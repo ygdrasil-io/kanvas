@@ -71,6 +71,7 @@ enum class GPUDestinationSnapshotSourceKind {
 data class GPUTargetAccess(
     val commandId: String,
     val requirement: GPUBlendDestinationReadRequirement,
+    val strategyGatePlan: GPUDestinationReadStrategyGatePlan?,
     val key: GPUDestinationSnapshotGroupKey,
     val drawBounds: GPUDestinationReadFootprint,
     val clipBounds: GPUPixelBounds,
@@ -94,16 +95,28 @@ data class GPUTargetAccess(
         require(sourceUsageLabels.none(String::isBlank)) {
             "GPUTargetAccess.sourceUsageLabels must not contain blanks"
         }
-        if (sourceKind != GPUDestinationSnapshotSourceKind.ExternalTexturableIntermediate) {
-            require("copy_src" in sourceUsageLabelsSnapshot) {
-                "canonical scene and layer targets must include copy_src"
+        if (requirement == GPUBlendDestinationReadRequirement.None) {
+            require(strategyGatePlan == null) {
+                "direct target writes must not carry a destination-read strategy selection"
             }
-        } else if ("copy_src" !in sourceUsageLabelsSnapshot) {
+        } else {
+            requireNotNull(strategyGatePlan) {
+                "destination-reading target accesses require a strategy planner selection"
+            }
+            require(strategyGatePlan.plan.requirement == requirement) {
+                "destination-read strategy selection requirement must match the target access"
+            }
+        }
+        if (sourceKind == GPUDestinationSnapshotSourceKind.ExternalTexturableIntermediate) {
             require("texture_binding" in sourceUsageLabelsSnapshot) {
-                "external CopyAsDrawMaterialization sources must be texturable"
+                "external destination snapshot sources must be texturable"
             }
             require(key.sourceIntermediate != null) {
-                "external CopyAsDrawMaterialization requires an exact source intermediate identity"
+                "external destination snapshot sources require an exact intermediate identity"
+            }
+        } else {
+            require("copy_src" in sourceUsageLabelsSnapshot) {
+                "canonical scene and layer targets must include copy_src"
             }
         }
     }
@@ -215,14 +228,10 @@ class GPUDestinationSnapshotGrouper(
             if (access.requirement == GPUBlendDestinationReadRequirement.None) {
                 return@forEachIndexed
             }
-            if (access.requirement == GPUBlendDestinationReadRequirement.Refused) {
-                refusals += refusal(
-                    code = "unsupported.destination_snapshot.blend_refused",
-                    access = access,
-                    facts = mapOf("accessIndex" to accessIndex.toString()),
-                )
-                decisions += "destination-snapshot:member command=${access.commandId} decision=refuse " +
-                    "reason=unsupported.destination_snapshot.blend_refused"
+            val selectedStrategy = requireNotNull(access.strategyGatePlan).plan.strategy
+            if (selectedStrategy != GPUDestinationReadStrategy.CopyTarget) {
+                decisions += "destination-snapshot:member command=${access.commandId} decision=skip " +
+                    "selectedStrategy=${selectedStrategy.name}"
                 return@forEachIndexed
             }
 
@@ -259,6 +268,7 @@ class GPUDestinationSnapshotGrouper(
             } else {
                 null
             }
+            var unionBudgetRefusalCode: String? = null
 
             if (union != null && union.accepted) {
                 val sharingGroup = requireNotNull(lastGroup)
@@ -270,20 +280,22 @@ class GPUDestinationSnapshotGrouper(
                 val budgetDiagnostic = costModel.budgetDiagnostic(
                     mutableGroups.dropLast(1).map(MutableSnapshotGroup::group) + prospectiveGroup,
                 )
-                if (budgetDiagnostic != null) {
-                    addBudgetRefusal(access, budgetDiagnostic.code.value, budgetDiagnostic.facts, refusals, decisions)
+                if (budgetDiagnostic == null) {
+                    val candidateAggregate = aggregateBytes - sharingGroup.group.copiedBytes.toBigInteger() +
+                        union.copiedBytes.toBigInteger()
+                    aggregateBytes = candidateAggregate
+                    sharingGroup.merge(member, union, accessIndex)
+                    decisions += union.dumpLine(access.commandId, "share")
                     return@forEachIndexed
                 }
-                val candidateAggregate = aggregateBytes - sharingGroup.group.copiedBytes.toBigInteger() +
-                    union.copiedBytes.toBigInteger()
-                aggregateBytes = candidateAggregate
-                sharingGroup.merge(member, union, accessIndex)
-                decisions += union.dumpLine(access.commandId, "share")
-                return@forEachIndexed
+                unionBudgetRefusalCode = budgetDiagnostic.code.value
             }
 
             if (lastGroup != null) {
                 decisions += when {
+                    unionBudgetRefusalCode != null ->
+                        "destination-snapshot:group command=${access.commandId} decision=separate " +
+                            "reason=union-budget diagnostic=$unionBudgetRefusalCode"
                     separation != null ->
                         "destination-snapshot:group command=${access.commandId} decision=separate $separation"
                     union != null -> union.dumpLine(access.commandId, "separate")
@@ -412,6 +424,24 @@ private data class MutableSnapshotGroup(
 
         for (index in firstAccessIndex until accessIndex) {
             val earlier = orderedAccesses[index]
+            val intervening = index > lastAccessIndex
+            if (intervening) {
+                if (earlier.key.target != access.key.target) {
+                    return "hazard=intervening-target-boundary writer=${earlier.commandId}"
+                }
+                if (earlier.key.targetGeneration != access.key.targetGeneration) {
+                    return "hazard=intervening-generation-boundary writer=${earlier.commandId}"
+                }
+                if (earlier.key != access.key) {
+                    return "hazard=intervening-group-key-boundary writer=${earlier.commandId}"
+                }
+                if (earlier.layerId != layerId) {
+                    return "hazard=intervening-layer-boundary writer=${earlier.commandId}"
+                }
+                if (earlier.filterId != filterId) {
+                    return "hazard=intervening-filter-boundary writer=${earlier.commandId}"
+                }
+            }
             if (earlier.key.target != access.key.target ||
                 earlier.key.targetGeneration != access.key.targetGeneration
             ) {
@@ -421,7 +451,7 @@ private data class MutableSnapshotGroup(
             if (earlierBounds is BoundsResult.Accepted && earlierBounds.bounds.intersects(readBounds)) {
                 return "hazard=intersecting-write writer=${earlier.commandId}"
             }
-            if (index > lastAccessIndex && earlier.requirement == GPUBlendDestinationReadRequirement.None) {
+            if (intervening && earlier.requirement == GPUBlendDestinationReadRequirement.None) {
                 return "hazard=direct-intervening-draw writer=${earlier.commandId}"
             }
         }

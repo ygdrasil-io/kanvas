@@ -14,6 +14,8 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateIdentity
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePurpose
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
@@ -24,6 +26,53 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 class GPUDestinationSnapshotGroupingTest {
+    @Test
+    fun `only planner selected CopyTarget accesses become destination snapshots`() {
+        val bindIntermediate = destinationRead(
+            commandId = "draw:bind-intermediate",
+            bounds = footprint(0.0, 0.0, 8.0, 8.0),
+            strategyGatePlan = strategyPlan(
+                commandId = "draw:bind-intermediate",
+                eligibleIntermediate = exactIntermediate(),
+            ),
+        )
+        val isolateLayer = destinationRead(
+            commandId = "draw:isolate-layer",
+            bounds = footprint(8.0, 0.0, 16.0, 8.0),
+            strategyGatePlan = strategyPlan(
+                commandId = "draw:isolate-layer",
+                mandatoryIsolation = GPUDestinationReadMandatoryIsolation(
+                    kind = GPUDestinationReadIsolationKind.Layer,
+                    targetLabel = "layer:isolated",
+                ),
+            ),
+        )
+        val refused = destinationRead(
+            commandId = "draw:refused",
+            bounds = footprint(16.0, 0.0, 24.0, 8.0),
+            strategyGatePlan = strategyPlan(
+                commandId = "draw:refused",
+                targetCopyAvailable = false,
+            ),
+        )
+
+        val result = uncalibratedGrouper().group(listOf(bindIntermediate, isolateLayer, refused))
+
+        assertTrue(result.groups.isEmpty())
+        assertTrue(result.materializations.isEmpty())
+        assertTrue(result.refusals.isEmpty())
+        assertEquals(
+            listOf(
+                "destination-snapshot:member command=draw:bind-intermediate decision=skip " +
+                    "selectedStrategy=BindIntermediate",
+                "destination-snapshot:member command=draw:isolate-layer decision=skip " +
+                    "selectedStrategy=IsolateLayer",
+                "destination-snapshot:member command=draw:refused decision=skip selectedStrategy=Refuse",
+            ),
+            result.decisionDump.filter { line -> line.contains("selectedStrategy=") },
+        )
+    }
+
     @Test
     fun `group key equality covers every typed destination and continuation identity axis`() {
         val base = groupKey()
@@ -110,6 +159,26 @@ class GPUDestinationSnapshotGroupingTest {
     }
 
     @Test
+    fun `union budget rejection falls back to two separately admissible snapshots`() {
+        val result = calibratedGrouper(frameBudgetBytes = 8_192).group(
+            listOf(
+                destinationRead("draw:a", bounds = footprint(0.0, 0.0, 16.0, 16.0)),
+                destinationRead("draw:b", bounds = footprint(0.0, 32.0, 16.0, 48.0)),
+            ),
+        )
+
+        assertEquals(listOf(listOf("draw:a"), listOf("draw:b")), result.groups.memberIds())
+        assertEquals(listOf(4_096L, 4_096L), result.groups.map { group -> group.copiedBytes })
+        assertEquals(8_192L, result.totalCopiedBytes)
+        assertTrue(result.refusals.isEmpty())
+        assertTrue(
+            result.decisionDump.any { line ->
+                line.contains("decision=separate") && line.contains("reason=union-budget")
+            },
+        )
+    }
+
+    @Test
     fun `target generation sample source layer and filter boundaries never share`() {
         val base = destinationRead("draw:a", bounds = footprint(0.0, 0.0, 8.0, 8.0))
         val boundaries = listOf(
@@ -164,6 +233,48 @@ class GPUDestinationSnapshotGroupingTest {
         assertTrue(overlapping.decisionDump.any { it.contains("hazard=intersecting-write") })
         assertEquals(2, direct.groups.size)
         assertTrue(direct.decisionDump.any { it.contains("hazard=direct-intervening-draw") })
+    }
+
+    @Test
+    fun `intervening target generation layer and filter boundaries precede intersection filtering`() {
+        val first = destinationRead("draw:a", bounds = footprint(0.0, 0.0, 16.0, 16.0))
+        val second = destinationRead("draw:b", bounds = footprint(16.0, 0.0, 32.0, 16.0))
+        val boundaries = listOf(
+            directWrite(
+                commandId = "draw:other-target",
+                bounds = footprint(16.0, 0.0, 32.0, 16.0),
+                key = groupKey(target = GPUTargetIdentity("target:other")),
+            ) to "hazard=intervening-target-boundary",
+            directWrite(
+                commandId = "draw:other-generation",
+                bounds = footprint(16.0, 0.0, 32.0, 16.0),
+                key = groupKey(targetGeneration = 12),
+            ) to "hazard=intervening-generation-boundary",
+            directWrite(
+                commandId = "draw:other-layer",
+                bounds = footprint(16.0, 0.0, 32.0, 16.0),
+                layerId = "layer:isolated",
+            ) to "hazard=intervening-layer-boundary",
+            directWrite(
+                commandId = "draw:other-filter",
+                bounds = footprint(16.0, 0.0, 32.0, 16.0),
+                filterId = "filter:blur",
+            ) to "hazard=intervening-filter-boundary",
+        )
+
+        boundaries.forEach { (boundary, expectedReason) ->
+            val result = calibratedGrouper().group(listOf(first, boundary, second))
+
+            assertEquals(
+                listOf(listOf("draw:a"), listOf("draw:b")),
+                result.groups.memberIds(),
+                boundary.commandId,
+            )
+            assertTrue(
+                result.decisionDump.any { line -> line.contains(expectedReason) },
+                "$expectedReason for ${boundary.commandId}",
+            )
+        }
     }
 
     @Test
@@ -304,6 +415,40 @@ class GPUDestinationSnapshotGroupingTest {
                 sourceUsageLabels = setOf("texture_binding"),
             )
         }
+        val externalCopy = external.copy(
+            commandId = "draw:external-copy",
+            key = groupKey(sourceIntermediate = GPUIntermediateIdentity("intermediate:copyable")),
+            sourceUsageLabels = setOf("texture_binding", "copy_src"),
+            strategyGatePlan = strategyPlan("draw:external-copy"),
+        )
+        assertIs<GPUDestinationSnapshotMaterialization.TextureCopy>(
+            uncalibratedGrouper().group(listOf(externalCopy)).materializations.single(),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            externalCopy.copy(key = groupKey(sourceIntermediate = null))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            externalCopy.copy(sourceUsageLabels = setOf("copy_src"))
+        }
+
+        val otherExternal = external.copy(
+            commandId = "draw:external-other",
+            drawBounds = footprint(8.0, 0.0, 16.0, 8.0),
+            key = groupKey(sourceIntermediate = GPUIntermediateIdentity("intermediate:other")),
+            strategyGatePlan = strategyPlan("draw:external-other"),
+        )
+        val distinctSources = calibratedGrouper().group(listOf(external, otherExternal))
+
+        assertEquals(listOf(listOf("draw:external"), listOf("draw:external-other")), distinctSources.groups.memberIds())
+        assertEquals(
+            listOf(
+                GPUIntermediateIdentity("intermediate:texturable"),
+                GPUIntermediateIdentity("intermediate:other"),
+            ),
+            distinctSources.materializations.map { materialization ->
+                assertIs<CopyAsDrawMaterialization>(materialization).sourceIntermediate
+            },
+        )
     }
 
     @Test
@@ -373,12 +518,14 @@ class GPUDestinationSnapshotGroupingTest {
             ),
         )
 
-    private fun calibratedGrouper(): GPUDestinationSnapshotGrouper =
+    private fun calibratedGrouper(
+        frameBudgetBytes: Long = 16L * 1024L * 1024L,
+    ): GPUDestinationSnapshotGrouper =
         GPUDestinationSnapshotGrouper(
             SnapshotGroupingCostModel(
                 frameMemoryBudgetRequest = GPUFrameMemoryBudgetRequest(
                     allocations = emptyList(),
-                    configuredAggregateBudgetBytes = 16L * 1024L * 1024L,
+                    configuredAggregateBudgetBytes = frameBudgetBytes,
                     deviceLimits = deviceLimits,
                 ),
                 calibration = SnapshotGroupingCalibration(
@@ -400,6 +547,7 @@ class GPUDestinationSnapshotGroupingTest {
         sourceKind: GPUDestinationSnapshotSourceKind =
             GPUDestinationSnapshotSourceKind.CanonicalSceneTarget,
         sourceUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
+        strategyGatePlan: GPUDestinationReadStrategyGatePlan = strategyPlan(commandId),
     ): GPUTargetAccess = access(
         commandId = commandId,
         requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
@@ -410,15 +558,22 @@ class GPUDestinationSnapshotGroupingTest {
         bytesPerPixel = bytesPerPixel,
         sourceKind = sourceKind,
         sourceUsageLabels = sourceUsageLabels,
+        strategyGatePlan = strategyGatePlan,
     )
 
     private fun directWrite(
         commandId: String,
         bounds: GPUDestinationReadFootprint,
+        key: GPUDestinationSnapshotGroupKey = groupKey(),
+        layerId: String = "layer:root",
+        filterId: String? = null,
     ): GPUTargetAccess = access(
         commandId = commandId,
         requirement = GPUBlendDestinationReadRequirement.None,
         bounds = bounds,
+        key = key,
+        layerId = layerId,
+        filterId = filterId,
     )
 
     private fun access(
@@ -432,6 +587,9 @@ class GPUDestinationSnapshotGroupingTest {
         sourceKind: GPUDestinationSnapshotSourceKind =
             GPUDestinationSnapshotSourceKind.CanonicalSceneTarget,
         sourceUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
+        strategyGatePlan: GPUDestinationReadStrategyGatePlan? = null,
+        layerId: String = "layer:root",
+        filterId: String? = null,
     ): GPUTargetAccess = GPUTargetAccess(
         commandId = commandId,
         requirement = requirement,
@@ -439,12 +597,63 @@ class GPUDestinationSnapshotGroupingTest {
         drawBounds = bounds,
         clipBounds = clipBounds,
         targetBounds = targetBounds,
-        layerId = "layer:root",
-        filterId = null,
+        layerId = layerId,
+        filterId = filterId,
         bytesPerPixel = bytesPerPixel,
         sourceKind = sourceKind,
         sourceUsageLabels = sourceUsageLabels,
+        strategyGatePlan = strategyGatePlan,
     )
+
+    private fun strategyPlan(
+        commandId: String,
+        eligibleIntermediate: GPUDestinationReadEligibleIntermediate? = null,
+        mandatoryIsolation: GPUDestinationReadMandatoryIsolation? = null,
+        targetCopyAvailable: Boolean = true,
+    ): GPUDestinationReadStrategyGatePlan = GPUDestinationReadStrategyPlanner().plan(
+        GPUDestinationReadStrategyRequest(
+            label = "snapshot:$commandId",
+            commandId = commandId,
+            requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+            bounds = GPUDestinationReadBounds(
+                boundsLabel = "0,0,16,16",
+                conservative = true,
+                pixelAligned = true,
+                width = 16,
+                height = 16,
+                targetWidth = 128,
+                targetHeight = 128,
+            ),
+            sourceTargetLabel = "target:main",
+            sourceUsageLabels = setOf("render_attachment", "copy_src"),
+            copyUsageLabels = setOf("copy_dst", "texture_binding"),
+            targetFormatClass = "rgba8unorm",
+            targetGeneration = 11,
+            eligibleIntermediate = eligibleIntermediate,
+            mandatoryIsolation = mandatoryIsolation,
+            targetCopyAvailable = targetCopyAvailable,
+        ),
+    )
+
+    private fun exactIntermediate(): GPUDestinationReadEligibleIntermediate =
+        GPUDestinationReadEligibleIntermediate(
+            GPUIntermediateTextureDescriptor(
+                label = "intermediate:exact",
+                purpose = GPUIntermediatePurpose.ExistingIntermediate,
+                descriptorHash = "descriptor:exact",
+                sourceTargetLabel = "target:main",
+                boundsLabel = "0,0,16,16",
+                width = 16,
+                height = 16,
+                formatClass = "rgba8unorm",
+                usageLabels = listOf("texture_binding"),
+                sampleCount = 1,
+                generation = 11,
+                lifetimeClass = "draw-local",
+                ownerScope = "snapshot-test",
+                byteEstimate = 1_024,
+            ),
+        )
 
     private fun footprint(
         left: Double,
