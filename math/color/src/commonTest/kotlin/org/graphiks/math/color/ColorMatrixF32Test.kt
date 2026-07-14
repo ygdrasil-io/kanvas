@@ -7,7 +7,7 @@ import kotlin.test.assertNotEquals
 class ColorMatrixF32Test {
     @Test
     fun `default is identity`() {
-        val m = ColorMatrixF32()
+        val m = ColorMatrixF32.ofIdentity()
         val arr = m.toFloatArray()
         assertEquals(1f, arr[0])  // R scale
         assertEquals(1f, arr[6])  // G scale
@@ -19,7 +19,7 @@ class ColorMatrixF32Test {
 
     @Test
     fun `setScale creates diagonal matrix`() {
-        val m = ColorMatrixF32()
+        val m = ColorMatrixF32.ofIdentity()
         m.setScale(0.5f, 0.25f, 0.125f)
         val arr = m.toFloatArray()
         assertEquals(0.5f, arr[0])
@@ -31,7 +31,7 @@ class ColorMatrixF32Test {
 
     @Test
     fun `setSaturation zero produces grayscale`() {
-        val m = ColorMatrixF32()
+        val m = ColorMatrixF32.ofIdentity()
         m.setSaturation(0f)
         val arr = m.toFloatArray()
         // All three RGB rows should have same luma weights
@@ -41,7 +41,7 @@ class ColorMatrixF32Test {
 
     @Test
     fun `setSaturation one produces identity-like`() {
-        val m = ColorMatrixF32()
+        val m = ColorMatrixF32.ofIdentity()
         m.setSaturation(1f)
         val arr = m.toFloatArray()
         assertEquals(1f, arr[0], 1e-6f)  // R scale
@@ -63,7 +63,7 @@ class ColorMatrixF32Test {
 
     @Test
     fun `postTranslate adds to bias`() {
-        val m = ColorMatrixF32()
+        val m = ColorMatrixF32.ofIdentity()
         m.postTranslate(0.5f, 0.25f, 0.125f, 0f)
         val arr = m.toFloatArray()
         assertEquals(0.5f, arr[4])
@@ -74,7 +74,7 @@ class ColorMatrixF32Test {
     @Test
     fun `setRowMajor and getRowMajor`() {
         val values = FloatArray(20) { it.toFloat() }
-        val m = ColorMatrixF32(values)
+        val m = ColorMatrixF32.of(values)
         val dst = FloatArray(20)
         m.getRowMajor(dst)
         for (i in 0 until 20) {
@@ -107,7 +107,7 @@ class ColorMatrixF32Test {
 
     @Test
     fun `setRGB2YUV and setYUV2RGB`() {
-        val m = ColorMatrixF32()
+        val m = ColorMatrixF32.ofIdentity()
         m.setRGB2YUV()
         val rgb2yuv = m.toFloatArray()
         m.setYUV2RGB()
