@@ -154,7 +154,7 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
             Point2F64((a.x + b.x) / 2, (a.y + b.y) / 2)
 
         /** Approximate equality for [Vector2F32] points. */
-        public fun ApproximatelyEqual(a: Vector2F32, b: Vector2F32): Boolean {
+        public fun approximatelyEqualVectors(a: Vector2F32, b: Vector2F32): Boolean {
             if (approximately_equal(a.x.toDouble(), b.x.toDouble())
                 && approximately_equal(a.y.toDouble(), b.y.toDouble())) return true
             if (!RoughlyEqualUlps(a.x, b.x) || !RoughlyEqualUlps(a.y, b.y)) return false
@@ -168,7 +168,7 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
         }
 
         /** Rough equality for [Vector2F32] points. */
-        public fun RoughlyEqual(a: Vector2F32, b: Vector2F32): Boolean {
+        public fun roughlyEqualVectors(a: Vector2F32, b: Vector2F32): Boolean {
             if (!RoughlyEqualUlps(a.x, b.x) && !RoughlyEqualUlps(a.y, b.y)) return false
             val dA = Point2F64(a.x.toDouble(), a.y.toDouble())
             val dB = Point2F64(b.x.toDouble(), b.y.toDouble())
@@ -180,7 +180,7 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
         }
 
         /** Very rough equality for [Vector2F32] points. */
-        public fun WayRoughlyEqual(a: Vector2F32, b: Vector2F32): Boolean {
+        public fun wayRoughlyEqualVectors(a: Vector2F32, b: Vector2F32): Boolean {
             val largest = max(
                 kotlin.math.abs(a.x),
                 max(kotlin.math.abs(a.y), max(kotlin.math.abs(b.x), kotlin.math.abs(b.y))),

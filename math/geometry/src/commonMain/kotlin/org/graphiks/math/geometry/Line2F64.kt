@@ -118,7 +118,7 @@ public class Line2F64(source: Array<Point2F64>) {
 
     companion object {
         /** Performs the computation. */
-        fun ExactPointH(xy: Point2F64, left: Double, right: Double, y: Double): Double {
+        fun exactPointH(xy: Point2F64, left: Double, right: Double, y: Double): Double {
             if (xy.y == y) {
                 if (xy.x == left) return 0.0
                 if (xy.x == right) return 1.0
@@ -127,7 +127,7 @@ public class Line2F64(source: Array<Point2F64>) {
         }
 
         /** Performs the computation. */
-        fun NearPointH(xy: Point2F64, left: Double, right: Double, y: Double): Double {
+        fun nearPointH(xy: Point2F64, left: Double, right: Double, y: Double): Double {
             if (!AlmostBequalUlps(xy.y, y)) return -1.0
             if (!AlmostBetweenUlps(left, xy.x, right)) return -1.0
             var t = (xy.x - left) / (right - left)
@@ -143,7 +143,7 @@ public class Line2F64(source: Array<Point2F64>) {
         }
 
         /** Performs the computation. */
-        fun ExactPointV(xy: Point2F64, top: Double, bottom: Double, x: Double): Double {
+        fun exactPointV(xy: Point2F64, top: Double, bottom: Double, x: Double): Double {
             if (xy.x == x) {
                 if (xy.y == top) return 0.0
                 if (xy.y == bottom) return 1.0
@@ -152,7 +152,7 @@ public class Line2F64(source: Array<Point2F64>) {
         }
 
         /** Performs the computation. */
-        fun NearPointV(xy: Point2F64, top: Double, bottom: Double, x: Double): Double {
+        fun nearPointV(xy: Point2F64, top: Double, bottom: Double, x: Double): Double {
             if (!AlmostBequalUlps(xy.x, x)) return -1.0
             if (!AlmostBetweenUlps(top, xy.y, bottom)) return -1.0
             var t = (xy.y - top) / (bottom - top)

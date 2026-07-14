@@ -76,7 +76,7 @@ public data class ColorF32 internal constructor(
     public operator fun plus(c: ColorF32): ColorF32 = ColorF32(red + c.red, green + c.green, blue + c.blue, alpha + c.alpha)
 
     /** Packs channels as RGBA bytes (alpha in the most-significant byte). */
-    public fun toBytes_RGBA(): Int =
+    public fun toPackedRGBA(): Int =
         (channelToByte(alpha) shl 24) or
             (channelToByte(blue) shl 16) or
             (channelToByte(green) shl 8) or
@@ -115,7 +115,7 @@ public data class ColorF32 internal constructor(
         )
 
         /** Creates a [ColorF32] from a packed RGBA integer. */
-        public fun fromBytes_RGBA(rgba: Int): ColorF32 = ColorF32(
+        public fun fromPackedRGBA(rgba: Int): ColorF32 = ColorF32(
             red = (rgba and 0xFF) / 255f,
             green = ((rgba ushr 8) and 0xFF) / 255f,
             blue = ((rgba ushr 16) and 0xFF) / 255f,

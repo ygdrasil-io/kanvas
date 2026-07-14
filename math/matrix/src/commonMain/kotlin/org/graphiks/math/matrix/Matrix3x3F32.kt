@@ -58,13 +58,13 @@ public data class Matrix3x3F32(
      */
     public enum class ScaleToFit {
         /** Stretch independently in x and y to fill `dst`. */
-        kFill_ScaleToFit,
+        fillScaleToFit,
         /** Uniform scale; align to top-left of `dst`. */
-        kStart_ScaleToFit,
+        startScaleToFit,
         /** Uniform scale; centre within `dst`. */
-        kCenter_ScaleToFit,
+        centerScaleToFit,
         /** Uniform scale; align to bottom-right of `dst`. */
-        kEnd_ScaleToFit,
+        endScaleToFit,
     }
 
     /**
@@ -788,45 +788,45 @@ public data class Matrix3x3F32(
 
         // ─── 9-element matrix index constants (row-major) ──────────────────
         /** Row-major index for scale X ([sx]). */
-        public const val kMScaleX: Int = 0
+        private const val kMScaleX: Int = 0
         /** Row-major index for skew X ([kx]). */
-        public const val kMSkewX: Int = 1
+        private const val kMSkewX: Int = 1
         /** Row-major index for translate X ([tx]). */
-        public const val kMTransX: Int = 2
+        private const val kMTransX: Int = 2
         /** Row-major index for skew Y ([ky]). */
-        public const val kMSkewY: Int = 3
+        private const val kMSkewY: Int = 3
         /** Row-major index for scale Y ([sy]). */
-        public const val kMScaleY: Int = 4
+        private const val kMScaleY: Int = 4
         /** Row-major index for translate Y ([ty]). */
-        public const val kMTransY: Int = 5
+        private const val kMTransY: Int = 5
         /** Row-major index for perspective 0 ([persp0]). */
-        public const val kMPersp0: Int = 6
+        private const val kMPersp0: Int = 6
         /** Row-major index for perspective 1 ([persp1]). */
-        public const val kMPersp1: Int = 7
+        private const val kMPersp1: Int = 7
         /** Row-major index for perspective 2 ([persp2]). */
-        public const val kMPersp2: Int = 8
+        private const val kMPersp2: Int = 8
 
         // ─── 6-element affine index constants (column-major: a, c, b, d, e, f) ────────
         /** Column-major affine index for scale X. */
-        public const val kAScaleX: Int = 0
+        private const val kAScaleX: Int = 0
         /** Column-major affine index for skew Y. */
-        public const val kASkewY: Int = 1
+        private const val kASkewY: Int = 1
         /** Column-major affine index for skew X. */
-        public const val kASkewX: Int = 2
+        private const val kASkewX: Int = 2
         /** Column-major affine index for scale Y. */
-        public const val kAScaleY: Int = 3
+        private const val kAScaleY: Int = 3
         /** Column-major affine index for translate X. */
-        public const val kATransX: Int = 4
+        private const val kATransX: Int = 4
         /** Column-major affine index for translate Y. */
-        public const val kATransY: Int = 5
+        private const val kATransY: Int = 5
 
         // ─── Internal markers for the min/max scale solver ─────────────
         /** Compute minimum singular value only. */
-        public const val SCALE_KIND_MIN: Int = 0
+        private const val SCALE_KIND_MIN: Int = 0
         /** Compute maximum singular value only. */
-        public const val SCALE_KIND_MAX: Int = 1
+        private const val SCALE_KIND_MAX: Int = 1
         /** Compute both min and max singular values. */
-        public const val SCALE_KIND_BOTH: Int = 2
+        private const val SCALE_KIND_BOTH: Int = 2
 
         /**
          * Build a matrix that maps `src` onto `dst` per the given
@@ -837,34 +837,34 @@ public data class Matrix3x3F32(
         public fun rectToRect(
             src: RectF32,
             dst: RectF32,
-            stf: ScaleToFit = ScaleToFit.kFill_ScaleToFit,
+            stf: ScaleToFit = ScaleToFit.fillScaleToFit,
         ): Matrix3x3F32? {
             if (src.isEmpty) return null
             var sx = if (src.width() == 0f) Float.POSITIVE_INFINITY else dst.width() / src.width()
             var sy = if (src.height() == 0f) Float.POSITIVE_INFINITY else dst.height() / src.height()
             var xLarger = false
 
-            if (stf != ScaleToFit.kFill_ScaleToFit) {
+            if (stf != ScaleToFit.fillScaleToFit) {
                 if (sx > sy) { xLarger = true; sx = sy } else { sy = sx }
             }
 
             var tx = dst.left - src.left * sx
             var ty = dst.top - src.top * sy
-            if (stf == ScaleToFit.kCenter_ScaleToFit || stf == ScaleToFit.kEnd_ScaleToFit) {
+            if (stf == ScaleToFit.centerScaleToFit || stf == ScaleToFit.endScaleToFit) {
                 var diff = if (xLarger) dst.width() - src.width() * sy
                 else dst.height() - src.height() * sy
-                if (stf == ScaleToFit.kCenter_ScaleToFit) diff *= 0.5f
+                if (stf == ScaleToFit.centerScaleToFit) diff *= 0.5f
                 if (xLarger) tx += diff else ty += diff
             }
             return Matrix3x3F32(sx = sx, kx = 0f, tx = tx, ky = 0f, sy = sy, ty = ty)
         }
 
         /**
-                 * Same as [MakeRectToRect] with `kFill_ScaleToFit` but returns
+                 * Same as [MakeRectToRect] with `fillScaleToFit` but returns
          * [Identity] instead of `null` when [src] is empty or degenerate.
          */
         public fun RectToRectOrIdentity(src: RectF32, dst: RectF32): Matrix3x3F32 =
-            rectToRect(src, dst, ScaleToFit.kFill_ScaleToFit) ?: Identity
+            rectToRect(src, dst, ScaleToFit.fillScaleToFit) ?: Identity
 
         /**
                  *
@@ -912,20 +912,20 @@ public data class Matrix3x3F32(
 
 
         /** No scale, skew, or translate. */
-        public const val kIdentity_Mask: Int = 0
+        private const val kIdentity_Mask: Int = 0
         /** Translation only. */
-        public const val kTranslate_Mask: Int = 0x01
+        private const val kTranslate_Mask: Int = 0x01
         /** Scale (uniform or non-uniform). */
-        public const val kScale_Mask: Int = 0x02
+        private const val kScale_Mask: Int = 0x02
         /** Skew or rotate. */
-        public const val kAffine_Mask: Int = 0x04
+        private const val kAffine_Mask: Int = 0x04
         /** Perspective — never set in this affine-only port. */
-        public const val kPerspective_Mask: Int = 0x08
+        private const val kPerspective_Mask: Int = 0x08
         /**
          * Internal "rect stays rect" mask — set when the upper 2x2 maps a rect
          * to a rect (axis-aligned, 90° rotation, or mirror). This bit is kept out of the public 4-bit subset returned by `getType()`.
          */
-        public const val kRectStaysRect_Mask: Int = 0x10
+        private const val kRectStaysRect_Mask: Int = 0x10
 
         /**
          * Compute the type mask for a 6-tuple affine matrix.cpp:101](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L101))
@@ -938,7 +938,7 @@ public data class Matrix3x3F32(
          * rotation. The no-skew branch is simpler: `rectStaysRect` holds iff
          * the primary diagonal is non-zero (translate / scale / mirror).
          */
-        public fun computeTypeMask(
+        private fun computeTypeMask(
             sx: Float, kx: Float, ky: Float, sy: Float, tx: Float, ty: Float,
             persp0: Float, persp1: Float, persp2: Float,
         ): Int {
@@ -966,7 +966,7 @@ public data class Matrix3x3F32(
         }
 
         /** Checks if the 2x2 matrix is degenerate. Used by [isSimilarity] / [preservesRightAngles]. */
-        public fun isDegenerate2x2(sx: Float, kx: Float, ky: Float, sy: Float): Boolean {
+        private fun isDegenerate2x2(sx: Float, kx: Float, ky: Float, sy: Float): Boolean {
             val perpDot = sx * sy - kx * ky
             return nearlyZero(perpDot, 1e-7f * 1e-7f)
         }

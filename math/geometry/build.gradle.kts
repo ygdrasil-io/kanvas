@@ -8,7 +8,7 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
-                api(project(":math:scalar"))
+                implementation(project(":math:scalar"))
                 api(project(":math:vector"))
             }
         }

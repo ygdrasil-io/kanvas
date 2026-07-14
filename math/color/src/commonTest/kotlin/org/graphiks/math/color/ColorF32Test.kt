@@ -15,26 +15,26 @@ class ColorF32Test {
     }
 
     @Test
-    fun `toBytes_RGBA places R in LSB and A in MSB`() {
-        val rOnly = ColorF32(1f, 0f, 0f, 0f).toBytes_RGBA()
+    fun `toPackedRGBA places R in LSB and A in MSB`() {
+        val rOnly = ColorF32(1f, 0f, 0f, 0f).toPackedRGBA()
         assertEquals(0xFF, rOnly and 0xFF)
         assertEquals(0x00, (rOnly ushr 8) and 0xFF)
         assertEquals(0x00, (rOnly ushr 16) and 0xFF)
         assertEquals(0x00, (rOnly ushr 24) and 0xFF)
 
-        val gOnly = ColorF32(0f, 1f, 0f, 0f).toBytes_RGBA()
+        val gOnly = ColorF32(0f, 1f, 0f, 0f).toPackedRGBA()
         assertEquals(0x00, gOnly and 0xFF)
         assertEquals(0xFF, (gOnly ushr 8) and 0xFF)
         assertEquals(0x00, (gOnly ushr 16) and 0xFF)
         assertEquals(0x00, (gOnly ushr 24) and 0xFF)
 
-        val bOnly = ColorF32(0f, 0f, 1f, 0f).toBytes_RGBA()
+        val bOnly = ColorF32(0f, 0f, 1f, 0f).toPackedRGBA()
         assertEquals(0x00, bOnly and 0xFF)
         assertEquals(0x00, (bOnly ushr 8) and 0xFF)
         assertEquals(0xFF, (bOnly ushr 16) and 0xFF)
         assertEquals(0x00, (bOnly ushr 24) and 0xFF)
 
-        val aOnly = ColorF32(0f, 0f, 0f, 1f).toBytes_RGBA()
+        val aOnly = ColorF32(0f, 0f, 0f, 1f).toPackedRGBA()
         assertEquals(0x00, aOnly and 0xFF)
         assertEquals(0x00, (aOnly ushr 8) and 0xFF)
         assertEquals(0x00, (aOnly ushr 16) and 0xFF)
@@ -42,14 +42,14 @@ class ColorF32Test {
     }
 
     @Test
-    fun `toBytes_RGBA exact bit layout`() {
-        val packed = ColorF32(0.5f, 0.25f, 0.125f, 1f).toBytes_RGBA()
+    fun `toPackedRGBA exact bit layout`() {
+        val packed = ColorF32(0.5f, 0.25f, 0.125f, 1f).toPackedRGBA()
         assertEquals(0xFF204080.toInt(), packed)
     }
 
     @Test
-    fun `fromBytes_RGBA reads bytes in RGBA order`() {
-        val c = ColorF32.fromBytes_RGBA(0x44332211)
+    fun `fromPackedRGBA reads bytes in RGBA order`() {
+        val c = ColorF32.fromPackedRGBA(0x44332211)
         assertEquals(0x11 / 255f, c.red, 1e-6f)
         assertEquals(0x22 / 255f, c.green, 1e-6f)
         assertEquals(0x33 / 255f, c.blue, 1e-6f)
@@ -57,7 +57,7 @@ class ColorF32Test {
     }
 
     @Test
-    fun `roundtrip toBytes_RGBA fromBytes_RGBA`() {
+    fun `roundtrip toPackedRGBA fromPackedRGBA`() {
         val samples = listOf(
             ColorF32(0f, 0f, 0f, 0f),
             ColorF32(1f, 1f, 1f, 1f),
@@ -69,7 +69,7 @@ class ColorF32Test {
             ColorF32(0.123f, 0.456f, 0.789f, 0.5f),
         )
         for (c in samples) {
-            val round = ColorF32.fromBytes_RGBA(c.toBytes_RGBA())
+            val round = ColorF32.fromPackedRGBA(c.toPackedRGBA())
             assertEquals(c.red, round.red, 1f / 255f, "red for $c")
             assertEquals(c.green, round.green, 1f / 255f, "green for $c")
             assertEquals(c.blue, round.blue, 1f / 255f, "blue for $c")
@@ -78,7 +78,7 @@ class ColorF32Test {
     }
 
     @Test
-    fun `roundtrip fromBytes_RGBA toBytes_RGBA preserves raw int`() {
+    fun `roundtrip fromPackedRGBA toPackedRGBA preserves raw int`() {
         val packedSamples = intArrayOf(
             0x00000000,
             0xFFFFFFFF.toInt(),
@@ -89,7 +89,7 @@ class ColorF32Test {
             0x12345678,
         )
         for (p in packedSamples) {
-            val back = ColorF32.fromBytes_RGBA(p).toBytes_RGBA()
+            val back = ColorF32.fromPackedRGBA(p).toPackedRGBA()
             assertEquals(p, back, "raw uint32 0x${p.toString(16)}")
         }
     }

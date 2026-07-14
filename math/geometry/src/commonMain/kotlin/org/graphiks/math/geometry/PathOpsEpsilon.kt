@@ -481,10 +481,10 @@ public fun dInterp(A: Double, B: Double, t: Double): Double = A + (B - A) * t
 public fun dSign(x: Double): Int = (if (x > 0) 1 else 0) - (if (x < 0) 1 else 0)
 
 /** Returns 0 / 1 / 2 for negative / zero / positive */
-public fun SKDSide(x: Double): Int = (if (x > 0) 1 else 0) + (if (x >= 0) 1 else 0)
+public fun sideBit(x: Double): Int = (if (x > 0) 1 else 0) + (if (x >= 0) 1 else 0)
 
 /** Returns 1 / 2 / 4 for negative / zero / positive */
-public fun dSideBit(x: Double): Int = 1 shl SKDSide(x)
+public fun dSideBit(x: Double): Int = 1 shl sideBit(x)
 
 /** Pin a t-value into [0, 1] using `precisely_*` thresholds */
 public fun pinT(t: Double): Double = when {

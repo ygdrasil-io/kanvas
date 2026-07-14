@@ -69,16 +69,16 @@ class Line2F64Test {
     @Test
     fun `ExactPointH matches horizontal endpoints`() {
         val xy = Point2F64(4.0, 7.0)
-        kotlin.test.assertEquals(0.0, Line2F64.ExactPointH(xy, 4.0, 10.0, 7.0))
-        kotlin.test.assertEquals(1.0, Line2F64.ExactPointH(xy, 0.0, 4.0, 7.0))
-        kotlin.test.assertEquals(-1.0, Line2F64.ExactPointH(xy, 0.0, 10.0, 6.0))
+        kotlin.test.assertEquals(0.0, Line2F64.exactPointH(xy, 4.0, 10.0, 7.0))
+        kotlin.test.assertEquals(1.0, Line2F64.exactPointH(xy, 0.0, 4.0, 7.0))
+        kotlin.test.assertEquals(-1.0, Line2F64.exactPointH(xy, 0.0, 10.0, 6.0))
     }
 
     @Test
     fun `ExactPointV matches vertical endpoints`() {
         val xy = Point2F64(5.0, 3.0)
-        kotlin.test.assertEquals(0.0, Line2F64.ExactPointV(xy, 3.0, 10.0, 5.0))
-        kotlin.test.assertEquals(1.0, Line2F64.ExactPointV(xy, 0.0, 3.0, 5.0))
-        kotlin.test.assertEquals(-1.0, Line2F64.ExactPointV(xy, 0.0, 10.0, 4.0))
+        kotlin.test.assertEquals(0.0, Line2F64.exactPointV(xy, 3.0, 10.0, 5.0))
+        kotlin.test.assertEquals(1.0, Line2F64.exactPointV(xy, 0.0, 3.0, 5.0))
+        kotlin.test.assertEquals(-1.0, Line2F64.exactPointV(xy, 0.0, 10.0, 4.0))
     }
 }

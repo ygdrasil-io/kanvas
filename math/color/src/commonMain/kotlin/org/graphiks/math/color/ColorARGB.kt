@@ -199,8 +199,9 @@ public fun hsvToColor(alpha: Int, h: Float, s: Float, v: Float): ColorARGB {
  *
  * @param hsv output array of at least 3 elements — `[hue, saturation, value]`.
  *            Hue is in degrees `[0, 360)`, saturation and value in `[0, 1]`.
+ * @return the [hsv] array for call chaining.
  */
-public fun colorToHSV(color: ColorARGB, hsv: FloatArray = FloatArray(3)) {
+public fun colorToHSV(color: ColorARGB, hsv: FloatArray): FloatArray {
     require(hsv.size >= 3) { "hsv must have at least 3 elements" }
     val r = color.red.toFloat()
     val g = color.green.toFloat()
@@ -223,6 +224,7 @@ public fun colorToHSV(color: ColorARGB, hsv: FloatArray = FloatArray(3)) {
     hsv[0] = h
     hsv[1] = s
     hsv[2] = v
+    return hsv
 }
 
 /**

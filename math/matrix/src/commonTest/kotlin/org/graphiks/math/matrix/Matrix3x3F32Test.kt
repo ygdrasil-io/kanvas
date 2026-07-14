@@ -401,7 +401,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `getType identity matrix`() {
-        assertEquals(Matrix3x3F32.kIdentity_Mask, Matrix3x3F32.Identity.getType())
+        assertEquals(0, Matrix3x3F32.Identity.getType())
         assertTrue(Matrix3x3F32.Identity.isIdentity)
         assertTrue(Matrix3x3F32.Identity.rectStaysRect())
         assertFalse(Matrix3x3F32.Identity.hasPerspective())
@@ -410,7 +410,7 @@ class Matrix3x3F32Test {
     @Test
     fun `getType pure translate`() {
         val m = Matrix3x3F32.translation(5f, 7f)
-        assertEquals(Matrix3x3F32.kTranslate_Mask, m.getType())
+        assertEquals(0x01, m.getType())
         assertTrue(m.isTranslate())
         assertTrue(m.isScaleTranslate())
         assertTrue(m.rectStaysRect())
@@ -420,29 +420,26 @@ class Matrix3x3F32Test {
     @Test
     fun `getType pure scale sets translate too when off-origin`() {
         val pureScale = Matrix3x3F32.scaling(2f, 3f)
-        assertEquals(Matrix3x3F32.kScale_Mask, pureScale.getType())
+        assertEquals(0x02, pureScale.getType())
         assertTrue(pureScale.isScaleTranslate())
         assertTrue(pureScale.rectStaysRect())
 
         val pivotScale = Matrix3x3F32.scaling(2f, 3f, 1f, 1f)
-        // pivotScale has tx, ty != 0 so kTranslate_Mask is also set.
-        assertEquals(Matrix3x3F32.kScale_Mask or Matrix3x3F32.kTranslate_Mask, pivotScale.getType())
+        assertEquals(0x02 or 0x01, pivotScale.getType())
     }
 
     @Test
     fun `getType cardinal rotate sets affine plus rectStaysRect`() {
         val m = Matrix3x3F32.rotation(90f)
-        // 90° rotation has kx=-1, ky=1, sx=sy=0 — Skia flags as Affine|Scale
-        // and rectStaysRect since the 2x2 swaps axes cleanly.
-        assertEquals(Matrix3x3F32.kAffine_Mask or Matrix3x3F32.kScale_Mask, m.getType())
-        assertFalse(m.isScaleTranslate())   // skew/rotation present
+        assertEquals(0x04 or 0x02, m.getType())
+        assertFalse(m.isScaleTranslate())
         assertTrue(m.rectStaysRect(), "90° rotation maps rect to rect")
     }
 
     @Test
     fun `getType arbitrary rotate clears rectStaysRect`() {
         val m = Matrix3x3F32.rotation(45f)
-        assertEquals(Matrix3x3F32.kAffine_Mask or Matrix3x3F32.kScale_Mask, m.getType())
+        assertEquals(0x04 or 0x02, m.getType())
         assertFalse(m.rectStaysRect(), "45° rotation does not preserve axis alignment")
     }
 
@@ -784,7 +781,7 @@ class Matrix3x3F32Test {
     fun `MakeRectToRect kFill stretches independently`() {
         val src = RectF32.ofLTRB(0f, 0f, 10f, 5f)
         val dst = RectF32.ofLTRB(100f, 200f, 300f, 600f)
-        val m = Matrix3x3F32.rectToRect(src, dst, Matrix3x3F32.ScaleToFit.kFill_ScaleToFit)!!
+        val m = Matrix3x3F32.rectToRect(src, dst, Matrix3x3F32.ScaleToFit.fillScaleToFit)!!
         // sx = 200/10 = 20, sy = 400/5 = 80
         assertEquals(20f, m.getScaleX()); assertEquals(80f, m.getScaleY())
         // Maps src.TL to dst.TL.
@@ -799,7 +796,7 @@ class Matrix3x3F32Test {
     fun `MakeRectToRect kCenter uses uniform scale and centres in dst`() {
         val src = RectF32.ofLTRB(0f, 0f, 10f, 5f)
         val dst = RectF32.ofLTRB(0f, 0f, 200f, 400f)
-        val m = Matrix3x3F32.rectToRect(src, dst, Matrix3x3F32.ScaleToFit.kCenter_ScaleToFit)!!
+        val m = Matrix3x3F32.rectToRect(src, dst, Matrix3x3F32.ScaleToFit.centerScaleToFit)!!
         // Uniform scale = min(200/10, 400/5) = min(20, 80) = 20.
         assertEquals(20f, m.getScaleX()); assertEquals(20f, m.getScaleY())
         // The mapped src is 200×100, centred in 200×400 ⇒ ty = 150.
@@ -811,7 +808,7 @@ class Matrix3x3F32Test {
         assertEquals(null, Matrix3x3F32.rectToRect(
             RectF32.Empty,
             RectF32.ofLTRB(0f, 0f, 10f, 10f),
-            Matrix3x3F32.ScaleToFit.kFill_ScaleToFit,
+            Matrix3x3F32.ScaleToFit.fillScaleToFit,
         ))
     }
 
@@ -898,7 +895,7 @@ class Matrix3x3F32Test {
         val m = Matrix3x3F32.perspective(0.001f, 0.002f)
         assertTrue(m.hasPerspective())
         // Skia: perspective ⇒ all type bits set.
-        assertEquals(Matrix3x3F32.kPerspective_Mask, m.getType() and Matrix3x3F32.kPerspective_Mask)
+        assertEquals(0x08, m.getType() and 0x08)
     }
 
     @Test
