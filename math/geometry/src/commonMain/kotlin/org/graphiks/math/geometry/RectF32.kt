@@ -255,7 +255,7 @@ public data class RectF32(
         public fun ofIntSize(w: Int, h: Int): RectF32 = RectF32(0f, 0f, w.toFloat(), h.toFloat())
 
         /** Empty rect (all zeros). */
-        public val Empty: RectF32 = RectF32(0f, 0f, 0f, 0f)
+        public val Empty: RectF32 get() = RectF32(0f, 0f, 0f, 0f)
 
         /** Creates a [RectF32] from a [SizeI32] at origin. */
         public fun from(size: SizeI32): RectF32 =

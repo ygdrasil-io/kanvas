@@ -84,17 +84,17 @@ public data class ColorF32 internal constructor(
 
     public companion object {
         /** Fully transparent black. */
-        public val Transparent: ColorF32 = ColorF32(0f, 0f, 0f, 0f)
+        public val Transparent: ColorF32 get() = ColorF32(0f, 0f, 0f, 0f)
         /** Opaque black. */
-        public val Black: ColorF32 = ColorF32(0f, 0f, 0f)
+        public val Black: ColorF32 get() = ColorF32(0f, 0f, 0f)
         /** Opaque white. */
-        public val White: ColorF32 = ColorF32(1f, 1f, 1f)
+        public val White: ColorF32 get() = ColorF32(1f, 1f, 1f)
         /** Opaque red. */
-        public val Red: ColorF32 = ColorF32(1f, 0f, 0f)
+        public val Red: ColorF32 get() = ColorF32(1f, 0f, 0f)
         /** Opaque green. */
-        public val Green: ColorF32 = ColorF32(0f, 1f, 0f)
+        public val Green: ColorF32 get() = ColorF32(0f, 1f, 0f)
         /** Opaque blue. */
-        public val Blue: ColorF32 = ColorF32(0f, 0f, 1f)
+        public val Blue: ColorF32 get() = ColorF32(0f, 0f, 1f)
 
         /** Creates a [ColorF32] from float components. */
         public fun of(red: Float, green: Float, blue: Float, alpha: Float = 1f): ColorF32 =

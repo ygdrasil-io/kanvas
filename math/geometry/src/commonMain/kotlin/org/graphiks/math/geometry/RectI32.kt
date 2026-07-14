@@ -194,7 +194,7 @@ public data class RectI32(
         public fun ofSize(w: Int, h: Int): RectI32 = RectI32(0, 0, w, h)
 
         /** Empty rect (all zeros). */
-        public val Empty: RectI32 = RectI32(0, 0, 0, 0)
+        public val Empty: RectI32 get() = RectI32(0, 0, 0, 0)
 
         /** Creates a [RectI32] from a [SizeI32] at origin. */
         public fun fromSize(size: SizeI32): RectI32 = RectI32(0, 0, size.width, size.height)

@@ -1,11 +1,13 @@
 package org.graphiks.math.vector
 
+import kotlin.ConsistentCopyVisibility
 import org.graphiks.math.scalar.nearlyZero
 
 /**
  * Immutable 4-D float vector / homogeneous coordinate.
  *
  */
+@ConsistentCopyVisibility
 public data class Vector4F32 internal constructor(
     public val x: Float, public val y: Float, public val z: Float, public val w: Float
 ) {

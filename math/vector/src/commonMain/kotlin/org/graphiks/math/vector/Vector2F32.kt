@@ -1,11 +1,13 @@
 package org.graphiks.math.vector
 
+import kotlin.ConsistentCopyVisibility
 import org.graphiks.math.scalar.nearlyZero
 
 /**
  * Immutable 2-D float vector.
  *
  */
+@ConsistentCopyVisibility
 public data class Vector2F32 internal constructor(public val x: Float, public val y: Float) {
 
     /** Returns `(-x, -y)`. */
