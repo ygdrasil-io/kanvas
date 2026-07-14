@@ -22,6 +22,12 @@ class DestinationReadMaterializationPreimageTest {
         assertFalse(preimage.nonClaims.productRoute)
         assertEquals(listOf(GPUMaterializedResourceRole.DestinationCopyTexture), preimage.resources.map { it.role })
         assertEquals(
+            "sourceUsage=render_attachment,copy_src",
+            gate.plan.sourceTargetFacts.single { it.startsWith("sourceUsage=") },
+        )
+        assertFalse(preimage.dumpLines().joinToString("\n").contains("CopyAsDrawMaterialization"))
+        assertFalse(preimage.dumpLines().joinToString("\n").contains("cpuReadback", ignoreCase = true))
+        assertEquals(
             listOf(
                 "resource-preimage:accepted plan=destination-read:blend-screen source=gpu-renderer.destination-read.strategy resources=dst-copy:blend-screen bindings=dst-read:blend-screen adapterBacked=false liveHandles=false productRoute=false",
                 "resource-preimage:resource label=dst-copy:blend-screen role=destination-copy-texture generation=42 lifetime=pass-local descriptor=${gate.copyDescriptorHash} usage=copy_dst,texture_binding facts=action=SplitPassAndCopyTarget;source=target:main",

@@ -10,6 +10,29 @@ import kotlin.test.assertTrue
 
 class DestinationReadStrategyGateTest {
     @Test
+    fun `semantic requirement strategy and copy materialization stay distinct`() {
+        assertEquals(
+            listOf(
+                GPUBlendDestinationReadRequirement.None,
+                GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+                GPUBlendDestinationReadRequirement.Refused,
+            ),
+            GPUBlendDestinationReadRequirement.entries,
+        )
+        assertEquals(
+            listOf(
+                GPUDestinationReadStrategy.None,
+                GPUDestinationReadStrategy.CopyTarget,
+                GPUDestinationReadStrategy.BindIntermediate,
+                GPUDestinationReadStrategy.IsolateLayer,
+                GPUDestinationReadStrategy.Refuse,
+            ),
+            GPUDestinationReadStrategy.entries,
+        )
+        assertFalse(GPUDestinationReadStrategy.entries.any { it.name == "CopyAsDrawMaterialization" })
+    }
+
+    @Test
     fun `planner selects approved existing isolation copy refusal priority`() {
         val planner = GPUDestinationReadStrategyPlanner()
         val exact = exactIntermediate()

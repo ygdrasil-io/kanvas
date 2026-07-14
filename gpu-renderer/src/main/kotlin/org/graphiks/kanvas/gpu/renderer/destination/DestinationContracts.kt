@@ -34,8 +34,6 @@ value class GPUDestinationReadToken(val value: String) {
 enum class GPUDestinationReadStrategy {
     /** No strategy needed. */
     None,
-    /** Use fixed-function blend. */
-    FixedFunction,
     /** Copy target to an intermediate. */
     CopyTarget,
     /** Bind an existing intermediate. */
@@ -231,9 +229,7 @@ data class GPUDestinationReadStrategyGatePlan(
             )
         }
 
-        if (plan.strategy == GPUDestinationReadStrategy.None ||
-            plan.strategy == GPUDestinationReadStrategy.FixedFunction
-        ) {
+        if (plan.strategy == GPUDestinationReadStrategy.None) {
             return listOf(
                 "destination-read:strategy row=$evidenceRow routeKind=$routeKind classification=$classification " +
                     "promoted=$promoted productActivation=$productActivation materialized=$materialized " +
@@ -805,9 +801,7 @@ private fun GPUDestinationReadStrategyRequest.selectionRefusalCode(
         }
         GPUDestinationReadStrategy.Refuse ->
             selection.refusalCode ?: "unsupported.destination_read.strategy_unavailable"
-        GPUDestinationReadStrategy.None,
-        GPUDestinationReadStrategy.FixedFunction,
-        -> DESTINATION_READ_STRATEGY_UNACCEPTED
+        GPUDestinationReadStrategy.None -> DESTINATION_READ_STRATEGY_UNACCEPTED
     }
 
 private fun GPUDestinationReadMaterializationRequest.materializationDiagnostics(
@@ -1276,7 +1270,6 @@ private fun GPUBlendDestinationReadRequirement.dumpLabel(): String =
 private fun GPUDestinationReadStrategy.dumpLabel(): String =
     when (this) {
         GPUDestinationReadStrategy.None -> "NoDestinationRead"
-        GPUDestinationReadStrategy.FixedFunction -> "FixedFunctionAttachmentBlend"
         GPUDestinationReadStrategy.CopyTarget -> "TargetCopySnapshot"
         GPUDestinationReadStrategy.BindIntermediate -> "SampleExistingIntermediate"
         GPUDestinationReadStrategy.IsolateLayer -> "LayerCompositeIsolation"
