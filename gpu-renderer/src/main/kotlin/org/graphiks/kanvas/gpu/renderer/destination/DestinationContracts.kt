@@ -109,8 +109,13 @@ data class GPUDestinationCopyTextureDescriptor(
     val ownerLabel: String,
     val byteEstimate: Long,
 ) {
+    internal val usageLabelsSnapshot: List<String> = usageLabels.toList()
+
     val usageLabel: String
-        get() = usageLabels.joinToString(",")
+        get() = usageLabelsSnapshot.joinToString(",")
+
+    internal fun evidenceSnapshot(): GPUDestinationCopyTextureDescriptor =
+        copy(usageLabels = usageLabelsSnapshot)
 }
 
 /** Destination-copy planning product. */
@@ -140,7 +145,9 @@ data class GPUDestinationReadPlan(
     val barrierAction: String? = null,
     val budgetClass: String,
     val diagnostic: GPUDestinationReadDiagnostic? = null,
-)
+) {
+    internal val sourceTargetFactsSnapshot: List<String> = sourceTargetFacts.toList()
+}
 
 /** Exact existing-intermediate evidence. The strategy planner validates all identity facts. */
 data class GPUDestinationReadEligibleIntermediate(
@@ -241,8 +248,18 @@ data class GPUDestinationReadStrategyGatePlan(
             val provenance = requireNotNull(copyTargetProvenance) {
                 "CopyTarget strategy requires canonical target provenance"
             }
-            val descriptor = requireNotNull(copyPlan).descriptor
-            require(copyPlan.commandScopeLabel == provenance.commandId) {
+            val canonicalCopyPlan = requireNotNull(copyPlan)
+            val descriptor = canonicalCopyPlan.descriptor
+            val publicDescriptor = requireNotNull(copyDescriptor) {
+                "CopyTarget strategy requires a public copy descriptor"
+            }
+            require(publicDescriptor.evidenceSnapshot() == descriptor.evidenceSnapshot()) {
+                "CopyTarget public descriptor must exactly match the copy plan descriptor"
+            }
+            require(plan.bounds.commandLabel() == provenance.commandId) {
+                "CopyTarget bounds command must match canonical target provenance"
+            }
+            require(canonicalCopyPlan.commandScopeLabel == provenance.commandId) {
                 "CopyTarget command scope must match canonical target provenance"
             }
             require(descriptor.sourceTargetLabel == provenance.canonicalTarget.value) {
@@ -254,19 +271,24 @@ data class GPUDestinationReadStrategyGatePlan(
             require(descriptor.formatClass == provenance.canonicalTargetFormat.value) {
                 "CopyTarget descriptor format must match canonical target provenance"
             }
-            require("source=${provenance.canonicalTarget.value}" in plan.sourceTargetFacts) {
+            val diagnosticSource = plan.requireSingleSourceFactValue("source")
+            val diagnosticSourceUsage = plan.requireSingleSourceFactValue("sourceUsage")
+            val diagnosticCopyUsage = plan.requireSingleSourceFactValue("copyUsage")
+            val diagnosticTargetFormat = plan.requireSingleSourceFactValue("targetFormat")
+            require(diagnosticSource == provenance.canonicalTarget.value) {
                 "CopyTarget diagnostic source must match canonical target provenance"
             }
-            val diagnosticUsage = plan.sourceTargetFacts
-                .firstOrNull { fact -> fact.startsWith("sourceUsage=") }
-                ?.removePrefix("sourceUsage=")
-                ?.split(',')
-                ?.filter(String::isNotEmpty)
-                ?.toSet()
-            require(diagnosticUsage == provenance.canonicalTargetUsageLabelsSnapshot) {
+            require(
+                diagnosticSourceUsage == provenance.canonicalTargetUsageLabelsSnapshot
+                    .canonicalUsageLabels()
+                    .joinToString(","),
+            ) {
                 "CopyTarget diagnostic source usage must match canonical target provenance"
             }
-            require("targetFormat=${provenance.canonicalTargetFormat.value}" in plan.sourceTargetFacts) {
+            require(diagnosticCopyUsage == descriptor.usageLabel) {
+                "CopyTarget diagnostic copy usage must match the copy descriptor"
+            }
+            require(diagnosticTargetFormat == provenance.canonicalTargetFormat.value) {
                 "CopyTarget diagnostic format must match canonical target provenance"
             }
         } else {
@@ -306,7 +328,8 @@ data class GPUDestinationReadStrategyGatePlan(
                 "destination-read:strategy row=$evidenceRow routeKind=$routeKind classification=$classification " +
                     "promoted=$promoted productActivation=$productActivation materialized=$materialized " +
                     "requirement=${plan.requirement.dumpLabel()} strategy=${plan.strategy.dumpLabel()} " +
-                    "action=$action source=${plan.sourceTargetFacts.single().removePrefix("source=")} noCopy=true",
+                    "action=$action source=${plan.sourceTargetFactsSnapshot.single().removePrefix("source=")} " +
+                    "noCopy=true",
                 DESTINATION_READ_NONCLAIM_LINE,
             )
         }
@@ -314,9 +337,10 @@ data class GPUDestinationReadStrategyGatePlan(
         val binding = requireNotNull(plan.binding)
         val bounds = plan.bounds
         val sourceLabel = when (plan.strategy) {
-            GPUDestinationReadStrategy.BindIntermediate -> plan.sourceTargetFacts.first { it.startsWith("intermediate=") }
+            GPUDestinationReadStrategy.BindIntermediate -> plan.sourceTargetFactsSnapshot
+                .first { it.startsWith("intermediate=") }
                 .removePrefix("intermediate=")
-            else -> plan.sourceTargetFacts.first { it.startsWith("source=") }.removePrefix("source=")
+            else -> plan.sourceTargetFactsSnapshot.first { it.startsWith("source=") }.removePrefix("source=")
         }
 
         val head = listOf(
@@ -335,8 +359,12 @@ data class GPUDestinationReadStrategyGatePlan(
             else -> emptyList()
         }
         val barrier = requireNotNull(copyPlan)
-        val resourceSourceUsage = plan.sourceTargetFacts.first { it.startsWith("sourceUsage=") }.removePrefix("sourceUsage=")
-        val resourceCopyUsage = plan.sourceTargetFacts.first { it.startsWith("copyUsage=") }.removePrefix("copyUsage=")
+        val resourceSourceUsage = plan.sourceTargetFactsSnapshot
+            .first { it.startsWith("sourceUsage=") }
+            .removePrefix("sourceUsage=")
+        val resourceCopyUsage = plan.sourceTargetFactsSnapshot
+            .first { it.startsWith("copyUsage=") }
+            .removePrefix("copyUsage=")
 
         return head + source + listOf(
             "destination-read:binding label=${binding.bindingLabel} layout=${binding.layoutHash} " +
@@ -366,7 +394,7 @@ data class GPUDestinationReadStrategyGatePlan(
             "bounds=${plan.bounds.copyBoundsLabel} lifetime=layer-local"
 
     private fun intermediateDescriptorHash(): String =
-        plan.sourceTargetFacts.firstOrNull { it.startsWith("intermediateDescriptor=") }
+        plan.sourceTargetFactsSnapshot.firstOrNull { it.startsWith("intermediateDescriptor=") }
             ?.removePrefix("intermediateDescriptor=")
             ?: ""
 }
@@ -409,7 +437,7 @@ fun GPUDestinationReadStrategyGatePlan.toDestinationReadMaterializationPreimage(
                 descriptorHash = descriptor.descriptorHash,
                 generation = descriptor.targetGeneration,
                 lifetimeClass = descriptor.lifetimeClass,
-                usageLabels = descriptor.usageLabels,
+                usageLabels = descriptor.usageLabelsSnapshot,
                 evidenceFacts = mapOf(
                     "action" to action.name,
                     "source" to sourceLabel,
@@ -1041,7 +1069,7 @@ private fun GPUDestinationReadMaterializationRequest.destinationReadOperandBridg
         descriptorHash = descriptor.descriptorHash,
         deviceGeneration = deviceGeneration,
         ownerScope = "destination-read:pass-local",
-        usageLabels = descriptor.usageLabels,
+        usageLabels = descriptor.usageLabelsSnapshot,
         invalidationPolicy = "pass-end",
         evidenceFacts = mapOf(
             "action" to gatePlan.action.name,
@@ -1292,7 +1320,16 @@ private fun GPUDestinationReadStrategyRequest.sourceFacts(
 }
 
 private fun GPUDestinationReadPlan.sourceFactValue(name: String): String =
-    sourceTargetFacts.first { fact -> fact.startsWith("$name=") }.removePrefix("$name=")
+    sourceTargetFactsSnapshot.first { fact -> fact.startsWith("$name=") }.removePrefix("$name=")
+
+private fun GPUDestinationReadPlan.requireSingleSourceFactValue(name: String): String {
+    val prefix = "$name="
+    val matchingFacts = sourceTargetFactsSnapshot.filter { fact -> fact.startsWith(prefix) }
+    require(matchingFacts.size == 1) {
+        "CopyTarget plan requires exactly one $name fact"
+    }
+    return matchingFacts.single().removePrefix(prefix)
+}
 
 private fun destinationCopyDescriptorHash(
     request: GPUDestinationReadStrategyRequest,

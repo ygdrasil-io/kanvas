@@ -97,6 +97,80 @@ class DestinationReadLiveMaterializationTest {
     }
 
     @Test
+    fun `mutable CopyTarget evidence cannot change dump preimage or live materialization`() {
+        val planned = GPUDestinationReadStrategyPlanner().plan(destinationRequest())
+        val mutableFacts = planned.plan.sourceTargetFacts.toMutableList()
+        val mutableCopyUsage = requireNotNull(planned.copyDescriptor).usageLabels.toMutableList()
+        val mutableDescriptor = requireNotNull(planned.copyDescriptor).copy(usageLabels = mutableCopyUsage)
+        val gate = planned.copy(
+            plan = planned.plan.copy(sourceTargetFacts = mutableFacts),
+            copyDescriptor = mutableDescriptor,
+            copyPlan = requireNotNull(planned.copyPlan).copy(descriptor = mutableDescriptor),
+        )
+
+        fun mutateFact(name: String, value: String) {
+            val index = mutableFacts.indexOfFirst { fact -> fact.startsWith("$name=") }
+            mutableFacts[index] = "$name=$value"
+        }
+        mutateFact("source", "target:evil")
+        mutateFact("sourceUsage", "storage_binding")
+        mutateFact("copyUsage", "storage_binding")
+        mutateFact("targetFormat", "bgra8unorm")
+        mutableCopyUsage.clear()
+        mutableCopyUsage += "storage_binding"
+
+        assertContains(
+            gate.dumpLines(),
+            "destination-read:strategy row=gpu-renderer.destination-read.strategy routeKind=GPUNative " +
+                "classification=TargetNative promoted=false productActivation=true materialized=false " +
+                "requirement=ShaderBlend strategy=TargetCopySnapshot action=SplitPassAndCopyTarget " +
+                "source=target:main generation=42",
+        )
+        assertContains(
+            gate.dumpLines(),
+            "destination-read:resource sourceUsage=render_attachment,copy_src " +
+                "copyUsage=copy_dst,texture_binding budget=copy-small copyBytes=8192",
+        )
+
+        val preimage = gate.toDestinationReadMaterializationPreimage()
+        assertContains(
+            preimage.dumpLines(),
+            "resource-preimage:resource label=dst-copy:blend-screen role=destination-copy-texture " +
+                "generation=42 lifetime=pass-local descriptor=${gate.copyDescriptorHash} " +
+                "usage=copy_dst,texture_binding facts=action=SplitPassAndCopyTarget;source=target:main",
+        )
+
+        val result = ValidatingDestinationReadMaterializer().materialize(
+            request = destinationMaterializationRequest(gate),
+            context = targetPreparationContext(),
+        )
+        val materialized = assertIs<GPUResourceMaterializationDecision.Materialized>(result.resourceDecision)
+        assertContains(
+            materialized.dumpLines(),
+            "resource.materialization:operand operand=dst-copy:blend-screen kind=destination-copy-texture " +
+                "deviceGeneration=17 owner=destination-read:pass-local usage=copy_dst,texture_binding " +
+                "invalidation=pass-end descriptor=${gate.copyDescriptorHash} " +
+                "facts=action=SplitPassAndCopyTarget;bounds=4,8,64,32;copyBeforeSample=true;" +
+                "copyBytes=8192;source=target:main;strategy=TargetCopySnapshot;targetGeneration=42",
+        )
+        assertContains(
+            result.commandStream.dumpLines(),
+            "passes.command copyTexture source=target:main destination=dst-copy:blend-screen " +
+                "bounds=4,8,64,32 token=dst-token:blend:screen:42",
+        )
+        assertFalse(
+            (gate.dumpLines() + preimage.dumpLines() + result.dumpLines())
+                .joinToString("\n")
+                .contains("evil"),
+        )
+        assertFalse(
+            (gate.dumpLines() + preimage.dumpLines() + result.dumpLines())
+                .joinToString("\n")
+                .contains("storage_binding"),
+        )
+    }
+
+    @Test
     fun `existing intermediate materialization validates and binds separate sampled texture`() {
         val gate = GPUDestinationReadStrategyPlanner().plan(
             destinationRequest(

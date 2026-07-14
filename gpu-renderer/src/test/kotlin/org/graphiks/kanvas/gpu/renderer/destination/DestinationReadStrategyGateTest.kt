@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePurpose
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -138,6 +139,93 @@ class DestinationReadStrategyGateTest {
             ),
             result.dumpLines(),
         )
+    }
+
+    @Test
+    fun `copy target gate rejects forged public copy descriptor and command evidence`() {
+        val valid = GPUDestinationReadStrategyPlanner().plan(targetCopyRequest())
+        val descriptor = requireNotNull(valid.copyDescriptor)
+        val copyPlan = requireNotNull(valid.copyPlan)
+        val forgedDescriptors = listOf(
+            descriptor.copy(label = "dst-copy:evil"),
+            descriptor.copy(descriptorHash = "sha256:evil"),
+            descriptor.copy(sourceTargetLabel = "target:evil"),
+            descriptor.copy(targetGeneration = descriptor.targetGeneration + 1L),
+            descriptor.copy(width = descriptor.width + 1),
+            descriptor.copy(height = descriptor.height + 1),
+            descriptor.copy(formatClass = "bgra8unorm"),
+            descriptor.copy(usageLabels = listOf("texture_binding")),
+            descriptor.copy(sampleCount = descriptor.sampleCount + 1),
+            descriptor.copy(lifetimeClass = "evil-lifetime"),
+            descriptor.copy(ownerLabel = "evil-owner"),
+            descriptor.copy(byteEstimate = descriptor.byteEstimate + 1L),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            valid.copy(copyDescriptor = null)
+        }
+        forgedDescriptors.forEach { forgedDescriptor ->
+            assertFailsWith<IllegalArgumentException> {
+                valid.copy(copyDescriptor = forgedDescriptor)
+            }
+            assertFailsWith<IllegalArgumentException> {
+                valid.copy(copyPlan = copyPlan.copy(descriptor = forgedDescriptor))
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            valid.copy(
+                plan = valid.plan.copy(
+                    bounds = valid.plan.bounds.copy(boundsLabel = "draw:evil|shape-local"),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `copy target gate requires unique congruent source facts`() {
+        val valid = GPUDestinationReadStrategyPlanner().plan(targetCopyRequest())
+        val requiredFactNames = listOf("source", "sourceUsage", "copyUsage", "targetFormat")
+
+        requiredFactNames.forEach { factName ->
+            assertFailsWith<IllegalArgumentException> {
+                valid.copy(
+                    plan = valid.plan.copy(
+                        sourceTargetFacts = valid.plan.sourceTargetFacts + "$factName=evil",
+                    ),
+                )
+            }
+        }
+
+        val incongruentFacts = mapOf(
+            "source" to "target:evil",
+            "sourceUsage" to "copy_src,render_attachment",
+            "copyUsage" to "texture_binding,copy_dst",
+            "targetFormat" to "bgra8unorm",
+        )
+        incongruentFacts.forEach { (factName, forgedValue) ->
+            assertFailsWith<IllegalArgumentException> {
+                valid.copy(
+                    plan = valid.plan.copy(
+                        sourceTargetFacts = valid.plan.sourceTargetFacts.map { fact ->
+                            if (fact.startsWith("$factName=")) "$factName=$forgedValue" else fact
+                        },
+                    ),
+                )
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            valid.copy(
+                plan = valid.plan.copy(
+                    sourceTargetFacts = valid.plan.sourceTargetFacts.map { fact ->
+                        if (fact.startsWith("sourceUsage=")) {
+                            "sourceUsage=render_attachment,copy_src,copy_src"
+                        } else {
+                            fact
+                        }
+                    },
+                ),
+            )
+        }
     }
 
     @Test
