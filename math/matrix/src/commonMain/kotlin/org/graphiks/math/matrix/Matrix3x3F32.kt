@@ -14,8 +14,8 @@ import org.graphiks.math.vector.Vector3F32
 import org.graphiks.math.vector.Vector4F32
 
 /**
- * Simple axis-aligned rectangle. Mirrors Skia's `SkRect` for the
- * narrow set of operations needed by [Matrix3x3F32] and [Matrix4x4F32].
+ * Simple axis-aligned rectangle for the narrow set of
+ * operations needed by [Matrix3x3F32] and [Matrix4x4F32].
  */
 public data class RectF32(
     val left: Float,
@@ -36,7 +36,7 @@ public data class RectF32(
 }
 
 /**
- * 2D transformation matrix — full 3 × 3 port of Skia's `Matrix3x3F32`.
+ * 2D transformation matrix — full 3 × 3 homogeneous representation.
  * Stored row-major:
  *
  * ```
@@ -46,14 +46,12 @@ public data class RectF32(
  * ```
  *
  * The default-constructed matrix is the identity (no scale, skew,
- * translate, or perspective). The 6 affine fields mirror Skia's
- * `kMScaleX / kMSkewX / kMTransX / kMSkewY / kMScaleY / kMTransY`;
- * the 3 perspective fields mirror `kMPersp0 / kMPersp1 / kMPersp2`.
+ * translate, or perspective).
  *
- * Operations come in two flavours mirroring Skia's `pre*` / `post*` split:
+ * Operations come in two flavours:
  *  - **`pre*` (default for `canvas.translate/scale/rotate/skew/concat`)**:
  *    `M = M · L` — the local transform is applied to the *source* coords
- *    first, then the prior CTM. Mirrors Skia's behaviour where
+ *    first, then the prior CTM.
  *    `canvas.translate(dx, dy)` shifts the origin of the *source* space.
  *  - **`post*`**: `M = L · M` — the local transform is applied to the
  *    *device* coords after the prior CTM.
@@ -77,8 +75,7 @@ public data class Matrix3x3F32(
 ) {
     /**
      * `ScaleToFit` describes how [Companion.MakeRectToRect] maps one
-     * rect to another. Mirrors Skia's enum
-     * ([Matrix3x3F32.h:129](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h#L129)).
+     * rect to another.
      */
     public enum class ScaleToFit {
         /** Stretch independently in x and y to fill `dst`. */
@@ -93,8 +90,7 @@ public data class Matrix3x3F32(
 
     /**
      * Cached type mask, computed once at construction. Bit-OR of the
-     * `k*_Mask` constants in the companion object. Mirrors Skia's
-     * `Matrix3x3F32::computeTypeMask` ([src/core/Matrix3x3F32.cpp:101](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L101))
+     * `k*_Mask` constants in the companion object.cpp:101](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L101))
      * specialised for the affine subset (perspective row is hardcoded
      * `[0, 0, 1]` so `kPerspective_Mask` is never set).
      *
@@ -106,7 +102,7 @@ public data class Matrix3x3F32(
     /**
      * Public type mask: bit-OR of [kIdentity_Mask] / [kTranslate_Mask] /
      * [kScale_Mask] / [kAffine_Mask]. [kPerspective_Mask] is never set
-     * for this affine-only port. Mirrors Skia's `Matrix3x3F32::getType`.
+     * for this affine-only port.
      *
      * Use the higher-level predicates ([isIdentity], [isTranslate],
      * [isScaleTranslate], [rectStaysRect]) when you don't need the raw
@@ -123,8 +119,7 @@ public data class Matrix3x3F32(
 
     /**
      * `true` if the matrix is some combination of identity / translate
-     * / scale (no rotation, skew, or perspective). Mirrors Skia's
-     * `Matrix3x3F32::isScaleTranslate`.
+     * / scale (no rotation, skew, or perspective).
      */
     public fun isScaleTranslate(): Boolean =
         (getType() and (kAffine_Mask or kPerspective_Mask)) == 0
@@ -133,26 +128,24 @@ public data class Matrix3x3F32(
      * Legacy alias for [isScaleTranslate] kept for the existing kanvas
      * call sites. Renamed conceptually now that we expose the full
      * type-mask system; callers writing new code should prefer
-     * [isScaleTranslate] for Skia naming parity.
+     * [isScaleTranslate] for naming consistency.
      */
     public val isAxisAligned: Boolean get() = isScaleTranslate()
 
     /**
      * `true` if the matrix maps a rect to a rect — identity, scale,
-     * cardinal-angle rotation, mirror, plus optional translation. Mirrors
-     * Skia's `rectStaysRect` ([Matrix3x3F32.h](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h)).
+     * cardinal-angle rotation, mirror, plus optional translation. Mirrors the rect stays rect algorithm).
      */
     public fun rectStaysRect(): Boolean = (fTypeMask and kRectStaysRect_Mask) != 0
 
-    /** Skia uses both names interchangeably. */
     public fun preservesAxisAlignment(): Boolean = rectStaysRect()
 
-    /** Always `false` in this affine-only port. Mirrors Skia's `hasPerspective`. */
+    /** Always `false` in this affine-only port. */
     public fun hasPerspective(): Boolean = (getType() and kPerspective_Mask) != 0
 
     /**
      * `true` if the matrix is a rotation + uniform scale + translate
-     * (a similarity transform). Mirrors Skia's [`Matrix3x3F32::isSimilarity`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L184).
+     * (a similarity transform).
      */
     public fun isSimilarity(tol: Float = 1e-7f): Boolean {
         val mask = getType()
@@ -175,8 +168,7 @@ public data class Matrix3x3F32(
 
     /**
      * `true` if the matrix maps perpendicular axes to perpendicular axes
-     * (i.e. preserves right angles). Mirrors Skia's
-     * [`preservesRightAngles`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L213).
+     * (i.e. preserves right angles).com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L213).
      */
     public fun preservesRightAngles(tol: Float = 1e-7f): Boolean {
         val mask = getType()
@@ -189,7 +181,7 @@ public data class Matrix3x3F32(
     }
 
     /**
-     * IEEE-strict (NaN-asymmetric) equality, mirroring Skia's
+     * IEEE-strict (NaN-asymmetric) equality.
      * `operator==`. The data-class generated `equals` uses
      * `Float.equals` (NaN-friendly), so use this when porting hot-path
      * C++ that relies on the IEEE semantic.
@@ -199,19 +191,19 @@ public data class Matrix3x3F32(
             ky == other.ky && sy == other.sy && ty == other.ty &&
             persp0 == other.persp0 && persp1 == other.persp1 && persp2 == other.persp2
 
-    // ─── Function-style accessors (Skia naming) ──────────────────────────
+    // ─── Function-style accessors ───────────────────────────────────────
 
-    /** Mirrors Skia's `Matrix3x3F32::getScaleX()`. Equivalent to direct field [sx] access. */
+    /** Equivalent to direct field [sx] access. */
     public fun getScaleX(): Float = sx
-    /** Mirrors Skia's `Matrix3x3F32::getScaleY()`. Equivalent to direct field [sy] access. */
+    /** Equivalent to direct field [sy] access. */
     public fun getScaleY(): Float = sy
-    /** Mirrors Skia's `Matrix3x3F32::getSkewX()`. */
+    /** Accessor for matrix element. */
     public fun getSkewX(): Float = kx
-    /** Mirrors Skia's `Matrix3x3F32::getSkewY()`. */
+    /** Accessor for matrix element. */
     public fun getSkewY(): Float = ky
-    /** Mirrors Skia's `Matrix3x3F32::getTranslateX()`. */
+    /** Accessor for matrix element. */
     public fun getTranslateX(): Float = tx
-    /** Mirrors Skia's `Matrix3x3F32::getTranslateY()`. */
+    /** Accessor for matrix element. */
     public fun getTranslateY(): Float = ty
 
     /** Always `0` for this affine port (perspective row is hardcoded `[0, 0, 1]`). */
@@ -238,10 +230,10 @@ public data class Matrix3x3F32(
     // ─── Array exchange ─────────────────────────────────────────────────
 
     /**
-     * Fill `buffer[0..8]` with the matrix in Skia's row-major 9-tuple
+     * Fill `buffer[0..8]` with the matrix in row-major 9-tuple
      * order: `[sx, kx, tx, ky, sy, ty, persp0, persp1, persp2]`.
      *
-     * Mirrors Skia's `Matrix3x3F32::get9` ([Matrix3x3F32.h](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h)).
+     * Computes the type mask).
      */
     public fun get9(buffer: FloatArray) {
         require(buffer.size >= 9) { "get9 buffer must have ≥ 9 elements (got ${buffer.size})" }
@@ -251,15 +243,14 @@ public data class Matrix3x3F32(
     }
 
     /**
-     * Fill `buffer[0..5]` with the affine 6-tuple in Skia's COLUMN-major
+     * Fill `buffer[0..5]` with the affine 6-tuple in column-major
      * order: `[scaleX, skewY, skewX, scaleY, transX, transY]`. Note the
-     * subtle reordering vs `get9` — Skia stores affine arrays as
+     * subtle reordering vs `get9` — affine arrays are stored as
      * `[a, c, b, d, e, f]` where the matrix is `[[a, b, e], [c, d, f]]`.
      *
      * Returns `false` (and leaves `buffer` untouched) when this matrix
      * has perspective — the affine 6-tuple cannot represent it.
-     * Mirrors Skia's [`Matrix3x3F32::asAffine`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L767).
-     */
+         */
     public fun asAffine(buffer: FloatArray): Boolean {
         require(buffer.size >= 6) { "asAffine buffer must have ≥ 6 elements (got ${buffer.size})" }
         if (hasPerspective()) return false
@@ -275,8 +266,7 @@ public data class Matrix3x3F32(
     /**
      * Bulk map source points to homogeneous output (no perspective
      * divide). `dst[i] = (sx*x + kx*y + tx, ky*x + sy*y + ty,
-     * persp0*x + persp1*y + persp2)`. Mirrors Skia's
-     * [`Matrix3x3F32::mapPointsToHomogeneous`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1080).
+     * persp0*x + persp1*y + persp2)`.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1080).
      */
     public fun mapHomogeneousPoints(
         dst: Array<Vector3F32>,
@@ -312,8 +302,7 @@ public data class Matrix3x3F32(
      * `max(|sx|, |sy|)`; for pure rotation, `1`; for any affine
      * combination, the longest semi-axis of the unit-circle's image.
      *
-     * Mirrors Skia's [`Matrix3x3F32::getMaxScale`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1451).
-     */
+         */
     public fun getMaxScale(): Float {
         val results = FloatArray(1)
         if (computeScaleFactor(scaleKind = SCALE_KIND_MAX, results)) return results[0]
@@ -321,7 +310,7 @@ public data class Matrix3x3F32(
     }
 
     /**
-     * Smallest singular value of the upper 2×2 — matches Skia's `getMinScale`.
+     * Smallest singular value of the upper 2×2 — matches the getMinScale algorithm.
      * Returns `-1` if the matrix has perspective (never the case here).
      */
     public fun getMinScale(): Float {
@@ -342,10 +331,10 @@ public data class Matrix3x3F32(
 
     /**
      * Legacy alias kept to avoid breaking pre-Phase-3 callers. Renamed
-     * to [getMaxScale] for Skia parity.
+     * to [getMaxScale] for compatibility.
      */
     @Deprecated(
-        "Use getMaxScale() for Skia naming parity",
+        "Use getMaxScale() for naming consistency",
         ReplaceWith("getMaxScale()"),
     )
     public fun computeMaxScale(): Float = getMaxScale()
@@ -355,9 +344,9 @@ public data class Matrix3x3F32(
      * + skew + translate component, such that
      * `this = remaining · S(scale.x, scale.y)`. Returns `null` when
      * the decomposition fails (perspective, non-finite, or near-singular
-     * scales — matching Skia's `decomposeScale`).
+     * scales — matching the algorithm).
      *
-     * Result type differs from Skia's out-parameter form because our
+     * Result type uses a `Pair` return because
      * `Matrix3x3F32` is immutable: returns a `Pair<Vector2F32, Matrix3x3F32>` of
      * `(scale, remaining)`.
      *
@@ -375,8 +364,7 @@ public data class Matrix3x3F32(
     }
 
     /**
-     * Internal min/max scale solver. Mirrors Skia's `get_scale_factor`
-     * template ([Matrix3x3F32.cpp:1348](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1348)).
+     * Internal min/max scale solver.cpp:1348](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1348)).
      * The eigenvalues of `MᵀM` are the squared singular values.
      */
     private fun computeScaleFactor(scaleKind: Int, results: FloatArray): Boolean {
@@ -400,7 +388,7 @@ public data class Matrix3x3F32(
             }
             return true
         }
-        // [a b; b c] = MᵀM (computed in float; Skia uses sdot).
+        // [a b; b c] = MᵀM (computed in float; uses sdot).
         val a = sx * sx + ky * ky
         val b = sx * kx + sy * ky
         val c = kx * kx + sy * sy
@@ -418,7 +406,7 @@ public data class Matrix3x3F32(
             first = aPlusCDiv2 - x   // smaller eigenvalue
             second = aPlusCDiv2 + x  // larger eigenvalue
         }
-        // Floating-point may drive a near-zero negative; Skia clamps to 0.
+        // Floating-point may drive a near-zero negative; clamp to 0.
         val sFirst = if (!first.isFinite()) return false else if (first < 0f) 0f else first
         val sSecond = if (!second.isFinite()) return false else if (second < 0f) 0f else second
         when (scaleKind) {
@@ -450,7 +438,7 @@ public data class Matrix3x3F32(
 
     /**
      * Apply only the linear part (drop translation) — used for direction
-     * vectors. Mirrors Skia's `Matrix3x3F32::mapVector(dx, dy)`.
+     * vectors.
      */
     public fun mapVector(dx: Float, dy: Float): Vector2F32 {
         val dst = Array(1) { Vector2F32.Zero }
@@ -461,7 +449,7 @@ public data class Matrix3x3F32(
     /**
      * Bulk apply this matrix to `count` source points, writing the
      * result to `dst`. `dst` and `src` may alias. Type-mask fast paths
-     * mirror Skia's `getMapPtsProc` dispatch:
+     * follow the type-dispatch pattern:
      *
      * - identity → straight copy
      * - translate-only → `+ (tx, ty)` per point
@@ -520,10 +508,9 @@ public data class Matrix3x3F32(
 
     /**
      * Bulk apply only the linear part (drop translation) to vectors.
-     * Mirrors Skia's [`Matrix3x3F32::mapVectors`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1108).
-     *
+         *
      * For perspective matrices the linear part is **not** simply the
-     * 2×2 sub-matrix: upstream takes the discrete derivative of
+     * 2×2 sub-matrix: the discrete derivative of
      * `mapPointPerspective` at the origin, i.e. `mapPoint(src) -
      * mapPoint(0, 0)`. The naive `(sx*x + kx*y, ky*x + sy*y)` is only
      * correct for affine matrices.
@@ -532,15 +519,14 @@ public data class Matrix3x3F32(
         require(count <= dst.size && count <= src.size)
         if (hasPerspective()) {
             // Perspective: dst[i] = mapPoint(src[i]) - mapPoint(0, 0).
-            // Matches the upstream `mapPointPerspective(src) -
-            // mapPointPerspective({0, 0})` formula (Matrix3x3F32.cpp:1108-1122),
+            // Uses the mapPoint - mapPoint(origin) formula,
             // which is the local Jacobian times src.
             val originW = persp2
             val originInvW = if (originW != 0f) 1f / originW else 0f
             val originX = tx * originInvW
             val originY = ty * originInvW
             // Walk backwards so dst === src aliasing stays well-defined
-            // when count > 1 (mirrors upstream's reverse loop).
+            // when count > 1 (reverse loop).
             for (i in count - 1 downTo 0) {
                 val x = src[i].x
                 val y = src[i].y
@@ -570,7 +556,7 @@ public data class Matrix3x3F32(
 
     /**
      * Apply this matrix to a rect, returning the bounding box of the
-     * transformed quad. Equivalent to Skia's `Matrix3x3F32::mapRect`.
+     * transformed quad. Equivalent to `Matrix3x3F32::mapRect`.
      */
     public fun mapRect(r: RectF32): RectF32 {
         // Fast path: scale + translate preserves rect orientation, no
@@ -594,8 +580,7 @@ public data class Matrix3x3F32(
      * Maps `(left, top)` and `(right, bottom)` directly; the result is
      * sorted to handle negative scales (which flip edges).
      *
-     * Mirrors Skia's [`Matrix3x3F32::mapRectScaleTranslate`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1133).
-     * Caller must verify `isScaleTranslate()` first.
+         * Caller must verify `isScaleTranslate()` first.
      */
     public fun mapRectScaleTranslate(r: RectF32): RectF32 {
         check(isScaleTranslate()) {
@@ -611,7 +596,7 @@ public data class Matrix3x3F32(
     /**
      * Heuristic mapped radius — for a circle with radius `r` mapped by
      * this matrix, returns the radius of a "representative" circle in
-     * device space. Skia maps `(r, 0)` and `(0, r)`, takes their lengths,
+     * device space. maps `(r, 0)` and `(0, r)` to device space, takes their lengths,
      * then returns the geometric mean.
      *
      * Mirrors [`Matrix3x3F32::mapRadius`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp).
@@ -625,17 +610,16 @@ public data class Matrix3x3F32(
         return sqrt(d0 * d1)
     }
 
-    /** Pre-concat: `this = this · other`. Mirrors `Matrix3x3F32::preConcat`. */
+    /** Pre-concat: `this = this · other` */
     public fun preConcat(other: Matrix3x3F32): Matrix3x3F32 = concat(this, other)
 
-    /** Post-concat: `this = other · this`. Mirrors `Matrix3x3F32::postConcat`. */
+    /** Post-concat: `this = other · this` */
     public fun postConcat(other: Matrix3x3F32): Matrix3x3F32 = concat(other, this)
 
     /**
      * `M.preTranslate(dx, dy)` ≡ `M · Translate(dx, dy)`. Affine fast
      * path; perspective dispatches through [preConcat] because
-     * `M · T` also updates the `persp2` row entry. Mirrors Skia's
-     * [`Matrix3x3F32::preTranslate`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L267)
+     * `M · T` also updates the `persp2` row entry.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L267)
      * dispatch (mask <= kTranslate / mask & kPerspective / else).
      */
     public fun preTranslate(dx: Float, dy: Float): Matrix3x3F32 {
@@ -647,7 +631,7 @@ public data class Matrix3x3F32(
 
     /**
      * `M.preScale(sx_, sy_)` ≡ `M · Scale(sx_, sy_)`. Closed-form per-cell
-     * multiply (mirrors Skia's `preScale` ([Matrix3x3F32.cpp:329](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L329))).
+     * multiply.
      * The perspective-row updates (`persp0 *= sx_`, `persp1 *= sy_`) are
      * unconditional — they collapse to no-op on affine matrices (`persp0
      * = persp1 = 0`) but propagate correctly through perspective matrices.
@@ -662,8 +646,7 @@ public data class Matrix3x3F32(
     /**
      * `M.preScale(sx_, sy_, px, py)` ≡ `M · S(sx_, sy_, px, py)` where the
      * scale leaves the pivot `(px, py)` fixed: `T(px, py) · Scale · T(-px, -py)`.
-     * Mirrors Skia's [`Matrix3x3F32::preScale(sx, sy, px, py)`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L319).
-     */
+         */
     public fun preScale(sx_: Float, sy_: Float, px: Float, py: Float): Matrix3x3F32 =
         if (sx_ == 1f && sy_ == 1f) this else preConcat(scaling(sx_, sy_, px, py))
 
@@ -695,8 +678,7 @@ public data class Matrix3x3F32(
      * perspective matrices the closed form would also need to update the
      * scale columns (since `T · M = [[sx, kx, tx], [ky, sy, ty], [persp0,
      * persp1, persp2]] + [[dx*persp0, dx*persp1, dx*persp2], ...]`), so
-     * we delegate to [postConcat] there. Mirrors Skia's
-     * [`Matrix3x3F32::postTranslate`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L285).
+     * we delegate to [postConcat] there.
      */
     public fun postTranslate(dx: Float, dy: Float): Matrix3x3F32 {
         if (hasPerspective()) return postConcat(translation(dx, dy))
@@ -707,7 +689,7 @@ public data class Matrix3x3F32(
      * `M.postScale(sx_, sy_)` ≡ `S(sx_, sy_) · M`. Closed-form per-cell
      * multiply (the scale row scales row 0 of M; the y row scales row 1).
      * Persp row stays untouched. Affine-correct AND perspective-correct
-     * unconditionally. Mirrors Skia's [`Matrix3x3F32::postScale`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L373).
+     * unconditionally.
      */
     public fun postScale(sx_: Float, sy_: Float): Matrix3x3F32 {
         if (sx_ == 1f && sy_ == 1f) return this
@@ -719,8 +701,7 @@ public data class Matrix3x3F32(
 
     /**
      * `M.postScale(sx_, sy_, px, py)` ≡ `S(sx_, sy_, px, py) · M`,
-     * keeping `(px, py)` in *device space* fixed. Mirrors Skia's
-     * [`Matrix3x3F32::postScale`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L364).
+     * keeping `(px, py)` in *device space* fixed.
      */
     public fun postScale(sx_: Float, sy_: Float, px: Float, py: Float): Matrix3x3F32 =
         if (sx_ == 1f && sy_ == 1f) this else postConcat(scaling(sx_, sy_, px, py))
@@ -747,15 +728,13 @@ public data class Matrix3x3F32(
 
     /**
      * Kotlin-idiomatic matrix multiply: `a * b ≡ Matrix3x3F32.concat(a, b)`.
-     * A point `p` is mapped first by `b`, then by `a`. Mirrors Skia's
-     * `operator*` on the C++ class.
+     * A point `p` is mapped first by `b`, then by `a`.
      */
     public operator fun times(other: Matrix3x3F32): Matrix3x3F32 = concat(this, other)
 
     /**
      * Inverse of this affine matrix, or `null` if the linear part is
-     * singular or near-singular. Mirrors Skia's `Matrix3x3F32::invert` +
-     * `sk_inv_determinant` (src/core/Matrix3x3F32.cpp).
+     * singular or near-singular.
      *
      * For the 2 × 2 linear part `[[sx, kx], [ky, sy]]` with determinant
      * `det = sx·sy − kx·ky`, the inverse linear part is
@@ -765,7 +744,7 @@ public data class Matrix3x3F32(
      * The determinant is computed in double-precision then compared to
      * `1e-7f³` (≈ 1.46e-11). A matrix whose `|det|` falls
      * below that returns `null` to avoid producing finite-but-garbage
-     * inverse values; this matches Skia's behaviour where a near-degenerate
+     * inverse values; this matches the reference behaviour where a near-degenerate
      * matrix is treated as singular.
      *
      * Used by [SkShader] implementations to map device-space pixel coords
@@ -782,15 +761,15 @@ public data class Matrix3x3F32(
         val iky = (-ky.toDouble() * invDet).toFloat()
         val isy = (sx.toDouble() * invDet).toFloat()
         // Inverse translate via dcross_dscale to keep double precision through the
-        // cross product (matches Skia's ComputeInv, src/core/Matrix3x3F32.cpp).
+        // cross product (double-precision).
         val itx = dcrossDscale(kx, ty, sy, tx, invDet)
         val ity = dcrossDscale(ky, tx, sx, ty, invDet)
         return Matrix3x3F32(sx = isx, kx = ikx, tx = itx, ky = iky, sy = isy, ty = ity)
     }
 
     /**
-     * Full 3×3 cofactor inverse for perspective matrices. Mirrors
-     * Skia's `ComputeInv` perspective branch
+     * Full 3×3 cofactor inverse for perspective matrices. Uses the
+     * perspective branch of the cofactor method
      * ([Matrix3x3F32.cpp:792](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L792)).
      * The det is computed in double; each cofactor is `(a*b - c*d)*invDet`
      * via [dcrossDscale] to preserve precision.
@@ -825,12 +804,11 @@ public data class Matrix3x3F32(
         public val Identity: Matrix3x3F32 = Matrix3x3F32()
 
         /**
-         * Function-form alias for [Identity] matching Skia's static
-         * accessor `Matrix3x3F32::I()` ([Matrix3x3F32.cpp:1464](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1464)).
+         * Function-form alias for [Identity].
          */
         public fun I(): Matrix3x3F32 = Identity
 
-        // ─── 9-element matrix index constants (Skia row-major) ──────────
+        // ─── 9-element matrix index constants (row-major) ──────────────────
         /** Row-major index for scale X ([sx]). */
         public const val kMScaleX: Int = 0
         /** Row-major index for skew X ([kx]). */
@@ -850,7 +828,7 @@ public data class Matrix3x3F32(
         /** Row-major index for perspective 2 ([persp2]). */
         public const val kMPersp2: Int = 8
 
-        // ─── 6-element affine index constants (Skia COLUMN-major: a, c, b, d, e, f) ──
+        // ─── 6-element affine index constants (column-major: a, c, b, d, e, f) ────────
         /** Column-major affine index for scale X. */
         public const val kAScaleX: Int = 0
         /** Column-major affine index for skew Y. */
@@ -875,10 +853,9 @@ public data class Matrix3x3F32(
         /**
          * Build a matrix that maps `src` onto `dst` per the given
          * [ScaleToFit] mode. Returns `null` if `src` is empty (matches
-         * Skia's `Rect2Rect`).
+        .
          *
-         * Mirrors Skia's [`Matrix3x3F32::Rect2Rect`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L559).
-         */
+                 */
         public fun rectToRect(
             src: RectF32,
             dst: RectF32,
@@ -905,16 +882,14 @@ public data class Matrix3x3F32(
         }
 
         /**
-         * Mirrors Skia's `Matrix3x3F32::RectToRectOrIdentity(src, dst)`.
-         * Same as [MakeRectToRect] with `kFill_ScaleToFit` but returns
+                 * Same as [MakeRectToRect] with `kFill_ScaleToFit` but returns
          * [Identity] instead of `null` when [src] is empty or degenerate.
          */
         public fun RectToRectOrIdentity(src: RectF32, dst: RectF32): Matrix3x3F32 =
             rectToRect(src, dst, ScaleToFit.kFill_ScaleToFit) ?: Identity
 
         /**
-         * Mirrors Skia's `Matrix3x3F32::setPolyToPoly(src, dst, count)`.
-         *
+                 *
          * Computes the projective transform that maps source points to the
          * corresponding destination points (0 ≤ count ≤ 4).
          * Returns `null` when the system is degenerate (no unique solution).
@@ -925,8 +900,7 @@ public data class Matrix3x3F32(
         /**
          * Build a matrix from a 9-element row-major buffer. The
          * perspective row is taken verbatim — pass `[0, 0, 1]` for an
-         * affine matrix. Mirrors Skia's
-         * [`Matrix3x3F32::set9`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L55).
+         * affine matrix.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L55).
          */
         public fun from9(buffer: FloatArray): Matrix3x3F32 {
             require(buffer.size >= 9) { "MakeFrom9 expects ≥ 9 elements (got ${buffer.size})" }
@@ -939,8 +913,7 @@ public data class Matrix3x3F32(
 
         /**
          * Build a matrix that applies pure perspective with the given
-         * x/y biases (`persp2 = 1`). Mirrors Skia's `Matrix3x3F32::setAll`
-         * with the perspective row `[p0, p1, 1]`.
+         * x/y biases (`persp2 = 1`).
          */
         public fun perspective(p0: Float, p1: Float): Matrix3x3F32 =
             Matrix3x3F32(persp0 = p0, persp1 = p1)
@@ -948,8 +921,7 @@ public data class Matrix3x3F32(
         /**
          * Build a matrix from a 6-element COLUMN-major affine buffer
          * `[scaleX, skewY, skewX, scaleY, transX, transY]`. Mirrors
-         * Skia's [`Matrix3x3F32::setAffine`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L61).
-         */
+                 */
         public fun fromAffine(buffer: FloatArray): Matrix3x3F32 {
             require(buffer.size >= 6) { "MakeFromAffine expects ≥ 6 elements (got ${buffer.size})" }
             return Matrix3x3F32(
@@ -958,8 +930,8 @@ public data class Matrix3x3F32(
             )
         }
 
-        // ─── TypeMask constants (mirror Skia's Matrix3x3F32::TypeMask enum) ──
-        // [Matrix3x3F32.h:165](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h#L165)
+        // ─── TypeMask constants ───────────────────────────────────────────────
+
 
         /** No scale, skew, or translate. */
         public const val kIdentity_Mask: Int = 0
@@ -973,17 +945,15 @@ public data class Matrix3x3F32(
         public const val kPerspective_Mask: Int = 0x08
         /**
          * Internal "rect stays rect" mask — set when the upper 2x2 maps a rect
-         * to a rect (axis-aligned, 90° rotation, or mirror). Skia keeps this
-         * bit out of the public 4-bit subset returned by `getType()`.
+         * to a rect (axis-aligned, 90° rotation, or mirror). This bit is kept out of the public 4-bit subset returned by `getType()`.
          */
         public const val kRectStaysRect_Mask: Int = 0x10
 
         /**
-         * Compute the type mask for a 6-tuple affine matrix. Mirrors Skia's
-         * `computeTypeMask` ([src/core/Matrix3x3F32.cpp:101](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L101))
+         * Compute the type mask for a 6-tuple affine matrix.cpp:101](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L101))
          * with the perspective branch removed.
          *
-         * The skew-non-zero branch tracks Skia's `(m01 | m10) != 0` short-circuit:
+         * The skew-non-zero branch short-circuits on `(m01 | m10) != 0`:
          * any skew implies `kAffine_Mask | kScale_Mask`, then `rectStaysRect`
          * holds iff the primary diagonal (`sx`, `sy`) is all zero AND the
          * secondary diagonal (`kx`, `ky`) is all non-zero — i.e. a 90°-class
@@ -994,7 +964,7 @@ public data class Matrix3x3F32(
             sx: Float, kx: Float, ky: Float, sy: Float, tx: Float, ty: Float,
             persp0: Float, persp1: Float, persp2: Float,
         ): Int {
-            // Perspective short-circuit: once perspective is on, Skia ORs all
+            // Perspective short-circuit: once perspective is on, OR all
             // bits including kRectStaysRect_Mask. Match that to keep mask
             // monotonic with respect to type-decay (an affine portion of a
             // perspective matrix shouldn't claim to preserve axis alignment).
@@ -1018,29 +988,25 @@ public data class Matrix3x3F32(
             return mask
         }
 
-        /** Skia's `is_degenerate_2x2`. Used by [isSimilarity] / [preservesRightAngles]. */
+        /** Checks if the 2x2 matrix is degenerate. Used by [isSimilarity] / [preservesRightAngles]. */
         public fun isDegenerate2x2(sx: Float, kx: Float, ky: Float, sy: Float): Boolean {
             val perpDot = sx * sy - kx * ky
             return nearlyZero(perpDot, 1e-7f * 1e-7f)
         }
 
         /**
-         * Translation matrix. Mirrors Skia's `Matrix3x3F32::Translate`
-         * ([Matrix3x3F32.h](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h)).
+         * Translation matrix.
          */
         public fun translation(x: Float, y: Float): Matrix3x3F32 =
             Matrix3x3F32(tx = x, ty = y)
 
         /**
-         * Vector-form `translation` overload — Skia C++ exposes both
-         * `Translate(Float dx, Float dy)` and `Translate(Vector2F32 v)`
-         * for hand-port readability.
+         * Vector-form `translation` overload.
          */
         public fun translation(v: Vector2F32): Matrix3x3F32 = translation(v.x, v.y)
 
         /**
-         * Non-uniform scale matrix. Mirrors Skia's `Matrix3x3F32::Scale`
-         * ([Matrix3x3F32.h](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h)).
+         * Non-uniform scale matrix.
          */
         public fun scaling(x: Float, y: Float): Matrix3x3F32 =
             Matrix3x3F32(sx = x, sy = y)
@@ -1051,21 +1017,18 @@ public data class Matrix3x3F32(
         /**
          * Scale around a pivot `(px, py)`, equivalent to
          * `T(px, py) · S(sx, sy) · T(-px, -py)`. Closed form mirrors
-         * Skia's [`Matrix3x3F32::setScale(sx, sy, px, py)`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L300):
-         * `tx = px - sx*px`, `ty = py - sy*py`.
+                 * `tx = px - sx*px`, `ty = py - sy*py`.
          */
         public fun scaling(x: Float, y: Float, pivotX: Float, pivotY: Float): Matrix3x3F32 =
             if (x == 1f && y == 1f) Identity
             else Matrix3x3F32(sx = x, kx = 0f, tx = pivotX - x * pivotX, ky = 0f, sy = y, ty = pivotY - y * pivotY)
 
         /**
-         * Rotation matrix around the origin, angle in **degrees** (Skia's
+         * Rotation matrix around the origin, angle in **degrees** (
          * convention). Positive angle is clockwise in screen-space (y-down).
          *
          * `sin` and `cos` results within `SK_ScalarSinCosNearlyZero` of zero
-         * are snapped to exactly `0f` (mirrors Skia's
-         * `sin` / `cos`,
-         * include/core/Float.h). This guarantees that `rotation(90)`,
+         * are snapped to exactly `0f`. This guarantees that `rotation(90)`,
          * `rotation(180)`, etc. produce bit-exact axis-aligned matrices,
          * so [isAxisAligned] returns `true` for cardinal angles instead of
          * tripping over a `~6e-8` cosine residue.
@@ -1081,10 +1044,9 @@ public data class Matrix3x3F32(
         }
 
         /**
-         * Singular-determinant threshold for [invert]. Skia compares
+         * Singular-determinant threshold for [invert]. Compares
          * `|det|` (cast back to float) against `1e-7f³`
-         * (cube of `1f / (1 << 12)` = ≈ 1.4552e-11). See `sk_inv_determinant`
-         * in src/core/Matrix3x3F32.cpp.
+         * (cube of `1f / 4096` ≈ 1.4552e-11).
          */
         private const val SK_DetNearlyZero: Float =
             (1f / 4096f) * (1f / 4096f) * (1f / 4096f)
@@ -1099,8 +1061,7 @@ public data class Matrix3x3F32(
         }
 
         /**
-         * Skew matrix. Mirrors Skia's `Matrix3x3F32::Skew`
-         * ([Matrix3x3F32.h](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h)).
+         * Skew matrix.
          */
         public fun skewing(kx: Float, ky: Float): Matrix3x3F32 =
             Matrix3x3F32(kx = kx, ky = ky)
@@ -1108,8 +1069,7 @@ public data class Matrix3x3F32(
         /**
          * Skew around a pivot `(px, py)`, equivalent to
          * `T(px, py) · Skew(kx, ky) · T(-px, -py)`. Closed form mirrors
-         * Skia's [`Matrix3x3F32::setSkew(sx, sy, px, py)`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L492):
-         * `tx = -kx*py`, `ty = -ky*px`.
+                 * `tx = -kx*py`, `ty = -ky*px`.
          */
         public fun skewing(kx: Float, ky: Float, pivotX: Float, pivotY: Float): Matrix3x3F32 =
             Matrix3x3F32(sx = 1f, kx = kx, tx = -kx * pivotY, ky = ky, sy = 1f, ty = -ky * pivotX)
@@ -1120,10 +1080,8 @@ public data class Matrix3x3F32(
          *
          * Dispatches between the affine 6-cell formula and a full 3×3
          * `rowcol3` multiply when either input has perspective (mirrors
-         * Skia's setConcat short-circuit, src/core/Matrix3x3F32.cpp:615).
-         * Each `a*b + c*d` cross-term is promoted to `double` before the
-         * final round to `float` via `muladdmul`, matching Skia's
-         * precision-tightening trick.
+                 * Each `a*b + c*d` cross-term is promoted to `double` before the
+         * final round to `float` via `muladdmul`.
          */
         public fun concat(a: Matrix3x3F32, b: Matrix3x3F32): Matrix3x3F32 {
             if (a.hasPerspective() || b.hasPerspective()) {
@@ -1151,19 +1109,18 @@ public data class Matrix3x3F32(
             )
         }
 
-        /** Skia src/core/Matrix3x3F32.cpp:603 — `(double)a*b + (double)c*d`, then round. */
+
         private fun muladdmul(a: Float, b: Float, c: Float, d: Float): Float =
             (a.toDouble() * b + c.toDouble() * d).toFloat()
 
         /**
-         * Skia src/core/Matrix3x3F32.cpp:607 — `a*b + c*d + e*f`, computed in
-         * float (Skia uses native float `rowcol3`; the leading two terms
+         * Computes `a*b + c*d + e*f` in float (the leading two terms
          * dominate, third is small). Used by the perspective concat path.
          */
         private fun rowcol3(a: Float, b: Float, c: Float, d: Float, e: Float, f: Float): Float =
             a * d + b * e + c * f
 
-        /** Skia src/core/Matrix3x3F32.cpp `ComputeInv` — `(a*b - c*d) * scale` in double. */
+
         private fun dcrossDscale(a: Float, b: Float, c: Float, d: Float, scale: Double): Float =
             ((a.toDouble() * b - c.toDouble() * d) * scale).toFloat()
 
@@ -1180,8 +1137,7 @@ public data class Matrix3x3F32(
 
         /**
          * 9-argument `of` — full row-major 3×3 construction. Mirrors
-         * Skia's `Matrix3x3F32::of(scaleX, skewX, transX, skewY, scaleY,
-         * transY, pers0, pers1, pers2)` ([Matrix3x3F32.h](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h)).
+        .
          */
         public fun of(
             sx: Float, kx: Float, tx: Float,
@@ -1192,12 +1148,11 @@ public data class Matrix3x3F32(
         // ─── RSXform factory ─────────────────────────────────────────────
 
         /**
-         * Build the matrix that corresponds to a Skia `SkRSXform`:
+         * Build the matrix from scale, rotation, and translation:
          * rotation + uniform scale + translation, optionally pivoted
          * around `(anchorX, anchorY)`. `scos` and `ssin` are
          * `cos(angle) * scale` and `sin(angle) * scale`. Mirrors
-         * Skia's [`Matrix3x3F32::setRSXform`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L424).
-         */
+                 */
         public fun rsXForm(
             scos: Float, ssin: Float, tx: Float, ty: Float,
         ): Matrix3x3F32 = Matrix3x3F32(
@@ -1209,8 +1164,7 @@ public data class Matrix3x3F32(
          * Pivoted `MakeRSXform`: applies rotation + scale around
          * `(anchor.x, anchor.y)` then translates by `(tx, ty)`. Equivalent
          * to `T(tx, ty) · R(scos, ssin) · T(-anchorX, -anchorY)`.
-         * Mirrors Skia's `SkRSXform::toQuad` style construction.
-         */
+                 */
         public fun rsXForm(
             scos: Float, ssin: Float,
             anchorX: Float, anchorY: Float,
@@ -1233,8 +1187,7 @@ public data class Matrix3x3F32(
          *  - 3 points → general affine (no perspective needed).
          *  - 4 points → general projective (perspective).
          *
-         * Algorithm mirrors Skia's
-         * [`Matrix3x3F32::PolyToPoly`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1306):
+                 * [`Matrix3x3F32::PolyToPoly`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1306):
          * build `srcMap` from src, invert, build `dstMap` from dst,
          * return `dstMap · srcMap⁻¹`.
          */
@@ -1262,7 +1215,7 @@ public data class Matrix3x3F32(
         }
 
         /**
-         * Mirrors Skia's `Poly2Proc` ([Matrix3x3F32.cpp:1214](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1214)):
+         * Computes the type mask):
          * the 2-point fit is rotate-scale-translate built so that the
          * basis maps `(0, 0) → src[0]` and `(1, 0) → src[1]`.
          */
@@ -1275,7 +1228,7 @@ public data class Matrix3x3F32(
             ty = p[0].y,
         )
 
-        /** Mirrors Skia's `Poly3Proc` ([Matrix3x3F32.cpp:1230](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1230)). */
+        /** Polynomial solver for the 3-point poly-to-poly system. */
         private fun Poly3Proc(p: Array<Vector2F32>): Matrix3x3F32 = Matrix3x3F32(
             sx = p[2].x - p[0].x,
             kx = p[1].x - p[0].x,
@@ -1286,11 +1239,11 @@ public data class Matrix3x3F32(
         )
 
         /**
-         * Mirrors Skia's `Poly4Proc` ([Matrix3x3F32.cpp:1246](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1246)).
+         * Computes the type mask).
          * Solves for the perspective coefficients `a1`, `a2` such that
          * the four corners `p[0..3]` are mapped to `(0,0), (1,0), (1,1),
          * (0,1)` (the unit square). Returns `null` on degenerate input
-         * (Skia's `checkForZero(denom)` short-circuit).
+         * (zero-check short-circuit).
          */
         private fun Poly4Proc(p: Array<Vector2F32>): Matrix3x3F32? {
             val x0 = p[2].x - p[0].x
@@ -1342,7 +1295,7 @@ public data class Matrix3x3F32(
             )
         }
 
-        /** Skia's `checkForZero` — `x*x == 0` (catches subnormals). */
+
         private fun checkForZero(x: Float): Boolean = x * x == 0f
     }
 }

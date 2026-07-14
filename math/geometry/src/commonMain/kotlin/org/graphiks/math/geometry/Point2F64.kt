@@ -6,14 +6,13 @@ import kotlin.math.sqrt
 import org.graphiks.math.vector.Vector2F32
 
 /**
- * Double-precision 2D point/vector. Merges Skia's `SkDPoint` and `SkDVector`
- * into one type; [Vector2F64] is a typealias for [Point2F64].
+ * Double-precision 2D point/vector. [Vector2F64] is a typealias for [Point2F64].
  */
 public data class Point2F64(var x: Double, var y: Double) {
 
     public constructor() : this(0.0, 0.0)
 
-    // ─── From SkDVector ──────────────────────────────────────────────────
+    // ─── Vector operations ──────────────────────────────────────────────────
 
     /** Adds [v] to this vector in place. */
     public operator fun plusAssign(v: Point2F64) { x += v.x; y += v.y }
@@ -30,7 +29,7 @@ public data class Point2F64(var x: Double, var y: Double) {
     /** 2-D cross product (scalar z-component). */
     public fun cross(a: Point2F64): Double = x * a.y - y * a.x
 
-    /** Cross product with ULP-based zero check. Mirrors `SkDVector::crossCheck`. */
+    /** Cross product with ULP-based zero check */
     public fun crossCheck(a: Point2F64): Double {
         val xy = x * a.y
         val yx = y * a.x
@@ -64,7 +63,7 @@ public data class Point2F64(var x: Double, var y: Double) {
     /** Returns `true` if both components are finite. */
     public fun isFinite(): Boolean = x.isFinite() && y.isFinite()
 
-    // ─── From SkDPoint ───────────────────────────────────────────────────
+    // ─── Point operations ───────────────────────────────────────────────────
 
     /** Sets this point from a [Vector2F32]. */
     public fun set(pt: Vector2F32) { x = pt.x.toDouble(); y = pt.y.toDouble() }
@@ -76,7 +75,7 @@ public data class Point2F64(var x: Double, var y: Double) {
     public operator fun minus(v: Point2F64): Point2F64 = Point2F64(x - v.x, y - v.y)
 
     /**
-     * Double-precision approximate equality. Mirrors `SkDPoint::approximatelyDEqual`.
+     * Double-precision approximate equality
      */
     public fun approximatelyDEqual(a: Point2F64): Boolean {
         if (approximately_equal(x, a.x) && approximately_equal(y, a.y)) return true
@@ -93,7 +92,7 @@ public data class Point2F64(var x: Double, var y: Double) {
         approximatelyDEqual(Point2F64(a.x.toDouble(), a.y.toDouble()))
 
     /**
-     * Standard approximate equality. Mirrors `SkDPoint::approximatelyEqual`.
+     * Standard approximate equality
      */
     public fun approximatelyEqual(a: Point2F64): Boolean {
         if (approximately_equal(x, a.x) && approximately_equal(y, a.y)) return true
@@ -127,7 +126,7 @@ public data class Point2F64(var x: Double, var y: Double) {
         return dx * dx + dy * dy
     }
 
-    /** Rough equality check. Mirrors `SkDPoint::roughlyEqual`. */
+    /** Rough equality check */
     public fun roughlyEqual(a: Point2F64): Boolean {
         if (roughly_equal(x, a.x) && roughly_equal(y, a.y)) return true
         val dist = distance(a)
@@ -138,7 +137,7 @@ public data class Point2F64(var x: Double, var y: Double) {
     }
 
     public companion object {
-        /** Returns the midpoint of [a] and [b]. Mirrors `SkDPoint::Mid`. */
+        /** Returns the midpoint of [a] and [b] */
         public fun Mid(a: Point2F64, b: Point2F64): Point2F64 =
             Point2F64((a.x + b.x) / 2, (a.y + b.y) / 2)
 
@@ -183,6 +182,6 @@ public data class Point2F64(var x: Double, var y: Double) {
 
 /**
  * Alias for [Point2F64] — the same type is used for both points and
- * vectors, mirroring Skia's convention.
+ * vectors.
  */
 public typealias Vector2F64 = Point2F64

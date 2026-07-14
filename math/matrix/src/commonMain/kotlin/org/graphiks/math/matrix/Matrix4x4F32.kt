@@ -11,12 +11,11 @@ import org.graphiks.math.vector.Vector3F32
 import org.graphiks.math.vector.Vector4F32
 
 /**
- * 4×4 transformation matrix — iso-aligned port of upstream Skia's
- * `Matrix4x4F32` ([include/core/Matrix4x4F32.h:150](https://github.com/google/skia/blob/main/include/core/Matrix4x4F32.h#L150),
+ * `Matrix4x4F32`,
  * [src/core/Matrix4x4F32.cpp](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp)).
  *
  * Storage is a length-16 `FloatArray` in **column-major** layout —
- * matching the upstream memory layout and OpenGL/Vulkan conventions:
+ * matching standard OpenGL/Vulkan conventions:
  *
  * ```
  *  index  0  4  8 12        col 0  col 1  col 2  col 3
@@ -25,12 +24,10 @@ import org.graphiks.math.vector.Vector4F32
  *  index  3  7 11 15
  * ```
  *
- * The class is **mutable** to mirror Skia's `setIdentity / setRotate /
- * preTranslate / postConcat` in-place idioms. For value-class semantics
+ * The class is **mutable** supporting common in-place transform idioms. For value-class semantics
  * use the `Matrix4x4F32(other)` copy constructor or [copy].
  *
- * Skia assumes a right-handed coordinate system: +X right, +Y down,
- * +Z into the screen.
+ * Assumes a right-handed coordinate system: +X right, +Y down, +Z into the screen.
  *
  * SkCanvas integration is deferred — this port is standalone and does
  * not yet feed the canvas matrix stack.
@@ -56,8 +53,7 @@ public class Matrix4x4F32 {
     }
 
     /**
-     * Compose constructor: `this = a · b`. Mirrors Skia's
-     * `Matrix4x4F32(const Matrix4x4F32& a, const Matrix4x4F32& b) { setConcat(a, b); }`.
+     * Compose constructor: `this = a · b`.
      */
     public constructor(a: Matrix4x4F32, b: Matrix4x4F32) {
         setConcat(a, b)
@@ -66,8 +62,7 @@ public class Matrix4x4F32 {
     /**
      * Row-major scalar constructor. Parameters are listed in **row-major**
      * order (`m0 m4 m8 m12` is the first row), but stored column-major.
-     * Mirrors Skia's `Matrix4x4F32(Float m0, Float m4, …)` constructor
-     * ([Matrix4x4F32.h:184](https://github.com/google/skia/blob/main/include/core/Matrix4x4F32.h#L184)).
+         *).
      */
     public constructor(
         m0: Float, m4: Float, m8: Float, m12: Float,
@@ -84,8 +79,7 @@ public class Matrix4x4F32 {
     /**
      * Build an [Matrix4x4F32] from a 3×3 [Matrix3x3F32]. The third row/column of the
      * 4×4 stays identity; the perspective row maps to the bottom row of
-     * the M44. Mirrors Skia's `explicit Matrix4x4F32(const Matrix3x3F32& src)`
-     * ([Matrix4x4F32.h:415](https://github.com/google/skia/blob/main/include/core/Matrix4x4F32.h#L415)).
+     * the M44.
      *
      * ```
      * [ a b c ]      [ a b 0 c ]
@@ -106,19 +100,16 @@ public class Matrix4x4F32 {
     public companion object {
         /**
          * Distance to the `w = 0` plane used when clipping perspective
-         * projections in [mapRect]. Matches upstream's
-         * [`SkPathPriv::kW0PlaneDistance`](https://github.com/google/skia/blob/main/src/core/SkPathPriv.h#L73)
-         * = `1.f / (1 << 14)` ≈ 6.1e-5. Corners with homogeneous `w`
+         * projections in [mapRect]. `kW0PlaneDistance = 1.f / (1 << 14)` ≈ 6.1e-5. Corners with homogeneous `w`
          * below this threshold are treated as being behind the camera.
          */
         public const val kW0PlaneDistance: Float = 1f / (1 shl 14)
 
-        /** Identity matrix. Mirrors upstream's default constructor. */
+        /** Identity matrix. */
         public fun identity(): Matrix4x4F32 = Matrix4x4F32()
 
         /**
-         * Translation matrix. Mirrors Skia's
-         * [`Matrix4x4F32::Translate`](https://github.com/google/skia/blob/main/include/core/Matrix4x4F32.h#L225).
+         * Translation matrix.
          */
         public fun translate(x: Float, y: Float, z: Float = 0f): Matrix4x4F32 = Matrix4x4F32(
             1f, 0f, 0f, x,
@@ -128,8 +119,7 @@ public class Matrix4x4F32 {
         )
 
         /**
-         * Diagonal scale matrix. Mirrors Skia's
-         * [`Matrix4x4F32::Scale`](https://github.com/google/skia/blob/main/include/core/Matrix4x4F32.h#L232).
+         * Diagonal scale matrix.
          */
         public fun scale(x: Float, y: Float, z: Float = 1f): Matrix4x4F32 = Matrix4x4F32(
             x,  0f, 0f, 0f,
@@ -141,9 +131,7 @@ public class Matrix4x4F32 {
         /**
          * Rotation around an arbitrary axis (radians). The axis is
          * normalized internally; identity is returned for a zero or
-         * non-finite axis. Mirrors Skia's
-         * [`Matrix4x4F32::Rotate`](https://github.com/google/skia/blob/main/include/core/Matrix4x4F32.h#L239)
-         * and [`Matrix4x4F32::setRotate`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L279).
+         * non-finite axis.
          */
         public fun rotate(axis: Vector3F32, radians: Float): Matrix4x4F32 = Matrix4x4F32().also {
             it.setRotate(axis, radians)
@@ -151,8 +139,7 @@ public class Matrix4x4F32 {
 
         /**
          * Build the view matrix that places the camera at `eye` looking
-         * at `center` with the given `up` direction. Mirrors Skia's
-         * [`Matrix4x4F32::LookAt`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L331).
+         * at `center` with the given `up` direction.
          */
         public fun lookAt(eye: Vector3F32, center: Vector3F32, up: Vector3F32): Matrix4x4F32 {
             val f = normalize3(center - eye)
@@ -176,8 +163,7 @@ public class Matrix4x4F32 {
         }
 
         /**
-         * Perspective projection. Mirrors Skia's
-         * [`Matrix4x4F32::Perspective`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L343).
+         * Perspective projection.
          * `near < far` and `angle != 0` are required.
          */
         public fun perspective(near: Float, far: Float, angle: Float): Matrix4x4F32 {
@@ -192,15 +178,14 @@ public class Matrix4x4F32 {
             m.setRC(2, 2, (far + near) * denomInv)
             m.setRC(2, 3, 2f * far * near * denomInv)
             m.setRC(3, 2, -1f)
-            // Note: m.rc(3, 3) stays at 1 (default identity), matching upstream
-            // which doesn't reset it. See src/core/Matrix4x4F32.cpp:343.
+           
+            // which doesn't reset it.
             return m
         }
 
         /**
          * Build a matrix that scales-and-translates `src` to fill `dst`
-         * exactly. Mirrors Skia's
-         * [`Matrix4x4F32::RectToRect`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L304).
+         * exactly.
          */
         public fun rectToRect(src: RectF32, dst: RectF32): Matrix4x4F32 {
             if (src.isEmpty) return Matrix4x4F32()
@@ -217,7 +202,7 @@ public class Matrix4x4F32 {
             )
         }
 
-        /** Skia-style `Normalize` helper that returns `v` if `length` is near zero. */
+        /** Helper for vector normalization that returns `v` if `length` is near zero. */
         private fun normalize3(v: Vector3F32): Vector3F32 {
             val len = v.length()
             return if (kotlin.math.abs(len) < 1e-7f) v else v * (1f / len)
@@ -248,8 +233,7 @@ public class Matrix4x4F32 {
 
     /**
      * Return row `i` as a [Vector4F32].
-     * Mirrors Skia's `Matrix4x4F32::row(int)`.
-     */
+         */
     public fun row(i: Int): Vector4F32 {
         require(i in 0..3) { "row($i) out of range" }
         return Vector4F32.of(fMat[i + 0], fMat[i + 4], fMat[i + 8], fMat[i + 12])
@@ -257,8 +241,7 @@ public class Matrix4x4F32 {
 
     /**
      * Return column `i` as a [Vector4F32].
-     * Mirrors Skia's `Matrix4x4F32::col(int)`.
-     */
+         */
     public fun col(i: Int): Vector4F32 {
         require(i in 0..3) { "col($i) out of range" }
         return Vector4F32.of(fMat[i * 4 + 0], fMat[i * 4 + 1], fMat[i * 4 + 2], fMat[i * 4 + 3])
@@ -266,8 +249,7 @@ public class Matrix4x4F32 {
 
     /**
      * Replace row `i` with [v].
-     * Mirrors Skia's `Matrix4x4F32::setRow`.
-     */
+         */
     public fun setRow(i: Int, v: Vector4F32) {
         require(i in 0..3) { "setRow($i) out of range" }
         fMat[i + 0] = v.x
@@ -278,8 +260,7 @@ public class Matrix4x4F32 {
 
     /**
      * Replace column `i` with [v].
-     * Mirrors Skia's `Matrix4x4F32::setCol`.
-     */
+         */
     public fun setCol(i: Int, v: Vector4F32) {
         require(i in 0..3) { "setCol($i) out of range" }
         fMat[i * 4 + 0] = v.x
@@ -322,8 +303,7 @@ public class Matrix4x4F32 {
 
     /**
      * Reset to identity. Returns `this` for chaining.
-     * Mirrors Skia's `Matrix4x4F32::setIdentity`.
-     */
+         */
     public fun setIdentity(): Matrix4x4F32 = apply {
         fMat.fill(0f)
         fMat[0] = 1f
@@ -334,8 +314,7 @@ public class Matrix4x4F32 {
 
     /**
      * Reset to a translation matrix. Returns `this` for chaining.
-     * Mirrors Skia's `Matrix4x4F32::setTranslate`.
-     */
+         */
     public fun setTranslate(x: Float, y: Float, z: Float = 0f): Matrix4x4F32 = apply {
         fMat[0] = 1f; fMat[1] = 0f; fMat[2] = 0f; fMat[3] = 0f
         fMat[4] = 0f; fMat[5] = 1f; fMat[6] = 0f; fMat[7] = 0f
@@ -345,8 +324,7 @@ public class Matrix4x4F32 {
 
     /**
      * Reset to a diagonal scale matrix. Returns `this` for chaining.
-     * Mirrors Skia's `Matrix4x4F32::setScale`.
-     */
+         */
     public fun setScale(x: Float, y: Float, z: Float = 1f): Matrix4x4F32 = apply {
         fMat[0] = x;  fMat[1] = 0f; fMat[2] = 0f; fMat[3] = 0f
         fMat[4] = 0f; fMat[5] = y;  fMat[6] = 0f; fMat[7] = 0f
@@ -356,8 +334,7 @@ public class Matrix4x4F32 {
 
     /**
      * Set this matrix to rotate about the **already unit-length** axis
-     * `axis` by the given sin and cos. Mirrors Skia's
-     * [`Matrix4x4F32::setRotateUnitSinCos`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L262).
+     * `axis` by the given sin and cos.
      */
     public fun setRotateUnitSinCos(axis: Vector3F32, sinAngle: Float, cosAngle: Float): Matrix4x4F32 {
         val x = axis.x
@@ -367,7 +344,7 @@ public class Matrix4x4F32 {
         val s = sinAngle
         val t = 1 - c
 
-        // Row-major as written upstream; stored column-major below.
+        // Row-major formulation; stored column-major below.
         fMat[0] = t * x * x + c;     fMat[4] = t * x * y - s * z; fMat[8] = t * x * z + s * y; fMat[12] = 0f
         fMat[1] = t * x * y + s * z; fMat[5] = t * y * y + c;     fMat[9] = t * y * z - s * x; fMat[13] = 0f
         fMat[2] = t * x * z - s * y; fMat[6] = t * y * z + s * x; fMat[10] = t * z * z + c;   fMat[14] = 0f
@@ -382,8 +359,7 @@ public class Matrix4x4F32 {
     /**
      * Set this matrix to rotate about the (possibly un-normalised) axis
      * by `radians`. Normalises `axis` internally; falls back to
-     * identity if `axis.length()` is zero or non-finite. Mirrors Skia's
-     * [`Matrix4x4F32::setRotate`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L279).
+     * identity if `axis.length()` is zero or non-finite.
      */
     public fun setRotate(axis: Vector3F32, radians: Float): Matrix4x4F32 {
         val len = axis.length()
@@ -410,22 +386,20 @@ public class Matrix4x4F32 {
     /** Returns a new matrix equal to `this · other`. */
     public operator fun times(other: Matrix4x4F32): Matrix4x4F32 = Matrix4x4F32(this, other)
 
-    /** In-place: `this = this · m`. Mirrors Skia's `preConcat`. */
+    /** In-place: `this = this · m`. */
     public fun preConcat(m: Matrix4x4F32): Matrix4x4F32 = setConcat(this, m)
 
-    /** In-place: `this = m · this`. Mirrors Skia's `postConcat`. */
+    /** In-place: `this = m · this`. */
     public fun postConcat(m: Matrix4x4F32): Matrix4x4F32 = setConcat(m, this)
 
     /**
      * In-place pre-multiply by a 3×3 [Matrix3x3F32] (promoted as in the
-     * `Matrix3x3F32` ctor). Mirrors Skia's
-     * [`Matrix4x4F32::preConcat(const Matrix3x3F32&)`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L70).
+     * `Matrix3x3F32` constructor.
      */
     public fun preConcat(b: Matrix3x3F32): Matrix4x4F32 = preConcat(Matrix4x4F32(b))
 
     /**
-     * In-place: pre-multiply by `translate(x, y, z)`. Mirrors
-     * [`Matrix4x4F32::preTranslate`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L89).
+     * In-place: pre-multiply by `translate(x, y, z)`.
      */
     public fun preTranslate(x: Float, y: Float, z: Float = 0f): Matrix4x4F32 {
         // Only the last column changes: c0*x + c1*y + c2*z + c3
@@ -441,8 +415,7 @@ public class Matrix4x4F32 {
     }
 
     /**
-     * In-place: post-multiply by `translate(x, y, z)`. Mirrors
-     * [`Matrix4x4F32::postTranslate`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L100).
+     * In-place: post-multiply by `translate(x, y, z)`.
      *
      * `t = (x, y, z, 0)` and each column `c_i` of the result is
      * `c_i + t * c_i.w`.
@@ -458,8 +431,7 @@ public class Matrix4x4F32 {
     }
 
     /**
-     * In-place 2D pre-scale. Mirrors
-     * [`Matrix4x4F32::preScale(Float, Float)`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L109).
+     * In-place 2D pre-scale.
      */
     public fun preScale(x: Float, y: Float): Matrix4x4F32 {
         fMat[0] *= x; fMat[1] *= x; fMat[2] *= x; fMat[3] *= x
@@ -468,8 +440,7 @@ public class Matrix4x4F32 {
     }
 
     /**
-     * In-place 3D pre-scale. Mirrors
-     * [`Matrix4x4F32::preScale(Float, Float, Float)`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L118).
+     * In-place 3D pre-scale.
      */
     public fun preScale(x: Float, y: Float, z: Float): Matrix4x4F32 {
         fMat[0] *= x; fMat[1] *= x; fMat[2] *= x; fMat[3] *= x
@@ -481,8 +452,7 @@ public class Matrix4x4F32 {
     // ─── Mapping ───────────────────────────────────────────────────────
 
     /**
-     * Apply this matrix to the 4-vector `(x, y, z, w)`. Mirrors Skia's
-     * [`Matrix4x4F32::map`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L129).
+     * Apply this matrix to the 4-vector `(x, y, z, w)`.
      */
     public fun map(x: Float, y: Float, z: Float, w: Float): Vector4F32 {
         val rx = fMat[0] * x + fMat[4] * y + fMat[8] * z + fMat[12] * w
@@ -533,7 +503,7 @@ public class Matrix4x4F32 {
      * Perspective path: ports
      * [`map_rect_perspective`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L164)
      * — corners whose homogeneous `w` is below `kW0PlaneDistance`
-     * (≈ 6.1e-5, the same threshold upstream uses to avoid division
+     * (≈ 6.1e-5, a threshold to avoid division
      * by ~zero) are clipped against the adjacent edges so the result
      * stays finite even when the rect crosses behind the camera.
      */
@@ -583,7 +553,7 @@ public class Matrix4x4F32 {
         val bl = map(l,  b,  0f, 1f)
 
         // Walk the corners clockwise. project(p0, p1, p2) returns
-        // (minX, minY, -maxX, -maxY) — same "flip" trick as upstream so
+        // (minX, minY, -maxX, -maxY) — same "flip" trick so
         // a single min() across the four results yields (l, t, -r, -b).
         val p0 = project(tl, tr, bl)
         val p1 = project(tr, br, tl)
@@ -656,8 +626,7 @@ public class Matrix4x4F32 {
 
     /**
      * Return the inverse of this matrix, or `null` if it is singular.
-     * Computed in `double` precision (matches Skia's
-     * [`SkInvert4x4Matrix`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32Invert.cpp#L72)).
+     * Computed in `double` precision.
      */
     public fun invert(): Matrix4x4F32? {
         val a00 = fMat[0].toDouble();  val a01 = fMat[1].toDouble()
@@ -716,7 +685,7 @@ public class Matrix4x4F32 {
         return result
     }
 
-    /** Return the transpose of this matrix. Mirrors Skia's `transpose()`. */
+    /** Return the transpose of this matrix. */
     public fun transpose(): Matrix4x4F32 {
         val t = Matrix4x4F32()
         transposeArrays(t.fMat, fMat)
@@ -728,9 +697,8 @@ public class Matrix4x4F32 {
     /**
      * Drop this 4×4 to its 3×3 affine image: the third row and column
      * are dropped, the perspective row of the M44 maps to the
-     * perspective row of the 3×3. Always returns a non-null matrix —
-     * the upstream API returns `Matrix3x3F32` directly, so this returns
-     * `Matrix3x3F32?` only for symmetry with [setM33] (use it as
+     * perspective row of the 3×3. Always returns a non-null matrix;
+     * returns `Matrix3x3F32?` for symmetry with [setM33] (use it as
      * `asM33()!!` if you want non-nullable).
      */
     public fun asM33(): Matrix3x3F32? = Matrix3x3F32.of(
@@ -757,8 +725,6 @@ public class Matrix4x4F32 {
     /**
      * If the bottom row is `[0, 0, 0, X]` with `X != 0, 1`, scale the
      * whole matrix by `1/X` so the bottom row becomes `[0, 0, 0, 1]`.
-     * Mirrors Skia's
-     * [`Matrix4x4F32::normalizePerspective`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L226).
      */
     public fun normalizePerspective() {
         if (fMat[15] != 1f && fMat[15] != 0f &&
@@ -774,8 +740,7 @@ public class Matrix4x4F32 {
 
     /**
      * Returns `true` if all 16 entries are finite (no Inf / NaN).
-     * Mirrors Skia's `Matrix4x4F32::isFinite()`.
-     */
+         */
     public fun isFinite(): Boolean {
         for (i in 0..15) if (!fMat[i].isFinite()) return false
         return true

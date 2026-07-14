@@ -4,8 +4,6 @@ package org.graphiks.math.color
  * Parameters for ICC parametric curve type 4: `y = (a*x + b)^g + e` for
  * `x >= d` and `y = c*x + f` for `x < d`.
  *
- * Iso-aligned port of Skia's `skcms_TransferFunction`
- * ([src/core/SkColorSpaceXformSteps.h](https://github.com/google/skia/blob/main/src/core/SkColorSpaceXformSteps.h)).
  */
 public data class ColorTransferFunction(
     public val g: Float,

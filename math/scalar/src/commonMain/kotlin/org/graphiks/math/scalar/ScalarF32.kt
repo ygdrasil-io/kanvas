@@ -5,8 +5,6 @@ import kotlin.math.*
 /**
  * Single-precision scalar value.
  *
- * Iso-aligned port of Skia's `SkScalar`
- * ([include/core/SkScalar.h](https://github.com/google/skia/blob/main/include/core/SkScalar.h)).
  */
 @JvmInline
 public value class ScalarF32 internal constructor(public val value: Float) {
@@ -90,7 +88,7 @@ public fun clamp(value: Float, min: Float, max: Float): Float = value.coerceIn(m
 public fun interp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
 /**
- * Alias for [interp]. Mirrors Skia's `SkScalarLerp`.
+ * Alias for [interp].
  */
 public fun lerp(a: Float, b: Float, t: Float): Float = interp(a, b, t)
 
@@ -102,8 +100,7 @@ public fun sign(value: Float): Float = if (value > 0f) 1f else if (value < 0f) -
 /**
  * Sine of [radians]. Snaps near-zero results to exactly 0f.
  *
- * Mirrors Skia's `sk_float_sin`
- * ([include/core/SkScalar.h](https://github.com/google/skia/blob/main/include/core/SkScalar.h)).
+ *).
  */
 public fun sin(radians: Float): Float {
     val r = kotlin.math.sin(radians.toDouble()).toFloat()
@@ -113,8 +110,7 @@ public fun sin(radians: Float): Float {
 /**
  * Cosine of [radians]. Snaps near-zero results to exactly 0f.
  *
- * Mirrors Skia's `sk_float_cos`
- * ([include/core/SkScalar.h](https://github.com/google/skia/blob/main/include/core/SkScalar.h)).
+ *).
  */
 public fun cos(radians: Float): Float {
     val r = kotlin.math.cos(radians.toDouble()).toFloat()
@@ -124,8 +120,7 @@ public fun cos(radians: Float): Float {
 /**
  * Tangent of [radians]. Snaps near-zero results to exactly 0f.
  *
- * Mirrors Skia's `sk_float_tan`
- * ([include/core/SkScalar.h](https://github.com/google/skia/blob/main/include/core/SkScalar.h)).
+ *).
  */
 public fun tan(radians: Float): Float {
     val r = kotlin.math.tan(radians.toDouble()).toFloat()
@@ -135,7 +130,6 @@ public fun tan(radians: Float): Float {
 /**
  * Saturating 32-bit integer addition: clamps result to `[Int.MIN_VALUE, Int.MAX_VALUE]`.
  *
- * Mirrors Skia's `Sk32_sat_add`
  * ([src/core/SkUtils.h](https://github.com/google/skia/blob/main/src/core/SkUtils.h)).
  */
 public fun saturatingAdd32(a: Int, b: Int): Int {
@@ -146,7 +140,6 @@ public fun saturatingAdd32(a: Int, b: Int): Int {
 /**
  * Saturating 32-bit integer subtraction: clamps result to `[Int.MIN_VALUE, Int.MAX_VALUE]`.
  *
- * Mirrors Skia's `Sk32_sat_sub`
  * ([src/core/SkUtils.h](https://github.com/google/skia/blob/main/src/core/SkUtils.h)).
  */
 public fun saturatingSub32(a: Int, b: Int): Int {

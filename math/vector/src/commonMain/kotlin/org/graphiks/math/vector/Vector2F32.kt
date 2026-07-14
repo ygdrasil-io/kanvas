@@ -5,8 +5,6 @@ import org.graphiks.math.scalar.nearlyZero
 /**
  * Immutable 2-D float vector.
  *
- * Iso-aligned port of Skia's `SkV2`
- * ([include/core/SkM44.h](https://github.com/google/skia/blob/main/include/core/SkM44.h)).
  */
 public data class Vector2F32 internal constructor(public val x: Float, public val y: Float) {
 

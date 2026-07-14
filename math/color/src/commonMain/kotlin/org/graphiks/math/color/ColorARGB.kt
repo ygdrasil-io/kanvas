@@ -3,21 +3,19 @@ package org.graphiks.math.color
 /**
  * Packed 32-bit ARGB color (`alpha shl 24 | red shl 16 | green shl 8 | blue`).
  *
- * Iso-aligned port of Skia's `SkColor`
- * ([include/core/SkColor.h](https://github.com/google/skia/blob/main/include/core/SkColor.h)).
  * Channels are unpremultiplied. Use [ColorARGBCompanion] for named color constants.
  */
 public typealias ColorARGB = Int
 
 /**
  * Packs four byte channels (alpha, red, green, blue) into a [ColorARGB].
- * Channels are masked to 8 bits. Mirrors upstream `SkColorSetARGB`.
+ * Channels are masked to 8 bits.
  */
 public fun colorARGB(a: Int, r: Int, g: Int, b: Int): ColorARGB =
     ((a and 0xFF) shl 24) or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF)
 
 /**
- * Packs RGB channels with full opacity (alpha = 0xFF). Mirrors `SkColorSetRGB`.
+ * Packs RGB channels with full opacity (alpha = 0xFF)
  */
 public fun colorRGB(r: Int, g: Int, b: Int): ColorARGB =
     colorARGB(0xFF, r, g, b)
@@ -73,8 +71,7 @@ public object ColorARGBCompanion {
 }
 
 /**
- * Premultiplies the given color channels. Mirrors upstream
- * `SkPreMultiplyARGB`.
+ * Premultiplies the given color channels.
  */
 public fun premultiplyARGB(a: Int, r: Int, g: Int, b: Int): Int {
     if (a == 0xFF) return colorARGB(a, r, g, b)
@@ -91,7 +88,6 @@ public fun ColorARGB.premultiplied(): ColorARGB = premultiplyColorARGB(this)
 
 /**
  * Unpremultiplies [color]. Returns the original if alpha is 0 or 255.
- * Mirrors upstream `SkUnPreMultiply::PMColorToColor`.
  */
 public fun unpremultiplyColorARGB(color: ColorARGB): ColorARGB {
     val a = color.alpha
@@ -107,13 +103,12 @@ public fun ColorARGB.unpremultiplied(): ColorARGB = unpremultiplyColorARGB(this)
 
 /**
  * Multiplies an alpha value by [scale] with rounding. Mirrors
- * `SkMultiplyAlpha255` / `SkAlphaMul`.
+ * Computes the alpha multiplication.
  */
 public fun multiplyAlpha255(a: Int, scale: Int): Int = (a * scale + 127) / 255
 
 /**
  * Multiplies an alpha value by [scale] with rounding for 16-bit alpha.
- * Mirrors `SkAlphaMulQ`.
  */
 public fun multiplyAlpha32(a: Int, scale: Int): Int = (a * scale + 0x7FFF) / 0xFFFF
 
@@ -188,7 +183,7 @@ public fun hsvToColor(alpha: Int, h: Float, s: Float, v: Float): ColorARGB {
 
 /**
  * Converts a [ColorARGB] to HSV. Writes into [hsv]: `hsv[0]` = hue,
- * `hsv[1]` = saturation, `hsv[2]` = value. Mirrors `SkColorToHSV`.
+ * `hsv[1]` = saturation, `hsv[2]` = value
  */
 public fun colorToHSV(color: ColorARGB, hsv: FloatArray = FloatArray(3)) {
     require(hsv.size >= 3) { "hsv must have at least 3 elements" }
@@ -217,7 +212,6 @@ public fun colorToHSV(color: ColorARGB, hsv: FloatArray = FloatArray(3)) {
 
 /**
  * Converts a [ColorARGB] to RGB565 with replicated low bits, keeping alpha.
- * Mirrors `SkPMColorToRGB16` / `SkPixel16ToPixel32`.
  */
 public fun colorToRGB565(c: ColorARGB): ColorARGB {
     val r = c.red and 0xF8

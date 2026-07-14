@@ -3,13 +3,10 @@ package org.graphiks.math.color
 /**
  * A 4×5 color matrix for transforming RGBA color vectors.
  *
- * Iso-aligned port of Skia's `SkColorMatrix`
- * ([include/core/SkColorMatrix.h](https://github.com/google/skia/blob/main/include/core/SkColorMatrix.h)).
- *
  * The 20-element backing array stores the matrix in row-major order:
  * rows 0-3 multiply R, G, B, A respectively; column 4 is the
- * additive translate column. Operations mirror Skia's `preConcat` /
- * `postConcat`, RGB↔YUV conversion, saturation, and identity/reset.
+ * additive translate column. Supports `preConcat` / `postConcat`,
+ * RGB↔YUV conversion, saturation, and identity/reset.
  */
 public class ColorMatrixF32 {
 
@@ -48,7 +45,7 @@ public class ColorMatrixF32 {
         fMat[kA_Scale] = 1f
     }
 
-    /** Sets this matrix to a diagonal scale. Mirrors `SkColorMatrix::setScale`. */
+    /** Sets this matrix to a diagonal scale */
     public fun setScale(rScale: Float, gScale: Float, bScale: Float, aScale: Float = 1f) {
         fMat.fill(0f)
         fMat[kR_Scale] = rScale
@@ -75,7 +72,7 @@ public class ColorMatrixF32 {
         JPEG_FULL_YUV_TO_RGB.copyInto(fMat)
     }
 
-    /** Sets this matrix to a saturation adjustment. Mirrors `SkColorMatrix::setSaturation`. */
+    /** Sets this matrix to a saturation adjustment */
     public fun setSaturation(sat: Float) {
         fMat.fill(0f)
         val R = kHueR * (1f - sat)
@@ -137,8 +134,7 @@ public class ColorMatrixF32 {
         public fun RGBtoYUV(yuvColorSpace: Any): ColorMatrixF32 {
             TODO(
                 "STUB.YUVA_PIXMAPS: ColorMatrixF32.RGBtoYUV($yuvColorSpace) — " +
-                    "per-color-space RGB→YUV matrices not yet ported from " +
-                    "src/core/SkYUVMath.cpp (SkColorMatrix_RGB2YUV)."
+                    "per-color-space RGB→YUV matrices not yet implemented."
             )
         }
 

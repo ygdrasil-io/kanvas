@@ -5,8 +5,6 @@ import org.graphiks.math.scalar.clamp
 /**
  * Mutable RGBA color with float components in [0, 1].
  *
- * Iso-aligned port of Skia's `SkColor4f`
- * ([include/core/SkColor.h](https://github.com/google/skia/blob/main/include/core/SkColor.h)).
  */
 @ConsistentCopyVisibility
 public data class ColorF32 internal constructor(

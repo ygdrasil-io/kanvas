@@ -3,8 +3,6 @@ package org.graphiks.math.geometry
 /**
  * Integer size (width, height).
  *
- * Iso-aligned port of Skia's `SkISize`
- * ([include/core/SkSize.h](https://github.com/google/skia/blob/main/include/core/SkSize.h)).
  */
 public data class SizeI32(val width: Int, val height: Int) {
     /** Returns `true` if width or height is non-positive. */
@@ -25,8 +23,6 @@ public data class SizeI32(val width: Int, val height: Int) {
 /**
  * Float size (width, height).
  *
- * Iso-aligned port of Skia's `SkSize`
- * ([include/core/SkSize.h](https://github.com/google/skia/blob/main/include/core/SkSize.h)).
  */
 public data class SizeF32(val width: Float, val height: Float) {
     /** Returns `true` if width or height is non-positive. */

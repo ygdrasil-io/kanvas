@@ -9,8 +9,6 @@ import kotlin.math.round
 /**
  * Mutable axis-aligned float rectangle.
  *
- * Iso-aligned port of Skia's `SkRect`
- * ([include/core/SkRect.h](https://github.com/google/skia/blob/main/include/core/SkRect.h)).
  */
 public data class RectF32(
     var left: Float,
@@ -18,10 +16,10 @@ public data class RectF32(
     var right: Float,
     var bottom: Float,
 ) {
-    /** Returns [left]. Mirrors Skia's `SkRect::x()`. */
+    /** Returns [left]. */
     public fun x(): Float = left
 
-    /** Returns [top]. Mirrors Skia's `SkRect::y()`. */
+    /** Returns [top]. */
     public fun y(): Float = top
 
     /** Returns the left edge. */
@@ -271,8 +269,7 @@ public data class RectF32(
 
         /**
          * Returns `true` if the two axis-aligned rects intersect.
-         * Mirrors Skia's `SkRect::Intersects` (static).
-         */
+                 */
         public fun Intersects(
             al: Float, at: Float, ar: Float, ab: Float,
             bl: Float, bt: Float, br: Float, bb: Float,

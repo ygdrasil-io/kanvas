@@ -8,7 +8,7 @@ import org.graphiks.math.vector.Vector2F32
 /**
  * Double-precision 2D line segment.
  *
- * Used by path-ops (SkPathOps) for exact geometric intersection
+ * Used by path-ops (path operations) for exact geometric intersection
  * calculations. The companion object provides static helpers for
  * finding exact and approximate points on horizontal/vertical edges.
  */
@@ -56,7 +56,7 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
     /**
      * Returns the parameter `t` of [xy] on this segment if the point
      * lies approximately on it, otherwise -1.0. Mirrors
-     * `SkDLine::nearPoint`.
+     * `Line::nearPoint`.
      */
     fun nearPoint(xy: Point2F64, unequal: BooleanArray? = null): Double {
         if (!AlmostBetweenUlps(pts[0].x, xy.x, pts[1].x)
@@ -83,7 +83,7 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
 
     /**
      * Returns `true` if [xy] lies approximately on the ray through
-     * this segment. Mirrors `SkDLine::NearRay`.
+     * this segment
      */
     fun nearRay(xy: Point2F64): Boolean {
         val len = pts[1] - pts[0]
@@ -108,7 +108,7 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
     override fun hashCode(): Int = 31 * pts[0].hashCode() + pts[1].hashCode()
 
     companion object {
-        /** Mirrors `SkDLine::ExactPointH`. */
+        /** Performs the computation. */
         fun ExactPointH(xy: Point2F64, left: Double, right: Double, y: Double): Double {
             if (xy.y == y) {
                 if (xy.x == left) return 0.0
@@ -117,7 +117,7 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
             return -1.0
         }
 
-        /** Mirrors `SkDLine::NearPointH`. */
+        /** Performs the computation. */
         fun NearPointH(xy: Point2F64, left: Double, right: Double, y: Double): Double {
             if (!AlmostBequalUlps(xy.y, y)) return -1.0
             if (!AlmostBetweenUlps(left, xy.x, right)) return -1.0
@@ -133,7 +133,7 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
             return t
         }
 
-        /** Mirrors `SkDLine::ExactPointV`. */
+        /** Performs the computation. */
         fun ExactPointV(xy: Point2F64, top: Double, bottom: Double, x: Double): Double {
             if (xy.x == x) {
                 if (xy.y == top) return 0.0
@@ -142,7 +142,7 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
             return -1.0
         }
 
-        /** Mirrors `SkDLine::NearPointV`. */
+        /** Performs the computation. */
         fun NearPointV(xy: Point2F64, top: Double, bottom: Double, x: Double): Double {
             if (!AlmostBequalUlps(xy.x, x)) return -1.0
             if (!AlmostBetweenUlps(top, xy.y, bottom)) return -1.0

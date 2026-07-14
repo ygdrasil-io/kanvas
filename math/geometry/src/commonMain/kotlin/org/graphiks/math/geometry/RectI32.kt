@@ -3,8 +3,6 @@ package org.graphiks.math.geometry
 /**
  * Mutable axis-aligned integer rectangle.
  *
- * Iso-aligned port of Skia's `SkIRect`
- * ([include/core/SkRect.h](https://github.com/google/skia/blob/main/include/core/SkRect.h)).
  */
 public data class RectI32(
     var left: Int,

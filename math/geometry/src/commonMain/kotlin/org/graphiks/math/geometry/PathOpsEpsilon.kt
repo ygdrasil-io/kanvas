@@ -6,10 +6,10 @@ import kotlin.math.min
 
 // ─── Epsilon constants ────────────────────────────────────────────────
 
-/** Single-precision epsilon = 2^-23 ≈ 1.19209290e-7. Mirrors `FLT_EPSILON`. */
+/** Single-precision epsilon = 2^-23 ≈ 1.19209290e-7 */
 public const val FLT_EPSILON: Double = 1.1920928955078125e-7
 
-/** Double-precision epsilon = 2^-52 ≈ 2.220446e-16. Mirrors `DBL_EPSILON`. */
+/** Double-precision epsilon = 2^-52 ≈ 2.220446e-16 */
 public const val DBL_EPSILON: Double = 2.220446049250313e-16
 
 /** `FLT_EPSILON` cubed. */
@@ -127,7 +127,7 @@ private fun lessOrEqualUlps(a: Float, b: Float, epsilon: Int): Boolean {
 
 // ─── Public ULPs predicates ───────────────────────────────────────────
 
-/** Returns `true` if [a] and [b] are within 16 ULPs. Mirrors `AlmostEqualUlps`. */
+/** Returns `true` if [a] and [b] are within 16 ULPs */
 public fun AlmostEqualUlps(a: Float, b: Float): Boolean = equalUlps(a, b, 16, 16)
 
 /** Double-precision overload for [AlmostEqualUlps]. */
@@ -216,7 +216,7 @@ public fun AlmostLessOrEqualUlps(a: Float, b: Float): Boolean = lessOrEqualUlps(
 /** Double-precision overload for [AlmostLessOrEqualUlps]. */
 public fun AlmostLessOrEqualUlps(a: Double, b: Double): Boolean = AlmostLessOrEqualUlps(a.toFloat(), b.toFloat())
 
-/** Returns the ULP distance between [a] and [b]. Mirrors `UlpsDistance`. */
+/** Returns the ULP distance between [a] and [b] */
 public fun UlpsDistance(a: Float, b: Float): Int {
     val aBits = a.toRawBits()
     val bBits = b.toRawBits()
@@ -409,19 +409,19 @@ public fun more_roughly_equal(x: Double, y: Double): Boolean = abs(x - y) < MORE
 
 // ─── T value & sign helpers ───────────────────────────────────────────
 
-/** Linear interpolation. Mirrors `SkDInterp`. */
+/** Linear interpolation */
 public fun SkDInterp(A: Double, B: Double, t: Double): Double = A + (B - A) * t
 
-/** Returns -1 / 0 / 1 for negative / zero / positive. Mirrors `SkDSign`. */
+/** Returns -1 / 0 / 1 for negative / zero / positive */
 public fun SkDSign(x: Double): Int = (if (x > 0) 1 else 0) - (if (x < 0) 1 else 0)
 
-/** Returns 0 / 1 / 2 for negative / zero / positive. Mirrors `SKDSide`. */
+/** Returns 0 / 1 / 2 for negative / zero / positive */
 public fun SKDSide(x: Double): Int = (if (x > 0) 1 else 0) + (if (x >= 0) 1 else 0)
 
-/** Returns 1 / 2 / 4 for negative / zero / positive. Mirrors `SkDSideBit`. */
+/** Returns 1 / 2 / 4 for negative / zero / positive */
 public fun SkDSideBit(x: Double): Int = 1 shl SKDSide(x)
 
-/** Pin a t-value into [0, 1] using `precisely_*` thresholds. Mirrors `SkPinT`. */
+/** Pin a t-value into [0, 1] using `precisely_*` thresholds */
 public fun SkPinT(t: Double): Double = when {
     precisely_less_than_zero(t) -> 0.0
     precisely_greater_than_one(t) -> 1.0
