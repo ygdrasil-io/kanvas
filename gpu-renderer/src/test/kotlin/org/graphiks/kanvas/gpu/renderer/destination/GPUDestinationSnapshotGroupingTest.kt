@@ -74,6 +74,69 @@ class GPUDestinationSnapshotGroupingTest {
     }
 
     @Test
+    fun `planner CopyTarget provenance stays canonical while external materialization facts stay separate`() {
+        val canonicalCopyTarget = strategyPlan(
+            commandId = "draw:external-provenance",
+            canonicalTarget = GPUTargetIdentity("target:main"),
+            canonicalTargetGeneration = 11,
+            canonicalTargetUsageLabels = setOf("render_attachment", "copy_src"),
+        )
+        val externalMaterialization = destinationRead(
+            commandId = "draw:external-provenance",
+            bounds = footprint(0.0, 0.0, 8.0, 8.0),
+            key = groupKey(
+                target = GPUTargetIdentity("target:main"),
+                targetGeneration = 11,
+                sourceIntermediate = GPUIntermediateIdentity("intermediate:texturable-provenance"),
+            ),
+            materializationSourceKind =
+                GPUDestinationSnapshotMaterializationSourceKind.ExternalTexturableIntermediate,
+            materializationSourceUsageLabels = setOf("texture_binding"),
+            strategyGatePlan = canonicalCopyTarget,
+        )
+
+        listOf(
+            strategyPlan(
+                commandId = "draw:external-provenance",
+                canonicalTarget = GPUTargetIdentity("target:other"),
+            ),
+            strategyPlan(
+                commandId = "draw:external-provenance",
+                canonicalTargetGeneration = 12,
+            ),
+            strategyPlan(commandId = "draw:other-command"),
+            strategyPlan(
+                commandId = "draw:external-provenance",
+                canonicalTargetFormat = GPUColorFormat("bgra8unorm"),
+            ),
+        ).forEach { mismatchedPlan ->
+            assertFailsWith<IllegalArgumentException> {
+                externalMaterialization.copy(strategyGatePlan = mismatchedPlan)
+            }
+        }
+
+        val result = uncalibratedGrouper().group(listOf(externalMaterialization))
+        assertIs<CopyAsDrawMaterialization>(result.materializations.single())
+        assertTrue(
+            result.decisionDump.any { line ->
+                line == "destination-snapshot:member command=draw:external-provenance " +
+                    "selectedStrategy=CopyTarget selectedCommand=draw:external-provenance " +
+                    "selectedTarget=target:main " +
+                    "selectedTargetGeneration=11 selectedTargetUsage=copy_src,render_attachment " +
+                    "selectedTargetFormat=rgba8unorm " +
+                    "materializationSource=ExternalTexturableIntermediate " +
+                    "materializationSourceUsage=texture_binding"
+            },
+        )
+
+        val canonicalWithoutCopySrc = strategyPlan(
+            commandId = "draw:canonical-without-copy-src",
+            canonicalTargetUsageLabels = setOf("render_attachment"),
+        )
+        assertEquals(GPUDestinationReadStrategy.Refuse, canonicalWithoutCopySrc.plan.strategy)
+    }
+
+    @Test
     fun `group key equality covers every typed destination and continuation identity axis`() {
         val base = groupKey()
 
@@ -185,8 +248,19 @@ class GPUDestinationSnapshotGroupingTest {
             base.copy(
                 commandId = "draw:target",
                 key = groupKey(target = GPUTargetIdentity("target:other")),
+                strategyGatePlan = strategyPlan(
+                    commandId = "draw:target",
+                    canonicalTarget = GPUTargetIdentity("target:other"),
+                ),
             ),
-            base.copy(commandId = "draw:generation", key = groupKey(targetGeneration = 12)),
+            base.copy(
+                commandId = "draw:generation",
+                key = groupKey(targetGeneration = 12),
+                strategyGatePlan = strategyPlan(
+                    commandId = "draw:generation",
+                    canonicalTargetGeneration = 12,
+                ),
+            ),
             base.copy(
                 commandId = "draw:sample",
                 key = groupKey(
@@ -194,13 +268,23 @@ class GPUDestinationSnapshotGroupingTest {
                         colorAttachment = GPUTargetIdentity("msaa-color:other"),
                     ),
                 ),
+                strategyGatePlan = strategyPlan("draw:sample"),
             ),
             base.copy(
                 commandId = "draw:source",
                 key = groupKey(sourceIntermediate = GPUIntermediateIdentity("intermediate:other")),
+                strategyGatePlan = strategyPlan("draw:source"),
             ),
-            base.copy(commandId = "draw:layer", layerId = "layer:isolated"),
-            base.copy(commandId = "draw:filter", filterId = "filter:blur"),
+            base.copy(
+                commandId = "draw:layer",
+                layerId = "layer:isolated",
+                strategyGatePlan = strategyPlan("draw:layer"),
+            ),
+            base.copy(
+                commandId = "draw:filter",
+                filterId = "filter:blur",
+                strategyGatePlan = strategyPlan("draw:filter"),
+            ),
         )
 
         boundaries.forEach { changed ->
@@ -393,8 +477,9 @@ class GPUDestinationSnapshotGroupingTest {
             commandId = "draw:external",
             bounds = footprint(0.0, 0.0, 8.0, 8.0),
             key = groupKey(sourceIntermediate = GPUIntermediateIdentity("intermediate:texturable")),
-            sourceKind = GPUDestinationSnapshotSourceKind.ExternalTexturableIntermediate,
-            sourceUsageLabels = setOf("texture_binding"),
+            materializationSourceKind =
+                GPUDestinationSnapshotMaterializationSourceKind.ExternalTexturableIntermediate,
+            materializationSourceUsageLabels = setOf("texture_binding"),
         )
         val result = uncalibratedGrouper().group(listOf(external))
 
@@ -402,23 +487,24 @@ class GPUDestinationSnapshotGroupingTest {
         assertTrue(GPUDestinationReadStrategy.entries.none { it.name == "CopyAsDrawMaterialization" })
         assertFailsWith<IllegalArgumentException> {
             external.copy(
-                sourceKind = GPUDestinationSnapshotSourceKind.CanonicalLayerTarget,
-                sourceUsageLabels = setOf("render_attachment"),
+                materializationSourceKind =
+                    GPUDestinationSnapshotMaterializationSourceKind.CanonicalLayerTarget,
+                materializationSourceUsageLabels = setOf("render_attachment"),
             )
         }
         assertFailsWith<IllegalArgumentException> {
-            external.copy(sourceUsageLabels = emptySet())
+            external.copy(materializationSourceUsageLabels = emptySet())
         }
         assertFailsWith<IllegalArgumentException> {
             external.copy(
                 key = groupKey(sourceIntermediate = null),
-                sourceUsageLabels = setOf("texture_binding"),
+                materializationSourceUsageLabels = setOf("texture_binding"),
             )
         }
         val externalCopy = external.copy(
             commandId = "draw:external-copy",
             key = groupKey(sourceIntermediate = GPUIntermediateIdentity("intermediate:copyable")),
-            sourceUsageLabels = setOf("texture_binding", "copy_src"),
+            materializationSourceUsageLabels = setOf("texture_binding", "copy_src"),
             strategyGatePlan = strategyPlan("draw:external-copy"),
         )
         assertIs<GPUDestinationSnapshotMaterialization.TextureCopy>(
@@ -428,7 +514,7 @@ class GPUDestinationSnapshotGroupingTest {
             externalCopy.copy(key = groupKey(sourceIntermediate = null))
         }
         assertFailsWith<IllegalArgumentException> {
-            externalCopy.copy(sourceUsageLabels = setOf("copy_src"))
+            externalCopy.copy(materializationSourceUsageLabels = setOf("copy_src"))
         }
 
         val otherExternal = external.copy(
@@ -544,10 +630,14 @@ class GPUDestinationSnapshotGroupingTest {
         clipBounds: GPUPixelBounds = GPUPixelBounds(0, 0, 128, 128),
         targetBounds: GPUPixelBounds = GPUPixelBounds(0, 0, 128, 128),
         bytesPerPixel: Int = 4,
-        sourceKind: GPUDestinationSnapshotSourceKind =
-            GPUDestinationSnapshotSourceKind.CanonicalSceneTarget,
-        sourceUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
-        strategyGatePlan: GPUDestinationReadStrategyGatePlan = strategyPlan(commandId),
+        materializationSourceKind: GPUDestinationSnapshotMaterializationSourceKind =
+            GPUDestinationSnapshotMaterializationSourceKind.CanonicalSceneTarget,
+        materializationSourceUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
+        strategyGatePlan: GPUDestinationReadStrategyGatePlan = strategyPlan(
+            commandId = commandId,
+            canonicalTarget = key.target,
+            canonicalTargetGeneration = key.targetGeneration,
+        ),
     ): GPUTargetAccess = access(
         commandId = commandId,
         requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
@@ -556,8 +646,8 @@ class GPUDestinationSnapshotGroupingTest {
         clipBounds = clipBounds,
         targetBounds = targetBounds,
         bytesPerPixel = bytesPerPixel,
-        sourceKind = sourceKind,
-        sourceUsageLabels = sourceUsageLabels,
+        materializationSourceKind = materializationSourceKind,
+        materializationSourceUsageLabels = materializationSourceUsageLabels,
         strategyGatePlan = strategyGatePlan,
     )
 
@@ -584,9 +674,9 @@ class GPUDestinationSnapshotGroupingTest {
         clipBounds: GPUPixelBounds = GPUPixelBounds(0, 0, 128, 128),
         targetBounds: GPUPixelBounds = GPUPixelBounds(0, 0, 128, 128),
         bytesPerPixel: Int = 4,
-        sourceKind: GPUDestinationSnapshotSourceKind =
-            GPUDestinationSnapshotSourceKind.CanonicalSceneTarget,
-        sourceUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
+        materializationSourceKind: GPUDestinationSnapshotMaterializationSourceKind =
+            GPUDestinationSnapshotMaterializationSourceKind.CanonicalSceneTarget,
+        materializationSourceUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
         strategyGatePlan: GPUDestinationReadStrategyGatePlan? = null,
         layerId: String = "layer:root",
         filterId: String? = null,
@@ -600,8 +690,8 @@ class GPUDestinationSnapshotGroupingTest {
         layerId = layerId,
         filterId = filterId,
         bytesPerPixel = bytesPerPixel,
-        sourceKind = sourceKind,
-        sourceUsageLabels = sourceUsageLabels,
+        materializationSourceKind = materializationSourceKind,
+        materializationSourceUsageLabels = materializationSourceUsageLabels,
         strategyGatePlan = strategyGatePlan,
     )
 
@@ -610,6 +700,10 @@ class GPUDestinationSnapshotGroupingTest {
         eligibleIntermediate: GPUDestinationReadEligibleIntermediate? = null,
         mandatoryIsolation: GPUDestinationReadMandatoryIsolation? = null,
         targetCopyAvailable: Boolean = true,
+        canonicalTarget: GPUTargetIdentity = GPUTargetIdentity("target:main"),
+        canonicalTargetGeneration: Long = 11,
+        canonicalTargetUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
+        canonicalTargetFormat: GPUColorFormat = GPUColorFormat("rgba8unorm"),
     ): GPUDestinationReadStrategyGatePlan = GPUDestinationReadStrategyPlanner().plan(
         GPUDestinationReadStrategyRequest(
             label = "snapshot:$commandId",
@@ -624,11 +718,11 @@ class GPUDestinationSnapshotGroupingTest {
                 targetWidth = 128,
                 targetHeight = 128,
             ),
-            sourceTargetLabel = "target:main",
-            sourceUsageLabels = setOf("render_attachment", "copy_src"),
+            sourceTargetLabel = canonicalTarget.value,
+            sourceUsageLabels = canonicalTargetUsageLabels,
             copyUsageLabels = setOf("copy_dst", "texture_binding"),
-            targetFormatClass = "rgba8unorm",
-            targetGeneration = 11,
+            targetFormatClass = canonicalTargetFormat.value,
+            targetGeneration = canonicalTargetGeneration,
             eligibleIntermediate = eligibleIntermediate,
             mandatoryIsolation = mandatoryIsolation,
             targetCopyAvailable = targetCopyAvailable,

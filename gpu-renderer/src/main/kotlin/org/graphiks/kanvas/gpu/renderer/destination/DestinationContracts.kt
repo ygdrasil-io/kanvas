@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.destination
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateBoundsFacts
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
@@ -21,6 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationPrei
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
+import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 /** Destination read token. */
 @JvmInline
@@ -186,6 +188,35 @@ data class GPUDestinationReadStrategyRequest(
     val maxCopyBytes: Long = Long.MAX_VALUE,
 )
 
+/** Canonical target facts that authorized the strategy planner's [GPUDestinationReadStrategy.CopyTarget]. */
+data class GPUDestinationReadCopyTargetProvenance(
+    val commandId: String,
+    val canonicalTarget: GPUTargetIdentity,
+    val canonicalTargetGeneration: Long,
+    val canonicalTargetUsageLabels: Set<String>,
+    val canonicalTargetFormat: GPUColorFormat,
+) {
+    internal val canonicalTargetUsageLabelsSnapshot: Set<String> = canonicalTargetUsageLabels.toSet()
+
+    init {
+        require(commandId.isNotBlank()) {
+            "GPUDestinationReadCopyTargetProvenance.commandId must not be blank"
+        }
+        require(canonicalTargetGeneration >= 0L) {
+            "GPUDestinationReadCopyTargetProvenance.canonicalTargetGeneration must be non-negative"
+        }
+        require(canonicalTargetUsageLabels.none(String::isBlank)) {
+            "GPUDestinationReadCopyTargetProvenance.canonicalTargetUsageLabels must not contain blanks"
+        }
+        require("copy_src" in canonicalTargetUsageLabelsSnapshot) {
+            "CopyTarget provenance requires canonical target copy_src usage"
+        }
+    }
+
+    val canonicalTargetUsageLabel: String
+        get() = canonicalTargetUsageLabelsSnapshot.sorted().joinToString(",")
+}
+
 /** Evidence result for the destination-read strategy gate. */
 data class GPUDestinationReadStrategyGatePlan(
     val label: String,
@@ -199,11 +230,52 @@ data class GPUDestinationReadStrategyGatePlan(
     val action: GPUDestinationReadAction,
     val copyDescriptor: GPUDestinationCopyTextureDescriptor?,
     val copyPlan: GPUDestinationCopyPlan?,
+    val copyTargetProvenance: GPUDestinationReadCopyTargetProvenance?,
     val budgetPolicy: GPUDestinationReadBudgetPolicy,
     val bindingInMaterialKey: Boolean,
     val materialKeyBoundaryHash: String,
     val diagnostics: List<GPUDestinationReadDiagnostic>,
 ) {
+    init {
+        if (plan.strategy == GPUDestinationReadStrategy.CopyTarget) {
+            val provenance = requireNotNull(copyTargetProvenance) {
+                "CopyTarget strategy requires canonical target provenance"
+            }
+            val descriptor = requireNotNull(copyPlan).descriptor
+            require(copyPlan.commandScopeLabel == provenance.commandId) {
+                "CopyTarget command scope must match canonical target provenance"
+            }
+            require(descriptor.sourceTargetLabel == provenance.canonicalTarget.value) {
+                "CopyTarget descriptor source must match canonical target provenance"
+            }
+            require(descriptor.targetGeneration == provenance.canonicalTargetGeneration) {
+                "CopyTarget descriptor generation must match canonical target provenance"
+            }
+            require(descriptor.formatClass == provenance.canonicalTargetFormat.value) {
+                "CopyTarget descriptor format must match canonical target provenance"
+            }
+            require("source=${provenance.canonicalTarget.value}" in plan.sourceTargetFacts) {
+                "CopyTarget diagnostic source must match canonical target provenance"
+            }
+            val diagnosticUsage = plan.sourceTargetFacts
+                .firstOrNull { fact -> fact.startsWith("sourceUsage=") }
+                ?.removePrefix("sourceUsage=")
+                ?.split(',')
+                ?.filter(String::isNotEmpty)
+                ?.toSet()
+            require(diagnosticUsage == provenance.canonicalTargetUsageLabelsSnapshot) {
+                "CopyTarget diagnostic source usage must match canonical target provenance"
+            }
+            require("targetFormat=${provenance.canonicalTargetFormat.value}" in plan.sourceTargetFacts) {
+                "CopyTarget diagnostic format must match canonical target provenance"
+            }
+        } else {
+            require(copyTargetProvenance == null) {
+                "only CopyTarget strategy may carry canonical target provenance"
+            }
+        }
+    }
+
     val copyDescriptorHash: String
         get() = copyDescriptor?.descriptorHash ?: plan.copyDescriptorHash ?: intermediateDescriptorHash()
 
@@ -602,6 +674,17 @@ class GPUDestinationReadStrategyPlanner {
             action = selection.action,
             copyDescriptor = if (selection.strategy == GPUDestinationReadStrategy.CopyTarget) descriptor else null,
             copyPlan = copyPlan,
+            copyTargetProvenance = if (selection.strategy == GPUDestinationReadStrategy.CopyTarget) {
+                GPUDestinationReadCopyTargetProvenance(
+                    commandId = request.commandId,
+                    canonicalTarget = GPUTargetIdentity(request.sourceTargetLabel),
+                    canonicalTargetGeneration = request.targetGeneration,
+                    canonicalTargetUsageLabels = request.sourceUsageLabels,
+                    canonicalTargetFormat = GPUColorFormat(request.targetFormatClass),
+                )
+            } else {
+                null
+            },
             budgetPolicy = GPUDestinationReadBudgetPolicy(request.maxCopyBytes, budgetClass),
             bindingInMaterialKey = binding.inMaterialKey,
             materialKeyBoundaryHash = destinationReadMaterialKeyBoundaryHash(request, selection.strategy),
@@ -634,6 +717,7 @@ class GPUDestinationReadStrategyPlanner {
             action = action,
             copyDescriptor = null,
             copyPlan = null,
+            copyTargetProvenance = null,
             budgetPolicy = GPUDestinationReadBudgetPolicy(request.maxCopyBytes, "no-copy"),
             bindingInMaterialKey = false,
             materialKeyBoundaryHash = destinationReadMaterialKeyBoundaryHash(request, strategy),
@@ -673,6 +757,7 @@ class GPUDestinationReadStrategyPlanner {
             action = GPUDestinationReadAction.Refuse,
             copyDescriptor = null,
             copyPlan = null,
+            copyTargetProvenance = null,
             budgetPolicy = GPUDestinationReadBudgetPolicy(request.maxCopyBytes, "refused", refusalCode),
             bindingInMaterialKey = false,
             materialKeyBoundaryHash = destinationReadMaterialKeyBoundaryHash(request, GPUDestinationReadStrategy.Refuse),

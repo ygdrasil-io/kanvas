@@ -60,14 +60,19 @@ data class GPUDestinationReadFootprint(
             aaOutsetPixels.isFinite() && filterOutsetPixels.isFinite()
 }
 
-/** Source class determines the legal copy materialization, independently of blend semantics. */
-enum class GPUDestinationSnapshotSourceKind {
+/** Future snapshot materialization source, independent of the canonical target selected by blend strategy. */
+enum class GPUDestinationSnapshotMaterializationSourceKind {
     CanonicalSceneTarget,
     CanonicalLayerTarget,
     ExternalTexturableIntermediate,
 }
 
-/** One ordered target write and optional semantic destination-read request. */
+/**
+ * One ordered target write and optional semantic destination-read request.
+ *
+ * [strategyGatePlan] proves which canonical target authorized `CopyTarget`; the
+ * `materializationSource*` fields independently describe how that future snapshot is populated.
+ */
 data class GPUTargetAccess(
     val commandId: String,
     val requirement: GPUBlendDestinationReadRequirement,
@@ -79,11 +84,12 @@ data class GPUTargetAccess(
     val layerId: String,
     val filterId: String?,
     val bytesPerPixel: Int = 4,
-    val sourceKind: GPUDestinationSnapshotSourceKind =
-        GPUDestinationSnapshotSourceKind.CanonicalSceneTarget,
-    val sourceUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
+    val materializationSourceKind: GPUDestinationSnapshotMaterializationSourceKind =
+        GPUDestinationSnapshotMaterializationSourceKind.CanonicalSceneTarget,
+    val materializationSourceUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
 ) {
-    internal val sourceUsageLabelsSnapshot: Set<String> = sourceUsageLabels.toSet()
+    internal val materializationSourceUsageLabelsSnapshot: Set<String> =
+        materializationSourceUsageLabels.toSet()
 
     init {
         require(commandId.isNotBlank()) { "GPUTargetAccess.commandId must not be blank" }
@@ -92,8 +98,8 @@ data class GPUTargetAccess(
             "GPUTargetAccess.filterId must be null or non-blank"
         }
         require(bytesPerPixel > 0) { "GPUTargetAccess.bytesPerPixel must be positive" }
-        require(sourceUsageLabels.none(String::isBlank)) {
-            "GPUTargetAccess.sourceUsageLabels must not contain blanks"
+        require(materializationSourceUsageLabels.none(String::isBlank)) {
+            "GPUTargetAccess.materializationSourceUsageLabels must not contain blanks"
         }
         if (requirement == GPUBlendDestinationReadRequirement.None) {
             require(strategyGatePlan == null) {
@@ -106,16 +112,33 @@ data class GPUTargetAccess(
             require(strategyGatePlan.plan.requirement == requirement) {
                 "destination-read strategy selection requirement must match the target access"
             }
+            if (strategyGatePlan.plan.strategy == GPUDestinationReadStrategy.CopyTarget) {
+                val provenance = requireNotNull(strategyGatePlan.copyTargetProvenance)
+                require(provenance.commandId == commandId) {
+                    "CopyTarget canonical target provenance must belong to the target access command"
+                }
+                require(provenance.canonicalTarget == key.target) {
+                    "CopyTarget canonical target provenance must match the snapshot group target"
+                }
+                require(provenance.canonicalTargetGeneration == key.targetGeneration) {
+                    "CopyTarget canonical target provenance must match the snapshot group generation"
+                }
+                require(provenance.canonicalTargetFormat == key.format) {
+                    "CopyTarget canonical target provenance must match the snapshot group format"
+                }
+            }
         }
-        if (sourceKind == GPUDestinationSnapshotSourceKind.ExternalTexturableIntermediate) {
-            require("texture_binding" in sourceUsageLabelsSnapshot) {
+        if (materializationSourceKind ==
+            GPUDestinationSnapshotMaterializationSourceKind.ExternalTexturableIntermediate
+        ) {
+            require("texture_binding" in materializationSourceUsageLabelsSnapshot) {
                 "external destination snapshot sources must be texturable"
             }
             require(key.sourceIntermediate != null) {
                 "external destination snapshot sources require an exact intermediate identity"
             }
         } else {
-            require("copy_src" in sourceUsageLabelsSnapshot) {
+            require("copy_src" in materializationSourceUsageLabelsSnapshot) {
                 "canonical scene and layer targets must include copy_src"
             }
         }
@@ -234,6 +257,16 @@ class GPUDestinationSnapshotGrouper(
                     "selectedStrategy=${selectedStrategy.name}"
                 return@forEachIndexed
             }
+            val provenance = requireNotNull(access.strategyGatePlan.copyTargetProvenance)
+            decisions += "destination-snapshot:member command=${access.commandId} " +
+                "selectedStrategy=CopyTarget selectedCommand=${provenance.commandId} " +
+                "selectedTarget=${provenance.canonicalTarget.value} " +
+                "selectedTargetGeneration=${provenance.canonicalTargetGeneration} " +
+                "selectedTargetUsage=${provenance.canonicalTargetUsageLabel} " +
+                "selectedTargetFormat=${provenance.canonicalTargetFormat.value} " +
+                "materializationSource=${access.materializationSourceKind.name} " +
+                "materializationSourceUsage=" +
+                access.materializationSourceUsageLabelsSnapshot.sorted().joinToString(",")
 
             val bounds = access.normalizedBounds()
             if (bounds is BoundsResult.Refused) {
@@ -324,8 +357,8 @@ class GPUDestinationSnapshotGrouper(
                 bytesPerPixel = access.bytesPerPixel,
                 firstAccessIndex = accessIndex,
                 lastAccessIndex = accessIndex,
-                sourceKind = access.sourceKind,
-                sourceUsageLabels = access.sourceUsageLabelsSnapshot,
+                materializationSourceKind = access.materializationSourceKind,
+                materializationSourceUsageLabels = access.materializationSourceUsageLabelsSnapshot,
             )
             val budgetDiagnostic = costModel.budgetDiagnostic(
                 mutableGroups.map(MutableSnapshotGroup::group) + newGroup.group,
@@ -405,8 +438,8 @@ private data class MutableSnapshotGroup(
     val bytesPerPixel: Int,
     val firstAccessIndex: Int,
     var lastAccessIndex: Int,
-    val sourceKind: GPUDestinationSnapshotSourceKind,
-    val sourceUsageLabels: Set<String>,
+    val materializationSourceKind: GPUDestinationSnapshotMaterializationSourceKind,
+    val materializationSourceUsageLabels: Set<String>,
 ) {
     fun separationReason(
         access: GPUTargetAccess,
@@ -418,7 +451,9 @@ private data class MutableSnapshotGroup(
         if (layerId != access.layerId) return "reason=layer-change"
         if (filterId != access.filterId) return "reason=filter-change"
         if (bytesPerPixel != access.bytesPerPixel) return "reason=bytes-per-pixel-change"
-        if (sourceKind != access.sourceKind || sourceUsageLabels != access.sourceUsageLabelsSnapshot) {
+        if (materializationSourceKind != access.materializationSourceKind ||
+            materializationSourceUsageLabels != access.materializationSourceUsageLabelsSnapshot
+        ) {
             return "reason=source-materialization-change"
         }
 
@@ -528,7 +563,7 @@ private data class MutableSnapshotGroup(
     }
 
     fun materialization(groupIndex: Int): GPUDestinationSnapshotMaterialization =
-        if ("copy_src" in sourceUsageLabels) {
+        if ("copy_src" in materializationSourceUsageLabels) {
             GPUDestinationSnapshotMaterialization.TextureCopy(groupIndex, group.logicalBounds)
         } else {
             CopyAsDrawMaterialization(
