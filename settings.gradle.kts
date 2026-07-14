@@ -65,6 +65,7 @@ includeBuild("external/poc-koreos") {
 
 include(":math")
 include(":math:scalar")
+include(":math:vector")
 include(":color-management")
 include(":font")
 include(":font:colr")
