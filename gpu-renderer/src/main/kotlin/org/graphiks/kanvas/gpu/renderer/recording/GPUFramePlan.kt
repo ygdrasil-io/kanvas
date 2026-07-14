@@ -554,7 +554,7 @@ internal fun GPUFrameMemoryBudgetPlan.snapshotForFramePlan(): GPUFrameMemoryBudg
     )
 
 private fun GPUCapabilities.canonicalSnapshotHash(): String =
-    CanonicalHashSink("GPUCapabilities/v1").apply {
+    CanonicalHashSink("GPUCapabilities/v2").apply {
         implementation("implementation", implementation)
         string("snapshotId", snapshotId)
         list("facts", facts.sortedWith(capabilityFactComparator)) { fact(it) }
@@ -566,6 +566,9 @@ private fun GPUCapabilities.canonicalSnapshotHash(): String =
             long("maxTextureDimension2D", limits.maxTextureDimension2D)
             long("copyBytesPerRowAlignment", limits.copyBytesPerRowAlignment)
             long("minUniformBufferOffsetAlignment", limits.minUniformBufferOffsetAlignment)
+            nullable("maxBufferSize", limits.maxBufferSize) { maxBufferSize ->
+                long("value", maxBufferSize)
+            }
             string("source", limits.source)
         }
         list("supportedTextureFormats", supportedTextureFormats.map { it.dumpLabel() }.sorted()) {

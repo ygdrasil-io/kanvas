@@ -109,6 +109,33 @@ class GPUCapabilityContractsTest {
     }
 
     @Test
+    fun `GPU limits expose max buffer size only when facade observed it`() {
+        val legacyPositional = GPULimits(8192, 256, 256, "legacy-source")
+        val unknown = GPULimits(
+            maxTextureDimension2D = 8192L,
+            copyBytesPerRowAlignment = 256L,
+            minUniformBufferOffsetAlignment = 256L,
+        )
+        val observed = unknown.copy(maxBufferSize = 268_435_456L)
+
+        assertEquals("legacy-source", legacyPositional.source)
+        assertEquals(null, legacyPositional.maxBufferSize)
+        assertEquals(null, unknown.maxBufferSize)
+        assertTrue(unknown.capabilityFacts("unknown").none { it.name == "maxBufferSize" })
+        assertEquals(
+            GPUCapabilityFact(
+                name = "maxBufferSize",
+                source = "device.limits",
+                value = "268435456",
+                affectsValidity = true,
+                evidenceLabel = "observed",
+            ),
+            observed.capabilityFacts("observed").single { it.name == "maxBufferSize" },
+        )
+        assertFailsWith<IllegalArgumentException> { unknown.copy(maxBufferSize = 0) }
+    }
+
+    @Test
     fun `GPU capabilities can carry limits without forcing existing facts`() {
         val limits = GPULimits.conservative(
             maxTextureDimension2D = 8192L,

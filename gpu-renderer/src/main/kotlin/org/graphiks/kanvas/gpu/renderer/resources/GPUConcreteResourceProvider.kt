@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
+import java.math.BigInteger
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 data class GPUNullBufferMaterializationRequest(
     val label: String,
     val byteSize: Long,
@@ -56,6 +59,11 @@ class GPUConcreteResourceProvider(
     private val textureSamplerProvider: GPUResourceProvider = ValidatingTextureSamplerResourceProvider(),
     private val leaseFactory: GPUResourceLeaseFactory = EvidenceOnlyGPUResourceLeaseFactory,
 ) : GPUResourceProvider {
+    private val physicalPoolBudgetLedger = GPUPhysicalPoolBudgetLedger()
+    private val scratchTexturePool = GPUScratchTexturePool(physicalPoolBudgetLedger)
+    private val readbackStagingPool = GPUReadbackStagingPool(physicalPoolBudgetLedger)
+    private val pendingPhysicalReservations = mutableListOf<GPUProviderPhysicalReservation>()
+    internal val pendingPhysicalReservationCount: Int get() = pendingPhysicalReservations.size
     private val nullBufferKeys = linkedSetOf<String>()
     private val uniformSlabLeases = linkedMapOf<GPUUniformSlabLeaseCacheKey, GPUResourceLease>()
     private val bindGroupLeases = linkedMapOf<GPUBindGroupLeaseCacheKey, GPUResourceLease>()
@@ -65,6 +73,264 @@ class GPUConcreteResourceProvider(
 
     val telemetry: GPUConcreteResourceProviderTelemetry
         get() = mutableTelemetry
+
+    override fun reserveScratchTexture(
+        request: GPUScratchTextureReservationRequest,
+        budget: GPUFrameMemoryBudgetPlan,
+        capabilities: GPUCapabilities,
+    ): GPUScratchTextureReservationResult {
+        var result = scratchTexturePool.reserve(request, budget, capabilities)
+        if (result.isAggregateBudgetRefusal()) {
+            purgeForAdmission((result as GPUScratchTextureReservationResult.Refused).diagnostic)
+            result = scratchTexturePool.reserve(request, budget, capabilities)
+        }
+        if (result is GPUScratchTextureReservationResult.Accepted) {
+            journalPhysicalReservation(
+                GPUProviderPhysicalReservation.Scratch(
+                    acquisitionOrdinal = result.lease.acquisitionToken,
+                    lease = result.lease,
+                ),
+            )
+        }
+        record(
+            lane = "scratch-texture",
+            result = if (result is GPUScratchTextureReservationResult.Accepted) "reserve" else "refuse",
+            keyHash = "physical-pool",
+            subjectHash = "reservation",
+        )
+        return result
+    }
+
+    override fun markScratchSubmitted(
+        reservationScope: String,
+        submissionId: GPUResourceSubmissionID,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUScratchLifecycleResult =
+        scratchTexturePool.markSubmitted(reservationScope, submissionId, deviceGeneration).also { result ->
+            if (result is GPUScratchLifecycleResult.Accepted) {
+                pendingPhysicalReservations.removeAll { pending ->
+                    pending is GPUProviderPhysicalReservation.Scratch &&
+                        pending.lease.reservationScope == reservationScope &&
+                        pending.lease.deviceGeneration == deviceGeneration
+                }
+            }
+            recordScratchLifecycle("submit", result)
+        }
+
+    override fun acceptScratchCompletion(
+        submissionId: GPUResourceSubmissionID,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUScratchLifecycleResult =
+        scratchTexturePool.acceptCompletion(submissionId, deviceGeneration).also { result ->
+            recordScratchLifecycle("complete", result)
+        }
+
+    override fun rejectScratchCompletion(
+        submissionId: GPUResourceSubmissionID,
+        deviceGeneration: GPUDeviceGenerationID,
+        failure: GPUScratchCompletionFailure,
+    ): GPUScratchLifecycleResult =
+        scratchTexturePool.rejectCompletion(submissionId, deviceGeneration, failure).also { result ->
+            recordScratchLifecycle("quarantine", result)
+        }
+
+    override fun reserveReadbackStaging(
+        request: GPUReadbackStagingReservationRequest,
+    ): GPUReadbackStagingReservationResult {
+        var result = readbackStagingPool.reserve(request)
+        if (result.isAggregateBudgetRefusal()) {
+            purgeForAdmission((result as GPUReadbackStagingReservationResult.Refused).diagnostic)
+            result = readbackStagingPool.reserve(request)
+        }
+        if (result is GPUReadbackStagingReservationResult.Accepted) {
+            journalPhysicalReservation(
+                GPUProviderPhysicalReservation.Readback(
+                    acquisitionOrdinal = result.lease.acquisitionToken,
+                    lease = result.lease,
+                ),
+            )
+        }
+        record(
+            lane = "readback-staging",
+            result = if (result is GPUReadbackStagingReservationResult.Accepted) "reserve" else "refuse",
+            keyHash = "physical-pool",
+            subjectHash = "reservation",
+        )
+        return result
+    }
+
+    override fun markReadbackSubmitted(
+        leases: List<GPUReadbackStagingLease>,
+        submissionId: GPUResourceSubmissionID,
+    ): GPUReadbackStagingLifecycleResult =
+        readbackStagingPool.markSubmitted(leases, submissionId).also { result ->
+            if (result is GPUReadbackStagingLifecycleResult.Accepted) {
+                pendingPhysicalReservations.removeAll { pending ->
+                    pending is GPUProviderPhysicalReservation.Readback &&
+                        leases.any { lease -> lease === pending.lease }
+                }
+            }
+            recordReadbackLifecycle("submit", result)
+        }
+
+    override fun acceptReadbackGPUCompletion(
+        submissionId: GPUResourceSubmissionID,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUReadbackStagingLifecycleResult =
+        readbackStagingPool.acceptGPUCompletion(submissionId, deviceGeneration).also { result ->
+            recordReadbackLifecycle("complete", result)
+        }
+
+    override fun rejectReadbackGPUCompletion(
+        submissionId: GPUResourceSubmissionID,
+        deviceGeneration: GPUDeviceGenerationID,
+        failure: GPUReadbackCompletionFailure,
+    ): GPUReadbackStagingLifecycleResult =
+        readbackStagingPool.rejectGPUCompletion(submissionId, deviceGeneration, failure).also { result ->
+            recordReadbackLifecycle("quarantine", result)
+        }
+
+    override fun markReadbackMapped(
+        lease: GPUReadbackStagingLease,
+    ): GPUReadbackStagingLifecycleResult =
+        readbackStagingPool.markMapped(lease).also { result -> recordReadbackLifecycle("map", result) }
+
+    override fun markReadbackDepadded(
+        lease: GPUReadbackStagingLease,
+    ): GPUReadbackStagingLifecycleResult =
+        readbackStagingPool.markDepadded(lease).also { result -> recordReadbackLifecycle("depad", result) }
+
+    override fun releaseReadbackAfterUnmap(
+        lease: GPUReadbackStagingLease,
+    ): GPUReadbackStagingLifecycleResult =
+        readbackStagingPool.releaseAfterUnmap(lease).also { result ->
+            recordReadbackLifecycle("release", result)
+        }
+
+    override fun markReadbackMapFailed(
+        lease: GPUReadbackStagingLease,
+        safety: GPUReadbackMapFailureSafety,
+    ): GPUReadbackStagingLifecycleResult =
+        readbackStagingPool.markMapFailed(lease, safety).also { result ->
+            recordReadbackLifecycle("map-failure", result)
+        }
+
+    override fun rollbackPhysicalPoolsBeforeSubmit(
+        ownerScope: String,
+    ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolRollbackSummary> {
+        val pending = pendingPhysicalReservations
+            .filter { reservation -> reservation.ownerScope == ownerScope }
+            .sortedByDescending(GPUProviderPhysicalReservation::acquisitionOrdinal)
+        val stale = pending.firstOrNull { reservation ->
+            when (reservation) {
+                is GPUProviderPhysicalReservation.Scratch ->
+                    !scratchTexturePool.canRollbackBeforeSubmit(reservation.lease)
+                is GPUProviderPhysicalReservation.Readback ->
+                    !readbackStagingPool.canRollbackBeforeSubmit(reservation.lease)
+            }
+        }
+        if (stale != null) {
+            return GPUPhysicalPoolMaintenanceDecision.Refused(
+                physicalPoolDiagnostic(
+                    code = "unsupported.physical_pool.rollback_journal_stale",
+                    message = "Physical pool rollback journal contains a reservation that is no longer rollbackable.",
+                    facts = mapOf(
+                        "ownerScope" to ownerScope,
+                        "reservationId" to stale.reservationId,
+                        "acquisitionOrdinal" to stale.acquisitionOrdinal.toString(),
+                    ),
+                ),
+            )
+        }
+
+        val scratchReleasedIds = mutableListOf<String>()
+        val scratchReleasedRefs = mutableListOf<GPUTextureResourceRef>()
+        val readbackReleasedIds = mutableListOf<String>()
+        val readbackReleasedRefs = mutableListOf<GPUBufferResourceRef>()
+        val releaseOrder = mutableListOf<GPUPhysicalPoolRollbackRelease>()
+        pending.forEach { reservation ->
+            when (reservation) {
+                is GPUProviderPhysicalReservation.Scratch -> {
+                    val released = checkNotNull(scratchTexturePool.rollbackLeaseBeforeSubmit(reservation.lease))
+                    scratchReleasedIds += released.releasedReservationIds
+                    scratchReleasedRefs += released.resourceRefs
+                    releaseOrder += GPUPhysicalPoolRollbackRelease.Scratch(
+                        reservationId = reservation.lease.reservationId,
+                        acquisitionOrdinal = reservation.acquisitionOrdinal,
+                        resourceRef = reservation.lease.resourceRef,
+                    )
+                }
+                is GPUProviderPhysicalReservation.Readback -> {
+                    val released = checkNotNull(readbackStagingPool.rollbackLeaseBeforeSubmit(reservation.lease))
+                    readbackReleasedIds += released.releasedReservationIds
+                    readbackReleasedRefs += released.resourceRefs
+                    releaseOrder += GPUPhysicalPoolRollbackRelease.Readback(
+                        reservationId = reservation.lease.reservationId,
+                        acquisitionOrdinal = reservation.acquisitionOrdinal,
+                        resourceRef = reservation.lease.resourceRef,
+                    )
+                }
+            }
+            pendingPhysicalReservations.remove(reservation)
+        }
+        return GPUPhysicalPoolMaintenanceDecision.Applied(
+            GPUPhysicalPoolRollbackSummary(
+                scratch = GPUScratchRollbackResult(scratchReleasedIds.toList(), scratchReleasedRefs.toList()),
+                readback = GPUReadbackStagingRollbackResult(
+                    readbackReleasedIds.toList(),
+                    readbackReleasedRefs.toList(),
+                ),
+                releaseOrder = releaseOrder,
+            ),
+        )
+    }
+
+    override fun invalidatePhysicalPoolsBefore(
+        currentGeneration: GPUDeviceGenerationID,
+    ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolInvalidationSummary> {
+        val summary = GPUPhysicalPoolInvalidationSummary(
+            scratchEntries = scratchTexturePool.invalidateGenerationsBefore(currentGeneration),
+            readbackEntries = readbackStagingPool.invalidateGenerationsBefore(currentGeneration),
+        )
+        pendingPhysicalReservations.removeAll { reservation ->
+            reservation.deviceGeneration.value < currentGeneration.value
+        }
+        return GPUPhysicalPoolMaintenanceDecision.Applied(
+            GPUPhysicalPoolInvalidationSummary(
+                scratchEntries = summary.scratchEntries,
+                readbackEntries = summary.readbackEntries,
+            ),
+        )
+    }
+
+    override fun evictPhysicalPoolsUntil(
+        residentBytesAtMost: Long,
+    ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolEvictionSummary> {
+        if (residentBytesAtMost < 0L) {
+            return GPUPhysicalPoolMaintenanceDecision.Refused(
+                physicalPoolDiagnostic(
+                    code = "unsupported.physical_pool.eviction_target_invalid",
+                    message = "Physical pool eviction target must be non-negative.",
+                    facts = mapOf("residentBytesAtMost" to residentBytesAtMost.toString()),
+                ),
+            )
+        }
+        val plan = planSharedEviction(residentBytesAtMost)
+            ?: return GPUPhysicalPoolMaintenanceDecision.Refused(
+                physicalPoolDiagnostic(
+                    code = "unsupported.physical_pool.insufficient_reclaimable_bytes",
+                    message = "Shared physical pools cannot reach the requested resident target safely.",
+                    facts = mapOf(
+                        "residentBytesAtMost" to residentBytesAtMost.toString(),
+                        "residentBytes" to physicalPoolBudgetLedger.managedResidentBytes().toString(),
+                        "reclaimableBytes" to sharedReclaimableCandidates()
+                            .sumOf(GPUPhysicalPoolEvictionCandidate::physicalBytes)
+                            .toString(),
+                    ),
+                ),
+            )
+        return GPUPhysicalPoolMaintenanceDecision.Applied(applySharedEviction(plan))
+    }
 
     fun materializeNullBuffer(
         request: GPUNullBufferMaterializationRequest,
@@ -438,6 +704,117 @@ class GPUConcreteResourceProvider(
                 subjectHash = subjectHash,
             ),
         )
+    }
+
+    private fun sharedReclaimableCandidates(): List<GPUPhysicalPoolEvictionCandidate> =
+        (scratchTexturePool.reclaimableCandidates() + readbackStagingPool.reclaimableCandidates())
+            .sortedWith(
+                compareBy<GPUPhysicalPoolEvictionCandidate>(
+                    { it.lastUseToken },
+                    { it.category.ordinal },
+                    { it.resourceId },
+                ),
+            )
+
+    private fun planSharedEviction(
+        residentBytesAtMost: Long,
+    ): List<GPUPhysicalPoolEvictionCandidate>? {
+        var projectedResident = physicalPoolBudgetLedger.managedResidentBytes()
+        if (projectedResident <= residentBytesAtMost) return emptyList()
+        val selected = mutableListOf<GPUPhysicalPoolEvictionCandidate>()
+        for (candidate in sharedReclaimableCandidates()) {
+            selected += candidate
+            projectedResident = Math.subtractExact(projectedResident, candidate.physicalBytes)
+            if (projectedResident <= residentBytesAtMost) return selected
+        }
+        return null
+    }
+
+    private fun applySharedEviction(
+        plan: List<GPUPhysicalPoolEvictionCandidate>,
+    ): GPUPhysicalPoolEvictionSummary {
+        val scratchEvicted = mutableListOf<GPUScratchTextureEntrySnapshot>()
+        val readbackEvicted = mutableListOf<GPUReadbackStagingEntrySnapshot>()
+        plan.forEach { candidate ->
+            when (candidate.category) {
+                GPUFrameMemoryCategory.ReusableScratch ->
+                    scratchEvicted += checkNotNull(scratchTexturePool.evictCandidate(candidate.resourceId))
+                GPUFrameMemoryCategory.ReadbackStaging ->
+                    readbackEvicted += checkNotNull(readbackStagingPool.evictCandidate(candidate.resourceId))
+                else -> error("Unexpected physical pool category ${candidate.category}")
+            }
+        }
+        return GPUPhysicalPoolEvictionSummary(
+            scratchEntries = scratchEvicted,
+            readbackEntries = readbackEvicted,
+            remainingResidentBytes = physicalPoolBudgetLedger.managedResidentBytes(),
+        )
+    }
+
+    private fun purgeForAdmission(diagnostic: org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic) {
+        val aggregate = diagnostic.facts["aggregatePeakBytes"]?.toBigIntegerOrNull() ?: return
+        val configured = diagnostic.facts["configuredAggregateBudgetBytes"]?.toBigIntegerOrNull() ?: return
+        val bytesToFree = (aggregate - configured).max(BigInteger.ZERO)
+        if (bytesToFree == BigInteger.ZERO) return
+        val managedResident = physicalPoolBudgetLedger.managedResidentBytes().toBigInteger()
+        val target = (managedResident - bytesToFree).max(BigInteger.ZERO).toLong()
+        val plan = planSharedEviction(target) ?: return
+        applySharedEviction(plan)
+    }
+
+    private fun journalPhysicalReservation(reservation: GPUProviderPhysicalReservation) {
+        pendingPhysicalReservations += reservation
+    }
+
+    private fun GPUScratchTextureReservationResult.isAggregateBudgetRefusal(): Boolean =
+        this is GPUScratchTextureReservationResult.Refused &&
+            diagnostic.code.value == "unsupported.scratch_texture.aggregate_budget_exceeded"
+
+    private fun GPUReadbackStagingReservationResult.isAggregateBudgetRefusal(): Boolean =
+        this is GPUReadbackStagingReservationResult.Refused &&
+            diagnostic.code.value == "unsupported.readback_staging.aggregate_budget_exceeded"
+
+    private fun recordScratchLifecycle(action: String, result: GPUScratchLifecycleResult) {
+        record(
+            lane = "scratch-texture",
+            result = if (result is GPUScratchLifecycleResult.Accepted) action else "refuse",
+            keyHash = "physical-pool",
+            subjectHash = "lifecycle",
+        )
+    }
+
+    private fun recordReadbackLifecycle(action: String, result: GPUReadbackStagingLifecycleResult) {
+        record(
+            lane = "readback-staging",
+            result = if (result is GPUReadbackStagingLifecycleResult.Accepted) action else "refuse",
+            keyHash = "physical-pool",
+            subjectHash = "lifecycle",
+        )
+    }
+}
+
+private sealed interface GPUProviderPhysicalReservation {
+    val acquisitionOrdinal: Long
+    val reservationId: String
+    val ownerScope: String
+    val deviceGeneration: GPUDeviceGenerationID
+
+    data class Scratch(
+        override val acquisitionOrdinal: Long,
+        val lease: GPUScratchTextureLease,
+    ) : GPUProviderPhysicalReservation {
+        override val reservationId: String get() = lease.reservationId
+        override val ownerScope: String get() = lease.reservationScope
+        override val deviceGeneration: GPUDeviceGenerationID get() = lease.deviceGeneration
+    }
+
+    data class Readback(
+        override val acquisitionOrdinal: Long,
+        val lease: GPUReadbackStagingLease,
+    ) : GPUProviderPhysicalReservation {
+        override val reservationId: String get() = lease.reservationId
+        override val ownerScope: String get() = lease.ownerScope
+        override val deviceGeneration: GPUDeviceGenerationID get() = lease.deviceGeneration
     }
 }
 

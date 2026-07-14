@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
@@ -86,6 +87,25 @@ class GPUFramePlanIntegrityTest {
 
         assertNotEquals(unknown.capabilitySnapshotHash, explicitlyUnsupported.capabilitySnapshotHash)
         assertNotEquals(unknown.sealHash, explicitlyUnsupported.sealHash)
+    }
+
+    @Test
+    fun `capability seal distinguishes unknown and different observed max buffer limits`() {
+        val frameId = GPUFrameID(79)
+        fun seal(maxBufferSize: Long?): GPUFrameCapabilitySeal = GPUFrameCapabilitySeal.capture(
+            frameId = frameId,
+            deviceGeneration = GPUDeviceGenerationID(3),
+            capabilities = integrityCapabilities(maxBufferSize = maxBufferSize),
+        )
+
+        val unknown = seal(null)
+        val firstObserved = seal(268_435_456)
+        val secondObserved = seal(536_870_912)
+
+        assertNotEquals(unknown.capabilitySnapshotHash, firstObserved.capabilitySnapshotHash)
+        assertNotEquals(firstObserved.capabilitySnapshotHash, secondObserved.capabilitySnapshotHash)
+        assertNotEquals(unknown.sealHash, firstObserved.sealHash)
+        assertNotEquals(firstObserved.sealHash, secondObserved.sealHash)
     }
 
     @Test
@@ -1143,6 +1163,7 @@ class GPUFramePlanIntegrityTest {
 
     private fun integrityCapabilities(
         supportedTextureUsage: GPUTextureUsage? = null,
+        maxBufferSize: Long? = null,
     ): GPUCapabilities = GPUCapabilities(
         implementation = GPUImplementationIdentity(
             facadeName = "integrity-test-facade",
@@ -1152,6 +1173,12 @@ class GPUFramePlanIntegrityTest {
         ),
         facts = listOf(capabilityFact("frame.integrity", "supported")),
         snapshotId = "integrity-test-capabilities",
+        limits = GPULimits(
+            maxTextureDimension2D = 8192,
+            copyBytesPerRowAlignment = 256,
+            minUniformBufferOffsetAlignment = 256,
+            maxBufferSize = maxBufferSize,
+        ),
         supportedTextureUsage = supportedTextureUsage,
     )
 

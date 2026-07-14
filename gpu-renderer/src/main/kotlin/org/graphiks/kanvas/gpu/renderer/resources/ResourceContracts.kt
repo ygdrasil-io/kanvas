@@ -1,6 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
@@ -310,6 +313,14 @@ data class GPUImportedTextureDescriptor(
 value class GPUTextureResourceRef(val value: String) {
     init {
         require(value.isNotBlank()) { "GPUTextureResourceRef.value must not be blank" }
+    }
+}
+
+/** Concrete opaque buffer reference scoped by provider ownership and device generation. */
+@JvmInline
+value class GPUBufferResourceRef(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUBufferResourceRef.value must not be blank" }
     }
 }
 
@@ -789,7 +800,7 @@ sealed interface GPUResourceMaterializationDecision {
      * provide PM evidence context without becoming backend handles or product
      * route activation.
      */
-    data class Materialized(
+    class Materialized(
         val resources: List<GPUTextureResourceRef>,
         val diagnostics: List<GPUResourceDiagnostic> = emptyList(),
         val targetId: String = UNSPECIFIED_DUMP_VALUE,
@@ -799,8 +810,11 @@ sealed interface GPUResourceMaterializationDecision {
         val operandBridge: List<GPUMaterializedCommandOperandBinding> = emptyList(),
         val payloadTelemetry: List<GPUPayloadMaterializationTelemetryEvent> = emptyList(),
         val resourceLeases: List<GPUResourceLease> = emptyList(),
+        bufferResources: List<GPUBufferResourceRef> = emptyList(),
     ) : GPUResourceMaterializationDecision {
+        val bufferResources: List<GPUBufferResourceRef> = immutableList(bufferResources)
         internal val dumpResourcesSnapshot: List<GPUTextureResourceRef> = resources.toList()
+        internal val dumpBufferResourcesSnapshot: List<GPUBufferResourceRef> = bufferResources
         internal val dumpDiagnosticsSnapshot: List<GPUResourceDiagnostic> = diagnostics.toList()
         internal val dumpTaskIdsSnapshot: List<String> = taskIds.toList()
         internal val dumpResourcePlanLabelsSnapshot: List<String> = resourcePlanLabels.toList()
@@ -809,6 +823,74 @@ sealed interface GPUResourceMaterializationDecision {
         internal val dumpPayloadTelemetrySnapshot: List<GPUPayloadMaterializationTelemetryEvent> =
             payloadTelemetry.toList()
         internal val dumpResourceLeaseSnapshot: List<GPUResourceLease> = resourceLeases.toList()
+
+        fun copy(
+            resources: List<GPUTextureResourceRef> = this.resources,
+            diagnostics: List<GPUResourceDiagnostic> = this.diagnostics,
+            targetId: String = this.targetId,
+            taskIds: List<String> = this.taskIds,
+            resourcePlanLabels: List<String> = this.resourcePlanLabels,
+            operandRefs: List<GPUMaterializedCommandOperandReference> = this.operandRefs,
+            operandBridge: List<GPUMaterializedCommandOperandBinding> = this.operandBridge,
+            payloadTelemetry: List<GPUPayloadMaterializationTelemetryEvent> = this.payloadTelemetry,
+            resourceLeases: List<GPUResourceLease> = this.resourceLeases,
+            bufferResources: List<GPUBufferResourceRef> = this.bufferResources,
+        ): Materialized = Materialized(
+            resources = resources,
+            diagnostics = diagnostics,
+            targetId = targetId,
+            taskIds = taskIds,
+            resourcePlanLabels = resourcePlanLabels,
+            operandRefs = operandRefs,
+            operandBridge = operandBridge,
+            payloadTelemetry = payloadTelemetry,
+            resourceLeases = resourceLeases,
+            bufferResources = bufferResources,
+        )
+
+        operator fun component1(): List<GPUTextureResourceRef> = resources
+        operator fun component2(): List<GPUResourceDiagnostic> = diagnostics
+        operator fun component3(): String = targetId
+        operator fun component4(): List<String> = taskIds
+        operator fun component5(): List<String> = resourcePlanLabels
+        operator fun component6(): List<GPUMaterializedCommandOperandReference> = operandRefs
+        operator fun component7(): List<GPUMaterializedCommandOperandBinding> = operandBridge
+        operator fun component8(): List<GPUPayloadMaterializationTelemetryEvent> = payloadTelemetry
+        operator fun component9(): List<GPUResourceLease> = resourceLeases
+        operator fun component10(): List<GPUBufferResourceRef> = bufferResources
+
+        override fun equals(other: Any?): Boolean =
+            other is Materialized &&
+                resources == other.resources &&
+                diagnostics == other.diagnostics &&
+                targetId == other.targetId &&
+                taskIds == other.taskIds &&
+                resourcePlanLabels == other.resourcePlanLabels &&
+                operandRefs == other.operandRefs &&
+                operandBridge == other.operandBridge &&
+                payloadTelemetry == other.payloadTelemetry &&
+                resourceLeases == other.resourceLeases &&
+                bufferResources == other.bufferResources
+
+        override fun hashCode(): Int {
+            var result = resources.hashCode()
+            result = 31 * result + diagnostics.hashCode()
+            result = 31 * result + targetId.hashCode()
+            result = 31 * result + taskIds.hashCode()
+            result = 31 * result + resourcePlanLabels.hashCode()
+            result = 31 * result + operandRefs.hashCode()
+            result = 31 * result + operandBridge.hashCode()
+            result = 31 * result + payloadTelemetry.hashCode()
+            result = 31 * result + resourceLeases.hashCode()
+            result = 31 * result + bufferResources.hashCode()
+            return result
+        }
+
+        override fun toString(): String =
+            "Materialized(resources=$resources, diagnostics=$diagnostics, targetId=$targetId, " +
+                "taskIds=$taskIds, resourcePlanLabels=$resourcePlanLabels, operandRefs=$operandRefs, " +
+                "operandBridge=$operandBridge, payloadTelemetry=$payloadTelemetry, " +
+                "resourceLeases=$resourceLeases, bufferResources=$bufferResources)"
     }
 
     /**
@@ -1112,6 +1194,98 @@ data class GPUTextureSamplerMaterializationRequest(
  * remain stable and dumpable.
  */
 interface GPUResourceProvider {
+    /** Reserves an opaque normalized scratch texture or refuses before backend allocation. */
+    fun reserveScratchTexture(
+        request: GPUScratchTextureReservationRequest,
+        budget: GPUFrameMemoryBudgetPlan,
+        capabilities: GPUCapabilities,
+    ): GPUScratchTextureReservationResult =
+        GPUScratchTextureReservationResult.Refused(
+            unconfiguredPoolDiagnostic(
+                code = "unsupported.scratch_texture.provider_unconfigured",
+                message = "The resource provider does not own a scratch texture pool.",
+            ),
+        )
+
+    /** Transfers one complete preflight scratch scope to a known GPU submission. */
+    fun markScratchSubmitted(
+        reservationScope: String,
+        submissionId: GPUResourceSubmissionID,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUScratchLifecycleResult = unconfiguredScratchLifecycle()
+
+    /** Makes submitted scratch reusable only after accepted GPU completion. */
+    fun acceptScratchCompletion(
+        submissionId: GPUResourceSubmissionID,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUScratchLifecycleResult = unconfiguredScratchLifecycle()
+
+    /** Quarantines scratch whose GPU completion failed or became uncertain. */
+    fun rejectScratchCompletion(
+        submissionId: GPUResourceSubmissionID,
+        deviceGeneration: GPUDeviceGenerationID,
+        failure: GPUScratchCompletionFailure,
+    ): GPUScratchLifecycleResult = unconfiguredScratchLifecycle()
+
+    /** Reserves output-owned readback staging with the same physical budget owner. */
+    fun reserveReadbackStaging(
+        request: GPUReadbackStagingReservationRequest,
+    ): GPUReadbackStagingReservationResult =
+        GPUReadbackStagingReservationResult.Refused(
+            unconfiguredPoolDiagnostic(
+                code = "unsupported.readback_staging.provider_unconfigured",
+                message = "The resource provider does not own a readback staging pool.",
+            ),
+        )
+
+    fun markReadbackSubmitted(
+        leases: List<GPUReadbackStagingLease>,
+        submissionId: GPUResourceSubmissionID,
+    ): GPUReadbackStagingLifecycleResult = unconfiguredReadbackLifecycle()
+
+    fun acceptReadbackGPUCompletion(
+        submissionId: GPUResourceSubmissionID,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUReadbackStagingLifecycleResult = unconfiguredReadbackLifecycle()
+
+    fun rejectReadbackGPUCompletion(
+        submissionId: GPUResourceSubmissionID,
+        deviceGeneration: GPUDeviceGenerationID,
+        failure: GPUReadbackCompletionFailure,
+    ): GPUReadbackStagingLifecycleResult = unconfiguredReadbackLifecycle()
+
+    fun markReadbackMapped(lease: GPUReadbackStagingLease): GPUReadbackStagingLifecycleResult =
+        unconfiguredReadbackLifecycle()
+
+    fun markReadbackDepadded(lease: GPUReadbackStagingLease): GPUReadbackStagingLifecycleResult =
+        unconfiguredReadbackLifecycle()
+
+    fun releaseReadbackAfterUnmap(lease: GPUReadbackStagingLease): GPUReadbackStagingLifecycleResult =
+        unconfiguredReadbackLifecycle()
+
+    fun markReadbackMapFailed(
+        lease: GPUReadbackStagingLease,
+        safety: GPUReadbackMapFailureSafety,
+    ): GPUReadbackStagingLifecycleResult = unconfiguredReadbackLifecycle()
+
+    /** Rolls back every never-submitted physical reservation owned by one preflight scope. */
+    fun rollbackPhysicalPoolsBeforeSubmit(
+        ownerScope: String,
+    ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolRollbackSummary> =
+        unconfiguredPhysicalPoolMaintenance()
+
+    /** Invalidates and deaccounts every physical entry older than the current device generation. */
+    fun invalidatePhysicalPoolsBefore(
+        currentGeneration: GPUDeviceGenerationID,
+    ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolInvalidationSummary> =
+        unconfiguredPhysicalPoolMaintenance()
+
+    /** Evicts globally oldest reclaimable entries until the shared resident target is reached. */
+    fun evictPhysicalPoolsUntil(
+        residentBytesAtMost: Long,
+    ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolEvictionSummary> =
+        unconfiguredPhysicalPoolMaintenance()
+
     /** Materializes one allocation plan or refuses it explicitly. */
     fun materialize(
         plan: GPUTextureAllocationPlan,
@@ -1182,6 +1356,30 @@ interface GPUResourceProvider {
             resourcePlanLabels = request.resourcePlanLabelsOrDefault(),
         )
 }
+
+private fun unconfiguredScratchLifecycle(): GPUScratchLifecycleResult =
+    GPUScratchLifecycleResult.Refused(
+        unconfiguredPoolDiagnostic(
+            code = "unsupported.scratch_texture.provider_unconfigured",
+            message = "The resource provider does not own a scratch texture pool.",
+        ),
+    )
+
+private fun unconfiguredReadbackLifecycle(): GPUReadbackStagingLifecycleResult =
+    GPUReadbackStagingLifecycleResult.Refused(
+        unconfiguredPoolDiagnostic(
+            code = "unsupported.readback_staging.provider_unconfigured",
+            message = "The resource provider does not own a readback staging pool.",
+        ),
+    )
+
+private fun <T> unconfiguredPhysicalPoolMaintenance(): GPUPhysicalPoolMaintenanceDecision<T> =
+    GPUPhysicalPoolMaintenanceDecision.Refused(
+        unconfiguredPoolDiagnostic(
+            code = "unsupported.physical_pool.provider_unconfigured",
+            message = "The resource provider does not own the physical resource pools.",
+        ),
+    )
 
 /** Resource-layer provider that validates command operands without exposing backend handles. */
 class ValidatingCommandOperandResourceProvider : GPUResourceProvider {

@@ -10,6 +10,29 @@ import kotlin.test.assertNull
 
 /** Verifies resource-provider refusal, descriptor usage, and lease diagnostics. */
 class GPUResourceProviderTest {
+    @Test
+    fun `materialized keeps positional compatibility and snapshots public buffer resources`() {
+        val positional = GPUResourceMaterializationDecision.Materialized(
+            emptyList(),
+            emptyList<GPUResourceDiagnostic>(),
+            "root-target",
+        )
+        assertEquals("root-target", positional.targetId)
+
+        val mutableBuffers = mutableListOf(GPUBufferResourceRef("buffer:first"))
+        val decision = GPUResourceMaterializationDecision.Materialized(
+            resources = emptyList(),
+            bufferResources = mutableBuffers,
+        )
+        mutableBuffers += GPUBufferResourceRef("buffer:late")
+
+        assertEquals(listOf(GPUBufferResourceRef("buffer:first")), decision.bufferResources)
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
+            (decision.bufferResources as MutableList<GPUBufferResourceRef>) += GPUBufferResourceRef("buffer:mutated")
+        }
+    }
+
     /** Ensures an unconfigured provider refuses instead of throwing or faking success. */
     @Test
     fun `resource provider test double refuses materialization by default`() {

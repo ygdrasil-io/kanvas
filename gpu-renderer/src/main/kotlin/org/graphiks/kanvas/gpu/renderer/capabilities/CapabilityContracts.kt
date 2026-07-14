@@ -217,12 +217,17 @@ data class GPULimits(
     val copyBytesPerRowAlignment: Long,
     val minUniformBufferOffsetAlignment: Long,
     val source: String = "device.limits",
+    /** Facade-observed buffer allocation limit; absent until the selected backend reports it. */
+    val maxBufferSize: Long? = null,
 ) {
     init {
         require(maxTextureDimension2D > 0L) { "GPULimits.maxTextureDimension2D must be positive" }
         require(copyBytesPerRowAlignment > 0L) { "GPULimits.copyBytesPerRowAlignment must be positive" }
         require(minUniformBufferOffsetAlignment > 0L) {
             "GPULimits.minUniformBufferOffsetAlignment must be positive"
+        }
+        require(maxBufferSize == null || maxBufferSize > 0L) {
+            "GPULimits.maxBufferSize must be positive when observed"
         }
         require(source.isNotBlank()) { "GPULimits.source must not be blank" }
     }
@@ -252,6 +257,16 @@ data class GPULimits(
                 affectsValidity = true,
                 evidenceLabel = evidenceLabel,
             ),
+        ) + listOfNotNull(
+            maxBufferSize?.let { observedMaxBufferSize ->
+                GPUCapabilityFact(
+                    name = "maxBufferSize",
+                    source = source,
+                    value = observedMaxBufferSize.toString(),
+                    affectsValidity = true,
+                    evidenceLabel = evidenceLabel,
+                )
+            },
         )
     }
 
@@ -261,11 +276,13 @@ data class GPULimits(
             maxTextureDimension2D: Long,
             copyBytesPerRowAlignment: Long,
             minUniformBufferOffsetAlignment: Long,
+            maxBufferSize: Long? = null,
         ): GPULimits =
             GPULimits(
                 maxTextureDimension2D = maxTextureDimension2D,
                 copyBytesPerRowAlignment = copyBytesPerRowAlignment,
                 minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment,
+                maxBufferSize = maxBufferSize,
                 source = "runtime.conservative",
             )
     }
