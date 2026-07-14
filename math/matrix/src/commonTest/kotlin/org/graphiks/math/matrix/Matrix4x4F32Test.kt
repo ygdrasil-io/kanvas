@@ -151,8 +151,7 @@ class Matrix4x4F32Test {
         val m = Matrix4x4F32()
         m.setRC(2, 1, 7f)
         assertEquals(7f, m.rc(2, 1))
-        // Column-major: row=2, col=1 → index 1*4 + 2 = 6
-        assertEquals(7f, m.fMat[6])
+        assertEquals(7f, m[2, 1])
     }
 
     @Test

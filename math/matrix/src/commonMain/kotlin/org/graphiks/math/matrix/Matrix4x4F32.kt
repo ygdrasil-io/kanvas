@@ -38,7 +38,7 @@ public class Matrix4x4F32 {
      * Backing array — 16 floats, column-major.
      * `m[col * 4 + row]` is the element at row `row`, column `col`.
      */
-    public val fMat: FloatArray = FloatArray(16)
+    internal val fMat: FloatArray = FloatArray(16)
 
     // ─── Constructors ──────────────────────────────────────────────────
 
@@ -216,6 +216,24 @@ public class Matrix4x4F32 {
      * Read element at `row`, `col` (0 <= row, col <= 3).
      * Uses column-major storage: `fMat[col * 4 + row]`.
      */
+    public operator fun get(row: Int, col: Int): Float {
+        require(row in 0..3 && col in 0..3) { "get($row, $col) out of range" }
+        return fMat[col * 4 + row]
+    }
+
+    /**
+     * Write element at `row`, `col` (0 <= row, col <= 3).
+     * Uses column-major storage: `fMat[col * 4 + row]`.
+     */
+    public operator fun set(row: Int, col: Int, value: Float) {
+        require(row in 0..3 && col in 0..3) { "set($row, $col) out of range" }
+        fMat[col * 4 + row] = value
+    }
+
+    /**
+     * Read element at `row`, `col` (0 <= row, col <= 3).
+     * Uses column-major storage: `fMat[col * 4 + row]`.
+     */
     public fun rc(row: Int, col: Int): Float {
         require(row in 0..3 && col in 0..3) { "rc($row, $col) out of range" }
         return fMat[col * 4 + row]
@@ -229,6 +247,11 @@ public class Matrix4x4F32 {
         require(row in 0..3 && col in 0..3) { "setRC($row, $col) out of range" }
         fMat[col * 4 + row] = value
     }
+
+    /**
+     * Returns a defensive copy of the backing column-major storage.
+     */
+    public fun toFloatArray(): FloatArray = fMat.copyOf()
 
     /**
      * Return row `i` as a [Vector4F32].

@@ -12,11 +12,15 @@ import org.graphiks.math.vector.Vector2F32
  * calculations. The companion object provides static helpers for
  * finding exact and approximate points on horizontal/vertical edges.
  */
-public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Point2F64())) {
+public class Line2F64(source: Array<Point2F64>) {
 
     init {
-        require(pts.size == 2) { "Line2F64 requires exactly 2 points (got ${pts.size})" }
+        require(source.size == 2) { "Line2F64 requires exactly 2 points (got ${source.size})" }
     }
+
+    private val pts: Array<Point2F64> = arrayOf(source[0], source[1])
+
+    public constructor() : this(arrayOf(Point2F64(), Point2F64()))
 
     public operator fun get(n: Int): Point2F64 {
         require(n in 0..1)
@@ -28,6 +32,9 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
         pts[n] = p
     }
 
+    /** Returns a defensive copy of the endpoints array. */
+    public fun toPointsArray(): Array<Point2F64> = arrayOf(pts[0], pts[1])
+
     /** Sets both endpoints from [Vector2F32] points. */
     fun set(p0: Vector2F32, p1: Vector2F32): Line2F64 {
         pts[0] = Point2F64(p0.x.toDouble(), p0.y.toDouble())
@@ -37,8 +44,8 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
 
     /** Returns the point at parameter `t` along this segment (0 → p0, 1 → p1). */
     fun ptAtT(t: Double): Point2F64 {
-        if (0.0 == t) return pts[0]
-        if (1.0 == t) return pts[1]
+        if (0.0 == t) return Point2F64.of(pts[0].x, pts[0].y)
+        if (1.0 == t) return Point2F64.of(pts[1].x, pts[1].y)
         val oneT = 1 - t
         return Point2F64(
             oneT * pts[0].x + t * pts[1].x,
@@ -106,6 +113,8 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
     }
 
     override fun hashCode(): Int = 31 * pts[0].hashCode() + pts[1].hashCode()
+
+    override fun toString(): String = "Line2F64([${pts[0].x}, ${pts[0].y}], [${pts[1].x}, ${pts[1].y}])"
 
     companion object {
         /** Performs the computation. */
