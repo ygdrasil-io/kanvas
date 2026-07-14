@@ -111,7 +111,7 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
-    fun `readback cleanup completes and releases pending submission when map fails`() {
+    fun `readback cleanup failure cannot fabricate queue completion`() {
         val manager = GPUQueueManager()
         val submission = manager.submit(
             label = "offscreen-pass:frame-1",
@@ -134,8 +134,8 @@ class GPUBackendRuntimeNativeSmokeTest {
         val dump = manager.telemetry.dumpLines().joinToString("\n")
         assertEquals("map failed", failure.message)
         assertEquals(0, unmapCalls)
-        assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
-        assertTrue(dump.contains("completion=readback-failed"))
+        assertTrue(dump.contains("submitted=1 completed=0 released=0 pending=1 waits=0 unknownCompletions=0"))
+        assertTrue(dump.contains("completion=pending"))
     }
 
     @Test
@@ -165,10 +165,9 @@ class GPUBackendRuntimeNativeSmokeTest {
         assertFalse(transientDestroyed)
         assertEquals(1L, manager.telemetry.pending)
         manager.markCompleted(submission.id, GPU_QUEUE_COMPLETION_TARGET_CLOSE)
-        manager.releaseCompleted()
-        transientDestroyed = true
-        assertTrue(transientDestroyed)
-        assertEquals(0L, manager.telemetry.pending)
+        assertEquals(emptyList(), manager.releaseCompleted())
+        assertFalse(transientDestroyed)
+        assertEquals(1L, manager.telemetry.pending)
     }
 
     @Test
@@ -187,7 +186,7 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
-    fun `window present cleanup completes and releases submitted frame on success`() {
+    fun `window present success remains independent from queue completion`() {
         // Full native window coverage requires platform surface handles; this helper keeps the lifecycle contract covered in CI.
         val manager = GPUQueueManager()
         val submission = manager.submit(
@@ -202,12 +201,12 @@ class GPUBackendRuntimeNativeSmokeTest {
         )
 
         val dump = manager.telemetry.dumpLines().joinToString("\n")
-        assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
-        assertTrue(dump.contains("completion=presented"))
+        assertTrue(dump.contains("submitted=1 completed=0 released=0 pending=1 waits=0 unknownCompletions=0"))
+        assertTrue(dump.contains("completion=pending"))
     }
 
     @Test
-    fun `window present cleanup marks failure and rethrows after release`() {
+    fun `window present failure rethrows without fabricating queue completion`() {
         // Full native window coverage requires platform surface handles; this helper keeps the lifecycle contract covered in CI.
         val manager = GPUQueueManager()
         val submission = manager.submit(
@@ -225,8 +224,8 @@ class GPUBackendRuntimeNativeSmokeTest {
 
         val dump = manager.telemetry.dumpLines().joinToString("\n")
         assertEquals("present failed", failure.message)
-        assertTrue(dump.contains("submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0"))
-        assertTrue(dump.contains("completion=$GPU_QUEUE_COMPLETION_PRESENT_FAILED"))
+        assertTrue(dump.contains("submitted=1 completed=0 released=0 pending=1 waits=0 unknownCompletions=0"))
+        assertTrue(dump.contains("completion=pending"))
     }
 
     @Test
@@ -1298,10 +1297,10 @@ class GPUBackendRuntimeNativeSmokeTest {
                 val completedDump = session.phase0EvidenceDumpLines.joinToString("\n")
                 assertTrue(
                     completedDump.contains(
-                        "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=1 unknownCompletions=0",
+                        "gpu-queue.telemetry submitted=1 completed=0 released=0 pending=1 waits=1 unknownCompletions=0",
                     ),
                 )
-                assertTrue(completedDump.contains("completion=readback-complete"))
+                assertTrue(completedDump.contains("completion=pending"))
             }
         }
     }
@@ -1431,12 +1430,12 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertTrue(evidenceDump.contains("gpu-phase0.baseline"))
             assertTrue(
                 evidenceDump.contains(
-                    "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=1 unknownCompletions=0",
+                    "gpu-queue.telemetry submitted=1 completed=0 released=0 pending=1 waits=1 unknownCompletions=0",
                 ),
             )
             assertTrue(evidenceDump.contains("gpu-queue.submission id=1 label=offscreen-pass:"))
             assertTrue(evidenceDump.contains("retained=4"))
-            assertTrue(evidenceDump.contains("completion=readback-complete"))
+            assertTrue(evidenceDump.contains("completion=pending"))
             assertTrue(evidenceDump.contains("resource-provider.cache"))
             assertTrue(evidenceDump.contains("resource-provider.lease"))
             assertTrue(evidenceDump.contains("kind=uniform-slab"))
@@ -1666,13 +1665,13 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertTrue(
                 dumpLines.any { line ->
                     line.contains(
-                        "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=0 unknownCompletions=0",
+                        "gpu-queue.telemetry submitted=1 completed=0 released=0 pending=1 waits=0 unknownCompletions=0",
                     )
                 },
             )
-            assertTrue(textureSubmissionLine.contains("completed=true"))
-            assertTrue(textureSubmissionLine.contains("released=true"))
-            assertTrue(textureSubmissionLine.contains("completion=target-close"))
+            assertTrue(textureSubmissionLine.contains("completed=false"))
+            assertTrue(textureSubmissionLine.contains("released=false"))
+            assertTrue(textureSubmissionLine.contains("completion=pending"))
             assertTrue(dumpLines.any { line -> line.contains("retained=3") })
             assertTrue(dumpLines.any { line -> line.contains("kind=uniform-slab") && line.contains("result=create") })
             assertTrue(dumpLines.any { line -> line.contains("kind=bind-group") && line.contains("result=create") })
@@ -1736,10 +1735,10 @@ class GPUBackendRuntimeNativeSmokeTest {
             val closedDump = session.phase0EvidenceDumpLines.joinToString("\n")
             assertTrue(
                 closedDump.contains(
-                    "gpu-queue.telemetry submitted=1 completed=1 released=1 pending=0 waits=1 unknownCompletions=0",
+                    "gpu-queue.telemetry submitted=1 completed=0 released=0 pending=1 waits=1 unknownCompletions=0",
                 ),
             )
-            assertTrue(closedDump.contains("completion=target-close"))
+            assertTrue(closedDump.contains("completion=pending"))
         }
     }
 
