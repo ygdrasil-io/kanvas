@@ -23,16 +23,31 @@ enum class GPUFrameMemoryCategory(val targetResident: Boolean) {
     ReusableScratch(targetResident = false),
 }
 
+/** Resource class that determines whether texture-dimension limits apply. */
+enum class GPUFrameMemoryResourceKind {
+    Texture2D,
+    Buffer,
+}
+
 /** One handle-free allocation fact consumed by aggregate frame budgeting. */
 data class GPUFrameMemoryAllocation(
     val label: String,
     val category: GPUFrameMemoryCategory,
     val bytes: Long,
-    val bounds: GPUPixelBounds? = null,
+    val resourceKind: GPUFrameMemoryResourceKind,
+    val extent: GPUPixelBounds?,
 ) {
     init {
         require(label.isNotBlank()) { "GPUFrameMemoryAllocation.label must not be blank" }
         require(bytes >= 0L) { "GPUFrameMemoryAllocation.bytes must be non-negative" }
+        when (resourceKind) {
+            GPUFrameMemoryResourceKind.Texture2D -> requireNotNull(extent) {
+                "GPUFrameMemoryAllocation.extent is required for Texture2D allocations"
+            }
+            GPUFrameMemoryResourceKind.Buffer -> require(extent == null) {
+                "GPUFrameMemoryAllocation.extent must be absent for Buffer allocations"
+            }
+        }
     }
 }
 
@@ -111,11 +126,14 @@ object GPUFrameMemoryBudgetPlanner {
     }
 }
 
-private fun GPUFrameMemoryAllocation.exceeds(limits: GPULimits): Boolean =
-    bounds?.let { pixelBounds ->
-        pixelBounds.right.toLong() > limits.maxTextureDimension2D ||
-            pixelBounds.bottom.toLong() > limits.maxTextureDimension2D
-    } ?: false
+private fun GPUFrameMemoryAllocation.exceeds(limits: GPULimits): Boolean = when (resourceKind) {
+    GPUFrameMemoryResourceKind.Texture2D -> {
+        val textureExtent = checkNotNull(extent)
+        textureExtent.width.toLong() > limits.maxTextureDimension2D ||
+            textureExtent.height.toLong() > limits.maxTextureDimension2D
+    }
+    GPUFrameMemoryResourceKind.Buffer -> false
+}
 
 private fun BigInteger.clampedLong(): Long = min(Long.MAX_VALUE.toBigInteger()).toLong()
 

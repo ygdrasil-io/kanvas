@@ -91,6 +91,46 @@ class GPUIntermediateMsaaPlanTest {
         assertEquals("unsupported.blend.msaa_destination_read_exactness", refusal.reasonCode)
     }
 
+    @Test
+    fun `multisample advanced blend exactness refusal precedes runtime resolve wiring`() {
+        val plan = GPUIntermediatePlanner().plan(
+            msaaRequest(
+                samplePlan = GPUSamplePlan.MultisampleFrame(4),
+                msaaAdapter = GPUMsaaAdapterCapability(
+                    adapterLabel = "adapter:test",
+                    maxSampleCount = 4,
+                    supportsAlphaToCoverage = false,
+                    supportsNativeResolve = true,
+                ),
+                blendMode = GPUBlendMode.MULTIPLY,
+            ),
+        )
+
+        val refusal = assertIs<GPUIntermediatePlanStep.Refuse>(plan.steps.single())
+        assertEquals("unsupported.blend.msaa_destination_read_exactness", refusal.reasonCode)
+        assertEquals("cmd-aa", refusal.scopeLabel)
+    }
+
+    @Test
+    fun `canonical msaa capability refusal still precedes advanced blend exactness`() {
+        val plan = GPUIntermediatePlanner().plan(
+            msaaRequest(
+                samplePlan = GPUSamplePlan.MultisampleFrame(2),
+                msaaAdapter = GPUMsaaAdapterCapability(
+                    adapterLabel = "adapter:test",
+                    maxSampleCount = 8,
+                    supportsAlphaToCoverage = false,
+                    supportsNativeResolve = true,
+                ),
+                blendMode = GPUBlendMode.MULTIPLY,
+            ),
+        )
+
+        val refusal = assertIs<GPUIntermediatePlanStep.Refuse>(plan.steps.single())
+        assertEquals("unsupported.msaa.sample_count", refusal.reasonCode)
+        assertEquals("target:main", refusal.scopeLabel)
+    }
+
     private fun msaaRequest(
         samplePlan: GPUSamplePlan,
         msaaAdapter: GPUMsaaAdapterCapability?,

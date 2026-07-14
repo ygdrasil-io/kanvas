@@ -81,13 +81,29 @@ class GPUIntermediatePlanner(
     private val blendPlanner: GPUBlendPlanner = GPUBlendPlanner(),
 ) {
     fun plan(request: GPUIntermediatePlannerRequest): GPUIntermediatePlan {
-        val msaaRefusal = request.msaaRefusal()
-        if (msaaRefusal != null) return request.refused(request.targetId, msaaRefusal)
+        val msaaGate = request.msaaGate()
+        if (msaaGate.capabilityRefusal != null) {
+            return request.refused(request.targetId, msaaGate.capabilityRefusal)
+        }
+
+        val blendPlans = request.drawRequests.map { draw ->
+            if (draw.saveLayer == null) planBlend(request, draw) else null
+        }
+        request.drawRequests.zip(blendPlans).firstOrNull { (_, blend) ->
+            blend is GPUBlendPlan.UnsupportedBlend
+        }?.let { (draw, blend) ->
+            blend as GPUBlendPlan.UnsupportedBlend
+            return request.refused(draw.commandId, blend.diagnostic.code)
+        }
+
+        if (msaaGate.runtimeRefusal != null) {
+            return request.refused(request.targetId, msaaGate.runtimeRefusal)
+        }
 
         val steps = mutableListOf<GPUIntermediatePlanStep>()
         val destinationReadEligibilities = mutableListOf<GPUIntermediateDestinationReadEligibility>()
         var telemetry = GPUIntermediateTelemetry()
-        for (draw in request.drawRequests) {
+        for ((index, draw) in request.drawRequests.withIndex()) {
             val saveLayer = draw.saveLayer
             if (saveLayer != null) {
                 val layerSteps = planSaveLayer(request, draw, saveLayer)
@@ -103,23 +119,7 @@ class GPUIntermediatePlanner(
                 continue
             }
 
-            val blend = blendPlanner.plan(
-                GPUBlendSpecializationRequest(
-                    mode = draw.blendMode,
-                    coverage = GPUCoverageConsumption.FullOrScissor,
-                    sourceAlpha = GPUSourceAlphaClassification.Translucent,
-                    target = GPUTargetBlendFacts(
-                        formatClass = request.targetFormatClass,
-                        clampsNormalizedColorWrites = request.targetFormatClass.endsWith("unorm"),
-                        premultipliedAlpha = true,
-                    ),
-                    samplePlan = request.samplePlan,
-                    activeAttachmentSampled = draw.activeAttachmentSampled,
-                ),
-            )
-            if (blend is GPUBlendPlan.UnsupportedBlend) {
-                return request.refused(draw.commandId, blend.diagnostic.code)
-            }
+            val blend = checkNotNull(blendPlans[index])
 
             if (blend.destinationReadRequirement ==
                 org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement.DestinationTextureRequired
@@ -145,6 +145,24 @@ class GPUIntermediatePlanner(
             destinationReadEligibilities = destinationReadEligibilities,
         )
     }
+
+    private fun planBlend(
+        request: GPUIntermediatePlannerRequest,
+        draw: GPUIntermediateDrawRequest,
+    ): GPUBlendPlan = blendPlanner.plan(
+        GPUBlendSpecializationRequest(
+            mode = draw.blendMode,
+            coverage = GPUCoverageConsumption.FullOrScissor,
+            sourceAlpha = GPUSourceAlphaClassification.Translucent,
+            target = GPUTargetBlendFacts(
+                formatClass = request.targetFormatClass,
+                clampsNormalizedColorWrites = request.targetFormatClass.endsWith("unorm"),
+                premultipliedAlpha = true,
+            ),
+            samplePlan = request.samplePlan,
+            activeAttachmentSampled = draw.activeAttachmentSampled,
+        ),
+    )
 
     private fun planSaveLayer(
         request: GPUIntermediatePlannerRequest,
@@ -210,18 +228,27 @@ class GPUIntermediatePlanner(
     }
 }
 
-private fun GPUIntermediatePlannerRequest.msaaRefusal(): String? {
+private data class GPUIntermediateMsaaGate(
+    val capabilityRefusal: String? = null,
+    val runtimeRefusal: String? = null,
+)
+
+private fun GPUIntermediatePlannerRequest.msaaGate(): GPUIntermediateMsaaGate {
     return when (val plan = samplePlan) {
         GPUSamplePlan.SingleSampleFrame,
         is GPUSamplePlan.LocalResolveApproximation,
-        -> null
+        -> GPUIntermediateMsaaGate()
         is GPUSamplePlan.MultisampleFrame -> {
             val route = GPUMsaa.resolve(
                 GPUMsaaRequest(plan.sampleCount, GPUMsaaCoverageMode.Standard, msaaAdapter),
             )
             when (route) {
-                is GPUMsaaRoute.Refused -> route.diagnostic.code
-                is GPUMsaaRoute.Accepted -> "unsupported.msaa.runtime_resolve_unwired"
+                is GPUMsaaRoute.Refused -> GPUIntermediateMsaaGate(
+                    capabilityRefusal = route.diagnostic.code,
+                )
+                is GPUMsaaRoute.Accepted -> GPUIntermediateMsaaGate(
+                    runtimeRefusal = "unsupported.msaa.runtime_resolve_unwired",
+                )
             }
         }
     }

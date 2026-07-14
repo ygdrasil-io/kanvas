@@ -40,65 +40,94 @@ enum class GPUSampleEndTransition {
     Discard,
 }
 
-/** Proof emitted only when both attachments were stored for a later pass break. */
-class GPUSampleStoredState internal constructor(
-    val key: GPUSampleContinuationKey,
-)
-
 /** Immutable request for one MSAA pass-segment transition. */
 data class GPUSampleContinuationRequest(
     val key: GPUSampleContinuationKey,
     val loadTransition: GPUSampleLoadTransition,
     val endTransition: GPUSampleEndTransition,
-    val storedState: GPUSampleStoredState? = null,
 )
 
-/** Pure accepted MSAA continuation transition. */
-data class GPUSampleContinuationPlan(
+/** Complete ordered sequence over which retained attachment authority is evaluated. */
+data class GPUSampleContinuationSequenceRequest(
+    val transitions: List<GPUSampleContinuationRequest>,
+) {
+    init {
+        require(transitions.isNotEmpty()) {
+            "GPUSampleContinuationSequenceRequest.transitions must not be empty"
+        }
+    }
+}
+
+/** One accepted step in an ordered MSAA continuation sequence. */
+data class GPUSampleContinuationTransitionPlan(
     val key: GPUSampleContinuationKey,
     val loadTransition: GPUSampleLoadTransition,
     val endTransition: GPUSampleEndTransition,
-    val storedState: GPUSampleStoredState?,
+    val storedForNextTransition: Boolean,
 )
 
-/** Result of validating and planning one MSAA attachment transition. */
+/** Pure accepted sequence with no caller-replayable continuation proof. */
+data class GPUSampleContinuationPlan(
+    val transitions: List<GPUSampleContinuationTransitionPlan>,
+    val finalStoredKey: GPUSampleContinuationKey?,
+)
+
+/** Result of validating and planning one ordered MSAA attachment sequence. */
 sealed interface GPUSampleContinuationResult {
     data class Accepted(val plan: GPUSampleContinuationPlan) : GPUSampleContinuationResult
-    data class Refused(val diagnostic: GPUDiagnostic) : GPUSampleContinuationResult
+    data class Refused(
+        val transitionIndex: Int,
+        val diagnostic: GPUDiagnostic,
+    ) : GPUSampleContinuationResult
 }
 
-/** Validates exact attachment continuity without observing or producing GPU handles. */
+/** Validates one complete ordered sequence without observing or producing GPU handles. */
 class GPUSampleContinuationPlanner {
-    fun plan(request: GPUSampleContinuationRequest): GPUSampleContinuationResult {
-        val diagnostic = request.validationDiagnostic()
-        if (diagnostic != null) return GPUSampleContinuationResult.Refused(diagnostic)
+    fun plan(request: GPUSampleContinuationSequenceRequest): GPUSampleContinuationResult {
+        var currentStoredKey: GPUSampleContinuationKey? = null
+        val transitions = ArrayList<GPUSampleContinuationTransitionPlan>(request.transitions.size)
+        request.transitions.forEachIndexed { index, transition ->
+            val diagnostic = transition.validationDiagnostic(currentStoredKey)
+            if (diagnostic != null) {
+                return GPUSampleContinuationResult.Refused(
+                    transitionIndex = index,
+                    diagnostic = diagnostic,
+                )
+            }
 
-        val nextStoredState = when (request.endTransition) {
-            GPUSampleEndTransition.StoreForContinuation -> GPUSampleStoredState(request.key)
-            GPUSampleEndTransition.Resolve,
-            GPUSampleEndTransition.Discard,
-            -> null
+            currentStoredKey = when (transition.endTransition) {
+                GPUSampleEndTransition.StoreForContinuation -> transition.key
+                GPUSampleEndTransition.Resolve,
+                GPUSampleEndTransition.Discard,
+                -> null
+            }
+            transitions += GPUSampleContinuationTransitionPlan(
+                key = transition.key,
+                loadTransition = transition.loadTransition,
+                endTransition = transition.endTransition,
+                storedForNextTransition = currentStoredKey != null,
+            )
         }
         return GPUSampleContinuationResult.Accepted(
             GPUSampleContinuationPlan(
-                key = request.key,
-                loadTransition = request.loadTransition,
-                endTransition = request.endTransition,
-                storedState = nextStoredState,
+                transitions = transitions,
+                finalStoredKey = currentStoredKey,
             ),
         )
     }
 }
 
-private fun GPUSampleContinuationRequest.validationDiagnostic(): GPUDiagnostic? {
+private fun GPUSampleContinuationRequest.validationDiagnostic(
+    currentStoredKey: GPUSampleContinuationKey?,
+): GPUDiagnostic? {
     if (loadTransition == GPUSampleLoadTransition.FreshClear) {
-        return if (storedState == null) null else refusal(
+        return if (currentStoredKey == null) null else refusal(
             code = "unsupported.msaa.continuation_fresh_clear_with_stored_state",
             message = "Fresh-clear MSAA transitions cannot consume retained attachment state.",
         )
     }
 
-    val storedKey = storedState?.key ?: return refusal(
+    val storedKey = currentStoredKey ?: return refusal(
         code = "unsupported.msaa.continuation_attachment_not_stored",
         message = "Retained-load MSAA transitions require previously stored attachments.",
     )

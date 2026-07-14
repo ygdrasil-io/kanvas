@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.resources
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -15,10 +16,22 @@ class GPUFrameMemoryBudgetTest {
     @Test
     fun `budget accounts every frame memory category separately`() {
         val allocations = GPUFrameMemoryCategory.entries.mapIndexed { index, category ->
+            val resourceKind = when (category) {
+                GPUFrameMemoryCategory.ReadbackStaging,
+                GPUFrameMemoryCategory.ReusableScratch,
+                -> GPUFrameMemoryResourceKind.Buffer
+                else -> GPUFrameMemoryResourceKind.Texture2D
+            }
             GPUFrameMemoryAllocation(
                 label = "allocation:$category",
                 category = category,
                 bytes = (index + 1L) * 1_024L,
+                resourceKind = resourceKind,
+                extent = if (resourceKind == GPUFrameMemoryResourceKind.Texture2D) {
+                    GPUPixelBounds(left = 0, top = 0, right = 1, bottom = 1)
+                } else {
+                    null
+                },
             )
         }
 
@@ -59,19 +72,22 @@ class GPUFrameMemoryBudgetTest {
                         label = "target:canonical",
                         category = GPUFrameMemoryCategory.CanonicalTarget,
                         bytes = canonicalBytes,
-                        bounds = bounds,
+                        resourceKind = GPUFrameMemoryResourceKind.Texture2D,
+                        extent = bounds,
                     ),
                     GPUFrameMemoryAllocation(
                         label = "target:msaa-color",
                         category = GPUFrameMemoryCategory.RetainedMsaaColor,
                         bytes = multisampleBytes,
-                        bounds = bounds,
+                        resourceKind = GPUFrameMemoryResourceKind.Texture2D,
+                        extent = bounds,
                     ),
                     GPUFrameMemoryAllocation(
                         label = "target:msaa-depth-stencil",
                         category = GPUFrameMemoryCategory.RetainedMsaaDepthStencil,
                         bytes = multisampleBytes,
-                        bounds = bounds,
+                        resourceKind = GPUFrameMemoryResourceKind.Texture2D,
+                        extent = bounds,
                     ),
                 ),
                 configuredAggregateBudgetBytes = 256L * 1_024L * 1_024L,
@@ -88,6 +104,50 @@ class GPUFrameMemoryBudgetTest {
     }
 
     @Test
+    fun `canonical and msaa textures reject missing extents`() {
+        listOf(
+            GPUFrameMemoryCategory.CanonicalTarget,
+            GPUFrameMemoryCategory.RetainedMsaaColor,
+            GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil,
+        ).forEach { category ->
+            assertFailsWith<IllegalArgumentException> {
+                GPUFrameMemoryAllocation(
+                    label = "texture:$category",
+                    category = category,
+                    bytes = 4,
+                    resourceKind = GPUFrameMemoryResourceKind.Texture2D,
+                    extent = null,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `readback buffer has no invented texture extent`() {
+        val allocation = GPUFrameMemoryAllocation(
+            label = "readback:staging",
+            category = GPUFrameMemoryCategory.ReadbackStaging,
+            bytes = 4_096,
+            resourceKind = GPUFrameMemoryResourceKind.Buffer,
+            extent = null,
+        )
+        val plan = GPUFrameMemoryBudgetPlanner.plan(
+            GPUFrameMemoryBudgetRequest(
+                allocations = listOf(allocation),
+                configuredAggregateBudgetBytes = 1L shl 20,
+                deviceLimits = deviceLimits,
+            ),
+        )
+
+        assertNull(plan.diagnostic)
+        assertFailsWith<IllegalArgumentException> {
+            allocation.copy(
+                extent = GPUPixelBounds(left = 0, top = 0, right = 1, bottom = 1),
+            )
+        }
+    }
+
+    @Test
     fun `device texture limits remain a hard preflight refusal`() {
         val plan = GPUFrameMemoryBudgetPlanner.plan(
             GPUFrameMemoryBudgetRequest(
@@ -96,7 +156,8 @@ class GPUFrameMemoryBudgetTest {
                         label = "target:oversized",
                         category = GPUFrameMemoryCategory.CanonicalTarget,
                         bytes = 9_000L * 4L,
-                        bounds = GPUPixelBounds(left = 0, top = 0, right = 9_000, bottom = 1),
+                        resourceKind = GPUFrameMemoryResourceKind.Texture2D,
+                        extent = GPUPixelBounds(left = 0, top = 0, right = 9_000, bottom = 1),
                     ),
                 ),
                 configuredAggregateBudgetBytes = 1L shl 30,
@@ -119,11 +180,15 @@ class GPUFrameMemoryBudgetTest {
                         label = "target:canonical",
                         category = GPUFrameMemoryCategory.CanonicalTarget,
                         bytes = Long.MAX_VALUE,
+                        resourceKind = GPUFrameMemoryResourceKind.Texture2D,
+                        extent = GPUPixelBounds(left = 0, top = 0, right = 1, bottom = 1),
                     ),
                     GPUFrameMemoryAllocation(
                         label = "scratch:one-byte",
                         category = GPUFrameMemoryCategory.ReusableScratch,
                         bytes = 1,
+                        resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                        extent = null,
                     ),
                 ),
                 configuredAggregateBudgetBytes = Long.MAX_VALUE,
