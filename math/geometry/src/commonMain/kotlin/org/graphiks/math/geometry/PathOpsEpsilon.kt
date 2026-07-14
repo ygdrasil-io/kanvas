@@ -125,75 +125,139 @@ private fun lessOrEqualUlps(a: Float, b: Float, epsilon: Int): Boolean {
     return aBits < bBits + epsilon
 }
 
+private fun signBitTo2sComplement64(bits: Long): Long =
+    if (bits < 0) -(bits and 0x7FFFFFFFFFFFFFFFL) else bits
+
+private fun doubleAs2sComplement(x: Double): Long = signBitTo2sComplement64(x.toRawBits())
+
+private fun argumentsDenormalizedDouble(a: Double, b: Double, epsilon: Int): Boolean {
+    val denorm = DBL_EPSILON * epsilon / 2
+    return abs(a) <= denorm && abs(b) <= denorm
+}
+
+private fun equalUlpsDouble(a: Double, b: Double, epsilon: Int, depsilon: Int): Boolean {
+    if (argumentsDenormalizedDouble(a, b, depsilon)) return true
+    val aBits = doubleAs2sComplement(a)
+    val bBits = doubleAs2sComplement(b)
+    return aBits < bBits + epsilon && bBits < aBits + epsilon
+}
+
+private fun equalUlpsNoNormalCheckDouble(a: Double, b: Double, epsilon: Int): Boolean {
+    val aBits = doubleAs2sComplement(a)
+    val bBits = doubleAs2sComplement(b)
+    return aBits < bBits + epsilon && bBits < aBits + epsilon
+}
+
+private fun equalUlpsPinDouble(a: Double, b: Double, epsilon: Int, depsilon: Int): Boolean {
+    if (!a.isFinite() || !b.isFinite()) return false
+    if (argumentsDenormalizedDouble(a, b, depsilon)) return true
+    val aBits = doubleAs2sComplement(a)
+    val bBits = doubleAs2sComplement(b)
+    return aBits < bBits + epsilon && bBits < aBits + epsilon
+}
+
+private fun dEqualUlpsDouble(a: Double, b: Double, epsilon: Int): Boolean {
+    val aBits = doubleAs2sComplement(a)
+    val bBits = doubleAs2sComplement(b)
+    return aBits < bBits + epsilon && bBits < aBits + epsilon
+}
+
+private fun notEqualUlpsDouble(a: Double, b: Double, epsilon: Int): Boolean {
+    if (argumentsDenormalizedDouble(a, b, epsilon)) return false
+    val aBits = doubleAs2sComplement(a)
+    val bBits = doubleAs2sComplement(b)
+    return aBits >= bBits + epsilon || bBits >= aBits + epsilon
+}
+
+private fun dNotEqualUlpsDouble(a: Double, b: Double, epsilon: Int): Boolean {
+    val aBits = doubleAs2sComplement(a)
+    val bBits = doubleAs2sComplement(b)
+    return aBits >= bBits + epsilon || bBits >= aBits + epsilon
+}
+
+private fun notEqualUlpsPinDouble(a: Double, b: Double, epsilon: Int): Boolean {
+    if (!a.isFinite() || !b.isFinite()) return false
+    if (argumentsDenormalizedDouble(a, b, epsilon)) return false
+    val aBits = doubleAs2sComplement(a)
+    val bBits = doubleAs2sComplement(b)
+    return aBits >= bBits + epsilon || bBits >= aBits + epsilon
+}
+
+private fun lessUlpsDouble(a: Double, b: Double, epsilon: Int): Boolean {
+    if (argumentsDenormalizedDouble(a, b, epsilon)) return a <= b - DBL_EPSILON * epsilon
+    val aBits = doubleAs2sComplement(a)
+    val bBits = doubleAs2sComplement(b)
+    return aBits <= bBits - epsilon
+}
+
+private fun lessOrEqualUlpsDouble(a: Double, b: Double, epsilon: Int): Boolean {
+    if (argumentsDenormalizedDouble(a, b, epsilon)) return a < b + DBL_EPSILON * epsilon
+    val aBits = doubleAs2sComplement(a)
+    val bBits = doubleAs2sComplement(b)
+    return aBits < bBits + epsilon
+}
+
 // ─── Public ULPs predicates ───────────────────────────────────────────
 
 /** Returns `true` if [a] and [b] are within 16 ULPs */
 public fun AlmostEqualUlps(a: Float, b: Float): Boolean = equalUlps(a, b, 16, 16)
 
 /** Double-precision overload for [AlmostEqualUlps]. */
-public fun AlmostEqualUlps(a: Double, b: Double): Boolean = AlmostEqualUlps(a.toFloat(), b.toFloat())
+public fun AlmostEqualUlps(a: Double, b: Double): Boolean = equalUlpsDouble(a, b, 16, 16)
 
 /** Like [AlmostEqualUlps] but skips the denormalized check. */
 public fun AlmostEqualUlpsNoNormalCheck(a: Float, b: Float): Boolean = equalUlpsNoNormalCheck(a, b, 16)
 
 /** Double-precision overload for [AlmostEqualUlpsNoNormalCheck]. */
-public fun AlmostEqualUlpsNoNormalCheck(a: Double, b: Double): Boolean = AlmostEqualUlpsNoNormalCheck(a.toFloat(), b.toFloat())
+public fun AlmostEqualUlpsNoNormalCheck(a: Double, b: Double): Boolean = equalUlpsNoNormalCheckDouble(a, b, 16)
 
 /** Like [AlmostEqualUlps] but pins non-finite values. */
 public fun AlmostEqualUlpsPin(a: Float, b: Float): Boolean = equalUlpsPin(a, b, 16, 16)
 
 /** Double-precision overload for [AlmostEqualUlpsPin]. */
-public fun AlmostEqualUlpsPin(a: Double, b: Double): Boolean = AlmostEqualUlpsPin(a.toFloat(), b.toFloat())
+public fun AlmostEqualUlpsPin(a: Double, b: Double): Boolean = equalUlpsPinDouble(a, b, 16, 16)
 
 /** Returns `true` if [a] and [b] are within 2 ULPs. */
 public fun AlmostBequalUlps(a: Float, b: Float): Boolean = equalUlps(a, b, 2, 2)
 
 /** Double-precision overload for [AlmostBequalUlps]. */
-public fun AlmostBequalUlps(a: Double, b: Double): Boolean = AlmostBequalUlps(a.toFloat(), b.toFloat())
+public fun AlmostBequalUlps(a: Double, b: Double): Boolean = equalUlpsDouble(a, b, 2, 2)
 
 /** Returns `true` if [a] and [b] are within 8 ULPs. */
 public fun AlmostPequalUlps(a: Float, b: Float): Boolean = equalUlps(a, b, 8, 8)
 
 /** Double-precision overload for [AlmostPequalUlps]. */
-public fun AlmostPequalUlps(a: Double, b: Double): Boolean = AlmostPequalUlps(a.toFloat(), b.toFloat())
+public fun AlmostPequalUlps(a: Double, b: Double): Boolean = equalUlpsDouble(a, b, 8, 8)
 
 /** Double-precision 16-ULP equality. */
 public fun AlmostDequalUlps(a: Float, b: Float): Boolean = dEqualUlps(a, b, 16)
 
-/** Double-precision overload with fallback to relative comparison. */
-public fun AlmostDequalUlps(a: Double, b: Double): Boolean {
-    val SK_ScalarMax = Float.MAX_VALUE.toDouble()
-    if (abs(a) < SK_ScalarMax && abs(b) < SK_ScalarMax) {
-        return AlmostDequalUlps(a.toFloat(), b.toFloat())
-    }
-    val denom = max(abs(a), abs(b))
-    if (denom == 0.0) return false
-    return abs(a - b) / denom < FLT_EPSILON * 16
-}
+/** Double-precision overload with proper Double ULP comparison. */
+public fun AlmostDequalUlps(a: Double, b: Double): Boolean = dEqualUlpsDouble(a, b, 16)
 
 /** Returns `true` if [a] and [b] are NOT within 16 ULPs. */
 public fun NotAlmostEqualUlps(a: Float, b: Float): Boolean = notEqualUlps(a, b, 16)
 
 /** Double-precision overload for [NotAlmostEqualUlps]. */
-public fun NotAlmostEqualUlps(a: Double, b: Double): Boolean = NotAlmostEqualUlps(a.toFloat(), b.toFloat())
+public fun NotAlmostEqualUlps(a: Double, b: Double): Boolean = notEqualUlpsDouble(a, b, 16)
 
 /** Returns `true` if [a] and [b] are NOT within 16 ULPs (pinned). */
 public fun NotAlmostEqualUlpsPin(a: Float, b: Float): Boolean = notEqualUlpsPin(a, b, 16)
 
 /** Double-precision overload for [NotAlmostEqualUlpsPin]. */
-public fun NotAlmostEqualUlpsPin(a: Double, b: Double): Boolean = NotAlmostEqualUlpsPin(a.toFloat(), b.toFloat())
+public fun NotAlmostEqualUlpsPin(a: Double, b: Double): Boolean = notEqualUlpsPinDouble(a, b, 16)
 
 /** Double-precision inequality variant of [AlmostDequalUlps]. */
 public fun NotAlmostDequalUlps(a: Float, b: Float): Boolean = dNotEqualUlps(a, b, 16)
 
 /** Double-precision overload for [NotAlmostDequalUlps]. */
-public fun NotAlmostDequalUlps(a: Double, b: Double): Boolean = NotAlmostDequalUlps(a.toFloat(), b.toFloat())
+public fun NotAlmostDequalUlps(a: Double, b: Double): Boolean = dNotEqualUlpsDouble(a, b, 16)
 
 /** Returns `true` if [a] and [b] are within 256 ULPs and 1024-denormalized ULPs. */
 public fun RoughlyEqualUlps(a: Float, b: Float): Boolean = equalUlps(a, b, 256, 1024)
 
 /** Double-precision overload for [RoughlyEqualUlps]. */
-public fun RoughlyEqualUlps(a: Double, b: Double): Boolean = RoughlyEqualUlps(a.toFloat(), b.toFloat())
+public fun RoughlyEqualUlps(a: Double, b: Double): Boolean = equalUlpsDouble(a, b, 256, 1024)
 
 /** Returns `true` if [b] is between [a] and [c] within 2 ULPs. */
 public fun AlmostBetweenUlps(a: Float, b: Float, c: Float): Boolean =
@@ -202,19 +266,20 @@ public fun AlmostBetweenUlps(a: Float, b: Float, c: Float): Boolean =
 
 /** Double-precision overload for [AlmostBetweenUlps]. */
 public fun AlmostBetweenUlps(a: Double, b: Double, c: Double): Boolean =
-    AlmostBetweenUlps(a.toFloat(), b.toFloat(), c.toFloat())
+    if (a <= c) lessOrEqualUlpsDouble(a, b, 2) && lessOrEqualUlpsDouble(b, c, 2)
+    else lessOrEqualUlpsDouble(b, a, 2) && lessOrEqualUlpsDouble(c, b, 2)
 
 /** Returns `true` if [a] < [b] within 16 ULPs. */
 public fun AlmostLessUlps(a: Float, b: Float): Boolean = lessUlps(a, b, 16)
 
 /** Double-precision overload for [AlmostLessUlps]. */
-public fun AlmostLessUlps(a: Double, b: Double): Boolean = AlmostLessUlps(a.toFloat(), b.toFloat())
+public fun AlmostLessUlps(a: Double, b: Double): Boolean = lessUlpsDouble(a, b, 16)
 
 /** Returns `true` if [a] <= [b] within 16 ULPs. */
 public fun AlmostLessOrEqualUlps(a: Float, b: Float): Boolean = lessOrEqualUlps(a, b, 16)
 
 /** Double-precision overload for [AlmostLessOrEqualUlps]. */
-public fun AlmostLessOrEqualUlps(a: Double, b: Double): Boolean = AlmostLessOrEqualUlps(a.toFloat(), b.toFloat())
+public fun AlmostLessOrEqualUlps(a: Double, b: Double): Boolean = lessOrEqualUlpsDouble(a, b, 16)
 
 /** Returns the ULP distance between [a] and [b] */
 public fun UlpsDistance(a: Float, b: Float): Int {

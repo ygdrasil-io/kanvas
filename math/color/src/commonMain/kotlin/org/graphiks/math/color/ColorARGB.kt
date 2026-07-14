@@ -114,7 +114,8 @@ public fun multiplyAlpha255(a: Int, scale: Int): Int = (a * scale + 127) / 255
  *
  * Both arguments and the result are in `[0, 65535]` (16-bit range).
  */
-public fun multiplyAlpha32(a: Int, scale: Int): Int = (a * scale + 0x7FFF) / 0xFFFF
+public fun multiplyAlpha32(a: Int, scale: Int): Int =
+    ((a.toLong() * scale.toLong() + 0x7FFF) / 0xFFFF).toInt()
 
 /**
  * Converts HSV to an opaque [ColorARGB].

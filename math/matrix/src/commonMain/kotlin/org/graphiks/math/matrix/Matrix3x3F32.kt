@@ -968,8 +968,7 @@ public data class Matrix3x3F32(
             // monotonic with respect to type-decay (an affine portion of a
             // perspective matrix shouldn't claim to preserve axis alignment).
             if (persp0 != 0f || persp1 != 0f || persp2 != 1f) {
-                return kTranslate_Mask or kScale_Mask or kAffine_Mask or kPerspective_Mask or
-                    kRectStaysRect_Mask
+                return kTranslate_Mask or kScale_Mask or kAffine_Mask or kPerspective_Mask
             }
             var mask = 0
             if (tx != 0f || ty != 0f) mask = mask or kTranslate_Mask

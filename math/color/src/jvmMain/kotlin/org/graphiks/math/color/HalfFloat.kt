@@ -61,12 +61,27 @@ public fun floatToHalf(f: Float): Short {
             (sign or rounded).toShort()
         }
         else -> {
-            val expHalf = (exp32 - (127 - 15)) shl 10
-            val mantHalf = (mant32 + 0x1000) ushr 13
-            if (mantHalf > 0x3FF) {
-                ((expHalf shr 10) + 1).let { newExp ->
-                    val newExpField = (newExp.coerceAtMost(0x1F)) shl 10
-                    (sign or newExpField).toShort()
+            val expHalf = (exp32 - 127 + 15) shl 10
+            val mantHalf = mant32 ushr 13
+            val roundingBit = (mant32 ushr 12) and 1
+            val hasTie = (mant32 and 0x1FFF) == 0x1000
+            if (hasTie) {
+                if (mantHalf and 1 == 0) {
+                    (sign or expHalf or mantHalf).toShort()
+                } else {
+                    val result = expHalf or mantHalf
+                    if (mantHalf == 0x3FF) {
+                        (sign or (result + 0x400)).toShort()
+                    } else {
+                        (sign or (result + 1)).toShort()
+                    }
+                }
+            } else if (roundingBit != 0) {
+                val result = expHalf or mantHalf
+                if (mantHalf == 0x3FF) {
+                    (sign or (result + 0x400)).toShort()
+                } else {
+                    (sign or (result + 1)).toShort()
                 }
             } else {
                 (sign or expHalf or mantHalf).toShort()

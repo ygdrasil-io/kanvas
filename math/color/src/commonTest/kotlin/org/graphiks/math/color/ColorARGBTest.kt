@@ -72,6 +72,11 @@ class ColorARGBTest {
     }
 
     @Test
+    fun `multiplyAlpha32 does not overflow`() {
+        assertEquals(65535, multiplyAlpha32(65535, 65535))
+    }
+
+    @Test
     fun `hsv to color produces expected values`() {
         val red = hsvToColor(0f, 1f, 1f)
         assertEquals(ColorARGB.Red, red)

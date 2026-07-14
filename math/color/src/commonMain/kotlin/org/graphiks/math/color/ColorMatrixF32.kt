@@ -113,7 +113,7 @@ public class ColorMatrixF32 {
     /** Returns `this * other`. */
     public operator fun times(other: ColorMatrixF32): ColorMatrixF32 {
         val out = ColorMatrixF32()
-        setConcatInto(out.fMat, other.fMat, this.fMat)
+        setConcatInto(out.fMat, this.fMat, other.fMat)
         return out
     }
 
