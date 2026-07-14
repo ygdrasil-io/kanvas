@@ -104,7 +104,7 @@ class Point2F64Test {
 
     @Test
     fun `Mid`() {
-        val mid = Point2F64.Mid(Point2F64(0.0, 0.0), Point2F64(2.0, 4.0))
+        val mid = Point2F64.midpoint(Point2F64.of(0.0, 0.0), Point2F64.of(2.0, 4.0))
         kotlin.test.assertEquals(1.0, mid.x)
         kotlin.test.assertEquals(2.0, mid.y)
     }

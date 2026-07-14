@@ -5,12 +5,18 @@ import kotlin.math.min
 import kotlin.math.sqrt
 import org.graphiks.math.vector.Vector2F32
 
+import kotlin.ConsistentCopyVisibility
+
 /**
  * Double-precision 2D point/vector. [Vector2F64] is a typealias for [Point2F64].
+ *
+ * Mutable by design — used by the pathops intersection machinery for in-place
+ * operations. Use [Point2F64.of] to construct from components.
  */
-public data class Point2F64(var x: Double, var y: Double) {
+@ConsistentCopyVisibility
+public data class Point2F64 internal constructor(var x: Double, var y: Double) {
 
-    public constructor() : this(0.0, 0.0)
+    internal constructor() : this(0.0, 0.0)
 
     // ─── Vector operations ──────────────────────────────────────────────────
 
@@ -137,8 +143,14 @@ public data class Point2F64(var x: Double, var y: Double) {
     }
 
     public companion object {
-        /** Returns the midpoint of [a] and [b] */
-        public fun Mid(a: Point2F64, b: Point2F64): Point2F64 =
+        /** Creates a [Point2F64] from components. */
+        public fun of(x: Double = 0.0, y: Double = 0.0): Point2F64 = Point2F64(x, y)
+
+        /** Creates a [Point2F64] from a [Vector2F32]. */
+        public fun from(v: Vector2F32): Point2F64 = Point2F64(v.x.toDouble(), v.y.toDouble())
+
+        /** Returns the midpoint of [a] and [b]. */
+        public fun midpoint(a: Point2F64, b: Point2F64): Point2F64 =
             Point2F64((a.x + b.x) / 2, (a.y + b.y) / 2)
 
         /** Approximate equality for [Vector2F32] points. */
