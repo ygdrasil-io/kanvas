@@ -1,5 +1,11 @@
 package org.graphiks.math.color
 
+/**
+ * Converts an IEEE 754 half-precision float ([Short] bit pattern) to a
+ * single-precision [Float].
+ *
+ * Handles subnormals, infinity, and NaN.
+ */
 public fun halfToFloat(h: Short): Float {
     val bits = h.toInt() and 0xFFFF
     val sign = (bits and 0x8000) shl 16
@@ -30,6 +36,12 @@ public fun halfToFloat(h: Short): Float {
     }
 }
 
+/**
+ * Converts a single-precision [Float] to an IEEE 754 half-precision float
+ * bit pattern stored as a [Short].
+ *
+ * Rounds to nearest-even. Subnormals, infinity, and NaN are preserved.
+ */
 public fun floatToHalf(f: Float): Short {
     val bits = java.lang.Float.floatToRawIntBits(f)
     val sign = (bits ushr 16) and 0x8000
