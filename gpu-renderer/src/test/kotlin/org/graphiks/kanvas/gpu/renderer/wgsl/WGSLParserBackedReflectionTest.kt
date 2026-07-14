@@ -5,6 +5,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCoverageKind
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaModuleAbi
 import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.wgsl.parser.Lowerer
