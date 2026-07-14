@@ -822,7 +822,7 @@ private fun firstRouteExecutedPMEvidenceConsistencyDiagnostics(
     telemetryLedger: GPUTelemetryLedger,
 ): List<String> {
     val renderTasks = recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
-    val recordingTaskIds = renderTasks.map { task -> task.taskId }.distinct()
+    val recordingTaskIds = renderTasks.map { task -> task.taskId.value }.distinct()
     val recordingPassIds = renderTasks.map { task -> task.passId }.distinct()
 
     return buildList {
@@ -1295,7 +1295,7 @@ private fun firstRouteRecordingPMEvidenceEntries(
                     ownerPackage = "payloads",
                     concept = "GPUPayloadGatherPlan",
                     detail = "recording $recordingId payload evidence for " +
-                        "renderTasks=${renderTasks.joinToString(",") { task -> task.taskId }}",
+                        "renderTasks=${renderTasks.joinToString(",") { task -> task.taskId.value }}",
                 ),
             )
             add(

@@ -183,9 +183,29 @@ class GPUPassBatchCommandStreamTest {
     fun `from batch plan refuses plans that omit cut packets from lowered batches`() {
         val packetStream = packetStream(
             packet("packet-1", 1, "target-a"),
-            packet("packet-2", 2, "target-a", role = GPUDrawPacketRole.Readback),
+            packet("packet-2", 2, "target-a"),
         )
-        val plan = GPUPassBatcher().plan(requestForAll(packetStream))
+        val plan = GPUPassBatchPlan(
+            streamId = packetStream.streamId,
+            passId = packetStream.passId,
+            batches = listOf(
+                batch(
+                    batchId = "batch-1",
+                    packet = packetStream.packets.first(),
+                    targetStateHash = "target-a",
+                    retainedRefs = emptyList(),
+                ),
+            ),
+            cuts = listOf(
+                GPUPassBatchCut(
+                    beforePacketId = packetStream.packets.first().packetId,
+                    afterPacketId = packetStream.packets.last().packetId,
+                    reasonCode = GPUPassBatchReason.BLEND_OR_FIXED_STATE_CHANGED,
+                    message = "fixture intentionally omits the cut packet",
+                ),
+            ),
+            inputPacketCount = packetStream.packetCount,
+        )
 
         val error = assertFailsWith<IllegalArgumentException> {
             GPUPassCommandStream.fromBatchPlan(

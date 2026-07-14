@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingFact
@@ -7,6 +9,196 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingKind
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
+
+/** Handle-free logical resource identity used before resource preflight. */
+sealed interface GPUFrameResourceRef {
+    val value: String
+}
+
+/** Handle-free logical texture identity used before resource preflight. */
+@JvmInline
+value class GPUFrameTextureRef(override val value: String) : GPUFrameResourceRef {
+    init {
+        require(value.isNotBlank()) { "GPUFrameTextureRef.value must not be blank" }
+    }
+}
+
+/** Handle-free logical buffer identity used before resource preflight. */
+@JvmInline
+value class GPUFrameBufferRef(override val value: String) : GPUFrameResourceRef {
+    init {
+        require(value.isNotBlank()) { "GPUFrameBufferRef.value must not be blank" }
+    }
+}
+
+/** Handle-free logical render-target identity used before resource preflight. */
+@JvmInline
+value class GPUFrameTargetRef(override val value: String) : GPUFrameResourceRef {
+    init {
+        require(value.isNotBlank()) { "GPUFrameTargetRef.value must not be blank" }
+    }
+}
+
+/** Semantic role assigned to one frame resource declaration. */
+enum class GPUFrameResourceRole {
+    SceneTarget,
+    LayerTarget,
+    FilterTarget,
+    DestinationSnapshot,
+    UploadStaging,
+    ReadbackStaging,
+    VertexData,
+    IndexData,
+    UniformData,
+    StorageData,
+    SurfaceOutput,
+}
+
+/** WebGPU-like logical usage required by one frame-plan operation. */
+enum class GPUFrameResourceUsage {
+    RenderAttachment,
+    TextureBinding,
+    StorageBinding,
+    CopySource,
+    CopyDestination,
+    Vertex,
+    Index,
+    Uniform,
+    Storage,
+    MapRead,
+}
+
+/** Lifetime class requested before concrete resource allocation. */
+enum class GPUFrameResourceLifetime {
+    CommandLocal,
+    PassLocal,
+    LayerLocal,
+    RecordingLocal,
+    FrameLocal,
+    SharedCache,
+    ImportedExternal,
+    SurfaceLease,
+}
+
+/** Discriminator for handle-free topology used by preflight and scratch-pool keying. */
+enum class GPUFrameResourceDescriptorKind {
+    Texture,
+    Buffer,
+}
+
+/** Handle-free topology used by preflight and later scratch-pool keying. */
+sealed interface GPUFrameResourceDescriptor {
+    val kind: GPUFrameResourceDescriptorKind
+}
+
+/** Complete logical texture topology retained before allocation. */
+data class GPUFrameTextureDescriptor(
+    val logicalBounds: GPUPixelBounds,
+    val format: GPUColorFormat,
+    val sampleCount: Int,
+) : GPUFrameResourceDescriptor {
+    override val kind = GPUFrameResourceDescriptorKind.Texture
+
+    init {
+        require(!logicalBounds.isEmpty) {
+            "GPUFrameTextureDescriptor.logicalBounds must not be empty"
+        }
+        require(sampleCount > 0) { "GPUFrameTextureDescriptor.sampleCount must be positive" }
+    }
+}
+
+/** Complete logical buffer topology retained before allocation. */
+data class GPUFrameBufferDescriptor(
+    val byteSize: Long,
+    val alignmentBytes: Long,
+) : GPUFrameResourceDescriptor {
+    override val kind = GPUFrameResourceDescriptorKind.Buffer
+
+    init {
+        require(byteSize >= 0L) { "GPUFrameBufferDescriptor.byteSize must be non-negative" }
+        require(alignmentBytes > 0L) { "GPUFrameBufferDescriptor.alignmentBytes must be positive" }
+    }
+}
+
+/** One immutable handle-free use of a logical frame resource. */
+data class GPUFrameResourceUse(
+    val resource: GPUFrameResourceRef,
+    val role: GPUFrameResourceRole,
+    val usage: GPUFrameResourceUsage,
+    val lifetime: GPUFrameResourceLifetime,
+    val write: Boolean,
+)
+
+/** One resource declaration that preflight must validate and materialize transactionally. */
+class GPUResourcePreparationRequest(
+    val resource: GPUFrameResourceRef,
+    val descriptor: GPUFrameResourceDescriptor,
+    val role: GPUFrameResourceRole,
+    usages: Set<GPUFrameResourceUsage>,
+    val lifetime: GPUFrameResourceLifetime,
+    val byteSize: Long,
+    val diagnosticLabel: String,
+) {
+    val usages: Set<GPUFrameResourceUsage> = usages.toSet()
+
+    init {
+        require(usages.isNotEmpty()) { "GPUResourcePreparationRequest.usages must not be empty" }
+        require(byteSize >= 0L) { "GPUResourcePreparationRequest.byteSize must be non-negative" }
+        require(diagnosticLabel.isNotBlank()) {
+            "GPUResourcePreparationRequest.diagnosticLabel must not be blank"
+        }
+        when (resource) {
+            is GPUFrameTextureRef, is GPUFrameTargetRef -> require(descriptor is GPUFrameTextureDescriptor) {
+                "Texture and target preparation requires GPUFrameTextureDescriptor"
+            }
+            is GPUFrameBufferRef -> require(descriptor is GPUFrameBufferDescriptor) {
+                "Buffer preparation requires GPUFrameBufferDescriptor"
+            }
+        }
+    }
+}
+
+/** Handle-free buffer-to-resource upload layout. */
+data class GPUUploadLayout(
+    val sourceOffsetBytes: Long,
+    val bytesPerRow: Long,
+    val rowsPerImage: Int,
+    val byteSize: Long,
+) {
+    init {
+        require(sourceOffsetBytes >= 0L) { "GPUUploadLayout.sourceOffsetBytes must be non-negative" }
+        require(bytesPerRow > 0L) { "GPUUploadLayout.bytesPerRow must be positive" }
+        require(rowsPerImage > 0) { "GPUUploadLayout.rowsPerImage must be positive" }
+        require(byteSize >= 0L) { "GPUUploadLayout.byteSize must be non-negative" }
+    }
+}
+
+/** Handle-free texture-copy layout for a bounded destination snapshot. */
+data class GPUTextureCopyLayout(
+    val bytesPerRow: Long,
+    val rowsPerImage: Int,
+) {
+    init {
+        require(bytesPerRow > 0L) { "GPUTextureCopyLayout.bytesPerRow must be positive" }
+        require(rowsPerImage > 0) { "GPUTextureCopyLayout.rowsPerImage must be positive" }
+    }
+}
+
+/** One immutable logical region copied between prepared resources. */
+data class GPUResourceCopyRegion(
+    val sourceOffsetBytes: Long,
+    val destinationOffsetBytes: Long,
+    val logicalBounds: GPUPixelBounds?,
+    val byteSize: Long,
+) {
+    init {
+        require(sourceOffsetBytes >= 0L) { "GPUResourceCopyRegion.sourceOffsetBytes must be non-negative" }
+        require(destinationOffsetBytes >= 0L) {
+            "GPUResourceCopyRegion.destinationOffsetBytes must be non-negative"
+        }
+        require(byteSize >= 0L) { "GPUResourceCopyRegion.byteSize must be non-negative" }
+    }
+}
 
 /**
  * Target-scoped coordinator for resource preparation before submission.

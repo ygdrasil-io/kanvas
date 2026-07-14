@@ -21,10 +21,13 @@ object GPUPassBatchReason {
     const val STALE_RESOURCE_GENERATION = "stale.batch.resource_generation"
 }
 
-data class GPUPassBatchQueueGuard(
-    val requiredRetainedRefs: List<String>,
-    val retainedRefs: List<String>,
+class GPUPassBatchQueueGuard(
+    requiredRetainedRefs: List<String>,
+    retainedRefs: List<String>,
 ) {
+    val requiredRetainedRefs: List<String> = requiredRetainedRefs.toList()
+    val retainedRefs: List<String> = retainedRefs.toList()
+
     val retained: Boolean
         get() = retainedRefs.containsAll(requiredRetainedRefs)
 
@@ -64,6 +67,12 @@ class GPUPassBatcherRequest(
 ) {
     val eligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility> =
         eligibilityByPacketId.toMap()
+
+    init {
+        require(this.eligibilityByPacketId.keys == packetStream.packetIds.toSet()) {
+            "GPUPassBatcherRequest eligibility must cover every packet exactly"
+        }
+    }
 }
 
 class GPUPassBatch(
@@ -82,7 +91,7 @@ class GPUPassBatch(
     val renderPipelineKeys: List<GPURenderPipelineKey> =
         packets.mapNotNull { it.renderPipelineKey }.distinct()
     val acceptedForBatching: Boolean
-        get() = packetCount >= 2 && queueGuard.retained
+        get() = packetCount >= 2
 
     init {
         require(batchId.isNotBlank()) { "GPUPassBatch.batchId must not be blank" }
@@ -156,15 +165,7 @@ class GPUPassBatcher {
         }
 
         stream.packets.forEach { packet ->
-            val eligibility = request.eligibilityByPacketId[packet.packetId]
-            val singlePacketCut = packet.singlePacketCut(eligibility)
-            if (singlePacketCut != null) {
-                emitCurrent()
-                cuts += singlePacketCut
-                return@forEach
-            }
-
-            val acceptedEligibility = requireNotNull(eligibility)
+            val acceptedEligibility = request.eligibilityByPacketId.getValue(packet.packetId)
             if (currentPackets.isEmpty()) {
                 currentPackets += packet
                 currentEligibility = acceptedEligibility
@@ -219,96 +220,19 @@ class GPUPassBatcher {
                     message = "target $currentTarget cannot batch with ${nextPacket.targetStateHash}",
                 )
             nextEligibility.kind != currentEligibility.kind ||
-                nextEligibility.fixedStateHash != currentEligibility.fixedStateHash ->
+                nextEligibility.fixedStateHash != currentEligibility.fixedStateHash ||
+                nextPacket.role != previousPacket.role ||
+                nextPacket.renderStepId != previousPacket.renderStepId ||
+                nextPacket.renderStepVersion != previousPacket.renderStepVersion ||
+                nextPacket.renderPipelineKey != previousPacket.renderPipelineKey ||
+                nextPacket.computePipelineKey != previousPacket.computePipelineKey ||
+                nextPacket.bindingLayoutHash != previousPacket.bindingLayoutHash ||
+                nextPacket.resourceGeneration != previousPacket.resourceGeneration ->
                 GPUPassBatchCut(
                     beforePacketId = previousPacket.packetId,
                     afterPacketId = nextPacket.packetId,
                     reasonCode = GPUPassBatchReason.BLEND_OR_FIXED_STATE_CHANGED,
                     message = "fixed state ${currentEligibility.fixedStateHash} cannot batch with ${nextEligibility.fixedStateHash}",
-                )
-            !nextEligibility.queueGuard.retained ->
-                GPUPassBatchCut(
-                    beforePacketId = previousPacket.packetId,
-                    afterPacketId = nextPacket.packetId,
-                    reasonCode = GPUPassBatchReason.UNRETAINED_MATERIALIZED_RESOURCE,
-                    message = "materialized resource is not retained by queue",
-                )
-            else -> null
-        }
-
-    private fun GPUDrawPacket.singlePacketCut(
-        eligibility: GPUPassBatchEligibility?,
-    ): GPUPassBatchCut? =
-        when {
-            role == GPUDrawPacketRole.Copy || role == GPUDrawPacketRole.Readback ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.COPY_OR_READBACK,
-                    message = "packet ${packetId.value} role $role cuts simple pass batching",
-                )
-            role == GPUDrawPacketRole.Upload ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.UPLOAD_BARRIER,
-                    message = "packet ${packetId.value} upload role cuts simple pass batching",
-                )
-            diagnostics.any { it.code.contains("destination-read") } ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.DESTINATION_READ,
-                    message = "packet ${packetId.value} requires destination-read",
-                )
-            diagnostics.any { it.code.contains("save-layer") || it.code.contains("layer") } ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.SAVE_LAYER,
-                    message = "packet ${packetId.value} requires layer isolation",
-                )
-            diagnostics.any { it.code.contains("filter-intermediate") || it.code.contains("filter") } ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.FILTER_INTERMEDIATE,
-                    message = "packet ${packetId.value} requires filter intermediate",
-                )
-            diagnostics.any { it.code.contains("text-complex") || it.code.contains("glyph") } ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.TEXT_COMPLEX,
-                    message = "packet ${packetId.value} requires text complex route",
-                )
-            role != GPUDrawPacketRole.Shading ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.BLEND_OR_FIXED_STATE_CHANGED,
-                    message = "packet ${packetId.value} role $role is not a simple shading packet",
-                )
-            renderPipelineKey == null ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.MISSING_PIPELINE_KEY,
-                    message = "packet ${packetId.value} has no render pipeline key",
-                )
-            eligibility == null ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.BLEND_OR_FIXED_STATE_CHANGED,
-                    message = "packet ${packetId.value} has no simple-pass eligibility",
-                )
-            !eligibility.queueGuard.retained ->
-                GPUPassBatchCut(
-                    beforePacketId = null,
-                    afterPacketId = packetId,
-                    reasonCode = GPUPassBatchReason.UNRETAINED_MATERIALIZED_RESOURCE,
-                    message = "materialized resource is not retained by queue",
                 )
             else -> null
         }

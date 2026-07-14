@@ -4,6 +4,7 @@ import org.graphiks.kanvas.glyph.gpu.GPUColorGlyphLayerPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.text.ColorGlyphRefusalKind
 import org.graphiks.kanvas.gpu.renderer.text.GPUColorGlyphRouteDecision
@@ -86,7 +87,8 @@ class GPUColorGlyphRoutePlanner {
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.colorBoundsHash(),
             scissorBoundsHash = null,
             originalPaintOrder = command.ordering.paintOrder,

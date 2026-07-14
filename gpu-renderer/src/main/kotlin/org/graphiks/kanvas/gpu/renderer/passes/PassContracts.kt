@@ -271,6 +271,7 @@ class GPUDrawPacket(
     val renderStepId: GPURenderStepID,
     val renderStepVersion: Int,
     val role: GPUDrawPacketRole,
+    val blendPlan: GPUBlendPlan? = null,
     val renderPipelineKey: GPURenderPipelineKey? = null,
     val computePipelineKey: GPUComputePipelineKey? = null,
     val bindingLayoutHash: String,
@@ -973,6 +974,7 @@ data class GPUDrawPass(
     val pipelineKeys: List<String>,
     val barriers: List<String>,
     val diagnostics: List<GPUPassDiagnostic> = emptyList(),
+    val drawPackets: List<GPUDrawPacket> = emptyList(),
 )
 
 /** Render-step contract for geometry and coverage execution. */
@@ -1206,7 +1208,8 @@ object GPUFirstRoutePassBuilder {
         analysisRecordId: String,
         renderStepIdentity: String,
         sortKey: Long,
-        pipelineKeyHash: String,
+        pipelineKey: GPURenderPipelineKey,
+        blendPlan: GPUBlendPlan,
         boundsHash: String,
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
@@ -1220,12 +1223,34 @@ object GPUFirstRoutePassBuilder {
             role = "fill",
             layerScopeId = "root",
             sortKey = sortKey,
-            pipelineKeyHash = pipelineKeyHash,
+            pipelineKeyHash = pipelineKey.value,
             uniformSlot = null,
             resourceSlot = null,
             boundsHash = boundsHash,
             scissorBoundsHash = scissorBoundsHash,
             originalPaintOrder = originalPaintOrder,
+        )
+        val packet = GPUDrawPacket(
+            packetId = GPUDrawPacketID("packet.$commandIdValue.0"),
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            passId = "pass.root.$commandIdValue",
+            layerId = "root",
+            bindingListId = "bindings.$commandIdValue",
+            insertionReasonCode = "paint-order",
+            sortKey = sortKey,
+            sortKeyPreimage = "paint-order:$originalPaintOrder",
+            renderStepId = GPURenderStepID(renderStepIdentity),
+            renderStepVersion = 1,
+            role = GPUDrawPacketRole.Shading,
+            blendPlan = blendPlan,
+            renderPipelineKey = pipelineKey,
+            bindingLayoutHash = "preflight.pending",
+            vertexSourceLabel = "preflight.pending",
+            scissorBoundsHash = scissorBoundsHash,
+            targetStateHash = targetStateHash,
+            originalPaintOrder = originalPaintOrder,
+            resourceGeneration = 0L,
         )
         return GPUDrawPass(
             passId = "pass.root.$commandIdValue",
@@ -1233,8 +1258,9 @@ object GPUFirstRoutePassBuilder {
             layerScopeId = "root",
             loadStoreLabel = "load.store",
             invocations = listOf(invocation),
-            pipelineKeys = listOf(pipelineKeyHash),
+            pipelineKeys = listOf(pipelineKey.value),
             barriers = emptyList(),
+            drawPackets = listOf(packet),
         )
     }
 
@@ -1269,7 +1295,8 @@ object GPUFirstRoutePassBuilder {
         analysisRecordId: String,
         renderStepIdentity: String,
         sortKey: Long,
-        pipelineKeyHash: String,
+        pipelineKey: GPURenderPipelineKey,
+        blendPlan: GPUBlendPlan,
         boundsHash: String,
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
@@ -1280,7 +1307,8 @@ object GPUFirstRoutePassBuilder {
             analysisRecordId = analysisRecordId,
             renderStepIdentity = renderStepIdentity,
             sortKey = sortKey,
-            pipelineKeyHash = pipelineKeyHash,
+            pipelineKey = pipelineKey,
+            blendPlan = blendPlan,
             boundsHash = boundsHash,
             scissorBoundsHash = scissorBoundsHash,
             originalPaintOrder = originalPaintOrder,
@@ -1308,37 +1336,28 @@ object GPUFirstRoutePassBuilder {
         analysisRecordId: String,
         renderStepIdentity: String,
         sortKey: Long,
-        pipelineKeyHash: String,
+        pipelineKey: GPURenderPipelineKey,
+        blendPlan: GPUBlendPlan,
         boundsHash: String,
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
         targetStateHash: String,
-    ): GPUDrawPass {
-        val invocation = GPUDrawInvocation(
+    ): GPUDrawPass =
+        acceptedTypedPass(
+            passId = "pass.text.$commandIdValue",
+            role = "text",
             commandIdValue = commandIdValue,
             analysisRecordId = analysisRecordId,
-            renderStepIndex = 0,
-            renderStepId = GPURenderStepID(renderStepIdentity),
-            role = "text",
-            layerScopeId = "root",
+            renderStepIdentity = renderStepIdentity,
             sortKey = sortKey,
-            pipelineKeyHash = pipelineKeyHash,
-            uniformSlot = null,
-            resourceSlot = null,
+            pipelineKey = pipelineKey,
+            blendPlan = blendPlan,
             boundsHash = boundsHash,
             scissorBoundsHash = scissorBoundsHash,
             originalPaintOrder = originalPaintOrder,
-        )
-        return GPUDrawPass(
-            passId = "pass.text.$commandIdValue",
             targetStateHash = targetStateHash,
             layerScopeId = "root",
-            loadStoreLabel = "load.store",
-            invocations = listOf(invocation),
-            pipelineKeys = listOf(pipelineKeyHash),
-            barriers = emptyList(),
         )
-    }
 
     /** Builds an accepted FillPath pass with path-fill render-step identity. */
     fun acceptedFillPath(
@@ -1346,37 +1365,28 @@ object GPUFirstRoutePassBuilder {
         analysisRecordId: String,
         renderStepIdentity: String,
         sortKey: Long,
-        pipelineKeyHash: String,
+        pipelineKey: GPURenderPipelineKey,
+        blendPlan: GPUBlendPlan,
         boundsHash: String,
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
         targetStateHash: String,
-    ): GPUDrawPass {
-        val invocation = GPUDrawInvocation(
+    ): GPUDrawPass =
+        acceptedTypedPass(
+            passId = "pass.path_fill.$commandIdValue",
+            role = "path_fill",
             commandIdValue = commandIdValue,
             analysisRecordId = analysisRecordId,
-            renderStepIndex = 0,
-            renderStepId = GPURenderStepID(renderStepIdentity),
-            role = "path_fill",
-            layerScopeId = "root",
+            renderStepIdentity = renderStepIdentity,
             sortKey = sortKey,
-            pipelineKeyHash = pipelineKeyHash,
-            uniformSlot = null,
-            resourceSlot = null,
+            pipelineKey = pipelineKey,
+            blendPlan = blendPlan,
             boundsHash = boundsHash,
             scissorBoundsHash = scissorBoundsHash,
             originalPaintOrder = originalPaintOrder,
-        )
-        return GPUDrawPass(
-            passId = "pass.path_fill.$commandIdValue",
             targetStateHash = targetStateHash,
             layerScopeId = "root",
-            loadStoreLabel = "load.store",
-            invocations = listOf(invocation),
-            pipelineKeys = listOf(pipelineKeyHash),
-            barriers = emptyList(),
         )
-    }
 
     /** Builds an empty refused FillPath pass. */
     fun refusedFillPath(
@@ -1433,37 +1443,28 @@ object GPUFirstRoutePassBuilder {
         analysisRecordId: String,
         renderStepIdentity: String,
         sortKey: Long,
-        pipelineKeyHash: String,
+        pipelineKey: GPURenderPipelineKey,
+        blendPlan: GPUBlendPlan,
         boundsHash: String,
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
         targetStateHash: String,
-    ): GPUDrawPass {
-        val invocation = GPUDrawInvocation(
+    ): GPUDrawPass =
+        acceptedTypedPass(
+            passId = "pass.image_draw.$commandIdValue",
+            role = "image_draw",
             commandIdValue = commandIdValue,
             analysisRecordId = analysisRecordId,
-            renderStepIndex = 0,
-            renderStepId = GPURenderStepID(renderStepIdentity),
-            role = "image_draw",
-            layerScopeId = "root",
+            renderStepIdentity = renderStepIdentity,
             sortKey = sortKey,
-            pipelineKeyHash = pipelineKeyHash,
-            uniformSlot = null,
-            resourceSlot = null,
+            pipelineKey = pipelineKey,
+            blendPlan = blendPlan,
             boundsHash = boundsHash,
             scissorBoundsHash = scissorBoundsHash,
             originalPaintOrder = originalPaintOrder,
-        )
-        return GPUDrawPass(
-            passId = "pass.image_draw.$commandIdValue",
             targetStateHash = targetStateHash,
             layerScopeId = "root",
-            loadStoreLabel = "load.store",
-            invocations = listOf(invocation),
-            pipelineKeys = listOf(pipelineKeyHash),
-            barriers = emptyList(),
         )
-    }
 
     /**
      * Builds an accepted ApplyFilter pass with filter render-step identity but
@@ -1474,37 +1475,28 @@ object GPUFirstRoutePassBuilder {
         analysisRecordId: String,
         renderStepIdentity: String,
         sortKey: Long,
-        pipelineKeyHash: String,
+        pipelineKey: GPURenderPipelineKey,
+        blendPlan: GPUBlendPlan,
         boundsHash: String,
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
         targetStateHash: String,
-    ): GPUDrawPass {
-        val invocation = GPUDrawInvocation(
+    ): GPUDrawPass =
+        acceptedTypedPass(
+            passId = "pass.filter.$commandIdValue",
+            role = "filter",
             commandIdValue = commandIdValue,
             analysisRecordId = analysisRecordId,
-            renderStepIndex = 0,
-            renderStepId = GPURenderStepID(renderStepIdentity),
-            role = "filter",
-            layerScopeId = "root",
+            renderStepIdentity = renderStepIdentity,
             sortKey = sortKey,
-            pipelineKeyHash = pipelineKeyHash,
-            uniformSlot = null,
-            resourceSlot = null,
+            pipelineKey = pipelineKey,
+            blendPlan = blendPlan,
             boundsHash = boundsHash,
             scissorBoundsHash = scissorBoundsHash,
             originalPaintOrder = originalPaintOrder,
-        )
-        return GPUDrawPass(
-            passId = "pass.filter.$commandIdValue",
             targetStateHash = targetStateHash,
             layerScopeId = "root",
-            loadStoreLabel = "load.store",
-            invocations = listOf(invocation),
-            pipelineKeys = listOf(pipelineKeyHash),
-            barriers = emptyList(),
         )
-    }
 
     /** Builds an empty refused ApplyFilter pass. */
     fun refusedApplyFilter(
@@ -1561,7 +1553,39 @@ object GPUFirstRoutePassBuilder {
         analysisRecordId: String,
         renderStepIdentity: String,
         sortKey: Long,
-        pipelineKeyHash: String,
+        pipelineKey: GPURenderPipelineKey,
+        blendPlan: GPUBlendPlan,
+        boundsHash: String,
+        scissorBoundsHash: String?,
+        originalPaintOrder: Int,
+        targetStateHash: String,
+        layerScopeId: String,
+    ): GPUDrawPass =
+        acceptedTypedPass(
+            passId = "pass.draw_layer.$commandIdValue",
+            role = "draw_layer",
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            renderStepIdentity = renderStepIdentity,
+            sortKey = sortKey,
+            pipelineKey = pipelineKey,
+            blendPlan = blendPlan,
+            boundsHash = boundsHash,
+            scissorBoundsHash = scissorBoundsHash,
+            originalPaintOrder = originalPaintOrder,
+            targetStateHash = targetStateHash,
+            layerScopeId = layerScopeId,
+        )
+
+    private fun acceptedTypedPass(
+        passId: String,
+        role: String,
+        commandIdValue: Int,
+        analysisRecordId: String,
+        renderStepIdentity: String,
+        sortKey: Long,
+        pipelineKey: GPURenderPipelineKey,
+        blendPlan: GPUBlendPlan,
         boundsHash: String,
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
@@ -1573,24 +1597,47 @@ object GPUFirstRoutePassBuilder {
             analysisRecordId = analysisRecordId,
             renderStepIndex = 0,
             renderStepId = GPURenderStepID(renderStepIdentity),
-            role = "draw_layer",
+            role = role,
             layerScopeId = layerScopeId,
             sortKey = sortKey,
-            pipelineKeyHash = pipelineKeyHash,
+            pipelineKeyHash = pipelineKey.value,
             uniformSlot = null,
             resourceSlot = null,
             boundsHash = boundsHash,
             scissorBoundsHash = scissorBoundsHash,
             originalPaintOrder = originalPaintOrder,
         )
+        val packet = GPUDrawPacket(
+            packetId = GPUDrawPacketID("packet.$commandIdValue.0"),
+            commandIdValue = commandIdValue,
+            analysisRecordId = analysisRecordId,
+            passId = passId,
+            layerId = layerScopeId,
+            bindingListId = "bindings.$commandIdValue",
+            insertionReasonCode = "paint-order",
+            sortKey = sortKey,
+            sortKeyPreimage = "paint-order:$originalPaintOrder",
+            renderStepId = GPURenderStepID(renderStepIdentity),
+            renderStepVersion = 1,
+            role = GPUDrawPacketRole.Shading,
+            blendPlan = blendPlan,
+            renderPipelineKey = pipelineKey,
+            bindingLayoutHash = "preflight.pending",
+            vertexSourceLabel = "preflight.pending",
+            scissorBoundsHash = scissorBoundsHash,
+            targetStateHash = targetStateHash,
+            originalPaintOrder = originalPaintOrder,
+            resourceGeneration = 0L,
+        )
         return GPUDrawPass(
-            passId = "pass.draw_layer.$commandIdValue",
+            passId = passId,
             targetStateHash = targetStateHash,
             layerScopeId = layerScopeId,
             loadStoreLabel = "load.store",
             invocations = listOf(invocation),
-            pipelineKeys = listOf(pipelineKeyHash),
+            pipelineKeys = listOf(pipelineKey.value),
             barriers = emptyList(),
+            drawPackets = listOf(packet),
         )
     }
 

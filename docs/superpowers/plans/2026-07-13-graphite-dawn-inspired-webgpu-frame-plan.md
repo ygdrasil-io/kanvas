@@ -720,6 +720,7 @@ data class GPUFrameReadbackRequest(
     val sourceBounds: GPUPixelBounds,
     val pixelFormat: GPUReadbackPixelFormat,
     val outputColorInterpretation: GPUColorInterpretation,
+    val bufferOffsetBytes: Long = 0L,
 )
 
 @JvmInline value class GPUFrameID(val value: Long)
@@ -739,6 +740,11 @@ texture/buffer/target refinements, `GPUFrameResourceRole`,
 `GPUResourceCopyRegion`. `GPUResourcePreparationRequest.resource` uses that
 same resource-owned `GPUFrameResourceRef`. Do not define any of them in
 `recording`, and do not let `resources` import frame steps or recording seals.
+For texture and target preparation, carry a typed handle-free
+`GPUFrameTextureDescriptor` with non-empty logical pixel bounds, typed color
+format, and positive sample count. The request's typed usage set completes the
+scratch-pool key; device generation remains a preflight context fact. Task 7
+must not reconstruct format, sample count, or logical extent from labels.
 
 - [ ] **Step 2: Run the planner test**
 
@@ -784,23 +790,34 @@ rtk git commit -m 'feat: finalize recordings into a linear GPU frame plan'
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUScratchTexturePool.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/ResourceContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/CapabilityContracts.kt`
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUReadbackLayout.kt`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUScratchTexturePoolTest.kt`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUReadbackLayoutTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProviderTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/GPUCapabilitiesTest.kt`
 
 **Interfaces:**
 
 - Consumes: `GPUFrameMemoryBudgetPlan`, typed scratch descriptors, completion ownership, canonical handle-free `GPUFrameReadbackRequest`, and `GPUCapabilities`.
-- Produces: completion-safe opaque scratch leases, a distinct output-owned readback staging lease, and `GPUReadbackLayoutPlanner.plan(request: GPUFrameReadbackRequest, capabilities: GPUCapabilities): GPUReadbackLayout`.
+- Produces: completion-safe opaque scratch leases, a distinct output-owned readback staging lease, and `GPUReadbackLayoutPlanner.plan(request: GPUFrameReadbackRequest, capabilities: GPUCapabilities): GPUReadbackLayoutPlan`.
 
 - [ ] **Step 1: Test logical/backing separation and completion-safe reuse**
 
-Request non-power-of-two logical textures, verify deterministic size classes, independent logical origin/extent and backing extent, format/usage/sample/device-generation keys, no alias between overlapping lifetimes, reuse only after accepted GPU completion, completed-resource eviction, budget refusal details, and device-generation invalidation.
+Request non-power-of-two logical textures and use Graphite's small `GetApproxSize`
+policy independently on width and height: minimum 16, next power of two through
+1024, then alternating 1.5x-power-of-two and power-of-two classes. Verify
+independent logical origin/extent and backing extent, exact normalized
+backing/format/usage/sample/device-generation keys, no alias between overlapping
+lifetimes, reuse only after accepted GPU completion, deterministic
+completed-resource LRU eviction without wall time, budget refusal details, and
+device-generation invalidation. Count normalized backing bytes, never logical
+bytes, against the aggregate budget. Logical bounds and semantic resource role
+do not participate in the reuse key.
 
 - [ ] **Step 2: Test WebGPU readback layout arithmetic**
 
-Cover widths whose unpadded rows are and are not multiples of the facade-provided `copyBytesPerRowAlignment`, non-zero offsets, rows-per-image, checked overflow, total padded size, and row depadding back to tightly packed RGBA. Test the observed WebGPU value `256` and a fake capability value `512` so the implementation cannot hard-code 256. Use `Long` for intermediate arithmetic and reject non-positive/non-power-of-two capability values and results that cannot fit facade buffer sizes. Model the staging lease lifecycle as `Reserved -> Submitted -> GPUCompletedMappingPending -> Mapped -> Depadded -> Releasable`, plus `MapFailed -> Releasable|Quarantined`. Delay mapping after accepted queue completion, request an identical staging buffer from another frame, and prove there is no reuse until map/unmap/depad terminates.
+Cover widths whose unpadded rows are and are not multiples of the facade-provided `copyBytesPerRowAlignment`, non-zero offsets, rows-per-image, checked overflow, exact minimum buffer size, and row depadding back to tightly packed RGBA. Preserve the caller's `bufferOffsetBytes` exactly and reject an RGBA8 offset that is not a multiple of 4; never round it silently. Compute the minimum Dawn copy size as `offset + paddedBytesPerRow * (height - 1) + unpaddedBytesPerRow`; keep any larger pooled backing-buffer size as a separate fact. Map from offset zero and depad each row from `bufferOffset + y * paddedBytesPerRow`, avoiding an artificial map-offset multiple-of-8 constraint. Test the observed WebGPU value `256` and a fake capability value `512` so the implementation cannot hard-code 256. Use `Long` for intermediate arithmetic and reject non-positive/non-power-of-two alignment values, values that cannot fit WebGPU `UInt` row fields, values above `GPULimits.maxBufferSize`, and tightly packed or padded results that cannot fit current host `ByteArray` sizes. Model the staging lease lifecycle as `Reserved -> Submitted -> GPUCompletedMappingPending -> Mapped -> Depadded -> Releasable`, plus `MapFailed -> Releasable|Quarantined`. Delay mapping after accepted queue completion, request an identical staging buffer from another frame, and prove there is no reuse until map/unmap/depad terminates.
 
 ```kotlin
 data class GPUReadbackLayout(
@@ -815,8 +832,13 @@ data class GPUReadbackLayout(
     val totalBufferBytes: Long,
 )
 
+sealed interface GPUReadbackLayoutPlan {
+    data class Planned(val layout: GPUReadbackLayout) : GPUReadbackLayoutPlan
+    data class Refused(val diagnostic: GPUDiagnostic) : GPUReadbackLayoutPlan
+}
+
 class GPUReadbackLayoutPlanner {
-    fun plan(request: GPUFrameReadbackRequest, capabilities: GPUCapabilities): GPUReadbackLayout
+    fun plan(request: GPUFrameReadbackRequest, capabilities: GPUCapabilities): GPUReadbackLayoutPlan
 }
 ```
 
@@ -830,18 +852,29 @@ Expected: FAIL to compile.
 
 - [ ] **Step 4: Implement pool ownership through `GPUResourceProvider`**
 
-Return opaque resource references and lease metadata; never expose raw wgpu handles to the semantic plan. Make the pool consume the aggregate frame budget from Task 4 and emit category-complete diagnostics.
+Return opaque resource references and lease metadata; add a concrete opaque
+`GPUBufferResourceRef` rather than reusing the logical `GPUFrameBufferRef`, and
+never expose raw wgpu handles to the semantic plan. Make the pool consume the
+aggregate frame budget from Task 4 and emit category-complete diagnostics.
+Only completion-accepted leases are reusable or evictable; submitted,
+quarantined, device-invalidated, and output-owned readback leases are not.
+Evict by a deterministic monotone-use token, never wall time.
 
 - [ ] **Step 5: Implement readback packing/depacking**
 
 Keep map/copy completion in the output path only. Readback may observe a completed scene but cannot provide destination pixels for subsequent GPU drawing. Queue completion releases ordinary submission resources but transfers the output-owned staging lease to `GPUCompletedMappingPending`; only terminal depadding/map failure plus unmap makes it reusable, and device-loss failure quarantines it when safe release cannot be proven.
+
+Extend `GPULimits` with the facade-observed `maxBufferSize`. wgpu4k already
+exposes this public limit; its current native `mapAsync`/queue-completion
+progress behavior remains a Task 9 dependency concern and must not be hidden by
+a Kanvas polling or blocking workaround.
 
 - [ ] **Step 6: Run resource/execution tests and commit**
 
 ```bash
 rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.resources.*' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUReadbackLayoutTest'
 rtk ./gradlew :gpu-renderer:test
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUScratchTexturePool.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/ResourceContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUReadbackLayout.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUScratchTexturePoolTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUReadbackLayoutTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProviderTest.kt
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUScratchTexturePool.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/ResourceContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/CapabilityContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUReadbackLayout.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUScratchTexturePoolTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUReadbackLayoutTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProviderTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/GPUCapabilitiesTest.kt
 rtk git commit -m 'feat: pool frame scratch and validate readback layout'
 ```
 

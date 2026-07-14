@@ -98,7 +98,7 @@ class GPUPassBatcherTest {
     }
 
     @Test
-    fun `batcher cuts packets with destination-read diagnostic`() {
+    fun `diagnostic text is not a batching or routing input`() {
         val diagnostic = GPUPassDiagnostic(
             code = "requires.destination-read",
             passId = "main-pass",
@@ -111,18 +111,20 @@ class GPUPassBatcherTest {
         )
         val plan = GPUPassBatcher().plan(requestForAll(packets, GPUPassBatchKind.SolidFill))
 
-        assertEquals(GPUPassBatchReason.DESTINATION_READ, plan.cuts.single().reasonCode)
+        assertEquals(1, plan.batches.size)
+        assertEquals(2, plan.batches.single().packetCount)
+        assertTrue(plan.cuts.isEmpty())
     }
 
     @Test
-    fun `batcher cuts packets with save layer filter text copy upload and readback roles or diagnostics`() {
+    fun `save layer filter and text diagnostic labels do not reconstruct routing`() {
         val cases = listOf(
             "requires.save-layer" to GPUPassBatchReason.SAVE_LAYER,
             "requires.filter-intermediate" to GPUPassBatchReason.FILTER_INTERMEDIATE,
             "requires.text-complex" to GPUPassBatchReason.TEXT_COMPLEX,
         )
 
-        cases.forEachIndexed { index, (code, expectedReason) ->
+        cases.forEachIndexed { index, (code, _) ->
             val packets = packetStream(
                 packet("packet-${index}a", commandId = 1, target = "target-a"),
                 packet(
@@ -133,42 +135,13 @@ class GPUPassBatcherTest {
                 ),
             )
             val plan = GPUPassBatcher().plan(requestForAll(packets, GPUPassBatchKind.SolidFill))
-            assertEquals(expectedReason, plan.cuts.single().reasonCode, code)
+            assertEquals(1, plan.batches.size, code)
+            assertTrue(plan.cuts.isEmpty(), code)
         }
-
-        val copyPacket = GPUDrawPacket(
-            packetId = GPUDrawPacketID("copy-packet"),
-            commandIdValue = 9,
-            analysisRecordId = "analysis-copy",
-            passId = "main-pass",
-            layerId = "root-layer",
-            bindingListId = "bindings-copy",
-            insertionReasonCode = "copy",
-            sortKey = 900L,
-            sortKeyPreimage = "copy",
-            renderStepId = GPURenderStepID("copy-step"),
-            renderStepVersion = 1,
-            role = GPUDrawPacketRole.Copy,
-            bindingLayoutHash = "layout-copy",
-            vertexSourceLabel = "copy",
-            targetStateHash = "target-a",
-            originalPaintOrder = 9,
-            resourceGeneration = 7L,
-        )
-        val copyPlan = GPUPassBatcher().plan(requestForAll(packetStream(copyPacket), GPUPassBatchKind.SolidFill))
-        assertEquals(GPUPassBatchReason.COPY_OR_READBACK, copyPlan.cuts.single().reasonCode)
-
-        val uploadPacket = copyPacket.copyForRole("upload-packet", GPUDrawPacketRole.Upload)
-        val uploadPlan = GPUPassBatcher().plan(requestForAll(packetStream(uploadPacket), GPUPassBatchKind.SolidFill))
-        assertEquals(GPUPassBatchReason.UPLOAD_BARRIER, uploadPlan.cuts.single().reasonCode)
-
-        val readbackPacket = copyPacket.copyForRole("readback-packet", GPUDrawPacketRole.Readback)
-        val readbackPlan = GPUPassBatcher().plan(requestForAll(packetStream(readbackPacket), GPUPassBatchKind.SolidFill))
-        assertEquals(GPUPassBatchReason.COPY_OR_READBACK, readbackPlan.cuts.single().reasonCode)
     }
 
     @Test
-    fun `batcher cuts unretained materialized resources`() {
+    fun `resource retention does not affect packet adjacency`() {
         val packets = packetStream(
             packet("packet-1", commandId = 1, target = "target-a"),
             packet("packet-2", commandId = 2, target = "target-a"),
@@ -191,8 +164,9 @@ class GPUPassBatcherTest {
             ),
         )
 
-        assertEquals(0, plan.batches.size)
-        assertTrue(plan.cuts.all { it.reasonCode == GPUPassBatchReason.UNRETAINED_MATERIALIZED_RESOURCE })
+        assertEquals(1, plan.batches.size)
+        assertEquals(2, plan.batches.single().packetCount)
+        assertTrue(plan.cuts.isEmpty())
     }
 
     @Test
@@ -205,10 +179,8 @@ class GPUPassBatcherTest {
         val acceptedThenCutPlan = GPUPassBatcher().plan(requestForAll(acceptedThenCut, GPUPassBatchKind.SolidFill))
 
         assertEquals(3, acceptedThenCutPlan.packetCount)
-        assertContains(
-            acceptedThenCutPlan.dumpLines(),
-            "passes.batch-plan stream=packet-stream-main pass=main-pass batches=1 accepted=1 cuts=1 packets=3 diagnostics=none",
-        )
+        assertEquals(2, acceptedThenCutPlan.batches.size)
+        assertEquals(1, acceptedThenCutPlan.cuts.size)
 
         val fullyRefused = packetStream(
             packet("packet-4", commandId = 4, target = "target-a", role = GPUDrawPacketRole.Upload),
@@ -217,10 +189,8 @@ class GPUPassBatcherTest {
         val fullyRefusedPlan = GPUPassBatcher().plan(requestForAll(fullyRefused, GPUPassBatchKind.SolidFill))
 
         assertEquals(2, fullyRefusedPlan.packetCount)
-        assertContains(
-            fullyRefusedPlan.dumpLines(),
-            "passes.batch-plan stream=packet-stream-main pass=main-pass batches=0 accepted=0 cuts=2 packets=2 diagnostics=none",
-        )
+        assertEquals(2, fullyRefusedPlan.batches.size)
+        assertEquals(1, fullyRefusedPlan.cuts.size)
     }
 
     @Test
@@ -279,14 +249,15 @@ class GPUPassBatcherTest {
     }
 
     @Test
-    fun `compute composite and discard packets cut simple pass batching`() {
+    fun `single packets remain represented without semantic refusal cuts`() {
         val computePlan = GPUPassBatcher().plan(
             requestForAll(
                 packetStream(packetForRole("compute-packet", 20, "target-a", GPUDrawPacketRole.Compute)),
                 GPUPassBatchKind.SolidFill,
             ),
         )
-        assertEquals(GPUPassBatchReason.BLEND_OR_FIXED_STATE_CHANGED, computePlan.cuts.single().reasonCode)
+        assertEquals(1, computePlan.batches.size)
+        assertTrue(computePlan.cuts.isEmpty())
 
         val compositePlan = GPUPassBatcher().plan(
             requestForAll(
@@ -294,7 +265,8 @@ class GPUPassBatcherTest {
                 GPUPassBatchKind.SolidFill,
             ),
         )
-        assertEquals(GPUPassBatchReason.BLEND_OR_FIXED_STATE_CHANGED, compositePlan.cuts.single().reasonCode)
+        assertEquals(1, compositePlan.batches.size)
+        assertTrue(compositePlan.cuts.isEmpty())
 
         val discardPlan = GPUPassBatcher().plan(
             requestForAll(
@@ -302,7 +274,8 @@ class GPUPassBatcherTest {
                 GPUPassBatchKind.SolidFill,
             ),
         )
-        assertEquals(GPUPassBatchReason.BLEND_OR_FIXED_STATE_CHANGED, discardPlan.cuts.single().reasonCode)
+        assertEquals(1, discardPlan.batches.size)
+        assertTrue(discardPlan.cuts.isEmpty())
     }
 
     @Test

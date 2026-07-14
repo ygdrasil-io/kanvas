@@ -42,6 +42,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 import org.graphiks.kanvas.gpu.renderer.stroke.DashVertexExpansion
@@ -276,7 +277,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -341,7 +343,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -439,7 +442,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -505,7 +509,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -595,7 +600,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -646,7 +652,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -714,7 +721,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -763,7 +771,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -847,7 +856,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -900,7 +910,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -1048,7 +1059,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -1097,7 +1109,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -1584,7 +1597,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -1989,7 +2003,17 @@ private fun String.allowsStableAnalysisLocalMatrix(): Boolean =
         }
 
 private fun GPUBlendFacts.canonicalRefusalCode(targetFormatClass: String): String? {
-    val plan = GPUBlendPlanner().plan(
+    val plan = canonicalPlan(targetFormatClass)
+    return when {
+        plan is GPUBlendPlan.UnsupportedBlend -> plan.diagnostic.code
+        plan.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
+            "unsupported.destination_read.required"
+        else -> null
+    }
+}
+
+internal fun GPUBlendFacts.canonicalPlan(targetFormatClass: String): GPUBlendPlan =
+    GPUBlendPlanner().plan(
         GPUBlendSpecializationRequest(
             mode = mode,
             coverage = GPUCoverageConsumption.FullOrScissor,
@@ -2002,13 +2026,6 @@ private fun GPUBlendFacts.canonicalRefusalCode(targetFormatClass: String): Strin
             samplePlan = GPUSamplePlan.SingleSampleFrame,
         ),
     )
-    return when {
-        plan is GPUBlendPlan.UnsupportedBlend -> plan.diagnostic.code
-        plan.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
-            "unsupported.destination_read.required"
-        else -> null
-    }
-}
 
 private const val maxStableAnalysisLocalMatrixLength = 64
 

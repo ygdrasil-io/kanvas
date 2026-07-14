@@ -67,6 +67,32 @@ class GPURendererPackageBoundaryTest {
         )
     }
 
+    /** Keeps the frame-plan/resource dependency one-way and handle-free. */
+    @Test
+    fun `frame planning imports only handle free resource contracts`() {
+        val resourcesRoot = productionFile("resources")
+        val recordingRoot = productionFile("recording")
+        val resourceSources = resourcesRoot.walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+        val recordingSources = recordingRoot.walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+
+        listOf("recording", "execution", "passes").forEach { forbiddenPackage ->
+            assertTrue(
+                actual = "import org.graphiks.kanvas.gpu.renderer.$forbiddenPackage." !in resourceSources,
+                message = "resources must not import $forbiddenPackage",
+            )
+        }
+        listOf("GPUConcreteResourceProvider", "GPUMaterialized", "GPUPrepared").forEach { forbiddenType ->
+            assertTrue(
+                actual = "import org.graphiks.kanvas.gpu.renderer.resources.$forbiddenType" !in recordingSources,
+                message = "recording must not import concrete resource type $forbiddenType",
+            )
+        }
+    }
+
     /** Ensures active specs expose one frame-planning authority without legacy contradictions. */
     @Test
     fun `active gpu renderer specs expose one coherent frame planning authority`() {

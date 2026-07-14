@@ -30,6 +30,22 @@ enum class GPURendererFeature(val dumpLabel: String) {
     TextureSampling("texture-sampling"),
 }
 
+/** Exact implementation evidence for the optional copy-as-draw materialization primitive. */
+data class GPUCopyAsDrawImplementationCapability(
+    val implementationId: String,
+    val implementationVersion: String,
+    val available: Boolean,
+) {
+    init {
+        require(implementationId.isNotBlank()) {
+            "GPUCopyAsDrawImplementationCapability.implementationId must not be blank"
+        }
+        require(implementationVersion.isNotBlank()) {
+            "GPUCopyAsDrawImplementationCapability.implementationVersion must not be blank"
+        }
+    }
+}
+
 /** Stable dump label for GPU texture formats used in diagnostics and snapshots. */
 fun GPUTextureFormat.dumpLabel(): String =
     when (this) {

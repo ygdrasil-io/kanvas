@@ -49,7 +49,7 @@ class GPURecorderTest {
         assertContains(recording.featureAssumptions, "capability:first_slice.fill_rect.native=supported")
 
         val task = assertIs<GPUTask.Render>(recording.taskList.tasks.single())
-        assertEquals("task.render.3", task.taskId)
+        assertEquals("task.render.3", task.taskId.value)
         assertEquals("pass.root.3", task.passId)
         assertEquals("analysis.fill_rect.3", task.analysisRecordId)
         assertEquals(listOf("rect.fill.coverage"), task.renderStepIds)
@@ -89,10 +89,10 @@ class GPURecorderTest {
         val recording = recorder.close()
 
         val task = assertIs<GPUTask.Refused>(recording.taskList.tasks.single())
-        assertEquals("unsupported.clip.complex_stack", task.diagnostic.code)
-        assertEquals(GPURecordingID("recording.refused"), task.diagnostic.recordingId)
-        assertEquals("task.refused.8", task.diagnostic.taskId)
-        assertTrue(task.diagnostic.terminal)
+        assertEquals("unsupported.clip.complex_stack", task.diagnostic.code.value)
+        assertEquals(GPURecordingID("recording.refused"), task.recordingId)
+        assertEquals("task.refused.8", task.taskId.value)
+        assertTrue(task.diagnostic.isTerminal)
         assertEquals(listOf(task.diagnostic), recording.taskList.diagnostics)
         assertFalse(recording.taskList.tasks.any { it is GPUTask.Render })
         assertContains(
@@ -122,7 +122,7 @@ class GPURecorderTest {
         assertContains(recording.featureAssumptions, "capability:first_slice.fill_rrect.native=supported")
 
         val task = assertIs<GPUTask.Render>(recording.taskList.tasks.single())
-        assertEquals("task.render.14", task.taskId)
+        assertEquals("task.render.14", task.taskId.value)
         assertEquals("pass.root.14", task.passId)
         assertEquals("analysis.fill_rrect.14", task.analysisRecordId)
         assertEquals(listOf("rrect.fill.coverage"), task.renderStepIds)
@@ -146,10 +146,10 @@ class GPURecorderTest {
         val recording = recorder.close()
 
         val task = assertIs<GPUTask.Refused>(recording.taskList.tasks.single())
-        assertEquals("unsupported.text.draw_run_route_unavailable", task.diagnostic.code)
-        assertEquals(GPURecordingID("recording.text-refused"), task.diagnostic.recordingId)
-        assertEquals("task.refused.13", task.diagnostic.taskId)
-        assertTrue(task.diagnostic.terminal)
+        assertEquals("unsupported.text.draw_run_route_unavailable", task.diagnostic.code.value)
+        assertEquals(GPURecordingID("recording.text-refused"), task.recordingId)
+        assertEquals("task.refused.13", task.taskId.value)
+        assertTrue(task.diagnostic.isTerminal)
         assertFalse(recording.taskList.tasks.any { it is GPUTask.Render })
         assertContains(
             recording.analysisDecisionDump.lines,
@@ -217,10 +217,10 @@ class GPURecorderTest {
         val recording = recorder.close()
 
         val dependency = recording.taskList.dependencies.single()
-        assertEquals("task.render.1", dependency.fromTaskId)
-        assertEquals("task.render.2", dependency.toTaskId)
+        assertEquals("task.render.1", dependency.fromTaskId.value)
+        assertEquals("task.render.2", dependency.toTaskId.value)
         assertEquals("render-order", dependency.dependencyKind)
-        assertEquals("recording.recording.sequence.render.0->1", dependency.useTokenLabel)
+        assertEquals("recording.recording.sequence.render.0->1", dependency.useToken?.value)
         assertContains(
             recording.taskList.dumpLines(),
             "dependency:render-order:task.render.1->task.render.2:recording.recording.sequence.render.0->1",
@@ -243,6 +243,39 @@ class GPURecorderTest {
         assertEquals(GPURecordingID("recording.ordered-b"), token.toRecordingId)
         assertEquals("recording-order", token.dependencyKind)
         assertEquals("ordered.recording.ordered-a->recording.ordered-b", token.tokenLabel)
+    }
+
+    @Test
+    fun `refused command remains in canonical paint order between accepted render tasks`() {
+        val recorder = GPURecorder(
+            recordingId = GPURecordingID("recording.mixed-order"),
+            capabilities = firstSliceCapabilities(),
+        )
+        recorder.record(acceptedFillRect(commandIdValue = 1, paintOrder = 0))
+        recorder.record(
+            acceptedFillRect(commandIdValue = 2, paintOrder = 1).copy(
+                clip = GPUClipFacts.complexStack(bounds = GPUBounds(0f, 0f, 16f, 16f)),
+            ),
+        )
+        recorder.record(acceptedFillRect(commandIdValue = 3, paintOrder = 2))
+
+        val recording = recorder.close()
+        val plan = GPUFramePlanner.plan(recording.taskList)
+
+        assertEquals(
+            listOf(
+                GPUTaskID("task.render.1") to GPUTaskID("task.refused.2"),
+                GPUTaskID("task.refused.2") to GPUTaskID("task.render.3"),
+            ),
+            recording.taskList.dependencies.map { dependency ->
+                dependency.fromTaskId to dependency.toTaskId
+            },
+        )
+        assertEquals(
+            listOf("task.render.1", "task.refused.2", "task.render.3"),
+            plan.steps.map { step -> step.sourceTaskIds.single().value },
+        )
+        assertIs<GPUFrameStep.RefusedLeafDrawStep>(plan.steps[1])
     }
 
     /** Builds one closed first-route recording for ordered-recording fixtures. */
