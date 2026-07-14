@@ -821,6 +821,7 @@ public data class Matrix3x3F32(
     }
 
     public companion object {
+        /** Identity matrix. */
         public val Identity: Matrix3x3F32 = Matrix3x3F32()
 
         /**
@@ -830,27 +831,45 @@ public data class Matrix3x3F32(
         public fun I(): Matrix3x3F32 = Identity
 
         // ─── 9-element matrix index constants (Skia row-major) ──────────
+        /** Row-major index for scale X ([sx]). */
         public const val kMScaleX: Int = 0
+        /** Row-major index for skew X ([kx]). */
         public const val kMSkewX: Int = 1
+        /** Row-major index for translate X ([tx]). */
         public const val kMTransX: Int = 2
+        /** Row-major index for skew Y ([ky]). */
         public const val kMSkewY: Int = 3
+        /** Row-major index for scale Y ([sy]). */
         public const val kMScaleY: Int = 4
+        /** Row-major index for translate Y ([ty]). */
         public const val kMTransY: Int = 5
+        /** Row-major index for perspective 0 ([persp0]). */
         public const val kMPersp0: Int = 6
+        /** Row-major index for perspective 1 ([persp1]). */
         public const val kMPersp1: Int = 7
+        /** Row-major index for perspective 2 ([persp2]). */
         public const val kMPersp2: Int = 8
 
         // ─── 6-element affine index constants (Skia COLUMN-major: a, c, b, d, e, f) ──
+        /** Column-major affine index for scale X. */
         public const val kAScaleX: Int = 0
+        /** Column-major affine index for skew Y. */
         public const val kASkewY: Int = 1
+        /** Column-major affine index for skew X. */
         public const val kASkewX: Int = 2
+        /** Column-major affine index for scale Y. */
         public const val kAScaleY: Int = 3
+        /** Column-major affine index for translate X. */
         public const val kATransX: Int = 4
+        /** Column-major affine index for translate Y. */
         public const val kATransY: Int = 5
 
         // ─── Internal markers for the min/max scale solver ─────────────
+        /** Compute minimum singular value only. */
         public const val SCALE_KIND_MIN: Int = 0
+        /** Compute maximum singular value only. */
         public const val SCALE_KIND_MAX: Int = 1
+        /** Compute both min and max singular values. */
         public const val SCALE_KIND_BOTH: Int = 2
 
         /**
@@ -1005,6 +1024,10 @@ public data class Matrix3x3F32(
             return nearlyZero(perpDot, 1e-7f * 1e-7f)
         }
 
+        /**
+         * Translation matrix. Mirrors Skia's `Matrix3x3F32::Translate`
+         * ([Matrix3x3F32.h](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h)).
+         */
         public fun translation(x: Float, y: Float): Matrix3x3F32 =
             Matrix3x3F32(tx = x, ty = y)
 
@@ -1015,9 +1038,14 @@ public data class Matrix3x3F32(
          */
         public fun translation(v: Vector2F32): Matrix3x3F32 = translation(v.x, v.y)
 
+        /**
+         * Non-uniform scale matrix. Mirrors Skia's `Matrix3x3F32::Scale`
+         * ([Matrix3x3F32.h](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h)).
+         */
         public fun scaling(x: Float, y: Float): Matrix3x3F32 =
             Matrix3x3F32(sx = x, sy = y)
 
+        /** Uniform scale matrix. */
         public fun scaling(scale: Float): Matrix3x3F32 = scaling(scale, scale)
 
         /**
@@ -1061,12 +1089,19 @@ public data class Matrix3x3F32(
         private const val SK_DetNearlyZero: Float =
             (1f / 4096f) * (1f / 4096f) * (1f / 4096f)
 
-        /** Rotation around a pivot point. */
+        /**
+         * Rotation around a pivot point `(pivotX, pivotY)`.
+         * Equivalent to `T(pivotX, pivotY) · R(degrees) · T(-pivotX, -pivotY)`.
+         */
         public fun rotation(degrees: Float, pivotX: Float, pivotY: Float): Matrix3x3F32 {
             // T(pivotX, pivotY) · R(degrees) · T(-pivotX, -pivotY).
             return translation(pivotX, pivotY).preConcat(rotation(degrees)).preConcat(translation(-pivotX, -pivotY))
         }
 
+        /**
+         * Skew matrix. Mirrors Skia's `Matrix3x3F32::Skew`
+         * ([Matrix3x3F32.h](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h)).
+         */
         public fun skewing(kx: Float, ky: Float): Matrix3x3F32 =
             Matrix3x3F32(kx = kx, ky = ky)
 

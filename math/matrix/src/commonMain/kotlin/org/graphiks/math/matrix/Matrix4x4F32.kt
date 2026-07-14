@@ -228,31 +228,46 @@ public class Matrix4x4F32 {
 
     // ─── Element access ────────────────────────────────────────────────
 
-    /** Read element at `row`, `col` (0 <= row, col <= 3). */
+    /**
+     * Read element at `row`, `col` (0 <= row, col <= 3).
+     * Uses column-major storage: `fMat[col * 4 + row]`.
+     */
     public fun rc(row: Int, col: Int): Float {
         require(row in 0..3 && col in 0..3) { "rc($row, $col) out of range" }
         return fMat[col * 4 + row]
     }
 
-    /** Write element at `row`, `col` (0 <= row, col <= 3). */
+    /**
+     * Write element at `row`, `col` (0 <= row, col <= 3).
+     * Uses column-major storage: `fMat[col * 4 + row]`.
+     */
     public fun setRC(row: Int, col: Int, value: Float) {
         require(row in 0..3 && col in 0..3) { "setRC($row, $col) out of range" }
         fMat[col * 4 + row] = value
     }
 
-    /** Return row `i` as a [Vector4F32]. Mirrors Skia's `Matrix4x4F32::row(int)`. */
+    /**
+     * Return row `i` as a [Vector4F32].
+     * Mirrors Skia's `Matrix4x4F32::row(int)`.
+     */
     public fun row(i: Int): Vector4F32 {
         require(i in 0..3) { "row($i) out of range" }
         return Vector4F32.of(fMat[i + 0], fMat[i + 4], fMat[i + 8], fMat[i + 12])
     }
 
-    /** Return column `i` as a [Vector4F32]. Mirrors Skia's `Matrix4x4F32::col(int)`. */
+    /**
+     * Return column `i` as a [Vector4F32].
+     * Mirrors Skia's `Matrix4x4F32::col(int)`.
+     */
     public fun col(i: Int): Vector4F32 {
         require(i in 0..3) { "col($i) out of range" }
         return Vector4F32.of(fMat[i * 4 + 0], fMat[i * 4 + 1], fMat[i * 4 + 2], fMat[i * 4 + 3])
     }
 
-    /** Replace row `i` with `v`. Mirrors Skia's `Matrix4x4F32::setRow`. */
+    /**
+     * Replace row `i` with [v].
+     * Mirrors Skia's `Matrix4x4F32::setRow`.
+     */
     public fun setRow(i: Int, v: Vector4F32) {
         require(i in 0..3) { "setRow($i) out of range" }
         fMat[i + 0] = v.x
@@ -261,7 +276,10 @@ public class Matrix4x4F32 {
         fMat[i + 12] = v.w
     }
 
-    /** Replace column `i` with `v`. Mirrors Skia's `Matrix4x4F32::setCol`. */
+    /**
+     * Replace column `i` with [v].
+     * Mirrors Skia's `Matrix4x4F32::setCol`.
+     */
     public fun setCol(i: Int, v: Vector4F32) {
         require(i in 0..3) { "setCol($i) out of range" }
         fMat[i * 4 + 0] = v.x
@@ -270,13 +288,19 @@ public class Matrix4x4F32 {
         fMat[i * 4 + 3] = v.w
     }
 
-    /** Copy backing column-major storage into [v]. */
+    /**
+     * Copy backing column-major storage into [v].
+     * Requires `v.size >= 16`.
+     */
     public fun getColMajor(v: FloatArray) {
         require(v.size >= 16) { "getColMajor needs >= 16 elements (got ${v.size})" }
         fMat.copyInto(v)
     }
 
-    /** Copy storage into [v] in row-major order (transposed). */
+    /**
+     * Copy storage into [v] in row-major order (transposed).
+     * Requires `v.size >= 16`.
+     */
     public fun getRowMajor(v: FloatArray) {
         require(v.size >= 16) { "getRowMajor needs >= 16 elements (got ${v.size})" }
         transposeArrays(v, fMat)
@@ -284,7 +308,10 @@ public class Matrix4x4F32 {
 
     // ─── State / setters ───────────────────────────────────────────────
 
-    /** `true` if this is the identity matrix. */
+    /**
+     * Returns `true` if this is the identity matrix.
+     * Performs exact bitwise comparison on all 16 entries.
+     */
     public fun isIdentity(): Boolean {
         return fMat[0] == 1f && fMat[5] == 1f && fMat[10] == 1f && fMat[15] == 1f &&
             fMat[1] == 0f && fMat[2] == 0f && fMat[3] == 0f &&
@@ -293,7 +320,10 @@ public class Matrix4x4F32 {
             fMat[12] == 0f && fMat[13] == 0f && fMat[14] == 0f
     }
 
-    /** Reset to identity. */
+    /**
+     * Reset to identity. Returns `this` for chaining.
+     * Mirrors Skia's `Matrix4x4F32::setIdentity`.
+     */
     public fun setIdentity(): Matrix4x4F32 = apply {
         fMat.fill(0f)
         fMat[0] = 1f
@@ -302,7 +332,10 @@ public class Matrix4x4F32 {
         fMat[15] = 1f
     }
 
-    /** Reset to translation. */
+    /**
+     * Reset to a translation matrix. Returns `this` for chaining.
+     * Mirrors Skia's `Matrix4x4F32::setTranslate`.
+     */
     public fun setTranslate(x: Float, y: Float, z: Float = 0f): Matrix4x4F32 = apply {
         fMat[0] = 1f; fMat[1] = 0f; fMat[2] = 0f; fMat[3] = 0f
         fMat[4] = 0f; fMat[5] = 1f; fMat[6] = 0f; fMat[7] = 0f
@@ -310,7 +343,10 @@ public class Matrix4x4F32 {
         fMat[12] = x; fMat[13] = y; fMat[14] = z; fMat[15] = 1f
     }
 
-    /** Reset to scale. */
+    /**
+     * Reset to a diagonal scale matrix. Returns `this` for chaining.
+     * Mirrors Skia's `Matrix4x4F32::setScale`.
+     */
     public fun setScale(x: Float, y: Float, z: Float = 1f): Matrix4x4F32 = apply {
         fMat[0] = x;  fMat[1] = 0f; fMat[2] = 0f; fMat[3] = 0f
         fMat[4] = 0f; fMat[5] = y;  fMat[6] = 0f; fMat[7] = 0f
@@ -736,7 +772,10 @@ public class Matrix4x4F32 {
         }
     }
 
-    /** `true` if all 16 entries are finite (no Inf / NaN). */
+    /**
+     * Returns `true` if all 16 entries are finite (no Inf / NaN).
+     * Mirrors Skia's `Matrix4x4F32::isFinite()`.
+     */
     public fun isFinite(): Boolean {
         for (i in 0..15) if (!fMat[i].isFinite()) return false
         return true

@@ -1,18 +1,32 @@
 package org.graphiks.math.color
 
+/**
+ * A 4×5 color matrix for transforming RGBA color vectors.
+ *
+ * Iso-aligned port of Skia's `SkColorMatrix`
+ * ([include/core/SkColorMatrix.h](https://github.com/google/skia/blob/main/include/core/SkColorMatrix.h)).
+ *
+ * The 20-element backing array stores the matrix in row-major order:
+ * rows 0-3 multiply R, G, B, A respectively; column 4 is the
+ * additive translate column. Operations mirror Skia's `preConcat` /
+ * `postConcat`, RGB↔YUV conversion, saturation, and identity/reset.
+ */
 public class ColorMatrixF32 {
 
     private val fMat: FloatArray = FloatArray(20)
 
+    /** Constructs an identity color matrix. */
     public constructor() {
         setIdentity()
     }
 
+    /** Constructs from a 20-element [FloatArray]. */
     public constructor(values: FloatArray) {
         require(values.size == 20) { "ColorMatrixF32 expects 20 floats, got ${values.size}" }
         values.copyInto(fMat)
     }
 
+    /** Constructs from 20 individual floats (row-major). */
     public constructor(
         m00: Float, m01: Float, m02: Float, m03: Float, m04: Float,
         m10: Float, m11: Float, m12: Float, m13: Float, m14: Float,
@@ -25,6 +39,7 @@ public class ColorMatrixF32 {
         fMat[15] = m30; fMat[16] = m31; fMat[17] = m32; fMat[18] = m33; fMat[19] = m34
     }
 
+    /** Resets this matrix to identity. */
     public fun setIdentity() {
         fMat.fill(0f)
         fMat[kR_Scale] = 1f
@@ -33,6 +48,7 @@ public class ColorMatrixF32 {
         fMat[kA_Scale] = 1f
     }
 
+    /** Sets this matrix to a diagonal scale. Mirrors `SkColorMatrix::setScale`. */
     public fun setScale(rScale: Float, gScale: Float, bScale: Float, aScale: Float = 1f) {
         fMat.fill(0f)
         fMat[kR_Scale] = rScale
@@ -41,6 +57,7 @@ public class ColorMatrixF32 {
         fMat[kA_Scale] = aScale
     }
 
+    /** Adds `(dr, dg, db, da)` to the translate column. */
     public fun postTranslate(dr: Float, dg: Float, db: Float, da: Float) {
         fMat[kR_Trans] += dr
         fMat[kG_Trans] += dg
@@ -48,14 +65,17 @@ public class ColorMatrixF32 {
         fMat[kA_Trans] += da
     }
 
+    /** Sets this matrix to the JPEG full-range RGB→YUV conversion matrix. */
     public fun setRGB2YUV() {
         JPEG_FULL_RGB_TO_YUV.copyInto(fMat)
     }
 
+    /** Sets this matrix to the JPEG full-range YUV→RGB conversion matrix. */
     public fun setYUV2RGB() {
         JPEG_FULL_YUV_TO_RGB.copyInto(fMat)
     }
 
+    /** Sets this matrix to a saturation adjustment. Mirrors `SkColorMatrix::setSaturation`. */
     public fun setSaturation(sat: Float) {
         fMat.fill(0f)
         val R = kHueR * (1f - sat)
@@ -68,26 +88,32 @@ public class ColorMatrixF32 {
         fMat[kA_Scale] = 1f
     }
 
+    /** Writes a 20-element [FloatArray] into this matrix (row-major). */
     public fun setRowMajor(src: FloatArray) {
         require(src.size == 20) { "expected 20 floats, got ${src.size}" }
         src.copyInto(fMat)
     }
 
+    /** Copies this matrix into [dst] (row-major). */
     public fun getRowMajor(dst: FloatArray) {
         require(dst.size == 20) { "expected 20-element destination, got ${dst.size}" }
         fMat.copyInto(dst)
     }
 
+    /** Returns a copy of the backing array. */
     public fun toFloatArray(): FloatArray = fMat.copyOf()
 
+    /** Pre-multiplies: `this = this * other`. */
     public fun preConcat(other: ColorMatrixF32) {
         setConcat(this, other)
     }
 
+    /** Post-multiplies: `this = other * this`. */
     public fun postConcat(other: ColorMatrixF32) {
         setConcat(other, this)
     }
 
+    /** Returns `this * other`. */
     public operator fun times(other: ColorMatrixF32): ColorMatrixF32 {
         val out = ColorMatrixF32()
         setConcatInto(out.fMat, other.fMat, this.fMat)
@@ -107,6 +133,7 @@ public class ColorMatrixF32 {
         fMat.joinToString(prefix = "ColorMatrixF32[", postfix = "]")
 
     public companion object {
+        /** Stub for per-color-space RGB→YUV conversion. */
         public fun RGBtoYUV(yuvColorSpace: Any): ColorMatrixF32 {
             TODO(
                 "STUB.YUVA_PIXMAPS: ColorMatrixF32.RGBtoYUV($yuvColorSpace) — " +

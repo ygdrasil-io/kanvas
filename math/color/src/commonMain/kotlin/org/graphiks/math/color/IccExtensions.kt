@@ -2,6 +2,10 @@ package org.graphiks.math.color
 
 import org.graphiks.math.matrix.Matrix3x3F32
 
+/**
+ * Reads the element at `(row, col)` from a [Matrix3x3F32] for ICC profile
+ * matrix access.
+ */
 public fun Matrix3x3F32.iccGet(row: Int, col: Int): Float {
     require(row in 0..2 && col in 0..2) { "iccGet: indices ($row, $col) out of [0..2]" }
     return when (row) {
@@ -11,6 +15,9 @@ public fun Matrix3x3F32.iccGet(row: Int, col: Int): Float {
     }
 }
 
+/**
+ * Returns a copy of this [Matrix3x3F32] with `(row, col)` set to [value].
+ */
 public fun Matrix3x3F32.iccSet(row: Int, col: Int, value: Float): Matrix3x3F32 {
     require(row in 0..2 && col in 0..2) { "iccSet: indices ($row, $col) out of [0..2]" }
     return when (row) {
@@ -26,6 +33,10 @@ public fun Matrix3x3F32.iccSet(row: Int, col: Int, value: Float): Matrix3x3F32 {
     }
 }
 
+/**
+ * Returns `true` if this [Matrix3x3F32] is an identity matrix (as
+ * relevant for ICC profile parsing).
+ */
 public val Matrix3x3F32.iccIsIdentity: Boolean
     get() = sx == 1f && kx == 0f && tx == 0f &&
             ky == 0f && sy == 1f && ty == 0f &&
