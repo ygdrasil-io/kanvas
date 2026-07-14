@@ -325,6 +325,13 @@ class GPUCapabilityContractsTest {
         }
     }
 
+    @Test
+    fun `device generation identity is checked and stable`() {
+        assertEquals(GPUDeviceGenerationID(7), GPUDeviceGenerationID(7))
+        assertEquals(7L, GPUDeviceGenerationID(7).value)
+        assertFailsWith<IllegalArgumentException> { GPUDeviceGenerationID(-1) }
+    }
+
     private fun textureUsageForRawValue(value: ULong): GPUTextureUsage {
         val method = GPUTextureUsage::class.java.getDeclaredMethod("box-impl", java.lang.Long.TYPE)
         return method.invoke(null, value.toLong()) as GPUTextureUsage

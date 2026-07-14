@@ -60,7 +60,7 @@ data class GPUIntermediatePlannerRequest(
     val targetFormatClass: String,
     val targetUsageLabels: Set<String>,
     val deviceGeneration: Long,
-    val requestedSampleCount: Int = 1,
+    val samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
     val msaaAdapter: GPUMsaaAdapterCapability? = null,
     val drawRequests: List<GPUIntermediateDrawRequest>,
 ) {
@@ -72,7 +72,6 @@ data class GPUIntermediatePlannerRequest(
             "GPUIntermediatePlannerRequest.targetUsageLabels must not contain blanks"
         }
         require(deviceGeneration >= 0L) { "GPUIntermediatePlannerRequest.deviceGeneration must be non-negative" }
-        require(requestedSampleCount > 0) { "GPUIntermediatePlannerRequest.requestedSampleCount must be positive" }
         require(drawRequests.isNotEmpty()) { "GPUIntermediatePlannerRequest.drawRequests must not be empty" }
     }
 }
@@ -114,11 +113,7 @@ class GPUIntermediatePlanner(
                         clampsNormalizedColorWrites = request.targetFormatClass.endsWith("unorm"),
                         premultipliedAlpha = true,
                     ),
-                    samplePlan = if (request.requestedSampleCount == 1) {
-                        GPUSamplePlan.SingleSampleFrame
-                    } else {
-                        GPUSamplePlan.MultisampleFrame(request.requestedSampleCount)
-                    },
+                    samplePlan = request.samplePlan,
                     activeAttachmentSampled = draw.activeAttachmentSampled,
                 ),
             )
@@ -216,13 +211,19 @@ class GPUIntermediatePlanner(
 }
 
 private fun GPUIntermediatePlannerRequest.msaaRefusal(): String? {
-    if (requestedSampleCount == 1) return null
-    val route = GPUMsaa.resolve(
-        GPUMsaaRequest(requestedSampleCount, GPUMsaaCoverageMode.Standard, msaaAdapter),
-    )
-    return when (route) {
-        is GPUMsaaRoute.Refused -> route.diagnostic.code
-        is GPUMsaaRoute.Accepted -> "unsupported.msaa.runtime_resolve_unwired"
+    return when (val plan = samplePlan) {
+        GPUSamplePlan.SingleSampleFrame,
+        is GPUSamplePlan.LocalResolveApproximation,
+        -> null
+        is GPUSamplePlan.MultisampleFrame -> {
+            val route = GPUMsaa.resolve(
+                GPUMsaaRequest(plan.sampleCount, GPUMsaaCoverageMode.Standard, msaaAdapter),
+            )
+            when (route) {
+                is GPUMsaaRoute.Refused -> route.diagnostic.code
+                is GPUMsaaRoute.Accepted -> "unsupported.msaa.runtime_resolve_unwired"
+            }
+        }
     }
 }
 

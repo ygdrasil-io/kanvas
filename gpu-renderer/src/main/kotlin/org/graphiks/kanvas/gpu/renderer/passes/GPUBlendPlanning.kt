@@ -153,7 +153,7 @@ class GPUBlendPlanner {
             return GPUBlendPlan.NoOp(request.mode, "destination is unchanged")
         }
         if (request.coverage == GPUCoverageConsumption.LCDCoverage) {
-            return if (request.samplePlan.sampleCount == 1) {
+            return if (request.samplePlan.exactSingleSampleDestinationRead) {
                 shaderWithDestination(
                     mode = request.mode,
                     formulaId = "lcd.${request.mode.gpuLabel}@v1",
@@ -173,7 +173,7 @@ class GPUBlendPlanner {
             GPUCoverageConsumption.LCDCoverage -> error("handled above")
         }
         return if (
-            request.samplePlan.sampleCount > 1 &&
+            !request.samplePlan.exactSingleSampleDestinationRead &&
             plan.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired
         ) {
             refused(request.mode, "unsupported.blend.msaa_destination_read_exactness")
@@ -345,7 +345,7 @@ class GPUBlendAllowlistPlanner(
                 request.materialKeyHash,
                 request.renderStepIdentity,
                 request.targetFormatClass,
-                request.samplePlan.sampleCount.toString(),
+                request.samplePlan.specializationKey,
                 request.sourceAlpha.name,
                 request.coverage.name,
                 blendStateHash,

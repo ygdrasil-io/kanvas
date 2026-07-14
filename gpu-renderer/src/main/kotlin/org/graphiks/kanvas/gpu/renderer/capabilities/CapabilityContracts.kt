@@ -3,6 +3,14 @@ package org.graphiks.kanvas.gpu.renderer.capabilities
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 
+/** Handle-free identity for one GPU device generation. */
+@JvmInline
+value class GPUDeviceGenerationID(val value: Long) {
+    init {
+        require(value >= 0L) { "GPUDeviceGenerationID.value must be non-negative" }
+    }
+}
+
 /** Implementation identity for native or future pure Kotlin GPU facade backends. */
 data class GPUImplementationIdentity(
     val facadeName: String,

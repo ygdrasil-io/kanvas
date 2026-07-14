@@ -1,5 +1,32 @@
 package org.graphiks.kanvas.gpu.renderer.coordinates
 
+/** Checked target-local pixel bounds with exclusive right and bottom edges. */
+data class GPUPixelBounds(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+) {
+    init {
+        require(left >= 0) { "GPUPixelBounds.left must be non-negative" }
+        require(top >= 0) { "GPUPixelBounds.top must be non-negative" }
+        require(right >= left) { "GPUPixelBounds.right must not be less than left" }
+        require(bottom >= top) { "GPUPixelBounds.bottom must not be less than top" }
+    }
+
+    val width: Int get() = Math.subtractExact(right, left)
+    val height: Int get() = Math.subtractExact(bottom, top)
+    val isEmpty: Boolean get() = width == 0 || height == 0
+
+    /** Computes allocation bytes without allowing integer overflow. */
+    fun checkedByteSize(bytesPerPixel: Int, sampleCount: Int): Long {
+        require(bytesPerPixel > 0) { "bytesPerPixel must be positive" }
+        require(sampleCount > 0) { "sampleCount must be positive" }
+        val pixels = Math.multiplyExact(width.toLong(), height.toLong())
+        return Math.multiplyExact(Math.multiplyExact(pixels, bytesPerPixel.toLong()), sampleCount.toLong())
+    }
+}
+
 /** Coordinate spaces used by GPU renderer planning. */
 enum class GPUCoordinateSpace {
     /** Local command coordinates before captured transforms. */

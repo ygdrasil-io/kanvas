@@ -185,7 +185,7 @@ data class GPUDestinationReadStrategyRequest(
     val passSplitAllowed: Boolean = true,
     val framebufferFetchRequested: Boolean = false,
     val cpuReadbackRequested: Boolean = false,
-    val maxCopyBytes: Long = DEFAULT_DESTINATION_COPY_MAX_BYTES,
+    val maxCopyBytes: Long = Long.MAX_VALUE,
 )
 
 /** Evidence result for the destination-read strategy gate. */
@@ -693,7 +693,6 @@ data class GPUDestinationReadDiagnostic(
     val terminal: Boolean,
 )
 
-private const val DEFAULT_DESTINATION_COPY_MAX_BYTES = 16L * 1024L * 1024L
 private const val DESTINATION_READ_EVIDENCE_ROW = "gpu-renderer.destination-read.strategy"
 private const val DESTINATION_READ_MATERIALIZATION_ROW = "gpu-renderer.destination-read.live-materialization"
 private const val DESTINATION_READ_BYTES_PER_PIXEL = 4L

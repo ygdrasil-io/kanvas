@@ -1,5 +1,13 @@
 package org.graphiks.kanvas.gpu.renderer.state
 
+/** Stable logical target identity; generation remains an explicit key axis. */
+@JvmInline
+value class GPUTargetIdentity(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUTargetIdentity.value must not be blank" }
+    }
+}
+
 /** Store behavior for target output. */
 enum class GPUStorePlan {
     /** Preserve attachment contents after the pass. */

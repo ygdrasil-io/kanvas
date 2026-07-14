@@ -1,5 +1,21 @@
 package org.graphiks.kanvas.gpu.renderer.color
 
+/** Stable handle-free target/intermediate color format identity. */
+@JvmInline
+value class GPUColorFormat(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUColorFormat.value must not be blank" }
+    }
+}
+
+/** Stable handle-free color and alpha interpretation identity. */
+@JvmInline
+value class GPUColorInterpretation(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUColorInterpretation.value must not be blank" }
+    }
+}
+
 /** Color-space descriptor used by color planning. */
 data class GPUColorSpaceDescriptor(
     val name: String,

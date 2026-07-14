@@ -3,6 +3,14 @@ package org.graphiks.kanvas.gpu.renderer.intermediates
 import org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateTextureMaterializationDescriptor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 
+/** Stable handle-free identity for an intermediate attachment or texture. */
+@JvmInline
+value class GPUIntermediateIdentity(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUIntermediateIdentity.value must not be blank" }
+    }
+}
+
 enum class GPUIntermediatePurpose {
     DestinationCopy,
     ReadbackSnapshot,

@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class SDRColorBoundaryTest {
@@ -123,6 +124,17 @@ class SDRColorBoundaryTest {
         assertFalse(first.behaviorKeyFacts.joinToString(" ").contains("fixture-b"))
         assertTrue(refused.behaviorKeyFacts.isEmpty())
         assertFalse(refused.dumpLines().single { it.startsWith("color:diagnostic") }.contains("sha256:profile-object"))
+    }
+
+    @Test
+    fun `color format and interpretation identities reject blank values`() {
+        assertEquals(GPUColorFormat("rgba8unorm"), GPUColorFormat("rgba8unorm"))
+        assertEquals(
+            GPUColorInterpretation("encoded-premul-srgb"),
+            GPUColorInterpretation("encoded-premul-srgb"),
+        )
+        assertFailsWith<IllegalArgumentException> { GPUColorFormat(" ") }
+        assertFailsWith<IllegalArgumentException> { GPUColorInterpretation("") }
     }
 }
 

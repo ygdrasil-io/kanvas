@@ -67,7 +67,7 @@ class GPUBlendCoveragePlannerTest {
                         val expected = expectedRoute(request)
                         val actual = planner.plan(request)
                         val context = "mode=${mode.gpuLabel},coverage=${case.coverage}," +
-                            "alpha=$sourceAlpha,target=${target.formatClass},samples=${case.samplePlan.sampleCount}"
+                            "alpha=$sourceAlpha,target=${target.formatClass},samplePlan=${case.samplePlan}"
 
                         assertEquals(expected.signature, actual.signature(), context)
                         assertEquals(expected.destinationReadRequirement, actual.destinationReadRequirement, context)
@@ -118,6 +118,30 @@ class GPUBlendCoveragePlannerTest {
         assertEquals(child.destinationReadRequirement, layer.destinationReadRequirement)
         assertEquals(child.sourceCoverageEncoding, layer.sourceCoverageEncoding)
     }
+
+    @Test
+    fun `only exact single sample frame accepts scalar destination read`() {
+        val exact = planner.plan(
+            request(GPUBlendMode.MULTIPLY, GPUCoverageConsumption.ScalarCoverage),
+        )
+        val continuations = listOf(
+            GPUSamplePlan.MultisampleFrame(4),
+            GPUSamplePlan.LocalResolveApproximation(sourceSampleCount = 4),
+        )
+
+        assertIs<GPUBlendPlan.ShaderBlendWithDstRead>(exact)
+        continuations.forEach { samplePlan ->
+            val refused = planner.plan(
+                request(GPUBlendMode.MULTIPLY, GPUCoverageConsumption.ScalarCoverage).copy(
+                    samplePlan = samplePlan,
+                ),
+            )
+            assertEquals(
+                "unsupported.blend.msaa_destination_read_exactness",
+                assertIs<GPUBlendPlan.UnsupportedBlend>(refused).diagnostic.code,
+            )
+        }
+    }
 }
 
 private data class CoverageCase(
@@ -128,8 +152,10 @@ private data class CoverageCase(
 private val coverageCases = listOf(
     CoverageCase(GPUCoverageConsumption.FullOrScissor, GPUSamplePlan.SingleSampleFrame),
     CoverageCase(GPUCoverageConsumption.FullOrScissor, GPUSamplePlan.MultisampleFrame(4)),
+    CoverageCase(GPUCoverageConsumption.FullOrScissor, GPUSamplePlan.LocalResolveApproximation(4)),
     CoverageCase(GPUCoverageConsumption.ScalarCoverage, GPUSamplePlan.SingleSampleFrame),
     CoverageCase(GPUCoverageConsumption.ScalarCoverage, GPUSamplePlan.MultisampleFrame(4)),
+    CoverageCase(GPUCoverageConsumption.ScalarCoverage, GPUSamplePlan.LocalResolveApproximation(4)),
     CoverageCase(GPUCoverageConsumption.StencilCoverage1x, GPUSamplePlan.SingleSampleFrame),
     CoverageCase(GPUCoverageConsumption.MultisampleAttachmentCoverage, GPUSamplePlan.MultisampleFrame(4)),
     CoverageCase(GPUCoverageConsumption.LCDCoverage, GPUSamplePlan.SingleSampleFrame),
@@ -162,7 +188,7 @@ private fun expectedRoute(request: GPUBlendSpecializationRequest): ExpectedRoute
     if (request.mode == GPUBlendMode.DST) return noOp()
 
     if (request.coverage == GPUCoverageConsumption.LCDCoverage) {
-        return if (request.samplePlan.sampleCount == 1) {
+        return if (request.samplePlan is GPUSamplePlan.SingleSampleFrame) {
             shader("lcd.${request.mode.gpuLabel}@v1", GPUSourceCoverageEncoding.LCDCoverageInShader)
         } else {
             refused("unsupported.blend.lcd_msaa_exactness")
@@ -182,7 +208,7 @@ private fun expectedRoute(request: GPUBlendSpecializationRequest): ExpectedRoute
         MatrixCoverage.Scalar -> expectedScalarRoute(request.mode, request.sourceAlpha)
     }
 
-    if (request.samplePlan.sampleCount > 1 && matrixRoute.destinationReadRequirement ==
+    if (request.samplePlan !is GPUSamplePlan.SingleSampleFrame && matrixRoute.destinationReadRequirement ==
         GPUBlendDestinationReadRequirement.DestinationTextureRequired
     ) {
         return refused("unsupported.blend.msaa_destination_read_exactness")
