@@ -697,7 +697,7 @@ public class Matrix4x4F32 {
      * `Matrix3x3F32?` only for symmetry with [setM33] (use it as
      * `asM33()!!` if you want non-nullable).
      */
-    public fun asM33(): Matrix3x3F32? = Matrix3x3F32.MakeAll(
+    public fun asM33(): Matrix3x3F32? = Matrix3x3F32.of(
         fMat[0], fMat[4], fMat[12],
         fMat[1], fMat[5], fMat[13],
         fMat[3], fMat[7], fMat[15],

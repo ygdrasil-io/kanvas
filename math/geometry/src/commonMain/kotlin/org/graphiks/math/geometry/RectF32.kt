@@ -43,7 +43,7 @@ public data class RectF32(
     public fun isFinite(): Boolean =
         left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()
 
-    public fun equalsLTRB(other: RectF32): Boolean =
+    public fun contentEqualsLTRB(other: RectF32): Boolean =
         left == other.left && top == other.top && right == other.right && bottom == other.bottom
 
     public fun setEmpty() { left = 0f; top = 0f; right = 0f; bottom = 0f }
@@ -103,15 +103,15 @@ public data class RectF32(
         return RectF32(l, t, r, b)
     }
 
-    public fun makeOffset(dx: Float, dy: Float): RectF32 =
+    public fun offsetBy(dx: Float, dy: Float): RectF32 =
         RectF32(left + dx, top + dy, right + dx, bottom + dy)
 
-    public fun makeOffset(v: Vector2F32): RectF32 = makeOffset(v.x, v.y)
+    public fun offsetBy(v: Vector2F32): RectF32 = offsetBy(v.x, v.y)
 
-    public fun makeInset(dx: Float, dy: Float): RectF32 =
+    public fun insetBy(dx: Float, dy: Float): RectF32 =
         RectF32(left + dx, top + dy, right - dx, bottom - dy)
 
-    public fun makeOutset(dx: Float, dy: Float): RectF32 = makeInset(-dx, -dy)
+    public fun outsetBy(dx: Float, dy: Float): RectF32 = insetBy(-dx, -dy)
 
     public fun contains(x: Float, y: Float): Boolean =
         x >= left && x < right && y >= top && y < bottom
@@ -177,24 +177,24 @@ public data class RectF32(
     )
 
     public companion object {
-        public fun MakeLTRB(l: Float, t: Float, r: Float, b: Float): RectF32 =
+        public fun ofLTRB(l: Float, t: Float, r: Float, b: Float): RectF32 =
             RectF32(l, t, r, b)
 
-        public fun MakeXYWH(x: Float, y: Float, w: Float, h: Float): RectF32 =
+        public fun ofOriginSize(x: Float, y: Float, w: Float, h: Float): RectF32 =
             RectF32(x, y, x + w, y + h)
 
-        public fun MakeWH(w: Float, h: Float): RectF32 = RectF32(0f, 0f, w, h)
+        public fun ofSize(w: Float, h: Float): RectF32 = RectF32(0f, 0f, w, h)
 
-        public fun MakeIWH(w: Int, h: Int): RectF32 = RectF32(0f, 0f, w.toFloat(), h.toFloat())
+        public fun ofIntSize(w: Int, h: Int): RectF32 = RectF32(0f, 0f, w.toFloat(), h.toFloat())
 
-        public fun MakeEmpty(): RectF32 = RectF32(0f, 0f, 0f, 0f)
+        public val Empty: RectF32 = RectF32(0f, 0f, 0f, 0f)
 
-        public fun Make(size: SizeI32): RectF32 =
+        public fun from(size: SizeI32): RectF32 =
             RectF32(0f, 0f, size.width.toFloat(), size.height.toFloat())
 
-        public fun Make(irect: RectI32): RectF32 = RectF32(
-            irect.left.toFloat(), irect.top.toFloat(),
-            irect.right.toFloat(), irect.bottom.toFloat(),
+        public fun from(rect: RectI32): RectF32 = RectF32(
+            rect.left.toFloat(), rect.top.toFloat(),
+            rect.right.toFloat(), rect.bottom.toFloat(),
         )
 
         public fun Intersects(
@@ -212,7 +212,7 @@ public data class RectF32(
             Intersects(a.left, a.top, a.right, a.bottom, b.left, b.top, b.right, b.bottom)
 
         public fun Bounds(points: Array<Vector2F32>): RectF32? {
-            if (points.isEmpty()) return MakeEmpty()
+            if (points.isEmpty()) return Empty
             var l = points[0].x; var r = points[0].x
             var t = points[0].y; var b = points[0].y
             var nx = 0f; var ny = 0f

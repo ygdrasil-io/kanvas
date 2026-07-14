@@ -36,7 +36,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `MakeTrans translates points`() {
-        val m = Matrix3x3F32.MakeTrans(3f, 5f)
+        val m = Matrix3x3F32.translation(3f, 5f)
         assertFalse(m.isIdentity)
         assertTrue(m.isAxisAligned)
         val (x, y) = m.mapXY(1f, 2f)
@@ -45,16 +45,16 @@ class Matrix3x3F32Test {
 
     @Test
     fun `MakeScale scales points`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f)
+        val m = Matrix3x3F32.scaling(2f, 3f)
         val (x, y) = m.mapXY(4f, 5f)
         assertEquals(8f, x); assertEquals(15f, y)
     }
 
     @Test
-    fun `MakeRotate(90) maps (1,0) to (0,1)`() {
+    fun `rotation(90) maps (1,0) to (0,1)`() {
         // Skia's positive rotation is clockwise in screen-space (y-down),
         // which means (1, 0) rotates to (cos90, sin90) = (0, 1).
-        val m = Matrix3x3F32.MakeRotate(90f)
+        val m = Matrix3x3F32.rotation(90f)
         val (x, y) = m.mapXY(1f, 0f)
         assertNear(0f, x); assertNear(1f, y)
         // And (0, 1) goes to (-1, 0).
@@ -64,9 +64,9 @@ class Matrix3x3F32Test {
     }
 
     @Test
-    fun `MakeRotate(deg, px, py) rotates around the pivot`() {
+    fun `rotation(deg, px, py) rotates around the pivot`() {
         // Rotate (3, 0) by 90° around (1, 0) should give (1, 2).
-        val m = Matrix3x3F32.MakeRotate(90f, 1f, 0f)
+        val m = Matrix3x3F32.rotation(90f, 1f, 0f)
         val (x, y) = m.mapXY(3f, 0f)
         assertNear(1f, x); assertNear(2f, y)
     }
@@ -74,7 +74,7 @@ class Matrix3x3F32Test {
     @Test
     fun `MakeSkew skews points`() {
         // skew x by 0.5 means: x' = x + 0.5 * y. y' = y.
-        val m = Matrix3x3F32.MakeSkew(0.5f, 0f)
+        val m = Matrix3x3F32.skewing(0.5f, 0f)
         val (x, y) = m.mapXY(1f, 4f)
         assertEquals(3f, x)         // 1 + 0.5 * 4 = 3
         assertEquals(4f, y)
@@ -85,16 +85,16 @@ class Matrix3x3F32Test {
     fun `concat applies right matrix first`() {
         // M = T(10, 0) * S(2, 2). A point (1, 2) goes through S first
         // (→ (2, 4)), then T (→ (12, 4)).
-        val m = Matrix3x3F32.concat(Matrix3x3F32.MakeTrans(10f, 0f), Matrix3x3F32.MakeScale(2f, 2f))
+        val m = Matrix3x3F32.concat(Matrix3x3F32.translation(10f, 0f), Matrix3x3F32.scaling(2f, 2f))
         val (x, y) = m.mapXY(1f, 2f)
         assertEquals(12f, x); assertEquals(4f, y)
     }
 
     @Test
     fun `preTranslate matches concat-with-Translate`() {
-        val base = Matrix3x3F32.MakeScale(3f, 5f)
+        val base = Matrix3x3F32.scaling(3f, 5f)
         val viaPre = base.preTranslate(7f, 11f)
-        val viaConcat = Matrix3x3F32.concat(base, Matrix3x3F32.MakeTrans(7f, 11f))
+        val viaConcat = Matrix3x3F32.concat(base, Matrix3x3F32.translation(7f, 11f))
         // Both transforms applied to a point should match within sub-pixel.
         val (a, b) = viaPre.mapXY(2f, 3f)
         val (c, d) = viaConcat.mapXY(2f, 3f)
@@ -103,7 +103,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `preScale composes scales`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preScale(5f, 7f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preScale(5f, 7f)
         // Effective scale: (10, 21).
         val (x, y) = m.mapXY(1f, 1f)
         assertEquals(10f, x); assertEquals(21f, y)
@@ -111,8 +111,8 @@ class Matrix3x3F32Test {
 
     @Test
     fun `mapRect returns axis-aligned bbox of rotated rect`() {
-        val m = Matrix3x3F32.MakeRotate(45f)
-        val r = m.mapRect(RectF32.MakeLTRB(0f, 0f, 1f, 1f))
+        val m = Matrix3x3F32.rotation(45f)
+        val r = m.mapRect(RectF32.ofLTRB(0f, 0f, 1f, 1f))
         // 1x1 unit square rotated 45° has bbox spanning [-sin45, 0] in X
         // (the (0,1) corner goes to (-sin45, cos45) ≈ (-.707, .707)) and
         // [0, sin45 + cos45] ≈ [0, sqrt(2)] in Y.
@@ -125,16 +125,16 @@ class Matrix3x3F32Test {
 
     @Test
     fun `computeMaxScale of pure scale returns max abs scale`() {
-        assertNear(2f, Matrix3x3F32.MakeScale(2f, 1f).getMaxScale())
-        assertNear(3f, Matrix3x3F32.MakeScale(1f, 3f).getMaxScale())
-        assertNear(2f, Matrix3x3F32.MakeScale(-2f, 1f).getMaxScale())
-        assertNear(5f, Matrix3x3F32.MakeScale(5f, 5f).getMaxScale())
+        assertNear(2f, Matrix3x3F32.scaling(2f, 1f).getMaxScale())
+        assertNear(3f, Matrix3x3F32.scaling(1f, 3f).getMaxScale())
+        assertNear(2f, Matrix3x3F32.scaling(-2f, 1f).getMaxScale())
+        assertNear(5f, Matrix3x3F32.scaling(5f, 5f).getMaxScale())
     }
 
     @Test
     fun `computeMaxScale of pure rotation is 1`() {
         for (deg in listOf(0f, 30f, 45f, 90f, 180f, -135f)) {
-            assertNear(1f, Matrix3x3F32.MakeRotate(deg).getMaxScale(),
+            assertNear(1f, Matrix3x3F32.rotation(deg).getMaxScale(),
                 msg = "rotation $deg deg max scale")
         }
     }
@@ -142,7 +142,7 @@ class Matrix3x3F32Test {
     @Test
     fun `computeMaxScale of rotated scale equals scale`() {
         // Rotate then scale: max scale should still be the scale magnitude.
-        val m = Matrix3x3F32.MakeRotate(30f).preScale(4f, 4f)
+        val m = Matrix3x3F32.rotation(30f).preScale(4f, 4f)
         assertNear(4f, m.getMaxScale())
     }
 
@@ -163,7 +163,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `concat with Identity is identity`() {
-        val m = Matrix3x3F32.MakeScale(3f, 5f).preTranslate(7f, 11f)
+        val m = Matrix3x3F32.scaling(3f, 5f).preTranslate(7f, 11f)
         assertEquals(m, Matrix3x3F32.concat(m, Matrix3x3F32.Identity))
         assertEquals(m, Matrix3x3F32.concat(Matrix3x3F32.Identity, m))
     }
@@ -171,15 +171,15 @@ class Matrix3x3F32Test {
     @Test
     fun `isAxisAligned distinguishes pure scale from rotation`() {
         assertTrue(Matrix3x3F32.Identity.isAxisAligned)
-        assertTrue(Matrix3x3F32.MakeTrans(5f, 7f).isAxisAligned)
-        assertTrue(Matrix3x3F32.MakeScale(2f, 3f).isAxisAligned)
-        assertFalse(Matrix3x3F32.MakeRotate(45f).isAxisAligned)
-        assertFalse(Matrix3x3F32.MakeSkew(0.5f, 0f).isAxisAligned)
+        assertTrue(Matrix3x3F32.translation(5f, 7f).isAxisAligned)
+        assertTrue(Matrix3x3F32.scaling(2f, 3f).isAxisAligned)
+        assertFalse(Matrix3x3F32.rotation(45f).isAxisAligned)
+        assertFalse(Matrix3x3F32.skewing(0.5f, 0f).isAxisAligned)
     }
 
     @Test
     fun `MakeAll constructs raw matrix`() {
-        val m = Matrix3x3F32.MakeAll(2f, 0f, 10f, 0f, 3f, 20f)
+        val m = Matrix3x3F32.of(2f, 0f, 10f, 0f, 3f, 20f)
         val (x, y) = m.mapXY(1f, 1f)
         assertEquals(12f, x)   // 2*1 + 0*1 + 10
         assertEquals(23f, y)   // 0*1 + 3*1 + 20
@@ -187,8 +187,8 @@ class Matrix3x3F32Test {
 
     @Test
     fun `mapXY and mapRect agree for axis-aligned matrices`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(1f, 1f)
-        val r = m.mapRect(RectF32.MakeLTRB(0f, 0f, 1f, 1f))
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(1f, 1f)
+        val r = m.mapRect(RectF32.ofLTRB(0f, 0f, 1f, 1f))
         val (lx, ly) = m.mapXY(0f, 0f)
         val (rx, ry) = m.mapXY(1f, 1f)
         // (0,0) → (2*0 + 2*1 = 2, 3*0 + 3*1 = 3) — wait we did preTranslate
@@ -204,13 +204,13 @@ class Matrix3x3F32Test {
         // For pure horizontal stretch + 90° rotation: maps (1,0) to (0, k).
         // Singular values should be {k, 1}. computeMaxScale returns k.
         val k = 7f
-        val m = Matrix3x3F32.MakeScale(k, 1f).preRotate(90f)
+        val m = Matrix3x3F32.scaling(k, 1f).preRotate(90f)
         assertNear(k, m.getMaxScale(), eps = 1e-3f)
     }
 
     @Test
     fun `negative scale matches Skia behaviour`() {
-        val m = Matrix3x3F32.MakeScale(1f, -1f)
+        val m = Matrix3x3F32.scaling(1f, -1f)
         val (x, y) = m.mapXY(3f, 4f)
         assertEquals(3f, x)
         assertEquals(-4f, y)
@@ -221,7 +221,7 @@ class Matrix3x3F32Test {
     @Test
     fun `pivoted MakeScale leaves pivot fixed`() {
         // Scale by (2, 3) around (1, 1) — point (1, 1) should be fixed.
-        val m = Matrix3x3F32.MakeScale(2f, 3f, 1f, 1f)
+        val m = Matrix3x3F32.scaling(2f, 3f, 1f, 1f)
         val (x, y) = m.mapXY(1f, 1f)
         assertNear(1f, x); assertNear(1f, y)
         // And (2, 1) should map to (1 + 2*1, 1) = (3, 1).
@@ -231,14 +231,14 @@ class Matrix3x3F32Test {
 
     @Test
     fun `pivoted MakeScale degenerates to identity for unit scale`() {
-        val m = Matrix3x3F32.MakeScale(1f, 1f, 7f, 11f)
+        val m = Matrix3x3F32.scaling(1f, 1f, 7f, 11f)
         assertTrue(m.isIdentity)
     }
 
     @Test
     fun `pivoted MakeSkew leaves pivot fixed`() {
         // Skew x by 0.5 around (10, 4) — point (10, 4) should be fixed.
-        val m = Matrix3x3F32.MakeSkew(0.5f, 0f, 10f, 4f)
+        val m = Matrix3x3F32.skewing(0.5f, 0f, 10f, 4f)
         val (x, y) = m.mapXY(10f, 4f)
         assertNear(10f, x); assertNear(4f, y)
     }
@@ -256,7 +256,7 @@ class Matrix3x3F32Test {
             -90f to floatArrayOf( 0f,  1f, -1f,  0f),
             -180f to floatArrayOf(-1f, 0f,  0f, -1f),
         )) {
-            val m = Matrix3x3F32.MakeRotate(deg)
+            val m = Matrix3x3F32.rotation(deg)
             assertEquals(expected[0], m.sx, "sx at $deg deg")
             assertEquals(expected[1], m.kx, "kx at $deg deg")
             assertEquals(expected[2], m.ky, "ky at $deg deg")
@@ -266,7 +266,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `MakeAll round-trips through fields`() {
-        val m = Matrix3x3F32.MakeAll(2f, 3f, 5f, 7f, 11f, 13f)
+        val m = Matrix3x3F32.of(2f, 3f, 5f, 7f, 11f, 13f)
         assertEquals(2f, m.sx); assertEquals(3f, m.kx); assertEquals(5f, m.tx)
         assertEquals(7f, m.ky); assertEquals(11f, m.sy); assertEquals(13f, m.ty)
     }
@@ -276,7 +276,7 @@ class Matrix3x3F32Test {
         // Phase 3: snapToZero should normalize -0f → 0f via the explicit
         // negation guard. Use Float.toRawBits to assert bit-exact.
         for (deg in listOf(0f, 90f, 180f, 270f, -90f, -180f, 360f)) {
-            val m = Matrix3x3F32.MakeRotate(deg)
+            val m = Matrix3x3F32.rotation(deg)
             for ((name, v) in listOf("sx" to m.sx, "kx" to m.kx, "ky" to m.ky, "sy" to m.sy)) {
                 if (v == 0f) {
                     assertEquals(0, v.toRawBits(),
@@ -305,7 +305,7 @@ class Matrix3x3F32Test {
     @Test
     fun `invert non-singular returns valid inverse`() {
         // Sanity check the threshold doesn't bite a normal matrix.
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(5f, 7f)
         val inv = m.invert()!!
         // M · M⁻¹ should be identity (within float precision).
         val composed = Matrix3x3F32.concat(m, inv)
@@ -314,16 +314,16 @@ class Matrix3x3F32Test {
     }
 
     @Test
-    fun `MakeRotate(0) and MakeRotate(180) are isAxisAligned`() {
+    fun `rotation(0) and rotation(180) are isAxisAligned`() {
         // 0° and 180° preserve `kx == ky == 0` after snap — they fit our
         // strict isAxisAligned (translate + scale only) definition.
         // 90/270/-90 swap axes (kx, ky != 0) so they're NOT isAxisAligned;
         // matching Skia, that's `rectStaysRect`, a looser predicate we don't expose yet.
-        assertTrue(Matrix3x3F32.MakeRotate(0f).isAxisAligned)
-        assertTrue(Matrix3x3F32.MakeRotate(180f).isAxisAligned)
-        assertTrue(Matrix3x3F32.MakeRotate(-180f).isAxisAligned)
-        assertFalse(Matrix3x3F32.MakeRotate(90f).isAxisAligned)
-        assertFalse(Matrix3x3F32.MakeRotate(-90f).isAxisAligned)
+        assertTrue(Matrix3x3F32.rotation(0f).isAxisAligned)
+        assertTrue(Matrix3x3F32.rotation(180f).isAxisAligned)
+        assertTrue(Matrix3x3F32.rotation(-180f).isAxisAligned)
+        assertFalse(Matrix3x3F32.rotation(90f).isAxisAligned)
+        assertFalse(Matrix3x3F32.rotation(-90f).isAxisAligned)
     }
 
     @Test
@@ -376,9 +376,9 @@ class Matrix3x3F32Test {
 
     @Test
     fun `pivoted preScale matches preConcat-with-MakeScale-pivoted`() {
-        val base = Matrix3x3F32.MakeRotate(30f).preTranslate(7f, 11f)
+        val base = Matrix3x3F32.rotation(30f).preTranslate(7f, 11f)
         val viaPre = base.preScale(2f, 3f, 5f, 5f)
-        val viaConcat = Matrix3x3F32.concat(base, Matrix3x3F32.MakeScale(2f, 3f, 5f, 5f))
+        val viaConcat = Matrix3x3F32.concat(base, Matrix3x3F32.scaling(2f, 3f, 5f, 5f))
         // Apply both to a probe point — must agree to sub-pixel.
         val (a, b) = viaPre.mapXY(2f, 3f)
         val (c, d) = viaConcat.mapXY(2f, 3f)
@@ -408,7 +408,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `getType pure translate`() {
-        val m = Matrix3x3F32.MakeTrans(5f, 7f)
+        val m = Matrix3x3F32.translation(5f, 7f)
         assertEquals(Matrix3x3F32.kTranslate_Mask, m.getType())
         assertTrue(m.isTranslate())
         assertTrue(m.isScaleTranslate())
@@ -418,19 +418,19 @@ class Matrix3x3F32Test {
 
     @Test
     fun `getType pure scale sets translate too when off-origin`() {
-        val pureScale = Matrix3x3F32.MakeScale(2f, 3f)
+        val pureScale = Matrix3x3F32.scaling(2f, 3f)
         assertEquals(Matrix3x3F32.kScale_Mask, pureScale.getType())
         assertTrue(pureScale.isScaleTranslate())
         assertTrue(pureScale.rectStaysRect())
 
-        val pivotScale = Matrix3x3F32.MakeScale(2f, 3f, 1f, 1f)
+        val pivotScale = Matrix3x3F32.scaling(2f, 3f, 1f, 1f)
         // pivotScale has tx, ty != 0 so kTranslate_Mask is also set.
         assertEquals(Matrix3x3F32.kScale_Mask or Matrix3x3F32.kTranslate_Mask, pivotScale.getType())
     }
 
     @Test
     fun `getType cardinal rotate sets affine plus rectStaysRect`() {
-        val m = Matrix3x3F32.MakeRotate(90f)
+        val m = Matrix3x3F32.rotation(90f)
         // 90° rotation has kx=-1, ky=1, sx=sy=0 — Skia flags as Affine|Scale
         // and rectStaysRect since the 2x2 swaps axes cleanly.
         assertEquals(Matrix3x3F32.kAffine_Mask or Matrix3x3F32.kScale_Mask, m.getType())
@@ -440,7 +440,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `getType arbitrary rotate clears rectStaysRect`() {
-        val m = Matrix3x3F32.MakeRotate(45f)
+        val m = Matrix3x3F32.rotation(45f)
         assertEquals(Matrix3x3F32.kAffine_Mask or Matrix3x3F32.kScale_Mask, m.getType())
         assertFalse(m.rectStaysRect(), "45° rotation does not preserve axis alignment")
     }
@@ -449,10 +449,10 @@ class Matrix3x3F32Test {
     fun `hasPerspective is always false in this affine port`() {
         for (m in listOf(
             Matrix3x3F32.Identity,
-            Matrix3x3F32.MakeTrans(1f, 1f),
-            Matrix3x3F32.MakeScale(2f, 3f),
-            Matrix3x3F32.MakeRotate(45f),
-            Matrix3x3F32.MakeSkew(0.5f, 0.7f),
+            Matrix3x3F32.translation(1f, 1f),
+            Matrix3x3F32.scaling(2f, 3f),
+            Matrix3x3F32.rotation(45f),
+            Matrix3x3F32.skewing(0.5f, 0.7f),
         )) {
             assertFalse(m.hasPerspective(), "hasPerspective should be false for $m")
         }
@@ -461,27 +461,27 @@ class Matrix3x3F32Test {
     @Test
     fun `isSimilarity identity translate uniform-scale rotate`() {
         assertTrue(Matrix3x3F32.Identity.isSimilarity())
-        assertTrue(Matrix3x3F32.MakeTrans(5f, 7f).isSimilarity())
+        assertTrue(Matrix3x3F32.translation(5f, 7f).isSimilarity())
         // Uniform scale ⇒ similarity.
-        assertTrue(Matrix3x3F32.MakeScale(2f, 2f).isSimilarity())
+        assertTrue(Matrix3x3F32.scaling(2f, 2f).isSimilarity())
         // Pure rotation ⇒ similarity.
-        assertTrue(Matrix3x3F32.MakeRotate(30f).isSimilarity())
+        assertTrue(Matrix3x3F32.rotation(30f).isSimilarity())
         // Non-uniform scale ⇒ NOT a similarity.
-        assertFalse(Matrix3x3F32.MakeScale(2f, 3f).isSimilarity())
+        assertFalse(Matrix3x3F32.scaling(2f, 3f).isSimilarity())
         // Skew ⇒ NOT a similarity (preserves neither angle nor uniform scale).
-        assertFalse(Matrix3x3F32.MakeSkew(0.5f, 0f).isSimilarity())
+        assertFalse(Matrix3x3F32.skewing(0.5f, 0f).isSimilarity())
     }
 
     @Test
     fun `preservesRightAngles identity translate scale rotate skew`() {
         assertTrue(Matrix3x3F32.Identity.preservesRightAngles())
-        assertTrue(Matrix3x3F32.MakeTrans(3f, 5f).preservesRightAngles())
+        assertTrue(Matrix3x3F32.translation(3f, 5f).preservesRightAngles())
         // Pure scale (even non-uniform) preserves right angles.
-        assertTrue(Matrix3x3F32.MakeScale(2f, 5f).preservesRightAngles())
+        assertTrue(Matrix3x3F32.scaling(2f, 5f).preservesRightAngles())
         // Pure rotation preserves right angles.
-        assertTrue(Matrix3x3F32.MakeRotate(30f).preservesRightAngles())
+        assertTrue(Matrix3x3F32.rotation(30f).preservesRightAngles())
         // Skew does NOT.
-        assertFalse(Matrix3x3F32.MakeSkew(0.5f, 0f).preservesRightAngles())
+        assertFalse(Matrix3x3F32.skewing(0.5f, 0f).preservesRightAngles())
     }
 
     @Test
@@ -493,18 +493,18 @@ class Matrix3x3F32Test {
         // ...cheapEqualTo is IEEE-strict (NaN != NaN).
         assertFalse(a.cheapEqualTo(b))
         // For finite values, both forms agree.
-        val m = Matrix3x3F32.MakeScale(2f, 3f)
-        assertTrue(m.cheapEqualTo(Matrix3x3F32.MakeScale(2f, 3f)))
+        val m = Matrix3x3F32.scaling(2f, 3f)
+        assertTrue(m.cheapEqualTo(Matrix3x3F32.scaling(2f, 3f)))
     }
 
     @Test
     fun `cheapEqualTo compares perspective fields`() {
-        val a = Matrix3x3F32.MakeAll(
+        val a = Matrix3x3F32.of(
             1f, 0f, 0f,
             0f, 1f, 0f,
             0.25f, 0f, 1f,
         )
-        val b = Matrix3x3F32.MakeAll(
+        val b = Matrix3x3F32.of(
             1f, 0f, 0f,
             0f, 1f, 0f,
             0.5f, 0f, 1f,
@@ -517,7 +517,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `mapXY Vector2F32 overload matches mapXY x y`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(5f, 7f)
         val (x, y) = m.mapXY(2f, 3f)
         val p = m.mapXY(Vector2F32.of(2f, 3f))
         assertEquals(x, p.x); assertEquals(y, p.y)
@@ -525,7 +525,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `mapVector ignores translation`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(100f, 200f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(100f, 200f)
         // Linear part for a (1, 0) vector: (sx, ky) = (2, 0). Translation
         // dropped — even though tx/ty are large, vector mapping shouldn't add them.
         val v = m.mapVector(1f, 0f)
@@ -534,7 +534,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `mapVector with perspective matches mapPoint minus origin`() {
-        val m = Matrix3x3F32.MakeAll(
+        val m = Matrix3x3F32.of(
             1.2f, 0.3f, 5f,
             0.1f, 1.5f, 7f,
             0.002f, 0.003f, 1f,
@@ -561,7 +561,7 @@ class Matrix3x3F32Test {
     fun `mapPoints translate adds tx ty`() {
         val src = arrayOf(Vector2F32.of(1f, 2f), Vector2F32.of(3f, 4f))
         val dst = Array(2) { Vector2F32.Zero }
-        Matrix3x3F32.MakeTrans(10f, 20f).mapPoints(dst, src, 2)
+        Matrix3x3F32.translation(10f, 20f).mapPoints(dst, src, 2)
         assertEquals(11f, dst[0].x); assertEquals(22f, dst[0].y)
         assertEquals(13f, dst[1].x); assertEquals(24f, dst[1].y)
     }
@@ -570,7 +570,7 @@ class Matrix3x3F32Test {
     fun `mapPoints scale-translate fast path`() {
         val src = arrayOf(Vector2F32.of(1f, 2f), Vector2F32.of(3f, 4f))
         val dst = Array(2) { Vector2F32.Zero }
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(5f, 7f)
         m.mapPoints(dst, src, 2)
         // Each src point: (2*x + tx_eff, 3*y + ty_eff). preTranslate:
         // base = MakeScale, then preTranslate ⇒ tx = 2*5 = 10, ty = 3*7 = 21.
@@ -580,7 +580,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `mapPoints full affine matches mapXY per point`() {
-        val m = Matrix3x3F32.MakeRotate(30f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.rotation(30f).preTranslate(5f, 7f)
         val src = arrayOf(Vector2F32.of(1f, 0f), Vector2F32.of(0f, 1f), Vector2F32.of(2f, 3f))
         val dst = Array(3) { Vector2F32.Zero }
         m.mapPoints(dst, src, 3)
@@ -596,7 +596,7 @@ class Matrix3x3F32Test {
         val pts = arrayOf(Vector2F32.of(1f, 2f), Vector2F32.of(3f, 4f))
         val src = arrayOf(Vector2F32.of(1f, 2f), Vector2F32.of(3f, 4f))
         val expected = Array(2) { Vector2F32.Zero }
-        val m = Matrix3x3F32.MakeRotate(30f)
+        val m = Matrix3x3F32.rotation(30f)
         m.mapPoints(expected, src, 2)
         m.mapPoints(pts, 2)
         for (i in 0 until 2) {
@@ -610,7 +610,7 @@ class Matrix3x3F32Test {
         val src = arrayOf(Vector2F32.of(1f, 0f), Vector2F32.of(0f, 1f))
         val dst = Array(2) { Vector2F32.Zero }
         // Big translate shouldn't show up in vectors.
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(100f, 200f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(100f, 200f)
         m.mapVectors(dst, src, 2)
         assertEquals(2f, dst[0].x); assertEquals(0f, dst[0].y)
         assertEquals(0f, dst[1].x); assertEquals(3f, dst[1].y)
@@ -622,7 +622,7 @@ class Matrix3x3F32Test {
         // `mapPointPerspective(src) - mapPointPerspective({0,0})` for
         // perspective matrices; the naive 2x2 linear part is wrong
         // because perspective is non-linear.
-        val m = Matrix3x3F32.MakeAll(
+        val m = Matrix3x3F32.of(
             1.2f, 0.3f, 5f,
             0.1f, 1.5f, 7f,
             0.002f, 0.003f, 1f,
@@ -651,7 +651,7 @@ class Matrix3x3F32Test {
         // its closed-form `sx*x + kx*y, ky*x + sy*y` semantics so a
         // pure 2D rotation+scale matrix still produces exact results
         // independent of the translation column.
-        val m = Matrix3x3F32.MakeAll(
+        val m = Matrix3x3F32.of(
             2f, -1f, 50f,
             3f,  4f, 90f,
         )
@@ -667,19 +667,19 @@ class Matrix3x3F32Test {
 
     @Test
     fun `mapRectScaleTranslate fast path matches mapRect`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(5f, 7f)
-        val r = RectF32.MakeLTRB(0f, 0f, 10f, 10f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(5f, 7f)
+        val r = RectF32.ofLTRB(0f, 0f, 10f, 10f)
         // The general mapRect goes through mapRectScaleTranslate fast path
         // when isScaleTranslate; verify the explicit call agrees.
         val fast = m.mapRectScaleTranslate(r)
         val general = m.mapRect(r)
-        assertTrue(fast.equalsLTRB(general))
+        assertTrue(fast.contentEqualsLTRB(general))
     }
 
     @Test
     fun `mapRectScaleTranslate handles negative scale by sorting`() {
-        val m = Matrix3x3F32.MakeScale(-2f, 1f)
-        val r = RectF32.MakeLTRB(1f, 0f, 3f, 5f)
+        val m = Matrix3x3F32.scaling(-2f, 1f)
+        val r = RectF32.ofLTRB(1f, 0f, 3f, 5f)
         // x: -2*1 = -2, -2*3 = -6 ⇒ left=-6, right=-2.
         val mapped = m.mapRectScaleTranslate(r)
         assertEquals(-6f, mapped.left); assertEquals(-2f, mapped.right)
@@ -688,15 +688,15 @@ class Matrix3x3F32Test {
 
     @Test
     fun `mapRectScaleTranslate throws when not scale-translate`() {
-        val m = Matrix3x3F32.MakeRotate(30f)
+        val m = Matrix3x3F32.rotation(30f)
         assertFailsWith<IllegalStateException> {
-            m.mapRectScaleTranslate(RectF32.MakeLTRB(0f, 0f, 1f, 1f))
+            m.mapRectScaleTranslate(RectF32.ofLTRB(0f, 0f, 1f, 1f))
         }
     }
 
     @Test
     fun `mapRadius equals scale magnitude for pure scale`() {
-        val m = Matrix3x3F32.MakeScale(3f, 4f)
+        val m = Matrix3x3F32.scaling(3f, 4f)
         // |det| = 12, sqrt = sqrt(12).
         assertNear(kotlin.math.sqrt(12f) * 5f, m.mapRadius(5f), eps = 1e-4f)
     }
@@ -706,14 +706,14 @@ class Matrix3x3F32Test {
         val r = 7f
         // Pure rotation ⇒ |det| = 1 ⇒ mapRadius(r) = r.
         for (deg in floatArrayOf(0f, 30f, 90f, 137f)) {
-            assertNear(r, Matrix3x3F32.MakeRotate(deg).mapRadius(r), eps = 1e-4f)
+            assertNear(r, Matrix3x3F32.rotation(deg).mapRadius(r), eps = 1e-4f)
         }
     }
 
     @Test
     fun `mapRadius uses mapped axis vector lengths under perspective`() {
         val r = 5f
-        val m = Matrix3x3F32.MakeAll(
+        val m = Matrix3x3F32.of(
             1.2f, 0.3f, 5f,
             0.1f, 1.5f, 7f,
             0.002f, 0.003f, 1f,
@@ -753,7 +753,7 @@ class Matrix3x3F32Test {
         m.get9(buf)
         // Row-major: [sx, kx, tx, ky, sy, ty, 0, 0, 1]
         assertEquals(floatArrayOf(2f, 3f, 5f, 7f, 11f, 13f, 0f, 0f, 1f).toList(), buf.toList())
-        assertEquals(m, Matrix3x3F32.MakeFrom9(buf))
+        assertEquals(m, Matrix3x3F32.from9(buf))
     }
 
     @Test
@@ -762,7 +762,7 @@ class Matrix3x3F32Test {
         // is fully supported, so a non-trivial perspective row builds a
         // perspective matrix that hasPerspective() flags accordingly.
         val buf = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0.5f, 0f, 1f)
-        val m = Matrix3x3F32.MakeFrom9(buf)
+        val m = Matrix3x3F32.from9(buf)
         assertTrue(m.hasPerspective())
         assertEquals(0.5f, m.persp0)
     }
@@ -774,16 +774,16 @@ class Matrix3x3F32Test {
         assertTrue(m.asAffine(buf))
         // Skia COLUMN-major: [scaleX, skewY, skewX, scaleY, transX, transY] = [2, 7, 3, 11, 5, 13]
         assertEquals(floatArrayOf(2f, 7f, 3f, 11f, 5f, 13f).toList(), buf.toList())
-        assertEquals(m, Matrix3x3F32.MakeFromAffine(buf))
+        assertEquals(m, Matrix3x3F32.fromAffine(buf))
     }
 
     // ─── Phase 3: MakeRectToRect ─────────────────────────────────────────
 
     @Test
     fun `MakeRectToRect kFill stretches independently`() {
-        val src = RectF32.MakeLTRB(0f, 0f, 10f, 5f)
-        val dst = RectF32.MakeLTRB(100f, 200f, 300f, 600f)
-        val m = Matrix3x3F32.MakeRectToRect(src, dst, Matrix3x3F32.ScaleToFit.kFill_ScaleToFit)!!
+        val src = RectF32.ofLTRB(0f, 0f, 10f, 5f)
+        val dst = RectF32.ofLTRB(100f, 200f, 300f, 600f)
+        val m = Matrix3x3F32.rectToRect(src, dst, Matrix3x3F32.ScaleToFit.kFill_ScaleToFit)!!
         // sx = 200/10 = 20, sy = 400/5 = 80
         assertEquals(20f, m.getScaleX()); assertEquals(80f, m.getScaleY())
         // Maps src.TL to dst.TL.
@@ -796,9 +796,9 @@ class Matrix3x3F32Test {
 
     @Test
     fun `MakeRectToRect kCenter uses uniform scale and centres in dst`() {
-        val src = RectF32.MakeLTRB(0f, 0f, 10f, 5f)
-        val dst = RectF32.MakeLTRB(0f, 0f, 200f, 400f)
-        val m = Matrix3x3F32.MakeRectToRect(src, dst, Matrix3x3F32.ScaleToFit.kCenter_ScaleToFit)!!
+        val src = RectF32.ofLTRB(0f, 0f, 10f, 5f)
+        val dst = RectF32.ofLTRB(0f, 0f, 200f, 400f)
+        val m = Matrix3x3F32.rectToRect(src, dst, Matrix3x3F32.ScaleToFit.kCenter_ScaleToFit)!!
         // Uniform scale = min(200/10, 400/5) = min(20, 80) = 20.
         assertEquals(20f, m.getScaleX()); assertEquals(20f, m.getScaleY())
         // The mapped src is 200×100, centred in 200×400 ⇒ ty = 150.
@@ -807,9 +807,9 @@ class Matrix3x3F32Test {
 
     @Test
     fun `MakeRectToRect returns null for empty src`() {
-        assertEquals(null, Matrix3x3F32.MakeRectToRect(
-            RectF32.MakeEmpty(),
-            RectF32.MakeLTRB(0f, 0f, 10f, 10f),
+        assertEquals(null, Matrix3x3F32.rectToRect(
+            RectF32.Empty,
+            RectF32.ofLTRB(0f, 0f, 10f, 10f),
             Matrix3x3F32.ScaleToFit.kFill_ScaleToFit,
         ))
     }
@@ -819,23 +819,23 @@ class Matrix3x3F32Test {
     @Test
     fun `getMaxScale matches legacy computeMaxScale on canonical inputs`() {
         // Pure scale.
-        assertNear(2f, Matrix3x3F32.MakeScale(2f, 1f).getMaxScale())
+        assertNear(2f, Matrix3x3F32.scaling(2f, 1f).getMaxScale())
         // Rotation only.
-        assertNear(1f, Matrix3x3F32.MakeRotate(45f).getMaxScale())
+        assertNear(1f, Matrix3x3F32.rotation(45f).getMaxScale())
         // Identity.
         assertNear(1f, Matrix3x3F32.Identity.getMaxScale())
     }
 
     @Test
     fun `getMinScale on pure scale returns smaller absolute axis`() {
-        assertNear(1f, Matrix3x3F32.MakeScale(2f, 1f).getMinScale())
-        assertNear(0.5f, Matrix3x3F32.MakeScale(2f, 0.5f).getMinScale())
+        assertNear(1f, Matrix3x3F32.scaling(2f, 1f).getMinScale())
+        assertNear(0.5f, Matrix3x3F32.scaling(2f, 0.5f).getMinScale())
     }
 
     @Test
     fun `getMinMaxScales returns sorted min and max`() {
         val s = FloatArray(2)
-        Matrix3x3F32.MakeScale(3f, 2f).getMinMaxScales(s)
+        Matrix3x3F32.scaling(3f, 2f).getMinMaxScales(s)
         assertNear(2f, s[0]); assertNear(3f, s[1])
     }
 
@@ -843,7 +843,7 @@ class Matrix3x3F32Test {
     fun `getMinMaxScales for rotated scale returns scale axes`() {
         val s = FloatArray(2)
         // 45° rotation of an asymmetric scale.
-        val m = Matrix3x3F32.MakeScale(4f, 1f).preRotate(45f)
+        val m = Matrix3x3F32.scaling(4f, 1f).preRotate(45f)
         m.getMinMaxScales(s)
         assertNear(1f, s[0], eps = 1e-3f); assertNear(4f, s[1], eps = 1e-3f)
     }
@@ -851,15 +851,15 @@ class Matrix3x3F32Test {
     @Test
     fun `deprecated computeMaxScale forwards to getMaxScale`() {
         @Suppress("DEPRECATION")
-        assertEquals(Matrix3x3F32.MakeScale(7f, 3f).getMaxScale(),
-            Matrix3x3F32.MakeScale(7f, 3f).computeMaxScale())
+        assertEquals(Matrix3x3F32.scaling(7f, 3f).getMaxScale(),
+            Matrix3x3F32.scaling(7f, 3f).computeMaxScale())
     }
 
     // ─── Phase 3: decomposeScale ──────────────────────────────────────
 
     @Test
     fun `decomposeScale on pure scale returns scale and identity remaining`() {
-        val (scale, remaining) = Matrix3x3F32.MakeScale(3f, 5f).decomposeScale()!!
+        val (scale, remaining) = Matrix3x3F32.scaling(3f, 5f).decomposeScale()!!
         assertNear(3f, scale.x); assertNear(5f, scale.y)
         // Remaining should be identity (within float tolerance).
         assertNear(1f, remaining.getScaleX(), eps = 1e-5f)
@@ -869,7 +869,7 @@ class Matrix3x3F32Test {
     @Test
     fun `decomposeScale on rotated scale extracts magnitudes`() {
         // Rotate then scale: scale magnitudes survive.
-        val m = Matrix3x3F32.MakeScale(3f, 5f).preRotate(45f)
+        val m = Matrix3x3F32.scaling(3f, 5f).preRotate(45f)
         val (scale, _) = m.decomposeScale()!!
         // Skia's decomposeScale uses Length(sx, ky) and Length(kx, sy).
         // For our 45°-rotated 3×5: row norms ≈ sqrt(3² · cos²45 + 5² · sin²45) ≈ same per axis.
@@ -894,7 +894,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `MakePerspective flips hasPerspective and getType`() {
-        val m = Matrix3x3F32.MakePerspective(0.001f, 0.002f)
+        val m = Matrix3x3F32.perspective(0.001f, 0.002f)
         assertTrue(m.hasPerspective())
         // Skia: perspective ⇒ all type bits set.
         assertEquals(Matrix3x3F32.kPerspective_Mask, m.getType() and Matrix3x3F32.kPerspective_Mask)
@@ -904,14 +904,14 @@ class Matrix3x3F32Test {
     fun `mapXY does perspective divide`() {
         // M = identity but with persp0 = 0.5 ⇒ for input (2, 0):
         //   px = 2, py = 0, w = 0.5*2 + 0 + 1 = 2 ⇒ output = (1, 0).
-        val m = Matrix3x3F32.MakePerspective(0.5f, 0f)
+        val m = Matrix3x3F32.perspective(0.5f, 0f)
         val (x, y) = m.mapXY(2f, 0f)
         assertNear(1f, x); assertNear(0f, y)
     }
 
     @Test
     fun `mapXY in affine matrix is unchanged`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(5f, 7f)
         val (x, y) = m.mapXY(1f, 1f)
         // Same as before perspective extension: (2*1 + 2*5, 3*1 + 3*7) = (12, 24).
         assertNear(12f, x); assertNear(24f, y)
@@ -919,7 +919,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `mapPoints handles perspective branch`() {
-        val m = Matrix3x3F32.MakePerspective(0.5f, 0f)
+        val m = Matrix3x3F32.perspective(0.5f, 0f)
         val src = arrayOf(Vector2F32.of(2f, 0f), Vector2F32.of(0f, 4f), Vector2F32.of(2f, 4f))
         val dst = Array(3) { Vector2F32.Zero }
         m.mapPoints(dst, src, 3)
@@ -931,8 +931,8 @@ class Matrix3x3F32Test {
 
     @Test
     fun `concat of two perspective matrices builds 3x3 product`() {
-        val a = Matrix3x3F32.MakePerspective(0.5f, 0f)
-        val b = Matrix3x3F32.MakePerspective(0f, 0.25f)
+        val a = Matrix3x3F32.perspective(0.5f, 0f)
+        val b = Matrix3x3F32.perspective(0f, 0.25f)
         val ab = Matrix3x3F32.concat(a, b)
         // Round-trip via mapXY: (a · b)(p) == a(b(p)).
         val p = Vector2F32.of(2f, 4f)
@@ -944,7 +944,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `invert of perspective matrix round-trips`() {
-        val m = Matrix3x3F32.MakePerspective(0.5f, 0.25f).preTranslate(2f, 3f)
+        val m = Matrix3x3F32.perspective(0.5f, 0.25f).preTranslate(2f, 3f)
         val inv = m.invert()!!
         val composed = Matrix3x3F32.concat(m, inv)
         // composed should be identity ⇒ map (3, 5) back to (3, 5).
@@ -954,7 +954,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `det collapses to det2x2 on affine`() {
-        val m = Matrix3x3F32.MakeRotate(30f).preScale(2f, 3f)
+        val m = Matrix3x3F32.rotation(30f).preScale(2f, 3f)
         assertNear(m.det2x2(), m.det(), eps = 1e-4f)
     }
 
@@ -984,7 +984,7 @@ class Matrix3x3F32Test {
     fun `mapHomogeneousPoints affine returns w=1 with mapped xy`() {
         val src = arrayOf(Vector2F32.of(1f, 0f))
         val dst = Array(1) { Vector3F32.of() }
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(5f, 7f)
         m.mapHomogeneousPoints(dst, src, 1)
         assertEquals(1f, dst[0].z)
         // mapped xy = (2*1 + 2*5, 3*0 + 3*7) = (12, 21).
@@ -995,7 +995,7 @@ class Matrix3x3F32Test {
     fun `mapHomogeneousPoints perspective returns un-divided w`() {
         val src = arrayOf(Vector2F32.of(2f, 4f))
         val dst = Array(1) { Vector3F32.of() }
-        val m = Matrix3x3F32.MakePerspective(0.5f, 0f)
+        val m = Matrix3x3F32.perspective(0.5f, 0f)
         m.mapHomogeneousPoints(dst, src, 1)
         // w = 0.5*2 + 0*4 + 1 = 2; xy unchanged from input.
         assertNear(2f, dst[0].x); assertNear(4f, dst[0].y); assertNear(2f, dst[0].z)
@@ -1005,14 +1005,14 @@ class Matrix3x3F32Test {
 
     @Test
     fun `MakeRSXform identity yields identity matrix`() {
-        val m = Matrix3x3F32.MakeRSXform(scos = 1f, ssin = 0f, tx = 0f, ty = 0f)
+        val m = Matrix3x3F32.rsXForm(scos = 1f, ssin = 0f, tx = 0f, ty = 0f)
         assertTrue(m.isIdentity)
     }
 
     @Test
     fun `MakeRSXform 90 deg rotation maps (1, 0) to (0, 1) plus translate`() {
         // 90° rotation: scos = 0, ssin = 1. Plus translation (10, 20).
-        val m = Matrix3x3F32.MakeRSXform(scos = 0f, ssin = 1f, tx = 10f, ty = 20f)
+        val m = Matrix3x3F32.rsXForm(scos = 0f, ssin = 1f, tx = 10f, ty = 20f)
         val (x, y) = m.mapXY(1f, 0f)
         assertNear(10f, x); assertNear(21f, y)   // (0, 1) + (10, 20)
     }
@@ -1020,14 +1020,14 @@ class Matrix3x3F32Test {
     @Test
     fun `MakeRSXform with uniform scale 2 doubles vector lengths`() {
         // 0° rotation, scale 2. scos = 2, ssin = 0.
-        val m = Matrix3x3F32.MakeRSXform(scos = 2f, ssin = 0f, tx = 0f, ty = 0f)
+        val m = Matrix3x3F32.rsXForm(scos = 2f, ssin = 0f, tx = 0f, ty = 0f)
         val (x, y) = m.mapXY(1f, 0f)
         assertNear(2f, x); assertNear(0f, y)
     }
 
     @Test
     fun `MakeRSXform pivoted matches SkRSXform anchor translation`() {
-        val m = Matrix3x3F32.MakeRSXform(
+        val m = Matrix3x3F32.rsXForm(
             scos = 0f, ssin = 1f,
             anchorX = 2f, anchorY = 3f,
             tx = 10f, ty = 20f,
@@ -1044,13 +1044,13 @@ class Matrix3x3F32Test {
 
     @Test
     fun `MakePolyToPoly empty returns identity`() {
-        val m = Matrix3x3F32.MakePolyToPoly(emptyArray(), emptyArray())!!
+        val m = Matrix3x3F32.polyToPoly(emptyArray(), emptyArray())!!
         assertTrue(m.isIdentity)
     }
 
     @Test
     fun `MakePolyToPoly 1 point is pure translate`() {
-        val m = Matrix3x3F32.MakePolyToPoly(
+        val m = Matrix3x3F32.polyToPoly(
             arrayOf(Vector2F32.of(0f, 0f)),
             arrayOf(Vector2F32.of(5f, 7f)),
         )!!
@@ -1064,7 +1064,7 @@ class Matrix3x3F32Test {
         val dst = arrayOf(Vector2F32.of(10f, 20f), Vector2F32.of(40f, 25f), Vector2F32.of(15f, 70f))
 
         val viaSet = Matrix3x3F32.setPolyToPoly(src, dst)!!
-        val viaMake = Matrix3x3F32.MakePolyToPoly(src, dst)!!
+        val viaMake = Matrix3x3F32.polyToPoly(src, dst)!!
 
         assertTrue(viaSet.cheapEqualTo(viaMake))
     }
@@ -1079,7 +1079,7 @@ class Matrix3x3F32Test {
         val dst = arrayOf(
             Vector2F32.of(10f, 20f), Vector2F32.of(110f, 30f), Vector2F32.of(120f, 130f), Vector2F32.of(20f, 120f),
         )
-        val m = Matrix3x3F32.MakePolyToPoly(src, dst)!!
+        val m = Matrix3x3F32.polyToPoly(src, dst)!!
         for (i in 0 until 4) {
             val mapped = m.mapXY(src[i])
             assertNear(dst[i].x, mapped.x, eps = 1e-2f, msg = "corner $i x")
@@ -1092,7 +1092,7 @@ class Matrix3x3F32Test {
         // 3 non-collinear points.
         val src = arrayOf(Vector2F32.of(0f, 0f), Vector2F32.of(1f, 0f), Vector2F32.of(0f, 1f))
         val dst = arrayOf(Vector2F32.of(10f, 20f), Vector2F32.of(40f, 25f), Vector2F32.of(15f, 70f))
-        val m = Matrix3x3F32.MakePolyToPoly(src, dst)!!
+        val m = Matrix3x3F32.polyToPoly(src, dst)!!
         assertFalse(m.hasPerspective(), "3-point fit should be affine")
         for (i in 0 until 3) {
             val mapped = m.mapXY(src[i])
@@ -1103,7 +1103,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `MakePolyToPoly mismatched sizes returns null`() {
-        assertEquals(null, Matrix3x3F32.MakePolyToPoly(
+        assertEquals(null, Matrix3x3F32.polyToPoly(
             arrayOf(Vector2F32.of(0f, 0f)),
             arrayOf(Vector2F32.of(1f, 1f), Vector2F32.of(2f, 2f)),
         ))
@@ -1113,14 +1113,14 @@ class Matrix3x3F32Test {
     fun `MakePolyToPoly more than 4 points returns null`() {
         val src = Array(5) { Vector2F32.Zero }
         val dst = Array(5) { Vector2F32.Zero }
-        assertEquals(null, Matrix3x3F32.MakePolyToPoly(src, dst))
+        assertEquals(null, Matrix3x3F32.polyToPoly(src, dst))
     }
 
     // ─── Phase 5: post* family ──────────────────────────────────────────
 
     @Test
     fun `postTranslate affine adds dx dy directly`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(5f, 7f)
         val post = m.postTranslate(10f, 20f)
         // For affine, postTranslate just bumps tx/ty.
         assertEquals(m.tx + 10f, post.tx); assertEquals(m.ty + 20f, post.ty)
@@ -1132,9 +1132,9 @@ class Matrix3x3F32Test {
     @Test
     fun `postTranslate matches T concat M for any matrix`() {
         // Identity check: postTranslate(a, b) = T(a, b) · M.
-        val m = Matrix3x3F32.MakeRotate(30f).preScale(2f, 3f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.rotation(30f).preScale(2f, 3f).preTranslate(5f, 7f)
         val viaPost = m.postTranslate(11f, 13f)
-        val viaConcat = Matrix3x3F32.concat(Matrix3x3F32.MakeTrans(11f, 13f), m)
+        val viaConcat = Matrix3x3F32.concat(Matrix3x3F32.translation(11f, 13f), m)
         for ((a, b) in listOf(viaPost.sx to viaConcat.sx, viaPost.kx to viaConcat.kx,
             viaPost.tx to viaConcat.tx, viaPost.ky to viaConcat.ky,
             viaPost.sy to viaConcat.sy, viaPost.ty to viaConcat.ty)) {
@@ -1146,18 +1146,18 @@ class Matrix3x3F32Test {
     fun `postTranslate perspective uses postConcat`() {
         // For perspective M, postTranslate must dispatch through postConcat
         // because T · M also affects the persp row terms in column 2.
-        val m = Matrix3x3F32.MakePerspective(0.5f, 0f).preTranslate(2f, 3f)
+        val m = Matrix3x3F32.perspective(0.5f, 0f).preTranslate(2f, 3f)
         val viaPost = m.postTranslate(11f, 13f)
-        val viaConcat = Matrix3x3F32.concat(Matrix3x3F32.MakeTrans(11f, 13f), m)
+        val viaConcat = Matrix3x3F32.concat(Matrix3x3F32.translation(11f, 13f), m)
         assertNear(viaConcat.tx, viaPost.tx); assertNear(viaConcat.ty, viaPost.ty)
         assertNear(viaConcat.persp2, viaPost.persp2, eps = 1e-4f)
     }
 
     @Test
     fun `postScale closed form matches postConcat`() {
-        val m = Matrix3x3F32.MakeRotate(45f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.rotation(45f).preTranslate(5f, 7f)
         val viaPost = m.postScale(2f, 3f)
-        val viaConcat = Matrix3x3F32.concat(Matrix3x3F32.MakeScale(2f, 3f), m)
+        val viaConcat = Matrix3x3F32.concat(Matrix3x3F32.scaling(2f, 3f), m)
         assertNear(viaConcat.sx, viaPost.sx, eps = 1e-4f)
         assertNear(viaConcat.kx, viaPost.kx, eps = 1e-4f)
         assertNear(viaConcat.tx, viaPost.tx, eps = 1e-4f)
@@ -1168,14 +1168,14 @@ class Matrix3x3F32Test {
 
     @Test
     fun `postScale unity short-circuit returns same matrix`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f)
+        val m = Matrix3x3F32.scaling(2f, 3f)
         // (sx_, sy_) == (1, 1) ⇒ short-circuit.
         assertEquals(m, m.postScale(1f, 1f))
     }
 
     @Test
     fun `postScale pivoted fixes pivot in device space`() {
-        val m = Matrix3x3F32.MakeTrans(0f, 0f)
+        val m = Matrix3x3F32.translation(0f, 0f)
         val post = m.postScale(2f, 3f, 5f, 7f)
         // Pivot (5, 7) in device space stays at (5, 7).
         val (x, y) = post.mapXY(5f, 7f)
@@ -1184,9 +1184,9 @@ class Matrix3x3F32Test {
 
     @Test
     fun `postRotate matches R concat M`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(5f, 7f)
         val viaPost = m.postRotate(45f)
-        val viaConcat = Matrix3x3F32.concat(Matrix3x3F32.MakeRotate(45f), m)
+        val viaConcat = Matrix3x3F32.concat(Matrix3x3F32.rotation(45f), m)
         assertNear(viaConcat.sx, viaPost.sx, eps = 1e-4f)
         assertNear(viaConcat.ty, viaPost.ty, eps = 1e-4f)
     }
@@ -1202,9 +1202,9 @@ class Matrix3x3F32Test {
 
     @Test
     fun `postSkew matches Skew concat M`() {
-        val m = Matrix3x3F32.MakeScale(2f, 3f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.scaling(2f, 3f).preTranslate(5f, 7f)
         val viaPost = m.postSkew(0.5f, 0f)
-        val viaConcat = Matrix3x3F32.concat(Matrix3x3F32.MakeSkew(0.5f, 0f), m)
+        val viaConcat = Matrix3x3F32.concat(Matrix3x3F32.skewing(0.5f, 0f), m)
         assertNear(viaConcat.sx, viaPost.sx, eps = 1e-4f)
         assertNear(viaConcat.ty, viaPost.ty, eps = 1e-4f)
     }
@@ -1213,9 +1213,9 @@ class Matrix3x3F32Test {
 
     @Test
     fun `preTranslate perspective dispatches through preConcat`() {
-        val m = Matrix3x3F32.MakePerspective(0.5f, 0f)
+        val m = Matrix3x3F32.perspective(0.5f, 0f)
         val viaPre = m.preTranslate(3f, 5f)
-        val viaConcat = Matrix3x3F32.concat(m, Matrix3x3F32.MakeTrans(3f, 5f))
+        val viaConcat = Matrix3x3F32.concat(m, Matrix3x3F32.translation(3f, 5f))
         // Includes the persp2 update which the affine fast path would miss.
         assertNear(viaConcat.tx, viaPre.tx, eps = 1e-4f)
         assertNear(viaConcat.ty, viaPre.ty, eps = 1e-4f)
@@ -1225,7 +1225,7 @@ class Matrix3x3F32Test {
     @Test
     fun `preScale perspective propagates to persp0 and persp1`() {
         // M · S: scales the perspective row's x and y components by sx_ and sy_.
-        val m = Matrix3x3F32.MakePerspective(0.5f, 0.25f)
+        val m = Matrix3x3F32.perspective(0.5f, 0.25f)
         val pre = m.preScale(2f, 3f)
         assertNear(0.5f * 2f, pre.persp0); assertNear(0.25f * 3f, pre.persp1)
         // persp2 unchanged on preScale (column 2 of M times scale's column 2 = unchanged).
@@ -1234,7 +1234,7 @@ class Matrix3x3F32Test {
 
     @Test
     fun `preScale on affine leaves persp row at (0, 0, 1)`() {
-        val m = Matrix3x3F32.MakeRotate(30f).preTranslate(5f, 7f)
+        val m = Matrix3x3F32.rotation(30f).preTranslate(5f, 7f)
         val pre = m.preScale(2f, 3f)
         assertEquals(0f, pre.persp0); assertEquals(0f, pre.persp1); assertEquals(1f, pre.persp2)
     }
@@ -1248,15 +1248,15 @@ class Matrix3x3F32Test {
 
     @Test
     fun `MakeTrans Vector2F32 overload matches dx dy form`() {
-        val m1 = Matrix3x3F32.MakeTrans(Vector2F32.of(5f, 7f))
-        val m2 = Matrix3x3F32.MakeTrans(5f, 7f)
+        val m1 = Matrix3x3F32.translation(Vector2F32.of(5f, 7f))
+        val m2 = Matrix3x3F32.translation(5f, 7f)
         assertEquals(m1, m2)
     }
 
     @Test
     fun `operator times equals concat`() {
-        val a = Matrix3x3F32.MakeRotate(30f)
-        val b = Matrix3x3F32.MakeScale(2f, 3f)
+        val a = Matrix3x3F32.rotation(30f)
+        val b = Matrix3x3F32.scaling(2f, 3f)
         assertEquals(Matrix3x3F32.concat(a, b), a * b)
     }
 }

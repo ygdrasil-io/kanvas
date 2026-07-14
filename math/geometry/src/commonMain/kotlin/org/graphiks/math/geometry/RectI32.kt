@@ -86,21 +86,21 @@ public data class RectI32(
         maxOf(left, right), maxOf(top, bottom),
     )
 
-    public fun makeOffset(dx: Int, dy: Int): RectI32 = RectI32(
+    public fun offsetBy(dx: Int, dy: Int): RectI32 = RectI32(
         Vector2I32.sk32SatAdd(left, dx),
         Vector2I32.sk32SatAdd(top, dy),
         Vector2I32.sk32SatAdd(right, dx),
         Vector2I32.sk32SatAdd(bottom, dy),
     )
 
-    public fun makeInset(dx: Int, dy: Int): RectI32 = RectI32(
+    public fun insetBy(dx: Int, dy: Int): RectI32 = RectI32(
         Vector2I32.sk32SatAdd(left, dx),
         Vector2I32.sk32SatAdd(top, dy),
         Vector2I32.sk32SatSub(right, dx),
         Vector2I32.sk32SatSub(bottom, dy),
     )
 
-    public fun makeOutset(dx: Int, dy: Int): RectI32 = makeInset(-dx, -dy)
+    public fun outsetBy(dx: Int, dy: Int): RectI32 = insetBy(-dx, -dy)
 
     public fun contains(x: Int, y: Int): Boolean =
         x >= left && x < right && y >= top && y < bottom
@@ -135,14 +135,14 @@ public data class RectI32(
     }
 
     public companion object {
-        public fun MakeLTRB(l: Int, t: Int, r: Int, b: Int): RectI32 = RectI32(l, t, r, b)
-        public fun MakeXYWH(x: Int, y: Int, w: Int, h: Int): RectI32 =
+        public fun ofLTRB(l: Int, t: Int, r: Int, b: Int): RectI32 = RectI32(l, t, r, b)
+        public fun ofOriginSize(x: Int, y: Int, w: Int, h: Int): RectI32 =
             RectI32(x, y, Vector2I32.sk32SatAdd(x, w), Vector2I32.sk32SatAdd(y, h))
-        public fun MakeWH(w: Int, h: Int): RectI32 = RectI32(0, 0, w, h)
-        public fun MakeEmpty(): RectI32 = RectI32(0, 0, 0, 0)
-        public fun MakeSize(size: SizeI32): RectI32 = RectI32(0, 0, size.width, size.height)
-        public fun MakePtSize(pt: Vector2I32, size: SizeI32): RectI32 =
-            MakeXYWH(pt.x, pt.y, size.width, size.height)
+        public fun ofSize(w: Int, h: Int): RectI32 = RectI32(0, 0, w, h)
+        public val Empty: RectI32 = RectI32(0, 0, 0, 0)
+        public fun fromSize(size: SizeI32): RectI32 = RectI32(0, 0, size.width, size.height)
+        public fun fromPointSize(pt: Vector2I32, size: SizeI32): RectI32 =
+            ofOriginSize(pt.x, pt.y, size.width, size.height)
 
         public fun Intersects(a: RectI32, b: RectI32): Boolean {
             val l = maxOf(a.left, b.left)

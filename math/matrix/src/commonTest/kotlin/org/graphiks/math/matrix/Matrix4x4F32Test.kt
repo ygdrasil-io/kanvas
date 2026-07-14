@@ -197,7 +197,7 @@ class Matrix4x4F32Test {
 
     @Test
     fun `mapPoint matches Matrix3x3F32 when m44 is affine`() {
-        val sk2D = Matrix3x3F32.MakeAll(2f, 0f, 5f, 0f, 3f, 7f)
+        val sk2D = Matrix3x3F32.of(2f, 0f, 5f, 0f, 3f, 7f)
         val m44 = Matrix4x4F32(sk2D)
         val p = Vector2F32.of(4f, 8f)
         val viaM44 = m44.mapPoint(p)
@@ -286,7 +286,7 @@ class Matrix4x4F32Test {
 
     @Test
     fun `asM33 round-trip preserves affine fields`() {
-        val src = Matrix3x3F32.MakeAll(2f, 0f, 5f, 0f, 3f, 7f, 0f, 0f, 1f)
+        val src = Matrix3x3F32.of(2f, 0f, 5f, 0f, 3f, 7f, 0f, 0f, 1f)
         val viaM44 = Matrix4x4F32(src).asM33()
         assertNotNull(viaM44)
         // Match the affine subset (perspective row is [0, 0, 1] for affine).
@@ -303,7 +303,7 @@ class Matrix4x4F32Test {
 
     @Test
     fun `setM33 reproduces Matrix3x3F32 constructor`() {
-        val src = Matrix3x3F32.MakeAll(2f, 1f, 5f, 0.5f, 3f, 7f)
+        val src = Matrix3x3F32.of(2f, 1f, 5f, 0.5f, 3f, 7f)
         val fromCtor = Matrix4x4F32(src)
         val viaSet = Matrix4x4F32().setM33(src)
         assertMatrixNear(fromCtor, viaSet)

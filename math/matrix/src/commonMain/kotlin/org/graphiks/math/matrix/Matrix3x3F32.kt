@@ -26,12 +26,12 @@ public data class RectF32(
     val isEmpty: Boolean get() = left >= right || top >= bottom
     fun width(): Float = right - left
     fun height(): Float = bottom - top
-    fun equalsLTRB(other: RectF32): Boolean =
+    fun contentEqualsLTRB(other: RectF32): Boolean =
         left == other.left && top == other.top && right == other.right && bottom == other.bottom
 
     companion object {
-        fun MakeLTRB(l: Float, t: Float, r: Float, b: Float): RectF32 = RectF32(l, t, r, b)
-        fun MakeEmpty(): RectF32 = RectF32(0f, 0f, 0f, 0f)
+        fun ofLTRB(l: Float, t: Float, r: Float, b: Float): RectF32 = RectF32(l, t, r, b)
+        val Empty: RectF32 = RectF32(0f, 0f, 0f, 0f)
     }
 }
 
@@ -581,7 +581,7 @@ public data class Matrix3x3F32(
         val (x1, y1) = mapXY(r.right, r.top)
         val (x2, y2) = mapXY(r.right, r.bottom)
         val (x3, y3) = mapXY(r.left, r.bottom)
-        return RectF32.MakeLTRB(
+        return RectF32.ofLTRB(
             minOf(x0, x1, x2, x3),
             minOf(y0, y1, y2, y3),
             maxOf(x0, x1, x2, x3),
@@ -605,7 +605,7 @@ public data class Matrix3x3F32(
         val r1 = sx * r.right + tx
         val t1 = sy * r.top + ty
         val b1 = sy * r.bottom + ty
-        return RectF32.MakeLTRB(minOf(l1, r1), minOf(t1, b1), maxOf(l1, r1), maxOf(t1, b1))
+        return RectF32.ofLTRB(minOf(l1, r1), minOf(t1, b1), maxOf(l1, r1), maxOf(t1, b1))
     }
 
     /**
@@ -639,7 +639,7 @@ public data class Matrix3x3F32(
      * dispatch (mask <= kTranslate / mask & kPerspective / else).
      */
     public fun preTranslate(dx: Float, dy: Float): Matrix3x3F32 {
-        if (hasPerspective()) return preConcat(MakeTrans(dx, dy))
+        if (hasPerspective()) return preConcat(translation(dx, dy))
         // Closed form for affine: keeps numerical precision (no accumulating
         // Identity multiplies).
         return copy(tx = tx + sx * dx + kx * dy, ty = ty + ky * dx + sy * dy)
@@ -665,28 +665,28 @@ public data class Matrix3x3F32(
      * Mirrors Skia's [`Matrix3x3F32::preScale(sx, sy, px, py)`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L319).
      */
     public fun preScale(sx_: Float, sy_: Float, px: Float, py: Float): Matrix3x3F32 =
-        if (sx_ == 1f && sy_ == 1f) this else preConcat(MakeScale(sx_, sy_, px, py))
+        if (sx_ == 1f && sy_ == 1f) this else preConcat(scaling(sx_, sy_, px, py))
 
     /**
      * `M.preRotate(deg)` ≡ `M · Rotate(deg)` around the origin.
      * Use [preRotate] with `(deg, px, py)` for a rotation around an
      * arbitrary pivot.
      */
-    public fun preRotate(deg: Float): Matrix3x3F32 = preConcat(MakeRotate(deg))
+    public fun preRotate(deg: Float): Matrix3x3F32 = preConcat(rotation(deg))
 
     public fun preRotate(deg: Float, px: Float, py: Float): Matrix3x3F32 =
-        preConcat(MakeRotate(deg, px, py))
+        preConcat(rotation(deg, px, py))
 
     /** `M.preSkew(kx_, ky_)` ≡ `M · Skew(kx_, ky_)`. */
     public fun preSkew(kx_: Float, ky_: Float): Matrix3x3F32 =
-        preConcat(MakeSkew(kx_, ky_))
+        preConcat(skewing(kx_, ky_))
 
     /**
      * `M.preSkew(kx_, ky_, px, py)` ≡ `M · Skew(kx_, ky_, px, py)` where the
      * skew leaves the pivot `(px, py)` fixed.
      */
     public fun preSkew(kx_: Float, ky_: Float, px: Float, py: Float): Matrix3x3F32 =
-        preConcat(MakeSkew(kx_, ky_, px, py))
+        preConcat(skewing(kx_, ky_, px, py))
 
     // ─── post* convenience family (sugar over postConcat) ───────────────
 
@@ -699,7 +699,7 @@ public data class Matrix3x3F32(
      * [`Matrix3x3F32::postTranslate`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L285).
      */
     public fun postTranslate(dx: Float, dy: Float): Matrix3x3F32 {
-        if (hasPerspective()) return postConcat(MakeTrans(dx, dy))
+        if (hasPerspective()) return postConcat(translation(dx, dy))
         return copy(tx = tx + dx, ty = ty + dy)
     }
 
@@ -723,27 +723,27 @@ public data class Matrix3x3F32(
      * [`Matrix3x3F32::postScale`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L364).
      */
     public fun postScale(sx_: Float, sy_: Float, px: Float, py: Float): Matrix3x3F32 =
-        if (sx_ == 1f && sy_ == 1f) this else postConcat(MakeScale(sx_, sy_, px, py))
+        if (sx_ == 1f && sy_ == 1f) this else postConcat(scaling(sx_, sy_, px, py))
 
     /** `M.postRotate(deg)` ≡ `R(deg) · M`. */
-    public fun postRotate(deg: Float): Matrix3x3F32 = postConcat(MakeRotate(deg))
+    public fun postRotate(deg: Float): Matrix3x3F32 = postConcat(rotation(deg))
 
     /**
      * `M.postRotate(deg, px, py)` ≡ `R(deg, px, py) · M`, where the
      * rotation is anchored at `(px, py)` in *device space*.
      */
     public fun postRotate(deg: Float, px: Float, py: Float): Matrix3x3F32 =
-        postConcat(MakeRotate(deg, px, py))
+        postConcat(rotation(deg, px, py))
 
     /** `M.postSkew(kx_, ky_)` ≡ `Skew(kx_, ky_) · M`. */
     public fun postSkew(kx_: Float, ky_: Float): Matrix3x3F32 =
-        postConcat(MakeSkew(kx_, ky_))
+        postConcat(skewing(kx_, ky_))
 
     /**
      * `M.postSkew(kx_, ky_, px, py)` ≡ `Skew(kx_, ky_, px, py) · M`.
      */
     public fun postSkew(kx_: Float, ky_: Float, px: Float, py: Float): Matrix3x3F32 =
-        postConcat(MakeSkew(kx_, ky_, px, py))
+        postConcat(skewing(kx_, ky_, px, py))
 
     /**
      * Kotlin-idiomatic matrix multiply: `a * b ≡ Matrix3x3F32.concat(a, b)`.
@@ -860,7 +860,7 @@ public data class Matrix3x3F32(
          *
          * Mirrors Skia's [`Matrix3x3F32::Rect2Rect`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L559).
          */
-        public fun MakeRectToRect(
+        public fun rectToRect(
             src: RectF32,
             dst: RectF32,
             stf: ScaleToFit = ScaleToFit.kFill_ScaleToFit,
@@ -891,7 +891,7 @@ public data class Matrix3x3F32(
          * [Identity] instead of `null` when [src] is empty or degenerate.
          */
         public fun RectToRectOrIdentity(src: RectF32, dst: RectF32): Matrix3x3F32 =
-            MakeRectToRect(src, dst, ScaleToFit.kFill_ScaleToFit) ?: Identity
+            rectToRect(src, dst, ScaleToFit.kFill_ScaleToFit) ?: Identity
 
         /**
          * Mirrors Skia's `Matrix3x3F32::setPolyToPoly(src, dst, count)`.
@@ -901,7 +901,7 @@ public data class Matrix3x3F32(
          * Returns `null` when the system is degenerate (no unique solution).
          */
         public fun setPolyToPoly(src: Array<Vector2F32>, dst: Array<Vector2F32>): Matrix3x3F32? =
-            MakePolyToPoly(src, dst)
+            polyToPoly(src, dst)
 
         /**
          * Build a matrix from a 9-element row-major buffer. The
@@ -909,7 +909,7 @@ public data class Matrix3x3F32(
          * affine matrix. Mirrors Skia's
          * [`Matrix3x3F32::set9`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L55).
          */
-        public fun MakeFrom9(buffer: FloatArray): Matrix3x3F32 {
+        public fun from9(buffer: FloatArray): Matrix3x3F32 {
             require(buffer.size >= 9) { "MakeFrom9 expects ≥ 9 elements (got ${buffer.size})" }
             return Matrix3x3F32(
                 sx = buffer[kMScaleX], kx = buffer[kMSkewX], tx = buffer[kMTransX],
@@ -923,7 +923,7 @@ public data class Matrix3x3F32(
          * x/y biases (`persp2 = 1`). Mirrors Skia's `Matrix3x3F32::setAll`
          * with the perspective row `[p0, p1, 1]`.
          */
-        public fun MakePerspective(p0: Float, p1: Float): Matrix3x3F32 =
+        public fun perspective(p0: Float, p1: Float): Matrix3x3F32 =
             Matrix3x3F32(persp0 = p0, persp1 = p1)
 
         /**
@@ -931,7 +931,7 @@ public data class Matrix3x3F32(
          * `[scaleX, skewY, skewX, scaleY, transX, transY]`. Mirrors
          * Skia's [`Matrix3x3F32::setAffine`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L61).
          */
-        public fun MakeFromAffine(buffer: FloatArray): Matrix3x3F32 {
+        public fun fromAffine(buffer: FloatArray): Matrix3x3F32 {
             require(buffer.size >= 6) { "MakeFromAffine expects ≥ 6 elements (got ${buffer.size})" }
             return Matrix3x3F32(
                 sx = buffer[kAScaleX], kx = buffer[kASkewX], tx = buffer[kATransX],
@@ -1005,20 +1005,20 @@ public data class Matrix3x3F32(
             return nearlyZero(perpDot, 1e-7f * 1e-7f)
         }
 
-        public fun MakeTrans(dx: Float, dy: Float): Matrix3x3F32 =
-            Matrix3x3F32(tx = dx, ty = dy)
+        public fun translation(x: Float, y: Float): Matrix3x3F32 =
+            Matrix3x3F32(tx = x, ty = y)
 
         /**
-         * Vector-form `MakeTrans` overload — Skia C++ exposes both
+         * Vector-form `translation` overload — Skia C++ exposes both
          * `Translate(Float dx, Float dy)` and `Translate(Vector2F32 v)`
          * for hand-port readability.
          */
-        public fun MakeTrans(v: Vector2F32): Matrix3x3F32 = MakeTrans(v.x, v.y)
+        public fun translation(v: Vector2F32): Matrix3x3F32 = translation(v.x, v.y)
 
-        public fun MakeScale(sx: Float, sy: Float): Matrix3x3F32 =
-            Matrix3x3F32(sx = sx, sy = sy)
+        public fun scaling(x: Float, y: Float): Matrix3x3F32 =
+            Matrix3x3F32(sx = x, sy = y)
 
-        public fun MakeScale(s: Float): Matrix3x3F32 = MakeScale(s, s)
+        public fun scaling(scale: Float): Matrix3x3F32 = scaling(scale, scale)
 
         /**
          * Scale around a pivot `(px, py)`, equivalent to
@@ -1026,9 +1026,9 @@ public data class Matrix3x3F32(
          * Skia's [`Matrix3x3F32::setScale(sx, sy, px, py)`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L300):
          * `tx = px - sx*px`, `ty = py - sy*py`.
          */
-        public fun MakeScale(sx: Float, sy: Float, px: Float, py: Float): Matrix3x3F32 =
-            if (sx == 1f && sy == 1f) Identity
-            else Matrix3x3F32(sx = sx, kx = 0f, tx = px - sx * px, ky = 0f, sy = sy, ty = py - sy * py)
+        public fun scaling(x: Float, y: Float, pivotX: Float, pivotY: Float): Matrix3x3F32 =
+            if (x == 1f && y == 1f) Identity
+            else Matrix3x3F32(sx = x, kx = 0f, tx = pivotX - x * pivotX, ky = 0f, sy = y, ty = pivotY - y * pivotY)
 
         /**
          * Rotation matrix around the origin, angle in **degrees** (Skia's
@@ -1037,13 +1037,13 @@ public data class Matrix3x3F32(
          * `sin` and `cos` results within `SK_ScalarSinCosNearlyZero` of zero
          * are snapped to exactly `0f` (mirrors Skia's
          * `sin` / `cos`,
-         * include/core/Float.h). This guarantees that `MakeRotate(90)`,
-         * `MakeRotate(180)`, etc. produce bit-exact axis-aligned matrices,
+         * include/core/Float.h). This guarantees that `rotation(90)`,
+         * `rotation(180)`, etc. produce bit-exact axis-aligned matrices,
          * so [isAxisAligned] returns `true` for cardinal angles instead of
          * tripping over a `~6e-8` cosine residue.
          */
-        public fun MakeRotate(deg: Float): Matrix3x3F32 {
-            val rad = (deg * (PI.toFloat() / 180f))
+        public fun rotation(degrees: Float): Matrix3x3F32 {
+            val rad = (degrees * (PI.toFloat() / 180f))
             val s = sin(rad)
             val c = cos(rad)
             // Avoid `-0f` from `-s` when `s` was snapped to `+0f`: explicit
@@ -1062,12 +1062,12 @@ public data class Matrix3x3F32(
             (1f / 4096f) * (1f / 4096f) * (1f / 4096f)
 
         /** Rotation around a pivot point. */
-        public fun MakeRotate(deg: Float, px: Float, py: Float): Matrix3x3F32 {
-            // T(px, py) · R(deg) · T(-px, -py).
-            return MakeTrans(px, py).preConcat(MakeRotate(deg)).preConcat(MakeTrans(-px, -py))
+        public fun rotation(degrees: Float, pivotX: Float, pivotY: Float): Matrix3x3F32 {
+            // T(pivotX, pivotY) · R(degrees) · T(-pivotX, -pivotY).
+            return translation(pivotX, pivotY).preConcat(rotation(degrees)).preConcat(translation(-pivotX, -pivotY))
         }
 
-        public fun MakeSkew(kx: Float, ky: Float): Matrix3x3F32 =
+        public fun skewing(kx: Float, ky: Float): Matrix3x3F32 =
             Matrix3x3F32(kx = kx, ky = ky)
 
         /**
@@ -1076,8 +1076,8 @@ public data class Matrix3x3F32(
          * Skia's [`Matrix3x3F32::setSkew(sx, sy, px, py)`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L492):
          * `tx = -kx*py`, `ty = -ky*px`.
          */
-        public fun MakeSkew(kx: Float, ky: Float, px: Float, py: Float): Matrix3x3F32 =
-            Matrix3x3F32(sx = 1f, kx = kx, tx = -kx * py, ky = ky, sy = 1f, ty = -ky * px)
+        public fun skewing(kx: Float, ky: Float, pivotX: Float, pivotY: Float): Matrix3x3F32 =
+            Matrix3x3F32(sx = 1f, kx = kx, tx = -kx * pivotY, ky = ky, sy = 1f, ty = -ky * pivotX)
 
         /**
          * Matrix multiply: returns `a · b`. A point `p` is mapped first by
@@ -1133,26 +1133,26 @@ public data class Matrix3x3F32(
             ((a.toDouble() * b - c.toDouble() * d) * scale).toFloat()
 
         /**
-         * `MakeAll(sx, kx, tx, ky, sy, ty)` — verbatim row-major construction
+         * `of(sx, kx, tx, ky, sy, ty)` — verbatim row-major construction
          * for callers that have all six scalars to hand (typically test
-         * fixtures or hand-translated `Matrix3x3F32::MakeAll(...)` from C++).
+         * fixtures or hand-translated `Matrix3x3F32::of(...)` from C++).
          * Perspective row defaults to `[0, 0, 1]` (affine matrix).
          */
-        public fun MakeAll(
+        public fun of(
             sx: Float, kx: Float, tx: Float,
             ky: Float, sy: Float, ty: Float,
         ): Matrix3x3F32 = Matrix3x3F32(sx, kx, tx, ky, sy, ty)
 
         /**
-         * 9-argument `MakeAll` — full row-major 3×3 construction. Mirrors
-         * Skia's `Matrix3x3F32::MakeAll(scaleX, skewX, transX, skewY, scaleY,
+         * 9-argument `of` — full row-major 3×3 construction. Mirrors
+         * Skia's `Matrix3x3F32::of(scaleX, skewX, transX, skewY, scaleY,
          * transY, pers0, pers1, pers2)` ([Matrix3x3F32.h](https://github.com/google/skia/blob/main/include/core/Matrix3x3F32.h)).
          */
-        public fun MakeAll(
+        public fun of(
             sx: Float, kx: Float, tx: Float,
             ky: Float, sy: Float, ty: Float,
-            p0: Float, p1: Float, p2: Float,
-        ): Matrix3x3F32 = Matrix3x3F32(sx, kx, tx, ky, sy, ty, p0, p1, p2)
+            persp0: Float, persp1: Float, persp2: Float,
+        ): Matrix3x3F32 = Matrix3x3F32(sx, kx, tx, ky, sy, ty, persp0, persp1, persp2)
 
         // ─── RSXform factory ─────────────────────────────────────────────
 
@@ -1163,7 +1163,7 @@ public data class Matrix3x3F32(
          * `cos(angle) * scale` and `sin(angle) * scale`. Mirrors
          * Skia's [`Matrix3x3F32::setRSXform`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L424).
          */
-        public fun MakeRSXform(
+        public fun rsXForm(
             scos: Float, ssin: Float, tx: Float, ty: Float,
         ): Matrix3x3F32 = Matrix3x3F32(
             sx = scos, kx = -ssin, tx = tx,
@@ -1176,7 +1176,7 @@ public data class Matrix3x3F32(
          * to `T(tx, ty) · R(scos, ssin) · T(-anchorX, -anchorY)`.
          * Mirrors Skia's `SkRSXform::toQuad` style construction.
          */
-        public fun MakeRSXform(
+        public fun rsXForm(
             scos: Float, ssin: Float,
             anchorX: Float, anchorY: Float,
             tx: Float, ty: Float,
@@ -1203,11 +1203,11 @@ public data class Matrix3x3F32(
          * build `srcMap` from src, invert, build `dstMap` from dst,
          * return `dstMap · srcMap⁻¹`.
          */
-        public fun MakePolyToPoly(src: Array<Vector2F32>, dst: Array<Vector2F32>): Matrix3x3F32? {
+        public fun polyToPoly(src: Array<Vector2F32>, dst: Array<Vector2F32>): Matrix3x3F32? {
             if (src.size != dst.size || src.size > 4) return null
             return when (src.size) {
                 0 -> Identity
-                1 -> MakeTrans(dst[0].x - src[0].x, dst[0].y - src[0].y)
+                1 -> translation(dst[0].x - src[0].x, dst[0].y - src[0].y)
                 2, 3, 4 -> {
                     val srcMap = polyToMap(src) ?: return null
                     val srcInv = srcMap.invert() ?: return null
