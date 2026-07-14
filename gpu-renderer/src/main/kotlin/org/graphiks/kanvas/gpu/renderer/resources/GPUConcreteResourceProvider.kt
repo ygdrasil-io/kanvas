@@ -3,6 +3,114 @@ package org.graphiks.kanvas.gpu.renderer.resources
 import java.math.BigInteger
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+
+/**
+ * Resource-owned input for the sole frame-preflight materialization boundary.
+ *
+ * This contract intentionally lives in `resources`: the resource package never imports the
+ * recording or execution packages. The execution preflighter supplies a Task 6 preparation
+ * request plus the already validated frame facts.
+ */
+class GPUFrameResourcePreparationInput(
+    val preparation: GPUResourcePreparationRequest,
+    val ownerScope: String,
+    val deviceGeneration: GPUDeviceGenerationID,
+    val resourceGeneration: Long,
+    val firstStep: Int,
+    val lastStepExclusive: Int,
+    val budgetPlan: GPUFrameMemoryBudgetPlan,
+    val capabilities: GPUCapabilities,
+    val readbackStagingDescriptor: GPUReadbackStagingDescriptorContract? = null,
+) {
+    init {
+        require(ownerScope.isNotBlank()) { "GPUFrameResourcePreparationInput.ownerScope must not be blank" }
+        require(resourceGeneration >= 0L) {
+            "GPUFrameResourcePreparationInput.resourceGeneration must be non-negative"
+        }
+        require(firstStep >= 0) { "GPUFrameResourcePreparationInput.firstStep must be non-negative" }
+        require(lastStepExclusive > firstStep) {
+            "GPUFrameResourcePreparationInput.lastStepExclusive must be greater than firstStep"
+        }
+        require(
+            readbackStagingDescriptor == null || preparation.role == GPUFrameResourceRole.ReadbackStaging,
+        ) {
+            "A readback staging descriptor requires a ReadbackStaging preparation"
+        }
+    }
+}
+
+/** Handle-free result of one resource-owned frame preparation. */
+sealed interface GPUPreparedConcreteResourceRef {
+    val value: String
+
+    data class Texture(val ref: GPUTextureResourceRef) : GPUPreparedConcreteResourceRef {
+        override val value: String get() = ref.value
+
+        init {
+            requireResourceDumpSafe("GPUPreparedConcreteResourceRef.Texture.ref", ref.value)
+        }
+    }
+
+    data class Buffer(val ref: GPUBufferResourceRef) : GPUPreparedConcreteResourceRef {
+        override val value: String get() = ref.value
+
+        init {
+            requireResourceDumpSafe("GPUPreparedConcreteResourceRef.Buffer.ref", ref.value)
+        }
+    }
+}
+
+sealed interface GPUFrameResourcePreparationDecision {
+    class Prepared(
+        val logicalResource: GPUFrameResourceRef,
+        val concreteResource: GPUPreparedConcreteResourceRef,
+        val role: GPUFrameResourceRole,
+        val deviceGeneration: GPUDeviceGenerationID,
+        val resourceGeneration: Long,
+        val outputOwnedReadbackLease: GPUReadbackStagingLease? = null,
+    ) : GPUFrameResourcePreparationDecision {
+        init {
+            require(resourceGeneration >= 0L) {
+                "GPUFrameResourcePreparationDecision.Prepared.resourceGeneration must be non-negative"
+            }
+            require(
+                outputOwnedReadbackLease == null || role == GPUFrameResourceRole.ReadbackStaging,
+            ) {
+                "Only a ReadbackStaging resource may carry output-owned readback state"
+            }
+        }
+    }
+
+    data class Refused(val diagnostic: org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic) :
+        GPUFrameResourcePreparationDecision
+}
+
+/**
+ * Resource-side preflight facade. Implementations own their acquisition journal and must release
+ * every never-submitted physical reservation in global reverse acquisition order.
+ */
+interface GPUFrameResourcePreflightProvider : GPUResourceProvider {
+    fun beginFramePreparation(
+        frameId: Long,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUFrameResourcePreparationSession
+
+    fun prepareFrameResource(input: GPUFrameResourcePreparationInput): GPUFrameResourcePreparationDecision
+
+    fun rollbackFrameResourcesBeforeSubmit(
+        ownerScope: String,
+    ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolRollbackSummary>
+}
+
+/** Provider-issued journal namespace unique across all preflighters sharing that provider. */
+@JvmInline
+value class GPUFrameResourcePreparationSession(val ownerScope: String) {
+    init {
+        require(ownerScope.isNotBlank()) { "GPUFrameResourcePreparationSession.ownerScope must not be blank" }
+        requireResourceDumpSafe("GPUFrameResourcePreparationSession.ownerScope", ownerScope)
+    }
+}
+
 data class GPUNullBufferMaterializationRequest(
     val label: String,
     val byteSize: Long,
@@ -55,14 +163,16 @@ class GPUConcreteResourceProviderTelemetry(
 }
 
 class GPUConcreteResourceProvider(
+    private val commandOperandProvider: GPUResourceProvider = ValidatingCommandOperandResourceProvider(),
     private val payloadProvider: GPUResourceProvider = ValidatingPayloadResourceProvider(),
     private val textureSamplerProvider: GPUResourceProvider = ValidatingTextureSamplerResourceProvider(),
     private val leaseFactory: GPUResourceLeaseFactory = EvidenceOnlyGPUResourceLeaseFactory,
-) : GPUResourceProvider {
+) : GPUFrameResourcePreflightProvider {
     private val physicalPoolBudgetLedger = GPUPhysicalPoolBudgetLedger()
     private val scratchTexturePool = GPUScratchTexturePool(physicalPoolBudgetLedger)
     private val readbackStagingPool = GPUReadbackStagingPool(physicalPoolBudgetLedger)
     private val pendingPhysicalReservations = mutableListOf<GPUProviderPhysicalReservation>()
+    private var framePreparationOrdinal: Long = 0
     internal val pendingPhysicalReservationCount: Int get() = pendingPhysicalReservations.size
     private val nullBufferKeys = linkedSetOf<String>()
     private val uniformSlabLeases = linkedMapOf<GPUUniformSlabLeaseCacheKey, GPUResourceLease>()
@@ -99,6 +209,19 @@ class GPUConcreteResourceProvider(
             subjectHash = "reservation",
         )
         return result
+    }
+
+    @Synchronized
+    override fun beginFramePreparation(
+        frameId: Long,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUFrameResourcePreparationSession {
+        require(frameId >= 0L) { "frameId must be non-negative" }
+        val ordinal = Math.incrementExact(framePreparationOrdinal)
+        framePreparationOrdinal = ordinal
+        return GPUFrameResourcePreparationSession(
+            "frame-preflight:$frameId:device:${deviceGeneration.value}:attempt:$ordinal",
+        )
     }
 
     override fun markScratchSubmitted(
@@ -158,6 +281,133 @@ class GPUConcreteResourceProvider(
         )
         return result
     }
+
+    override fun prepareFrameResource(
+        input: GPUFrameResourcePreparationInput,
+    ): GPUFrameResourcePreparationDecision {
+        val preparation = input.preparation
+        val readbackDescriptor = input.readbackStagingDescriptor
+        if (readbackDescriptor != null) {
+            val bufferDescriptor = preparation.descriptor as? GPUFrameBufferDescriptor
+                ?: return GPUFrameResourcePreparationDecision.Refused(
+                    physicalPoolDiagnostic(
+                        code = "unsupported.readback_staging.buffer_descriptor_missing",
+                        message = "Readback staging requires a buffer descriptor.",
+                        facts = emptyMap(),
+                    ),
+                )
+            if (bufferDescriptor.byteSize < readbackDescriptor.minimumBufferBytes ||
+                bufferDescriptor.byteSize > readbackDescriptor.maxBufferSize
+            ) {
+                return GPUFrameResourcePreparationDecision.Refused(
+                    physicalPoolDiagnostic(
+                        code = "unsupported.readback_staging.backing_size_invalid",
+                        message = "Readback backing size must contain the logical minimum and fit maxBufferSize.",
+                        facts = mapOf(
+                            "backingBufferBytes" to bufferDescriptor.byteSize.toString(),
+                            "minimumBufferBytes" to readbackDescriptor.minimumBufferBytes.toString(),
+                            "maxBufferSize" to readbackDescriptor.maxBufferSize.toString(),
+                        ),
+                    ),
+                )
+            }
+            val reservation = reserveReadbackStaging(
+                GPUReadbackStagingReservationRequest(
+                    reservationId = "${input.ownerScope}:${preparation.resource.value}",
+                    ownerScope = input.ownerScope,
+                    deviceGeneration = input.deviceGeneration,
+                    descriptor = readbackDescriptor,
+                    backingBufferBytes = bufferDescriptor.byteSize,
+                    budgetPlan = input.budgetPlan,
+                ),
+            )
+            return when (reservation) {
+                is GPUReadbackStagingReservationResult.Accepted ->
+                    GPUFrameResourcePreparationDecision.Prepared(
+                        logicalResource = preparation.resource,
+                        concreteResource = GPUPreparedConcreteResourceRef.Buffer(reservation.lease.resourceRef),
+                        role = preparation.role,
+                        deviceGeneration = input.deviceGeneration,
+                        resourceGeneration = input.resourceGeneration,
+                        outputOwnedReadbackLease = reservation.lease,
+                    )
+                is GPUReadbackStagingReservationResult.Refused ->
+                    GPUFrameResourcePreparationDecision.Refused(reservation.diagnostic)
+            }
+        }
+
+        if (preparation.resource is GPUFrameTextureRef &&
+            preparation.role in setOf(
+                GPUFrameResourceRole.DestinationSnapshot,
+                GPUFrameResourceRole.LayerTarget,
+                GPUFrameResourceRole.FilterTarget,
+            ) &&
+            preparation.lifetime != GPUFrameResourceLifetime.ImportedExternal &&
+            preparation.lifetime != GPUFrameResourceLifetime.SurfaceLease
+        ) {
+            val reservation = reserveScratchTexture(
+                request = GPUScratchTextureReservationRequest(
+                    reservationId = "${input.ownerScope}:${preparation.resource.value}",
+                    reservationScope = input.ownerScope,
+                    preparation = preparation,
+                    deviceGeneration = input.deviceGeneration,
+                    firstStep = input.firstStep,
+                    lastStepExclusive = input.lastStepExclusive,
+                ),
+                budget = input.budgetPlan,
+                capabilities = input.capabilities,
+            )
+            return when (reservation) {
+                is GPUScratchTextureReservationResult.Accepted ->
+                    GPUFrameResourcePreparationDecision.Prepared(
+                        logicalResource = preparation.resource,
+                        concreteResource = GPUPreparedConcreteResourceRef.Texture(reservation.lease.resourceRef),
+                        role = preparation.role,
+                        deviceGeneration = input.deviceGeneration,
+                        resourceGeneration = input.resourceGeneration,
+                    )
+                is GPUScratchTextureReservationResult.Refused ->
+                    GPUFrameResourcePreparationDecision.Refused(reservation.diagnostic)
+            }
+        }
+
+        if (preparation.role == GPUFrameResourceRole.ReadbackStaging) {
+            return GPUFrameResourcePreparationDecision.Refused(
+                physicalPoolDiagnostic(
+                    code = "unsupported.readback_staging.layout_missing",
+                    message = "Readback staging requires a validated readback layout descriptor.",
+                    facts = emptyMap(),
+                ),
+            )
+        }
+
+        val concreteResource = when (preparation.resource) {
+            is GPUFrameBufferRef -> GPUPreparedConcreteResourceRef.Buffer(
+                GPUBufferResourceRef("frame-resource:${preparation.resource.value}"),
+            )
+            is GPUFrameTextureRef, is GPUFrameTargetRef -> GPUPreparedConcreteResourceRef.Texture(
+                GPUTextureResourceRef("frame-resource:${preparation.resource.value}"),
+            )
+        }
+        return GPUFrameResourcePreparationDecision.Prepared(
+            logicalResource = preparation.resource,
+            concreteResource = concreteResource,
+            role = preparation.role,
+            deviceGeneration = input.deviceGeneration,
+            resourceGeneration = input.resourceGeneration,
+        )
+    }
+
+    override fun materializeCommandOperands(
+        request: GPUCommandOperandMaterializationRequest,
+        context: GPUTargetPreparationContext,
+    ): GPUResourceMaterializationDecision =
+        commandOperandProvider.materializeCommandOperands(request, context)
+
+    override fun rollbackFrameResourcesBeforeSubmit(
+        ownerScope: String,
+    ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolRollbackSummary> =
+        rollbackPhysicalPoolsBeforeSubmit(ownerScope)
 
     override fun markReadbackSubmitted(
         leases: List<GPUReadbackStagingLease>,

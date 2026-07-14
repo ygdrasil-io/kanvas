@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
@@ -255,7 +256,7 @@ class GPUBackendRuntimeNativeSmokeTest {
             pointerLabels = mapOf("layerHandle" to 42L),
         )
 
-        assertEquals(GPUDeviceGeneration(7L), windowSurfaceDeviceGeneration(windowRuntimeOrdinal = 7L))
+        assertEquals(GPUDeviceGenerationID(7L), windowSurfaceDeviceGeneration(windowRuntimeOrdinal = 7L))
         assertEquals(
             "gpu-window-surface-7-appkitmetallayer-640x480",
             windowSurfaceTargetId(windowRuntimeOrdinal = 7L, binding = binding),
@@ -299,7 +300,7 @@ class GPUBackendRuntimeNativeSmokeTest {
             colorFormat = "rgba8unorm",
         )
 
-        assertEquals(GPUDeviceGeneration(3L), sessionDeviceGeneration(sessionOrdinal = 3L))
+        assertEquals(GPUDeviceGenerationID(3L), sessionDeviceGeneration(sessionOrdinal = 3L))
         assertEquals(
             "gpu-offscreen-3-5-320x180-rgba8unorm",
             offscreenTargetId(

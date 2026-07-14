@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheEventResult
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUTelemetryLedger
 import kotlin.test.Test
@@ -62,8 +63,8 @@ class GPUExecutionCacheContractsTest {
             cache.getOrCreate(
                 cacheRequest(
                     domain = GPUExecutionCacheDomain.RenderPipeline,
-                    deviceGeneration = GPUDeviceGeneration(6),
-                    expectedDeviceGeneration = GPUDeviceGeneration(7),
+                    deviceGeneration = GPUDeviceGenerationID(6),
+                    expectedDeviceGeneration = GPUDeviceGenerationID(7),
                 ),
             ) { "GPURenderPipeline@stale" },
         )
@@ -165,8 +166,8 @@ class GPUExecutionCacheContractsTest {
         domain: GPUExecutionCacheDomain,
         keyHash: String = "module-key",
         subjectHash: String = "module-subject",
-        deviceGeneration: GPUDeviceGeneration = GPUDeviceGeneration(7),
-        expectedDeviceGeneration: GPUDeviceGeneration = GPUDeviceGeneration(7),
+        deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(7),
+        expectedDeviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(7),
     ): GPUExecutionCacheRequest =
         GPUExecutionCacheRequest(
             domain = domain,

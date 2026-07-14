@@ -764,6 +764,7 @@ class GPUPassCommandStream(
     commands: List<GPUPassCommand>,
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
     operandBridge: List<GPUPassCommandOperandBridge> = emptyList(),
+    sourcePassIds: List<String> = listOf(passId),
 ) {
     /** Commands copied in facade call order. */
     val commands: List<GPUPassCommand> = immutableList(commands)
@@ -773,6 +774,9 @@ class GPUPassCommandStream(
 
     /** Provider-materialized packet-to-command operands copied before encoder planning. */
     val operandBridge: List<GPUPassCommandOperandBridge> = immutableList(operandBridge)
+
+    /** Original packet pass IDs retained even when Task 8 encloses them in one render-pass step. */
+    val sourcePassIds: List<String> = immutableList(sourcePassIds)
 
     /** Facade operation labels in encoded order. */
     val commandLabels: List<String>
@@ -794,6 +798,9 @@ class GPUPassCommandStream(
         require(streamId.isNotBlank()) { "GPUPassCommandStream.streamId must not be blank" }
         require(packetStreamId.isNotBlank()) { "GPUPassCommandStream.packetStreamId must not be blank" }
         require(passId.isNotBlank()) { "GPUPassCommandStream.passId must not be blank" }
+        require(this.sourcePassIds.isNotEmpty() && this.sourcePassIds.none { it.isBlank() }) {
+            "GPUPassCommandStream.sourcePassIds must be non-empty and contain no blanks"
+        }
         require(commands.isNotEmpty()) { "GPUPassCommandStream.commands must not be empty" }
         val packetIds = sourcePacketIds.toSet()
         val commandKeys = commands.map { command -> command.sourcePacketId to command.commandLabel }.toSet()
@@ -958,6 +965,7 @@ fun GPUPassCommandStream.dumpLines(): List<String> =
         "passes.command-stream id=$streamId " +
             "packetStream=$packetStreamId " +
             "pass=$passId " +
+            (if (sourcePassIds == listOf(passId)) "" else "sourcePasses=${sourcePassIds.dumpSequence()} ") +
             "commands=${commandLabels.dumpSequence()} " +
             "packets=${sourcePacketIds.map { packetId -> packetId.value }.dumpSequence()} " +
             "diagnostics=${diagnostics.dumpCodes()}",

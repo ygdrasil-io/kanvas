@@ -6,14 +6,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.execution.GPUExecutionDiagnostic
-import org.graphiks.kanvas.gpu.renderer.execution.GPUReadbackRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUReadbackResult
 import org.graphiks.kanvas.gpu.renderer.execution.dumpLines
 import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImagePixelsDescriptor
 import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageShaderPreparedPlanner
 import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageShaderRoutePlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 
 /** Verifies KGPU-M11-004 texture/view/sampler live materialization contracts. */
 class GPUTextureSamplerMaterializationProviderTest {
@@ -57,8 +61,7 @@ class GPUTextureSamplerMaterializationProviderTest {
         val skippedReadback = skippedTextureSamplerReadback()
         val readbackDump = skippedReadback.dumpLines().joinToString("\n")
         assertContains(readbackDump, "execution.readback:skipped")
-        assertContains(readbackDump, "reason=unsupported.execution.readback_unavailable")
-        assertContains(readbackDump, "failureReason=kgpu-m11-004.adapter-readback-not-promoted")
+        assertContains(readbackDump, "reason=kgpu-m11-004.adapter-readback-not-promoted")
         assertFalse(readbackDump.contains("execution.readback:completed"))
     }
 
@@ -247,18 +250,15 @@ private fun targetPreparationContext(): GPUTargetPreparationContext =
     )
 
 private fun skippedTextureSamplerReadback(): GPUReadbackResult.Skipped {
-    val request = GPUReadbackRequest(
-        requestId = "readback-texture-sampler-skipped",
-        sourceLabel = "kgpu-m11-004-texture-sampler-materialization",
-        boundsLabel = "0,0 2x2",
-        format = "rgba8unorm",
-        synchronizationLabel = "after-materialization",
-        expectedArtifactLabel = "texture-sampler-readback.png",
-        failureReason = "kgpu-m11-004.adapter-readback-not-promoted",
+    val request = GPUFrameReadbackRequest(
+        requestId = GPUReadbackRequestID("readback-texture-sampler-skipped"),
+        sourceBounds = GPUPixelBounds(0, 0, 2, 2),
+        pixelFormat = GPUReadbackPixelFormat.Rgba8Unorm,
+        outputColorInterpretation = GPUColorInterpretation("srgb-premul"),
     )
     return GPUReadbackResult.Skipped(
         request = request,
-        reasonCode = "unsupported.execution.readback_unavailable",
+        reasonCode = "kgpu-m11-004.adapter-readback-not-promoted",
         diagnostics = listOf(GPUExecutionDiagnostic.readbackUnavailable(request, stage = "readback")),
     )
 }

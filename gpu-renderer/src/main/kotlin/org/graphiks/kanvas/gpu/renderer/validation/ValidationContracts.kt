@@ -875,15 +875,15 @@ private fun firstRouteExecutedPMEvidenceConsistencyDiagnostics(
             )
 
             val submittedReadbackIds = submission.readbackRequests
-                .map { request -> request.requestId }
+                .map { request -> request.requestId.value }
                 .distinct()
             val submittedReadbackIdSet = submittedReadbackIds.toSet()
             val readbackResultIds = readbacks
                 .map { readback ->
                     when (readback) {
-                        is GPUReadbackResult.Completed -> readback.request.requestId
-                        is GPUReadbackResult.Skipped -> readback.request.requestId
-                        is GPUReadbackResult.Refused -> readback.request.requestId
+                        is GPUReadbackResult.Completed -> readback.request.requestId.value
+                        is GPUReadbackResult.Skipped -> readback.request.requestId.value
+                        is GPUReadbackResult.Refused -> readback.request.requestId.value
                     }
                 }
             val duplicateReadbackResultIds = readbackResultIds
@@ -913,7 +913,7 @@ private fun firstRouteExecutedPMEvidenceConsistencyDiagnostics(
             }
             val unsubmittedCompletedReadbackIds = readbacks
                 .filterIsInstance<GPUReadbackResult.Completed>()
-                .map { readback -> readback.request.requestId }
+                .map { readback -> readback.request.requestId.value }
                 .distinct()
                 .filterNot { requestId -> requestId in submittedReadbackIdSet }
             if (unsubmittedCompletedReadbackIds.isNotEmpty()) {

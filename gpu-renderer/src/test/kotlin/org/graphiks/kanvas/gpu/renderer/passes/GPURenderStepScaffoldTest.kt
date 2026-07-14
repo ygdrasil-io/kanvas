@@ -5,7 +5,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCommandEncoderPlan
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCommandScope
-import org.graphiks.kanvas.gpu.renderer.execution.GPUDeviceGeneration
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.execution.dumpLines
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
@@ -123,7 +123,7 @@ class GPURenderStepScaffoldTest {
         val encoderPlan = GPUCommandEncoderPlan.fromPassCommandStream(
             planId = "encoder-plan-frame-1",
             contextIdentity = "wgpu-context-main",
-            deviceGeneration = GPUDeviceGeneration(4L),
+            deviceGeneration = GPUDeviceGenerationID(4L),
             targetGeneration = 11L,
             scope = GPUCommandScope.Render(
                 label = "main-pass",

@@ -897,9 +897,11 @@ data class GPUReadbackStagingReservationRequest(
         require(reservationId.isNotBlank()) {
             "GPUReadbackStagingReservationRequest.reservationId must not be blank"
         }
+        requireResourceDumpSafe("GPUReadbackStagingReservationRequest.reservationId", reservationId)
         require(ownerScope.isNotBlank()) {
             "GPUReadbackStagingReservationRequest.ownerScope must not be blank"
         }
+        requireResourceDumpSafe("GPUReadbackStagingReservationRequest.ownerScope", ownerScope)
     }
 }
 

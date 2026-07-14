@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
@@ -382,18 +383,20 @@ enum class GPUMaterializedCommandOperandKind {
  * scope, usage, and invalidation policy without exposing raw backend objects or
  * making the reference durable key material.
  */
-data class GPUMaterializedCommandOperandReference(
+class GPUMaterializedCommandOperandReference(
     val label: String,
     val kind: GPUMaterializedCommandOperandKind,
     val descriptorHash: String,
     val deviceGeneration: Long,
     val ownerScope: String,
-    val usageLabels: List<String>,
+    usageLabels: List<String>,
     val invalidationPolicy: String,
-    val evidenceFacts: Map<String, String> = emptyMap(),
+    evidenceFacts: Map<String, String> = emptyMap(),
 ) {
-    internal val dumpUsageLabelsSnapshot: List<String> = usageLabels.toList()
-    internal val dumpEvidenceFactsSnapshot: Map<String, String> = evidenceFacts.toMap()
+    val usageLabels: List<String> = immutableList(usageLabels)
+    val evidenceFacts: Map<String, String> = immutableMap(evidenceFacts)
+    internal val dumpUsageLabelsSnapshot: List<String> = this.usageLabels
+    internal val dumpEvidenceFactsSnapshot: Map<String, String> = this.evidenceFacts
 
     init {
         require(label.isNotBlank()) { "GPUMaterializedCommandOperandReference.label must not be blank" }
@@ -430,6 +433,30 @@ data class GPUMaterializedCommandOperandReference(
             requireDumpSafeValue("GPUMaterializedCommandOperandReference.evidenceFacts value", value)
         }
     }
+
+    override fun equals(other: Any?): Boolean =
+        other is GPUMaterializedCommandOperandReference &&
+            label == other.label && kind == other.kind && descriptorHash == other.descriptorHash &&
+            deviceGeneration == other.deviceGeneration && ownerScope == other.ownerScope &&
+            usageLabels == other.usageLabels && invalidationPolicy == other.invalidationPolicy &&
+            evidenceFacts == other.evidenceFacts
+
+    override fun hashCode(): Int {
+        var result = label.hashCode()
+        result = 31 * result + kind.hashCode()
+        result = 31 * result + descriptorHash.hashCode()
+        result = 31 * result + deviceGeneration.hashCode()
+        result = 31 * result + ownerScope.hashCode()
+        result = 31 * result + usageLabels.hashCode()
+        result = 31 * result + invalidationPolicy.hashCode()
+        result = 31 * result + evidenceFacts.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "GPUMaterializedCommandOperandReference(label=$label, kind=$kind, descriptorHash=$descriptorHash, " +
+            "deviceGeneration=$deviceGeneration, ownerScope=$ownerScope, usageLabels=$usageLabels, " +
+            "invalidationPolicy=$invalidationPolicy, evidenceFacts=$evidenceFacts)"
 }
 
 /** Provider output that binds a materialized operand to a pass command. */

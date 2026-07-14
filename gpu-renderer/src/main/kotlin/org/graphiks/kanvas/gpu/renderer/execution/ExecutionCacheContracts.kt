@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheEventResult
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetryEvent
 
@@ -27,8 +28,8 @@ data class GPUExecutionCacheRequest(
     val domain: GPUExecutionCacheDomain,
     val keyHash: String,
     val subjectHash: String,
-    val deviceGeneration: GPUDeviceGeneration,
-    val expectedDeviceGeneration: GPUDeviceGeneration,
+    val deviceGeneration: GPUDeviceGenerationID,
+    val expectedDeviceGeneration: GPUDeviceGenerationID,
     val ownerScope: String,
     val releaseBlocking: Boolean = false,
     val productRouteActivated: Boolean = false,
@@ -194,7 +195,7 @@ class GPUExecutionObjectCache<T : Any>(
     private data class CacheEntryKey(
         val keyHash: String,
         val subjectHash: String,
-        val deviceGeneration: GPUDeviceGeneration,
+        val deviceGeneration: GPUDeviceGenerationID,
     )
 
     private fun GPUExecutionCacheRequest.entryKey(): CacheEntryKey =
