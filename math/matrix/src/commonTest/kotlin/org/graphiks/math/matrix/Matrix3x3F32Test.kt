@@ -12,6 +12,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.vector.Vector3F32
+import org.graphiks.math.geometry.RectF32
 
 /**
  * Coverage for the Phase 4b [Matrix3x3F32] data class — affine 2 × 3 matrix

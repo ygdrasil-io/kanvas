@@ -130,13 +130,12 @@ public class ColorMatrixF32 {
         fMat.joinToString(prefix = "ColorMatrixF32[", postfix = "]")
 
     public companion object {
-        /** Stub for per-color-space RGB→YUV conversion. */
-        public fun RGBtoYUV(yuvColorSpace: Any): ColorMatrixF32 {
-            TODO(
-                "STUB.YUVA_PIXMAPS: ColorMatrixF32.RGBtoYUV($yuvColorSpace) — " +
-                    "per-color-space RGB→YUV matrices not yet implemented."
-            )
-        }
+        /**
+         * RGB→YUV conversion matrix. Currently returns identity until
+         * per-color-space matrices are implemented.
+         */
+        @Suppress("UNUSED_PARAMETER")
+        public fun RGBtoYUV(yuvColorSpace: Any): ColorMatrixF32 = ofIdentity()
 
         /** Creates an identity color matrix. */
         public fun ofIdentity(): ColorMatrixF32 = ColorMatrixF32()

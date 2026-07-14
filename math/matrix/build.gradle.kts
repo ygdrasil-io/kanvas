@@ -10,6 +10,7 @@ kotlin {
             dependencies {
                 api(project(":math:scalar"))
                 api(project(":math:vector"))
+                api(project(":math:geometry"))
             }
         }
         commonTest {

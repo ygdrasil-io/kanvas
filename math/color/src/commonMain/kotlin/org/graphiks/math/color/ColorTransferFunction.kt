@@ -45,5 +45,9 @@ public data class ColorTransferFunction internal constructor(
             g = 1.2f, a = 0.7746413f, b = 0.0042930f,
             c = 0.5555556f, d = 0.0f, e = 0.0f, f = 0.0f
         )
+
+        /** Creates a custom transfer function from the 7 parameters. */
+        public fun of(g: Float, a: Float, b: Float, c: Float, d: Float, e: Float, f: Float): ColorTransferFunction =
+            ColorTransferFunction(g, a, b, c, d, e, f)
     }
 }

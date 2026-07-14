@@ -65,4 +65,19 @@ class ColorTransferFunctionTest {
         assertEquals(a, b)
         assertEquals(a.hashCode(), b.hashCode())
     }
+
+    @Test
+    fun `of creates custom transfer function`() {
+        val tf = ColorTransferFunction.of(
+            g = 2.2f, a = 1f, b = 0f,
+            c = 0.1f, d = 0.05f, e = 0f, f = 0f,
+        )
+        assertEquals(2.2f, tf.g)
+        assertEquals(1f, tf.a)
+        assertEquals(0f, tf.b)
+        assertEquals(0.1f, tf.c)
+        assertEquals(0.05f, tf.d)
+        assertEquals(0f, tf.e)
+        assertEquals(0f, tf.f)
+    }
 }

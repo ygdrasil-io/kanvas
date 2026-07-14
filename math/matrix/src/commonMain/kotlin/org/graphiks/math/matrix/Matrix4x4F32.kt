@@ -8,6 +8,7 @@ import org.graphiks.math.scalar.sin
 import org.graphiks.math.scalar.tan
 import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.vector.Vector3F32
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.vector.Vector4F32
 
 /**

@@ -11,29 +11,8 @@ import org.graphiks.math.scalar.sin
 import org.graphiks.math.scalar.tan
 import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.vector.Vector3F32
+import org.graphiks.math.geometry.RectF32
 import org.graphiks.math.vector.Vector4F32
-
-/**
- * Simple axis-aligned rectangle for the narrow set of
- * operations needed by [Matrix3x3F32] and [Matrix4x4F32].
- */
-public data class RectF32(
-    val left: Float,
-    val top: Float,
-    val right: Float,
-    val bottom: Float,
-) {
-    val isEmpty: Boolean get() = left >= right || top >= bottom
-    fun width(): Float = right - left
-    fun height(): Float = bottom - top
-    fun contentEqualsLTRB(other: RectF32): Boolean =
-        left == other.left && top == other.top && right == other.right && bottom == other.bottom
-
-    companion object {
-        fun ofLTRB(l: Float, t: Float, r: Float, b: Float): RectF32 = RectF32(l, t, r, b)
-        val Empty: RectF32 = RectF32(0f, 0f, 0f, 0f)
-    }
-}
 
 /**
  * 2D transformation matrix — full 3 × 3 homogeneous representation.

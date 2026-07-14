@@ -11,6 +11,7 @@ import kotlin.math.PI
 import org.graphiks.math.vector.Vector2F32
 import org.graphiks.math.vector.Vector3F32
 import org.graphiks.math.vector.Vector4F32
+import org.graphiks.math.geometry.RectF32
 
 class Matrix4x4F32Test {
 
