@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 class ColorF32Test {
     @Test
     fun `hsvToColor treats out-of-range hue as zero instead of wrapping`() {
-        val red = colorARGB(0x80, 0xFF, 0x00, 0x00)
+        val red = ColorARGB.of(0x80, 0xFF, 0x00, 0x00)
         assertEquals(red, hsvToColor(0x80, -60f, 1f, 1f))
         assertEquals(red, hsvToColor(0x80, 360f, 1f, 1f))
         assertEquals(red, hsvToColor(0x80, 420f, 1f, 1f))
@@ -103,7 +103,7 @@ class ColorF32Test {
     @Test
     fun `toColorARGB conversion`() {
         val c = ColorF32(1f, 0f, 0f, 1f)
-        assertEquals(ColorARGBCompanion.Red, c.toColorARGB())
+        assertEquals(ColorARGB.Red, c.toColorARGB())
     }
 
     @Test
@@ -133,7 +133,7 @@ class ColorF32Test {
 
     @Test
     fun `fromColorARGB`() {
-        val c = ColorF32.fromColorARGB(ColorARGBCompanion.Red)
+        val c = ColorF32.fromColorARGB(ColorARGB.Red)
         assertEquals(1f, c.red, 1e-6f)
         assertEquals(0f, c.green, 1e-6f)
         assertEquals(0f, c.blue, 1e-6f)

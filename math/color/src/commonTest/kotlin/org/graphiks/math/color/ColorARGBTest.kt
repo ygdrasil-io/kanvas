@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 class ColorARGBTest {
     @Test
     fun `pack and unpack channels`() {
-        val c = colorARGB(0x80, 0x12, 0x34, 0x56)
+        val c = ColorARGB.of(0x80, 0x12, 0x34, 0x56)
         assertEquals(0x80, c.alpha)
         assertEquals(0x12, c.red)
         assertEquals(0x34, c.green)
@@ -15,7 +15,7 @@ class ColorARGBTest {
 
     @Test
     fun `colorRGB sets alpha to 0xFF`() {
-        val c = colorRGB(0x12, 0x34, 0x56)
+        val c = ColorARGB.of(0x12, 0x34, 0x56)
         assertEquals(0xFF, c.alpha)
         assertEquals(0x12, c.red)
         assertEquals(0x34, c.green)
@@ -24,7 +24,7 @@ class ColorARGBTest {
 
     @Test
     fun `withAlpha replaces alpha`() {
-        val c = colorARGB(0xFF, 0x10, 0x20, 0x30)
+        val c = ColorARGB.of(0xFF, 0x10, 0x20, 0x30)
         val d = c.withAlpha(0x80)
         assertEquals(0x80, d.alpha)
         assertEquals(0x10, d.red)
@@ -34,33 +34,33 @@ class ColorARGBTest {
 
     @Test
     fun `companion constants`() {
-        assertEquals(0x00000000, ColorARGBCompanion.Transparent)
-        assertEquals(0xFF000000.toInt(), ColorARGBCompanion.Black)
-        assertEquals(0xFFFFFFFF.toInt(), ColorARGBCompanion.White)
-        assertEquals(0xFFFF0000.toInt(), ColorARGBCompanion.Red)
-        assertEquals(0xFF00FF00.toInt(), ColorARGBCompanion.Green)
-        assertEquals(0xFF0000FF.toInt(), ColorARGBCompanion.Blue)
+        assertEquals(0x00000000, ColorARGB.Transparent.value)
+        assertEquals(0xFF000000.toInt(), ColorARGB.Black.value)
+        assertEquals(0xFFFFFFFF.toInt(), ColorARGB.White.value)
+        assertEquals(0xFFFF0000.toInt(), ColorARGB.Red.value)
+        assertEquals(0xFF00FF00.toInt(), ColorARGB.Green.value)
+        assertEquals(0xFF0000FF.toInt(), ColorARGB.Blue.value)
     }
 
     @Test
     fun `premultiply opaque is identity`() {
-        val c = colorARGB(0xFF, 0x80, 0x40, 0x20)
-        val pm = premultiplyColorARGB(c)
+        val c = ColorARGB.of(0xFF, 0x80, 0x40, 0x20)
+        val pm = c.premultiplied()
         assertEquals(c, pm)
     }
 
     @Test
     fun `premultiply transparent is zero`() {
-        val c = colorARGB(0x00, 0x80, 0x40, 0x20)
-        val pm = premultiplyColorARGB(c)
-        assertEquals(0, pm)
+        val c = ColorARGB.of(0x00, 0x80, 0x40, 0x20)
+        val pm = c.premultiplied()
+        assertEquals(ColorARGB.Transparent, pm)
     }
 
     @Test
     fun `premultiply and unpremultiply roundtrip`() {
-        val c = colorARGB(0x80, 0x80, 0x40, 0x20)
-        val pm = premultiplyColorARGB(c)
-        val round = unpremultiplyColorARGB(pm)
+        val c = ColorARGB.of(0x80, 0x80, 0x40, 0x20)
+        val pm = c.premultiplied()
+        val round = pm.unpremultiplied()
         assertEquals(c.alpha, round.alpha)
     }
 
@@ -74,13 +74,13 @@ class ColorARGBTest {
     @Test
     fun `hsv to color produces expected values`() {
         val red = hsvToColor(0f, 1f, 1f)
-        assertEquals(ColorARGBCompanion.Red, red)
+        assertEquals(ColorARGB.Red, red)
 
         val green = hsvToColor(120f, 1f, 1f)
-        assertEquals(ColorARGBCompanion.Green, green)
+        assertEquals(ColorARGB.Green, green)
 
         val blue = hsvToColor(240f, 1f, 1f)
-        assertEquals(ColorARGBCompanion.Blue, blue)
+        assertEquals(ColorARGB.Blue, blue)
     }
 
     @Test
@@ -92,7 +92,7 @@ class ColorARGBTest {
 
     @Test
     fun `color to hsv roundtrip`() {
-        val c = colorARGB(0xFF, 0x80, 0x40, 0x20)
+        val c = ColorARGB.of(0xFF, 0x80, 0x40, 0x20)
         val hsv = FloatArray(3)
         colorToHSV(c, hsv)
         val back = hsvToColor(hsv[0], hsv[1], hsv[2])
@@ -109,7 +109,7 @@ class ColorARGBTest {
 
     @Test
     fun `hsv out of range hue treats as zero`() {
-        val red = colorARGB(0xFF, 0xFF, 0x00, 0x00)
+        val red = ColorARGB.of(0xFF, 0xFF, 0x00, 0x00)
         assertEquals(red, hsvToColor(-60f, 1f, 1f))
         assertEquals(red, hsvToColor(360f, 1f, 1f))
         assertEquals(red, hsvToColor(420f, 1f, 1f))

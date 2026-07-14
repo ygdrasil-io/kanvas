@@ -34,7 +34,7 @@ public data class ColorF32 internal constructor(
         val r = (clamp(red, 0f, 1f) * 255f + 0.5f).toInt()
         val g = (clamp(green, 0f, 1f) * 255f + 0.5f).toInt()
         val b = (clamp(blue, 0f, 1f) * 255f + 0.5f).toInt()
-        return colorARGB(a, r, g, b)
+        return ColorARGB.of(a, r, g, b)
     }
 
     /** Returns the premultiplied form of this color. */

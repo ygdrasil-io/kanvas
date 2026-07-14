@@ -1,128 +1,75 @@
 package org.graphiks.math.color
 
-/**
- * Packed 32-bit ARGB color (`alpha shl 24 | red shl 16 | green shl 8 | blue`).
- *
- * Channels are unpremultiplied. Use [ColorARGBCompanion] for named color constants.
- */
-public typealias ColorARGB = Int
+@JvmInline
+public value class ColorARGB internal constructor(public val value: Int) {
 
-/**
- * Packs four byte channels (alpha, red, green, blue) into a [ColorARGB].
- * Channels are masked to 8 bits.
- */
-public fun colorARGB(a: Int, r: Int, g: Int, b: Int): ColorARGB =
-    ((a and 0xFF) shl 24) or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF)
+    public val alpha: Int get() = (value shr 24) and 0xFF
+    public val red: Int get() = (value shr 16) and 0xFF
+    public val green: Int get() = (value shr 8) and 0xFF
+    public val blue: Int get() = value and 0xFF
 
-/**
- * Packs RGB channels with full opacity (alpha = 0xFF)
- */
-public fun colorRGB(r: Int, g: Int, b: Int): ColorARGB =
-    colorARGB(0xFF, r, g, b)
+    public fun withAlpha(a: Int): ColorARGB =
+        ColorARGB(((a and 0xFF) shl 24) or (value and 0x00FFFFFF.toInt()))
 
-/** Alpha component (0-255). */
-public val ColorARGB.alpha: Int get() = (this shr 24) and 0xFF
+    public fun premultiplied(): ColorARGB {
+        val a = alpha
+        if (a == 0xFF) return this
+        if (a == 0) return ColorARGB.Transparent
+        return of(a, (red * a + 127) / 255, (green * a + 127) / 255, (blue * a + 127) / 255)
+    }
 
-/** Red component (0-255). */
-public val ColorARGB.red: Int get() = (this shr 16) and 0xFF
+    public fun unpremultiplied(): ColorARGB {
+        val a = alpha
+        if (a == 0 || a == 0xFF) return this
+        val r = (red * 255 + a / 2) / a
+        val g = (green * 255 + a / 2) / a
+        val b = (blue * 255 + a / 2) / a
+        return of(a, r.coerceIn(0, 255), g.coerceIn(0, 255), b.coerceIn(0, 255))
+    }
 
-/** Green component (0-255). */
-public val ColorARGB.green: Int get() = (this shr 8) and 0xFF
+    public companion object {
+        public val Transparent: ColorARGB = ColorARGB(0x00000000)
+        public val Black: ColorARGB = ColorARGB(0xFF000000.toInt())
+        public val DarkGray: ColorARGB = ColorARGB(0xFF444444.toInt())
+        public val Gray: ColorARGB = ColorARGB(0xFF888888.toInt())
+        public val LightGray: ColorARGB = ColorARGB(0xFFCCCCCC.toInt())
+        public val White: ColorARGB = ColorARGB(0xFFFFFFFF.toInt())
+        public val Red: ColorARGB = ColorARGB(0xFFFF0000.toInt())
+        public val Green: ColorARGB = ColorARGB(0xFF00FF00.toInt())
+        public val Blue: ColorARGB = ColorARGB(0xFF0000FF.toInt())
+        public val Yellow: ColorARGB = ColorARGB(0xFFFFFF00.toInt())
+        public val Cyan: ColorARGB = ColorARGB(0xFF00FFFF.toInt())
+        public val Magenta: ColorARGB = ColorARGB(0xFFFF00FF.toInt())
 
-/** Blue component (0-255). */
-public val ColorARGB.blue: Int get() = this and 0xFF
+        public fun of(alpha: Int, red: Int, green: Int, blue: Int): ColorARGB =
+            ColorARGB(((alpha and 0xFF) shl 24) or ((red and 0xFF) shl 16) or ((green and 0xFF) shl 8) or (blue and 0xFF))
 
-/** Returns a copy of this color with the alpha channel replaced. */
-public fun ColorARGB.withAlpha(a: Int): ColorARGB =
-    ((a and 0xFF) shl 24) or (this and 0x00FFFFFF.toInt())
-
-/**
- * Pseudo-companion for [ColorARGB], accessed via `ColorARGB.Companion`.
- * Provides named color constants.
- */
-public val ColorARGB.Companion: ColorARGBCompanion get() = ColorARGBCompanion
-
-/** Named [ColorARGB] constants. */
-public object ColorARGBCompanion {
-    /** Fully transparent (0x00000000). */
-    public val Transparent: ColorARGB = 0x00000000
-    /** Black (0xFF000000). */
-    public val Black: ColorARGB = 0xFF000000.toInt()
-    /** Dark gray (0xFF444444). */
-    public val DarkGray: ColorARGB = 0xFF444444.toInt()
-    /** Gray (0xFF888888). */
-    public val Gray: ColorARGB = 0xFF888888.toInt()
-    /** Light gray (0xFFCCCCCC). */
-    public val LightGray: ColorARGB = 0xFFCCCCCC.toInt()
-    /** White (0xFFFFFFFF). */
-    public val White: ColorARGB = 0xFFFFFFFF.toInt()
-    /** Red (0xFFFF0000). */
-    public val Red: ColorARGB = 0xFFFF0000.toInt()
-    /** Green (0xFF00FF00). */
-    public val Green: ColorARGB = 0xFF00FF00.toInt()
-    /** Blue (0xFF0000FF). */
-    public val Blue: ColorARGB = 0xFF0000FF.toInt()
-    /** Yellow (0xFFFFFF00). */
-    public val Yellow: ColorARGB = 0xFFFFFF00.toInt()
-    /** Cyan (0xFF00FFFF). */
-    public val Cyan: ColorARGB = 0xFF00FFFF.toInt()
-    /** Magenta (0xFFFF00FF). */
-    public val Magenta: ColorARGB = 0xFFFF00FF.toInt()
+        public fun of(red: Int, green: Int, blue: Int): ColorARGB =
+            of(0xFF, red, green, blue)
+    }
 }
 
-/**
- * Premultiplies the given color channels.
- */
-public fun premultiplyARGB(a: Int, r: Int, g: Int, b: Int): Int {
-    if (a == 0xFF) return colorARGB(a, r, g, b)
-    if (a == 0) return 0
-    return colorARGB(a, (r * a + 127) / 255, (g * a + 127) / 255, (b * a + 127) / 255)
+public fun premultiplyARGB(a: Int, r: Int, g: Int, b: Int): ColorARGB {
+    if (a == 0xFF) return ColorARGB.of(a, r, g, b)
+    if (a == 0) return ColorARGB.Transparent
+    return ColorARGB.of(a, (r * a + 127) / 255, (g * a + 127) / 255, (b * a + 127) / 255)
 }
 
-/** Premultiplies [color] and returns the result. */
-public fun premultiplyColorARGB(color: ColorARGB): ColorARGB =
-    premultiplyARGB(color.alpha, color.red, color.green, color.blue)
+public fun premultiplyColorARGB(color: ColorARGB): ColorARGB = color.premultiplied()
 
-/** Returns the premultiplied form of this color. */
-public fun ColorARGB.premultiplied(): ColorARGB = premultiplyColorARGB(this)
+public fun unpremultiplyColorARGB(color: ColorARGB): ColorARGB = color.unpremultiplied()
 
-/**
- * Unpremultiplies [color]. Returns the original if alpha is 0 or 255.
- */
-public fun unpremultiplyColorARGB(color: ColorARGB): ColorARGB {
-    val a = color.alpha
-    if (a == 0 || a == 0xFF) return color
-    val r = (color.red * 255 + a / 2) / a
-    val g = (color.green * 255 + a / 2) / a
-    val b = (color.blue * 255 + a / 2) / a
-    return colorARGB(a, r.coerceIn(0, 255), g.coerceIn(0, 255), b.coerceIn(0, 255))
-}
-
-/** Returns the unpremultiplied form of this color. */
-public fun ColorARGB.unpremultiplied(): ColorARGB = unpremultiplyColorARGB(this)
-
-/**
- * Multiplies an alpha value by [scale] with rounding. Mirrors
- * Computes the alpha multiplication.
- */
 public fun multiplyAlpha255(a: Int, scale: Int): Int = (a * scale + 127) / 255
 
-/**
- * Multiplies an alpha value by [scale] with rounding for 16-bit alpha.
- */
 public fun multiplyAlpha32(a: Int, scale: Int): Int = (a * scale + 0x7FFF) / 0xFFFF
 
-/**
- * Converts HSV (hue, saturation, value) to a [ColorARGB] with full opacity.
- * Hue is [0, 360), saturation and value are [0, 1].
- */
 public fun hsvToColor(h: Float, s: Float, v: Float): ColorARGB {
     val sClamped = s.coerceIn(0f, 1f)
     val vClamped = v.coerceIn(0f, 1f)
 
     if (sClamped <= 0f) {
         val gray = (vClamped * 255f + 0.5f).toInt().coerceIn(0, 255)
-        return colorARGB(0xFF, gray, gray, gray)
+        return ColorARGB.of(0xFF, gray, gray, gray)
     }
 
     val hue = if (h < 0f || h >= 360f) 0f else h / 60f
@@ -144,19 +91,16 @@ public fun hsvToColor(h: Float, s: Float, v: Float): ColorARGB {
     val rb = (r * 255f + 0.5f).toInt().coerceIn(0, 255)
     val gb = (g * 255f + 0.5f).toInt().coerceIn(0, 255)
     val bb = (b * 255f + 0.5f).toInt().coerceIn(0, 255)
-    return colorARGB(0xFF, rb, gb, bb)
+    return ColorARGB.of(0xFF, rb, gb, bb)
 }
 
-/**
- * Converts HSV to a [ColorARGB] with the given alpha channel.
- */
 public fun hsvToColor(alpha: Int, h: Float, s: Float, v: Float): ColorARGB {
     val sClamped = s.coerceIn(0f, 1f)
     val vClamped = v.coerceIn(0f, 1f)
 
     if (sClamped <= 0f) {
         val gray = (vClamped * 255f + 0.5f).toInt().coerceIn(0, 255)
-        return colorARGB(alpha and 0xFF, gray, gray, gray)
+        return ColorARGB.of(alpha and 0xFF, gray, gray, gray)
     }
 
     val hue = if (h < 0f || h >= 360f) 0f else h / 60f
@@ -178,13 +122,9 @@ public fun hsvToColor(alpha: Int, h: Float, s: Float, v: Float): ColorARGB {
     val rb = (r * 255f + 0.5f).toInt().coerceIn(0, 255)
     val gb = (g * 255f + 0.5f).toInt().coerceIn(0, 255)
     val bb = (b * 255f + 0.5f).toInt().coerceIn(0, 255)
-    return colorARGB(alpha and 0xFF, rb, gb, bb)
+    return ColorARGB.of(alpha and 0xFF, rb, gb, bb)
 }
 
-/**
- * Converts a [ColorARGB] to HSV. Writes into [hsv]: `hsv[0]` = hue,
- * `hsv[1]` = saturation, `hsv[2]` = value
- */
 public fun colorToHSV(color: ColorARGB, hsv: FloatArray = FloatArray(3)) {
     require(hsv.size >= 3) { "hsv must have at least 3 elements" }
     val r = color.red.toFloat()
@@ -210,12 +150,9 @@ public fun colorToHSV(color: ColorARGB, hsv: FloatArray = FloatArray(3)) {
     hsv[2] = v
 }
 
-/**
- * Converts a [ColorARGB] to RGB565 with replicated low bits, keeping alpha.
- */
 public fun colorToRGB565(c: ColorARGB): ColorARGB {
     val r = c.red and 0xF8
     val g = c.green and 0xFC
     val b = c.blue and 0xF8
-    return colorARGB(0xFF, r or (r ushr 5), g or (g ushr 6), b or (b ushr 5))
+    return ColorARGB.of(0xFF, r or (r ushr 5), g or (g ushr 6), b or (b ushr 5))
 }
