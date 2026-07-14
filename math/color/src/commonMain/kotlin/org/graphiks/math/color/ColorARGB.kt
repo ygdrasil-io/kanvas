@@ -13,20 +13,20 @@ package org.graphiks.math.color
  * [unpremultiplied] to convert.
  */
 @JvmInline
-public value class ColorARGB internal constructor(public val value: Int) {
+public value class ColorARGB internal constructor(public val value: UInt) {
 
     /** Alpha component in `[0, 255]`. */
-    public val alpha: Int get() = (value shr 24) and 0xFF
+    public val alpha: Int get() = (value shr 24).toInt()
     /** Red component in `[0, 255]`. */
-    public val red: Int get() = (value shr 16) and 0xFF
+    public val red: Int get() = (value shr 16 and 0xFFu).toInt()
     /** Green component in `[0, 255]`. */
-    public val green: Int get() = (value shr 8) and 0xFF
+    public val green: Int get() = (value shr 8 and 0xFFu).toInt()
     /** Blue component in `[0, 255]`. */
-    public val blue: Int get() = value and 0xFF
+    public val blue: Int get() = (value and 0xFFu).toInt()
 
     /** Returns a new color with the given alpha, preserving RGB. */
     public fun withAlpha(a: Int): ColorARGB =
-        ColorARGB(((a and 0xFF) shl 24) or (value and 0x00FFFFFF.toInt()))
+        ColorARGB(((a and 0xFF) shl 24).toUInt() or (value and 0x00FFFFFFu))
 
     /** Returns this color with RGB premultiplied by alpha. */
     public fun premultiplied(): ColorARGB {
@@ -48,33 +48,35 @@ public value class ColorARGB internal constructor(public val value: Int) {
 
     public companion object {
         /** Fully transparent black. */
-        public val Transparent: ColorARGB = ColorARGB(0x00000000)
+        public val Transparent: ColorARGB = ColorARGB(0x00000000u)
         /** Opaque black. */
-        public val Black: ColorARGB = ColorARGB(0xFF000000.toInt())
+        public val Black: ColorARGB = ColorARGB(0xFF000000u)
         /** Dark gray. */
-        public val DarkGray: ColorARGB = ColorARGB(0xFF444444.toInt())
+        public val DarkGray: ColorARGB = ColorARGB(0xFF444444u)
         /** Medium gray. */
-        public val Gray: ColorARGB = ColorARGB(0xFF888888.toInt())
+        public val Gray: ColorARGB = ColorARGB(0xFF888888u)
         /** Light gray. */
-        public val LightGray: ColorARGB = ColorARGB(0xFFCCCCCC.toInt())
+        public val LightGray: ColorARGB = ColorARGB(0xFFCCCCCCu)
         /** Opaque white. */
-        public val White: ColorARGB = ColorARGB(0xFFFFFFFF.toInt())
+        public val White: ColorARGB = ColorARGB(0xFFFFFFFFu)
         /** Opaque red. */
-        public val Red: ColorARGB = ColorARGB(0xFFFF0000.toInt())
+        public val Red: ColorARGB = ColorARGB(0xFFFF0000u)
         /** Opaque green. */
-        public val Green: ColorARGB = ColorARGB(0xFF00FF00.toInt())
+        public val Green: ColorARGB = ColorARGB(0xFF00FF00u)
         /** Opaque blue. */
-        public val Blue: ColorARGB = ColorARGB(0xFF0000FF.toInt())
+        public val Blue: ColorARGB = ColorARGB(0xFF0000FFu)
         /** Opaque yellow. */
-        public val Yellow: ColorARGB = ColorARGB(0xFFFFFF00.toInt())
+        public val Yellow: ColorARGB = ColorARGB(0xFFFFFF00u)
         /** Opaque cyan. */
-        public val Cyan: ColorARGB = ColorARGB(0xFF00FFFF.toInt())
+        public val Cyan: ColorARGB = ColorARGB(0xFF00FFFFu)
         /** Opaque magenta. */
-        public val Magenta: ColorARGB = ColorARGB(0xFFFF00FF.toInt())
+        public val Magenta: ColorARGB = ColorARGB(0xFFFF00FFu)
 
         /** Creates a color from ARGB components (each in `[0, 255]`). */
         public fun of(alpha: Int, red: Int, green: Int, blue: Int): ColorARGB =
-            ColorARGB(((alpha and 0xFF) shl 24) or ((red and 0xFF) shl 16) or ((green and 0xFF) shl 8) or (blue and 0xFF))
+            ColorARGB(
+                (((alpha and 0xFF) shl 24) or ((red and 0xFF) shl 16) or ((green and 0xFF) shl 8) or (blue and 0xFF)).toUInt()
+            )
 
         /** Creates an opaque color from RGB components (each in `[0, 255]`). */
         public fun of(red: Int, green: Int, blue: Int): ColorARGB =

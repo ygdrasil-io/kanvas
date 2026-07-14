@@ -34,12 +34,12 @@ class ColorARGBTest {
 
     @Test
     fun `companion constants`() {
-        assertEquals(0x00000000, ColorARGB.Transparent.value)
-        assertEquals(0xFF000000.toInt(), ColorARGB.Black.value)
-        assertEquals(0xFFFFFFFF.toInt(), ColorARGB.White.value)
-        assertEquals(0xFFFF0000.toInt(), ColorARGB.Red.value)
-        assertEquals(0xFF00FF00.toInt(), ColorARGB.Green.value)
-        assertEquals(0xFF0000FF.toInt(), ColorARGB.Blue.value)
+        assertEquals(0x00000000u, ColorARGB.Transparent.value)
+        assertEquals(0xFF000000u, ColorARGB.Black.value)
+        assertEquals(0xFFFFFFFFu, ColorARGB.White.value)
+        assertEquals(0xFFFF0000u, ColorARGB.Red.value)
+        assertEquals(0xFF00FF00u, ColorARGB.Green.value)
+        assertEquals(0xFF0000FFu, ColorARGB.Blue.value)
     }
 
     @Test
