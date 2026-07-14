@@ -410,19 +410,19 @@ public fun more_roughly_equal(x: Double, y: Double): Boolean = abs(x - y) < MORE
 // ─── T value & sign helpers ───────────────────────────────────────────
 
 /** Linear interpolation */
-public fun SkDInterp(A: Double, B: Double, t: Double): Double = A + (B - A) * t
+public fun dInterp(A: Double, B: Double, t: Double): Double = A + (B - A) * t
 
 /** Returns -1 / 0 / 1 for negative / zero / positive */
-public fun SkDSign(x: Double): Int = (if (x > 0) 1 else 0) - (if (x < 0) 1 else 0)
+public fun dSign(x: Double): Int = (if (x > 0) 1 else 0) - (if (x < 0) 1 else 0)
 
 /** Returns 0 / 1 / 2 for negative / zero / positive */
 public fun SKDSide(x: Double): Int = (if (x > 0) 1 else 0) + (if (x >= 0) 1 else 0)
 
 /** Returns 1 / 2 / 4 for negative / zero / positive */
-public fun SkDSideBit(x: Double): Int = 1 shl SKDSide(x)
+public fun dSideBit(x: Double): Int = 1 shl SKDSide(x)
 
 /** Pin a t-value into [0, 1] using `precisely_*` thresholds */
-public fun SkPinT(t: Double): Double = when {
+public fun pinT(t: Double): Double = when {
     precisely_less_than_zero(t) -> 0.0
     precisely_greater_than_one(t) -> 1.0
     else -> t

@@ -42,10 +42,10 @@ class PathOpsEpsilonTest {
     }
 
     @Test
-    fun `SkPinT clamps to 0_1 range`() {
-        kotlin.test.assertEquals(0.0, SkPinT(-0.001))
-        kotlin.test.assertEquals(1.0, SkPinT(1.001))
-        kotlin.test.assertEquals(0.5, SkPinT(0.5))
+    fun `pinT clamps to 0_1 range`() {
+        kotlin.test.assertEquals(0.0, pinT(-0.001))
+        kotlin.test.assertEquals(1.0, pinT(1.001))
+        kotlin.test.assertEquals(0.5, pinT(0.5))
     }
 
     @Test
@@ -62,17 +62,17 @@ class PathOpsEpsilonTest {
     }
 
     @Test
-    fun `SkDInterp linear`() {
-        kotlin.test.assertEquals(0.0, SkDInterp(0.0, 10.0, 0.0))
-        kotlin.test.assertEquals(10.0, SkDInterp(0.0, 10.0, 1.0))
-        kotlin.test.assertEquals(5.0, SkDInterp(0.0, 10.0, 0.5))
+    fun `dInterp linear`() {
+        kotlin.test.assertEquals(0.0, dInterp(0.0, 10.0, 0.0))
+        kotlin.test.assertEquals(10.0, dInterp(0.0, 10.0, 1.0))
+        kotlin.test.assertEquals(5.0, dInterp(0.0, 10.0, 0.5))
     }
 
     @Test
-    fun `SkDSign returns -1 0 1`() {
-        kotlin.test.assertEquals(1, SkDSign(5.0))
-        kotlin.test.assertEquals(0, SkDSign(0.0))
-        kotlin.test.assertEquals(-1, SkDSign(-3.0))
+    fun `dSign returns -1 0 1`() {
+        kotlin.test.assertEquals(1, dSign(5.0))
+        kotlin.test.assertEquals(0, dSign(0.0))
+        kotlin.test.assertEquals(-1, dSign(-3.0))
     }
 
     @Test

@@ -62,7 +62,6 @@ public class Matrix4x4F32 {
     /**
      * Row-major scalar constructor. Parameters are listed in **row-major**
      * order (`m0 m4 m8 m12` is the first row), but stored column-major.
-         *).
      */
     public constructor(
         m0: Float, m4: Float, m8: Float, m12: Float,

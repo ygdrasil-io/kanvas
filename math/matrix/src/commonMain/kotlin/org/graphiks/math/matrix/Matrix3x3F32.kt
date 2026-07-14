@@ -233,7 +233,6 @@ public data class Matrix3x3F32(
      * Fill `buffer[0..8]` with the matrix in row-major 9-tuple
      * order: `[sx, kx, tx, ky, sy, ty, persp0, persp1, persp2]`.
      *
-     * Computes the type mask).
      */
     public fun get9(buffer: FloatArray) {
         require(buffer.size >= 9) { "get9 buffer must have ≥ 9 elements (got ${buffer.size})" }
@@ -250,7 +249,7 @@ public data class Matrix3x3F32(
      *
      * Returns `false` (and leaves `buffer` untouched) when this matrix
      * has perspective — the affine 6-tuple cannot represent it.
-         */
+     */
     public fun asAffine(buffer: FloatArray): Boolean {
         require(buffer.size >= 6) { "asAffine buffer must have ≥ 6 elements (got ${buffer.size})" }
         if (hasPerspective()) return false

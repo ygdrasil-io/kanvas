@@ -67,7 +67,7 @@ public data class RectI32(
 
     /** Sets edges from origin `(x, y)` and size `(w, h)` with saturating add. */
     public fun setXYWH(x: Int, y: Int, w: Int, h: Int) {
-        setLTRB(x, y, Vector2I32.sk32SatAdd(x, w), Vector2I32.sk32SatAdd(y, h))
+        setLTRB(x, y, Vector2I32.saturatingAdd32(x, w), Vector2I32.saturatingAdd32(y, h))
     }
 
     /** Sets the rect to `(0, 0, w, h)`. */
@@ -75,10 +75,10 @@ public data class RectI32(
 
     /** Translates by `(dx, dy)` with saturating arithmetic. */
     public fun offset(dx: Int, dy: Int) {
-        left = Vector2I32.sk32SatAdd(left, dx)
-        top = Vector2I32.sk32SatAdd(top, dy)
-        right = Vector2I32.sk32SatAdd(right, dx)
-        bottom = Vector2I32.sk32SatAdd(bottom, dy)
+        left = Vector2I32.saturatingAdd32(left, dx)
+        top = Vector2I32.saturatingAdd32(top, dy)
+        right = Vector2I32.saturatingAdd32(right, dx)
+        bottom = Vector2I32.saturatingAdd32(bottom, dy)
     }
 
     /** Translates by [delta]. */
@@ -86,18 +86,18 @@ public data class RectI32(
 
     /** Moves the rect to `(newX, newY)` preserving size with saturating arithmetic. */
     public fun offsetTo(newX: Int, newY: Int) {
-        right = Vector2I32.sk64PinToS32(right.toLong() + newX.toLong() - left.toLong())
-        bottom = Vector2I32.sk64PinToS32(bottom.toLong() + newY.toLong() - top.toLong())
+        right = Vector2I32.pinToInt32(right.toLong() + newX.toLong() - left.toLong())
+        bottom = Vector2I32.pinToInt32(bottom.toLong() + newY.toLong() - top.toLong())
         left = newX
         top = newY
     }
 
     /** Insets by `(dx, dy)` with saturating arithmetic. */
     public fun inset(dx: Int, dy: Int) {
-        left = Vector2I32.sk32SatAdd(left, dx)
-        top = Vector2I32.sk32SatAdd(top, dy)
-        right = Vector2I32.sk32SatSub(right, dx)
-        bottom = Vector2I32.sk32SatSub(bottom, dy)
+        left = Vector2I32.saturatingAdd32(left, dx)
+        top = Vector2I32.saturatingAdd32(top, dy)
+        right = Vector2I32.saturatingSub32(right, dx)
+        bottom = Vector2I32.saturatingSub32(bottom, dy)
     }
 
     /** Outsets by `(dx, dy)` (negative inset). */
@@ -105,10 +105,10 @@ public data class RectI32(
 
     /** Adjusts edges individually with saturating arithmetic. */
     public fun adjust(dL: Int, dT: Int, dR: Int, dB: Int) {
-        left = Vector2I32.sk32SatAdd(left, dL)
-        top = Vector2I32.sk32SatAdd(top, dT)
-        right = Vector2I32.sk32SatAdd(right, dR)
-        bottom = Vector2I32.sk32SatAdd(bottom, dB)
+        left = Vector2I32.saturatingAdd32(left, dL)
+        top = Vector2I32.saturatingAdd32(top, dT)
+        right = Vector2I32.saturatingAdd32(right, dR)
+        bottom = Vector2I32.saturatingAdd32(bottom, dB)
     }
 
     /** Sorts edges so `left <= right` and `top <= bottom`. */
@@ -125,18 +125,18 @@ public data class RectI32(
 
     /** Returns a copy translated by `(dx, dy)` with saturating arithmetic. */
     public fun offsetBy(dx: Int, dy: Int): RectI32 = RectI32(
-        Vector2I32.sk32SatAdd(left, dx),
-        Vector2I32.sk32SatAdd(top, dy),
-        Vector2I32.sk32SatAdd(right, dx),
-        Vector2I32.sk32SatAdd(bottom, dy),
+        Vector2I32.saturatingAdd32(left, dx),
+        Vector2I32.saturatingAdd32(top, dy),
+        Vector2I32.saturatingAdd32(right, dx),
+        Vector2I32.saturatingAdd32(bottom, dy),
     )
 
     /** Returns a copy inset by `(dx, dy)` with saturating arithmetic. */
     public fun insetBy(dx: Int, dy: Int): RectI32 = RectI32(
-        Vector2I32.sk32SatAdd(left, dx),
-        Vector2I32.sk32SatAdd(top, dy),
-        Vector2I32.sk32SatSub(right, dx),
-        Vector2I32.sk32SatSub(bottom, dy),
+        Vector2I32.saturatingAdd32(left, dx),
+        Vector2I32.saturatingAdd32(top, dy),
+        Vector2I32.saturatingSub32(right, dx),
+        Vector2I32.saturatingSub32(bottom, dy),
     )
 
     /** Returns a copy outset by `(dx, dy)`. */
@@ -188,7 +188,7 @@ public data class RectI32(
 
         /** Creates a [RectI32] from origin `(x, y)` and size `(w, h)` with saturating add. */
         public fun ofOriginSize(x: Int, y: Int, w: Int, h: Int): RectI32 =
-            RectI32(x, y, Vector2I32.sk32SatAdd(x, w), Vector2I32.sk32SatAdd(y, h))
+            RectI32(x, y, Vector2I32.saturatingAdd32(x, w), Vector2I32.saturatingAdd32(y, h))
 
         /** Creates a [RectI32] from size `(w, h)` at origin. */
         public fun ofSize(w: Int, h: Int): RectI32 = RectI32(0, 0, w, h)

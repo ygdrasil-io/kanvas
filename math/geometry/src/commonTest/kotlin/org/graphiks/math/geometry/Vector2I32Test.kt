@@ -8,8 +8,8 @@ import kotlin.test.Test
 class Vector2I32Test {
 
     @Test
-    fun `Make and accessors store coordinates`() {
-        val p = Vector2I32.Make(3, 4)
+    fun `of and accessors store coordinates`() {
+        val p = Vector2I32.of(3, 4)
         assertEquals(3, p.x)
         assertEquals(4, p.y)
     }

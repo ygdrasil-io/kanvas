@@ -77,7 +77,7 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
         if (unequal != null && unequal.isNotEmpty()) {
             unequal[0] = largest.toFloat() != (largest + dist).toFloat()
         }
-        t = SkPinT(t)
+        t = pinT(t)
         return t
     }
 
@@ -122,7 +122,7 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
             if (!AlmostBequalUlps(xy.y, y)) return -1.0
             if (!AlmostBetweenUlps(left, xy.x, right)) return -1.0
             var t = (xy.x - left) / (right - left)
-            t = SkPinT(t)
+            t = pinT(t)
             val realPtX = (1 - t) * left + t * right
             val dx = xy.y - y; val dy = xy.x - realPtX
             val dist = sqrt(dx * dx + dy * dy)
@@ -147,7 +147,7 @@ public data class Line2F64(val pts: Array<Point2F64> = arrayOf(Point2F64(), Poin
             if (!AlmostBequalUlps(xy.x, x)) return -1.0
             if (!AlmostBetweenUlps(top, xy.y, bottom)) return -1.0
             var t = (xy.y - top) / (bottom - top)
-            t = SkPinT(t)
+            t = pinT(t)
             val realPtY = (1 - t) * top + t * bottom
             val dx = xy.x - x; val dy = xy.y - realPtY
             val dist = sqrt(dx * dx + dy * dy)

@@ -99,8 +99,6 @@ public fun sign(value: Float): Float = if (value > 0f) 1f else if (value < 0f) -
 
 /**
  * Sine of [radians]. Snaps near-zero results to exactly 0f.
- *
- *).
  */
 public fun sin(radians: Float): Float {
     val r = kotlin.math.sin(radians.toDouble()).toFloat()
@@ -109,8 +107,6 @@ public fun sin(radians: Float): Float {
 
 /**
  * Cosine of [radians]. Snaps near-zero results to exactly 0f.
- *
- *).
  */
 public fun cos(radians: Float): Float {
     val r = kotlin.math.cos(radians.toDouble()).toFloat()
@@ -119,8 +115,6 @@ public fun cos(radians: Float): Float {
 
 /**
  * Tangent of [radians]. Snaps near-zero results to exactly 0f.
- *
- *).
  */
 public fun tan(radians: Float): Float {
     val r = kotlin.math.tan(radians.toDouble()).toFloat()
