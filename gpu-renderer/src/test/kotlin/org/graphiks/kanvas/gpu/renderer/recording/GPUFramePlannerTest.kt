@@ -7,7 +7,9 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCopyAsDrawImplementationCapability
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
@@ -35,6 +37,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
@@ -71,6 +74,7 @@ class GPUFramePlannerTest {
 
     @Test
     fun `stable recording insertion and phase order produce one adjacent render segment`() {
+        val capabilitySeal = frameCapabilitySeal()
         val first = renderTask(
             taskId = "task.render.1",
             recordingId = "recording.second",
@@ -82,10 +86,11 @@ class GPUFramePlannerTest {
             commandId = 2,
         )
         val taskList = GPUTaskList(
-            frameId = GPUFrameID(7),
+            frameId = FRAME_ID,
+            capabilitySeal = capabilitySeal,
             recordingSeals = listOf(
-                seal("recording.first", insertionOrder = 0),
-                seal("recording.second", insertionOrder = 1),
+                seal("recording.first", insertionOrder = 0, capabilitySealHash = capabilitySeal.sealHash),
+                seal("recording.second", insertionOrder = 1, capabilitySealHash = capabilitySeal.sealHash),
             ),
             expectedReplayKeyHash = "replay.same",
             tasks = listOf(first, second),
@@ -184,13 +189,29 @@ class GPUFramePlannerTest {
 
     @Test
     fun `layer transition readback and output expand into the closed ordered step algebra`() {
-        val transition = GPUTask.TargetTransition(
-            taskId = GPUTaskID("task.transition"),
+        val enter = GPUTask.TargetTransition(
+            taskId = GPUTaskID("task.transition.enter"),
             recordingId = GPURecordingID("recording.a"),
             phase = GPUTaskPhase.Transition,
             parent = GPUFrameTargetRef("target.scene"),
             child = GPUFrameTargetRef("target.layer"),
             transitionKind = GPUTargetTransitionKind.EnterChild,
+        )
+        val composite = GPUTask.TargetTransition(
+            taskId = GPUTaskID("task.transition.composite"),
+            recordingId = GPURecordingID("recording.a"),
+            phase = GPUTaskPhase.Transition,
+            parent = GPUFrameTargetRef("target.scene"),
+            child = GPUFrameTargetRef("target.layer"),
+            transitionKind = GPUTargetTransitionKind.CompositeChild,
+        )
+        val returnToParent = GPUTask.TargetTransition(
+            taskId = GPUTaskID("task.transition.return"),
+            recordingId = GPURecordingID("recording.a"),
+            phase = GPUTaskPhase.Transition,
+            parent = GPUFrameTargetRef("target.scene"),
+            child = GPUFrameTargetRef("target.layer"),
+            transitionKind = GPUTargetTransitionKind.ReturnToParent,
         )
         val readback = GPUTask.Readback(
             taskId = GPUTaskID("task.readback"),
@@ -222,9 +243,11 @@ class GPUFramePlannerTest {
 
         val plan = GPUFramePlanner.plan(
             taskList(
-                tasks = listOf(output, readback, transition),
+                tasks = listOf(output, readback, returnToParent, composite, enter),
                 dependencies = listOf(
-                    GPUTaskDependency(transition.taskId, readback.taskId, "order", null, "test"),
+                    GPUTaskDependency(enter.taskId, composite.taskId, "order", null, "test"),
+                    GPUTaskDependency(composite.taskId, returnToParent.taskId, "order", null, "test"),
+                    GPUTaskDependency(returnToParent.taskId, readback.taskId, "order", null, "test"),
                     GPUTaskDependency(readback.taskId, output.taskId, "order", null, "test"),
                 ),
             ),
@@ -233,6 +256,8 @@ class GPUFramePlannerTest {
         assertEquals(
             listOf(
                 GPUFrameStep.TargetTransitionStep::class,
+                GPUFrameStep.TargetTransitionStep::class,
+                GPUFrameStep.TargetTransitionStep::class,
                 GPUFrameStep.ReadbackCopyStep::class,
                 GPUFrameStep.AcquireSurfaceOutput::class,
                 GPUFrameStep.SurfaceBlitRenderPassStep::class,
@@ -240,11 +265,12 @@ class GPUFramePlannerTest {
             ),
             plan.steps.map { it::class },
         )
-        assertEquals(256, assertIs<GPUFrameStep.ReadbackCopyStep>(plan.steps[1]).request.bufferOffsetBytes)
+        assertEquals(256, assertIs<GPUFrameStep.ReadbackCopyStep>(plan.steps[3]).request.bufferOffsetBytes)
     }
 
     @Test
     fun `plan snapshots caller collections and keeps repeatable dump and hash`() {
+        val capabilitySeal = frameCapabilitySeal()
         val tasks = mutableListOf<GPUTask>(renderTask("task.render", "recording.a", 1))
         val seals = mutableListOf(seal("recording.a", 0))
         val diagnostics = mutableListOf(diagnostic("test.info", terminal = false))
@@ -258,7 +284,8 @@ class GPUFramePlannerTest {
             diagnostic = null,
         )
         val taskList = GPUTaskList(
-            frameId = GPUFrameID(9),
+            frameId = FRAME_ID,
+            capabilitySeal = capabilitySeal,
             recordingSeals = seals,
             expectedReplayKeyHash = "replay.same",
             tasks = tasks,
@@ -295,13 +322,26 @@ class GPUFramePlannerTest {
         assertFalse(leafPlan.atomicallyRefused)
         assertEquals(10, assertIs<GPUFrameStep.RefusedLeafDrawStep>(leafPlan.steps.single()).commandId.value)
 
-        val child = renderTask("task.child", "recording.a", 11)
+        val scopeId = GPUCompositeScopeID("scope.composite.12")
+        val provenanceToken = GPUCompositeProvenanceToken("child.11")
+        val child = renderTask(
+            "task.child",
+            "recording.a",
+            11,
+            compositeMembership = GPUTaskCompositeMembership(
+                scopeId = scopeId,
+                parentCommandId = GPUDrawCommandID(12),
+                childOrdinal = 0,
+                provenanceToken = provenanceToken,
+            ),
+        )
         val composite = refusedTask(
             taskId = "task.refused.composite",
             commandId = 12,
             scope = GPURefusalScope.RefusedCompositeCommand,
-            provenance = listOf(GPUCompositeProvenanceToken("child.11")),
+            provenance = listOf(provenanceToken),
             consumedChildren = listOf(child.taskId),
+            compositeScopeId = scopeId,
         )
         val compositePlan = GPUFramePlanner.plan(
             taskList(
@@ -316,14 +356,27 @@ class GPUFramePlannerTest {
 
     @Test
     fun `composite child dependency leaking outside the scope refuses atomically`() {
-        val child = renderTask("task.child", "recording.a", 1)
+        val scopeId = GPUCompositeScopeID("scope.composite.3")
+        val provenanceToken = GPUCompositeProvenanceToken("child.1")
+        val child = renderTask(
+            "task.child",
+            "recording.a",
+            1,
+            compositeMembership = GPUTaskCompositeMembership(
+                scopeId = scopeId,
+                parentCommandId = GPUDrawCommandID(3),
+                childOrdinal = 0,
+                provenanceToken = provenanceToken,
+            ),
+        )
         val external = renderTask("task.external", "recording.a", 2)
         val composite = refusedTask(
             taskId = "task.composite",
             commandId = 3,
             scope = GPURefusalScope.RefusedCompositeCommand,
-            provenance = listOf(GPUCompositeProvenanceToken("child.1")),
+            provenance = listOf(provenanceToken),
             consumedChildren = listOf(child.taskId),
+            compositeScopeId = scopeId,
         )
         val plan = GPUFramePlanner.plan(
             taskList(
@@ -347,10 +400,24 @@ class GPUFramePlannerTest {
                 groupIndex = 0,
                 logicalBounds = GPUPixelBounds(0, 0, 4, 4),
             ),
-            capability = null,
         )
-        val copyPlan = GPUFramePlanner.plan(taskList(tasks = listOf(textureCopy)))
-        assertIs<GPUFrameStep.CopyDestinationStep>(copyPlan.steps.single())
+        val consumer = renderTask(
+            "task.render.7",
+            "recording.a",
+            7,
+            blendPlan = GPUBlendPlan.ShaderBlendWithDstRead(
+                mode = GPUBlendMode.OVERLAY,
+                formulaId = "overlay",
+                sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+            ),
+        )
+        val copyPlan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(textureCopy, consumer),
+                dependencies = listOf(dependency(textureCopy, consumer)),
+            ),
+        )
+        assertIs<GPUFrameStep.CopyDestinationStep>(copyPlan.steps.first())
         assertTrue(copyPlan.steps.none { it is GPUFrameStep.CopyAsDrawMaterializationStep })
 
         val copyAsDraw = destinationTask(
@@ -359,11 +426,15 @@ class GPUFramePlannerTest {
                 logicalBounds = GPUPixelBounds(0, 0, 4, 4),
                 sourceIntermediate = GPUIntermediateIdentity("intermediate.source"),
             ),
-            capability = null,
         )
-        val unavailablePlan = GPUFramePlanner.plan(taskList(tasks = listOf(copyAsDraw)))
-        val unavailable = assertIs<GPUFrameStep.RefusedLeafDrawStep>(unavailablePlan.steps.single())
-        assertEquals("unsupported.destination_read.copy_unavailable", unavailable.diagnostic.code.value)
+        val unavailablePlan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(copyAsDraw, consumer),
+                dependencies = listOf(dependency(copyAsDraw, consumer)),
+            ),
+        )
+        assertTrue(unavailablePlan.atomicallyRefused)
+        assertEquals("unsupported.destination_read.copy_unavailable", unavailablePlan.diagnostics.last().code.value)
         assertTrue(unavailablePlan.steps.none { it.executionKind == GPUFrameStepExecutionKind.Encoder })
 
         val available = destinationTask(
@@ -372,10 +443,18 @@ class GPUFramePlannerTest {
                 logicalBounds = GPUPixelBounds(0, 0, 4, 4),
                 sourceIntermediate = GPUIntermediateIdentity("intermediate.source"),
             ),
-            capability = GPUCopyAsDrawImplementationCapability("kanvas.copy-as-draw", "1", available = true),
         )
-        val availablePlan = GPUFramePlanner.plan(taskList(tasks = listOf(available)))
-        assertIs<GPUFrameStep.CopyAsDrawMaterializationStep>(availablePlan.steps.single())
+        val availableSeal = frameCapabilitySeal(
+            GPUCopyAsDrawImplementationCapability("kanvas.copy-as-draw", "1", available = true),
+        )
+        val availablePlan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(available, consumer),
+                dependencies = listOf(dependency(available, consumer)),
+                capabilitySeal = availableSeal,
+            ),
+        )
+        assertIs<GPUFrameStep.CopyAsDrawMaterializationStep>(availablePlan.steps.first())
     }
 
     @Test
@@ -429,8 +508,10 @@ class GPUFramePlannerTest {
         recordingId: String,
         commandId: Int,
         target: String = "target.scene",
+        compositeMembership: GPUTaskCompositeMembership? = null,
+        blendPlan: GPUBlendPlan = executableBlend(),
     ): GPUTask.Render {
-        val packet = packet(commandId)
+        val packet = packet(commandId, blendPlan)
         return GPUTask.Render(
             taskId = GPUTaskID(taskId),
             recordingId = GPURecordingID(recordingId),
@@ -442,14 +523,17 @@ class GPUFramePlannerTest {
             batchEligibilityByPacketId = mapOf(
                 packet.packetId to GPUPassBatchEligibility(
                     kind = GPUPassBatchKind.SolidFill,
-                    fixedStateHash = "fixed.src-over",
                     queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
                 ),
             ),
+            compositeMembership = compositeMembership,
         )
     }
 
-    private fun packet(commandId: Int): GPUDrawPacket =
+    private fun packet(
+        commandId: Int,
+        blendPlan: GPUBlendPlan,
+    ): GPUDrawPacket =
         GPUDrawPacket(
             packetId = GPUDrawPacketID("packet.$commandId"),
             commandIdValue = commandId,
@@ -463,7 +547,7 @@ class GPUFramePlannerTest {
             renderStepId = GPURenderStepID("rect.fill"),
             renderStepVersion = 1,
             role = GPUDrawPacketRole.Shading,
-            blendPlan = GPUBlendPlan.NoOp(GPUBlendMode.DST, "fixture"),
+            blendPlan = blendPlan,
             renderPipelineKey = GPURenderPipelineKey("pipeline.rect"),
             bindingLayoutHash = "layout.rect",
             vertexSourceLabel = "vertices.rect",
@@ -472,20 +556,34 @@ class GPUFramePlannerTest {
             resourceGeneration = 3,
         )
 
-    private fun seal(recordingId: String, insertionOrder: Long): GPURecordingSeal =
+    private fun executableBlend(): GPUBlendPlan =
+        GPUBlendPlan.ShaderBlendNoDstRead(
+            mode = GPUBlendMode.SRC,
+            formulaId = "source",
+            sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+        )
+
+    private fun seal(
+        recordingId: String,
+        insertionOrder: Long,
+        capabilitySealHash: String = frameCapabilitySeal().sealHash,
+    ): GPURecordingSeal =
         GPURecordingSeal(
             recordingId = GPURecordingID(recordingId),
             insertionOrder = insertionOrder,
             compatibilityKeyHash = "compat.same",
             replayKeyHash = "replay.same",
+            capabilitySealHash = capabilitySealHash,
         )
 
     private fun taskList(
         tasks: List<GPUTask>,
         dependencies: List<GPUTaskDependency> = emptyList(),
-        seals: List<GPURecordingSeal> = listOf(seal("recording.a", 0)),
+        capabilitySeal: GPUFrameCapabilitySeal = frameCapabilitySeal(),
+        seals: List<GPURecordingSeal> = listOf(seal("recording.a", 0, capabilitySeal.sealHash)),
     ): GPUTaskList = GPUTaskList(
-        frameId = GPUFrameID(11),
+        frameId = FRAME_ID,
+        capabilitySeal = capabilitySeal,
         recordingSeals = seals,
         expectedReplayKeyHash = "replay.same",
         tasks = tasks,
@@ -509,12 +607,14 @@ class GPUFramePlannerTest {
         scope: GPURefusalScope,
         provenance: List<GPUCompositeProvenanceToken> = emptyList(),
         consumedChildren: List<GPUTaskID> = emptyList(),
+        compositeScopeId: GPUCompositeScopeID? = null,
     ): GPUTask.Refused = GPUTask.Refused(
         taskId = GPUTaskID(taskId),
         recordingId = GPURecordingID("recording.a"),
         phase = GPUTaskPhase.Refusal,
         commandId = GPUDrawCommandID(commandId),
         scope = scope,
+        compositeScopeId = compositeScopeId,
         provenanceTokens = provenance,
         consumedChildTaskIds = consumedChildren,
         diagnostic = diagnostic("unsupported.test.$commandId"),
@@ -522,13 +622,13 @@ class GPUFramePlannerTest {
 
     private fun destinationTask(
         materialization: org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotMaterialization,
-        capability: GPUCopyAsDrawImplementationCapability?,
     ): GPUTask.DestinationSnapshots {
         val bounds = materialization.logicalBounds
+        val sourceIntermediate = (materialization as? CopyAsDrawMaterialization)?.sourceIntermediate
         val grouping = GPUDestinationSnapshotGroupingResult(
             groups = listOf(
                 GPUDestinationSnapshotGroup(
-                    key = destinationGroupKey(),
+                    key = destinationGroupKey(sourceIntermediate),
                     logicalBounds = bounds,
                     members = listOf(GPUDestinationReadMember("draw.7", 0, bounds)),
                     copiedBytes = 64,
@@ -545,19 +645,44 @@ class GPUFramePlannerTest {
             recordingId = GPURecordingID("recording.a"),
             phase = GPUTaskPhase.Copy,
             payload = GPUDestinationSnapshotTaskPayload(
-                source = GPUFrameTargetRef("target.scene"),
                 grouping = grouping,
-                snapshotsByGroupIndex = mapOf(0 to GPUFrameTextureRef("texture.snapshot")),
-                copyLayoutsByGroupIndex = mapOf(0 to GPUTextureCopyLayout(256, 4)),
-                commandBindings = listOf(
-                    GPUDestinationSnapshotCommandBinding("draw.7", GPUDrawCommandID(7)),
+                operations = listOf(
+                    when (materialization) {
+                        is GPUDestinationSnapshotMaterialization.TextureCopy ->
+                            GPUDestinationSnapshotOperation.TextureCopy(
+                                groupIndex = 0,
+                                source = GPUFrameTargetRef("target.scene"),
+                                snapshot = GPUFrameTextureRef("texture.snapshot"),
+                                logicalBounds = bounds,
+                                copyLayout = GPUTextureCopyLayout(256, 4),
+                                consumers = listOf(destinationConsumer()),
+                            )
+                        is CopyAsDrawMaterialization ->
+                            GPUDestinationSnapshotOperation.CopyAsDraw(
+                                groupIndex = 0,
+                                source = GPUFrameTextureRef("texture.intermediate.source"),
+                                sourceIntermediate = materialization.sourceIntermediate,
+                                snapshot = GPUFrameTextureRef("texture.snapshot"),
+                                logicalBounds = bounds,
+                                consumers = listOf(destinationConsumer()),
+                            )
+                    },
                 ),
-                copyAsDrawCapability = capability,
             ),
         )
     }
 
-    private fun destinationGroupKey(): GPUDestinationSnapshotGroupKey =
+    private fun destinationConsumer(): GPUDestinationSnapshotConsumerRef =
+        GPUDestinationSnapshotConsumerRef(
+            groupingCommandId = "draw.7",
+            renderTaskId = GPUTaskID("task.render.7"),
+            packetId = GPUDrawPacketID("packet.7"),
+            commandId = GPUDrawCommandID(7),
+        )
+
+    private fun destinationGroupKey(
+        sourceIntermediate: GPUIntermediateIdentity?,
+    ): GPUDestinationSnapshotGroupKey =
         GPUDestinationSnapshotGroupKey(
             target = GPUTargetIdentity("target.scene"),
             targetGeneration = 2,
@@ -574,7 +699,26 @@ class GPUFramePlannerTest {
                 colorAttachment = GPUTargetIdentity("target.scene.msaa"),
                 depthStencilAttachment = null,
             ),
-            sourceIntermediate = GPUIntermediateIdentity("intermediate.source"),
+            sourceIntermediate = sourceIntermediate,
+        )
+
+    private fun frameCapabilitySeal(
+        copyAsDraw: GPUCopyAsDrawImplementationCapability? = null,
+    ): GPUFrameCapabilitySeal =
+        GPUFrameCapabilitySeal.capture(
+            frameId = FRAME_ID,
+            deviceGeneration = GPUDeviceGenerationID(3),
+            capabilities = GPUCapabilities(
+                implementation = GPUImplementationIdentity(
+                    facadeName = "wgpu4k",
+                    implementationName = "kanvas-test",
+                    adapterName = "fixture-adapter",
+                    deviceName = "fixture-device",
+                ),
+                facts = emptyList(),
+                snapshotId = "capabilities.frame-planner.fixture",
+                copyAsDrawCapability = copyAsDraw,
+            ),
         )
 
     private fun diagnostic(code: String, terminal: Boolean = true): GPUDiagnostic =
@@ -596,4 +740,8 @@ class GPUFramePlannerTest {
             configuredAggregateBudgetBytes = 1,
             diagnostic = null,
         )
+
+    private companion object {
+        val FRAME_ID = GPUFrameID(11)
+    }
 }

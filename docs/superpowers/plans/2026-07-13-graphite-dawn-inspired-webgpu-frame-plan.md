@@ -563,6 +563,26 @@ rtk git commit -m 'feat: plan bounded destination snapshot groups'
 
 Cover compatible recording insertion, preserved task IDs/dependencies/phase order, cycle rejection, replay-key mismatch, pass/destination-copy/pass sequencing, layer transitions, readback/output steps, direct draw batching, target hazards, and repeatable dump/hash output. Add refusal cases for isolated leaf, whole composite command with child provenance consumed, and atomic escalation when order cannot be preserved. Assert `CopyAsDrawMaterializationStep` is emitted only when the capability record says the implementation is present; canonical `CopySrc` targets never need it, and an otherwise requested route refuses with `unsupported.destination_read.copy_unavailable` before preflight. Extend `GPURendererPackageBoundaryTest` to prove `resources` imports neither `recording` nor `execution`, `recording` imports only handle-free resource contracts rather than the concrete provider/materialized handles, and the complete package graph remains acyclic.
 
+The plan snapshots every nested collection into JVM-immutable storage. Its canonical hash and
+human-readable dump preserve the frame capability seal, recording seals, `phaseOrder`, complete
+`GPUTaskDependency` evidence, memory budget, internal render batches, exact Task 5 destination
+group keys/consumers, intentionally elided `NoOp` draw evidence, steps, and diagnostics. The dump
+includes the complete handle-free capability-seal facts, not only its hash. Structural boundaries,
+nullable values, and typed resource-ref variants remain distinguishable in the hash preimage.
+While a child target scope is active, every target-touching render, compute, copy, upload,
+destination-snapshot, preparation, or readback task may touch only that active child; after
+`CompositeChild`, only the exact `ReturnToParent` transition is legal. Invalid scopes refuse the
+frame atomically. An atomically refused plan has no steps and carries a terminal diagnostic.
+
+A Task 5 snapshot is materialized before the first exact packet consumer only when no non-consumer
+packet or task can write its source or snapshot during the consumer lifetime. A destination
+consumer absorbed by a refused composite is rejected atomically instead of losing its Task 5
+evidence. Consumer bindings must target the exact Task 5 target and remain strictly ordered by the
+Task 5 access order and the actual `(task, packet)` execution order. All packets inside one
+`RenderPassStep` share one `targetStateHash`; a change cuts the render pass. After any physical pass
+cut on an already opened target/sample/segment, the continuation uses `load` with no clear color;
+subsequent semantic clears must be explicit clear packets rather than repeated attachment clears.
+
 Use this closed step algebra:
 
 ```kotlin
@@ -570,17 +590,18 @@ sealed interface GPUFrameStep {
     val sourceTaskIds: List<GPUTaskID>
     val executionKind: GPUFrameStepExecutionKind
 
-    data class RenderPassStep(
+    class RenderPassStep(
         val target: GPUFrameTargetRef,
         val loadStore: GPULoadStorePlan,
         val samplePlan: GPUSamplePlan,
         val drawPackets: List<GPUDrawPacket>,
+        val batches: List<GPUFrameRenderBatch>,
         override val sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
-    data class ComputePassStep(
+    class ComputePassStep(
         val target: GPUFrameTargetRef,
         val resourceUses: List<GPUFrameResourceUse>,
         val dispatches: List<GPUComputeDispatch>,
@@ -589,14 +610,14 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
-    data class PrepareResourcesStep(
+    class PrepareResourcesStep(
         val requests: List<GPUResourcePreparationRequest>,
         override val sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Preflight
     }
 
-    data class UploadResourceStep(
+    class UploadResourceStep(
         val staging: GPUFrameBufferRef,
         val destination: GPUFrameResourceRef,
         val layout: GPUUploadLayout,
@@ -605,7 +626,7 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
-    data class CopyResourceStep(
+    class CopyResourceStep(
         val source: GPUFrameResourceRef,
         val destination: GPUFrameResourceRef,
         val regions: List<GPUResourceCopyRegion>,
@@ -614,7 +635,7 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
-    data class DependencyBarrierStep(
+    class DependencyBarrierStep(
         val orderedUseTokens: List<GPUTaskUseToken>,
         val reasonCode: String,
         override val sourceTaskIds: List<GPUTaskID>,
@@ -622,26 +643,32 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.DependencyOnly
     }
 
-    data class CopyDestinationStep(
+    class CopyDestinationStep(
         val source: GPUFrameTargetRef,
+        val sourceKey: GPUDestinationSnapshotGroupKey,
         val snapshot: GPUFrameTextureRef,
         val logicalBounds: GPUPixelBounds,
         val copyLayout: GPUTextureCopyLayout,
+        val consumers: List<GPUDestinationSnapshotConsumerRef>,
         override val sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
-    data class CopyAsDrawMaterializationStep(
-        val source: GPUFrameTargetRef,
+    class CopyAsDrawMaterializationStep(
+        val source: GPUFrameTextureRef,
+        val sourceKey: GPUDestinationSnapshotGroupKey,
+        val sourceIntermediate: GPUIntermediateIdentity,
         val snapshot: GPUFrameTextureRef,
         val logicalBounds: GPUPixelBounds,
+        val capabilitySealHash: String,
+        val consumers: List<GPUDestinationSnapshotConsumerRef>,
         override val sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
-    data class TargetTransitionStep(
+    class TargetTransitionStep(
         val parent: GPUFrameTargetRef,
         val child: GPUFrameTargetRef,
         val transitionKind: GPUTargetTransitionKind,
@@ -650,7 +677,7 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.DependencyOnly
     }
 
-    data class ReadbackCopyStep(
+    class ReadbackCopyStep(
         val source: GPUFrameTargetRef,
         val staging: GPUFrameBufferRef,
         val request: GPUFrameReadbackRequest,
@@ -659,14 +686,14 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
-    data class AcquireSurfaceOutput(
+    class AcquireSurfaceOutput(
         val descriptor: GPUSurfaceOutputDescriptor,
         override val sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Preflight
     }
 
-    data class SurfaceBlitRenderPassStep(
+    class SurfaceBlitRenderPassStep(
         val scene: GPUFrameTargetRef,
         val output: GPUSurfaceOutputRef,
         override val sourceTaskIds: List<GPUTaskID>,
@@ -674,14 +701,14 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
-    data class PostSubmitPresentAction(
+    class PostSubmitPresentAction(
         val output: GPUSurfaceOutputRef,
         override val sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.PostSubmitHost
     }
 
-    data class RefusedLeafDrawStep(
+    class RefusedLeafDrawStep(
         val commandId: GPUDrawCommandID,
         val diagnostic: GPUDiagnostic,
         override val sourceTaskIds: List<GPUTaskID>,
@@ -689,7 +716,7 @@ sealed interface GPUFrameStep {
         override val executionKind = GPUFrameStepExecutionKind.RefusalEvidence
     }
 
-    data class RefusedCompositeCommandStep(
+    class RefusedCompositeCommandStep(
         val commandId: GPUDrawCommandID,
         val provenanceTokens: List<GPUCompositeProvenanceToken>,
         val diagnostic: GPUDiagnostic,
@@ -707,12 +734,25 @@ enum class GPUFrameStepExecutionKind {
     RefusalEvidence,
 }
 
-data class GPUFramePlan(
+class GPUFramePlan(
     val frameId: GPUFrameID,
+    val capabilitySeal: GPUFrameCapabilitySeal,
     val recordingSeals: List<GPURecordingSeal>,
+    val dependencies: List<GPUTaskDependency>,
+    val phaseOrder: List<GPUTaskPhase>,
+    val elidedNoOpDraws: List<GPUFrameElidedNoOpDraw>,
     val steps: List<GPUFrameStep>,
     val memoryBudget: GPUFrameMemoryBudgetPlan,
     val diagnostics: List<GPUDiagnostic>,
+    val atomicallyRefused: Boolean,
+)
+
+data class GPUFrameElidedNoOpDraw(
+    val taskId: GPUTaskID,
+    val packetId: GPUDrawPacketID,
+    val commandId: GPUDrawCommandID,
+    val mode: GPUBlendMode,
+    val reason: String,
 )
 
 data class GPUFrameReadbackRequest(
@@ -756,7 +796,7 @@ Expected: FAIL because the finalizer does not exist.
 
 - [ ] **Step 3: Evolve task payloads without adding a second route decision**
 
-Add typed target, access, pass, destination, output, refusal-scope, and provenance facts to the existing `GPUTask` variants. Replace task-ID strings and resource-plan labels at this boundary with validated `GPUTaskID` and `GPUResourcePreparationRequest` values. Map `PrepareResources` to preflight work, `Upload` and general `Copy` to encoder steps using prepared staging resources, and `Barrier` to a dependency-only step that produces no fake WebGPU barrier command. Preserve each source task ID in canonical source order in the resulting step even when the step is not encodable; do not use unordered sets in deterministic dumps. `GPUFramePlanner` may validate and linearize; it must consume the already chosen `GPUBlendPlan`, preserve refused tasks, and reject cycles/incompatible seals atomically.
+Add typed target, access, pass, destination, output, refusal-scope, and provenance facts to the existing `GPUTask` variants. Replace task-ID strings and resource-plan labels at this boundary with validated `GPUTaskID` and `GPUResourcePreparationRequest` values. Map `PrepareResources` to preflight work, `Upload` and general `Copy` to encoder steps using prepared staging resources, and `Barrier` to a dependency-only step that produces no fake WebGPU barrier command. Preserve each source task ID in canonical source order in the resulting step even when the step is not encodable. The sole exception is a canonical `GPUBlendPlan.NoOp` with a required non-blank audit reason: omit encoder work and preserve its task, packet, command, mode, and reason in ordered `GPUFrameElidedNoOpDraw` evidence included in dump/hash. Do not use unordered sets in deterministic evidence. `GPUFramePlanner` may validate and linearize; it must consume the already chosen `GPUBlendPlan`, preserve refused tasks, and reject cycles/incompatible seals atomically.
 
 - [ ] **Step 4: Reuse pass-local batching**
 

@@ -996,11 +996,18 @@ private fun GPUSurfaceTargetDescriptor.snapshot(): GPUSurfaceTargetDescriptor =
     copy(usageLabels = usageLabels.toSet())
 
 private fun GPUDrawPass.snapshot(): GPUDrawPass =
-    copy(
+    GPUDrawPass(
+        passId = passId,
+        targetStateHash = targetStateHash,
+        layerScopeId = layerScopeId,
+        loadStoreLabel = loadStoreLabel,
         invocations = invocations.toList(),
         pipelineKeys = pipelineKeys.toList(),
         barriers = barriers.toList(),
         diagnostics = diagnostics.toList(),
+        drawPackets = drawPackets.toList(),
+        provisionalSegmentKey = provisionalSegmentKey,
+        batchEligibilityByPacketId = batchEligibilityByPacketId.toMap(),
     )
 
 private fun GPUResourceMaterializationDecision.Materialized.snapshot(): GPUResourceMaterializationDecision.Materialized =

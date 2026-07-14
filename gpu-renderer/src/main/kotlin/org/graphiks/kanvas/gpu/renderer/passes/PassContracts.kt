@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
@@ -192,7 +194,7 @@ class GPURenderStepDescriptor(
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
 ) {
     /** Diagnostics copied from descriptor production. */
-    val diagnostics: List<GPUPassDiagnostic> = diagnostics.toList()
+    val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
 
     init {
         require(version >= 0) { "GPURenderStepDescriptor.version must be non-negative" }
@@ -285,7 +287,7 @@ class GPUDrawPacket(
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
 ) {
     /** Diagnostics copied from packet production so caller mutation cannot rewrite evidence. */
-    val diagnostics: List<GPUPassDiagnostic> = diagnostics.toList()
+    val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
 
     /** Diagnostic codes in packet-local order for compact dump and assertion surfaces. */
     val diagnosticCodes: List<String>
@@ -344,10 +346,10 @@ class GPUDrawPacketStream(
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
 ) {
     /** Packets copied in stream order. */
-    val packets: List<GPUDrawPacket> = packets.toList()
+    val packets: List<GPUDrawPacket> = immutableList(packets)
 
     /** Stream diagnostics copied before command lowering. */
-    val diagnostics: List<GPUPassDiagnostic> = diagnostics.toList()
+    val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
 
     /** Packet identifiers in stream order. */
     val packetIds: List<GPUDrawPacketID>
@@ -764,13 +766,13 @@ class GPUPassCommandStream(
     operandBridge: List<GPUPassCommandOperandBridge> = emptyList(),
 ) {
     /** Commands copied in facade call order. */
-    val commands: List<GPUPassCommand> = commands.toList()
+    val commands: List<GPUPassCommand> = immutableList(commands)
 
     /** Command-stream diagnostics copied before encoder planning. */
-    val diagnostics: List<GPUPassDiagnostic> = diagnostics.toList()
+    val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
 
     /** Provider-materialized packet-to-command operands copied before encoder planning. */
-    val operandBridge: List<GPUPassCommandOperandBridge> = operandBridge.toList()
+    val operandBridge: List<GPUPassCommandOperandBridge> = immutableList(operandBridge)
 
     /** Facade operation labels in encoded order. */
     val commandLabels: List<String>
@@ -965,17 +967,40 @@ fun GPUPassCommandStream.dumpLines(): List<String> =
         diagnostics.dumpLines()
 
 /** Draw pass descriptor close to GPU submission. */
-data class GPUDrawPass(
+class GPUDrawPass(
     val passId: String,
     val targetStateHash: String,
     val layerScopeId: String,
     val loadStoreLabel: String,
-    val invocations: List<GPUDrawInvocation>,
-    val pipelineKeys: List<String>,
-    val barriers: List<String>,
-    val diagnostics: List<GPUPassDiagnostic> = emptyList(),
-    val drawPackets: List<GPUDrawPacket> = emptyList(),
-)
+    invocations: List<GPUDrawInvocation>,
+    pipelineKeys: List<String>,
+    barriers: List<String>,
+    diagnostics: List<GPUPassDiagnostic> = emptyList(),
+    drawPackets: List<GPUDrawPacket> = emptyList(),
+    val provisionalSegmentKey: GPUProvisionalRenderSegmentKey =
+        GPUProvisionalRenderSegmentKey("target.$targetStateHash.layer.$layerScopeId"),
+    batchEligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility> =
+        drawPackets.associate { packet ->
+            packet.packetId to GPUPassBatchEligibility(
+                kind = GPUPassBatchKind.Isolated,
+                adjacency = GPUPassBatchAdjacency.Isolated,
+            )
+        },
+) {
+    val invocations: List<GPUDrawInvocation> = immutableList(invocations)
+    val pipelineKeys: List<String> = immutableList(pipelineKeys)
+    val barriers: List<String> = immutableList(barriers)
+    val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
+    val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
+    val batchEligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility> =
+        immutableMap(batchEligibilityByPacketId)
+
+    init {
+        require(this.batchEligibilityByPacketId.keys == this.drawPackets.map { it.packetId }.toSet()) {
+            "GPUDrawPass batching eligibility must cover every packet exactly"
+        }
+    }
+}
 
 /** Render-step contract for geometry and coverage execution. */
 interface GPURenderStep {
@@ -1214,6 +1239,8 @@ object GPUFirstRoutePassBuilder {
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
         targetStateHash: String,
+        batchKind: GPUPassBatchKind,
+        batchAdjacency: GPUPassBatchAdjacency = GPUPassBatchAdjacency.Compatible,
     ): GPUDrawPass {
         val invocation = GPUDrawInvocation(
             commandIdValue = commandIdValue,
@@ -1261,6 +1288,12 @@ object GPUFirstRoutePassBuilder {
             pipelineKeys = listOf(pipelineKey.value),
             barriers = emptyList(),
             drawPackets = listOf(packet),
+            batchEligibilityByPacketId = mapOf(
+                packet.packetId to GPUPassBatchEligibility(
+                    kind = batchKind,
+                    adjacency = batchAdjacency,
+                ),
+            ),
         )
     }
 
@@ -1301,6 +1334,8 @@ object GPUFirstRoutePassBuilder {
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
         targetStateHash: String,
+        batchKind: GPUPassBatchKind,
+        batchAdjacency: GPUPassBatchAdjacency = GPUPassBatchAdjacency.Compatible,
     ): GPUDrawPass =
         acceptedFillRect(
             commandIdValue = commandIdValue,
@@ -1313,6 +1348,8 @@ object GPUFirstRoutePassBuilder {
             scissorBoundsHash = scissorBoundsHash,
             originalPaintOrder = originalPaintOrder,
             targetStateHash = targetStateHash,
+            batchKind = batchKind,
+            batchAdjacency = batchAdjacency,
         )
 
     /** Builds an empty refused FillRRect pass so unsupported rrects cannot produce draw work. */

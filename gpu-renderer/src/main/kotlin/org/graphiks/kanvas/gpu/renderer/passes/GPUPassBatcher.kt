@@ -1,10 +1,27 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
+
+/** Typed identity for one provisional render-pass segment across recorded commands. */
+@JvmInline
+value class GPUProvisionalRenderSegmentKey(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUProvisionalRenderSegmentKey.value must not be blank" }
+    }
+}
 
 enum class GPUPassBatchKind(val dumpLabel: String) {
     SolidFill("solid-fill"),
     SimpleGradient("simple-gradient"),
+    Isolated("isolated"),
+}
+
+/** Whether pass analysis proved that a packet may join an adjacent compatible packet. */
+enum class GPUPassBatchAdjacency {
+    Compatible,
+    Isolated,
 }
 
 object GPUPassBatchReason {
@@ -25,8 +42,8 @@ class GPUPassBatchQueueGuard(
     requiredRetainedRefs: List<String>,
     retainedRefs: List<String>,
 ) {
-    val requiredRetainedRefs: List<String> = requiredRetainedRefs.toList()
-    val retainedRefs: List<String> = retainedRefs.toList()
+    val requiredRetainedRefs: List<String> = immutableList(requiredRetainedRefs)
+    val retainedRefs: List<String> = immutableList(retainedRefs)
 
     val retained: Boolean
         get() = retainedRefs.containsAll(requiredRetainedRefs)
@@ -48,31 +65,44 @@ class GPUPassBatchQueueGuard(
 
 data class GPUPassBatchEligibility(
     val kind: GPUPassBatchKind,
-    val fixedStateHash: String,
+    val adjacency: GPUPassBatchAdjacency = GPUPassBatchAdjacency.Compatible,
     val queueGuard: GPUPassBatchQueueGuard = GPUPassBatchQueueGuard(
         requiredRetainedRefs = emptyList(),
         retainedRefs = emptyList(),
     ),
-) {
-    init {
-        require(fixedStateHash.isNotBlank()) {
-            "GPUPassBatchEligibility.fixedStateHash must not be blank"
-        }
-    }
-}
+)
 
 class GPUPassBatcherRequest(
-    val packetStream: GPUDrawPacketStream,
+    val segmentKey: GPUProvisionalRenderSegmentKey,
+    packets: List<GPUDrawPacket>,
     eligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility>,
+    diagnostics: List<GPUPassDiagnostic> = emptyList(),
+    val streamId: String = "segment.${segmentKey.value}",
+    val passId: String = segmentKey.value,
 ) {
+    val packets: List<GPUDrawPacket> = immutableList(packets)
     val eligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility> =
-        eligibilityByPacketId.toMap()
+        immutableMap(eligibilityByPacketId)
+    val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
 
     init {
-        require(this.eligibilityByPacketId.keys == packetStream.packetIds.toSet()) {
+        require(this.eligibilityByPacketId.keys == packets.map(GPUDrawPacket::packetId).toSet()) {
             "GPUPassBatcherRequest eligibility must cover every packet exactly"
         }
     }
+
+    /** Compatibility bridge for legacy pass-local tests and Task 8 command-stream fixtures. */
+    constructor(
+        packetStream: GPUDrawPacketStream,
+        eligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility>,
+    ) : this(
+        segmentKey = GPUProvisionalRenderSegmentKey(packetStream.passId),
+        packets = packetStream.packets,
+        eligibilityByPacketId = eligibilityByPacketId,
+        diagnostics = packetStream.diagnostics,
+        streamId = packetStream.streamId,
+        passId = packetStream.passId,
+    )
 }
 
 class GPUPassBatch(
@@ -80,10 +110,9 @@ class GPUPassBatch(
     packets: List<GPUDrawPacket>,
     val kind: GPUPassBatchKind,
     val targetStateHash: String,
-    val fixedStateHash: String,
     val queueGuard: GPUPassBatchQueueGuard,
 ) {
-    val packets: List<GPUDrawPacket> = packets.toList()
+    val packets: List<GPUDrawPacket> = immutableList(packets)
     val packetIds: List<GPUDrawPacketID>
         get() = packets.map { it.packetId }
     val packetCount: Int
@@ -97,7 +126,6 @@ class GPUPassBatch(
         require(batchId.isNotBlank()) { "GPUPassBatch.batchId must not be blank" }
         require(packets.isNotEmpty()) { "GPUPassBatch.packets must not be empty" }
         require(targetStateHash.isNotBlank()) { "GPUPassBatch.targetStateHash must not be blank" }
-        require(fixedStateHash.isNotBlank()) { "GPUPassBatch.fixedStateHash must not be blank" }
     }
 }
 
@@ -121,9 +149,9 @@ class GPUPassBatchPlan(
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
     inputPacketCount: Int,
 ) {
-    val batches: List<GPUPassBatch> = batches.toList()
-    val cuts: List<GPUPassBatchCut> = cuts.toList()
-    val diagnostics: List<GPUPassDiagnostic> = diagnostics.toList()
+    val batches: List<GPUPassBatch> = immutableList(batches)
+    val cuts: List<GPUPassBatchCut> = immutableList(cuts)
+    val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
     val packetCount: Int = inputPacketCount
     val acceptedBatchCount: Int
         get() = batches.count { it.acceptedForBatching }
@@ -137,7 +165,6 @@ class GPUPassBatchPlan(
 
 class GPUPassBatcher {
     fun plan(request: GPUPassBatcherRequest): GPUPassBatchPlan {
-        val stream = request.packetStream
         val batches = mutableListOf<GPUPassBatch>()
         val cuts = mutableListOf<GPUPassBatchCut>()
         var currentPackets = mutableListOf<GPUDrawPacket>()
@@ -155,7 +182,6 @@ class GPUPassBatcher {
                     packets = packets,
                     kind = eligibility.kind,
                     targetStateHash = target,
-                    fixedStateHash = eligibility.fixedStateHash,
                     queueGuard = mergeQueueGuards(packets, request.eligibilityByPacketId),
                 )
             }
@@ -164,7 +190,7 @@ class GPUPassBatcher {
             currentTarget = null
         }
 
-        stream.packets.forEach { packet ->
+        request.packets.forEach { packet ->
             val acceptedEligibility = request.eligibilityByPacketId.getValue(packet.packetId)
             if (currentPackets.isEmpty()) {
                 currentPackets += packet
@@ -195,12 +221,12 @@ class GPUPassBatcher {
         emitCurrent()
 
         return GPUPassBatchPlan(
-            streamId = stream.streamId,
-            passId = stream.passId,
+            streamId = request.streamId,
+            passId = request.passId,
             batches = batches,
             cuts = cuts,
-            diagnostics = stream.diagnostics,
-            inputPacketCount = stream.packetCount,
+            diagnostics = request.diagnostics,
+            inputPacketCount = request.packets.size,
         )
     }
 
@@ -219,9 +245,11 @@ class GPUPassBatcher {
                     reasonCode = GPUPassBatchReason.TARGET_CHANGED,
                     message = "target $currentTarget cannot batch with ${nextPacket.targetStateHash}",
                 )
-            nextEligibility.kind != currentEligibility.kind ||
-                nextEligibility.fixedStateHash != currentEligibility.fixedStateHash ||
+            currentEligibility.adjacency != GPUPassBatchAdjacency.Compatible ||
+                nextEligibility.adjacency != GPUPassBatchAdjacency.Compatible ||
+                nextEligibility.kind != currentEligibility.kind ||
                 nextPacket.role != previousPacket.role ||
+                nextPacket.blendPlan != previousPacket.blendPlan ||
                 nextPacket.renderStepId != previousPacket.renderStepId ||
                 nextPacket.renderStepVersion != previousPacket.renderStepVersion ||
                 nextPacket.renderPipelineKey != previousPacket.renderPipelineKey ||
@@ -232,7 +260,7 @@ class GPUPassBatcher {
                     beforePacketId = previousPacket.packetId,
                     afterPacketId = nextPacket.packetId,
                     reasonCode = GPUPassBatchReason.BLEND_OR_FIXED_STATE_CHANGED,
-                    message = "fixed state ${currentEligibility.fixedStateHash} cannot batch with ${nextEligibility.fixedStateHash}",
+                    message = "typed packet state or batch eligibility changed",
                 )
             else -> null
         }

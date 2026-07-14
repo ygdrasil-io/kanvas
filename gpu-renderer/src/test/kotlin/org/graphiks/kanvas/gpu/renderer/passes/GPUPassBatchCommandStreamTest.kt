@@ -229,7 +229,6 @@ class GPUPassBatchCommandStreamTest {
             eligibilityByPacketId = packetStream.packets.associate { packet ->
                 packet.packetId to GPUPassBatchEligibility(
                     kind = GPUPassBatchKind.SolidFill,
-                    fixedStateHash = "fixed:src-over",
                     queueGuard = GPUPassBatchQueueGuard(
                         requiredRetainedRefs = retainedRefs,
                         retainedRefs = retainedRefs,
@@ -255,7 +254,6 @@ class GPUPassBatchCommandStreamTest {
             packets = listOf(packet),
             kind = GPUPassBatchKind.SolidFill,
             targetStateHash = targetStateHash,
-            fixedStateHash = "fixed:src-over",
             queueGuard = GPUPassBatchQueueGuard(
                 requiredRetainedRefs = retainedRefs,
                 retainedRefs = retainedRefs,

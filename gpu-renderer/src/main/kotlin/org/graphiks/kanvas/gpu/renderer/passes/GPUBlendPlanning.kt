@@ -105,7 +105,11 @@ sealed interface GPUBlendPlan {
             get() = child.destinationReadRequirement
     }
 
-    data class NoOp(override val mode: GPUBlendMode, val reason: String) : GPUBlendPlan
+    data class NoOp(override val mode: GPUBlendMode, val reason: String) : GPUBlendPlan {
+        init {
+            require(reason.isNotBlank()) { "GPUBlendPlan.NoOp.reason must not be blank" }
+        }
+    }
 
     data class UnsupportedBlend(
         override val mode: GPUBlendMode,

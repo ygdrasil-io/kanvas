@@ -1376,6 +1376,7 @@ class FirstRoutePMEvidenceBundleTest {
     private fun acceptedFillRectRecording(recordingIdValue: String, commandIdValue: Int): GPURecording {
         val recorder = GPURecorder(
             recordingId = GPURecordingID(recordingIdValue),
+            frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(29),
             capabilities = firstSliceCapabilities(),
         )
         recorder.record(acceptedFillRect(commandIdValue = commandIdValue))
@@ -1386,6 +1387,7 @@ class FirstRoutePMEvidenceBundleTest {
     private fun refusedFillRectRecording(recordingIdValue: String, commandIdValue: Int): GPURecording {
         val recorder = GPURecorder(
             recordingId = GPURecordingID(recordingIdValue),
+            frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(29),
             capabilities = firstSliceCapabilities(),
         )
         recorder.record(

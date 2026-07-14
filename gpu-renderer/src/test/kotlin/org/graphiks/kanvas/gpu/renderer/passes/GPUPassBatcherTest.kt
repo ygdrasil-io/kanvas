@@ -79,17 +79,22 @@ class GPUPassBatcherTest {
     }
 
     @Test
-    fun `batcher cuts on fixed state change`() {
+    fun `batcher cuts on typed pipeline state change`() {
         val packets = packetStream(
             packet("packet-1", commandId = 1, target = "target-a"),
-            packet("packet-2", commandId = 2, target = "target-a"),
+            packet(
+                "packet-2",
+                commandId = 2,
+                target = "target-a",
+                pipeline = GPURenderPipelineKey("render:solid-fill:dst-over"),
+            ),
         )
         val plan = GPUPassBatcher().plan(
             GPUPassBatcherRequest(
                 packetStream = packets,
                 eligibilityByPacketId = mapOf(
-                    GPUDrawPacketID("packet-1") to eligibility(GPUPassBatchKind.SolidFill, fixedStateHash = "fixed:src-over"),
-                    GPUDrawPacketID("packet-2") to eligibility(GPUPassBatchKind.SolidFill, fixedStateHash = "fixed:dst-over"),
+                    GPUDrawPacketID("packet-1") to eligibility(GPUPassBatchKind.SolidFill),
+                    GPUDrawPacketID("packet-2") to eligibility(GPUPassBatchKind.SolidFill),
                 ),
             ),
         )
@@ -157,7 +162,6 @@ class GPUPassBatcherTest {
                 eligibilityByPacketId = packets.packets.associate { packet ->
                     packet.packetId to GPUPassBatchEligibility(
                         kind = GPUPassBatchKind.SolidFill,
-                        fixedStateHash = "fixed:src-over",
                         queueGuard = unretained,
                     )
                 },
@@ -292,12 +296,10 @@ class GPUPassBatcherTest {
 
     private fun eligibility(
         kind: GPUPassBatchKind,
-        fixedStateHash: String = "fixed:src-over",
         retainedRefs: List<String> = listOf("lease:uniform-slab:frame-1", "lease:bind-group:frame-1"),
     ): GPUPassBatchEligibility =
         GPUPassBatchEligibility(
             kind = kind,
-            fixedStateHash = fixedStateHash,
             queueGuard = GPUPassBatchQueueGuard(
                 requiredRetainedRefs = retainedRefs,
                 retainedRefs = retainedRefs,

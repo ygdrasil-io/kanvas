@@ -281,6 +281,8 @@ data class GPUCapabilities(
     val supportedTextureFormats: Set<GPUTextureFormat> = emptySet(),
     val supportedTextureUsage: GPUTextureUsage? = null,
     val rendererFeatures: Set<GPURendererFeature> = emptySet(),
+    /** Optional real implementation primitive captured by the device capability registry. */
+    val copyAsDrawCapability: GPUCopyAsDrawImplementationCapability? = null,
 ) {
     init {
         require(snapshotId.isNotBlank()) { "GPUCapabilities.snapshotId must not be blank" }

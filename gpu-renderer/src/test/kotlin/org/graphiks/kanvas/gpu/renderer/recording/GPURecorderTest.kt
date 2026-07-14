@@ -32,6 +32,7 @@ class GPURecorderTest {
     fun `accepted fill rect records analysis dump compatibility key and prematerialization render task`() {
         val recorder = GPURecorder(
             recordingId = GPURecordingID("recording.accepted"),
+            frameId = GPUFrameID(17),
             capabilities = firstSliceCapabilities(),
         )
 
@@ -78,6 +79,7 @@ class GPURecorderTest {
     fun `refused fill rect records refused task and terminal diagnostics without render work`() {
         val recorder = GPURecorder(
             recordingId = GPURecordingID("recording.refused"),
+            frameId = GPUFrameID(17),
             capabilities = firstSliceCapabilities(),
         )
 
@@ -107,6 +109,7 @@ class GPURecorderTest {
     fun `accepted fill rrect records analysis dump compatibility key and prematerialization render task`() {
         val recorder = GPURecorder(
             recordingId = GPURecordingID("recording.rrect-accepted"),
+            frameId = GPUFrameID(17),
             capabilities = firstSliceRRectCapabilities(),
         )
 
@@ -139,6 +142,7 @@ class GPURecorderTest {
     fun `draw text run records explicit refused task without render work`() {
         val recorder = GPURecorder(
             recordingId = GPURecordingID("recording.text-refused"),
+            frameId = GPUFrameID(17),
             capabilities = firstSliceCapabilities(),
         )
 
@@ -162,6 +166,7 @@ class GPURecorderTest {
     fun `draw text run records stable diagnostics for skia-like payload leakage`() {
         val recorder = GPURecorder(
             recordingId = GPURecordingID("recording.text-leak"),
+            frameId = GPUFrameID(17),
             capabilities = firstSliceCapabilities(),
         )
 
@@ -188,6 +193,7 @@ class GPURecorderTest {
     fun `one shot recording refuses replay with stable diagnostic and key dump available`() {
         val recorder = GPURecorder(
             recordingId = GPURecordingID("recording.one-shot"),
+            frameId = GPUFrameID(17),
             capabilities = firstSliceCapabilities(),
         )
 
@@ -209,6 +215,7 @@ class GPURecorderTest {
     fun `ordered commands and ordered recordings expose dependency token evidence`() {
         val recorder = GPURecorder(
             recordingId = GPURecordingID("recording.sequence"),
+            frameId = GPUFrameID(17),
             capabilities = firstSliceCapabilities(),
         )
 
@@ -249,6 +256,7 @@ class GPURecorderTest {
     fun `refused command remains in canonical paint order between accepted render tasks`() {
         val recorder = GPURecorder(
             recordingId = GPURecordingID("recording.mixed-order"),
+            frameId = GPUFrameID(17),
             capabilities = firstSliceCapabilities(),
         )
         recorder.record(acceptedFillRect(commandIdValue = 1, paintOrder = 0))
@@ -282,6 +290,7 @@ class GPURecorderTest {
     private fun singleCommandRecording(recordingIdValue: String, commandIdValue: Int): GPURecording {
         val recorder = GPURecorder(
             recordingId = GPURecordingID(recordingIdValue),
+            frameId = GPUFrameID(17),
             capabilities = firstSliceCapabilities(),
         )
         recorder.record(acceptedFillRect(commandIdValue = commandIdValue))

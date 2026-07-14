@@ -283,6 +283,11 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            batchKind = if (isLinearGradient) {
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SimpleGradient
+            } else {
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SolidFill
+            },
         )
 
         return GPUFirstRoutePlan(
@@ -349,6 +354,8 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            batchKind = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.Isolated,
+            batchAdjacency = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency.Isolated,
         )
 
         return GPUFirstRoutePlan(
@@ -448,6 +455,11 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            batchKind = if (isLinearGradient) {
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SimpleGradient
+            } else {
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SolidFill
+            },
         )
 
         return GPUFirstRoutePlan(
@@ -515,6 +527,8 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            batchKind = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.Isolated,
+            batchAdjacency = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency.Isolated,
         )
 
         return GPUFirstRoutePlan(

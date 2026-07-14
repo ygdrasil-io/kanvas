@@ -3521,7 +3521,6 @@ private class WgpuRenderRecorder(
                     sourceLabel = sourceLabel,
                     kind = batchKind.toNativePassBatchKind(),
                     pipelineKeyLabel = keys.renderPipelineKeyHash,
-                    fixedStateHash = "fixed:${blendMode?.stateId ?: "none"}:${targetFormat.toBackendColorFormat()}",
                     retainedLeases = slab.leases,
                 )
             }
@@ -3572,7 +3571,6 @@ private class WgpuRenderRecorder(
         sourceLabel: String,
         kind: GPUPassBatchKind,
         pipelineKeyLabel: String,
-        fixedStateHash: String,
         retainedLeases: List<GPUResourceLease>,
     ) {
         if (draws.isEmpty()) return
@@ -3625,7 +3623,6 @@ private class WgpuRenderRecorder(
         val eligibility = packets.associate { packet ->
             packet.packetId to GPUPassBatchEligibility(
                 kind = kind,
-                fixedStateHash = fixedStateHash.sanitizeBatchLabel(),
                 queueGuard = queueGuard,
             )
         }

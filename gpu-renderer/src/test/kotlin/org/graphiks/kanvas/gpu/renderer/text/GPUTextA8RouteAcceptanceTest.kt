@@ -84,6 +84,7 @@ class GPUTextA8RouteAcceptanceTest {
 
         val recorder = GPURecorder(
             recordingId = GPURecordingID("test-a8-accept"),
+            frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(23),
             capabilities = textA8Capabilities(),
         )
         recorder.record(command)
@@ -137,6 +138,7 @@ class GPUTextA8RouteAcceptanceTest {
 
         val recorder = GPURecorder(
             recordingId = GPURecordingID("test-a8-refuse"),
+            frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(23),
             capabilities = textA8Capabilities(),
         )
         recorder.record(command)

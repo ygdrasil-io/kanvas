@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingBlock
@@ -139,7 +140,7 @@ class GPUResourcePreparationRequest(
     val byteSize: Long,
     val diagnosticLabel: String,
 ) {
-    val usages: Set<GPUFrameResourceUsage> = usages.toSet()
+    val usages: Set<GPUFrameResourceUsage> = immutableSet(usages)
 
     init {
         require(usages.isNotEmpty()) { "GPUResourcePreparationRequest.usages must not be empty" }
@@ -153,6 +154,11 @@ class GPUResourcePreparationRequest(
             }
             is GPUFrameBufferRef -> require(descriptor is GPUFrameBufferDescriptor) {
                 "Buffer preparation requires GPUFrameBufferDescriptor"
+            }
+        }
+        if (descriptor is GPUFrameBufferDescriptor) {
+            require(byteSize == descriptor.byteSize) {
+                "Buffer preparation byteSize must match GPUFrameBufferDescriptor.byteSize"
             }
         }
     }

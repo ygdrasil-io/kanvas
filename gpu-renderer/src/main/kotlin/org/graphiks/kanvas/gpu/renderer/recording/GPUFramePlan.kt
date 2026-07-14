@@ -1,12 +1,29 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCopyAsDrawImplementationCapability
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.capabilities.dumpLabel
+import org.graphiks.kanvas.gpu.renderer.capabilities.dumpLabels
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
@@ -29,6 +46,46 @@ import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 value class GPUFrameID(val value: Long) {
     init {
         require(value >= 0L) { "GPUFrameID.value must be non-negative" }
+    }
+}
+
+/**
+ * Canonical handle-free capability snapshot sealed for exactly one frame/device generation.
+ *
+ * The constructor is private so destination payloads cannot self-declare backend support. The
+ * owner captures this value only from the selected device's real [GPUCapabilities] snapshot.
+ */
+class GPUFrameCapabilitySeal private constructor(
+    val frameId: GPUFrameID,
+    val deviceGeneration: GPUDeviceGenerationID,
+    val implementation: GPUImplementationIdentity,
+    val capabilitySnapshotId: String,
+    val capabilitySnapshotHash: String,
+    val copyAsDrawCapability: GPUCopyAsDrawImplementationCapability?,
+    val sealHash: String,
+) {
+    companion object {
+        internal fun capture(
+            frameId: GPUFrameID,
+            deviceGeneration: GPUDeviceGenerationID,
+            capabilities: GPUCapabilities,
+        ): GPUFrameCapabilitySeal {
+            val snapshotHash = capabilities.canonicalSnapshotHash()
+            val sealHash = CanonicalHashSink("GPUFrameCapabilitySeal/v1")
+                .long("frameId", frameId.value)
+                .long("deviceGeneration", deviceGeneration.value)
+                .string("capabilitySnapshotHash", snapshotHash)
+                .finish()
+            return GPUFrameCapabilitySeal(
+                frameId = frameId,
+                deviceGeneration = deviceGeneration,
+                implementation = capabilities.implementation,
+                capabilitySnapshotId = capabilities.snapshotId,
+                capabilitySnapshotHash = snapshotHash,
+                copyAsDrawCapability = capabilities.copyAsDrawCapability,
+                sealHash = sealHash,
+            )
+        }
     }
 }
 
@@ -136,6 +193,7 @@ data class GPURecordingSeal(
     val insertionOrder: Long,
     val compatibilityKeyHash: String,
     val replayKeyHash: String,
+    val capabilitySealHash: String,
 ) {
     init {
         require(insertionOrder >= 0L) { "GPURecordingSeal.insertionOrder must be non-negative" }
@@ -143,6 +201,22 @@ data class GPURecordingSeal(
             "GPURecordingSeal.compatibilityKeyHash must not be blank"
         }
         require(replayKeyHash.isNotBlank()) { "GPURecordingSeal.replayKeyHash must not be blank" }
+        require(capabilitySealHash.isNotBlank()) {
+            "GPURecordingSeal.capabilitySealHash must not be blank"
+        }
+    }
+}
+
+/** Canonical evidence for a draw packet intentionally elided because its blend is a true NoOp. */
+data class GPUFrameElidedNoOpDraw(
+    val taskId: GPUTaskID,
+    val packetId: GPUDrawPacketID,
+    val commandId: GPUDrawCommandID,
+    val mode: GPUBlendMode,
+    val reason: String,
+) {
+    init {
+        require(reason.isNotBlank()) { "GPUFrameElidedNoOpDraw.reason must not be blank" }
     }
 }
 
@@ -166,10 +240,48 @@ sealed interface GPUFrameStep {
         val samplePlan: GPUSamplePlan,
         drawPackets: List<GPUDrawPacket>,
         sourceTaskIds: List<GPUTaskID>,
+        batches: List<GPUFrameRenderBatch> = listOf(
+            GPUFrameRenderBatch(
+                batchId = "batch.direct",
+                kind = GPUPassBatchKind.Isolated,
+                packets = drawPackets,
+                sourceTaskIds = sourceTaskIds,
+            ),
+        ),
     ) : GPUFrameStep {
-        val drawPackets: List<GPUDrawPacket> = drawPackets.toList()
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
+        val batches: List<GPUFrameRenderBatch> = immutableList(batches)
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
+
+        init {
+            require(drawPackets.isNotEmpty()) {
+                "GPUFrameStep.RenderPassStep.drawPackets must not be empty"
+            }
+            require(drawPackets.map(GPUDrawPacket::packetId).distinct().size == drawPackets.size) {
+                "GPUFrameStep.RenderPassStep.drawPackets must have unique packet IDs"
+            }
+            require(drawPackets.map(GPUDrawPacket::targetStateHash).distinct().size == 1) {
+                "GPUFrameStep.RenderPassStep.drawPackets must share one target state"
+            }
+            require(sourceTaskIds.isNotEmpty() && sourceTaskIds.distinct().size == sourceTaskIds.size) {
+                "GPUFrameStep.RenderPassStep.sourceTaskIds must be non-empty and unique"
+            }
+            require(batches.isNotEmpty()) {
+                "GPUFrameStep.RenderPassStep.batches must not be empty"
+            }
+            require(
+                batches.flatMap(GPUFrameRenderBatch::packets).map(GPUDrawPacket::packetId) ==
+                    drawPackets.map(GPUDrawPacket::packetId),
+            ) {
+                "GPUFrameStep.RenderPassStep.batches must exactly partition drawPackets in order"
+            }
+            require(
+                batches.flatMap(GPUFrameRenderBatch::sourceTaskIds).distinct() == sourceTaskIds,
+            ) {
+                "GPUFrameStep.RenderPassStep batch sourceTaskIds must exactly cover the step sourceTaskIds"
+            }
+        }
     }
 
     class ComputePassStep(
@@ -178,9 +290,9 @@ sealed interface GPUFrameStep {
         dispatches: List<GPUComputeDispatch>,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        val resourceUses: List<GPUFrameResourceUse> = resourceUses.toList()
-        val dispatches: List<GPUComputeDispatch> = dispatches.toList()
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
+        val dispatches: List<GPUComputeDispatch> = immutableList(dispatches)
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
@@ -188,8 +300,8 @@ sealed interface GPUFrameStep {
         requests: List<GPUResourcePreparationRequest>,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        val requests: List<GPUResourcePreparationRequest> = requests.toList()
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        val requests: List<GPUResourcePreparationRequest> = immutableList(requests)
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Preflight
     }
 
@@ -199,7 +311,7 @@ sealed interface GPUFrameStep {
         val layout: GPUUploadLayout,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
@@ -209,8 +321,8 @@ sealed interface GPUFrameStep {
         regions: List<GPUResourceCopyRegion>,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        val regions: List<GPUResourceCopyRegion> = regions.toList()
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        val regions: List<GPUResourceCopyRegion> = immutableList(regions)
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
@@ -219,8 +331,8 @@ sealed interface GPUFrameStep {
         val reasonCode: String,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        val orderedUseTokens: List<GPUTaskUseToken> = orderedUseTokens.toList()
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        val orderedUseTokens: List<GPUTaskUseToken> = immutableList(orderedUseTokens)
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.DependencyOnly
 
         init {
@@ -232,23 +344,37 @@ sealed interface GPUFrameStep {
 
     class CopyDestinationStep(
         val source: GPUFrameTargetRef,
+        val sourceKey: GPUDestinationSnapshotGroupKey,
         val snapshot: GPUFrameTextureRef,
         val logicalBounds: GPUPixelBounds,
         val copyLayout: GPUTextureCopyLayout,
+        consumers: List<GPUDestinationSnapshotConsumerRef>,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        val consumers: List<GPUDestinationSnapshotConsumerRef> = immutableList(consumers)
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
     class CopyAsDrawMaterializationStep(
-        val source: GPUFrameTargetRef,
+        val source: GPUFrameTextureRef,
+        val sourceKey: GPUDestinationSnapshotGroupKey,
+        val sourceIntermediate: GPUIntermediateIdentity,
         val snapshot: GPUFrameTextureRef,
         val logicalBounds: GPUPixelBounds,
+        val capabilitySealHash: String,
+        consumers: List<GPUDestinationSnapshotConsumerRef>,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        val consumers: List<GPUDestinationSnapshotConsumerRef> = immutableList(consumers)
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
+
+        init {
+            require(capabilitySealHash.isNotBlank()) {
+                "CopyAsDrawMaterializationStep.capabilitySealHash must not be blank"
+            }
+        }
     }
 
     class TargetTransitionStep(
@@ -257,7 +383,7 @@ sealed interface GPUFrameStep {
         val transitionKind: GPUTargetTransitionKind,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.DependencyOnly
     }
 
@@ -267,7 +393,7 @@ sealed interface GPUFrameStep {
         val request: GPUFrameReadbackRequest,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
@@ -275,7 +401,7 @@ sealed interface GPUFrameStep {
         val descriptor: GPUSurfaceOutputDescriptor,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Preflight
     }
 
@@ -284,7 +410,7 @@ sealed interface GPUFrameStep {
         val output: GPUSurfaceOutputRef,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
     }
 
@@ -292,7 +418,7 @@ sealed interface GPUFrameStep {
         val output: GPUSurfaceOutputRef,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.PostSubmitHost
     }
 
@@ -302,7 +428,7 @@ sealed interface GPUFrameStep {
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
         val diagnostic: GPUDiagnostic = diagnostic.snapshot()
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.RefusalEvidence
     }
 
@@ -312,55 +438,677 @@ sealed interface GPUFrameStep {
         diagnostic: GPUDiagnostic,
         sourceTaskIds: List<GPUTaskID>,
     ) : GPUFrameStep {
-        val provenanceTokens: List<GPUCompositeProvenanceToken> = provenanceTokens.toList()
+        val provenanceTokens: List<GPUCompositeProvenanceToken> = immutableList(provenanceTokens)
         val diagnostic: GPUDiagnostic = diagnostic.snapshot()
-        override val sourceTaskIds: List<GPUTaskID> = sourceTaskIds.toList()
+        override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.RefusalEvidence
+    }
+}
+
+/** One adjacent batch retained inside a single render-pass step. */
+class GPUFrameRenderBatch(
+    val batchId: String,
+    val kind: GPUPassBatchKind,
+    packets: List<GPUDrawPacket>,
+    sourceTaskIds: List<GPUTaskID>,
+) {
+    val packets: List<GPUDrawPacket> = immutableList(packets)
+    val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
+
+    init {
+        require(batchId.isNotBlank()) { "GPUFrameRenderBatch.batchId must not be blank" }
+        require(packets.isNotEmpty()) { "GPUFrameRenderBatch.packets must not be empty" }
+        require(sourceTaskIds.isNotEmpty() && sourceTaskIds.distinct().size == sourceTaskIds.size) {
+            "GPUFrameRenderBatch.sourceTaskIds must be non-empty and unique"
+        }
     }
 }
 
 /** Immutable deterministic result of task-list linearization. */
 class GPUFramePlan(
     val frameId: GPUFrameID,
+    val capabilitySeal: GPUFrameCapabilitySeal,
     recordingSeals: List<GPURecordingSeal>,
     steps: List<GPUFrameStep>,
     memoryBudget: GPUFrameMemoryBudgetPlan,
     diagnostics: List<GPUDiagnostic>,
+    dependencies: List<GPUTaskDependency> = emptyList(),
+    phaseOrder: List<GPUTaskPhase> = GPUTaskPhase.entries,
+    elidedNoOpDraws: List<GPUFrameElidedNoOpDraw> = emptyList(),
     val atomicallyRefused: Boolean = false,
 ) {
-    val recordingSeals: List<GPURecordingSeal> = recordingSeals.toList()
-    val steps: List<GPUFrameStep> = steps.toList()
+    val recordingSeals: List<GPURecordingSeal> = immutableList(recordingSeals)
+    val steps: List<GPUFrameStep> = immutableList(steps)
     val memoryBudget: GPUFrameMemoryBudgetPlan = memoryBudget.snapshotForFramePlan()
-    val diagnostics: List<GPUDiagnostic> = diagnostics.map(GPUDiagnostic::snapshot)
+    val diagnostics: List<GPUDiagnostic> = immutableList(diagnostics.map(GPUDiagnostic::snapshot))
+    val dependencies: List<GPUTaskDependency> = immutableList(dependencies)
+    val phaseOrder: List<GPUTaskPhase> = immutableList(phaseOrder)
+    val elidedNoOpDraws: List<GPUFrameElidedNoOpDraw> = immutableList(elidedNoOpDraws)
+
+    init {
+        require(frameId == capabilitySeal.frameId) {
+            "GPUFramePlan.frameId must match GPUFrameCapabilitySeal.frameId"
+        }
+        require(phaseOrder.distinct().size == phaseOrder.size) {
+            "GPUFramePlan.phaseOrder must not contain duplicates"
+        }
+        require(!atomicallyRefused || steps.isEmpty()) {
+            "GPUFramePlan atomically refused plans must not retain steps"
+        }
+        require(!atomicallyRefused || diagnostics.any(GPUDiagnostic::isTerminal)) {
+            "GPUFramePlan atomically refused plans require a terminal diagnostic"
+        }
+    }
 
     fun dumpLines(): List<String> =
         listOf(
-            "frame id=${frameId.value} refused=$atomicallyRefused seals=${recordingSeals.size} " +
+            "frame id=${frameId.value} capabilitySeal=${capabilitySeal.sealHash} " +
+                "refused=$atomicallyRefused seals=${recordingSeals.size} " +
                 "steps=${steps.size} diagnostics=${diagnostics.size}",
             memoryBudget.dumpLine(),
+            capabilitySeal.dumpLine(),
+            "phase-order ${phaseOrder.joinToString(",", transform = GPUTaskPhase::name)}",
         ) +
             recordingSeals.map { seal ->
                 "seal recording=${seal.recordingId.value} insertion=${seal.insertionOrder} " +
-                    "compatibility=${seal.compatibilityKeyHash} replay=${seal.replayKeyHash}"
+                "compatibility=${seal.compatibilityKeyHash} replay=${seal.replayKeyHash} " +
+                    "capabilitySeal=${seal.capabilitySealHash}"
             } +
+            dependencies.mapIndexed { index, dependency -> dependency.dumpLine(index) } +
+            elidedNoOpDraws.mapIndexed { index, evidence -> evidence.dumpLine(index) } +
             steps.mapIndexed { index, step -> step.dumpLine(index) } +
             diagnostics.mapIndexed { index, diagnostic -> diagnostic.dumpLine("diagnostic[$index]") }
 
     fun stableHash(): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(dumpLines().joinToString("\n").toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+        return canonicalPreimageHash()
     }
 }
 
-private fun GPUDiagnostic.snapshot(): GPUDiagnostic = copy(facts = facts.toMap())
+private fun GPUDiagnostic.snapshot(): GPUDiagnostic = copy(facts = immutableMap(facts))
+
+private fun GPUTaskDependency.dumpLine(index: Int): String =
+    "dependency index=$index kind=$dependencyKind from=${fromTaskId.value} to=${toTaskId.value} " +
+        "useToken=${useToken?.value ?: "none"} reason=$reasonCode"
+
+private fun GPUFrameCapabilitySeal.dumpLine(): String {
+    val copyAsDraw = copyAsDrawCapability?.let { capability ->
+        "${capability.implementationId}@${capability.implementationVersion}:${capability.available}"
+    } ?: "none"
+    return "capability frame=${frameId.value} deviceGeneration=${deviceGeneration.value} " +
+        "facade=${implementation.facadeName} implementation=${implementation.implementationName} " +
+        "adapter=${implementation.adapterName} device=${implementation.deviceName} " +
+        "vendorId=${implementation.vendorId ?: "none"} deviceId=${implementation.deviceId ?: "none"} " +
+        "snapshotId=$capabilitySnapshotId snapshotHash=$capabilitySnapshotHash " +
+        "copyAsDraw=$copyAsDraw seal=$sealHash"
+}
+
+private fun GPUFrameElidedNoOpDraw.dumpLine(index: Int): String =
+    "elided-noop index=$index task=${taskId.value} packet=${packetId.value} " +
+        "command=${commandId.value} mode=${mode.name} reason=$reason"
 
 internal fun GPUFrameMemoryBudgetPlan.snapshotForFramePlan(): GPUFrameMemoryBudgetPlan =
     copy(
-        categoryTotals = categoryTotals.toMap(),
-        deviceLimitFacts = deviceLimitFacts.toList(),
+        categoryTotals = immutableMap(categoryTotals),
+        deviceLimitFacts = immutableList(deviceLimitFacts),
         diagnostic = diagnostic?.snapshot(),
     )
+
+private fun GPUCapabilities.canonicalSnapshotHash(): String =
+    CanonicalHashSink("GPUCapabilities/v1").apply {
+        implementation("implementation", implementation)
+        string("snapshotId", snapshotId)
+        list("facts", facts.sortedWith(capabilityFactComparator)) { fact(it) }
+        list("knownUnsupportedFacts", knownUnsupportedFacts.sortedWith(capabilityFactComparator)) {
+            fact(it)
+        }
+        nullable("limits", limits) { limits ->
+            tag("GPULimits")
+            long("maxTextureDimension2D", limits.maxTextureDimension2D)
+            long("copyBytesPerRowAlignment", limits.copyBytesPerRowAlignment)
+            long("minUniformBufferOffsetAlignment", limits.minUniformBufferOffsetAlignment)
+            string("source", limits.source)
+        }
+        list("supportedTextureFormats", supportedTextureFormats.map { it.dumpLabel() }.sorted()) {
+            string("format", it)
+        }
+        nullable("supportedTextureUsage", supportedTextureUsage) { usage ->
+            list("labels", usage.dumpLabels().sorted()) { label ->
+                string("usage", label)
+            }
+        }
+        list("rendererFeatures", rendererFeatures.map { it.dumpLabel }.sorted()) {
+            string("feature", it)
+        }
+        nullable("copyAsDraw", copyAsDrawCapability) { capability ->
+            copyAsDrawCapability("value", capability)
+        }
+    }.finish()
+
+private val capabilityFactComparator: Comparator<GPUCapabilityFact> =
+    compareBy<GPUCapabilityFact>(
+        { it.name },
+        { it.source },
+        { it.value },
+        { it.affectsValidity },
+        { it.evidenceLabel },
+    )
+
+private fun GPUFramePlan.canonicalPreimageHash(): String =
+    CanonicalHashSink("GPUFramePlan/v3").apply {
+        long("frameId", frameId.value)
+        capabilitySeal("capabilitySeal", capabilitySeal)
+        bool("atomicallyRefused", atomicallyRefused)
+        list("recordingSeals", recordingSeals) { seal ->
+            tag("GPURecordingSeal")
+            string("recordingId", seal.recordingId.value)
+            long("insertionOrder", seal.insertionOrder)
+            string("compatibilityKeyHash", seal.compatibilityKeyHash)
+            string("replayKeyHash", seal.replayKeyHash)
+            string("capabilitySealHash", seal.capabilitySealHash)
+        }
+        list("phaseOrder", phaseOrder) { phase -> string("phase", phase.name) }
+        list("dependencies", dependencies) { dependency ->
+            tag("GPUTaskDependency")
+            string("fromTaskId", dependency.fromTaskId.value)
+            string("toTaskId", dependency.toTaskId.value)
+            string("dependencyKind", dependency.dependencyKind)
+            nullableString("useToken", dependency.useToken?.value)
+            string("reasonCode", dependency.reasonCode)
+        }
+        list("elidedNoOpDraws", elidedNoOpDraws) { evidence ->
+            tag("GPUFrameElidedNoOpDraw")
+            string("taskId", evidence.taskId.value)
+            string("packetId", evidence.packetId.value)
+            int("commandId", evidence.commandId.value)
+            string("mode", evidence.mode.name)
+            string("reason", evidence.reason)
+        }
+        memoryBudget("memoryBudget", memoryBudget)
+        list("steps", steps) { step(it) }
+        list("diagnostics", diagnostics) { diagnostic("diagnostic", it) }
+    }.finish()
+
+private class CanonicalHashSink(rootTag: String) {
+    private val bytes = ByteArrayOutputStream()
+    private val output = DataOutputStream(bytes)
+
+    init {
+        string("root", rootTag)
+    }
+
+    fun tag(value: String): CanonicalHashSink = string("type", value)
+
+    fun string(name: String, value: String): CanonicalHashSink = apply {
+        field(1, name)
+        val encoded = value.toByteArray(Charsets.UTF_8)
+        output.writeInt(encoded.size)
+        output.write(encoded)
+    }
+
+    fun nullableString(name: String, value: String?): CanonicalHashSink = apply {
+        field(2, name)
+        output.writeBoolean(value != null)
+        if (value != null) {
+            val encoded = value.toByteArray(Charsets.UTF_8)
+            output.writeInt(encoded.size)
+            output.write(encoded)
+        }
+    }
+
+    fun int(name: String, value: Int): CanonicalHashSink = apply {
+        field(3, name)
+        output.writeInt(value)
+    }
+
+    fun long(name: String, value: Long): CanonicalHashSink = apply {
+        field(4, name)
+        output.writeLong(value)
+    }
+
+    fun bool(name: String, value: Boolean): CanonicalHashSink = apply {
+        field(5, name)
+        output.writeBoolean(value)
+    }
+
+    fun <T> list(
+        name: String,
+        values: List<T>,
+        encode: CanonicalHashSink.(T) -> Unit,
+    ): CanonicalHashSink = apply {
+        field(6, name)
+        output.writeInt(values.size)
+        values.forEach { value ->
+            field(7, "item")
+            encode(value)
+        }
+    }
+
+    fun <T> nullable(
+        name: String,
+        value: T?,
+        encode: CanonicalHashSink.(T) -> Unit,
+    ): CanonicalHashSink = apply {
+        field(8, name)
+        output.writeBoolean(value != null)
+        if (value != null) encode(value)
+    }
+
+    fun finish(): String {
+        output.flush()
+        return MessageDigest.getInstance("SHA-256")
+            .digest(bytes.toByteArray())
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    }
+
+    private fun field(kind: Int, name: String) {
+        output.writeByte(kind)
+        val encoded = name.toByteArray(Charsets.UTF_8)
+        output.writeInt(encoded.size)
+        output.write(encoded)
+    }
+}
+
+private fun CanonicalHashSink.implementation(name: String, value: GPUImplementationIdentity) {
+    tag(name)
+    tag("GPUImplementationIdentity")
+    string("facadeName", value.facadeName)
+    string("implementationName", value.implementationName)
+    string("adapterName", value.adapterName)
+    string("deviceName", value.deviceName)
+    nullableString("vendorId", value.vendorId)
+    nullableString("deviceId", value.deviceId)
+}
+
+private fun CanonicalHashSink.fact(value: GPUCapabilityFact) {
+    tag("GPUCapabilityFact")
+    string("name", value.name)
+    string("source", value.source)
+    string("value", value.value)
+    bool("affectsValidity", value.affectsValidity)
+    string("evidenceLabel", value.evidenceLabel)
+}
+
+private fun CanonicalHashSink.copyAsDrawCapability(
+    name: String,
+    value: GPUCopyAsDrawImplementationCapability,
+) {
+    tag(name)
+    tag("GPUCopyAsDrawImplementationCapability")
+    string("implementationId", value.implementationId)
+    string("implementationVersion", value.implementationVersion)
+    bool("available", value.available)
+}
+
+private fun CanonicalHashSink.capabilitySeal(name: String, value: GPUFrameCapabilitySeal) {
+    tag(name)
+    tag("GPUFrameCapabilitySeal")
+    long("frameId", value.frameId.value)
+    long("deviceGeneration", value.deviceGeneration.value)
+    implementation("implementation", value.implementation)
+    string("capabilitySnapshotId", value.capabilitySnapshotId)
+    string("capabilitySnapshotHash", value.capabilitySnapshotHash)
+    nullable("copyAsDrawCapability", value.copyAsDrawCapability) {
+        copyAsDrawCapability("value", it)
+    }
+    string("sealHash", value.sealHash)
+}
+
+private fun CanonicalHashSink.memoryBudget(name: String, value: GPUFrameMemoryBudgetPlan) {
+    tag(name)
+    tag("GPUFrameMemoryBudgetPlan")
+    long("peakFrameTransientBytes", value.peakFrameTransientBytes)
+    long("targetResidentBytes", value.targetResidentBytes)
+    list("categoryTotals", GPUFrameMemoryCategory.entries) { category ->
+        string("category", category.name)
+        long("bytes", value.categoryTotals[category] ?: 0L)
+    }
+    list("deviceLimitFacts", value.deviceLimitFacts) { fact(it) }
+    long("configuredAggregateBudgetBytes", value.configuredAggregateBudgetBytes)
+    nullable("diagnostic", value.diagnostic) { diagnostic("value", it) }
+}
+
+private fun CanonicalHashSink.step(value: GPUFrameStep) {
+    tag(value.canonicalTypeTag())
+    string("executionKind", value.executionKind.name)
+    list("sourceTaskIds", value.sourceTaskIds) { string("taskId", it.value) }
+    when (value) {
+        is GPUFrameStep.RenderPassStep -> {
+            resourceRef("target", value.target)
+            loadStore("loadStore", value.loadStore)
+            samplePlan("samplePlan", value.samplePlan)
+            list("batches", value.batches) { batch ->
+                string("batchId", batch.batchId)
+                string("kind", batch.kind.name)
+                list("sourceTaskIds", batch.sourceTaskIds) { string("taskId", it.value) }
+                list("packets", batch.packets) { packet(it) }
+            }
+            list("drawPackets", value.drawPackets) { packet(it) }
+        }
+        is GPUFrameStep.ComputePassStep -> {
+            resourceRef("target", value.target)
+            list("resourceUses", value.resourceUses) { resourceUse(it) }
+            list("dispatches", value.dispatches) { dispatch(it) }
+        }
+        is GPUFrameStep.PrepareResourcesStep ->
+            list("requests", value.requests) { preparationRequest(it) }
+        is GPUFrameStep.UploadResourceStep -> {
+            resourceRef("staging", value.staging)
+            resourceRef("destination", value.destination)
+            long("sourceOffsetBytes", value.layout.sourceOffsetBytes)
+            long("bytesPerRow", value.layout.bytesPerRow)
+            int("rowsPerImage", value.layout.rowsPerImage)
+            long("byteSize", value.layout.byteSize)
+        }
+        is GPUFrameStep.CopyResourceStep -> {
+            resourceRef("source", value.source)
+            resourceRef("destination", value.destination)
+            list("regions", value.regions) { region ->
+                long("sourceOffsetBytes", region.sourceOffsetBytes)
+                long("destinationOffsetBytes", region.destinationOffsetBytes)
+                nullable("logicalBounds", region.logicalBounds) { bounds("value", it) }
+                long("byteSize", region.byteSize)
+            }
+        }
+        is GPUFrameStep.DependencyBarrierStep -> {
+            string("reasonCode", value.reasonCode)
+            list("orderedUseTokens", value.orderedUseTokens) { string("token", it.value) }
+        }
+        is GPUFrameStep.CopyDestinationStep -> {
+            resourceRef("source", value.source)
+            destinationSourceKey("sourceKey", value.sourceKey)
+            resourceRef("snapshot", value.snapshot)
+            bounds("logicalBounds", value.logicalBounds)
+            long("bytesPerRow", value.copyLayout.bytesPerRow)
+            int("rowsPerImage", value.copyLayout.rowsPerImage)
+            list("consumers", value.consumers) { destinationConsumer(it) }
+        }
+        is GPUFrameStep.CopyAsDrawMaterializationStep -> {
+            resourceRef("source", value.source)
+            destinationSourceKey("sourceKey", value.sourceKey)
+            string("sourceIntermediate", value.sourceIntermediate.value)
+            resourceRef("snapshot", value.snapshot)
+            bounds("logicalBounds", value.logicalBounds)
+            string("capabilitySealHash", value.capabilitySealHash)
+            list("consumers", value.consumers) { destinationConsumer(it) }
+        }
+        is GPUFrameStep.TargetTransitionStep -> {
+            resourceRef("parent", value.parent)
+            resourceRef("child", value.child)
+            string("transitionKind", value.transitionKind.name)
+        }
+        is GPUFrameStep.ReadbackCopyStep -> {
+            resourceRef("source", value.source)
+            resourceRef("staging", value.staging)
+            string("requestId", value.request.requestId.value)
+            bounds("sourceBounds", value.request.sourceBounds)
+            string("pixelFormat", value.request.pixelFormat.name)
+            string("outputColorInterpretation", value.request.outputColorInterpretation.value)
+            long("bufferOffsetBytes", value.request.bufferOffsetBytes)
+        }
+        is GPUFrameStep.AcquireSurfaceOutput -> surfaceDescriptor(value.descriptor)
+        is GPUFrameStep.SurfaceBlitRenderPassStep -> {
+            resourceRef("scene", value.scene)
+            string("output", value.output.value)
+        }
+        is GPUFrameStep.PostSubmitPresentAction -> string("output", value.output.value)
+        is GPUFrameStep.RefusedLeafDrawStep -> {
+            int("commandId", value.commandId.value)
+            diagnostic("diagnostic", value.diagnostic)
+        }
+        is GPUFrameStep.RefusedCompositeCommandStep -> {
+            int("commandId", value.commandId.value)
+            list("provenanceTokens", value.provenanceTokens) { string("token", it.value) }
+            diagnostic("diagnostic", value.diagnostic)
+        }
+    }
+}
+
+private fun GPUFrameStep.canonicalTypeTag(): String = when (this) {
+    is GPUFrameStep.RenderPassStep -> "RenderPassStep"
+    is GPUFrameStep.ComputePassStep -> "ComputePassStep"
+    is GPUFrameStep.PrepareResourcesStep -> "PrepareResourcesStep"
+    is GPUFrameStep.UploadResourceStep -> "UploadResourceStep"
+    is GPUFrameStep.CopyResourceStep -> "CopyResourceStep"
+    is GPUFrameStep.DependencyBarrierStep -> "DependencyBarrierStep"
+    is GPUFrameStep.CopyDestinationStep -> "CopyDestinationStep"
+    is GPUFrameStep.CopyAsDrawMaterializationStep -> "CopyAsDrawMaterializationStep"
+    is GPUFrameStep.TargetTransitionStep -> "TargetTransitionStep"
+    is GPUFrameStep.ReadbackCopyStep -> "ReadbackCopyStep"
+    is GPUFrameStep.AcquireSurfaceOutput -> "AcquireSurfaceOutput"
+    is GPUFrameStep.SurfaceBlitRenderPassStep -> "SurfaceBlitRenderPassStep"
+    is GPUFrameStep.PostSubmitPresentAction -> "PostSubmitPresentAction"
+    is GPUFrameStep.RefusedLeafDrawStep -> "RefusedLeafDrawStep"
+    is GPUFrameStep.RefusedCompositeCommandStep -> "RefusedCompositeCommandStep"
+}
+
+private fun CanonicalHashSink.packet(value: GPUDrawPacket) {
+    tag("GPUDrawPacket")
+    string("packetId", value.packetId.value)
+    int("commandIdValue", value.commandIdValue)
+    string("analysisRecordId", value.analysisRecordId)
+    string("passId", value.passId)
+    string("layerId", value.layerId)
+    string("bindingListId", value.bindingListId)
+    string("insertionReasonCode", value.insertionReasonCode)
+    long("sortKey", value.sortKey)
+    string("sortKeyPreimage", value.sortKeyPreimage)
+    string("renderStepId", value.renderStepId.value)
+    int("renderStepVersion", value.renderStepVersion)
+    string("role", value.role.name)
+    nullable("blendPlan", value.blendPlan) { blendPlan(it) }
+    nullableString("renderPipelineKey", value.renderPipelineKey?.value)
+    nullableString("computePipelineKey", value.computePipelineKey?.value)
+    string("bindingLayoutHash", value.bindingLayoutHash)
+    nullable("uniformSlot", value.uniformSlot) { slot ->
+        string("slotId", slot.slotId.value)
+        string("fingerprint", slot.fingerprint.value)
+        long("byteOffset", slot.byteOffset)
+    }
+    nullable("resourceSlot", value.resourceSlot) { slot ->
+        string("slotId", slot.slotId.value)
+        string("fingerprint", slot.fingerprint.value)
+        int("bindingIndex", slot.bindingIndex)
+    }
+    string("vertexSourceLabel", value.vertexSourceLabel)
+    nullableString("scissorBoundsHash", value.scissorBoundsHash)
+    string("targetStateHash", value.targetStateHash)
+    int("originalPaintOrder", value.originalPaintOrder)
+    long("resourceGeneration", value.resourceGeneration)
+    list("diagnostics", value.diagnostics) { diagnostic ->
+        string("code", diagnostic.code)
+        nullableString("passId", diagnostic.passId)
+        nullableString("invocationId", diagnostic.invocationId)
+        bool("terminal", diagnostic.terminal)
+    }
+}
+
+private fun CanonicalHashSink.blendPlan(value: GPUBlendPlan) {
+    when (value) {
+        is GPUBlendPlan.FixedFunctionBlend -> {
+            tag("FixedFunctionBlend")
+            string("mode", value.mode.name)
+            string("sourceCoverageEncoding", value.sourceCoverageEncoding.name)
+            string("stateId", value.state.stateId)
+            string("colorSourceFactor", value.state.color.sourceFactor)
+            string("colorDestinationFactor", value.state.color.destinationFactor)
+            string("colorOperation", value.state.color.operation)
+            string("alphaSourceFactor", value.state.alpha.sourceFactor)
+            string("alphaDestinationFactor", value.state.alpha.destinationFactor)
+            string("alphaOperation", value.state.alpha.operation)
+            string("writeMask", value.state.writeMask)
+        }
+        is GPUBlendPlan.ShaderBlendNoDstRead -> {
+            tag("ShaderBlendNoDstRead")
+            string("mode", value.mode.name)
+            string("formulaId", value.formulaId)
+            string("sourceCoverageEncoding", value.sourceCoverageEncoding.name)
+        }
+        is GPUBlendPlan.ShaderBlendWithDstRead -> {
+            tag("ShaderBlendWithDstRead")
+            string("mode", value.mode.name)
+            string("formulaId", value.formulaId)
+            string("sourceCoverageEncoding", value.sourceCoverageEncoding.name)
+        }
+        is GPUBlendPlan.LayerCompositeBlend -> {
+            tag("LayerCompositeBlend")
+            string("layerOrderingToken", value.layerOrderingToken)
+            blendPlan(value.child)
+        }
+        is GPUBlendPlan.NoOp -> {
+            tag("NoOp")
+            string("mode", value.mode.name)
+            string("reason", value.reason)
+        }
+        is GPUBlendPlan.UnsupportedBlend -> {
+            tag("UnsupportedBlend")
+            string("mode", value.mode.name)
+            string("diagnosticCode", value.diagnostic.code)
+            string("diagnosticMode", value.diagnostic.mode.name)
+            string("diagnosticMessage", value.diagnostic.message)
+            bool("diagnosticTerminal", value.diagnostic.terminal)
+            string("refusalScope", value.refusalScope.name)
+        }
+    }
+}
+
+private fun CanonicalHashSink.loadStore(name: String, value: GPULoadStorePlan) {
+    tag(name)
+    tag("GPULoadStorePlan")
+    string("loadOp", value.loadOp)
+    string("storePlan", value.storePlan.name)
+    nullableString("clearColorLabel", value.clearColorLabel)
+}
+
+private fun CanonicalHashSink.samplePlan(name: String, value: GPUSamplePlan) {
+    tag(name)
+    when (value) {
+        GPUSamplePlan.SingleSampleFrame -> tag("SingleSampleFrame")
+        is GPUSamplePlan.MultisampleFrame -> {
+            tag("MultisampleFrame")
+            int("sampleCount", value.sampleCount)
+        }
+        is GPUSamplePlan.LocalResolveApproximation -> {
+            tag("LocalResolveApproximation")
+            int("sourceSampleCount", value.sourceSampleCount)
+        }
+    }
+}
+
+private fun CanonicalHashSink.resourceRef(name: String, value: GPUFrameResourceRef) {
+    tag(name)
+    tag(
+        when (value) {
+            is GPUFrameTextureRef -> "GPUFrameTextureRef"
+            is GPUFrameBufferRef -> "GPUFrameBufferRef"
+            is GPUFrameTargetRef -> "GPUFrameTargetRef"
+        },
+    )
+    string("value", value.value)
+}
+
+private fun CanonicalHashSink.resourceUse(value: GPUFrameResourceUse) {
+    tag("GPUFrameResourceUse")
+    resourceRef("resource", value.resource)
+    string("role", value.role.name)
+    string("usage", value.usage.name)
+    string("lifetime", value.lifetime.name)
+    bool("write", value.write)
+}
+
+private fun CanonicalHashSink.dispatch(value: GPUComputeDispatch) {
+    tag("GPUComputeDispatch")
+    string("programKey", value.programKey.value)
+    int("workgroupCountX", value.workgroupCountX)
+    int("workgroupCountY", value.workgroupCountY)
+    int("workgroupCountZ", value.workgroupCountZ)
+}
+
+private fun CanonicalHashSink.preparationRequest(value: GPUResourcePreparationRequest) {
+    tag("GPUResourcePreparationRequest")
+    resourceRef("resource", value.resource)
+    when (val descriptor = value.descriptor) {
+        is GPUFrameTextureDescriptor -> {
+            tag("GPUFrameTextureDescriptor")
+            bounds("logicalBounds", descriptor.logicalBounds)
+            string("format", descriptor.format.value)
+            int("sampleCount", descriptor.sampleCount)
+        }
+        is GPUFrameBufferDescriptor -> {
+            tag("GPUFrameBufferDescriptor")
+            long("byteSize", descriptor.byteSize)
+            long("alignmentBytes", descriptor.alignmentBytes)
+        }
+    }
+    string("role", value.role.name)
+    list("usages", value.usages.sortedBy { it.name }) { string("usage", it.name) }
+    string("lifetime", value.lifetime.name)
+    long("byteSize", value.byteSize)
+    string("diagnosticLabel", value.diagnosticLabel)
+}
+
+private fun CanonicalHashSink.bounds(name: String, value: GPUPixelBounds) {
+    tag(name)
+    tag("GPUPixelBounds")
+    int("left", value.left)
+    int("top", value.top)
+    int("right", value.right)
+    int("bottom", value.bottom)
+}
+
+private fun CanonicalHashSink.surfaceDescriptor(value: GPUSurfaceOutputDescriptor) {
+    tag("GPUSurfaceOutputDescriptor")
+    string("output", value.output.value)
+    int("width", value.width)
+    int("height", value.height)
+    string("format", value.format.value)
+    long("targetGeneration", value.targetGeneration)
+}
+
+private fun CanonicalHashSink.destinationSourceKey(
+    name: String,
+    value: GPUDestinationSnapshotGroupKey,
+) {
+    tag(name)
+    tag("GPUDestinationSnapshotGroupKey")
+    string("target", value.target.value)
+    long("targetGeneration", value.targetGeneration)
+    long("deviceGeneration", value.deviceGeneration.value)
+    string("format", value.format.value)
+    string("colorInterpretation", value.colorInterpretation.value)
+    tag("sampleContinuation")
+    string("sampleTarget", value.sampleContinuation.target.value)
+    long("sampleTargetGeneration", value.sampleContinuation.targetGeneration)
+    long("sampleDeviceGeneration", value.sampleContinuation.deviceGeneration.value)
+    string("sampleColorFormat", value.sampleContinuation.colorFormat.value)
+    string("sampleColorInterpretation", value.sampleContinuation.colorInterpretation.value)
+    int("sampleCount", value.sampleContinuation.samplePlan.sampleCount)
+    string("colorAttachment", value.sampleContinuation.colorAttachment.value)
+    nullableString("depthStencilAttachment", value.sampleContinuation.depthStencilAttachment?.value)
+    nullableString("sourceIntermediate", value.sourceIntermediate?.value)
+}
+
+private fun CanonicalHashSink.destinationConsumer(value: GPUDestinationSnapshotConsumerRef) {
+    tag("GPUDestinationSnapshotConsumerRef")
+    string("groupingCommandId", value.groupingCommandId)
+    string("renderTaskId", value.renderTaskId.value)
+    string("packetId", value.packetId.value)
+    int("commandId", value.commandId.value)
+}
+
+private fun CanonicalHashSink.diagnostic(name: String, value: GPUDiagnostic) {
+    tag(name)
+    tag("GPUDiagnostic")
+    string("code", value.code.value)
+    string("domain", value.domain.name)
+    string("severity", value.severity.name)
+    string("message", value.message)
+    list("facts", value.facts.toSortedMap().entries.toList()) { entry ->
+        string("key", entry.key)
+        string("value", entry.value)
+    }
+    bool("isTerminal", value.isTerminal)
+    bool("isRetryable", value.isRetryable)
+}
 
 private fun GPUFrameStep.dumpLine(index: Int): String {
     val tasks = sourceTaskIds.joinToString(",", transform = GPUTaskID::value)
@@ -368,7 +1116,9 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
         is GPUFrameStep.RenderPassStep ->
             "render target=${target.value} load=${loadStore.loadOp} store=${loadStore.storePlan.name} " +
                 "clear=${loadStore.clearColorLabel ?: "none"} sample=${samplePlan.specializationKey} " +
-                "packets=${drawPackets.joinToString(";") { packet -> packet.stableDump() }}"
+                "batches=${batches.joinToString(";") { batch ->
+                    "${batch.batchId}:${batch.kind.name}:${batch.packets.joinToString(",") { it.packetId.value }}"
+                }} packets=${drawPackets.joinToString(";") { packet -> packet.stableDump() }}"
         is GPUFrameStep.ComputePassStep ->
             "compute target=${target.value} uses=${resourceUses.joinToString(";") { it.stableDump() }} " +
                 "dispatches=${dispatches.joinToString(";") { it.stableDump() }}"
@@ -384,10 +1134,15 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
         is GPUFrameStep.DependencyBarrierStep ->
             "barrier reason=$reasonCode tokens=${orderedUseTokens.joinToString(",") { it.value }}"
         is GPUFrameStep.CopyDestinationStep ->
-            "destination-copy source=${source.value} snapshot=${snapshot.value} bounds=$logicalBounds " +
-                "bytesPerRow=${copyLayout.bytesPerRow} rowsPerImage=${copyLayout.rowsPerImage}"
+            "destination-copy source=${source.value} ${sourceKey.dumpDestinationSourceKey()} " +
+                "snapshot=${snapshot.value} bounds=$logicalBounds " +
+                "bytesPerRow=${copyLayout.bytesPerRow} rowsPerImage=${copyLayout.rowsPerImage} " +
+                "consumers=${consumers.joinToString(";") { it.dumpDestinationConsumer() }}"
         is GPUFrameStep.CopyAsDrawMaterializationStep ->
-            "copy-as-draw source=${source.value} snapshot=${snapshot.value} bounds=$logicalBounds"
+            "copy-as-draw source=${source.value} ${sourceKey.dumpDestinationSourceKey()} " +
+                "sourceIntermediate=${sourceIntermediate.value} snapshot=${snapshot.value} bounds=$logicalBounds " +
+                "capabilitySeal=$capabilitySealHash " +
+                "consumers=${consumers.joinToString(";") { it.dumpDestinationConsumer() }}"
         is GPUFrameStep.TargetTransitionStep ->
             "target-transition parent=${parent.value} child=${child.value} kind=${transitionKind.name}"
         is GPUFrameStep.ReadbackCopyStep ->
@@ -423,7 +1178,8 @@ private fun GPUDrawPacket.stableDump(): String =
         "step=${renderStepId.value}@$renderStepVersion|role=${role.name}|blend=${blendPlan}|" +
         "renderPipeline=${renderPipelineKey?.value ?: "none"}|" +
         "computePipeline=${computePipelineKey?.value ?: "none"}|layout=$bindingLayoutHash|" +
-        "uniform=${uniformSlot?.slotId?.value ?: "none"}|resource=${resourceSlot?.slotId?.value ?: "none"}|" +
+        "uniform=${uniformSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.byteOffset}" } ?: "none"}|" +
+        "resource=${resourceSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.bindingIndex}" } ?: "none"}|" +
         "vertex=$vertexSourceLabel|scissor=${scissorBoundsHash ?: "none"}|target=$targetStateHash|" +
         "order=$originalPaintOrder|generation=$resourceGeneration|" +
         "diagnostics=${diagnostics.joinToString(";") { diagnostic ->
@@ -455,3 +1211,20 @@ private fun GPUDiagnostic.dumpLine(prefix: String): String =
     "$prefix code=${code.value} domain=${domain.name} severity=${severity.name} " +
         "message=$message facts=${facts.toSortedMap().entries.joinToString(",") { (key, value) -> "$key=$value" }} " +
         "terminal=$isTerminal retryable=$isRetryable"
+
+private fun GPUDestinationSnapshotGroupKey.dumpDestinationSourceKey(): String =
+    "sourceTarget=${target.value} targetGeneration=$targetGeneration deviceGeneration=${deviceGeneration.value} " +
+        "format=${format.value} color=${colorInterpretation.value} " +
+        "sampleTarget=${sampleContinuation.target.value} " +
+        "sampleTargetGeneration=${sampleContinuation.targetGeneration} " +
+        "sampleDeviceGeneration=${sampleContinuation.deviceGeneration.value} " +
+        "sampleFormat=${sampleContinuation.colorFormat.value} " +
+        "sampleColor=${sampleContinuation.colorInterpretation.value} " +
+        "sampleCount=${sampleContinuation.samplePlan.sampleCount} " +
+        "colorAttachment=${sampleContinuation.colorAttachment.value} " +
+        "depthStencilAttachment=${sampleContinuation.depthStencilAttachment?.value ?: "none"} " +
+        "sourceIntermediate=${sourceIntermediate?.value ?: "none"}"
+
+private fun GPUDestinationSnapshotConsumerRef.dumpDestinationConsumer(): String =
+    "consumerGrouping=$groupingCommandId,consumerTask=${renderTaskId.value}," +
+        "consumerPacket=${packetId.value},consumerCommand=${commandId.value}"
