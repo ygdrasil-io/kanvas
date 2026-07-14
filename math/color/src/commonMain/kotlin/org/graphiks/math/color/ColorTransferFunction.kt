@@ -1,11 +1,13 @@
 package org.graphiks.math.color
 
+import kotlin.ConsistentCopyVisibility
+
 /**
  * Parameters for ICC parametric curve type 4: `y = (a*x + b)^g + e` for
  * `x >= d` and `y = c*x + f` for `x < d`.
- *
  */
-public data class ColorTransferFunction(
+@ConsistentCopyVisibility
+public data class ColorTransferFunction internal constructor(
     public val g: Float,
     public val a: Float,
     public val b: Float,
