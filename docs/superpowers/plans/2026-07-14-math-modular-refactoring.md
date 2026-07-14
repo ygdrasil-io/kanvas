@@ -74,13 +74,13 @@ math/
         │   ├── ColorARGB.kt         ← port from SkColor.kt
         │   ├── ColorF32.kt          ← port from SkColor4f.kt
         │   ├── ColorMatrixF32.kt    ← port from SkColorMatrix.kt
-        │   ├── TransferFunction.kt  ← port from SkcmsTransferFunction.kt
+        │   ├── ColorTransferFunction.kt  ← port from SkcmsColorTransferFunction.kt
         │   └── IccExtensions.kt     ← port from SkcmsMatrix3x3/3x4 (extensions on Matrix3x3F32)
         ├── commonTest/kotlin/
         │   ├── ColorARGBTest.kt
         │   ├── ColorF32Test.kt
         │   ├── ColorMatrixF32Test.kt
-        │   └── TransferFunctionTest.kt
+        │   └── ColorTransferFunctionTest.kt
         └── jvmMain/kotlin/
             └── HalfFloat.kt         ← port from HalfFloat.kt (jvm)
 ```
@@ -121,7 +121,7 @@ In `settings.gradle.kts`, add after line 66 (`include(":math")`):
 include(":math:scalar")
 ```
 
-- [ ] **Step 3: Create `ScalarF32.kt`** — value class wrapping `Float` with all constants/functions from `SkScalar.kt`
+- [ ] **Step 3: Create `ScalarF32.kt`** — value class wrapping `Float` with instance methods and companion constants
 
 ```kotlin
 package org.graphiks.math.scalar
@@ -129,7 +129,17 @@ package org.graphiks.math.scalar
 import kotlin.math.*
 
 @JvmInline
-public value class ScalarF32(public val value: Float) {
+public value class ScalarF32 internal constructor(public val value: Float) {
+
+    public fun isNearlyZero(tolerance: Float = 1e-7f): Boolean = abs(value) <= tolerance
+    public fun isNearlyEqual(other: Float, tolerance: Float = 1e-7f): Boolean = abs(value - other) <= tolerance
+    public fun clamp(min: Float, max: Float): Float = value.coerceIn(min, max)
+    public fun floorToInt(): Int = floor(value).toInt()
+    public fun ceilToInt(): Int = ceil(value).toInt()
+    public fun roundToInt(): Int = round(value).toInt()
+    public fun isFinite(): Boolean = value.isFinite()
+    public fun isInteger(): Boolean = value == floor(value)
+    public fun isNaN(): Boolean = value.isNaN()
 
     public companion object {
         public val Zero: ScalarF32 = ScalarF32(0f)
@@ -139,61 +149,43 @@ public value class ScalarF32(public val value: Float) {
         public val TwoPi: ScalarF32 = ScalarF32((2.0 * PI).toFloat())
         public val PiOver2: ScalarF32 = ScalarF32((PI / 2.0).toFloat())
         public val Sqrt2: ScalarF32 = ScalarF32(SQRT2.toFloat())
+        public val Epsilon: ScalarF32 = ScalarF32(1e-7f)
         public val Max: ScalarF32 = ScalarF32(Float.MAX_VALUE)
         public val Infinity: ScalarF32 = ScalarF32(Float.POSITIVE_INFINITY)
         public val NegativeInfinity: ScalarF32 = ScalarF32(Float.NEGATIVE_INFINITY)
         public val NaN: ScalarF32 = ScalarF32(Float.NaN)
 
-        public fun nearlyZero(value: Float, tolerance: Float = 1e-7f): Boolean =
-            abs(value) <= tolerance
-
-        public fun nearlyEqual(a: Float, b: Float, tolerance: Float = 1e-7f): Boolean =
-            abs(a - b) <= tolerance
-
-        public fun clamp(value: Float, min: Float, max: Float): Float =
-            value.coerceIn(min, max)
-
-        public fun interp(a: Float, b: Float, t: Float): Float =
-            a + (b - a) * t
-
-        public fun sign(x: Float): Float =
-            if (x > 0f) 1f else if (x < 0f) -1f else 0f
-
-        public fun sin(radians: Float): Float {
-            val r = sin(radians.toDouble()).toFloat()
-            return if (nearlyZero(r)) 0f else r
-        }
-
-        public fun cos(radians: Float): Float {
-            val r = cos(radians.toDouble()).toFloat()
-            return if (nearlyZero(r)) 0f else r
-        }
-
-        public fun tan(radians: Float): Float {
-            val r = tan(radians.toDouble()).toFloat()
-            return if (nearlyZero(r)) 0f else r
-        }
-
-        public fun saturatingAdd32(a: Int, b: Int): Int {
-            val sum = a.toLong() + b.toLong()
-            return sum.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
-        }
-
-        public fun saturatingSub32(a: Int, b: Int): Int {
-            val diff = a.toLong() - b.toLong()
-            return diff.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
-        }
-
-        public fun floorToInt(value: Float): Int = floor(value).toInt()
-        public fun ceilToInt(value: Float): Int = ceil(value).toInt()
-        public fun roundToInt(value: Float): Int = round(value).toInt()
-
-        public fun isFinite(value: Float): Boolean = value.isFinite()
-        public fun isInteger(value: Float): Boolean = value == floor(value)
-        public fun isNaN(value: Float): Boolean = value.isNaN()
-
-        public fun lerp(a: Float, b: Float, t: Float): Float = interp(a, b, t)
+        public fun of(value: Float): ScalarF32 = ScalarF32(value)
     }
+}
+
+public fun nearlyZero(value: Float, tolerance: Float = 1e-7f): Boolean = abs(value) <= tolerance
+public fun nearlyEqual(a: Float, b: Float, tolerance: Float = 1e-7f): Boolean = abs(a - b) <= tolerance
+public fun clamp(value: Float, min: Float, max: Float): Float = value.coerceIn(min, max)
+public fun interp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+public fun lerp(a: Float, b: Float, t: Float): Float = interp(a, b, t)
+public fun sign(value: Float): Float = if (value > 0f) 1f else if (value < 0f) -1f else 0f
+
+public fun sin(radians: Float): Float {
+    val r = kotlin.math.sin(radians.toDouble()).toFloat()
+    return if (nearlyZero(r)) 0f else r
+}
+public fun cos(radians: Float): Float {
+    val r = kotlin.math.cos(radians.toDouble()).toFloat()
+    return if (nearlyZero(r)) 0f else r
+}
+public fun tan(radians: Float): Float {
+    val r = kotlin.math.tan(radians.toDouble()).toFloat()
+    return if (nearlyZero(r)) 0f else r
+}
+
+public fun saturatingAdd32(a: Int, b: Int): Int {
+    val sum = a.toLong() + b.toLong()
+    return sum.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+}
+public fun saturatingSub32(a: Int, b: Int): Int {
+    val diff = a.toLong() - b.toLong()
+    return diff.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
 }
 ```
 
@@ -215,101 +207,111 @@ class ScalarF32Test {
 
     @Test
     fun testNearlyZero() {
-        assertTrue(ScalarF32.nearlyZero(0f))
-        assertTrue(ScalarF32.nearlyZero(1e-8f))
-        assertFalse(ScalarF32.nearlyZero(0.001f))
+        assertTrue(nearlyZero(0f))
+        assertTrue(nearlyZero(1e-8f))
+        assertFalse(nearlyZero(0.001f))
     }
 
     @Test
     fun testNearlyEqual() {
-        assertTrue(ScalarF32.nearlyEqual(1f, 1.00000001f))
-        assertFalse(ScalarF32.nearlyEqual(1f, 2f))
+        assertTrue(nearlyEqual(1f, 1.00000001f))
+        assertFalse(nearlyEqual(1f, 2f))
     }
 
     @Test
     fun testClamp() {
-        assertEquals(5f, ScalarF32.clamp(5f, 0f, 10f))
-        assertEquals(0f, ScalarF32.clamp(-5f, 0f, 10f))
-        assertEquals(10f, ScalarF32.clamp(15f, 0f, 10f))
+        assertEquals(5f, clamp(5f, 0f, 10f))
+        assertEquals(0f, clamp(-5f, 0f, 10f))
+        assertEquals(10f, clamp(15f, 0f, 10f))
     }
 
     @Test
     fun testInterp() {
-        assertEquals(0f, ScalarF32.interp(0f, 10f, 0f))
-        assertEquals(10f, ScalarF32.interp(0f, 10f, 1f))
-        assertEquals(5f, ScalarF32.interp(0f, 10f, 0.5f))
+        assertEquals(0f, interp(0f, 10f, 0f))
+        assertEquals(10f, interp(0f, 10f, 1f))
+        assertEquals(5f, interp(0f, 10f, 0.5f))
     }
 
     @Test
     fun testSign() {
-        assertEquals(1f, ScalarF32.sign(5f))
-        assertEquals(-1f, ScalarF32.sign(-5f))
-        assertEquals(0f, ScalarF32.sign(0f))
+        assertEquals(1f, sign(5f))
+        assertEquals(-1f, sign(-5f))
+        assertEquals(0f, sign(0f))
     }
 
     @Test
     fun testSin() {
-        assertEquals(0f, ScalarF32.sin(0f))
-        assertEquals(1f, ScalarF32.sin(PI.toFloat() / 2f))
-        assertEquals(0f, ScalarF32.sin(PI.toFloat()))
+        assertEquals(0f, sin(0f))
+        assertEquals(1f, sin(PI.toFloat() / 2f))
+        assertEquals(0f, sin(PI.toFloat()))
     }
 
     @Test
     fun testCos() {
-        assertEquals(1f, ScalarF32.cos(0f))
-        assertEquals(0f, ScalarF32.cos(PI.toFloat() / 2f))
-        assertEquals(-1f, ScalarF32.cos(PI.toFloat()))
+        assertEquals(1f, cos(0f))
+        assertEquals(0f, cos(PI.toFloat() / 2f))
+        assertEquals(-1f, cos(PI.toFloat()))
     }
 
     @Test
     fun testTan() {
-        assertEquals(0f, ScalarF32.tan(0f))
-        assertEquals(0f, ScalarF32.tan(PI.toFloat()))
+        assertEquals(0f, tan(0f))
+        assertEquals(0f, tan(PI.toFloat()))
     }
 
     @Test
     fun testSaturatingAdd32() {
-        assertEquals(10, ScalarF32.saturatingAdd32(7, 3))
-        assertEquals(Int.MAX_VALUE, ScalarF32.saturatingAdd32(Int.MAX_VALUE, 1))
-        assertEquals(Int.MIN_VALUE, ScalarF32.saturatingAdd32(Int.MIN_VALUE, -1))
+        assertEquals(10, saturatingAdd32(7, 3))
+        assertEquals(Int.MAX_VALUE, saturatingAdd32(Int.MAX_VALUE, 1))
+        assertEquals(Int.MIN_VALUE, saturatingAdd32(Int.MIN_VALUE, -1))
     }
 
     @Test
     fun testSaturatingSub32() {
-        assertEquals(4, ScalarF32.saturatingSub32(7, 3))
-        assertEquals(Int.MIN_VALUE, ScalarF32.saturatingSub32(Int.MIN_VALUE, 1))
-        assertEquals(Int.MAX_VALUE, ScalarF32.saturatingSub32(Int.MAX_VALUE, -1))
+        assertEquals(4, saturatingSub32(7, 3))
+        assertEquals(Int.MIN_VALUE, saturatingSub32(Int.MIN_VALUE, 1))
+        assertEquals(Int.MAX_VALUE, saturatingSub32(Int.MAX_VALUE, -1))
     }
 
     @Test
-    fun testFloorToInt() {
-        assertEquals(3, ScalarF32.floorToInt(3.7f))
-        assertEquals(-4, ScalarF32.floorToInt(-3.2f))
+    fun testInstanceIsNearlyZero() {
+        assertTrue(ScalarF32.of(0f).isNearlyZero())
+        assertFalse(ScalarF32.of(0.001f).isNearlyZero())
     }
 
     @Test
-    fun testCeilToInt() {
-        assertEquals(4, ScalarF32.ceilToInt(3.2f))
-        assertEquals(-3, ScalarF32.ceilToInt(-3.7f))
+    fun testInstanceClamp() {
+        assertEquals(5f, ScalarF32.of(5f).clamp(0f, 10f))
+        assertEquals(0f, ScalarF32.of(-5f).clamp(0f, 10f))
     }
 
     @Test
-    fun testRoundToInt() {
-        assertEquals(4, ScalarF32.roundToInt(3.7f))
-        assertEquals(3, ScalarF32.roundToInt(3.2f))
+    fun testInstanceFloorToInt() {
+        assertEquals(3, ScalarF32.of(3.7f).floorToInt())
+        assertEquals(-4, ScalarF32.of(-3.2f).floorToInt())
     }
 
     @Test
-    fun testIsFinite() {
-        assertTrue(ScalarF32.isFinite(1f))
-        assertFalse(ScalarF32.isFinite(Float.POSITIVE_INFINITY))
-        assertFalse(ScalarF32.isFinite(Float.NaN))
+    fun testInstanceCeilToInt() {
+        assertEquals(4, ScalarF32.of(3.2f).ceilToInt())
     }
 
     @Test
-    fun testIsInteger() {
-        assertTrue(ScalarF32.isInteger(5f))
-        assertFalse(ScalarF32.isInteger(5.3f))
+    fun testInstanceRoundToInt() {
+        assertEquals(4, ScalarF32.of(3.7f).roundToInt())
+    }
+
+    @Test
+    fun testInstanceIsFinite() {
+        assertTrue(ScalarF32.of(1f).isFinite())
+        assertFalse(ScalarF32.of(Float.POSITIVE_INFINITY).isFinite())
+        assertFalse(ScalarF32.of(Float.NaN).isFinite())
+    }
+
+    @Test
+    fun testInstanceIsInteger() {
+        assertTrue(ScalarF32.of(5f).isInteger())
+        assertFalse(ScalarF32.of(5.3f).isInteger())
     }
 }
 ```
@@ -385,47 +387,43 @@ include(":math:vector")
 ```kotlin
 package org.graphiks.math.vector
 
-import org.graphiks.math.scalar.ScalarF32
+import org.graphiks.math.scalar.nearlyZero
+import org.graphiks.math.scalar.sin
+import org.graphiks.math.scalar.cos
 
-public data class Vector2F32(public val x: Float, public val y: Float) {
+public data class Vector2F32 internal constructor(public val x: Float, public val y: Float) {
 
     public operator fun unaryMinus(): Vector2F32 = Vector2F32(-x, -y)
-
     public operator fun plus(v: Vector2F32): Vector2F32 = Vector2F32(x + v.x, y + v.y)
     public operator fun minus(v: Vector2F32): Vector2F32 = Vector2F32(x - v.x, y - v.y)
-
     public operator fun times(v: Vector2F32): Vector2F32 = Vector2F32(x * v.x, y * v.y)
     public operator fun times(s: Float): Vector2F32 = Vector2F32(x * s, y * s)
     public operator fun div(s: Float): Vector2F32 = Vector2F32(x / s, y / s)
 
     public fun lengthSquared(): Float = x * x + y * y
-    public fun length(): Float = Companion.length(x, y)
+    public fun length(): Float {
+        val mag2 = x * x + y * y
+        if (mag2.isFinite()) return kotlin.math.sqrt(mag2)
+        val xx = x.toDouble()
+        val yy = y.toDouble()
+        return kotlin.math.sqrt(xx * xx + yy * yy).toFloat()
+    }
     public fun dot(v: Vector2F32): Float = x * v.x + y * v.y
     public fun cross(v: Vector2F32): Float = x * v.y - y * v.x
     public fun normalize(): Vector2F32 {
         val len = length()
-        return if (ScalarF32.nearlyZero(len)) Vector2F32(0f, 0f) else this / len
+        return if (nearlyZero(len)) Vector2F32(0f, 0f) else this / len
     }
     public fun distanceTo(other: Vector2F32): Float = (this - other).length()
-    public fun isFinite(): Boolean = ScalarF32.isFinite(x) && ScalarF32.isFinite(y)
-    public fun isZero(): Boolean = ScalarF32.nearlyZero(x) && ScalarF32.nearlyZero(y)
+    public fun isFinite(): Boolean = x.isFinite() && y.isFinite()
+    public fun isZero(): Boolean = nearlyZero(x) && nearlyZero(y)
 
     public companion object {
         public val Zero: Vector2F32 = Vector2F32(0f, 0f)
-        public val One: Vector2F32 = Vector2F32(1f, 1f)
         public val UnitX: Vector2F32 = Vector2F32(1f, 0f)
         public val UnitY: Vector2F32 = Vector2F32(0f, 1f)
 
-        public fun dot(a: Vector2F32, b: Vector2F32): Float = a.x * b.x + a.y * b.y
-        public fun cross(a: Vector2F32, b: Vector2F32): Float = a.x * b.y - a.y * b.x
-        public fun distance(a: Vector2F32, b: Vector2F32): Float = (a - b).length()
-        public fun length(x: Float, y: Float): Float {
-            val mag2 = x * x + y * y
-            if (mag2.isFinite()) return kotlin.math.sqrt(mag2)
-            val xx = x.toDouble()
-            val yy = y.toDouble()
-            return kotlin.math.sqrt(xx * xx + yy * yy).toFloat()
-        }
+        public fun of(x: Float = 0f, y: Float = 0f): Vector2F32 = Vector2F32(x, y)
     }
 }
 
@@ -437,15 +435,13 @@ public operator fun Float.times(v: Vector2F32): Vector2F32 = v * this
 ```kotlin
 package org.graphiks.math.vector
 
-import org.graphiks.math.scalar.ScalarF32
+import org.graphiks.math.scalar.nearlyZero
 
-public data class Vector3F32(public val x: Float, public val y: Float, public val z: Float) {
+public data class Vector3F32 internal constructor(public val x: Float, public val y: Float, public val z: Float) {
 
     public operator fun unaryMinus(): Vector3F32 = Vector3F32(-x, -y, -z)
-
     public operator fun plus(v: Vector3F32): Vector3F32 = Vector3F32(x + v.x, y + v.y, z + v.z)
     public operator fun minus(v: Vector3F32): Vector3F32 = Vector3F32(x - v.x, y - v.y, z - v.z)
-
     public operator fun times(v: Vector3F32): Vector3F32 = Vector3F32(x * v.x, y * v.y, z * v.z)
     public operator fun times(s: Float): Vector3F32 = Vector3F32(x * s, y * s, z * s)
     public operator fun div(s: Float): Vector3F32 = Vector3F32(x / s, y / s, z / s)
@@ -454,21 +450,17 @@ public data class Vector3F32(public val x: Float, public val y: Float, public va
     public fun length(): Float = kotlin.math.sqrt(lengthSquared())
     public fun dot(v: Vector3F32): Float = x * v.x + y * v.y + z * v.z
     public fun cross(v: Vector3F32): Vector3F32 = Vector3F32(
-        y * v.z - z * v.y,
-        z * v.x - x * v.z,
-        x * v.y - y * v.x
+        y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x
     )
     public fun normalize(): Vector3F32 {
         val len = length()
-        return if (ScalarF32.nearlyZero(len)) Vector3F32(0f, 0f, 0f) else this / len
+        return if (nearlyZero(len)) Vector3F32(0f, 0f, 0f) else this / len
     }
-    public fun isFinite(): Boolean = ScalarF32.isFinite(x) && ScalarF32.isFinite(y) && ScalarF32.isFinite(z)
+    public fun isFinite(): Boolean = x.isFinite() && y.isFinite() && z.isFinite
 
     public companion object {
         public val Zero: Vector3F32 = Vector3F32(0f, 0f, 0f)
-
-        public fun dot(a: Vector3F32, b: Vector3F32): Float = a.x * b.x + a.y * b.y + a.z * b.z
-        public fun cross(a: Vector3F32, b: Vector3F32): Vector3F32 = a.cross(b)
+        public fun of(x: Float = 0f, y: Float = 0f, z: Float = 0f): Vector3F32 = Vector3F32(x, y, z)
     }
 }
 
@@ -480,26 +472,21 @@ public operator fun Float.times(v: Vector3F32): Vector3F32 = v * this
 ```kotlin
 package org.graphiks.math.vector
 
-import org.graphiks.math.scalar.ScalarF32
+import org.graphiks.math.scalar.nearlyZero
 
-public data class Vector4F32(
-    public val x: Float,
-    public val y: Float,
-    public val z: Float,
-    public val w: Float
+public data class Vector4F32 internal constructor(
+    public val x: Float, public val y: Float, public val z: Float, public val w: Float
 ) {
     public operator fun unaryMinus(): Vector4F32 = Vector4F32(-x, -y, -z, -w)
-
     public operator fun plus(v: Vector4F32): Vector4F32 = Vector4F32(x + v.x, y + v.y, z + v.z, w + v.w)
     public operator fun minus(v: Vector4F32): Vector4F32 = Vector4F32(x - v.x, y - v.y, z - v.z, w - v.w)
-
     public operator fun times(v: Vector4F32): Vector4F32 = Vector4F32(x * v.x, y * v.y, z * v.z, w * v.w)
     public operator fun times(s: Float): Vector4F32 = Vector4F32(x * s, y * s, z * s, w * s)
     public operator fun div(s: Float): Vector4F32 = Vector4F32(x / s, y / s, z / s, w / s)
 
     public operator fun get(i: Int): Float = when (i) {
         0 -> x; 1 -> y; 2 -> z; 3 -> w
-        else -> throw IndexOutOfBoundsException("index $i")
+        else -> throw IndexOutOfBoundsException("$i")
     }
 
     public fun lengthSquared(): Float = x * x + y * y + z * z + w * w
@@ -507,54 +494,31 @@ public data class Vector4F32(
     public fun dot(v: Vector4F32): Float = x * v.x + y * v.y + z * v.z + w * v.w
     public fun normalize(): Vector4F32 {
         val len = length()
-        return if (ScalarF32.nearlyZero(len)) Vector4F32(0f, 0f, 0f, 0f) else this / len
+        return if (nearlyZero(len)) Vector4F32(0f, 0f, 0f, 0f) else this / len
     }
 
     public companion object {
-        public fun dot(a: Vector4F32, b: Vector4F32): Float = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w
+        public fun of(x: Float = 0f, y: Float = 0f, z: Float = 0f, w: Float = 0f): Vector4F32 =
+            Vector4F32(x, y, z, w)
     }
 }
 
 public operator fun Float.times(v: Vector4F32): Vector4F32 = v * this
 ```
 
-- [ ] **Step 6: Create `MutableVector2F32.kt`** — inline class wrapping `FloatArray(2)` for in-place mutation
+- [ ] **Step 6: Create `MutableVector2F32.kt`** — class with `var x, y` for in-place mutation
 
 ```kotlin
 package org.graphiks.math.vector
 
-import org.graphiks.math.scalar.ScalarF32
+import org.graphiks.math.scalar.nearlyZero
 
-@JvmInline
-public value class MutableVector2F32(private val data: FloatArray) {
+public class MutableVector2F32(public var x: Float, public var y: Float) {
 
-    public var x: Float
-        get() = data[0]
-        set(value) { data[0] = value }
-
-    public var y: Float
-        get() = data[1]
-        set(value) { data[1] = value }
-
-    public fun set(x: Float, y: Float) {
-        this.x = x
-        this.y = y
-    }
-
-    public fun offset(dx: Float, dy: Float) {
-        x += dx
-        y += dy
-    }
-
-    public fun scale(s: Float) {
-        x *= s
-        y *= s
-    }
-
-    public fun negate() {
-        x = -x
-        y = -y
-    }
+    public fun set(x: Float, y: Float) { this.x = x; this.y = y }
+    public fun offset(dx: Float, dy: Float) { x += dx; y += dy }
+    public fun scale(s: Float) { x *= s; y *= s }
+    public fun negate() { x = -x; y = -y }
 
     public fun length(): Float {
         val mag2 = x * x + y * y
@@ -565,12 +529,10 @@ public value class MutableVector2F32(private val data: FloatArray) {
     }
 
     public fun normalize(): Boolean {
-        val xx = x.toDouble()
-        val yy = y.toDouble()
+        val xx = x.toDouble(); val yy = y.toDouble()
         val dmag = kotlin.math.sqrt(xx * xx + yy * yy)
         val dscale = 1.0 / dmag
-        val nx = (xx * dscale).toFloat()
-        val ny = (yy * dscale).toFloat()
+        val nx = (xx * dscale).toFloat(); val ny = (yy * dscale).toFloat()
         if (!nx.isFinite() || !ny.isFinite() || (nx == 0f && ny == 0f)) {
             set(0f, 0f); return false
         }
@@ -578,88 +540,53 @@ public value class MutableVector2F32(private val data: FloatArray) {
     }
 
     public fun setLength(length: Float): Boolean {
-        val xx = x.toDouble()
-        val yy = y.toDouble()
+        val xx = x.toDouble(); val yy = y.toDouble()
         val dmag = kotlin.math.sqrt(xx * xx + yy * yy)
         val dscale = length.toDouble() / dmag
-        val nx = (xx * dscale).toFloat()
-        val ny = (yy * dscale).toFloat()
+        val nx = (xx * dscale).toFloat(); val ny = (yy * dscale).toFloat()
         if (!nx.isFinite() || !ny.isFinite() || (nx == 0f && ny == 0f)) {
             set(0f, 0f); return false
         }
         set(nx, ny); return true
     }
 
-    public fun toVector(): Vector2F32 = Vector2F32(x, y)
-    public fun isZero(): Boolean = ScalarF32.nearlyZero(x) && ScalarF32.nearlyZero(y)
+    public fun toVector(): Vector2F32 = Vector2F32.of(x, y)
+    public fun isZero(): Boolean = nearlyZero(x) && nearlyZero(y)
 
     public companion object {
-        public fun of(x: Float = 0f, y: Float = 0f): MutableVector2F32 =
-            MutableVector2F32(floatArrayOf(x, y))
-
-        public fun from(v: Vector2F32): MutableVector2F32 =
-            MutableVector2F32(floatArrayOf(v.x, v.y))
+        public fun of(x: Float = 0f, y: Float = 0f): MutableVector2F32 = MutableVector2F32(x, y)
+        public fun from(v: Vector2F32): MutableVector2F32 = MutableVector2F32(v.x, v.y)
     }
 }
 ```
 
-- [ ] **Step 7: Create `MutableVector3F32.kt`** — inline class wrapping `FloatArray(3)` for in-place mutation
+- [ ] **Step 7: Create `MutableVector3F32.kt`** — class with `var x, y, z` for in-place mutation
 
 ```kotlin
 package org.graphiks.math.vector
 
-import org.graphiks.math.scalar.ScalarF32
+import org.graphiks.math.scalar.nearlyZero
 
-@JvmInline
-public value class MutableVector3F32(private val data: FloatArray) {
+public class MutableVector3F32(public var x: Float, public var y: Float, public var z: Float) {
 
-    public var x: Float
-        get() = data[0]
-        set(value) { data[0] = value }
-
-    public var y: Float
-        get() = data[1]
-        set(value) { data[1] = value }
-
-    public var z: Float
-        get() = data[2]
-        set(value) { data[2] = value }
-
-    public fun set(x: Float, y: Float, z: Float) {
-        this.x = x; this.y = y; this.z = z
-    }
-
-    public fun offset(dx: Float, dy: Float, dz: Float) {
-        x += dx; y += dy; z += dz
-    }
-
-    public fun scale(s: Float) {
-        x *= s; y *= s; z *= s
-    }
-
-    public fun negate() {
-        x = -x; y = -y; z = -z
-    }
+    public fun set(x: Float, y: Float, z: Float) { this.x = x; this.y = y; this.z = z }
+    public fun offset(dx: Float, dy: Float, dz: Float) { x += dx; y += dy; z += dz }
+    public fun scale(s: Float) { x *= s; y *= s; z *= s }
+    public fun negate() { x = -x; y = -y; z = -z }
 
     public fun length(): Float = kotlin.math.sqrt(x * x + y * y + z * z)
-
     public fun normalize(): Boolean {
         val len = length()
-        return if (ScalarF32.nearlyZero(len)) {
-            set(0f, 0f, 0f); false
-        } else {
-            scale(1f / len); true
-        }
+        return if (nearlyZero(len)) { set(0f, 0f, 0f); false }
+        else { scale(1f / len); true }
     }
 
-    public fun toVector(): Vector3F32 = Vector3F32(x, y, z)
+    public fun toVector(): Vector3F32 = Vector3F32.of(x, y, z)
 
     public companion object {
         public fun of(x: Float = 0f, y: Float = 0f, z: Float = 0f): MutableVector3F32 =
-            MutableVector3F32(floatArrayOf(x, y, z))
-
-        public fun from(v: Vector3F32): MutableVector3F32 =
-            MutableVector3F32(floatArrayOf(v.x, v.y, v.z))
+            MutableVector3F32(x, y, z)
+        public fun from(v: Vector3F32): MutableVector3F32 = MutableVector3F32(v.x, v.y, v.z)
     }
 }
 ```
@@ -732,8 +659,7 @@ class Vector2F32Test {
 
     @Test
     fun testDot() {
-        assertEquals(11f, Vector2F32(1f, 2f).dot(Vector2F32(3f, 4f)))
-        assertEquals(11f, Vector2F32.dot(Vector2F32(1f, 2f), Vector2F32(3f, 4f)))
+        assertEquals(11f, Vector2F32.of(1f, 2f).dot(Vector2F32.of(3f, 4f)))
     }
 
     @Test
@@ -1200,7 +1126,8 @@ Port the full `SkMatrix.kt` content (1279 lines) with these renames:
 - `SkScalar` → `ScalarF32` (use `Float` directly or `ScalarF32` value class)
 - `SkPoint` → `Vector2F32`
 - `SkRect` → `RectF32` (use as local type or port geometry types here)
-- All `SkScalar*` functions (e.g. `SkScalarNearlyZero`) → `ScalarF32.nearlyZero()`
+- All `SkScalar*` functions (e.g. `SkScalarNearlyZero`) → top-level `nearlyZero()`
+- `SkScalar` typealias → `Float` or `ScalarF32` value class
 - Package: `org.graphiks.math.matrix`
 
 Since this file is large, the port is a mechanical rename operation. Key public API surface:
@@ -1224,12 +1151,12 @@ public data class Matrix3x3F32(
 | `:math` | `:math:matrix` |
 |---|---|
 | `SkMatrix` | `Matrix3x3F32` |
-| `SkScalarNearlyZero(x)` | `ScalarF32.nearlyZero(x)` |
+| `SkScalarNearlyZero(x)` | `nearlyZero(x)` |
 | `SkScalarSqrt(x)` | `kotlin.math.sqrt(x)` |
-| `SkScalarSinCos(x, ..)` | `ScalarF32.sin(x)` / `ScalarF32.cos(x)` |
+| `SkScalarSinCos(x, ..)` | `sin(x)` / `cos(x)` |
 | `SkPoint` | `Vector2F32` |
 | `SkVector` | `Vector2F32` |
-| `SkScalarInterp` | `ScalarF32.interp` |
+| `SkScalarInterp` | `interp` |
 | `SkScalar` | `Float` |
 
 - [ ] **Step 4: Create `Matrix4x4F32.kt`** — port of `SkM44.kt` (4x4 column-major matrix)
@@ -1241,7 +1168,7 @@ Port migration mapping:
 | `SkV4` | `Vector4F32` |
 | `SkV3` | `Vector3F32` |
 | `SkV2` | `Vector2F32` |
-| `SkScalarNearlyZero(x)` | `ScalarF32.nearlyZero(x)` |
+| `SkScalarNearlyZero(x)` | `nearlyZero(x)` |
 | `SkScalarSqrt(x)` | `kotlin.math.sqrt(x)` |
 
 - [ ] **Step 5: Create `Matrix3x3F32Test.kt`** — port of `SkMatrixTest.kt` with renames
@@ -1350,9 +1277,9 @@ Migration mapping:
 |---|---|
 | `SkRect` | `RectF32` |
 | `SkIRect` | `RectI32` |
-| `SkScalarNearlyZero` | `ScalarF32.nearlyZero` |
-| `SkScalarIsNaN` | `ScalarF32.isNaN` |
-| `SkScalarIsFinite` | `ScalarF32.isFinite` |
+| `SkScalarNearlyZero` | `nearlyZero` |
+| `SkScalarIsNaN` | `Float.isNaN()` |
+| `SkScalarIsFinite` | `Float.isFinite()` |
 
 - [ ] **Step 5: Create `RectI32.kt`** — integer rectangle with overflow-safe width/height
 
@@ -1436,13 +1363,13 @@ git commit -m "feat: add :math:geometry module with Vector2I32, RectF32/I32, Siz
 - Create: `math/color/src/commonMain/kotlin/org/graphiks/math/color/ColorARGB.kt` (port from `SkColor.kt`)
 - Create: `math/color/src/commonMain/kotlin/org/graphiks/math/color/ColorF32.kt` (port from `SkColor4f.kt`)
 - Create: `math/color/src/commonMain/kotlin/org/graphiks/math/color/ColorMatrixF32.kt` (port from `SkColorMatrix.kt`)
-- Create: `math/color/src/commonMain/kotlin/org/graphiks/math/color/TransferFunction.kt` (port from `SkcmsTransferFunction.kt`)
+- Create: `math/color/src/commonMain/kotlin/org/graphiks/math/color/ColorTransferFunction.kt` (port from `SkcmsColorTransferFunction.kt`)
 - Create: `math/color/src/commonMain/kotlin/org/graphiks/math/color/IccExtensions.kt` (port from `SkcmsMatrix3x3/3x4`)
 - Create: `math/color/src/jvmMain/kotlin/org/graphiks/math/color/HalfFloat.kt` (port from jvm `HalfFloat.kt`)
 - Create: `math/color/src/commonTest/kotlin/org/graphiks/math/color/ColorARGBTest.kt`
 - Create: `math/color/src/commonTest/kotlin/org/graphiks/math/color/ColorF32Test.kt`
 - Create: `math/color/src/commonTest/kotlin/org/graphiks/math/color/ColorMatrixF32Test.kt`
-- Create: `math/color/src/commonTest/kotlin/org/graphiks/math/color/TransferFunctionTest.kt`
+- Create: `math/color/src/commonTest/kotlin/org/graphiks/math/color/ColorTransferFunctionTest.kt`
 - Modify: `settings.gradle.kts`
 
 - [ ] **Step 1: Create `math/color/build.gradle.kts`**
@@ -1480,22 +1407,7 @@ include(":math:color")
 ```kotlin
 package org.graphiks.math.color
 
-import org.graphiks.math.scalar.ScalarF32
-
 public typealias ColorARGB = Int
-
-public const val COLOR_TRANSPARENT: ColorARGB = 0x00000000.toInt()
-public const val COLOR_BLACK: ColorARGB = 0xFF000000.toInt()
-public const val COLOR_DARK_GRAY: ColorARGB = 0xFF444444.toInt()
-public const val COLOR_GRAY: ColorARGB = 0xFF888888.toInt()
-public const val COLOR_LIGHT_GRAY: ColorARGB = 0xFFCCCCCC.toInt()
-public const val COLOR_WHITE: ColorARGB = 0xFFFFFFFF.toInt()
-public const val COLOR_RED: ColorARGB = 0xFFFF0000.toInt()
-public const val COLOR_GREEN: ColorARGB = 0xFF00FF00.toInt()
-public const val COLOR_BLUE: ColorARGB = 0xFF0000FF.toInt()
-public const val COLOR_YELLOW: ColorARGB = 0xFFFFFF00.toInt()
-public const val COLOR_CYAN: ColorARGB = 0xFF00FFFF.toInt()
-public const val COLOR_MAGENTA: ColorARGB = 0xFFFF00FF.toInt()
 
 public fun colorARGB(a: Int, r: Int, g: Int, b: Int): ColorARGB =
     ((a and 0xFF) shl 24) or ((r and 0xFF) shl 16) or ((g and 0xFF) shl 8) or (b and 0xFF)
@@ -1510,6 +1422,23 @@ public val ColorARGB.blue: Int get() = this and 0xFF
 
 public fun ColorARGB.withAlpha(a: Int): ColorARGB =
     ((a and 0xFF) shl 24) or (this and 0x00FFFFFF.toInt())
+
+public val ColorARGB.Companion: ColorARGBCompanion get() = ColorARGBCompanion
+
+public object ColorARGBCompanion {
+    public val Transparent: ColorARGB = 0x00000000.toInt()
+    public val Black: ColorARGB = 0xFF000000.toInt()
+    public val DarkGray: ColorARGB = 0xFF444444.toInt()
+    public val Gray: ColorARGB = 0xFF888888.toInt()
+    public val LightGray: ColorARGB = 0xFFCCCCCC.toInt()
+    public val White: ColorARGB = 0xFFFFFFFF.toInt()
+    public val Red: ColorARGB = 0xFFFF0000.toInt()
+    public val Green: ColorARGB = 0xFF00FF00.toInt()
+    public val Blue: ColorARGB = 0xFF0000FF.toInt()
+    public val Yellow: ColorARGB = 0xFFFFFF00.toInt()
+    public val Cyan: ColorARGB = 0xFF00FFFF.toInt()
+    public val Magenta: ColorARGB = 0xFFFF00FF.toInt()
+}
 
 public fun premultiplyARGB(a: Int, r: Int, g: Int, b: Int): Int {
     if (a == 0xFF) return colorARGB(a, r, g, b)
@@ -1542,26 +1471,22 @@ public fun multiplyAlpha32(a: Int, scale: Int): Int = (a * scale + 0x7FFF) / 0xF
 ```kotlin
 package org.graphiks.math.color
 
-import org.graphiks.math.scalar.ScalarF32
+import org.graphiks.math.scalar.clamp
 
-public data class ColorF32(public var red: Float, public var green: Float, public var blue: Float, public var alpha: Float = 1f) {
-
+public data class ColorF32 internal constructor(
+    public var red: Float,
+    public var green: Float,
+    public var blue: Float,
+    public var alpha: Float = 1f
+) {
     public val isOpaque: Boolean get() = alpha >= 1f
 
     public fun toColorARGB(): ColorARGB {
-        val a = (ScalarF32.clamp(alpha, 0f, 1f) * 255f + 0.5f).toInt()
-        val r = (ScalarF32.clamp(red, 0f, 1f) * 255f + 0.5f).toInt()
-        val g = (ScalarF32.clamp(green, 0f, 1f) * 255f + 0.5f).toInt()
-        val b = (ScalarF32.clamp(blue, 0f, 1f) * 255f + 0.5f).toInt()
+        val a = (clamp(alpha, 0f, 1f) * 255f + 0.5f).toInt()
+        val r = (clamp(red, 0f, 1f) * 255f + 0.5f).toInt()
+        val g = (clamp(green, 0f, 1f) * 255f + 0.5f).toInt()
+        val b = (clamp(blue, 0f, 1f) * 255f + 0.5f).toInt()
         return colorARGB(a, r, g, b)
-    }
-
-    public fun toBytesRGBA(): ByteArray {
-        val a = (ScalarF32.clamp(alpha, 0f, 1f) * 255f + 0.5f).toInt().toByte()
-        val r = (ScalarF32.clamp(red, 0f, 1f) * 255f + 0.5f).toInt().toByte()
-        val g = (ScalarF32.clamp(green, 0f, 1f) * 255f + 0.5f).toInt().toByte()
-        val b = (ScalarF32.clamp(blue, 0f, 1f) * 255f + 0.5f).toInt().toByte()
-        return byteArrayOf(r, g, b, a)
     }
 
     public fun premultiplied(): ColorF32 {
@@ -1588,6 +1513,9 @@ public data class ColorF32(public var red: Float, public var green: Float, publi
         public val Green: ColorF32 = ColorF32(0f, 1f, 0f)
         public val Blue: ColorF32 = ColorF32(0f, 0f, 1f)
 
+        public fun of(red: Float, green: Float, blue: Float, alpha: Float = 1f): ColorF32 =
+            ColorF32(red, green, blue, alpha)
+
         public fun fromBytesRGBA(r: Byte, g: Byte, b: Byte, a: Byte = (-1).toByte()): ColorF32 =
             ColorF32(
                 (r.toInt() and 0xFF) / 255f,
@@ -1609,12 +1537,12 @@ public operator fun Float.times(c: ColorF32): ColorF32 = c * this
 
 Port the 253-line file with rename: `SkColorMatrix` → `ColorMatrixF32`.
 
-- [ ] **Step 6: Create `TransferFunction.kt`** — port of `SkcmsTransferFunction.kt`
+- [ ] **Step 6: Create `ColorTransferFunction.kt`** — port of `SkcmsColorTransferFunction.kt`
 
 ```kotlin
 package org.graphiks.math.color
 
-public data class TransferFunction(
+public data class ColorTransferFunction(
     public val g: Float,
     public val a: Float,
     public val b: Float,
@@ -1624,26 +1552,26 @@ public data class TransferFunction(
     public val f: Float
 ) {
     public companion object {
-        public val sRGB: TransferFunction = TransferFunction(
+        public val sRGB: ColorTransferFunction = ColorTransferFunction(
             g = 2.4f, a = 1f / 1.055f, b = 0.055f / 1.055f,
             c = 1f / 12.92f, d = 0.04045f, e = 0f, f = 0f
         )
 
-        public val Linear: TransferFunction = TransferFunction(
+        public val Linear: ColorTransferFunction = ColorTransferFunction(
             g = 1f, a = 1f, b = 0f, c = 0f, d = 0f, e = 0f, f = 0f
         )
 
-        public val Rec2020: TransferFunction = TransferFunction(
+        public val Rec2020: ColorTransferFunction = ColorTransferFunction(
             g = 2.2222222f, a = 0.9096724f, b = 0.0903276f,
             c = 0.2222222f / 0.45f, d = 0.0812429f, e = 0f, f = 0f
         )
 
-        public val PQ: TransferFunction = TransferFunction(
+        public val PQ: ColorTransferFunction = ColorTransferFunction(
             g = 0.8359375f, a = 0.1593018f, b = 0.0f,
             c = 1.0f, d = 0.0f, e = 0.0f, f = 0.0f
         )
 
-        public val HLG: TransferFunction = TransferFunction(
+        public val HLG: ColorTransferFunction = ColorTransferFunction(
             g = 1.2f, a = 0.7746413f, b = 0.0042930f,
             c = 0.5555556f, d = 0.0f, e = 0.0f, f = 0.0f
         )
@@ -1666,7 +1594,7 @@ Place in `math/color/src/jvmMain/kotlin/org/graphiks/math/color/HalfFloat.kt`
 | `SkColorTest.kt` (if exists) | `ColorARGBTest.kt` (top-level function tests) |
 | `SkColor4fTest.kt` | `ColorF32Test.kt` |
 
-Create additional tests for `TransferFunctionTest.kt` and `ColorMatrixF32Test.kt`.
+Create additional tests for `ColorTransferFunctionTest.kt` and `ColorMatrixF32Test.kt`.
 
 - [ ] **Step 10: Compile `:math:color`**
 
@@ -1682,7 +1610,7 @@ Expected: all tests pass, BUILD SUCCESSFUL
 
 ```bash
 git add settings.gradle.kts math/color/
-git commit -m "feat: add :math:color module with ColorARGB, ColorF32, ColorMatrixF32, TransferFunction"
+git commit -m "feat: add :math:color module with ColorARGB, ColorF32, ColorMatrixF32, ColorTransferFunction"
 ```
 
 ---

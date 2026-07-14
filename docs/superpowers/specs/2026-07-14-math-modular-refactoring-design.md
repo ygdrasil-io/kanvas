@@ -23,14 +23,9 @@ The current `:math` module ships 38 source files in a single flat `org.graphiks.
 - **Gradle ID:** `:math:scalar` (folder `math/scalar/`)
 - **Build:** `kotlin-multiplatform` convention plugin
 - **Types:**
-  - `ScalarF32` — `@JvmInline value class` wrapping `Float`
-- **Functions (top-level):**
-  - Constants: `ScalarF32.One`, `ScalarF32.Pi`, `ScalarF32.Epsilon`, etc.
-  - Trig: `sin`, `cos`, `tan` (with snap-to-zero at multiples of π)
-  - Predicates: `nearlyZero`, `isFinite`, `isInteger`
-  - Rounding: `floor`, `ceil`, `round` (port of `SkScalarFloorTo*`)
-  - Math: `sign` (copy-sign), `clamp`, `interp` (lerp), `lerp`
-  - Saturating integer arithmetic: `saturatingAdd32`, `saturatingSub32`
+  - `ScalarF32` — `@JvmInline value class` wrapping `Float`. Constructor `internal`, factory `ScalarF32.of(1.5f)`. Companion holds constants (`ScalarF32.Zero`, `ScalarF32.Pi`). Instance methods provide the ergonomics: `scalar.isNearlyZero()`, `scalar.clamp(min, max)`, `scalar.floorToInt()`, etc.
+  - Top-level functions for standalone usage: `nearlyZero(float)`, `clamp(value, min, max)`, `interp(a, b, t)`, `saturatingAdd32`, `saturatingSub32`.
+  - Trig functions as top-level: `sin(radians)`, `cos(radians)`, `tan(radians)` (with snap-to-zero at multiples of π).
 - **Sources ported from:** `SkScalar.kt`
 
 ### `:math:vector`
@@ -38,15 +33,16 @@ The current `:math` module ships 38 source files in a single flat `org.graphiks.
 - **Gradle ID:** `:math:vector` (folder `math/vector/`)
 - **Build:** `kotlin-multiplatform` convention plugin
 - **Types:**
-  - `Vector2F32` — immutable `data class` with `val x, y: Float`
-  - `Vector3F32` — immutable `data class` with `val x, y, z: Float`
-  - `Vector4F32` — immutable `data class` with `val x, y, z, w: Float`
-  - `MutableVector2F32` — `@JvmInline value class` wrapping `FloatArray(2)`
-  - `MutableVector3F32` — `@JvmInline value class` wrapping `FloatArray(3)`
-- **Operations:** `+`, `-`, `*` (scalar & component-wise), `/`, `dot`, `cross`, `length`, `normalize`
+  - `Vector2F32` — immutable `data class` with `val x, y: Float`. Constructor `internal`, factory `Vector2F32.of(x, y)`.
+  - `Vector3F32` — immutable `data class` with `val x, y, z: Float`. Factory `Vector3F32.of(x, y, z)`.
+  - `Vector4F32` — immutable `data class` with `val x, y, z, w: Float`. Factory `Vector4F32.of(x, y, z, w)`.
+  - `MutableVector2F32` — `class` with `var x, y: Float` (regular class, not inline). Factory `MutableVector2F32.of(x, y)`.
+  - `MutableVector3F32` — `class` with `var x, y, z: Float`. Factory `MutableVector3F32.of(x, y, z)`.
+- **Operations:** All math operations are instance methods — `a.dot(b)`, `a.cross(b)`, `a.normalize()`, `a.length()`. Operators: `+`, `-`, `*` (scalar & component-wise), `/`.
 - **Design decisions:**
   - Point and vector types are merged — `Vector2F32` serves both position and direction semantics
-  - Mutable variants for in-place C++ idioms (`offset`, `scale`, `setLength`)
+  - Mutable variants for in-place C++ idioms (`set`, `offset`, `scale`, `setLength`, `negate`)
+  - No companion statics for math ops (use instance methods or top-level functions)
   - No mutable `Vector4F32` (used only in matrix row/col operations, immutable is fine)
 - **Sources ported from:** `SkV2.kt`, `SkV3.kt`, `SkV4.kt`, `SkPoint.kt`, `SkPoint3.kt`, `SkMathBackend.kt` (internal dot helpers)
 
@@ -82,10 +78,10 @@ The current `:math` module ships 38 source files in a single flat `org.graphiks.
 - **Gradle ID:** `:math:color` (folder `math/color/`)
 - **Build:** `kotlin-multiplatform` convention plugin
 - **Types:**
-  - `ColorARGB` — `typealias ColorARGB = Int` with top-level functions for packing/unpacking, premultiply, HSV conversion
-  - `ColorF32` — float RGBA (non-premultiplied), mutable `data class`
-  - `ColorMatrixF32` — 4×5 color transform matrix, `class` (mutable)
-  - `TransferFunction` — `data class` with 7 floats (`g, a, b, c, d, e, f`), parametric curve
+  - `ColorARGB` — `typealias ColorARGB = Int`. Companion holds named constants (`ColorARGB.Black`, `ColorARGB.White`, `ColorARGB.Red`, etc.). Extension properties (`alpha`, `red`, `green`, `blue`). Top-level functions for `premultiplyColor`, `unpremultiplyColor`, HSV conversion.
+  - `ColorF32` — float RGBA (non-premultiplied), mutable `data class`. Factory `ColorF32.of(r, g, b, a)`. Instance methods: `toColorARGB()`, `premultiplied()`, `unpremultiplied()`.
+  - `ColorMatrixF32` — 4×5 color transform matrix, `class` (mutable). Factory `ColorMatrixF32.ofIdentity()`.
+  - `ColorTransferFunction` — `data class` with 7 floats (`g, a, b, c, d, e, f`), parametric curve. Predefined instances: `ColorTransferFunction.sRgb`, `.linear`, `.rec2020`, `.pq`, `.hlg`.
   - ICC colorimetric operations as extension functions on `Matrix3x3F32` from `:math:matrix`
   - `HalfFloat` — JVM-only half-float conversion functions (in `src/jvmMain/`)
 - **Sources ported from:** `SkColor.kt`, `SkColor4f.kt`, `SkColorMatrix.kt`, `SkcmsTransferFunction.kt`, `SkcmsMatrix3x3.kt`, `SkcmsMatrix3x4.kt`, `HalfFloat.kt` (jvm)
@@ -98,7 +94,10 @@ The current `:math` module ships 38 source files in a single flat `org.graphiks.
 | Type suffix (`F32`, `I32`, `F64`) | `Vector2F32`, `RectI32`, `Point2F64` |
 | Dimension before type | `Vector2F32`, `Matrix4x4F32` |
 | Format explicit in color types | `ColorARGB`, `ColorF32` |
-| `value class` where possible | `ScalarF32`, `MutableVector2F32` |
+| `value class` where possible (DDD) | `ScalarF32` |
+| Constructors `internal`, factory `of()` | `Vector2F32.of(1f, 2f)` |
+| Instance methods over companion statics | `a.dot(b)` not `Vector2F32.dot(a, b)` |
+| Companion for named constants | `ColorARGB.Black`, `ScalarF32.Zero` |
 | Single type + typealias over two types | `Vector2I32` + `typealias Point2I32` |
 
 ## What Does NOT Change
