@@ -39,16 +39,32 @@ public data class Vector4F32 internal constructor(
     public fun lengthSquared(): Float = x * x + y * y + z * z + w * w
 
     /** Euclidean length. */
-    public fun length(): Float = kotlin.math.sqrt(lengthSquared())
+    public fun length(): Float = lengthAsDouble().toFloat()
 
     /** Dot product. */
     public fun dot(v: Vector4F32): Float = x * v.x + y * v.y + z * v.z + w * v.w
 
     /** Returns a unit vector, or `(0, 0, 0, 0)` if this vector is near-zero. */
     public fun normalize(): Vector4F32 {
-        val len = length()
-        return if (nearlyZero(len)) Vector4F32(0f, 0f, 0f, 0f) else this / len
+        val len = lengthAsDouble()
+        return if (nearlyZero(len.toFloat())) {
+            Vector4F32(0f, 0f, 0f, 0f)
+        } else {
+            Vector4F32(
+                (x.toDouble() / len).toFloat(),
+                (y.toDouble() / len).toFloat(),
+                (z.toDouble() / len).toFloat(),
+                (w.toDouble() / len).toFloat(),
+            )
+        }
     }
+
+    private fun lengthAsDouble(): Double = kotlin.math.sqrt(
+        x.toDouble() * x.toDouble() +
+            y.toDouble() * y.toDouble() +
+            z.toDouble() * z.toDouble() +
+            w.toDouble() * w.toDouble(),
+    )
 
     public companion object {
         /** Creates a [Vector4F32] from components. */

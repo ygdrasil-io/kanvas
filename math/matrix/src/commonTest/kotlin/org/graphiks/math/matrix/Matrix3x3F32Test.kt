@@ -444,7 +444,7 @@ class Matrix3x3F32Test {
     }
 
     @Test
-    fun `hasPerspective is always false in this affine port`() {
+    fun `hasPerspective is false for affine transforms`() {
         for (m in listOf(
             Matrix3x3F32.Identity,
             Matrix3x3F32.translation(1f, 1f),
@@ -781,7 +781,7 @@ class Matrix3x3F32Test {
     fun `MakeRectToRect kFill stretches independently`() {
         val src = RectF32.ofLTRB(0f, 0f, 10f, 5f)
         val dst = RectF32.ofLTRB(100f, 200f, 300f, 600f)
-        val m = Matrix3x3F32.rectToRect(src, dst, Matrix3x3F32.ScaleToFit.fillScaleToFit)!!
+        val m = Matrix3x3F32.rectToRect(src, dst, Matrix3x3F32.ScaleToFit.FILL)!!
         // sx = 200/10 = 20, sy = 400/5 = 80
         assertEquals(20f, m.getScaleX()); assertEquals(80f, m.getScaleY())
         // Maps src.TL to dst.TL.
@@ -796,7 +796,7 @@ class Matrix3x3F32Test {
     fun `MakeRectToRect kCenter uses uniform scale and centres in dst`() {
         val src = RectF32.ofLTRB(0f, 0f, 10f, 5f)
         val dst = RectF32.ofLTRB(0f, 0f, 200f, 400f)
-        val m = Matrix3x3F32.rectToRect(src, dst, Matrix3x3F32.ScaleToFit.centerScaleToFit)!!
+        val m = Matrix3x3F32.rectToRect(src, dst, Matrix3x3F32.ScaleToFit.CENTER)!!
         // Uniform scale = min(200/10, 400/5) = min(20, 80) = 20.
         assertEquals(20f, m.getScaleX()); assertEquals(20f, m.getScaleY())
         // The mapped src is 200×100, centred in 200×400 ⇒ ty = 150.
@@ -808,7 +808,7 @@ class Matrix3x3F32Test {
         assertEquals(null, Matrix3x3F32.rectToRect(
             RectF32.Empty,
             RectF32.ofLTRB(0f, 0f, 10f, 10f),
-            Matrix3x3F32.ScaleToFit.fillScaleToFit,
+            Matrix3x3F32.ScaleToFit.FILL,
         ))
     }
 
@@ -1237,11 +1237,9 @@ class Matrix3x3F32Test {
         assertEquals(0f, pre.persp0); assertEquals(0f, pre.persp1); assertEquals(1f, pre.persp2)
     }
 
-    // ─── Phase 5: cosmetic aliases ──────────────────────────────────────
-
     @Test
-    fun `I returns Identity`() {
-        assertEquals(Matrix3x3F32.Identity, Matrix3x3F32.I())
+    fun `rectToRectOrIdentity returns Identity for empty source`() {
+        assertEquals(Matrix3x3F32.Identity, Matrix3x3F32.rectToRectOrIdentity(RectF32.Empty, RectF32.Empty))
     }
 
     @Test

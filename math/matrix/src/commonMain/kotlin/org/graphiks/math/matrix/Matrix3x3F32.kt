@@ -58,20 +58,19 @@ public data class Matrix3x3F32(
      */
     public enum class ScaleToFit {
         /** Stretch independently in x and y to fill `dst`. */
-        fillScaleToFit,
+        FILL,
         /** Uniform scale; align to top-left of `dst`. */
-        startScaleToFit,
+        START,
         /** Uniform scale; centre within `dst`. */
-        centerScaleToFit,
+        CENTER,
         /** Uniform scale; align to bottom-right of `dst`. */
-        endScaleToFit,
+        END,
     }
 
     /**
      * Cached type mask, computed once at construction. Bit-OR of the
-     * `k*_Mask` constants in the companion object.cpp:101](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L101))
-     * specialised for the affine subset (perspective row is hardcoded
-     * `[0, 0, 1]` so `kPerspective_Mask` is never set).
+     * `k*_Mask` constants, including [kPerspective_Mask] when the bottom
+     * row differs from `[0, 0, 1]`.
      *
      * Body-declared (not a primary-constructor field) so it stays out of
      * `data class` `equals` / `hashCode` / `copy`.
@@ -79,9 +78,8 @@ public data class Matrix3x3F32(
     private val fTypeMask: Int = computeTypeMask(sx, kx, ky, sy, tx, ty, persp0, persp1, persp2)
 
     /**
-     * Public type mask: bit-OR of [kIdentity_Mask] / [kTranslate_Mask] /
-     * [kScale_Mask] / [kAffine_Mask]. [kPerspective_Mask] is never set
-     * for this affine-only port.
+     * Public type mask: bit-OR of [kIdentity_Mask], [kTranslate_Mask],
+     * [kScale_Mask], [kAffine_Mask], and [kPerspective_Mask].
      *
      * Use the higher-level predicates ([isIdentity], [isTranslate],
      * [isScaleTranslate], [rectStaysRect]) when you don't need the raw
@@ -104,22 +102,20 @@ public data class Matrix3x3F32(
         (getType() and (kAffine_Mask or kPerspective_Mask)) == 0
 
     /**
-     * Legacy alias for [isScaleTranslate] kept for the existing kanvas
-     * call sites. Renamed conceptually now that we expose the full
-     * type-mask system; callers writing new code should prefer
+     * Compatibility alias for [isScaleTranslate]. New code should prefer
      * [isScaleTranslate] for naming consistency.
      */
     public val isAxisAligned: Boolean get() = isScaleTranslate()
 
     /**
      * `true` if the matrix maps a rect to a rect — identity, scale,
-     * cardinal-angle rotation, mirror, plus optional translation. Mirrors the rect stays rect algorithm).
+     * cardinal-angle rotation, mirror, plus optional translation.
      */
     public fun rectStaysRect(): Boolean = (fTypeMask and kRectStaysRect_Mask) != 0
 
     public fun preservesAxisAlignment(): Boolean = rectStaysRect()
 
-    /** Always `false` in this affine-only port. */
+    /** `true` when the bottom row differs from `[0, 0, 1]`. */
     public fun hasPerspective(): Boolean = (getType() and kPerspective_Mask) != 0
 
     /**
@@ -147,7 +143,7 @@ public data class Matrix3x3F32(
 
     /**
      * `true` if the matrix maps perpendicular axes to perpendicular axes
-     * (i.e. preserves right angles).com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L213).
+     * (i.e. preserves right angles).
      */
     public fun preservesRightAngles(tol: Float = 1e-7f): Boolean {
         val mask = getType()
@@ -185,9 +181,9 @@ public data class Matrix3x3F32(
     /** Accessor for matrix element. */
     public fun getTranslateY(): Float = ty
 
-    /** Always `0` for this affine port (perspective row is hardcoded `[0, 0, 1]`). */
+    /** Returns the first perspective coefficient. */
     public fun getPerspX(): Float = persp0
-    /** Returns `kMPersp1` (`persp1`). */
+    /** Returns the second perspective coefficient. */
     public fun getPerspY(): Float = persp1
 
     /**
@@ -244,7 +240,7 @@ public data class Matrix3x3F32(
     /**
      * Bulk map source points to homogeneous output (no perspective
      * divide). `dst[i] = (sx*x + kx*y + tx, ky*x + sy*y + ty,
-     * persp0*x + persp1*y + persp2)`.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1080).
+     * persp0*x + persp1*y + persp2)`.
      */
     public fun mapHomogeneousPoints(
         dst: Array<Vector3F32>,
@@ -279,17 +275,16 @@ public data class Matrix3x3F32(
      * Largest singular value of the upper 2×2. For pure scale, returns
      * `max(|sx|, |sy|)`; for pure rotation, `1`; for any affine
      * combination, the longest semi-axis of the unit-circle's image.
-     *
-         */
+     */
     public fun getMaxScale(): Float {
         val results = FloatArray(1)
         if (computeScaleFactor(scaleKind = SCALE_KIND_MAX, results)) return results[0]
-        return -1f   // unreachable for affine-only port
+        return -1f
     }
 
     /**
-     * Smallest singular value of the upper 2×2 — matches the getMinScale algorithm.
-     * Returns `-1` if the matrix has perspective (never the case here).
+     * Smallest singular value of the upper 2×2. Returns `-1` when a
+     * finite result cannot be computed.
      */
     public fun getMinScale(): Float {
         val results = FloatArray(1)
@@ -298,9 +293,8 @@ public data class Matrix3x3F32(
     }
 
     /**
-     * Fill `scaleFactors[0..1]` with `[min, max]` singular values.
-     * Returns `false` if the matrix has perspective (always succeeds
-     * here).
+     * Fills `scaleFactors[0..1]` with `[min, max]` singular values of the
+     * upper 2×2. Returns `false` when finite values cannot be computed.
      */
     public fun getMinMaxScales(scaleFactors: FloatArray): Boolean {
         require(scaleFactors.size >= 2)
@@ -308,8 +302,7 @@ public data class Matrix3x3F32(
     }
 
     /**
-     * Legacy alias kept to avoid breaking pre-Phase-3 callers. Renamed
-     * to [getMaxScale] for compatibility.
+     * Compatibility alias for [getMaxScale].
      */
     @Deprecated(
         "Use getMaxScale() for naming consistency",
@@ -328,7 +321,7 @@ public data class Matrix3x3F32(
      * `Matrix3x3F32` is immutable: returns a `Pair<Vector2F32, Matrix3x3F32>` of
      * `(scale, remaining)`.
      *
-     * Mirrors [`Matrix3x3F32::decomposeScale`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1479).
+     * Mirrors [`SkMatrix::decomposeScale`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1479).
      */
     public fun decomposeScale(): Pair<Vector2F32, Matrix3x3F32>? {
         if (hasPerspective()) return null
@@ -342,8 +335,8 @@ public data class Matrix3x3F32(
     }
 
     /**
-     * Internal min/max scale solver.cpp:1348](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1348)).
-     * The eigenvalues of `MᵀM` are the squared singular values.
+     * Internal min/max scale solver. The eigenvalues of `MᵀM` are the
+     * squared singular values.
      */
     private fun computeScaleFactor(scaleKind: Int, results: FloatArray): Boolean {
         val mask = getType()
@@ -432,9 +425,9 @@ public data class Matrix3x3F32(
      * - identity → straight copy
      * - translate-only → `+ (tx, ty)` per point
      * - scale + translate → `(sx*x + tx, sy*y + ty)` per point
-     * - else → full affine
+     * - else → full affine or perspective transform
      *
-     * Mirrors [`Matrix3x3F32::mapPoints`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L782).
+     * Mirrors [`SkMatrix::mapPoints`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L782).
      */
     public fun mapPoints(dst: Array<Vector2F32>, src: Array<Vector2F32>, count: Int) {
         require(count <= dst.size && count <= src.size) {
@@ -486,19 +479,17 @@ public data class Matrix3x3F32(
 
     /**
      * Bulk apply only the linear part (drop translation) to vectors.
-         *
-     * For perspective matrices the linear part is **not** simply the
-     * 2×2 sub-matrix: the discrete derivative of
-     * `mapPointPerspective` at the origin, i.e. `mapPoint(src) -
-     * mapPoint(0, 0)`. The naive `(sx*x + kx*y, ky*x + sy*y)` is only
-     * correct for affine matrices.
+     *
+     * For perspective matrices this returns the finite displacement
+     * `mapPoint(src) - mapPoint(0, 0)`, because a single global linear
+     * part does not exist. For affine matrices it reduces to the upper
+     * 2×2 sub-matrix.
      */
     public fun mapVectors(dst: Array<Vector2F32>, src: Array<Vector2F32>, count: Int) {
         require(count <= dst.size && count <= src.size)
         if (hasPerspective()) {
             // Perspective: dst[i] = mapPoint(src[i]) - mapPoint(0, 0).
-            // Uses the mapPoint - mapPoint(origin) formula,
-            // which is the local Jacobian times src.
+            // Uses the finite mapPoint - mapPoint(origin) displacement.
             val originW = persp2
             val originInvW = if (originW != 0f) 1f / originW else 0f
             val originX = tx * originInvW
@@ -577,7 +568,7 @@ public data class Matrix3x3F32(
      * device space. maps `(r, 0)` and `(0, r)` to device space, takes their lengths,
      * then returns the geometric mean.
      *
-     * Mirrors [`Matrix3x3F32::mapRadius`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp).
+     * Mirrors [`SkMatrix::mapRadius`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp).
      */
     public fun mapRadius(r: Float): Float {
         val vec = arrayOf(Vector2F32.of(r, 0f), Vector2F32.of(0f, r))
@@ -597,8 +588,7 @@ public data class Matrix3x3F32(
     /**
      * `M.preTranslate(dx, dy)` ≡ `M · Translate(dx, dy)`. Affine fast
      * path; perspective dispatches through [preConcat] because
-     * `M · T` also updates the `persp2` row entry.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L267)
-     * dispatch (mask <= kTranslate / mask & kPerspective / else).
+     * `M · T` also updates the `persp2` row entry.
      */
     public fun preTranslate(dx: Float, dy: Float): Matrix3x3F32 {
         if (hasPerspective()) return preConcat(translation(dx, dy))
@@ -711,8 +701,9 @@ public data class Matrix3x3F32(
     public operator fun times(other: Matrix3x3F32): Matrix3x3F32 = concat(this, other)
 
     /**
-     * Inverse of this affine matrix, or `null` if the linear part is
-     * singular or near-singular.
+     * Inverse of this matrix, or `null` if it is singular or
+     * near-singular. Affine matrices use a dedicated 2×2 fast path;
+     * perspective matrices use the full 3×3 cofactor inverse.
      *
      * For the 2 × 2 linear part `[[sx, kx], [ky, sy]]` with determinant
      * `det = sx·sy − kx·ky`, the inverse linear part is
@@ -725,9 +716,6 @@ public data class Matrix3x3F32(
      * inverse values; this matches the reference behaviour where a near-degenerate
      * matrix is treated as singular.
      *
-     * Used by [SkShader] implementations to map device-space pixel coords
-     * back into the shader's local coordinate system (where the gradient
-     * geometry was defined).
      */
     public fun invert(): Matrix3x3F32? {
         if (hasPerspective()) return invertPerspective()
@@ -748,7 +736,7 @@ public data class Matrix3x3F32(
     /**
      * Full 3×3 cofactor inverse for perspective matrices. Uses the
      * perspective branch of the cofactor method
-     * ([Matrix3x3F32.cpp:792](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L792)).
+     * ([SkMatrix.cpp:792](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L792)).
      * The det is computed in double; each cofactor is `(a*b - c*d)*invDet`
      * via [dcrossDscale] to preserve precision.
      */
@@ -780,11 +768,6 @@ public data class Matrix3x3F32(
     public companion object {
         /** Identity matrix. */
         public val Identity: Matrix3x3F32 = Matrix3x3F32()
-
-        /**
-         * Function-form alias for [Identity].
-         */
-        public fun I(): Matrix3x3F32 = Identity
 
         // ─── 9-element matrix index constants (row-major) ──────────────────
         /** Row-major index for scale X ([sx]). */
@@ -837,37 +820,36 @@ public data class Matrix3x3F32(
         public fun rectToRect(
             src: RectF32,
             dst: RectF32,
-            stf: ScaleToFit = ScaleToFit.fillScaleToFit,
+            stf: ScaleToFit = ScaleToFit.FILL,
         ): Matrix3x3F32? {
             if (src.isEmpty) return null
             var sx = if (src.width() == 0f) Float.POSITIVE_INFINITY else dst.width() / src.width()
             var sy = if (src.height() == 0f) Float.POSITIVE_INFINITY else dst.height() / src.height()
             var xLarger = false
 
-            if (stf != ScaleToFit.fillScaleToFit) {
+            if (stf != ScaleToFit.FILL) {
                 if (sx > sy) { xLarger = true; sx = sy } else { sy = sx }
             }
 
             var tx = dst.left - src.left * sx
             var ty = dst.top - src.top * sy
-            if (stf == ScaleToFit.centerScaleToFit || stf == ScaleToFit.endScaleToFit) {
+            if (stf == ScaleToFit.CENTER || stf == ScaleToFit.END) {
                 var diff = if (xLarger) dst.width() - src.width() * sy
                 else dst.height() - src.height() * sy
-                if (stf == ScaleToFit.centerScaleToFit) diff *= 0.5f
+                if (stf == ScaleToFit.CENTER) diff *= 0.5f
                 if (xLarger) tx += diff else ty += diff
             }
             return Matrix3x3F32(sx = sx, kx = 0f, tx = tx, ky = 0f, sy = sy, ty = ty)
         }
 
         /**
-                 * Same as [MakeRectToRect] with `fillScaleToFit` but returns
+         * Same as [rectToRect] with [ScaleToFit.FILL], but returns
          * [Identity] instead of `null` when [src] is empty or degenerate.
          */
-        public fun RectToRectOrIdentity(src: RectF32, dst: RectF32): Matrix3x3F32 =
-            rectToRect(src, dst, ScaleToFit.fillScaleToFit) ?: Identity
+        public fun rectToRectOrIdentity(src: RectF32, dst: RectF32): Matrix3x3F32 =
+            rectToRect(src, dst, ScaleToFit.FILL) ?: Identity
 
         /**
-                 *
          * Computes the projective transform that maps source points to the
          * corresponding destination points (0 ≤ count ≤ 4).
          * Returns `null` when the system is degenerate (no unique solution).
@@ -878,10 +860,10 @@ public data class Matrix3x3F32(
         /**
          * Build a matrix from a 9-element row-major buffer. The
          * perspective row is taken verbatim — pass `[0, 0, 1]` for an
-         * affine matrix.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L55).
+         * affine matrix.
          */
         public fun from9(buffer: FloatArray): Matrix3x3F32 {
-            require(buffer.size >= 9) { "MakeFrom9 expects ≥ 9 elements (got ${buffer.size})" }
+            require(buffer.size >= 9) { "from9 expects ≥ 9 elements (got ${buffer.size})" }
             return Matrix3x3F32(
                 sx = buffer[kMScaleX], kx = buffer[kMSkewX], tx = buffer[kMTransX],
                 ky = buffer[kMSkewY], sy = buffer[kMScaleY], ty = buffer[kMTransY],
@@ -919,7 +901,7 @@ public data class Matrix3x3F32(
         private const val kScale_Mask: Int = 0x02
         /** Skew or rotate. */
         private const val kAffine_Mask: Int = 0x04
-        /** Perspective — never set in this affine-only port. */
+        /** Perspective transform. */
         private const val kPerspective_Mask: Int = 0x08
         /**
          * Internal "rect stays rect" mask — set when the upper 2x2 maps a rect
@@ -928,8 +910,9 @@ public data class Matrix3x3F32(
         private const val kRectStaysRect_Mask: Int = 0x10
 
         /**
-         * Compute the type mask for a 6-tuple affine matrix.cpp:101](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L101))
-         * with the perspective branch removed.
+         * Computes the type mask for the full 3×3 transform. Perspective
+         * short-circuits to the most general public mask; affine matrices
+         * then use the upper 2×2 and translation coefficients.
          *
          * The skew-non-zero branch short-circuits on `(m01 | m10) != 0`:
          * any skew implies `kAffine_Mask | kScale_Mask`, then `rectStaysRect`
@@ -1164,7 +1147,7 @@ public data class Matrix3x3F32(
          *  - 3 points → general affine (no perspective needed).
          *  - 4 points → general projective (perspective).
          *
-                 * [`Matrix3x3F32::PolyToPoly`](https://github.com/google/skia/blob/main/src/core/Matrix3x3F32.cpp#L1306):
+                 * [`SkMatrix::PolyToPoly`](https://github.com/google/skia/blob/main/src/core/SkMatrix.cpp#L1306):
          * build `srcMap` from src, invert, build `dstMap` from dst,
          * return `dstMap · srcMap⁻¹`.
          */
@@ -1183,20 +1166,19 @@ public data class Matrix3x3F32(
             }
         }
 
-        /** Dispatcher for [Poly2Proc] / [Poly3Proc] / [Poly4Proc]. */
+        /** Dispatcher for [poly2Proc] / [poly3Proc] / [poly4Proc]. */
         private fun polyToMap(pts: Array<Vector2F32>): Matrix3x3F32? = when (pts.size) {
-            2 -> Poly2Proc(pts)
-            3 -> Poly3Proc(pts)
-            4 -> Poly4Proc(pts)
+            2 -> poly2Proc(pts)
+            3 -> poly3Proc(pts)
+            4 -> poly4Proc(pts)
             else -> null
         }
 
         /**
-         * Computes the type mask):
-         * the 2-point fit is rotate-scale-translate built so that the
+         * Builds the 2-point rotate-scale-translate fit so that the
          * basis maps `(0, 0) → src[0]` and `(1, 0) → src[1]`.
          */
-        private fun Poly2Proc(p: Array<Vector2F32>): Matrix3x3F32 = Matrix3x3F32(
+        private fun poly2Proc(p: Array<Vector2F32>): Matrix3x3F32 = Matrix3x3F32(
             sx = p[1].y - p[0].y,
             kx = p[1].x - p[0].x,
             tx = p[0].x,
@@ -1206,7 +1188,7 @@ public data class Matrix3x3F32(
         )
 
         /** Polynomial solver for the 3-point poly-to-poly system. */
-        private fun Poly3Proc(p: Array<Vector2F32>): Matrix3x3F32 = Matrix3x3F32(
+        private fun poly3Proc(p: Array<Vector2F32>): Matrix3x3F32 = Matrix3x3F32(
             sx = p[2].x - p[0].x,
             kx = p[1].x - p[0].x,
             tx = p[0].x,
@@ -1216,13 +1198,12 @@ public data class Matrix3x3F32(
         )
 
         /**
-         * Computes the type mask).
          * Solves for the perspective coefficients `a1`, `a2` such that
          * the four corners `p[0..3]` are mapped to `(0,0), (1,0), (1,1),
          * (0,1)` (the unit square). Returns `null` on degenerate input
          * (zero-check short-circuit).
          */
-        private fun Poly4Proc(p: Array<Vector2F32>): Matrix3x3F32? {
+        private fun poly4Proc(p: Array<Vector2F32>): Matrix3x3F32? {
             val x0 = p[2].x - p[0].x
             val y0 = p[2].y - p[0].y
             val x1 = p[2].x - p[1].x

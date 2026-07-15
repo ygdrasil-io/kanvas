@@ -53,39 +53,27 @@ public fun floatToHalf(f: Float): Short {
             (sign or 0x7C00 or mant16).toShort()
         }
         exp32 > 142 -> (sign or 0x7C00).toShort()
-        exp32 < 103 -> sign.toShort()
+        exp32 < 102 -> sign.toShort()
         exp32 < 113 -> {
             val mantWithImplicit = mant32 or 0x800000
-            val shift = 14 + (113 - exp32)
-            val rounded = (mantWithImplicit + (1 shl (shift - 1))) ushr shift
+            val shift = 126 - exp32
+            val truncated = mantWithImplicit ushr shift
+            val remainder = mantWithImplicit and ((1 shl shift) - 1)
+            val halfway = 1 shl (shift - 1)
+            val rounded = truncated + if (
+                remainder > halfway || (remainder == halfway && truncated and 1 != 0)
+            ) 1 else 0
             (sign or rounded).toShort()
         }
         else -> {
             val expHalf = (exp32 - 127 + 15) shl 10
             val mantHalf = mant32 ushr 13
-            val roundingBit = (mant32 ushr 12) and 1
-            val hasTie = (mant32 and 0x1FFF) == 0x1000
-            if (hasTie) {
-                if (mantHalf and 1 == 0) {
-                    (sign or expHalf or mantHalf).toShort()
-                } else {
-                    val result = expHalf or mantHalf
-                    if (mantHalf == 0x3FF) {
-                        (sign or (result + 0x400)).toShort()
-                    } else {
-                        (sign or (result + 1)).toShort()
-                    }
-                }
-            } else if (roundingBit != 0) {
-                val result = expHalf or mantHalf
-                if (mantHalf == 0x3FF) {
-                    (sign or (result + 0x400)).toShort()
-                } else {
-                    (sign or (result + 1)).toShort()
-                }
-            } else {
-                (sign or expHalf or mantHalf).toShort()
-            }
+            val remainder = mant32 and 0x1FFF
+            val halfway = 0x1000
+            val increment = if (
+                remainder > halfway || (remainder == halfway && mantHalf and 1 != 0)
+            ) 1 else 0
+            (sign or expHalf or mantHalf).plus(increment).toShort()
         }
     }
 }

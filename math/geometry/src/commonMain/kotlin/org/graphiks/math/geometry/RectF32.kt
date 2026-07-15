@@ -1,10 +1,10 @@
 package org.graphiks.math.geometry
 
+import org.graphiks.math.scalar.ScalarF32
 import org.graphiks.math.scalar.nearlyZero
 import org.graphiks.math.vector.Vector2F32
 import kotlin.math.ceil
 import kotlin.math.floor
-import kotlin.math.round
 
 /**
  * Mutable axis-aligned float rectangle.
@@ -52,17 +52,14 @@ public data class RectF32(
     /** Returns the top-left corner. */
     public fun topLeft(): Vector2F32 = Vector2F32.of(left, top)
 
-    /** Returns the top-left corner. */
-    public fun TL(): Vector2F32 = Vector2F32.of(left, top)
-
     /** Returns the top-right corner. */
-    public fun TR(): Vector2F32 = Vector2F32.of(right, top)
+    public fun topRight(): Vector2F32 = Vector2F32.of(right, top)
 
     /** Returns the bottom-left corner. */
-    public fun BL(): Vector2F32 = Vector2F32.of(left, bottom)
+    public fun bottomLeft(): Vector2F32 = Vector2F32.of(left, bottom)
 
     /** Returns the bottom-right corner. */
-    public fun BR(): Vector2F32 = Vector2F32.of(right, bottom)
+    public fun bottomRight(): Vector2F32 = Vector2F32.of(right, bottom)
 
     /** `true` if the rect is empty (`left >= right` or `top >= bottom`). */
     public val isEmpty: Boolean get() = !(left < right && top < bottom)
@@ -193,7 +190,7 @@ public data class RectF32(
 
     /** Returns `true` if this rect intersects [r]. */
     public fun intersects(r: RectF32): Boolean =
-        Intersects(left, top, right, bottom, r.left, r.top, r.right, r.bottom)
+        Companion.intersects(left, top, right, bottom, r.left, r.top, r.right, r.bottom)
 
     /** Joins this rect with [r] in place (union). */
     public fun join(r: RectF32) {
@@ -221,10 +218,13 @@ public data class RectF32(
         bottom = maxOf(bottom, r.bottom)
     }
 
-    /** Rounds all edges to the nearest integer, returning a [RectI32]. */
+    /**
+     * Rounds all edges to the nearest integer with half-way ties toward
+     * positive infinity, returning a [RectI32].
+     */
     public fun round(): RectI32 = RectI32(
-        round(left).toInt(), round(top).toInt(),
-        round(right).toInt(), round(bottom).toInt(),
+        ScalarF32.of(left).roundToInt(), ScalarF32.of(top).roundToInt(),
+        ScalarF32.of(right).roundToInt(), ScalarF32.of(bottom).roundToInt(),
     )
 
     /** Rounds outward (floor left/top, ceil right/bottom), returning a [RectI32]. */
@@ -270,7 +270,7 @@ public data class RectF32(
         /**
          * Returns `true` if the two axis-aligned rects intersect.
                  */
-        public fun Intersects(
+        public fun intersects(
             al: Float, at: Float, ar: Float, ab: Float,
             bl: Float, bt: Float, br: Float, bb: Float,
         ): Boolean {
@@ -282,14 +282,14 @@ public data class RectF32(
         }
 
         /** Returns `true` if [a] and [b] intersect. */
-        public fun Intersects(a: RectF32, b: RectF32): Boolean =
-            Intersects(a.left, a.top, a.right, a.bottom, b.left, b.top, b.right, b.bottom)
+        public fun intersects(a: RectF32, b: RectF32): Boolean =
+            intersects(a.left, a.top, a.right, a.bottom, b.left, b.top, b.right, b.bottom)
 
         /**
          * Returns a [RectF32] bounding all points, or `null` if any
          * component overflows (returns [Empty] for an empty array).
          */
-        public fun Bounds(points: Array<Vector2F32>): RectF32? {
+        public fun bounds(points: Array<Vector2F32>): RectF32? {
             if (points.isEmpty()) return Empty
             var l = points[0].x; var r = points[0].x
             var t = points[0].y; var b = points[0].y

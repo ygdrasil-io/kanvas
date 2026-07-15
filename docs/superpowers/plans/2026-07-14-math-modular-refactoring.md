@@ -1,10 +1,18 @@
 # Math Modular Refactoring — Implementation Plan
 
+> **Historical execution record:** this plan captures the initial scaffold and
+> is not an active backlog or API contract. The reviewed architecture and
+> current public surface are defined by
+> `docs/superpowers/specs/2026-07-14-math-modular-refactoring-design.md` and the
+> source. In particular, its embedded code samples predate the JVM+JS targets,
+> the final module graph, the unsigned `ColorARGB` value class, and the sealed
+> transfer-function model.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Create 5 new Kotlin Multiplatform sub-modules (`:math:scalar`, `:math:vector`, `:math:matrix`, `:math:geometry`, `:math:color`) with idiomatic Kotlin naming, ported from the existing `:math` module. Old `:math` remains intact.
 
-**Architecture:** Each module lives under `math/<name>/` with its own `build.gradle.kts`, package under `org.graphiks.math.<name>`, and mirrors the KMP source layout of `:math`. All modules use the `buildsrc.convention.kotlin-multiplatform` convention plugin. Dependencies flow: scalar → vector → matrix, scalar+vector → geometry, scalar+matrix → color.
+**Architecture:** Each module lives under `math/<name>/` with its own `build.gradle.kts`, package under `org.graphiks.math.<name>`, and mirrors the KMP source layout of `:math`. All modules use the `buildsrc.convention.kotlin-multiplatform` convention plugin. The final dependency graph and platform targets are documented in the design specification linked above.
 
 **Tech Stack:** Kotlin Multiplatform, JUnit 5, kotlinx-benchmark (deferred — benchmarks stay on `:math` for now)
 

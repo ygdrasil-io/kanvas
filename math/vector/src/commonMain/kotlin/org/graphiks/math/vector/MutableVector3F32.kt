@@ -23,16 +23,24 @@ public class MutableVector3F32(public var x: Float, public var y: Float, public 
     public fun negate() { x = -x; y = -y; z = -z }
 
     /** Euclidean length. */
-    public fun length(): Float = kotlin.math.sqrt(x * x + y * y + z * z)
+    public fun length(): Float = lengthAsDouble(x, y, z).toFloat()
 
     /**
      * Normalizes this vector in place. Returns `false` if the vector
      * was near-zero (reset to zero).
      */
     public fun normalize(): Boolean {
-        val len = length()
-        return if (nearlyZero(len)) { set(0f, 0f, 0f); false }
-        else { scale(1f / len); true }
+        val len = lengthAsDouble(x, y, z)
+        if (nearlyZero(len.toFloat())) {
+            set(0f, 0f, 0f)
+            return false
+        }
+        set(
+            (x.toDouble() / len).toFloat(),
+            (y.toDouble() / len).toFloat(),
+            (z.toDouble() / len).toFloat(),
+        )
+        return true
     }
 
     /** Returns an immutable copy as a [Vector3F32]. */

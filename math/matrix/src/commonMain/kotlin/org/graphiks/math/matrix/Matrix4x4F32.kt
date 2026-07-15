@@ -13,7 +13,7 @@ import org.graphiks.math.vector.Vector4F32
 
 /**
  * `Matrix4x4F32`,
- * [src/core/Matrix4x4F32.cpp](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp)).
+ * [src/core/SkM44.cpp](https://github.com/google/skia/blob/main/src/core/SkM44.cpp).
  *
  * Storage is a length-16 `FloatArray` in **column-major** layout —
  * matching standard OpenGL/Vulkan conventions:
@@ -504,7 +504,7 @@ public class Matrix4x4F32 {
      * Apply this matrix to a 2D point, treating it as `(x, y, 0, 1)`
      * with a homogeneous divide on the result. If the bottom row is
      * `[0, 0, 0, 1]` this returns the affine drop of the M44 to its
-     * 2D action (matches `asM33()?.mapXY`).
+     * 2D action (matches `asM33().mapXY`).
      */
     public fun mapPoint(p: Vector2F32): Vector2F32 {
         val r = map(p.x, p.y, 0f, 1f)
@@ -519,12 +519,12 @@ public class Matrix4x4F32 {
     /**
      * Apply this matrix to `r` and return the axis-aligned bounding
      * box of the transformed rect (z = 0). Mirrors
-     * [`Matrix3x3F32Priv::MapRect(const Matrix4x4F32&, const RectF32&)`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L216).
+     * [`SkMatrixPriv::MapRect(const SkM44&, const SkRect&)`](https://github.com/google/skia/blob/main/src/core/SkM44.cpp#L216).
      *
      * Affine (no perspective) path: project four corners, take min/max.
      *
      * Perspective path: ports
-     * [`map_rect_perspective`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L164)
+     * [`map_rect_perspective`](https://github.com/google/skia/blob/main/src/core/SkM44.cpp#L164)
      * — corners whose homogeneous `w` is below `kW0PlaneDistance`
      * (≈ 6.1e-5, a threshold to avoid division
      * by ~zero) are clipped against the adjacent edges so the result
@@ -555,7 +555,7 @@ public class Matrix4x4F32 {
 
     /**
      * Perspective path with `w = 0` plane clipping. Direct port of
-     * [`map_rect_perspective`](https://github.com/google/skia/blob/main/src/core/Matrix4x4F32.cpp#L164).
+     * [`map_rect_perspective`](https://github.com/google/skia/blob/main/src/core/SkM44.cpp#L164).
      *
      * Each of the 4 corners is projected together with its two
      * neighbours (clockwise traversal). When the corner's `w` is below
@@ -720,11 +720,9 @@ public class Matrix4x4F32 {
     /**
      * Drop this 4×4 to its 3×3 affine image: the third row and column
      * are dropped, the perspective row of the M44 maps to the
-     * perspective row of the 3×3. Always returns a non-null matrix;
-     * returns `Matrix3x3F32?` for symmetry with [setM33] (use it as
-     * `asM33()!!` if you want non-nullable).
+     * perspective row of the 3×3.
      */
-    public fun asM33(): Matrix3x3F32? = Matrix3x3F32.of(
+    public fun asM33(): Matrix3x3F32 = Matrix3x3F32.of(
         fMat[0], fMat[4], fMat[12],
         fMat[1], fMat[5], fMat[13],
         fMat[3], fMat[7], fMat[15],

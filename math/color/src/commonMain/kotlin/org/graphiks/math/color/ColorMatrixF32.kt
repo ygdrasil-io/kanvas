@@ -131,11 +131,16 @@ public class ColorMatrixF32 {
 
     public companion object {
         /**
-         * RGB→YUV conversion matrix. Currently returns identity until
-         * per-color-space matrices are implemented.
+         * RGB→YUV conversion for a named color space.
+         *
+         * Per-color-space conversion is not implemented yet. This method
+         * fails explicitly so an unsupported conversion cannot silently
+         * produce unchanged colors.
          */
-        @Suppress("UNUSED_PARAMETER")
-        public fun RGBtoYUV(yuvColorSpace: Any): ColorMatrixF32 = ofIdentity()
+        public fun rgbToYuv(yuvColorSpace: Any): Nothing =
+            throw UnsupportedOperationException(
+                "RGB-to-YUV conversion is not implemented for $yuvColorSpace",
+            )
 
         /** Creates an identity color matrix. */
         public fun ofIdentity(): ColorMatrixF32 = ColorMatrixF32()

@@ -106,6 +106,10 @@ class ScalarF32Test {
     @Test
     fun testInstanceRoundToInt() {
         assertEquals(4, ScalarF32.of(3.7f).roundToInt())
+        assertEquals(1, ScalarF32.of(0.5f).roundToInt())
+        assertEquals(3, ScalarF32.of(2.5f).roundToInt())
+        assertEquals(0, ScalarF32.of(-0.5f).roundToInt())
+        assertEquals(-2, ScalarF32.of(-2.5f).roundToInt())
     }
 
     @Test

@@ -32,7 +32,7 @@ public data class Vector3F32 internal constructor(public val x: Float, public va
     public fun lengthSquared(): Float = x * x + y * y + z * z
 
     /** Euclidean length. */
-    public fun length(): Float = kotlin.math.sqrt(lengthSquared())
+    public fun length(): Float = lengthAsDouble(x, y, z).toFloat()
 
     /** Dot product. */
     public fun dot(v: Vector3F32): Float = x * v.x + y * v.y + z * v.z
@@ -44,8 +44,16 @@ public data class Vector3F32 internal constructor(public val x: Float, public va
 
     /** Returns a unit vector, or `(0, 0, 0)` if this vector is near-zero. */
     public fun normalize(): Vector3F32 {
-        val len = length()
-        return if (nearlyZero(len)) Vector3F32(0f, 0f, 0f) else this / len
+        val len = lengthAsDouble(x, y, z)
+        return if (nearlyZero(len.toFloat())) {
+            Vector3F32(0f, 0f, 0f)
+        } else {
+            Vector3F32(
+                (x.toDouble() / len).toFloat(),
+                (y.toDouble() / len).toFloat(),
+                (z.toDouble() / len).toFloat(),
+            )
+        }
     }
 
     /** Returns `true` if all components are finite. */
@@ -61,3 +69,9 @@ public data class Vector3F32 internal constructor(public val x: Float, public va
 
 /** Scalar-times-vector: `s * v`. */
 public operator fun Float.times(v: Vector3F32): Vector3F32 = v * this
+
+internal fun lengthAsDouble(x: Float, y: Float, z: Float): Double = kotlin.math.sqrt(
+    x.toDouble() * x.toDouble() +
+        y.toDouble() * y.toDouble() +
+        z.toDouble() * z.toDouble(),
+)

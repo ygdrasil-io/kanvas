@@ -1,14 +1,11 @@
 package org.graphiks.math.geometry
 
-import kotlin.ConsistentCopyVisibility
-
 /**
  * Mutable integer 2-D point/vector with saturating arithmetic.
  *
  * Arithmetic operators (`+`, `-`, `+=`, `-=`) use saturating 32-bit
  * add/subtract .
  */
-@ConsistentCopyVisibility
 public data class Vector2I32(public var x: Int = 0, public var y: Int = 0) {
 
     /** Returns `true` if both components are zero. */

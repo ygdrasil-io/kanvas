@@ -100,8 +100,13 @@ public data class RectI32(
         bottom = Vector2I32.saturatingSub32(bottom, dy)
     }
 
-    /** Outsets by `(dx, dy)` (negative inset). */
-    public fun outset(dx: Int, dy: Int) { inset(-dx, -dy) }
+    /** Outsets by `(dx, dy)` with saturating arithmetic. */
+    public fun outset(dx: Int, dy: Int) {
+        left = Vector2I32.saturatingSub32(left, dx)
+        top = Vector2I32.saturatingSub32(top, dy)
+        right = Vector2I32.saturatingAdd32(right, dx)
+        bottom = Vector2I32.saturatingAdd32(bottom, dy)
+    }
 
     /** Adjusts edges individually with saturating arithmetic. */
     public fun adjust(dL: Int, dT: Int, dR: Int, dB: Int) {
@@ -139,8 +144,13 @@ public data class RectI32(
         Vector2I32.saturatingSub32(bottom, dy),
     )
 
-    /** Returns a copy outset by `(dx, dy)`. */
-    public fun outsetBy(dx: Int, dy: Int): RectI32 = insetBy(-dx, -dy)
+    /** Returns a copy outset by `(dx, dy)` with saturating arithmetic. */
+    public fun outsetBy(dx: Int, dy: Int): RectI32 = RectI32(
+        Vector2I32.saturatingSub32(left, dx),
+        Vector2I32.saturatingSub32(top, dy),
+        Vector2I32.saturatingAdd32(right, dx),
+        Vector2I32.saturatingAdd32(bottom, dy),
+    )
 
     /** Returns `true` if the point `(x, y)` is inside this rect. */
     public fun contains(x: Int, y: Int): Boolean =
@@ -204,7 +214,7 @@ public data class RectI32(
             ofOriginSize(pt.x, pt.y, size.width, size.height)
 
         /** Returns `true` if [a] and [b] intersect. */
-        public fun Intersects(a: RectI32, b: RectI32): Boolean {
+        public fun intersects(a: RectI32, b: RectI32): Boolean {
             val l = maxOf(a.left, b.left)
             val r = minOf(a.right, b.right)
             val t = maxOf(a.top, b.top)

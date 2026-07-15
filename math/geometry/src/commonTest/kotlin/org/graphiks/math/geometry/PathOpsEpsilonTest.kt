@@ -16,68 +16,91 @@ class PathOpsEpsilonTest {
     }
 
     @Test
-    fun `approximately_zero`() {
-        kotlin.test.assertTrue(approximately_zero(0.0))
-        kotlin.test.assertTrue(approximately_zero(1e-8))
-        kotlin.test.assertFalse(approximately_zero(0.001))
+    fun `approximatelyZero`() {
+        kotlin.test.assertTrue(PathOpsEpsilon.approximatelyZero(0.0))
+        kotlin.test.assertTrue(PathOpsEpsilon.approximatelyZero(1e-8))
+        kotlin.test.assertFalse(PathOpsEpsilon.approximatelyZero(0.001))
     }
 
     @Test
-    fun `approximately_equal`() {
-        kotlin.test.assertTrue(approximately_equal(0.5, 0.5 + 1e-8))
-        kotlin.test.assertFalse(approximately_equal(0.5, 0.5001))
+    fun `approximatelyEqual`() {
+        kotlin.test.assertTrue(PathOpsEpsilon.approximatelyEqual(0.5, 0.5 + 1e-8))
+        kotlin.test.assertFalse(PathOpsEpsilon.approximatelyEqual(0.5, 0.5001))
     }
 
     @Test
-    fun `precisely_equal`() {
-        kotlin.test.assertTrue(precisely_equal(0.0, 1e-30))
-        kotlin.test.assertFalse(precisely_equal(0.0, 1e-12))
+    fun `preciselyEqual`() {
+        kotlin.test.assertTrue(PathOpsEpsilon.preciselyEqual(0.0, 1e-30))
+        kotlin.test.assertFalse(PathOpsEpsilon.preciselyEqual(0.0, 1e-12))
     }
 
     @Test
-    fun `zero_or_one exactly zero or one`() {
-        kotlin.test.assertTrue(zero_or_one(0.0))
-        kotlin.test.assertTrue(zero_or_one(1.0))
-        kotlin.test.assertFalse(zero_or_one(0.5))
+    fun `zeroOrOne exactly zero or one`() {
+        kotlin.test.assertTrue(PathOpsEpsilon.zeroOrOne(0.0))
+        kotlin.test.assertTrue(PathOpsEpsilon.zeroOrOne(1.0))
+        kotlin.test.assertFalse(PathOpsEpsilon.zeroOrOne(0.5))
     }
 
     @Test
     fun `pinT clamps to 0_1 range`() {
-        kotlin.test.assertEquals(0.0, pinT(-0.001))
-        kotlin.test.assertEquals(1.0, pinT(1.001))
-        kotlin.test.assertEquals(0.5, pinT(0.5))
+        kotlin.test.assertEquals(0.0, PathOpsEpsilon.pinT(-0.001))
+        kotlin.test.assertEquals(1.0, PathOpsEpsilon.pinT(1.001))
+        kotlin.test.assertEquals(0.5, PathOpsEpsilon.pinT(0.5))
     }
 
     @Test
     fun `between predicate`() {
-        kotlin.test.assertTrue(between(0.0, 0.5, 1.0))
-        kotlin.test.assertTrue(between(1.0, 0.5, 0.0))
-        kotlin.test.assertFalse(between(0.0, 2.0, 1.0))
+        kotlin.test.assertTrue(PathOpsEpsilon.between(0.0, 0.5, 1.0))
+        kotlin.test.assertTrue(PathOpsEpsilon.between(1.0, 0.5, 0.0))
+        kotlin.test.assertFalse(PathOpsEpsilon.between(0.0, 2.0, 1.0))
     }
 
     @Test
-    fun `AlmostEqualUlps for equal values`() {
-        kotlin.test.assertTrue(AlmostEqualUlps(1f, 1f))
-        kotlin.test.assertTrue(AlmostEqualUlps(0f, 0f))
+    fun `almostEqualUlps for equal values`() {
+        kotlin.test.assertTrue(PathOpsEpsilon.almostEqualUlps(1f, 1f))
+        kotlin.test.assertTrue(PathOpsEpsilon.almostEqualUlps(0f, 0f))
     }
 
     @Test
-    fun `dInterp linear`() {
-        kotlin.test.assertEquals(0.0, dInterp(0.0, 10.0, 0.0))
-        kotlin.test.assertEquals(10.0, dInterp(0.0, 10.0, 1.0))
-        kotlin.test.assertEquals(5.0, dInterp(0.0, 10.0, 0.5))
+    fun `almostEqualUlps enforces boundaries on Float and Double`() {
+        val oneFloatBits = 1f.toRawBits()
+        kotlin.test.assertTrue(PathOpsEpsilon.almostEqualUlps(1f, Float.fromBits(oneFloatBits + 15)))
+        kotlin.test.assertFalse(PathOpsEpsilon.almostEqualUlps(1f, Float.fromBits(oneFloatBits + 16)))
+
+        val oneDoubleBits = 1.0.toRawBits()
+        kotlin.test.assertTrue(PathOpsEpsilon.almostEqualUlps(1.0, Double.fromBits(oneDoubleBits + 15)))
+        kotlin.test.assertFalse(PathOpsEpsilon.almostEqualUlps(1.0, Double.fromBits(oneDoubleBits + 16)))
     }
 
     @Test
-    fun `dSign returns -1 0 1`() {
-        kotlin.test.assertEquals(1, dSign(5.0))
-        kotlin.test.assertEquals(0, dSign(0.0))
-        kotlin.test.assertEquals(-1, dSign(-3.0))
+    fun `almostEqualUlps handles signed zero and pinned non-finite values`() {
+        kotlin.test.assertTrue(PathOpsEpsilon.almostEqualUlps(-0f, 0f))
+        kotlin.test.assertTrue(PathOpsEpsilon.almostEqualUlps(-0.0, 0.0))
+        kotlin.test.assertFalse(
+            PathOpsEpsilon.almostEqualUlpsPin(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY),
+        )
+        kotlin.test.assertFalse(
+            PathOpsEpsilon.almostEqualUlpsPin(Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY),
+        )
     }
 
     @Test
-    fun `roughly_equal`() {
-        kotlin.test.assertTrue(roughly_equal(0.0, 1e-6))
-        kotlin.test.assertFalse(roughly_equal(0.0, 0.01))
+    fun `interpolate linear`() {
+        kotlin.test.assertEquals(0.0, PathOpsEpsilon.interpolate(0.0, 10.0, 0.0))
+        kotlin.test.assertEquals(10.0, PathOpsEpsilon.interpolate(0.0, 10.0, 1.0))
+        kotlin.test.assertEquals(5.0, PathOpsEpsilon.interpolate(0.0, 10.0, 0.5))
+    }
+
+    @Test
+    fun `sign returns -1 0 1`() {
+        kotlin.test.assertEquals(1, PathOpsEpsilon.sign(5.0))
+        kotlin.test.assertEquals(0, PathOpsEpsilon.sign(0.0))
+        kotlin.test.assertEquals(-1, PathOpsEpsilon.sign(-3.0))
+    }
+
+    @Test
+    fun `roughlyEqual`() {
+        kotlin.test.assertTrue(PathOpsEpsilon.roughlyEqual(0.0, 1e-6))
+        kotlin.test.assertFalse(PathOpsEpsilon.roughlyEqual(0.0, 0.01))
     }
 }

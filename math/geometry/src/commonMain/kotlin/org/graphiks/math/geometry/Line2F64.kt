@@ -1,5 +1,12 @@
 package org.graphiks.math.geometry
 
+import org.graphiks.math.geometry.PathOpsEpsilon.almostBEqualUlps
+import org.graphiks.math.geometry.PathOpsEpsilon.almostBetweenUlps
+import org.graphiks.math.geometry.PathOpsEpsilon.almostEqualUlps
+import org.graphiks.math.geometry.PathOpsEpsilon.almostEqualUlpsPin
+import org.graphiks.math.geometry.PathOpsEpsilon.between
+import org.graphiks.math.geometry.PathOpsEpsilon.pinT
+import org.graphiks.math.geometry.PathOpsEpsilon.roughlyEqualUlps
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -66,8 +73,8 @@ public class Line2F64(source: Array<Point2F64>) {
      * `Line::nearPoint`.
      */
     fun nearPoint(xy: Point2F64, unequal: BooleanArray? = null): Double {
-        if (!AlmostBetweenUlps(pts[0].x, xy.x, pts[1].x)
-            || !AlmostBetweenUlps(pts[0].y, xy.y, pts[1].y)) return -1.0
+        if (!almostBetweenUlps(pts[0].x, xy.x, pts[1].x)
+            || !almostBetweenUlps(pts[0].y, xy.y, pts[1].y)) return -1.0
         val len = pts[1] - pts[0]
         val denom = len.x * len.x + len.y * len.y
         val ab0 = xy - pts[0]
@@ -80,7 +87,7 @@ public class Line2F64(source: Array<Point2F64>) {
         val tiniest = min(min(min(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         var largest = max(max(max(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         largest = max(largest, -tiniest)
-        if (!AlmostEqualUlpsPin(largest, largest + dist)) return -1.0
+        if (!almostEqualUlpsPin(largest, largest + dist)) return -1.0
         if (unequal != null && unequal.isNotEmpty()) {
             unequal[0] = largest.toFloat() != (largest + dist).toFloat()
         }
@@ -103,7 +110,7 @@ public class Line2F64(source: Array<Point2F64>) {
         val tiniest = min(min(min(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         var largest = max(max(max(pts[0].x, pts[0].y), pts[1].x), pts[1].y)
         largest = max(largest, -tiniest)
-        return RoughlyEqualUlps(largest, largest + dist)
+        return roughlyEqualUlps(largest, largest + dist)
     }
 
     override fun equals(other: Any?): Boolean {
@@ -128,8 +135,8 @@ public class Line2F64(source: Array<Point2F64>) {
 
         /** Performs the computation. */
         fun nearPointH(xy: Point2F64, left: Double, right: Double, y: Double): Double {
-            if (!AlmostBequalUlps(xy.y, y)) return -1.0
-            if (!AlmostBetweenUlps(left, xy.x, right)) return -1.0
+            if (!almostBEqualUlps(xy.y, y)) return -1.0
+            if (!almostBetweenUlps(left, xy.x, right)) return -1.0
             var t = (xy.x - left) / (right - left)
             t = pinT(t)
             val realPtX = (1 - t) * left + t * right
@@ -138,7 +145,7 @@ public class Line2F64(source: Array<Point2F64>) {
             val tiniest = min(min(y, left), right)
             var largest = max(max(y, left), right)
             largest = max(largest, -tiniest)
-            if (!AlmostEqualUlps(largest, largest + dist)) return -1.0
+            if (!almostEqualUlps(largest, largest + dist)) return -1.0
             return t
         }
 
@@ -153,8 +160,8 @@ public class Line2F64(source: Array<Point2F64>) {
 
         /** Performs the computation. */
         fun nearPointV(xy: Point2F64, top: Double, bottom: Double, x: Double): Double {
-            if (!AlmostBequalUlps(xy.x, x)) return -1.0
-            if (!AlmostBetweenUlps(top, xy.y, bottom)) return -1.0
+            if (!almostBEqualUlps(xy.x, x)) return -1.0
+            if (!almostBetweenUlps(top, xy.y, bottom)) return -1.0
             var t = (xy.y - top) / (bottom - top)
             t = pinT(t)
             val realPtY = (1 - t) * top + t * bottom
@@ -163,7 +170,7 @@ public class Line2F64(source: Array<Point2F64>) {
             val tiniest = min(min(x, top), bottom)
             var largest = max(max(x, top), bottom)
             largest = max(largest, -tiniest)
-            if (!AlmostEqualUlps(largest, largest + dist)) return -1.0
+            if (!almostEqualUlps(largest, largest + dist)) return -1.0
             return t
         }
     }

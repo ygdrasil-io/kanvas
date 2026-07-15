@@ -53,6 +53,17 @@ class Vector4F32Test {
     }
 
     @Test
+    fun testLengthAndNormalizeLargeFiniteVector() {
+        val v = Vector4F32(1e30f, 1e30f, 1e30f, 1e30f)
+        assertEquals(2e30f, v.length(), 2e24f)
+
+        val normalized = v.normalize()
+        assertEquals(1f, normalized.length(), 1e-6f)
+        assertEquals(0.5f, normalized.x, 1e-6f)
+        assertEquals(0.5f, normalized.w, 1e-6f)
+    }
+
+    @Test
     fun testDot() {
         assertEquals(70f, Vector4F32(1f, 2f, 3f, 4f).dot(Vector4F32(5f, 6f, 7f, 8f)))
     }

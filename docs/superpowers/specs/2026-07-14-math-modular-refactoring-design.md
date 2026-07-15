@@ -13,15 +13,18 @@ The current `:math` module ships 38 source files in a single flat `org.graphiks.
 ```
 :math:scalar          ← no dependencies
 :math:vector          ← :math:scalar
-:math:matrix          ← :math:scalar, :math:vector
 :math:geometry        ← :math:scalar, :math:vector
+:math:matrix          ← :math:scalar, :math:vector, :math:geometry
 :math:color           ← :math:scalar, :math:matrix
 ```
+
+Every module targets JVM and JavaScript (IR on Node.js). `HalfFloat` remains
+JVM-only because its reference-compatible API lives in `jvmMain`.
 
 ### `:math:scalar`
 - **Package:** `org.graphiks.math.scalar`
 - **Gradle ID:** `:math:scalar` (folder `math/scalar/`)
-- **Build:** `kotlin-multiplatform` convention plugin
+- **Build:** `kotlin-multiplatform` convention plugin; JVM and JS/Node.js targets
 - **Types:**
   - `ScalarF32` — `@JvmInline value class` wrapping `Float`. Constructor `internal`, factory `ScalarF32.of(1.5f)`. Companion holds constants (`ScalarF32.Zero`, `ScalarF32.Pi`). Instance methods provide the ergonomics: `scalar.isNearlyZero()`, `scalar.clamp(min, max)`, `scalar.floorToInt()`, etc.
   - Top-level functions for standalone usage: `nearlyZero(float)`, `clamp(value, min, max)`, `interp(a, b, t)`, `saturatingAdd32`, `saturatingSub32`.
@@ -31,7 +34,7 @@ The current `:math` module ships 38 source files in a single flat `org.graphiks.
 ### `:math:vector`
 - **Package:** `org.graphiks.math.vector`
 - **Gradle ID:** `:math:vector` (folder `math/vector/`)
-- **Build:** `kotlin-multiplatform` convention plugin
+- **Build:** `kotlin-multiplatform` convention plugin; JVM and JS/Node.js targets
 - **Types:**
   - `Vector2F32` — immutable `data class` with `val x, y: Float`. Constructor `internal`, factory `Vector2F32.of(x, y)`.
   - `Vector3F32` — immutable `data class` with `val x, y, z: Float`. Factory `Vector3F32.of(x, y, z)`.
@@ -49,9 +52,9 @@ The current `:math` module ships 38 source files in a single flat `org.graphiks.
 ### `:math:matrix`
 - **Package:** `org.graphiks.math.matrix`
 - **Gradle ID:** `:math:matrix` (folder `math/matrix/`)
-- **Build:** `kotlin-multiplatform` convention plugin
+- **Build:** `kotlin-multiplatform` convention plugin; JVM and JS/Node.js targets
 - **Types:**
-  - `Matrix3x3F32` — row-major 3×3 float transform (was `SkMatrix`), `class` (mutable)
+  - `Matrix3x3F32` — immutable row-major 3×3 float transform (was `SkMatrix`), represented as a `data class`
   - `Matrix4x4F32` — column-major 4×4 float transform (was `SkM44`), `class` (mutable)
 - **Operations:** `invert`, `mapPoint`, `mapVector`, `concat`, `determinant`, `decompose`, `perspective`, pre/post transforms, `ScaleToFit` enum
 - **Sources ported from:** `SkMatrix.kt`, `SkM44.kt`, `SkMathBackend.kt` (m44Concat)
@@ -59,7 +62,7 @@ The current `:math` module ships 38 source files in a single flat `org.graphiks.
 ### `:math:geometry`
 - **Package:** `org.graphiks.math.geometry`
 - **Gradle ID:** `:math:geometry` (folder `math/geometry/`)
-- **Build:** `kotlin-multiplatform` convention plugin
+- **Build:** `kotlin-multiplatform` convention plugin; JVM and JS/Node.js targets
 - **Types:**
   - `Vector2I32` — integer 2D vector with saturating arithmetic, `data class`, `typealias Point2I32 = Vector2I32`
   - `RectF32` — float rectangle, mutable `data class`
@@ -70,18 +73,18 @@ The current `:math` module ships 38 source files in a single flat `org.graphiks.
     - `Point2F64` — double point, mutable
     - `Vector2F64` — double vector, same type as `Point2F64` via companion functions
     - `Line2F64` — double line segment (`pts[2]`)
-    - `PathOpsEpsilon` — `object` with epsilon constants and ULPs-tolerant comparison predicates (`approximatelyEqual`, `roughlyEqual`, `preciselyEqual`, etc.)
+    - `PathOpsEpsilon` — `object` with ULPs-tolerant comparison predicates (`approximatelyEqual`, `roughlyEqual`, `preciselyEqual`, etc.); well-known epsilon constants remain top-level `const val`s
 - **Sources ported from:** `SkIPoint.kt`, `SkRect.kt`, `SkIRect.kt`, `SkISize.kt`, `SkDPoint.kt`, `SkDLine.kt`, `SkPathOpsTypes.kt`
 
 ### `:math:color`
 - **Package:** `org.graphiks.math.color`
 - **Gradle ID:** `:math:color` (folder `math/color/`)
-- **Build:** `kotlin-multiplatform` convention plugin
+- **Build:** `kotlin-multiplatform` convention plugin; JVM and JS/Node.js targets
 - **Types:**
-  - `ColorARGB` — `typealias ColorARGB = Int`. Companion holds named constants (`ColorARGB.Black`, `ColorARGB.White`, `ColorARGB.Red`, etc.). Extension properties (`alpha`, `red`, `green`, `blue`). Top-level functions for `premultiplyColor`, `unpremultiplyColor`, HSV conversion.
-  - `ColorF32` — float RGBA (non-premultiplied), mutable `data class`. Factory `ColorF32.of(r, g, b, a)`. Instance methods: `toColorARGB()`, `premultiplied()`, `unpremultiplied()`.
+  - `ColorARGB` — `value class` over `UInt`, preserving the unsigned `AARRGGBB` bit layout. Companion holds named constants (`ColorARGB.Black`, `ColorARGB.White`, `ColorARGB.Red`, etc.); channel properties and premultiply/unpremultiply operations are type-safe members.
+  - `ColorF32` — immutable float RGBA (non-premultiplied) `data class`. Factory `ColorF32.of(r, g, b, a)`. Instance methods: `toColorARGB()`, `premultiplied()`, `unpremultiplied()`.
   - `ColorMatrixF32` — 4×5 color transform matrix, `class` (mutable). Factory `ColorMatrixF32.ofIdentity()`.
-  - `ColorTransferFunction` — `data class` with 7 floats (`g, a, b, c, d, e, f`), parametric curve. Predefined instances: `ColorTransferFunction.sRgb`, `.linear`, `.rec2020`, `.pq`, `.hlg`.
+  - `ColorTransferFunction` — sealed encoded-to-linear transfer-function API. ICC type-4 curves use the `Parametric` data class; PQ (ST 2084) and HLG use dedicated equations because they cannot be represented by the ICC seven-parameter form. Predefined instances: `ColorTransferFunction.sRgb`, `.linear`, `.rec2020`, `.pq`, `.hlg`.
   - ICC colorimetric operations as extension functions on `Matrix3x3F32` from `:math:matrix`
   - `HalfFloat` — JVM-only half-float conversion functions (in `src/jvmMain/`)
 - **Sources ported from:** `SkColor.kt`, `SkColor4f.kt`, `SkColorMatrix.kt`, `SkcmsTransferFunction.kt`, `SkcmsMatrix3x3.kt`, `SkcmsMatrix3x4.kt`, `HalfFloat.kt` (jvm)
@@ -117,7 +120,8 @@ The current `:math` module ships 38 source files in a single flat `org.graphiks.
 
 ## Module Build Configuration
 
-Each new module uses the existing `buildsrc.convention.kotlin-multiplatform` convention plugin, matching the conventions of the current `:math` module:
+Each new module uses the existing `buildsrc.convention.kotlin-multiplatform`
+convention plugin and declares the same JVM and JavaScript/Node.js targets:
 
 ```kotlin
 // in math/scalar/build.gradle.kts
@@ -125,6 +129,10 @@ plugins {
     id("buildsrc.convention.kotlin-multiplatform")
 }
 kotlin {
+    jvm()
+    js {
+        nodejs()
+    }
     sourceSets {
         commonMain.dependencies { }
         commonTest.dependencies { }
@@ -132,10 +140,13 @@ kotlin {
 }
 ```
 
-Module dependency declarations use `api(project(":math:scalar"))` so types are transitively available — matching how `color-management` declares `api(project(":math"))` today.
+Dependencies are exposed with `api` only when their types occur in the public
+surface: `:matrix` exposes `:vector` and `:geometry`, `:geometry` exposes
+`:vector`, and `:color` exposes `:matrix`. Scalar-only implementation details
+remain `implementation` dependencies.
 
 ## Verification
 
-- Each module compiles independently
-- Each module's ported tests pass
+- Each module compiles for JVM and JavaScript
+- Each module's ported tests pass on JVM and Node.js
 - No regression in existing `:math` module tests

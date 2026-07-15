@@ -158,9 +158,9 @@ class RectF32Test {
     }
 
     @Test
-    fun `Intersects companion accepts loose coordinates`() {
-        assertTrue(RectF32.Intersects(0f, 0f, 10f, 10f, 5f, 5f, 15f, 15f))
-        assertFalse(RectF32.Intersects(0f, 0f, 5f, 5f, 10f, 10f, 20f, 20f))
+    fun `intersects companion accepts loose coordinates`() {
+        assertTrue(RectF32.intersects(0f, 0f, 10f, 10f, 5f, 5f, 15f, 15f))
+        assertFalse(RectF32.intersects(0f, 0f, 5f, 5f, 10f, 10f, 20f, 20f))
     }
 
     @Test
@@ -193,11 +193,15 @@ class RectF32Test {
     }
 
     @Test
-    fun `round at half-integer ties rounds to even`() {
+    fun `round at half-integer ties rounds toward positive infinity`() {
         val r = RectF32.ofLTRB(0.5f, 1.5f, 2.5f, 3.5f)
         val ir = r.round()
-        assertEquals(0, ir.left); assertEquals(2, ir.top)
-        assertEquals(2, ir.right); assertEquals(4, ir.bottom)
+        assertEquals(1, ir.left); assertEquals(2, ir.top)
+        assertEquals(3, ir.right); assertEquals(4, ir.bottom)
+
+        val negative = RectF32.ofLTRB(-1.5f, -0.5f, 0.5f, 1.5f).round()
+        assertEquals(-1, negative.left); assertEquals(0, negative.top)
+        assertEquals(1, negative.right); assertEquals(2, negative.bottom)
     }
 
     @Test
@@ -217,31 +221,31 @@ class RectF32Test {
     }
 
     @Test
-    fun `Bounds returns tight bbox`() {
+    fun `bounds returns tight bbox`() {
         val pts = arrayOf(Vector2F32.of(1f, 2f), Vector2F32.of(5f, 7f), Vector2F32.of(-3f, 4f))
-        val b = RectF32.Bounds(pts)!!
+        val b = RectF32.bounds(pts)!!
         assertTrue(b.contentEqualsLTRB(RectF32.ofLTRB(-3f, 2f, 5f, 7f)))
     }
 
     @Test
-    fun `Bounds returns null on non-finite point`() {
+    fun `bounds returns null on non-finite point`() {
         val pts = arrayOf(Vector2F32.of(1f, 2f), Vector2F32.of(Float.NaN, 0f))
-        assertNull(RectF32.Bounds(pts))
+        assertNull(RectF32.bounds(pts))
     }
 
     @Test
-    fun `Bounds of empty array is empty rect`() {
-        val b = RectF32.Bounds(emptyArray())
+    fun `bounds of empty array is empty rect`() {
+        val b = RectF32.bounds(emptyArray())
         assertNotNull(b)
         assertTrue(b.isEmpty)
     }
 
     @Test
-    fun `TL TR BL BR return corners`() {
+    fun `corner accessors return corners`() {
         val r = RectF32.ofLTRB(1f, 2f, 3f, 4f)
-        assertEquals(Vector2F32.of(1f, 2f), r.TL())
-        assertEquals(Vector2F32.of(3f, 2f), r.TR())
-        assertEquals(Vector2F32.of(1f, 4f), r.BL())
-        assertEquals(Vector2F32.of(3f, 4f), r.BR())
+        assertEquals(Vector2F32.of(1f, 2f), r.topLeft())
+        assertEquals(Vector2F32.of(3f, 2f), r.topRight())
+        assertEquals(Vector2F32.of(1f, 4f), r.bottomLeft())
+        assertEquals(Vector2F32.of(3f, 4f), r.bottomRight())
     }
 }

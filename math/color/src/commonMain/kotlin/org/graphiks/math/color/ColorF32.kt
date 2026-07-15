@@ -3,15 +3,16 @@ package org.graphiks.math.color
 import org.graphiks.math.scalar.clamp
 
 /**
- * Mutable RGBA color with float components in [0, 1].
- *
+ * Immutable RGBA color with floating-point components. Values are not
+ * implicitly clamped, so out-of-gamut and HDR components are preserved;
+ * use [clampToFit] when a normalized `[0, 1]` color is required.
  */
 @ConsistentCopyVisibility
 public data class ColorF32 internal constructor(
-    public var red: Float,
-    public var green: Float,
-    public var blue: Float,
-    public var alpha: Float = 1f
+    public val red: Float,
+    public val green: Float,
+    public val blue: Float,
+    public val alpha: Float = 1f
 ) {
     /** `true` if alpha >= 1. */
     public val isOpaque: Boolean get() = alpha >= 1f

@@ -92,7 +92,7 @@ class Matrix4x4F32Test {
         val r = Matrix4x4F32.rotate(Vector3F32.of(1f, 2f, 3f).normalize(), 0.7f)
         val inv = r.invert()
         assertNotNull(inv)
-        assertMatrixNear(r.transpose(), inv!!, 1e-4f)
+        assertMatrixNear(r.transpose(), inv, 1e-4f)
     }
 
     @Test
@@ -106,7 +106,7 @@ class Matrix4x4F32Test {
     fun `invert of identity is identity`() {
         val inv = Matrix4x4F32().invert()
         assertNotNull(inv)
-        assertMatrixNear(Matrix4x4F32(), inv!!)
+        assertMatrixNear(Matrix4x4F32(), inv)
     }
 
     @Test
@@ -288,9 +288,8 @@ class Matrix4x4F32Test {
     fun `asM33 round-trip preserves affine fields`() {
         val src = Matrix3x3F32.of(2f, 0f, 5f, 0f, 3f, 7f, 0f, 0f, 1f)
         val viaM44 = Matrix4x4F32(src).asM33()
-        assertNotNull(viaM44)
         // Match the affine subset (perspective row is [0, 0, 1] for affine).
-        assertEquals(src.sx, viaM44!!.sx, 1e-5f)
+        assertEquals(src.sx, viaM44.sx, 1e-5f)
         assertEquals(src.kx, viaM44.kx, 1e-5f)
         assertEquals(src.tx, viaM44.tx, 1e-5f)
         assertEquals(src.ky, viaM44.ky, 1e-5f)

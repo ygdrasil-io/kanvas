@@ -50,6 +50,19 @@ class Vector3F32Test {
     }
 
     @Test
+    fun testLengthAndNormalizeLargeFiniteVector() {
+        val v = Vector3F32(1e30f, 1e30f, 1e30f)
+        val expectedLength = (kotlin.math.sqrt(3.0) * 1e30).toFloat()
+        assertEquals(expectedLength, v.length(), expectedLength * 1e-6f)
+
+        val normalized = v.normalize()
+        assertEquals(1f, normalized.length(), 1e-6f)
+        assertTrue(normalized.x > 0f)
+        assertTrue(normalized.y > 0f)
+        assertTrue(normalized.z > 0f)
+    }
+
+    @Test
     fun testDot() {
         assertEquals(32f, Vector3F32(1f, 2f, 3f).dot(Vector3F32(4f, 5f, 6f)))
     }

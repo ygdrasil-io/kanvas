@@ -1,5 +1,6 @@
 package org.graphiks.math.scalar
 
+import kotlin.jvm.JvmInline
 import kotlin.math.*
 
 /**
@@ -25,7 +26,7 @@ public value class ScalarF32 internal constructor(public val value: Float) {
     public fun ceilToInt(): Int = ceil(value).toInt()
 
     /** Rounds this value to the nearest integer (ties toward +infinity). */
-    public fun roundToInt(): Int = round(value).toInt()
+    public fun roundToInt(): Int = floor(value.toDouble() + 0.5).toInt()
 
     /** Returns `true` if this value is finite (not infinite or NaN). */
     public fun isFinite(): Boolean = value.isFinite()

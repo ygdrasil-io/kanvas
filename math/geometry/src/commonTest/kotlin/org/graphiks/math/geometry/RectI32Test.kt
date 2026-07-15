@@ -78,6 +78,11 @@ class RectI32Test {
         assertEquals(Int.MIN_VALUE + 1, ins.left)
         assertEquals(Int.MAX_VALUE, ins.right)
 
+        val minOutset = RectI32.ofLTRB(0, 0, 10, 10)
+        minOutset.outset(Int.MIN_VALUE, 0)
+        assertEquals(Int.MAX_VALUE, minOutset.left)
+        assertEquals(Int.MIN_VALUE + 10, minOutset.right)
+
         val ins2 = RectI32.ofLTRB(0, 0, 10, 10)
         ins2.inset(Int.MIN_VALUE, 0)
         assertEquals(Int.MIN_VALUE, ins2.left)
@@ -102,6 +107,10 @@ class RectI32Test {
         val out = r.outsetBy(Int.MAX_VALUE, 0)
         assertEquals(Int.MIN_VALUE + 1, out.left)
         assertEquals(Int.MAX_VALUE, out.right)
+
+        val minOut = r.outsetBy(Int.MIN_VALUE, 0)
+        assertEquals(Int.MAX_VALUE, minOut.left)
+        assertEquals(Int.MIN_VALUE + 10, minOut.right)
     }
 
     @Test
@@ -176,9 +185,9 @@ class RectI32Test {
     }
 
     @Test
-    fun `Intersects companion`() {
-        assertTrue(RectI32.Intersects(RectI32.ofLTRB(0, 0, 10, 10), RectI32.ofLTRB(5, 5, 15, 15)))
-        assertFalse(RectI32.Intersects(RectI32.ofLTRB(0, 0, 5, 5), RectI32.ofLTRB(10, 10, 20, 20)))
+    fun `intersects companion`() {
+        assertTrue(RectI32.intersects(RectI32.ofLTRB(0, 0, 10, 10), RectI32.ofLTRB(5, 5, 15, 15)))
+        assertFalse(RectI32.intersects(RectI32.ofLTRB(0, 0, 5, 5), RectI32.ofLTRB(10, 10, 20, 20)))
     }
 
     @Test

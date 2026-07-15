@@ -1,5 +1,14 @@
 package org.graphiks.math.geometry
 
+import org.graphiks.math.geometry.PathOpsEpsilon.almostDEqualUlps
+import org.graphiks.math.geometry.PathOpsEpsilon.almostEqualUlps
+import org.graphiks.math.geometry.PathOpsEpsilon.almostEqualUlpsNoNormalCheck
+import org.graphiks.math.geometry.PathOpsEpsilon.almostPEqualUlps
+import org.graphiks.math.geometry.PathOpsEpsilon.approximatelyEqual
+import org.graphiks.math.geometry.PathOpsEpsilon.approximatelyZero
+import org.graphiks.math.geometry.PathOpsEpsilon.roughlyEqual
+import org.graphiks.math.geometry.PathOpsEpsilon.roughlyEqualUlps
+import org.graphiks.math.geometry.PathOpsEpsilon.roughlyZeroWhenComparedTo
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -39,14 +48,14 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
     public fun crossCheck(a: Point2F64): Double {
         val xy = x * a.y
         val yx = y * a.x
-        return if (AlmostEqualUlps(xy, yx)) 0.0 else xy - yx
+        return if (almostEqualUlps(xy, yx)) 0.0 else xy - yx
     }
 
     /** Cross product with no-normal-check ULP comparison. */
     public fun crossNoNormalCheck(a: Point2F64): Double {
         val xy = x * a.y
         val yx = y * a.x
-        return if (AlmostEqualUlpsNoNormalCheck(xy, yx)) 0.0 else xy - yx
+        return if (almostEqualUlpsNoNormalCheck(xy, yx)) 0.0 else xy - yx
     }
 
     /** Dot product. */
@@ -84,13 +93,13 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
      * Double-precision approximate equality
      */
     public fun approximatelyDEqual(a: Point2F64): Boolean {
-        if (approximately_equal(x, a.x) && approximately_equal(y, a.y)) return true
-        if (!RoughlyEqualUlps(x, a.x) || !RoughlyEqualUlps(y, a.y)) return false
+        if (approximatelyEqual(x, a.x) && approximatelyEqual(y, a.y)) return true
+        if (!roughlyEqualUlps(x, a.x) || !roughlyEqualUlps(y, a.y)) return false
         val dist = distance(a)
         val tiniest = min(min(min(x, a.x), y), a.y)
         var largest = max(max(max(x, a.x), y), a.y)
         largest = max(largest, -tiniest)
-        return AlmostDequalUlps(largest, largest + dist)
+        return almostDEqualUlps(largest, largest + dist)
     }
 
     /** Double-precision approximate equality with a [Vector2F32]. */
@@ -101,13 +110,13 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
      * Standard approximate equality
      */
     public fun approximatelyEqual(a: Point2F64): Boolean {
-        if (approximately_equal(x, a.x) && approximately_equal(y, a.y)) return true
-        if (!RoughlyEqualUlps(x, a.x) || !RoughlyEqualUlps(y, a.y)) return false
+        if (approximatelyEqual(x, a.x) && approximatelyEqual(y, a.y)) return true
+        if (!roughlyEqualUlps(x, a.x) || !roughlyEqualUlps(y, a.y)) return false
         val dist = distance(a)
         val tiniest = min(min(min(x, a.x), y), a.y)
         var largest = max(max(max(x, a.x), y), a.y)
         largest = max(largest, -tiniest)
-        return AlmostPequalUlps(largest, largest + dist)
+        return almostPEqualUlps(largest, largest + dist)
     }
 
     /** Approximate equality with a [Vector2F32]. */
@@ -115,7 +124,7 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
         approximatelyEqual(Point2F64(a.x.toDouble(), a.y.toDouble()))
 
     /** Returns `true` if both components are approximately zero. */
-    public fun approximatelyZero(): Boolean = approximately_zero(x) && approximately_zero(y)
+    public fun approximatelyZero(): Boolean = approximatelyZero(x) && approximatelyZero(y)
 
     /** Converts to a [Vector2F32]. */
     public fun asVector2F32(): Vector2F32 = Vector2F32.of(x = x.toFloat(), y = y.toFloat())
@@ -134,12 +143,12 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
 
     /** Rough equality check */
     public fun roughlyEqual(a: Point2F64): Boolean {
-        if (roughly_equal(x, a.x) && roughly_equal(y, a.y)) return true
+        if (roughlyEqual(x, a.x) && roughlyEqual(y, a.y)) return true
         val dist = distance(a)
         val tiniest = min(min(min(x, a.x), y), a.y)
         var largest = max(max(max(x, a.x), y), a.y)
         largest = max(largest, -tiniest)
-        return RoughlyEqualUlps(largest, largest + dist)
+        return roughlyEqualUlps(largest, largest + dist)
     }
 
     public companion object {
@@ -155,28 +164,28 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
 
         /** Approximate equality for [Vector2F32] points. */
         public fun approximatelyEqualVectors(a: Vector2F32, b: Vector2F32): Boolean {
-            if (approximately_equal(a.x.toDouble(), b.x.toDouble())
-                && approximately_equal(a.y.toDouble(), b.y.toDouble())) return true
-            if (!RoughlyEqualUlps(a.x, b.x) || !RoughlyEqualUlps(a.y, b.y)) return false
+            if (approximatelyEqual(a.x.toDouble(), b.x.toDouble())
+                && approximatelyEqual(a.y.toDouble(), b.y.toDouble())) return true
+            if (!roughlyEqualUlps(a.x, b.x) || !roughlyEqualUlps(a.y, b.y)) return false
             val dA = Point2F64(a.x.toDouble(), a.y.toDouble())
             val dB = Point2F64(b.x.toDouble(), b.y.toDouble())
             val dist = dA.distance(dB)
             val tiniest = min(min(min(a.x, b.x), a.y), b.y)
             var largest = max(max(max(a.x, b.x), a.y), b.y)
             largest = max(largest, -tiniest)
-            return AlmostDequalUlps(largest.toDouble(), largest.toDouble() + dist)
+            return almostDEqualUlps(largest.toDouble(), largest.toDouble() + dist)
         }
 
         /** Rough equality for [Vector2F32] points. */
         public fun roughlyEqualVectors(a: Vector2F32, b: Vector2F32): Boolean {
-            if (!RoughlyEqualUlps(a.x, b.x) && !RoughlyEqualUlps(a.y, b.y)) return false
+            if (!roughlyEqualUlps(a.x, b.x) && !roughlyEqualUlps(a.y, b.y)) return false
             val dA = Point2F64(a.x.toDouble(), a.y.toDouble())
             val dB = Point2F64(b.x.toDouble(), b.y.toDouble())
             val dist = dA.distance(dB)
             val tiniest = min(min(min(a.x, b.x), a.y), b.y)
             var largest = max(max(max(a.x, b.x), a.y), b.y)
             largest = max(largest, -tiniest)
-            return AlmostDequalUlps(largest.toDouble(), largest.toDouble() + dist)
+            return almostDEqualUlps(largest.toDouble(), largest.toDouble() + dist)
         }
 
         /** Very rough equality for [Vector2F32] points. */
@@ -187,7 +196,7 @@ public data class Point2F64 internal constructor(var x: Double, var y: Double) {
             )
             val dx = a.x - b.x; val dy = a.y - b.y
             val largestDiff = max(kotlin.math.abs(dx), kotlin.math.abs(dy))
-            return roughly_zero_when_compared_to(largestDiff.toDouble(), largest.toDouble())
+            return roughlyZeroWhenComparedTo(largestDiff.toDouble(), largest.toDouble())
         }
     }
 }

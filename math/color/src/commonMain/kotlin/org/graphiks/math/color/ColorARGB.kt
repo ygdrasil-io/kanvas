@@ -1,5 +1,7 @@
 package org.graphiks.math.color
 
+import kotlin.jvm.JvmInline
+
 /**
  * Packed 32-bit ARGB color.
  *

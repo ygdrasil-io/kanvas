@@ -62,6 +62,16 @@ class MutableVector3F32Test {
     }
 
     @Test
+    fun testNormalizeLargeFiniteVector() {
+        val v = MutableVector3F32.of(1e30f, 1e30f, 1e30f)
+        assertTrue(v.normalize())
+        assertEquals(1f, v.length(), 1e-6f)
+        assertTrue(v.x > 0f)
+        assertTrue(v.y > 0f)
+        assertTrue(v.z > 0f)
+    }
+
+    @Test
     fun testNormalizeZero() {
         val v = MutableVector3F32.of(0f, 0f, 0f)
         assertFalse(v.normalize())

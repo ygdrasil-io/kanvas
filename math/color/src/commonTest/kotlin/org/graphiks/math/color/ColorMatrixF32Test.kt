@@ -2,6 +2,7 @@ package org.graphiks.math.color
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 
 class ColorMatrixF32Test {
@@ -94,15 +95,18 @@ class ColorMatrixF32Test {
     }
 
     @Test
-    fun `preConcat and postConcat`() {
-        val a = ColorMatrixF32()
-        a.setScale(2f, 1f, 1f)
-        val b = ColorMatrixF32()
-        b.setScale(1f, 3f, 1f)
-        val c = a * b
-        a.preConcat(b) // a = b * a
-        val arr = a.toFloatArray()
-        assertEquals(c.toFloatArray().asList(), arr.asList())
+    fun `preConcat and postConcat preserve their documented order`() {
+        val scale = ColorMatrixF32.ofIdentity().apply { setScale(2f, 1f, 1f) }
+        val translate = ColorMatrixF32.ofIdentity().apply { postTranslate(0.25f, 0f, 0f, 0f) }
+
+        val pre = ColorMatrixF32.of(scale.toFloatArray())
+        pre.preConcat(translate)
+        assertEquals(0.5f, pre.toFloatArray()[4], "scale * translate must scale the bias")
+
+        val post = ColorMatrixF32.of(scale.toFloatArray())
+        post.postConcat(translate)
+        assertEquals(0.25f, post.toFloatArray()[4], "translate * scale keeps the bias")
+        assertNotEquals(pre, post)
     }
 
     @Test
@@ -115,5 +119,12 @@ class ColorMatrixF32Test {
         // Both should be non-identity
         assertNotEquals(1f, rgb2yuv[1])
         assertNotEquals(1f, yuv2rgb[2])
+    }
+
+    @Test
+    fun `unsupported color space conversion fails explicitly`() {
+        assertFailsWith<UnsupportedOperationException> {
+            ColorMatrixF32.rgbToYuv("JPEG_FULL")
+        }
     }
 }
