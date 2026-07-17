@@ -93,6 +93,43 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
     }
 
     @Test
+    fun `decoration failure disposes transferred draft ownership exactly once`() {
+        val ownedHandle = CountingHandle()
+        val draft = ownedDraft(ownedHandle)
+        val delegate = TransferringDraftProbe(ownedHandle, draft)
+
+        val result = materializeWgpu4kSurfaceRoute(
+            format = GPUTextureFormat.BGRA8Unorm,
+            acquireSurfaceBlit = {
+                GPUWgpu4kSurfaceBlitCacheLease(
+                    fakeNative("surface.source"),
+                    fakeNative("surface.pipeline"),
+                    fakeNative("surface.bind-group"),
+                )
+            },
+            materializeWithSurfaceBlit = { delegate.materializeAndTransfer() },
+            decorateMaterializedDraft = { _, transferredDraft ->
+                assertTrue(transferredDraft === draft)
+                error("surface decoration failed")
+            },
+        )
+        delegate.close()
+        delegate.close()
+        assertTrue(draft.disposeBeforeRegistration())
+        assertTrue(draft.disposeBeforeRegistration())
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result)
+        assertEquals("failed.native-frame-payload.surface-blit-materialization", refused.code)
+        assertEquals(
+            "The typed surface blit payload could not be materialized: IllegalStateException",
+            refused.message,
+        )
+        assertEquals(1, delegate.materializationCount)
+        assertEquals(1, delegate.transferredHandleCount)
+        assertEquals(1, ownedHandle.closeCount)
+    }
+
+    @Test
     fun `common surface decorator restores full payload identity and exact final blit`() {
         val generation = GPUDeviceGenerationID(7)
         val copyScope = scope(
@@ -217,6 +254,58 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             else -> error("Unexpected fake native call: ${method.name}")
         }
     } as T
+
+    private fun ownedDraft(handle: AutoCloseable) = GPUPreparedNativeFrameDraft(
+        GPUPreparedNativeFramePayload(
+            identity = GPUPreparedNativeFrameIdentity(
+                frameId = GPUFrameID(12),
+                contextIdentity = "target.scene",
+                encoderPlanId = "window.encoder.failure",
+                deviceGeneration = GPUDeviceGenerationID(7),
+                targetGeneration = 3,
+                scopes = emptyList(),
+            ),
+            scopeOperands = emptyList(),
+            scopeOperandKeys = emptyList(),
+            auxiliaryOwnedHandles = listOf(
+                GPUPreparedNativeAuxiliaryHandle(
+                    handle,
+                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                ),
+            ),
+        ),
+    )
+
+    private class CountingHandle : AutoCloseable {
+        var closeCount = 0
+            private set
+
+        override fun close() {
+            closeCount += 1
+        }
+    }
+
+    private class TransferringDraftProbe(
+        private var pendingHandle: AutoCloseable?,
+        private val draft: GPUPreparedNativeFrameDraft,
+    ) : AutoCloseable {
+        var materializationCount = 0
+            private set
+        var transferredHandleCount = 0
+            private set
+
+        fun materializeAndTransfer(): GPUPreparedNativeFramePayloadMaterialization {
+            materializationCount += 1
+            transferredHandleCount += 1
+            pendingHandle = null
+            return GPUPreparedNativeFramePayloadMaterialization.Materialized(draft)
+        }
+
+        override fun close() {
+            pendingHandle?.close()
+            pendingHandle = null
+        }
+    }
 
     private class DelegateOwnershipProbe : AutoCloseable {
         var materializationCount = 0

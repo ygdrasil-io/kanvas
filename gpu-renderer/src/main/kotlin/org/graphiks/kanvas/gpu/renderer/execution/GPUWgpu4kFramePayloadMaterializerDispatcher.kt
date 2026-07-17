@@ -108,13 +108,28 @@ internal fun materializeWgpu4kSurfaceRoute(
     materializeWithSurfaceBlit: (
         GPUWgpu4kSurfaceBlitCacheLease,
     ) -> GPUPreparedNativeFramePayloadMaterialization,
+    decorateMaterializedDraft: (
+        GPUWgpu4kSurfaceBlitCacheLease,
+        GPUPreparedNativeFrameDraft,
+    ) -> GPUPreparedNativeFrameDraft = { _, draft -> draft },
 ): GPUPreparedNativeFramePayloadMaterialization {
     val cached = try {
         acquireSurfaceBlit(format)
     } catch (failure: Throwable) {
         return refusedWgpu4kSurfaceBlitMaterialization(failure)
     }
-    return materializeWithSurfaceBlit(cached)
+    val materialized = materializeWithSurfaceBlit(cached)
+    if (materialized !is GPUPreparedNativeFramePayloadMaterialization.Materialized) {
+        return materialized
+    }
+    return try {
+        GPUPreparedNativeFramePayloadMaterialization.Materialized(
+            decorateMaterializedDraft(cached, materialized.draft),
+        )
+    } catch (failure: Throwable) {
+        materialized.draft.disposeBeforeRegistration()
+        refusedWgpu4kSurfaceBlitMaterialization(failure)
+    }
 }
 
 private fun refusedWgpu4kSurfaceBlitMaterialization(
@@ -300,17 +315,15 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         return materializeWgpu4kSurfaceRoute(
             format = surfaceRoute.format,
             acquireSurfaceBlit = surfaceBlitCache::acquire,
-        ) { cached ->
-            val materialized = selected.materializeReusable(
-                reusableFramePlan,
-                reusableEncoderPlan,
-                resources,
-                generationSeal,
-            )
-            if (materialized !is GPUPreparedNativeFramePayloadMaterialization.Materialized) {
-                return@materializeWgpu4kSurfaceRoute materialized
-            }
-            try {
+            materializeWithSurfaceBlit = {
+                selected.materializeReusable(
+                    reusableFramePlan,
+                    reusableEncoderPlan,
+                    resources,
+                    generationSeal,
+                )
+            },
+            decorateMaterializedDraft = { cached, reusableDraft ->
                 val surfaceBlit = GPUPreparedNativeScopeOperand.SurfaceBlit(
                     sourceStepIndex = surfaceRoute.surfaceScope.sourceStepIndex,
                     source = GPUPreparedNativeTextureViewOperand(
@@ -327,17 +340,13 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                         generationSeal.deviceGeneration,
                     ),
                 )
-                GPUPreparedNativeFramePayloadMaterialization.Materialized(
-                    decorateWgpu4kSurfaceBlitDraft(
-                        fullEncoderPlan,
-                        materialized.draft,
-                        surfaceBlit,
-                    ),
+                decorateWgpu4kSurfaceBlitDraft(
+                    fullEncoderPlan,
+                    reusableDraft,
+                    surfaceBlit,
                 )
-            } catch (failure: Throwable) {
-                refusedWgpu4kSurfaceBlitMaterialization(failure)
-            }
-        }
+            },
+        )
     }
 
     override fun bindLateSurface(

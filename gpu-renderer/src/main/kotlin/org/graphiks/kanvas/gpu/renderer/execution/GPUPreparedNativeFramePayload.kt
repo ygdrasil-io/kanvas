@@ -773,7 +773,37 @@ internal fun GPUPreparedNativeOperand.nativeHandle(): AutoCloseable = when (this
 /** Reusable operands created before the ephemeral surface acquisition. */
 internal class GPUPreparedNativeFrameDraft internal constructor(
     val payload: GPUPreparedNativeFramePayload,
-)
+) {
+    private val pendingOwnedHandles = run {
+        val identities = java.util.Collections.newSetFromMap(
+            IdentityHashMap<AutoCloseable, Boolean>(),
+        )
+        (
+            payload.scopeOperands.flatMap(GPUPreparedNativeScopeOperand::operands)
+                .filter { it.ownership != GPUPreparedNativeOperandOwnership.Borrowed }
+                .map(GPUPreparedNativeOperand::nativeHandle) +
+                payload.auxiliaryOwnedHandles.map { it.handle }
+            )
+            .filter(identities::add)
+            .asReversed()
+            .toMutableList()
+    }
+
+    /** Releases ownership that reached a draft but was refused before adapter registration. */
+    @Synchronized
+    internal fun disposeBeforeRegistration(): Boolean {
+        val iterator = pendingOwnedHandles.iterator()
+        while (iterator.hasNext()) {
+            try {
+                iterator.next().close()
+                iterator.remove()
+            } catch (_: Throwable) {
+                // Retain only the failed handle so an explicit retry cannot double-close successes.
+            }
+        }
+        return pendingOwnedHandles.isEmpty()
+    }
+}
 
 /** Allocation-free result that only attaches an acquired surface target to a reusable draft. */
 internal sealed interface GPUPreparedNativeFrameLateSurfaceBinding {
