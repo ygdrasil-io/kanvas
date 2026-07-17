@@ -50,13 +50,6 @@ fun runGpuRendererSceneKadre(args: Array<String>) {
         return
     }
 
-    val unsupportedReason = scene.kadreWindowedRectOnlyUnsupportedReason()
-    if (unsupportedReason != null) {
-        WindowedSceneSessionReport.notYetRendered(scene, frames, unsupportedReason).writeTo(output)
-        println(windowedCompletionMessage(scene.sceneId.value, "not-yet-rendered", output))
-        return
-    }
-
     runCatching {
         kadreWindowedSceneRunnerLauncher.run(scene, frames, output)
     }.getOrElse { failure ->

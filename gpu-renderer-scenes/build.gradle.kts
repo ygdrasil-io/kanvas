@@ -186,3 +186,11 @@ tasks.register<JavaExec>("runGpuRendererSceneKadre") {
         }
     })
 }
+
+tasks.register("kadreFrameLifecycleCheck") {
+    group = "verification"
+    description = "Opt-in: compiles Kadre and runs prepared-window lifecycle checks; requires external/poc-koreos."
+    dependsOn(tasks.named("compileKadreKotlin"))
+    dependsOn(project(":gpu-renderer").tasks.named("test"))
+    dependsOn(tasks.named("test"))
+}

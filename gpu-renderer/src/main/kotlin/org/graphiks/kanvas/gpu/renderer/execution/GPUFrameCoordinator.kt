@@ -8,6 +8,9 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptTelemetrySink
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralEventKind
@@ -25,10 +28,11 @@ internal fun interface GPUFramePreflightPort {
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult
 }
 
-/** Closed Task 10 output algebra. Native surface acquire/present is deliberately absent. */
+/** Closed output algebra for completion, readback, or an opaque prepared window binding. */
 sealed interface GPUSceneFrameOutputRequest {
     data object CurrentFrameCompletionOnly : GPUSceneFrameOutputRequest
     data class ReadbackRgba(val requestId: GPUReadbackRequestID) : GPUSceneFrameOutputRequest
+    data class PresentToWindow(val preparedOutput: GPUPreparedWindowOutput) : GPUSceneFrameOutputRequest
 }
 
 /** Closed terminal output algebra. Readback bytes are defensively owned by this value. */
@@ -158,7 +162,7 @@ class GPUFrameCoordinator internal constructor(
             GPUFrameStructuralPhase.Preflight,
             GPUFrameStructuralEventKind.PreflightAccepted,
         )
-        val outputDiagnostic = validateTask10Output(frame, outputRequest)
+        val outputDiagnostic = validateOutput(frame, outputRequest)
         if (outputDiagnostic != null) {
             if (!frame.claimForRollback()) {
                 return refused(
@@ -192,28 +196,29 @@ class GPUFrameCoordinator internal constructor(
         )
     }
 
-    private fun validateTask10Output(
+    private fun validateOutput(
         frame: PreparedGPUFrame,
         outputRequest: GPUSceneFrameOutputRequest,
     ): GPUDiagnostic? {
-        if (frame.hostActions.isNotEmpty() || frame.acquiredSurfaceOutput != null) {
-            return executionDiagnostic(
-                "unsupported.frame-coordinator.host-output-task10",
-                "Task 10 does not execute native surface acquire or present host actions.",
-            )
-        }
         return when (outputRequest) {
-            GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly -> if (frame.resources.outputOwnedReadbacks.isEmpty()) {
-                null
-            } else {
-                executionDiagnostic(
+            GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly -> when {
+                frame.hostActions.isNotEmpty() || frame.acquiredSurfaceOutput != null -> executionDiagnostic(
+                    "invalid.frame-coordinator.completion-host-output",
+                    "Completion-only output cannot retain surface host actions.",
+                )
+                frame.resources.outputOwnedReadbacks.isNotEmpty() -> executionDiagnostic(
                     "invalid.frame-coordinator.completion-output",
                     "Completion-only output cannot retain prepared readback outputs.",
                 )
+                else -> null
             }
             is GPUSceneFrameOutputRequest.ReadbackRgba -> {
                 val planned = frame.resources.outputOwnedReadbacks.singleOrNull()
                 when {
+                    frame.hostActions.isNotEmpty() || frame.acquiredSurfaceOutput != null -> executionDiagnostic(
+                        "invalid.frame-coordinator.readback-host-output",
+                        "RGBA readback cannot retain surface host actions.",
+                    )
                     planned == null -> executionDiagnostic(
                         "invalid.frame-coordinator.readback-output-missing",
                         "RGBA readback requires exactly one matching prepared output.",
@@ -229,6 +234,32 @@ class GPUFrameCoordinator internal constructor(
                     )
                     else -> null
                 }
+            }
+            is GPUSceneFrameOutputRequest.PresentToWindow -> when {
+                outputRequest.preparedOutput.isClosed -> executionDiagnostic(
+                    "unsupported.frame-coordinator.window-output-closed",
+                    "The prepared window output is closed.",
+                )
+                frame.resources.outputOwnedReadbacks.isNotEmpty() -> executionDiagnostic(
+                    "invalid.frame-coordinator.window-readback-output",
+                    "Window presentation cannot retain prepared readback outputs.",
+                )
+                frame.hostActions.map { it.kind } != listOf(
+                    GPUHostActionKind.AcquireSurface,
+                    GPUHostActionKind.Present,
+                ) -> executionDiagnostic(
+                    "invalid.frame-coordinator.window-host-actions",
+                    "Window presentation requires exactly one acquire and one post-submit present action.",
+                )
+                frame.acquiredSurfaceOutput == null -> executionDiagnostic(
+                    "invalid.frame-coordinator.window-output-missing",
+                    "Window presentation requires one acquired surface output.",
+                )
+                !outputRequest.preparedOutput.matches(frame.acquiredSurfaceOutput) -> executionDiagnostic(
+                    "stale.frame-coordinator.window-output",
+                    "The acquired surface does not belong to the requested prepared window output generation.",
+                )
+                else -> null
             }
         }
     }
@@ -318,6 +349,7 @@ class GPUPreparedSceneFrameSession internal constructor(
     private val closeAction: () -> Unit = {},
     private val attemptIdFactory: () -> GPUFrameAttemptID = ::nextGPUFrameAttemptID,
     private val nativeCountersFactory: () -> GPUPreparedSceneNativeCounters = { GPUPreparedSceneNativeCounters() },
+    private val sceneTargetResolver: (GPUTaskList) -> GPUFrameTargetRef? = ::resolvePreparedSceneTarget,
 ) : AutoCloseable {
     private var state = State.Idle
     private var closeActionInvoked = false
@@ -330,10 +362,29 @@ class GPUPreparedSceneFrameSession internal constructor(
         taskList: GPUTaskList,
         outputRequest: GPUSceneFrameOutputRequest = GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly,
     ): GPUPreparedSceneFrameHandle {
+        val submittedTaskList = when (outputRequest) {
+            is GPUSceneFrameOutputRequest.PresentToWindow -> {
+                outputRequest.preparedOutput.availabilityDiagnostic?.let { return localRefusal(it) }
+                val sceneTarget = sceneTargetResolver(taskList) ?: return localRefusal(
+                    "unsupported.prepared-scene-session.window-target-missing",
+                    "Window presentation requires one canonical scene target.",
+                )
+                try {
+                    outputRequest.preparedOutput.attachToFrame(taskList, sceneTarget)
+                } catch (failure: Throwable) {
+                    return localRefusal(
+                        "unsupported.prepared-scene-session.window-output",
+                        "The prepared window output is incompatible with this frame.",
+                        mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                    )
+                }
+            }
+            else -> taskList
+        }
         synchronized(this) {
             when (state) {
                 State.Idle -> {
-                    val compatibilityDiagnostic = compatibilityValidator.validate(taskList)
+                    val compatibilityDiagnostic = compatibilityValidator.validate(submittedTaskList)
                     if (compatibilityDiagnostic != null) {
                         return localRefusal(compatibilityDiagnostic)
                     }
@@ -353,7 +404,7 @@ class GPUPreparedSceneFrameSession internal constructor(
         }
 
         val handle = try {
-            coordinatorFactory.create(taskList, outputRequest).submit(taskList, outputRequest)
+            coordinatorFactory.create(submittedTaskList, outputRequest).submit(submittedTaskList, outputRequest)
         } catch (failure: Throwable) {
             completeFrameState()
             return localRefusal(
@@ -459,6 +510,12 @@ class GPUPreparedSceneFrameSession internal constructor(
     }
 }
 
+private fun resolvePreparedSceneTarget(taskList: GPUTaskList): GPUFrameTargetRef? =
+    taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+        .flatMap { it.requests }
+        .singleOrNull { it.role == GPUFrameResourceRole.SceneTarget }
+        ?.resource as? GPUFrameTargetRef
+
 private fun GPUFrameExecutionCompletedResult.toProduct(
     outputRequest: GPUSceneFrameOutputRequest,
 ): GPUPreparedSceneCompletedFrameResult = GPUPreparedSceneCompletedFrameResult(
@@ -479,6 +536,7 @@ private fun GPUFrameExecutionCompletedResult.toProduct(
             }
             GPUSceneFrameOutput.ReadbackRgba(completed.requestId, completed.bytes)
         }
+        is GPUSceneFrameOutputRequest.PresentToWindow -> GPUSceneFrameOutput.CurrentFrameCompletionOnly
     },
     encodedScopeKinds = encodedScopeKinds,
     telemetry = telemetry,

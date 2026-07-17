@@ -89,6 +89,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
+import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeys
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
@@ -865,8 +867,11 @@ private class WgpuBackendSession(
                     }
                 }
             },
-            coordinatorFactory = GPUFrameCoordinatorFactory { taskList, _ ->
+            coordinatorFactory = GPUFrameCoordinatorFactory { taskList, outputRequest ->
                 coordinatorCreations.incrementAndGet()
+                val windowOutput = (outputRequest as? GPUSceneFrameOutputRequest.PresentToWindow)
+                    ?.preparedOutput
+                val windowSnapshot = windowOutput?.snapshot()
                 val target = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
                     .flatMap { it.requests }
                     .single {
@@ -910,11 +915,12 @@ private class WgpuBackendSession(
                         deviceGeneration = deviceGeneration,
                         targetGeneration = targetGeneration,
                         resourceGenerations = generations,
+                        surfaceGeneration = windowSnapshot?.surfaceGeneration ?: targetGeneration,
                     ),
                     capabilities = capabilities,
                     resourceProvider = resourceProvider,
                     completionProvider = queueCompletionRuntime,
-                    surfaceProvider = PreparedSceneNoSurfaceOutput,
+                    surfaceProvider = windowOutput?.surfaceProvider ?: PreparedSceneNoSurfaceOutput,
                     nativeBoundary = runtimeResourceAdapter.bindNativeFrameBoundary(
                         resourceProvider,
                         materializer,
@@ -949,6 +955,7 @@ private class WgpuBackendSession(
                         completion = queueCompletionRuntime,
                         retention = retentionObserver,
                         readback = readback,
+                        presenter = windowOutput?.presenter ?: GPUPostSubmitPresentAccess.Unavailable,
                     ),
                 )
             },
@@ -1030,12 +1037,14 @@ private class WgpuBackendSession(
         }
     }
 
-    override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
-        WgpuWindowSurface(
-            binding = binding,
-            capabilities = capabilities,
-            telemetryRecorder = telemetryRecorder,
-            recordRuntimeResourceLeasesAction = { leases -> recordRuntimeResourceLeases(leases) },
+    override fun prepareWindowOutput(binding: GPUNativeSurfaceBinding): GPUPreparedWindowOutput =
+        GPUPreparedWindowOutput(
+            WgpuPreparedWindowOutputController(
+                binding = binding,
+                deviceGeneration = deviceGeneration,
+                device = glfw.wgpuContext.device,
+                adapterInfo = adapterInfo,
+            ),
         )
 
     override fun close() {
@@ -1169,7 +1178,7 @@ private class WgpuBackendSession(
 
 private object PreparedSceneNoSurfaceOutput : GPUSurfaceOutputProvider {
     override fun acquire(request: GPUSurfaceAcquisitionRequest): GPUSurfaceAcquisitionResult =
-        GPUSurfaceAcquisitionResult.Unavailable(GPUSurfaceAcquisitionStatus.Timeout)
+        GPUSurfaceAcquisitionResult.Unavailable(GPUSurfaceAcquisitionStatus.DependencyUnavailable)
 
     override fun release(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult =
         GPUSurfaceReleaseResult.Released
@@ -2390,8 +2399,11 @@ private class WgpuWindowSurface(
                 surfaceTexture.texture.close()
                 error("Surface texture acquisition failed with terminal status ${surfaceTexture.status.name}")
             }
-            SurfaceTextureStatus.success,
-            SurfaceTextureStatus.timeout -> Unit
+            SurfaceTextureStatus.timeout -> {
+                surfaceTexture.texture.close()
+                return false
+            }
+            SurfaceTextureStatus.success -> Unit
         }
 
         val frameOrdinal = frameOrdinalCounter.incrementAndGet()
@@ -2488,6 +2500,73 @@ private class WgpuWindowSurface(
                 }
             }
         }
+    }
+}
+
+/**
+ * Shared-device window binding. Native acquisition is intentionally dependency-gated until
+ * wgpu4k exposes the wgpu-native v29 surface-status values without the current enum mismatch.
+ */
+private class WgpuPreparedWindowOutputController(
+    binding: GPUNativeSurfaceBinding,
+    override val deviceGeneration: GPUDeviceGenerationID,
+    device: GPUDevice,
+    override val adapterInfo: GPUBackendAdapterSummary?,
+) : GPUPreparedWindowOutputController {
+    private val runtime = createNativeWindowRuntime(binding, device, adapterInfo)
+    private val output = GPUSurfaceOutputRef("prepared-window.${nextWindowRuntimeOrdinal()}")
+    private var width = binding.width
+    private var height = binding.height
+    private var generation = 0L
+    private var closed = false
+
+    override val availabilityDiagnostic: GPUDiagnostic
+        get() = executionDiagnostic(
+            PREPARED_WINDOW_WGPU4K_STATUS_BLOCKER,
+            "Native window presentation is dependency-gated until wgpu4k surface statuses match wgpu-native v29.",
+            mapOf("dependency" to "io.ygdrasil:wgpu4k", "recovery" to "upgrade-wgpu4k"),
+        )
+
+    @Synchronized
+    override fun snapshot(): GPUPreparedWindowOutputSnapshot {
+        check(!closed) { "Prepared window output is closed" }
+        return GPUPreparedWindowOutputSnapshot(
+            output = output,
+            width = width,
+            height = height,
+            format = GPUColorFormat(runtime.format.toBackendColorFormat()),
+            surfaceGeneration = generation,
+        )
+    }
+
+    @Synchronized
+    override fun resize(width: Int, height: Int) {
+        check(!closed) { "Prepared window output is closed" }
+        require(width > 0 && height > 0)
+        if (this.width == width && this.height == height) return
+        runtime.configure(width, height)
+        this.width = width
+        this.height = height
+        generation = Math.addExact(generation, 1L)
+    }
+
+    override fun acquire(request: GPUSurfaceAcquisitionRequest): GPUSurfaceAcquisitionResult =
+        GPUSurfaceAcquisitionResult.Unavailable(GPUSurfaceAcquisitionStatus.Timeout)
+
+    override fun release(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult =
+        GPUSurfaceReleaseResult.Released
+
+    override fun present(output: GPUAcquiredSurfaceOutput): GPUPostSubmitPresentResult =
+        GPUPostSubmitPresentResult.Failed(availabilityDiagnostic)
+
+    override fun discardAfterSubmit(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult =
+        GPUSurfaceReleaseResult.Released
+
+    @Synchronized
+    override fun close() {
+        if (closed) return
+        closed = true
+        runtime.close()
     }
 }
 
@@ -6526,6 +6605,7 @@ private data class NativeWindowRuntime(
     val format: GPUTextureFormat,
     val alphaMode: CompositeAlphaMode,
     val adapterInfo: GPUBackendAdapterSummary,
+    val ownsDevice: Boolean = true,
 ) : AutoCloseable {
     /** Reconfigures the native surface to the latest non-zero size before presentation. */
     fun configure(width: Int, height: Int) {
@@ -6543,11 +6623,61 @@ private data class NativeWindowRuntime(
     }
 
     override fun close() {
-        device.close()
+        if (ownsDevice) device.close()
         surface.close()
         instance.close()
     }
 }
+
+private fun createNativeWindowRuntime(
+    binding: GPUNativeSurfaceBinding,
+    device: GPUDevice,
+    adapterInfo: GPUBackendAdapterSummary?,
+): NativeWindowRuntime {
+    require(binding.platform == GPUNativePlatform.AppKitMetalLayer) {
+        "Unsupported native platform ${binding.platform}"
+    }
+    val instance = WGPU.createInstance(WGPUInstanceBackend.Metal)
+        ?: error("GPU runtime instance creation returned null")
+    try {
+        val layerAddress = binding.pointerLabels.firstNonZeroPointer("layerHandle", "nsLayer", "metalLayer")
+            ?: error("GPUNativeSurfaceBinding.pointerLabels must provide a non-zero native layer pointer")
+        val surface = instance.getSurfaceFromMetalLayer(layerAddress.toNativeAddress())
+            ?: error("GPU surface creation from native layer returned null")
+        try {
+            val surfaceAdapter = instance.requestAdapter(surface)
+                ?: error("GPU adapter request failed for native surface")
+            try {
+                surface.computeSurfaceCapabilities(surfaceAdapter)
+                val format = surface.supportedFormats.firstOrNull { it == GPUTextureFormat.BGRA8Unorm }
+                    ?: surface.supportedFormats.firstOrNull()
+                    ?: GPUTextureFormat.BGRA8Unorm
+                val alphaMode = surface.supportedAlphaMode.firstOrNull { it == CompositeAlphaMode.Opaque }
+                    ?: CompositeAlphaMode.Auto
+                return NativeWindowRuntime(
+                    instance = instance,
+                    surface = surface,
+                    device = device,
+                    format = format,
+                    alphaMode = alphaMode,
+                    adapterInfo = adapterInfo ?: GPUBackendAdapterSummary("unknown-adapter"),
+                    ownsDevice = false,
+                ).also { it.configure(binding.width, binding.height) }
+            } finally {
+                surfaceAdapter.close()
+            }
+        } catch (failure: Throwable) {
+            surface.close()
+            throw failure
+        }
+    } catch (failure: Throwable) {
+        instance.close()
+        throw failure
+    }
+}
+
+private const val PREPARED_WINDOW_WGPU4K_STATUS_BLOCKER =
+    "unsupported.wgpu4k.surface-status-v29"
 
 private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeWindowRuntime {
     require(binding.platform == GPUNativePlatform.AppKitMetalLayer) {

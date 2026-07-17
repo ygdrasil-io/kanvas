@@ -274,7 +274,7 @@ class GPUFrameCoordinatorTest {
     }
 
     @Test
-    fun `task 10 refuses acquired and present host actions before executor`() {
+    fun `completion only refuses acquired and present host actions before executor`() {
         val calls = mutableListOf<String>()
         val rollbackEvents = mutableListOf<String>()
         val prepared = GPUFrameCoreTestFixture.preparedFrame(
@@ -295,7 +295,7 @@ class GPUFrameCoordinatorTest {
         assertTrue(calls.isEmpty())
         assertEquals(listOf("rollback:resources"), rollbackEvents)
         assertEquals(
-            "unsupported.frame-coordinator.host-output-task10",
+            "invalid.frame-coordinator.completion-host-output",
             handle.completion.toCompletableFuture().get().diagnostic?.code?.value,
         )
     }
@@ -331,6 +331,7 @@ class GPUFrameCoordinatorTest {
         fun label(request: GPUSceneFrameOutputRequest): String = when (request) {
             GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly -> "completion"
             is GPUSceneFrameOutputRequest.ReadbackRgba -> "readback:${request.requestId.value}"
+            is GPUSceneFrameOutputRequest.PresentToWindow -> "present"
         }
 
         assertEquals("completion", label(GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly))
@@ -358,7 +359,7 @@ class GPUFrameCoordinatorTest {
     @Test
     fun `scene output request is closed to current frame completion or one rgba readback`() {
         assertEquals(
-            setOf("CurrentFrameCompletionOnly", "ReadbackRgba"),
+            setOf("CurrentFrameCompletionOnly", "ReadbackRgba", "PresentToWindow"),
             GPUSceneFrameOutputRequest::class.java.declaredClasses.map(Class<*>::getSimpleName).toSet(),
         )
     }

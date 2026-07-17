@@ -223,6 +223,7 @@ internal class GPUFrameExecutor(
     private val completion: GPUQueueCompletionAccess,
     retention: GPUFrameResourceRetention,
     private val readback: GPUFrameReadbackAccess = GPUFrameReadbackAccess.Unavailable,
+    private val presenter: GPUPostSubmitPresentAccess = GPUPostSubmitPresentAccess.Unavailable,
     private val attemptIdFactory: () -> GPUFrameAttemptID = ::nextGPUFrameAttemptID,
 ) : GPUFrameExecutionPort {
     private val retentionLedger = GPUFrameRetentionLedger(retention)
@@ -418,6 +419,20 @@ internal class GPUFrameExecutor(
 
         val ticket = preparedFrame.completionTicket
         val registration = preparedFrame.retentionRegistration()
+        fun discardSurfaceAfterSubmit(): GPUDiagnostic? = preparedFrame.acquiredSurfaceOutput?.let { output ->
+            val release = try {
+                presenter.discardAfterSubmit(output)
+            } catch (failure: Throwable) {
+                GPUSurfaceReleaseResult.Failed(
+                    executionDiagnostic(
+                        "failed.frame-execution.window-output-discard",
+                        "Window output cleanup failed after submit entry.",
+                        mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                    ),
+                )
+            }
+            (release as? GPUSurfaceReleaseResult.Failed)?.diagnostic
+        }
         when (val submitOwnership = preparedFrame.rollback.enterSubmit()) {
             GPUPreparedNativeFrameBindingResult.Ready -> Unit
             is GPUPreparedNativeFrameBindingResult.Refused -> {
@@ -446,7 +461,7 @@ internal class GPUFrameExecutor(
                 counter = GPUFrameStructuralCounter.QueueSubmit,
             )
         } catch (failure: Throwable) {
-            val diagnostic = executionDiagnostic(
+            val diagnostic = discardSurfaceAfterSubmit() ?: executionDiagnostic(
                 "failed.frame-execution.submit",
                 "Frame submission failed synchronously.",
                 mapOf("failureClass" to failure::class.simpleName.orEmpty()),
@@ -479,7 +494,8 @@ internal class GPUFrameExecutor(
                 }
             ) {
                 GPUFrameReadbackLifecycleResult.Applied -> Unit
-                is GPUFrameReadbackLifecycleResult.Refused -> {
+            is GPUFrameReadbackLifecycleResult.Refused -> {
+                    discardSurfaceAfterSubmit()
                     retentionLedger.quarantine(registration, submitted.diagnostic)
                     preparedFrame.rollback.quarantineNativeAfterSubmit()
                     runCatching { completion.cancel(ticket) }
@@ -514,6 +530,7 @@ internal class GPUFrameExecutor(
         val callbackLock = Any()
         var armReturned = false
         var pendingDelivery: GPUQueueCompletionDelivery.Accepted? = null
+        var postSubmitPresentDiagnostic: GPUDiagnostic? = null
 
         fun finishTerminal(
             diagnostic: GPUDiagnostic?,
@@ -639,7 +656,7 @@ internal class GPUFrameExecutor(
 
         fun completeDelivery(delivery: GPUQueueCompletionDelivery.Accepted) {
             if (!gpuDeliveryClaimed.compareAndSet(false, true)) return
-            var diagnostic = if (delivery.ticketId != ticket.ticketId) {
+            var completionDiagnostic = if (delivery.ticketId != ticket.ticketId) {
                 executionDiagnostic(
                     "failed.frame-execution.completion-ticket",
                     "Queue completion was delivered for a different ticket.",
@@ -660,42 +677,42 @@ internal class GPUFrameExecutor(
                     },
                 )
             }
-            if (diagnostic == null) {
+            if (completionDiagnostic == null) {
                 when (val release = retentionLedger.complete(registration, delivery.outcome)) {
                     GPUFrameRetentionLedgerResult.Applied -> {
                         if (preparedFrame.hasNativePayload &&
                             !preparedFrame.rollback.releaseNativeAfterCompletion()
                         ) {
-                            diagnostic = executionDiagnostic(
+                            completionDiagnostic = executionDiagnostic(
                                 "failed.native-frame-payload.release",
                                 "Completed native frame payload could not be released safely.",
                             )
                             preparedFrame.rollback.quarantineNativeAfterSubmit()
-                            retentionLedger.quarantine(registration, diagnostic)
+                            retentionLedger.quarantine(registration, completionDiagnostic)
                         }
                     }
                     GPUFrameRetentionLedgerResult.RegistrationMissing -> {
-                        diagnostic = executionDiagnostic(
+                        completionDiagnostic = executionDiagnostic(
                             "failed.frame-execution.resource-lifetime",
                             "Completion-owned resources were missing from the strong retention ledger.",
                             mapOf("failureClass" to "RegistrationMissing"),
                         )
-                        retentionLedger.quarantine(registration, diagnostic)
+                        retentionLedger.quarantine(registration, completionDiagnostic)
                     }
                     is GPUFrameRetentionLedgerResult.ObserverFailed -> {
-                        diagnostic = executionDiagnostic(
+                        completionDiagnostic = executionDiagnostic(
                             "failed.frame-execution.resource-lifetime",
                             "Completion-owned resources could not be released safely.",
                             mapOf("failureClass" to release.failureClass),
                         )
-                        retentionLedger.quarantine(registration, diagnostic)
+                        retentionLedger.quarantine(registration, completionDiagnostic)
                     }
                 }
             } else {
-                retentionLedger.quarantine(registration, diagnostic)
+                retentionLedger.quarantine(registration, completionDiagnostic)
                 preparedFrame.rollback.quarantineNativeAfterSubmit()
             }
-            if (diagnostic != null) {
+            if (completionDiagnostic != null) {
                 preparedFrame.rollback.quarantineNativeAfterSubmit()
                 if (preparedReadbackOutput != null) {
                     val failureKind = (delivery.outcome as? GPUQueueCompletionOutcome.Failure)?.kind
@@ -709,10 +726,11 @@ internal class GPUFrameExecutor(
                         )
                     }
                     if (rejected is GPUFrameReadbackLifecycleResult.Refused) {
-                        diagnostic = rejected.diagnostic
+                        completionDiagnostic = rejected.diagnostic
                     }
                 }
             }
+            var diagnostic = completionDiagnostic ?: postSubmitPresentDiagnostic
             if (diagnostic != null || preparedReadbackOutput == null) {
                 finishTerminal(diagnostic)
                 return
@@ -783,6 +801,7 @@ internal class GPUFrameExecutor(
                 )
                 retentionLedger.quarantine(registration, diagnostic)
                 preparedFrame.rollback.quarantineNativeAfterSubmit()
+                discardSurfaceAfterSubmit()?.let { diagnostic = it }
                 if (preparedReadbackOutput != null) {
                     val rejected = safeReadbackLifecycle("rejectGPUCompletion") {
                         readback.rejectGPUCompletion(
@@ -847,6 +866,22 @@ internal class GPUFrameExecutor(
                 GPUFrameStructuralEventKind.CompletionArmed,
                 counter = GPUFrameStructuralCounter.CompletionArm,
             )
+            preparedFrame.acquiredSurfaceOutput?.let { surfaceOutput ->
+                postSubmitPresentDiagnostic = when (val result = try {
+                    presenter.present(surfaceOutput)
+                } catch (failure: Throwable) {
+                    GPUPostSubmitPresentResult.Failed(
+                        executionDiagnostic(
+                            "failed.frame-execution.window-present-callback",
+                            "Window presentation failed without a captured result.",
+                            mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                        ),
+                    )
+                }) {
+                    GPUPostSubmitPresentResult.Presented -> null
+                    is GPUPostSubmitPresentResult.Failed -> result.diagnostic
+                }
+            }
             val deliveredDuringArm = synchronized(callbackLock) {
                 armReturned = true
                 pendingDelivery
@@ -876,6 +911,7 @@ internal class GPUFrameExecutor(
             }
             retentionLedger.quarantine(registration, diagnostic)
             preparedFrame.rollback.quarantineNativeAfterSubmit()
+            discardSurfaceAfterSubmit()?.let { diagnostic = it }
             if (preparedReadbackOutput != null) {
                 val rejected = safeReadbackLifecycle("rejectGPUCompletion") {
                     readback.rejectGPUCompletion(
@@ -912,7 +948,16 @@ internal class GPUFrameExecutor(
         }
 
         return if (correctlyArmed) {
-            GPUFrameExecutionHandle(attemptId, immediate, resultFuture)
+            val presentFailure = postSubmitPresentDiagnostic
+            GPUFrameExecutionHandle(
+                attemptId,
+                if (presentFailure == null) {
+                    immediate
+                } else {
+                    GPUFrameImmediateState.FailedAfterSubmit(ticket.ticketId, presentFailure)
+                },
+                resultFuture,
+            )
         } else {
             val result = resultFuture.getNow(null)
             val diagnostic = requireNotNull(result?.diagnostic)

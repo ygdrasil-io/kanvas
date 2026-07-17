@@ -86,6 +86,19 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `backend session exposes only an opaque prepared window output binding`() {
+        val factory = GPUBackendSession::class.java.methods.singleOrNull {
+            it.name == "prepareWindowOutput"
+        }
+
+        assertNotNull(factory)
+        assertContentEquals(arrayOf(GPUNativeSurfaceBinding::class.java), factory.parameterTypes)
+        assertEquals(GPUPreparedWindowOutput::class.java, factory.returnType)
+        assertFalse(GPUBackendSession::class.java.methods.any { it.name == "createWindowSurface" })
+        assertFalse(GPUPreparedWindowOutput::class.java.methods.any { it.name == "encodeAndPresent" })
+    }
+
+    @Test
     fun `production frame backend requires typed native operands when backend is available`() = runBlocking {
         val context = glfwContextRenderer(
             width = 1,

@@ -555,7 +555,7 @@ internal class GPUFramePreflighter(
                 is GPUSurfaceAcquisitionResult.Unavailable -> return refuseWithRollback(
                     rollback,
                     acquiredAnyResource,
-                    surfaceDiagnostic(acquisition.status),
+                    gpuSurfaceAcquisitionDiagnostic(acquisition.status),
                 )
             }
         }
@@ -573,7 +573,7 @@ internal class GPUFramePreflighter(
         if (acquiredSurface != null &&
             (acquiredSurface.output != acquireStep?.descriptor?.output ||
                 acquiredSurface.deviceGeneration != context.deviceGeneration ||
-                acquiredSurface.targetGeneration != context.targetGeneration)
+                acquiredSurface.targetGeneration != acquireStep.descriptor.targetGeneration)
         ) {
             return refuseWithRollback(
                 rollback,
@@ -673,8 +673,8 @@ internal class GPUFramePreflighter(
             if (blits.single().output != output || presents.single().output != output) {
                 return diagnostic("invalid.preflight.surface_output_mismatch", "Surface acquire, blit and present must name the same output.")
             }
-            if (acquires.single().descriptor.targetGeneration != context.targetGeneration) {
-                return diagnostic("stale.preflight.target_generation", "Surface descriptor target generation is stale.")
+            if (acquires.single().descriptor.targetGeneration != context.surfaceGeneration) {
+                return diagnostic("stale.preflight.surface_generation", "Surface descriptor generation is stale.")
             }
             val acquireIndex = framePlan.steps.indexOf(acquires.single())
             val blitIndex = framePlan.steps.indexOf(blits.single())
@@ -1693,7 +1693,7 @@ private fun GPUFrameStep.preparedLane(): GPUPreparedStepLane = when (executionKi
     org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStepExecutionKind.RefusalEvidence -> GPUPreparedStepLane.RefusalEvidence
 }
 
-private fun surfaceDiagnostic(status: GPUSurfaceAcquisitionStatus): GPUDiagnostic = when (status) {
+internal fun gpuSurfaceAcquisitionDiagnostic(status: GPUSurfaceAcquisitionStatus): GPUDiagnostic = when (status) {
     GPUSurfaceAcquisitionStatus.Lost, GPUSurfaceAcquisitionStatus.Outdated -> diagnostic(
         "unsupported.preflight.surface_reconfigure",
         "Surface must be reconfigured before retry.",
@@ -1708,6 +1708,11 @@ private fun surfaceDiagnostic(status: GPUSurfaceAcquisitionStatus): GPUDiagnosti
         "failed.preflight.surface_terminal",
         "Surface acquisition failed terminally.",
         mapOf("status" to status.name, "recovery" to "terminal"),
+    )
+    GPUSurfaceAcquisitionStatus.DependencyUnavailable -> diagnostic(
+        "unsupported.wgpu4k.surface-status-v29",
+        "Surface acquisition is dependency-gated until wgpu4k exposes wgpu-native v29 statuses.",
+        mapOf("status" to status.name, "recovery" to "upgrade-wgpu4k"),
     )
 }
 

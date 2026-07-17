@@ -188,8 +188,9 @@ interface GPUBackendSession : AutoCloseable {
     /** Prepares one reusable canonical offscreen target for serialized scene frames. */
     fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession
 
-    /** Binds a native window surface that can encode and present fullscreen passes. */
-    fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface
+    /** Prepares an opaque window output on this session's canonical device. */
+    fun prepareWindowOutput(binding: GPUNativeSurfaceBinding): GPUPreparedWindowOutput =
+        error("unsupported.backend.prepared-window-output")
 }
 
 val GPUBackendSession.phase0EvidenceDumpLines: List<String>
@@ -259,7 +260,7 @@ interface GPUBackendOffscreenTarget : AutoCloseable, GPUBackendQueueCompletionAc
     fun copyOffscreenTexture(sourceTextureLabel: String, destinationTextureLabel: String)
 }
 
-/** Represents a native surface that can be resized and presented to screen. */
+/** Legacy implementation detail with no session factory; product callers use GPUPreparedWindowOutput. */
 interface GPUBackendWindowSurface : AutoCloseable, GPUBackendQueueCompletionAccess {
     override val queueCompletion: GPUQueueCompletionAccess
         get() = unavailableGPUQueueCompletionAccess

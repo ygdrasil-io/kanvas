@@ -208,6 +208,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
                 is GPUPreparedNativeScopeOperand.Render -> encodeRender(operand)
                 is GPUPreparedNativeScopeOperand.Copy -> encodeCopy(operand)
                 is GPUPreparedNativeScopeOperand.Readback -> encodeReadback(operand)
+                is GPUPreparedNativeScopeOperand.SurfaceBlit -> encodeSurfaceBlit(operand)
                 else -> error("Unsupported production native frame scope: ${operand.operationKind}")
             }
         }
@@ -308,6 +309,30 @@ internal class GPUWgpu4kFrameEncodingBackend(
                 ),
             )
             synchronized(this@GPUWgpu4kFrameEncodingBackend) { readbackCopyCount += 1 }
+        }
+
+        private fun encodeSurfaceBlit(blit: GPUPreparedNativeScopeOperand.SurfaceBlit) {
+            native.beginRenderPass(
+                RenderPassDescriptor(
+                    colorAttachments = listOf(
+                        RenderPassColorAttachment(
+                            view = blit.target.view,
+                            loadOp = GPULoadOp.Clear,
+                            clearValue = Color(0.0, 0.0, 0.0, 0.0),
+                            storeOp = GPUStoreOp.Store,
+                        ),
+                    ),
+                ),
+            ) {
+                setPipeline(blit.pipeline.pipeline)
+                setBindGroup(0u, blit.bindGroup.bindGroup)
+                draw(3u, 1u, 0u, 0u)
+                end()
+            }
+            synchronized(this@GPUWgpu4kFrameEncodingBackend) {
+                renderPassCount += 1
+                drawCount += 1
+            }
         }
 
         private fun encodeCopy(copy: GPUPreparedNativeScopeOperand.Copy) {

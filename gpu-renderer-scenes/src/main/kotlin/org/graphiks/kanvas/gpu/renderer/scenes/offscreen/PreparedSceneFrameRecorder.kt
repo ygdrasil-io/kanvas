@@ -8,7 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 
 /** One closed scene-to-task recording boundary for every product offscreen consumer. */
-internal sealed interface PreparedSceneFrameResult {
+sealed interface PreparedSceneFrameResult {
     data class Recorded(
         val route: String,
         val taskList: GPUTaskList,
@@ -26,7 +26,7 @@ internal sealed interface PreparedSceneFrameResult {
  * Selects only typed prepared recorders. It never falls back to an immediate target encoder.
  * Unsupported families remain explicit until their Task 12 semantic payload is implemented.
  */
-internal class PreparedSceneFrameRecorder {
+class PreparedSceneFrameRecorder {
     fun record(
         scene: GPURendererScene<SceneCommand>,
         capabilities: GPUCapabilities,

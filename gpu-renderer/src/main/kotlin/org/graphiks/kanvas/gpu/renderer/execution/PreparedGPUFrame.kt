@@ -42,12 +42,14 @@ class GPUFramePreflightContext(
     val deviceGeneration: GPUDeviceGenerationID,
     val targetGeneration: Long,
     resourceGenerations: Map<GPUFrameResourceRef, Long>,
+    val surfaceGeneration: Long = targetGeneration,
 ) {
     val resourceGenerations: Map<GPUFrameResourceRef, Long> = immutableMap(resourceGenerations)
 
     init {
         requireExecutionDumpSafe("GPUFramePreflightContext.targetId", targetId)
         require(targetGeneration >= 0L) { "GPUFramePreflightContext.targetGeneration must be non-negative" }
+        require(surfaceGeneration >= 0L) { "GPUFramePreflightContext.surfaceGeneration must be non-negative" }
         require(resourceGenerations.values.none { it < 0L }) {
             "GPUFramePreflightContext.resourceGenerations must be non-negative"
         }
@@ -262,6 +264,7 @@ enum class GPUSurfaceAcquisitionStatus {
     Timeout,
     OutOfMemory,
     DeviceLost,
+    DependencyUnavailable,
 }
 
 data class GPUSurfaceAcquisitionRequest(
@@ -704,8 +707,13 @@ internal class PreparedGPUFrame(
             require(output.deviceGeneration == generationSeal.deviceGeneration) {
                 "PreparedGPUFrame surface device generation must match the seal"
             }
-            require(output.targetGeneration == generationSeal.targetGeneration) {
-                "PreparedGPUFrame surface target generation must match the seal"
+            val surfaceGeneration = semanticPlan.steps
+                .filterIsInstance<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.AcquireSurfaceOutput>()
+                .singleOrNull()
+                ?.descriptor
+                ?.targetGeneration
+            require(output.targetGeneration == surfaceGeneration) {
+                "PreparedGPUFrame surface generation must match its acquisition descriptor"
             }
         }
         stepPartition.forEach { evidence ->

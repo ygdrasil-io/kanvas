@@ -1828,6 +1828,7 @@ internal object GPUFrameCoreTestFixture {
     fun preparedFrame(
         rollbackEvents: MutableList<String>? = null,
         withHostActions: Boolean = false,
+        surfaceGeneration: Long = 1,
         nativePayloadOwnership: GPUPreparedNativeFrameOwnership? = null,
         useDifferentRollbackTicket: Boolean = false,
         readbackRequestId: GPUReadbackRequestID? = null,
@@ -1878,7 +1879,7 @@ internal object GPUFrameCoreTestFixture {
                 width = 4,
                 height = 4,
                 format = GPUColorFormat("rgba8unorm"),
-                targetGeneration = 1,
+                targetGeneration = surfaceGeneration,
             ),
             sourceTaskIds = surfaceTasks,
         )
@@ -2035,7 +2036,7 @@ internal object GPUFrameCoreTestFixture {
             ),
         )
         val acquiredSurfaceOutput = if (withHostActions) {
-            GPUAcquiredSurfaceOutput(surfaceOutput, deviceGeneration, 1, "surface-output")
+            GPUAcquiredSurfaceOutput(surfaceOutput, deviceGeneration, surfaceGeneration, "surface-output")
         } else {
             null
         }
