@@ -131,6 +131,8 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             assertEquals(1L, counters.targetNativeUses)
             assertEquals(1L, counters.submits)
             assertEquals(1L, counters.readbackCopies)
+            assertEquals(2L, counters.destinationSnapshotCreations)
+            assertEquals(0L, counters.destinationSnapshotReuses)
         } finally {
             try {
                 session.close()
@@ -206,6 +208,8 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             assertEquals(modes.size.toLong(), counters.targetNativeUses)
             assertEquals(modes.size.toLong(), counters.submits)
             assertEquals(modes.size.toLong(), counters.readbackCopies)
+            assertEquals(1L, counters.destinationSnapshotCreations)
+            assertEquals((modes.size - 1).toLong(), counters.destinationSnapshotReuses)
             assertEquals(0, counters.activeNativePayloads)
         } finally {
             try {

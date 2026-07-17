@@ -299,6 +299,8 @@ data class GPUPreparedSceneNativeCounters(
     val separableBlurInvariantReuses: Long = 0L,
     val separableBlurIntermediateCreations: Long = 0L,
     val separableBlurIntermediateReuses: Long = 0L,
+    val destinationSnapshotCreations: Long = 0L,
+    val destinationSnapshotReuses: Long = 0L,
     val colorGlyphInvariantCreations: Long = 0L,
     val colorGlyphAtlasCreations: Long = 0L,
     val colorGlyphAtlasUploads: Long = 0L,

@@ -675,6 +675,8 @@ private class WgpuBackendSession(
     private val quarantinedColorGlyphCaches = linkedSetOf<GPUWgpu4kColorGlyphSessionCache>()
     private val quarantinedSeparableBlurCaches =
         linkedSetOf<GPUWgpu4kSeparableBlurRectSessionCache>()
+    private val quarantinedDestinationCopyCaches =
+        linkedSetOf<GPUWgpu4kDestinationCopySessionCache>()
     private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits(
         maxTextureDimension2D = minOf(
@@ -793,6 +795,9 @@ private class WgpuBackendSession(
         val separableBlurRectCache = setupTransaction.own(
             GPUWgpu4kSeparableBlurRectSessionCache(glfw.wgpuContext.device),
         )
+        val destinationCopyCache = setupTransaction.own(
+            GPUWgpu4kDestinationCopySessionCache(glfw.wgpuContext.device),
+        )
         telemetryRecorder.recordTextureCreated()
         val encodingBackend = setupTransaction.own(GPUWgpu4kFrameEncodingBackend(
             deviceGeneration = deviceGeneration,
@@ -897,6 +902,7 @@ private class WgpuBackendSession(
                     colorGlyphCache,
                     registeredUniformRectCache,
                     separableBlurRectCache,
+                    destinationCopyCache,
                 )
                 val preflighter = GPUFramePreflighter(
                     context = GPUFramePreflightContext(
@@ -956,6 +962,7 @@ private class WgpuBackendSession(
                         colorGlyphCache,
                         registeredUniformRectCache,
                         separableBlurRectCache,
+                        destinationCopyCache,
                     )
                 } finally {
                     childLease.close()
@@ -969,6 +976,7 @@ private class WgpuBackendSession(
                 val colorGlyph = colorGlyphCache.counters()
                 val registeredUniform = registeredUniformRectCache.counters()
                 val separableBlur = separableBlurRectCache.counters()
+                val destinationCopy = destinationCopyCache.counters()
                 GPUPreparedSceneNativeCounters(
                     encoders = encoding.encoders,
                     commandBuffers = encoding.finishes,
@@ -996,6 +1004,8 @@ private class WgpuBackendSession(
                     separableBlurInvariantReuses = separableBlur.invariantReuses,
                     separableBlurIntermediateCreations = separableBlur.intermediateCreations,
                     separableBlurIntermediateReuses = separableBlur.intermediateReuses,
+                    destinationSnapshotCreations = destinationCopy.snapshotCreations,
+                    destinationSnapshotReuses = destinationCopy.snapshotReuses,
                     colorGlyphInvariantCreations = colorGlyph.invariantCreations,
                     colorGlyphAtlasCreations = colorGlyph.atlasCreations,
                     colorGlyphAtlasUploads = colorGlyph.atlasUploads,
@@ -1068,6 +1078,14 @@ private class WgpuBackendSession(
                 synchronized(this) { quarantinedSeparableBlurCaches.remove(cache) }
             }
         }
+        val quarantinedDestinationCopies = synchronized(this) {
+            quarantinedDestinationCopyCaches.toList()
+        }
+        quarantinedDestinationCopies.forEach { cache ->
+            runCatching { cache.close() }.onSuccess {
+                synchronized(this) { quarantinedDestinationCopyCaches.remove(cache) }
+            }
+        }
         queueCompletionRuntime.close()
         try {
             runtimeResourceAdapter.close()
@@ -1092,6 +1110,7 @@ private class WgpuBackendSession(
         colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
         registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
         separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
+        destinationCopyCache: GPUWgpu4kDestinationCopySessionCache,
     ) {
         var firstFailure: Throwable? = null
         try {
@@ -1127,6 +1146,12 @@ private class WgpuBackendSession(
             separableBlurRectCache.close()
         } catch (failure: Throwable) {
             synchronized(this) { quarantinedSeparableBlurCaches += separableBlurRectCache }
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+        }
+        try {
+            destinationCopyCache.close()
+        } catch (failure: Throwable) {
+            synchronized(this) { quarantinedDestinationCopyCaches += destinationCopyCache }
             if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
         }
         firstFailure?.let { throw it }

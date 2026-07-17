@@ -56,6 +56,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
     private val registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
     private val separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
+    private val destinationCopyCache: GPUWgpu4kDestinationCopySessionCache,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private var delegate: GPUPreparedNativeFramePayloadMaterializer? = null
     private var closed = false
@@ -87,6 +88,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     device,
                     queue,
                     preparedSceneTarget,
+                    destinationCopyCache,
                 ),
                 framePlan,
                 encoderPlan,

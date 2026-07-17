@@ -111,6 +111,7 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
     private val device: GPUDevice,
     private val queue: GPUQueue,
     private val preparedSceneTarget: GPUWgpu4kPreparedSceneTarget? = null,
+    private val destinationCopyCache: GPUWgpu4kDestinationCopySessionCache? = null,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preRegistrationHandles = GPUPreRegistrationNativeHandleLedger()
     private var materialized = false
@@ -469,7 +470,15 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
             ).tracked()
             val targetView = preparedNativeTarget?.second ?: targetTexture.createView().tracked()
             val ownsCanonicalTarget = preparedNativeTarget == null
-            val snapshotTexture = device.createTexture(
+            val cachedSnapshot = destinationCopyCache?.acquire(
+                listOf(
+                    GPUDestinationCopySnapshotSpec(
+                        snapshotAllocation.backingWidth,
+                        snapshotAllocation.backingHeight,
+                    ),
+                ),
+            )?.single()
+            val snapshotTexture = cachedSnapshot?.texture ?: device.createTexture(
                 TextureDescriptor(
                     size = Extent3D(
                         snapshotAllocation.backingWidth.toUInt(),
@@ -480,7 +489,8 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
                     label = "Kanvas.frame.destinationCopy.snapshot",
                 ),
             ).tracked()
-            val snapshotView = snapshotTexture.createView().tracked()
+            val snapshotView = cachedSnapshot?.view ?: snapshotTexture.createView().tracked()
+            val ownsSnapshot = cachedSnapshot == null
             val backgroundUniform = backgroundSemantic?.let { semantic ->
                 createUniform(
                     "Kanvas.frame.destinationCopy.backgroundUniform64",
@@ -697,7 +707,9 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
                             completionOwned,
                         ),
                     )
-                    add(GPUPreparedNativeAuxiliaryHandle(snapshotView, completionOwned))
+                    if (ownsSnapshot) {
+                        add(GPUPreparedNativeAuxiliaryHandle(snapshotView, completionOwned))
+                    }
                     backgroundUniform?.let {
                         add(GPUPreparedNativeAuxiliaryHandle(it, completionOwned))
                     }
@@ -714,17 +726,19 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
                         add(GPUPreparedNativeAuxiliaryHandle(it, completionOwned))
                     }
                     add(GPUPreparedNativeAuxiliaryHandle(consumerLayout, completionOwned))
-                    add(
-                        GPUPreparedNativeAuxiliaryHandle(
-                            GPUPreparedNativeCompletionAnchor(
-                                buildList {
-                                    if (ownsCanonicalTarget) add(targetTexture)
-                                    add(snapshotTexture)
-                                },
+                    if (ownsCanonicalTarget || ownsSnapshot) {
+                        add(
+                            GPUPreparedNativeAuxiliaryHandle(
+                                GPUPreparedNativeCompletionAnchor(
+                                    buildList {
+                                        if (ownsCanonicalTarget) add(targetTexture)
+                                        if (ownsSnapshot) add(snapshotTexture)
+                                    },
+                                ),
+                                completionOwned,
                             ),
-                            completionOwned,
-                        ),
-                    )
+                        )
+                    }
                 },
             )
             val materialization = GPUPreparedNativeFramePayloadMaterialization.Materialized(
@@ -768,6 +782,7 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
             val binding: ConsumerBinding,
             val texture: io.ygdrasil.webgpu.GPUTexture,
             val view: io.ygdrasil.webgpu.GPUTextureView,
+            val ownedByPayload: Boolean,
         )
         data class DrawNative(
             val render: GPUFrameStep.RenderPassStep,
@@ -1065,8 +1080,14 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
             ).tracked()
             val targetView = preparedNativeTarget?.second ?: targetTexture.createView().tracked()
             val ownsCanonicalTarget = preparedNativeTarget == null
+            val cachedSnapshots = destinationCopyCache?.acquire(
+                consumerBindings.map { binding ->
+                    GPUDestinationCopySnapshotSpec(binding.backingWidth, binding.backingHeight)
+                },
+            )
             val snapshots = consumerBindings.mapIndexed { index, binding ->
-                val texture = device.createTexture(
+                val cached = cachedSnapshots?.get(index)
+                val texture = cached?.texture ?: device.createTexture(
                     TextureDescriptor(
                         size = Extent3D(binding.backingWidth.toUInt(), binding.backingHeight.toUInt()),
                         format = GPUTextureFormat.RGBA8Unorm,
@@ -1074,7 +1095,12 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
                         label = "Kanvas.frame.destinationCopy.multi.snapshot.$index",
                     ),
                 ).tracked()
-                SnapshotNative(binding, texture, texture.createView().tracked())
+                SnapshotNative(
+                    binding,
+                    texture,
+                    cached?.view ?: texture.createView().tracked(),
+                    ownedByPayload = cached == null,
+                )
             }
             val snapshotByRender = snapshots.associateBy { it.binding.render }
             val draws = renders.mapIndexed { index, render ->
@@ -1256,24 +1282,27 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
                             completionOwned,
                         ),
                     )
-                    snapshots.forEach {
+                    snapshots.filter { it.ownedByPayload }.forEach {
                         add(GPUPreparedNativeAuxiliaryHandle(it.view, completionOwned))
                     }
                     draws.forEach { add(GPUPreparedNativeAuxiliaryHandle(it.uniform, completionOwned)) }
                     draws.forEach { add(GPUPreparedNativeAuxiliaryHandle(it.pipelineLayout, completionOwned)) }
                     draws.forEach { add(GPUPreparedNativeAuxiliaryHandle(it.shader, completionOwned)) }
                     draws.forEach { add(GPUPreparedNativeAuxiliaryHandle(it.layout, completionOwned)) }
-                    add(
-                        GPUPreparedNativeAuxiliaryHandle(
-                            GPUPreparedNativeCompletionAnchor(
-                                buildList {
-                                    if (ownsCanonicalTarget) add(targetTexture)
-                                    snapshots.forEach { add(it.texture) }
-                                },
+                    val ownedSnapshots = snapshots.filter { it.ownedByPayload }
+                    if (ownsCanonicalTarget || ownedSnapshots.isNotEmpty()) {
+                        add(
+                            GPUPreparedNativeAuxiliaryHandle(
+                                GPUPreparedNativeCompletionAnchor(
+                                    buildList {
+                                        if (ownsCanonicalTarget) add(targetTexture)
+                                        ownedSnapshots.forEach { add(it.texture) }
+                                    },
+                                ),
+                                completionOwned,
                             ),
-                            completionOwned,
-                        ),
-                    )
+                        )
+                    }
                 },
             )
             val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(

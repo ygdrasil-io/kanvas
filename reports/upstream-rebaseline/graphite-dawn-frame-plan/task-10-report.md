@@ -98,10 +98,16 @@ materializer binds two distinct prepared snapshot allocations and the second con
 first consumer's result. The final center is white, with one target use, one encoder, one command
 buffer, one submit, and one readback.
 
-The remaining 10D work is to reuse session-owned native scratch textures instead of recreating their
-backings, broaden mixed direct packets beyond exact full-coverage `Src`, and bind the separately
-prepared scalar/LCD coverage resource topology. No global 10D completion or performance claim is
-made here.
+Snapshot backings are now owned by the serialized prepared-session cache. The cache key is the
+ordered list of physical backing extents produced by prepared scratch leases; it never replaces
+logical bounds or budget evidence. A stable one-snapshot topology creates one native texture/view
+and reuses it across all 14 advanced-mode frames. The two-consumer topology creates exactly two
+backings. A topology change closes the old set before creating the new one, and session close owns
+the final native teardown.
+
+The remaining 10D work is to broaden mixed direct packets beyond exact full-coverage `Src` and bind
+the separately prepared scalar/LCD coverage resource topology. No global 10D completion or
+performance claim is made here.
 
 ## Slice 10E persistent MSAA continuation evidence
 
