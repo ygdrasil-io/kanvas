@@ -60,6 +60,33 @@ class PreparedSceneFrameRecorderTest {
         assertTrue(result.message.contains("path-fill-stencil"))
     }
 
+    @Test
+    fun `every registry family reaches the prepared recorder as recorded or stable refused`() {
+        GPURendererSceneRegistry.registry.scenes.forEachIndexed { index, scene ->
+            when (
+                val result = PreparedSceneFrameRecorder().record(
+                    scene = scene,
+                    capabilities = capabilities(),
+                    deviceGeneration = GPUDeviceGenerationID(41),
+                    frameOrdinal = index + 1L,
+                    withReadback = false,
+                )
+            ) {
+                is PreparedSceneFrameResult.Recorded -> {
+                    assertTrue(result.route.isNotBlank(), scene.sceneId.value)
+                    assertTrue(result.taskList.tasks.isNotEmpty(), scene.sceneId.value)
+                }
+                is PreparedSceneFrameResult.Refused -> {
+                    assertTrue(
+                        result.code.startsWith("unsupported.prepared-scene."),
+                        "${scene.sceneId.value}: ${result.code}",
+                    )
+                    assertTrue(result.message.isNotBlank(), scene.sceneId.value)
+                }
+            }
+        }
+    }
+
     private fun capabilities() = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "unit", "adapter", "device"),
         facts = listOf(GPUCapabilityFact("limits", "test", "observed", true, "prepared-scene")),

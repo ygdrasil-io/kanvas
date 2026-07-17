@@ -77,6 +77,7 @@ private class PreparedSceneKadreApp(
         Thread(task, "kanvas-kadre-frame-completion").apply { isDaemon = true }
     }
     private val pendingCompletion = AtomicReference<ObservedCompletion?>(null)
+    private val lifecycle = KadreWindowFrameLifecycle()
     private var runtimeSession: GPUBackendSession? = null
     private var preparedSession: GPUPreparedSceneFrameSession? = null
     private var preparedOutput: GPUPreparedWindowOutput? = null
@@ -84,8 +85,8 @@ private class PreparedSceneKadreApp(
     private var adapterInfo: String? = null
     private var surfaceFormat: String? = null
     private var presentedFrames = 0
-    private var frameInFlight = false
     private val frameTimingSamplesNanos = mutableListOf<Long>()
+    private var pendingTermination: PendingTermination? = null
     private var completed = false
 
     override fun canCreateSurfaces(eventLoop: ActiveEventLoop) {
@@ -101,21 +102,21 @@ private class PreparedSceneKadreApp(
             window = win
             val handle = win.rawWindowHandle
             if (handle !is RawWindowHandle.AppKit || handle.nsLayer == 0L) {
-                completeBlocked(eventLoop, "kadre-appkit-required", "Kadre AppKit handle did not expose nsLayer: $handle")
+                requestBlocked(eventLoop, "kadre-appkit-required", "Kadre AppKit handle did not expose nsLayer: $handle")
                 return
             }
             val session = GPUBackendRuntimeFactory.createOrNull() ?: run {
-                completeBlocked(eventLoop, "wgpu-runtime-unavailable", "GPU backend runtime creation returned null")
+                requestBlocked(eventLoop, "wgpu-runtime-unavailable", "GPU backend runtime creation returned null")
                 return
             }
             runtimeSession = session
             val capabilities = session.capabilities ?: run {
-                completeBlocked(eventLoop, "wgpu-capabilities-unavailable", "GPU backend capabilities are unavailable")
+                requestBlocked(eventLoop, "wgpu-capabilities-unavailable", "GPU backend capabilities are unavailable")
                 return
             }
             val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
                 ?.let(::GPUDeviceGenerationID) ?: run {
-                completeBlocked(eventLoop, "wgpu-device-generation-unavailable", "GPU device generation is unavailable")
+                requestBlocked(eventLoop, "wgpu-device-generation-unavailable", "GPU device generation is unavailable")
                 return
             }
             preparedSession = session.prepareSceneFrameSession(
@@ -134,7 +135,7 @@ private class PreparedSceneKadreApp(
             deviceGeneration = generation
             requestNextFrame(eventLoop)
         }.onFailure { failure ->
-            completeBlocked(
+            requestBlocked(
                 eventLoop,
                 initializationFailureReason(failure.message ?: failure.toString()),
                 failure.message ?: failure.toString(),
@@ -146,9 +147,13 @@ private class PreparedSceneKadreApp(
 
     override fun aboutToWait(eventLoop: ActiveEventLoop) {
         pendingCompletion.getAndSet(null)?.let { completion ->
-            frameInFlight = false
+            if (lifecycle.frameCompleted() == KadreWindowLifecycleAction.CloseResources) {
+                val termination = requireNotNull(pendingTermination)
+                completeBlockedNow(eventLoop, termination.reason, termination.error)
+                return
+            }
             if (completion.failure != null) {
-                completeBlocked(
+                requestBlocked(
                     eventLoop,
                     "kadre-windowed-frame-completion-failed",
                     completion.failure.message ?: completion.failure.toString(),
@@ -158,7 +163,7 @@ private class PreparedSceneKadreApp(
             val result = requireNotNull(completion.result)
             if (result.outcome != GPUFrameStructuralOutcome.Succeeded) {
                 val diagnostic = result.diagnostic
-                completeBlocked(
+                requestBlocked(
                     eventLoop,
                     diagnostic?.code?.value ?: "kadre-windowed-frame-refused",
                     diagnostic?.message ?: "Prepared scene frame did not succeed.",
@@ -172,13 +177,13 @@ private class PreparedSceneKadreApp(
                 return
             }
         }
-        if (!completed && !frameInFlight) requestNextFrame(eventLoop)
+        if (!completed && lifecycle.canRequestRedraw) requestNextFrame(eventLoop)
     }
 
     override fun windowEvent(eventLoop: ActiveEventLoop, windowId: WindowId, event: Any) {
         when (event) {
             WindowEvent.RedrawRequested -> renderFrame(eventLoop)
-            WindowEvent.CloseRequested -> completeBlocked(
+            WindowEvent.CloseRequested -> requestBlocked(
                 eventLoop,
                 "kadre-windowed-run-failed",
                 "Window closed before $requestedFrames requested frames were presented.",
@@ -188,7 +193,13 @@ private class PreparedSceneKadreApp(
         }
     }
 
-    override fun destroySurfaces(eventLoop: ActiveEventLoop) = releaseResources()
+    override fun destroySurfaces(eventLoop: ActiveEventLoop) {
+        requestBlocked(
+            eventLoop,
+            pendingTermination?.reason ?: "kadre-windowed-surfaces-destroyed",
+            pendingTermination?.error ?: "Kadre destroyed window surfaces before frame delivery completed.",
+        )
+    }
 
     private fun resizeSurfaceIfDrawable(size: PhysicalSize<Int>) {
         if (size.width <= 0 || size.height <= 0) return
@@ -196,7 +207,7 @@ private class PreparedSceneKadreApp(
     }
 
     private fun renderFrame(eventLoop: ActiveEventLoop) {
-        if (completed || frameInFlight) return
+        if (completed || !lifecycle.canRequestRedraw) return
         val session = preparedSession ?: return
         val windowOutput = preparedOutput ?: return
         val capabilities = runtimeSession?.capabilities ?: return
@@ -212,27 +223,40 @@ private class PreparedSceneKadreApp(
         ) {
             is PreparedSceneFrameResult.Recorded -> result
             is PreparedSceneFrameResult.Refused -> {
-                completeBlocked(eventLoop, result.code, result.message)
+                requestBlocked(eventLoop, result.code, result.message)
                 return
             }
         }
-        frameInFlight = true
+        if (!lifecycle.beginFrame()) return
         val started = System.nanoTime()
-        session.renderFrame(
-            recorded.taskList,
-            GPUSceneFrameOutputRequest.PresentToWindow(windowOutput),
-        ).completion.whenCompleteAsync({ result, failure ->
+        val completion = runCatching {
+            session.renderFrame(
+                recorded.taskList,
+                GPUSceneFrameOutputRequest.PresentToWindow(windowOutput),
+            ).completion
+        }.getOrElse { failure ->
+            lifecycle.frameCompleted()
+            requestBlocked(
+                eventLoop,
+                "kadre-windowed-frame-submit-failed",
+                failure.message ?: failure.toString(),
+            )
+            return
+        }
+        completion.whenCompleteAsync({ result, failure ->
             pendingCompletion.compareAndSet(null, ObservedCompletion(result, failure, started))
         }, completionExecutor)
     }
 
     private fun requestNextFrame(eventLoop: ActiveEventLoop) {
+        if (!lifecycle.canRequestRedraw) return
         eventLoop.setControlFlow(ControlFlow.Poll)
         window?.requestRedraw()
     }
 
     private fun completePresented(eventLoop: ActiveEventLoop) {
         if (completed) return
+        check(lifecycle.requestClose() == KadreWindowLifecycleAction.CloseResources)
         completed = true
         try {
             WindowedSceneSessionReport.presented(
@@ -253,7 +277,25 @@ private class PreparedSceneKadreApp(
         }
     }
 
-    private fun completeBlocked(eventLoop: ActiveEventLoop, reason: String, error: String) {
+    private fun requestBlocked(eventLoop: ActiveEventLoop, reason: String, error: String) {
+        if (completed) return
+        if (pendingTermination == null) pendingTermination = PendingTermination(reason, error)
+        when (lifecycle.requestClose()) {
+            KadreWindowLifecycleAction.CloseResources -> completeBlockedNow(
+                eventLoop,
+                requireNotNull(pendingTermination).reason,
+                requireNotNull(pendingTermination).error,
+            )
+            KadreWindowLifecycleAction.AwaitFrameCompletion -> {
+                eventLoop.setControlFlow(ControlFlow.Poll)
+            }
+            KadreWindowLifecycleAction.None,
+            KadreWindowLifecycleAction.RequestRedraw,
+            -> Unit
+        }
+    }
+
+    private fun completeBlockedNow(eventLoop: ActiveEventLoop, reason: String, error: String) {
         if (completed) return
         completed = true
         try {
@@ -293,6 +335,11 @@ private class PreparedSceneKadreApp(
         else -> "kadre-windowed-initialization-failed"
     }
 }
+
+private data class PendingTermination(
+    val reason: String,
+    val error: String,
+)
 
 private data class ObservedCompletion(
     val result: GPUPreparedSceneCompletedFrameResult?,

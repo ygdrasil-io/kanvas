@@ -1,5 +1,23 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     id("buildsrc.convention.kotlin-jvm")
+}
+
+val kadreWindowLifecycleUnitTest = tasks.register<Test>("kadreWindowLifecycleUnitTest") {
+    group = "verification"
+    description = "Runs only the headless Kadre lifecycle, launcher, and prepared-recorder contracts."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching(
+        "org.graphiks.kanvas.gpu.renderer.scenes.windowed.KadreWindowFrameLifecycleTest",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kanvas.gpu.renderer.scenes.windowed.RunGpuRendererSceneKadreMainTest",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kanvas.gpu.renderer.scenes.offscreen.PreparedSceneFrameRecorderTest",
+    )
 }
 
 val mainSourceSet = sourceSets.main.get()
@@ -191,6 +209,6 @@ tasks.register("kadreFrameLifecycleCheck") {
     group = "verification"
     description = "Opt-in: compiles Kadre and runs prepared-window lifecycle checks; requires external/poc-koreos."
     dependsOn(tasks.named("compileKadreKotlin"))
-    dependsOn(project(":gpu-renderer").tasks.named("test"))
-    dependsOn(tasks.named("test"))
+    dependsOn(project(":gpu-renderer").tasks.named("gpuWindowFrameLifecycleTest"))
+    dependsOn(kadreWindowLifecycleUnitTest)
 }

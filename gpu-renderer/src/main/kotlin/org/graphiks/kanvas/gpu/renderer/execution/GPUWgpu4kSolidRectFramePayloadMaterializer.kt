@@ -159,7 +159,9 @@ internal class GPUWgpu4kPreparedSceneTarget private constructor(
                 TextureDescriptor(
                     size = Extent3D(width.toUInt(), height.toUInt()),
                     format = GPUTextureFormat.RGBA8Unorm,
-                    usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
+                    usage = GPUTextureUsage.RenderAttachment or
+                        GPUTextureUsage.CopySrc or
+                        GPUTextureUsage.TextureBinding,
                     label = "Kanvas.preparedScene.canonicalTarget",
                 ),
             )

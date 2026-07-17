@@ -1,7 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -12,6 +15,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
+import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 
 class GPUWindowFrameLifecycleTest {
     @Test
@@ -66,6 +70,123 @@ class GPUWindowFrameLifecycleTest {
         )
         assertTrue("retention:complete" in events)
         assertTrue("retention:quarantine" !in events)
+    }
+
+    @Test
+    fun `failed present discards acquired output exactly once without completing or releasing retention`() {
+        val events = mutableListOf<String>()
+        val completion = ManualCompletion(events)
+        val presenter = object : GPUPostSubmitPresentAccess {
+            override fun present(output: GPUAcquiredSurfaceOutput): GPUPostSubmitPresentResult {
+                events += "present:failed"
+                return GPUPostSubmitPresentResult.Failed(
+                    executionDiagnostic("failed.window.present", "present refused"),
+                )
+            }
+
+            override fun discardAfterSubmit(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult {
+                events += "surface:discard"
+                return GPUSurfaceReleaseResult.Released
+            }
+        }
+
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = RecordingBackend(events),
+            completion = completion,
+            retention = RecordingRetention(events),
+            presenter = presenter,
+        ).execute(GPUFrameCoreTestFixture.preparedFrame(withHostActions = true))
+
+        val immediate = assertIs<GPUFrameImmediateState.FailedAfterSubmit>(handle.immediateState)
+        assertEquals("failed.window.present", immediate.diagnostic.code.value)
+        assertEquals(1, events.count { it == "surface:discard" })
+        assertFalse(handle.completion.toCompletableFuture().isDone)
+        assertTrue("retention:complete" !in events)
+        assertTrue("retention:quarantine" !in events)
+
+        completion.deliver(GPUQueueCompletionOutcome.Success)
+
+        assertEquals(
+            "failed.window.present",
+            handle.completion.toCompletableFuture().get().diagnostic?.code?.value,
+        )
+        assertEquals(1, events.count { it == "surface:discard" })
+        assertTrue("retention:complete" in events)
+    }
+
+    @Test
+    fun `throwing present keeps primary diagnostic and attaches failing discard while completion stays pending`() {
+        val events = mutableListOf<String>()
+        val completion = ManualCompletion(events)
+        val presenter = object : GPUPostSubmitPresentAccess {
+            override fun present(output: GPUAcquiredSurfaceOutput): GPUPostSubmitPresentResult {
+                events += "present:throw"
+                error("present exploded")
+            }
+
+            override fun discardAfterSubmit(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult {
+                events += "surface:discard"
+                return GPUSurfaceReleaseResult.Failed(
+                    executionDiagnostic("failed.window.cleanup", "cleanup refused"),
+                )
+            }
+        }
+
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = RecordingBackend(events),
+            completion = completion,
+            retention = RecordingRetention(events),
+            presenter = presenter,
+        ).execute(GPUFrameCoreTestFixture.preparedFrame(withHostActions = true))
+
+        val immediate = assertIs<GPUFrameImmediateState.FailedAfterSubmit>(handle.immediateState)
+        assertEquals("failed.frame-execution.window-present-callback", immediate.diagnostic.code.value)
+        assertEquals("failed.window.cleanup", immediate.diagnostic.facts["surfaceCleanupCode"])
+        assertEquals("cleanup refused", immediate.diagnostic.facts["surfaceCleanupMessage"])
+        assertEquals(1, events.count { it == "surface:discard" })
+        assertFalse(handle.completion.toCompletableFuture().isDone)
+
+        completion.deliver(GPUQueueCompletionOutcome.Success)
+
+        assertEquals(
+            "failed.frame-execution.window-present-callback",
+            handle.completion.toCompletableFuture().get().diagnostic?.code?.value,
+        )
+        assertTrue("retention:complete" in events)
+    }
+
+    @Test
+    fun `simultaneous present and completion failure reports each diagnostic at its own boundary`() {
+        val events = mutableListOf<String>()
+        val completion = ManualCompletion(events)
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = RecordingBackend(events),
+            completion = completion,
+            retention = RecordingRetention(events),
+            presenter = object : GPUPostSubmitPresentAccess {
+                override fun present(output: GPUAcquiredSurfaceOutput) = GPUPostSubmitPresentResult.Failed(
+                    executionDiagnostic("failed.window.present", "present refused"),
+                )
+
+                override fun discardAfterSubmit(output: GPUAcquiredSurfaceOutput) =
+                    GPUSurfaceReleaseResult.Released
+            },
+        ).execute(GPUFrameCoreTestFixture.preparedFrame(withHostActions = true))
+
+        assertEquals(
+            "failed.window.present",
+            assertIs<GPUFrameImmediateState.FailedAfterSubmit>(handle.immediateState).diagnostic.code.value,
+        )
+
+        completion.deliver(GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.DeviceLost))
+
+        assertEquals(
+            "failed.frame-execution.queue-completion",
+            handle.completion.toCompletableFuture().get().diagnostic?.code?.value,
+        )
     }
 
     @Test
@@ -189,6 +310,94 @@ class GPUWindowFrameLifecycleTest {
     }
 
     @Test
+    fun `generic session reaches late acquire final blit one present and pending dedicated completion`() {
+        val events = mutableListOf<String>()
+        val completion = ManualCompletion(events)
+        val controller = RecordingWindowController(
+            outputRef = GPUSurfaceOutputRef("surface.main"),
+            events = events,
+        )
+        val output = GPUPreparedWindowOutput(controller)
+        val session = GPUPreparedSceneFrameSession(
+            coordinatorFactory = GPUFrameCoordinatorFactory { submittedTasks, outputRequest ->
+                val outputTask = assertIs<GPUTask.Output>(submittedTasks.tasks.single())
+                assertEquals(GPUSurfaceOutputRef("surface.main"), outputTask.descriptor.output)
+                GPUFrameCoordinator(
+                    planner = GPUFramePlanningPort { plannedTasks ->
+                        assertTrue(plannedTasks === submittedTasks)
+                        GPUFrameCoreTestFixture.preparedFrame(
+                            withHostActions = true,
+                            surfaceGeneration = 9,
+                        ).semanticPlan
+                    },
+                    preflighter = GPUFramePreflightPort { framePlan ->
+                        assertIs<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.AcquireSurfaceOutput>(
+                            framePlan.steps[framePlan.steps.lastIndex - 2],
+                        )
+                        assertIs<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.SurfaceBlitRenderPassStep>(
+                            framePlan.steps[framePlan.steps.lastIndex - 1],
+                        )
+                        assertIs<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.PostSubmitPresentAction>(
+                            framePlan.steps.last(),
+                        )
+                        assertIs<GPUSurfaceAcquisitionResult.Acquired>(
+                            controller.acquire(
+                                GPUSurfaceAcquisitionRequest(outputTask.descriptor, GPUDeviceGenerationID(7)),
+                            ),
+                        )
+                        GPUFramePreflightResult.Prepared(
+                            GPUFrameCoreTestFixture.preparedFrame(
+                                withHostActions = true,
+                                surfaceGeneration = 9,
+                            ),
+                        )
+                    },
+                    executor = GPUFrameExecutor(
+                        sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+                        backend = RecordingBackend(events),
+                        completion = completion,
+                        retention = RecordingRetention(events),
+                        presenter = controller,
+                    ),
+                ).also {
+                    assertIs<GPUSceneFrameOutputRequest.PresentToWindow>(outputRequest)
+                }
+            },
+            sceneTargetResolver = { GPUFrameTargetRef("target.scene") },
+        )
+
+        val handle = session.renderFrame(
+            GPUFrameCoreTestFixture.taskList(),
+            GPUSceneFrameOutputRequest.PresentToWindow(output),
+        )
+
+        assertIs<GPUFrameImmediateState.Submitted>(handle.immediateState)
+        assertFalse(handle.completion.toCompletableFuture().isDone)
+        assertEquals(1, events.count { it == "surface:acquire" })
+        assertEquals(1, events.count { it == "submit" })
+        assertEquals(1, events.count { it == "present" })
+        assertEquals(1, events.count { it == "encode:SurfaceBlit" })
+
+        val deliveryThread = AtomicReference<String>()
+        handle.completion.thenRun { deliveryThread.set(Thread.currentThread().name) }
+        val deliveryExecutor = Executors.newSingleThreadExecutor { task ->
+            Thread(task, "window-completion-delivery")
+        }
+        try {
+            deliveryExecutor.submit { completion.deliver(GPUQueueCompletionOutcome.Success) }.get()
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                handle.completion.toCompletableFuture().get().outcome,
+            )
+            assertEquals("window-completion-delivery", deliveryThread.get())
+        } finally {
+            deliveryExecutor.shutdownNow()
+            session.close()
+            output.close()
+        }
+    }
+
+    @Test
     fun `surface generation is independent from the canonical scene target generation`() {
         val frame = GPUFrameCoreTestFixture.preparedFrame(
             withHostActions = true,
@@ -247,6 +456,8 @@ class GPUWindowFrameLifecycleTest {
 
     private class RecordingWindowController(
         private val dependencyGated: Boolean = false,
+        private val outputRef: GPUSurfaceOutputRef = GPUSurfaceOutputRef("surface.window"),
+        private val events: MutableList<String>? = null,
     ) : GPUPreparedWindowOutputController {
         override val deviceGeneration = GPUDeviceGenerationID(7)
         override val adapterInfo: GPUBackendAdapterSummary? = null
@@ -264,7 +475,7 @@ class GPUWindowFrameLifecycleTest {
         private var generation = 9L
 
         override fun snapshot() = GPUPreparedWindowOutputSnapshot(
-            output = GPUSurfaceOutputRef("surface.window"),
+            output = outputRef,
             width = width,
             height = height,
             format = GPUColorFormat("bgra8unorm"),
@@ -277,11 +488,17 @@ class GPUWindowFrameLifecycleTest {
             generation += 1
         }
 
-        override fun acquire(request: GPUSurfaceAcquisitionRequest) = GPUSurfaceAcquisitionResult.Acquired(
-            GPUAcquiredSurfaceOutput(request.descriptor.output, request.deviceGeneration, generation, "fake.surface"),
-        )
+        override fun acquire(request: GPUSurfaceAcquisitionRequest): GPUSurfaceAcquisitionResult {
+            events?.add("surface:acquire")
+            return GPUSurfaceAcquisitionResult.Acquired(
+                GPUAcquiredSurfaceOutput(request.descriptor.output, request.deviceGeneration, generation, "fake.surface"),
+            )
+        }
         override fun release(output: GPUAcquiredSurfaceOutput) = GPUSurfaceReleaseResult.Released
-        override fun present(output: GPUAcquiredSurfaceOutput) = GPUPostSubmitPresentResult.Presented
+        override fun present(output: GPUAcquiredSurfaceOutput): GPUPostSubmitPresentResult {
+            events?.add("present")
+            return GPUPostSubmitPresentResult.Presented
+        }
         override fun discardAfterSubmit(output: GPUAcquiredSurfaceOutput) = GPUSurfaceReleaseResult.Released
         override fun close() = Unit
     }
@@ -346,6 +563,40 @@ class GPUWindowFrameLifecycleTest {
                 ticket.ticketId,
                 GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.Cancelled),
             )
+    }
+
+    private class ManualCompletion(
+        private val events: MutableList<String>,
+    ) : GPUQueueCompletionAccess {
+        private var ticket: GPUQueueCompletionTicket? = null
+        private var sink: GPUQueueCompletionSink? = null
+
+        override fun reserveTicket(request: GPUQueueCompletionTicketRequest): GPUQueueCompletionTicketReservation =
+            error("not used")
+
+        override fun abandonReservedTicket(ticket: GPUQueueCompletionTicket): GPUQueueCompletionTicketAbandonResult =
+            error("not used")
+
+        override fun armAfterSubmit(
+            ticket: GPUQueueCompletionTicket,
+            sink: GPUQueueCompletionSink,
+        ): GPUQueueCompletionArmResult {
+            events += "completion:arm"
+            this.ticket = ticket
+            this.sink = sink
+            return GPUQueueCompletionArmResult.Armed(ticket.ticketId)
+        }
+
+        fun deliver(outcome: GPUQueueCompletionOutcome) {
+            val armedTicket = requireNotNull(ticket)
+            requireNotNull(sink).accept(GPUQueueCompletionDelivery.Accepted(armedTicket.ticketId, outcome))
+        }
+
+        override suspend fun awaitCompletion(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery =
+            error("not used")
+
+        override fun cancel(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery =
+            error("completion must remain armed")
     }
 
     private class RecordingRetention(private val events: MutableList<String>) : GPUFrameResourceRetention {

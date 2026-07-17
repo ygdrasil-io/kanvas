@@ -28,6 +28,7 @@ internal data class GPUPreparedWindowOutputSnapshot(
 internal interface GPUPreparedWindowOutputController :
     GPUSurfaceOutputProvider,
     GPUPostSubmitPresentAccess,
+    GPUAcquiredSurfaceNativeTargetResolver,
     AutoCloseable {
     val deviceGeneration: GPUDeviceGenerationID
     val adapterInfo: GPUBackendAdapterSummary?
@@ -35,6 +36,7 @@ internal interface GPUPreparedWindowOutputController :
         get() = null
     fun snapshot(): GPUPreparedWindowOutputSnapshot
     fun resize(width: Int, height: Int)
+    override fun resolve(output: GPUAcquiredSurfaceOutput): GPUPreparedNativeTextureViewOperand? = null
     override fun discardAfterSubmit(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult
 }
 
@@ -57,6 +59,7 @@ class GPUPreparedWindowOutput internal constructor(
     internal fun snapshot(): GPUPreparedWindowOutputSnapshot = controller.snapshot()
     internal val surfaceProvider: GPUSurfaceOutputProvider get() = controller
     internal val presenter: GPUPostSubmitPresentAccess get() = controller
+    internal val nativeTargetResolver: GPUAcquiredSurfaceNativeTargetResolver get() = controller
     internal val availabilityDiagnostic get() = controller.availabilityDiagnostic
 
     internal fun matches(output: GPUAcquiredSurfaceOutput): Boolean {

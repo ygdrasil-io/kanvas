@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.glfwContextRenderer
+import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -96,6 +97,39 @@ class GPUBackendRuntimeNativeSmokeTest {
         assertEquals(GPUPreparedWindowOutput::class.java, factory.returnType)
         assertFalse(GPUBackendSession::class.java.methods.any { it.name == "createWindowSurface" })
         assertFalse(GPUPreparedWindowOutput::class.java.methods.any { it.name == "encodeAndPresent" })
+    }
+
+    @Test
+    fun `surface blit cache samples the canonical prepared target for rgba and bgra outputs`() = runBlocking {
+        val context = glfwContextRenderer(
+            width = 1,
+            height = 1,
+            title = "surface-blit-cache",
+            deferredRendering = true,
+        )
+        val lifecycle = GPUWgpu4kPreparedSceneTargetLifecycle()
+        val target = GPUWgpu4kPreparedSceneTarget.create(
+            device = context.wgpuContext.device,
+            width = 4,
+            height = 4,
+            deviceGeneration = GPUDeviceGenerationID(77),
+            targetGeneration = 3,
+            lifecycle = lifecycle,
+        )
+        try {
+            GPUWgpu4kSurfaceBlitSessionCache(context.wgpuContext.device, target).use { cache ->
+                val rgba = cache.acquire(GPUTextureFormat.RGBA8Unorm)
+                val bgra = cache.acquire(GPUTextureFormat.BGRA8Unorm)
+
+                assertTrue(rgba.pipeline !== bgra.pipeline)
+                assertTrue(rgba.bindGroup !== bgra.bindGroup)
+                assertEquals(2L, cache.counters().formatCreations)
+                assertEquals(2L, lifecycle.snapshot().third)
+            }
+        } finally {
+            target.close()
+            context.close()
+        }
     }
 
     @Test

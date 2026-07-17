@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
+import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.reflect.KClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
@@ -14,6 +15,91 @@ internal sealed interface GPUWgpu4kPreparedFramePayloadRoute {
     data object RegisteredUniformRect : GPUWgpu4kPreparedFramePayloadRoute
     data object SeparableBlurRect : GPUWgpu4kPreparedFramePayloadRoute
     data class Refused(val code: String, val message: String) : GPUWgpu4kPreparedFramePayloadRoute
+}
+
+internal fun interface GPUAcquiredSurfaceNativeTargetResolver {
+    fun resolve(output: GPUAcquiredSurfaceOutput): GPUPreparedNativeTextureViewOperand?
+
+    companion object {
+        val Unavailable = GPUAcquiredSurfaceNativeTargetResolver { null }
+    }
+}
+
+internal fun decorateWgpu4kSurfaceBlitDraft(
+    fullEncoderPlan: GPUCommandEncoderPlan,
+    reusableDraft: GPUPreparedNativeFrameDraft,
+    surfaceBlit: GPUPreparedNativeScopeOperand.SurfaceBlit,
+): GPUPreparedNativeFrameDraft {
+    val reusable = reusableDraft.payload
+    require(reusable.identity.contextIdentity == fullEncoderPlan.contextIdentity)
+    require(reusable.identity.encoderPlanId == fullEncoderPlan.planId)
+    require(reusable.identity.deviceGeneration == fullEncoderPlan.deviceGeneration)
+    require(reusable.identity.targetGeneration == fullEncoderPlan.targetGeneration)
+    val reusableByStep = reusable.scopeOperands.associateBy { it.sourceStepIndex }
+    val fullOperands = fullEncoderPlan.scopes.map { scope ->
+        if (scope.operationKind == GPUEncoderOperationKind.SurfaceBlit) {
+            require(scope.sourceStepIndex == surfaceBlit.sourceStepIndex)
+            surfaceBlit
+        } else {
+            requireNotNull(reusableByStep[scope.sourceStepIndex]) {
+                "Reusable native payload omitted encoder step ${scope.sourceStepIndex}"
+            }
+        }
+    }
+    return GPUPreparedNativeFrameDraft(
+        GPUPreparedNativeFramePayload(
+            identity = GPUPreparedNativeFrameIdentity(
+                frameId = reusable.identity.frameId,
+                contextIdentity = fullEncoderPlan.contextIdentity,
+                encoderPlanId = fullEncoderPlan.planId,
+                deviceGeneration = fullEncoderPlan.deviceGeneration,
+                targetGeneration = fullEncoderPlan.targetGeneration,
+                scopes = fullEncoderPlan.scopes.map { scope ->
+                    GPUPreparedNativeScopeKey(
+                        scope.sourceStepIndex,
+                        scope.operationKind,
+                        scope.resourceGenerationLabels,
+                        scope.nativeOperandKeys,
+                    )
+                },
+            ),
+            scopeOperands = fullOperands,
+            scopeOperandKeys = fullEncoderPlan.scopes.map { it.nativeOperandKeys },
+            auxiliaryOwnedHandles = reusable.auxiliaryOwnedHandles,
+        ),
+    )
+}
+
+internal fun bindWgpu4kLateSurface(
+    draft: GPUPreparedNativeFrameDraft,
+    acquiredSurface: GPUAcquiredSurfaceOutput?,
+    resolver: GPUAcquiredSurfaceNativeTargetResolver,
+): GPUPreparedNativeFrameLateSurfaceBinding {
+    val surface = draft.payload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.SurfaceBlit>()
+        .singleOrNull() ?: return GPUPreparedNativeFrameLateSurfaceBinding.NotRequired
+    val acquired = acquiredSurface ?: return GPUPreparedNativeFrameLateSurfaceBinding.Refused(
+        "unsupported.native-frame-payload.surface-output-missing",
+        "The native surface blit requires one acquired output.",
+    )
+    if (acquired.output != surface.output) {
+        return GPUPreparedNativeFrameLateSurfaceBinding.Refused(
+            "stale.native-frame-payload.surface-output-mismatch",
+            "The acquired native surface output does not match the prepared blit output.",
+        )
+    }
+    val target = resolver.resolve(acquired) ?: return GPUPreparedNativeFrameLateSurfaceBinding.Refused(
+        "unsupported.native-frame-payload.surface-target-unavailable",
+        "The acquired output did not expose its session-owned opaque native target.",
+    )
+    if (target.deviceGeneration != acquired.deviceGeneration ||
+        target.ownership != GPUPreparedNativeOperandOwnership.Borrowed
+    ) {
+        return GPUPreparedNativeFrameLateSurfaceBinding.Refused(
+            "stale.native-frame-payload.surface-target-generation",
+            "The opaque native surface target does not match the acquired output generation.",
+        )
+    }
+    return GPUPreparedNativeFrameLateSurfaceBinding.Bound(acquired.output, target)
 }
 
 internal fun selectWgpu4kPreparedFramePayloadRoute(
@@ -57,6 +143,9 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
     private val separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
     private val destinationCopyCache: GPUWgpu4kDestinationCopySessionCache,
+    private val surfaceBlitCache: GPUWgpu4kSurfaceBlitSessionCache,
+    private val surfaceTargetResolver: GPUAcquiredSurfaceNativeTargetResolver =
+        GPUAcquiredSurfaceNativeTargetResolver.Unavailable,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private var delegate: GPUPreparedNativeFramePayloadMaterializer? = null
     private var closed = false
@@ -74,9 +163,19 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                 "The prepared frame payload dispatcher is one-shot and already consumed.",
             )
         }
-        val semantics = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val surfaceRoute = when (val split = splitWgpu4kSurfaceRoute(framePlan, encoderPlan)) {
+            Wgpu4kSurfaceRouteSplit.NoSurface -> null
+            is Wgpu4kSurfaceRouteSplit.Routed -> split
+            is Wgpu4kSurfaceRouteSplit.Refused -> return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                split.code,
+                split.message,
+            )
+        }
+        val reusableFramePlan = surfaceRoute?.reusableFramePlan ?: framePlan
+        val reusableEncoderPlan = surfaceRoute?.reusableEncoderPlan ?: encoderPlan
+        val semantics = reusableFramePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { step -> step.drawPackets.mapNotNull { it.semanticPayload } }
-        val hasDestinationCopy = framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }
+        val hasDestinationCopy = reusableFramePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }
         return when (
             val route = selectWgpu4kPreparedFramePayloadRoute(
                 semantics.map { it::class },
@@ -90,8 +189,10 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     preparedSceneTarget,
                     destinationCopyCache,
                 ),
-                framePlan,
+                reusableFramePlan,
+                reusableEncoderPlan,
                 encoderPlan,
+                surfaceRoute,
                 resources,
                 generationSeal,
             )
@@ -102,8 +203,10 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     preparedSceneTarget,
                     solidRectCache,
                 ),
-                framePlan,
+                reusableFramePlan,
+                reusableEncoderPlan,
                 encoderPlan,
+                surfaceRoute,
                 resources,
                 generationSeal,
             )
@@ -114,8 +217,10 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     preparedSceneTarget,
                     colorGlyphCache,
                 ),
-                framePlan,
+                reusableFramePlan,
+                reusableEncoderPlan,
                 encoderPlan,
+                surfaceRoute,
                 resources,
                 generationSeal,
             )
@@ -126,8 +231,10 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     preparedSceneTarget,
                     registeredUniformRectCache,
                 ),
-                framePlan,
+                reusableFramePlan,
+                reusableEncoderPlan,
                 encoderPlan,
+                surfaceRoute,
                 resources,
                 generationSeal,
             )
@@ -138,8 +245,10 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     preparedSceneTarget,
                     separableBlurRectCache,
                 ),
-                framePlan,
+                reusableFramePlan,
+                reusableEncoderPlan,
                 encoderPlan,
+                surfaceRoute,
                 resources,
                 generationSeal,
             )
@@ -150,21 +259,65 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
 
     private fun dispatch(
         selected: GPUPreparedNativeFramePayloadMaterializer,
-        framePlan: GPUFramePlan,
-        encoderPlan: GPUCommandEncoderPlan,
+        reusableFramePlan: GPUFramePlan,
+        reusableEncoderPlan: GPUCommandEncoderPlan,
+        fullEncoderPlan: GPUCommandEncoderPlan,
+        surfaceRoute: Wgpu4kSurfaceRouteSplit.Routed?,
         resources: GPUPreparedResourceSet,
         generationSeal: GPUPreparedGenerationSeal,
     ): GPUPreparedNativeFramePayloadMaterialization {
         delegate = selected
-        return selected.materializeReusable(framePlan, encoderPlan, resources, generationSeal)
+        val materialized = selected.materializeReusable(
+            reusableFramePlan,
+            reusableEncoderPlan,
+            resources,
+            generationSeal,
+        )
+        if (surfaceRoute == null || materialized !is GPUPreparedNativeFramePayloadMaterialization.Materialized) {
+            return materialized
+        }
+        return try {
+            val cached = surfaceBlitCache.acquire(surfaceRoute.format)
+            val surfaceBlit = GPUPreparedNativeScopeOperand.SurfaceBlit(
+                sourceStepIndex = surfaceRoute.surfaceScope.sourceStepIndex,
+                source = GPUPreparedNativeTextureViewOperand(
+                    cached.sourceView,
+                    generationSeal.deviceGeneration,
+                ),
+                output = surfaceRoute.output,
+                pipeline = GPUPreparedNativeRenderPipelineOperand(
+                    cached.pipeline,
+                    generationSeal.deviceGeneration,
+                ),
+                bindGroup = GPUPreparedNativeBindGroupOperand(
+                    cached.bindGroup,
+                    generationSeal.deviceGeneration,
+                ),
+            )
+            GPUPreparedNativeFramePayloadMaterialization.Materialized(
+                decorateWgpu4kSurfaceBlitDraft(
+                    fullEncoderPlan,
+                    materialized.draft,
+                    surfaceBlit,
+                ),
+            )
+        } catch (failure: Throwable) {
+            GPUPreparedNativeFramePayloadMaterialization.Refused(
+                "failed.native-frame-payload.surface-blit-materialization",
+                "The typed surface blit payload could not be materialized: ${failure::class.simpleName.orEmpty()}",
+            )
+        }
     }
 
     override fun bindLateSurface(
         draft: GPUPreparedNativeFrameDraft,
         acquiredSurface: GPUAcquiredSurfaceOutput?,
     ): GPUPreparedNativeFrameLateSurfaceBinding = synchronized(this) {
-        delegate?.bindLateSurface(draft, acquiredSurface)
-            ?: GPUPreparedNativeFrameLateSurfaceBinding.Refused(
+        if (draft.payload.scopeOperands.any { it.operationKind == GPUEncoderOperationKind.SurfaceBlit }) {
+            bindWgpu4kLateSurface(draft, acquiredSurface, surfaceTargetResolver)
+        } else {
+            delegate?.bindLateSurface(draft, acquiredSurface)
+        } ?: GPUPreparedNativeFrameLateSurfaceBinding.Refused(
                 "unsupported.native-frame-payload.dispatcher-state",
                 "No prepared native payload route was selected.",
             )
@@ -175,4 +328,83 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         closed = true
         (delegate as? AutoCloseable)?.close()
     }
+}
+
+private sealed interface Wgpu4kSurfaceRouteSplit {
+    data object NoSurface : Wgpu4kSurfaceRouteSplit
+
+    data class Routed(
+        val reusableFramePlan: GPUFramePlan,
+        val reusableEncoderPlan: GPUCommandEncoderPlan,
+        val surfaceScope: GPUCommandEncoderScopePlan,
+        val output: org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef,
+        val format: GPUTextureFormat,
+    ) : Wgpu4kSurfaceRouteSplit
+
+    data class Refused(val code: String, val message: String) : Wgpu4kSurfaceRouteSplit
+}
+
+private fun splitWgpu4kSurfaceRoute(
+    framePlan: GPUFramePlan,
+    encoderPlan: GPUCommandEncoderPlan,
+): Wgpu4kSurfaceRouteSplit {
+    val surfaceSteps = framePlan.steps.filter {
+        it is GPUFrameStep.AcquireSurfaceOutput ||
+            it is GPUFrameStep.SurfaceBlitRenderPassStep ||
+            it is GPUFrameStep.PostSubmitPresentAction
+    }
+    val surfaceScopes = encoderPlan.scopes.filter { it.operationKind == GPUEncoderOperationKind.SurfaceBlit }
+    if (surfaceSteps.isEmpty() && surfaceScopes.isEmpty()) return Wgpu4kSurfaceRouteSplit.NoSurface
+    val suffix = framePlan.steps.takeLast(3)
+    val acquire = suffix.getOrNull(0) as? GPUFrameStep.AcquireSurfaceOutput
+    val blit = suffix.getOrNull(1) as? GPUFrameStep.SurfaceBlitRenderPassStep
+    val present = suffix.getOrNull(2) as? GPUFrameStep.PostSubmitPresentAction
+    val scope = surfaceScopes.singleOrNull()
+    if (surfaceSteps.size != 3 || acquire == null || blit == null || present == null ||
+        scope == null || encoderPlan.scopes.lastOrNull() !== scope ||
+        scope.sourceStepIndex != framePlan.steps.lastIndex - 1 ||
+        acquire.descriptor.output != blit.output || blit.output != present.output
+    ) {
+        return Wgpu4kSurfaceRouteSplit.Refused(
+            "unsupported.native-frame-payload.surface-chain-shape",
+            "A window frame requires one final AcquireSurfaceOutput/SurfaceBlit/PostSubmitPresent chain.",
+        )
+    }
+    val format = acquire.descriptor.format.value.toWgpu4kSurfaceFormat()
+        ?: return Wgpu4kSurfaceRouteSplit.Refused(
+            "unsupported.native-frame-payload.surface-format",
+            "The window surface format is not supported by the typed surface blit pipeline.",
+        )
+    return Wgpu4kSurfaceRouteSplit.Routed(
+        reusableFramePlan = GPUFramePlan(
+            frameId = framePlan.frameId,
+            capabilitySeal = framePlan.capabilitySeal,
+            recordingSeals = framePlan.recordingSeals,
+            steps = framePlan.steps.dropLast(3),
+            memoryBudget = framePlan.memoryBudget,
+            diagnostics = framePlan.diagnostics,
+            dependencies = framePlan.dependencies,
+            phaseOrder = framePlan.phaseOrder,
+            elidedNoOpDraws = framePlan.elidedNoOpDraws,
+            atomicallyRefused = framePlan.atomicallyRefused,
+        ),
+        reusableEncoderPlan = GPUCommandEncoderPlan.ordered(
+            planId = encoderPlan.planId,
+            contextIdentity = encoderPlan.contextIdentity,
+            deviceGeneration = encoderPlan.deviceGeneration,
+            targetGeneration = encoderPlan.targetGeneration,
+            scopes = encoderPlan.scopes.dropLast(1),
+        ),
+        surfaceScope = scope,
+        output = blit.output,
+        format = format,
+    )
+}
+
+private fun String.toWgpu4kSurfaceFormat(): GPUTextureFormat? = when (lowercase()) {
+    "rgba8unorm" -> GPUTextureFormat.RGBA8Unorm
+    "rgba8unorm-srgb" -> GPUTextureFormat.RGBA8UnormSrgb
+    "bgra8unorm" -> GPUTextureFormat.BGRA8Unorm
+    "bgra8unorm-srgb" -> GPUTextureFormat.BGRA8UnormSrgb
+    else -> null
 }

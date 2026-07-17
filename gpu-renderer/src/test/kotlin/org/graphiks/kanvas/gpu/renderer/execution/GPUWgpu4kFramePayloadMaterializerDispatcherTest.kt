@@ -1,9 +1,19 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.GPUBindGroup
+import io.ygdrasil.webgpu.GPURenderPipeline
+import io.ygdrasil.webgpu.GPUTexture
+import io.ygdrasil.webgpu.GPUTextureView
+import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 
 class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
     @Test
@@ -53,4 +63,130 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
         val refused = assertIs<GPUWgpu4kPreparedFramePayloadRoute.Refused>(route)
         assertEquals("unsupported.native-frame-payload.mixed-semantic-shape", refused.code)
     }
+
+    @Test
+    fun `common surface decorator restores full payload identity and exact final blit`() {
+        val generation = GPUDeviceGenerationID(7)
+        val copyScope = scope(
+            index = 0,
+            kind = GPUEncoderOperationKind.Copy,
+            keys = listOf(
+                key(GPUPreparedNativeOperandRole.CopySource, GPUPreparedNativeOperandKind.Texture, "copy.source"),
+                key(GPUPreparedNativeOperandRole.CopyDestination, GPUPreparedNativeOperandKind.Texture, "copy.target"),
+            ),
+        )
+        val surfaceScope = scope(
+            index = 2,
+            kind = GPUEncoderOperationKind.SurfaceBlit,
+            keys = listOf(
+                key(GPUPreparedNativeOperandRole.SurfaceSource, GPUPreparedNativeOperandKind.TextureView, "surface.source"),
+                key(GPUPreparedNativeOperandRole.SurfaceTarget, GPUPreparedNativeOperandKind.TextureView, "surface.target"),
+                key(GPUPreparedNativeOperandRole.SurfacePipeline, GPUPreparedNativeOperandKind.RenderPipeline, "surface.pipeline"),
+                key(GPUPreparedNativeOperandRole.SurfaceBindGroup, GPUPreparedNativeOperandKind.BindGroup, "surface.bind-group"),
+            ),
+        )
+        val fullEncoderPlan = GPUCommandEncoderPlan.ordered(
+            planId = "window.encoder",
+            contextIdentity = "target.scene",
+            deviceGeneration = generation,
+            targetGeneration = 3,
+            scopes = listOf(copyScope, surfaceScope),
+        )
+        val copy = GPUPreparedNativeScopeOperand.Copy(
+            sourceStepIndex = 0,
+            operationKind = GPUEncoderOperationKind.Copy,
+            source = GPUPreparedNativeTextureOperand(fakeNative("copy.source"), generation),
+            destination = GPUPreparedNativeTextureOperand(fakeNative("copy.target"), generation),
+            textureLayout = GPUPreparedNativeTextureCopyLayout(0, 0, 0, 0, 4, 4),
+        )
+        val reusableDraft = GPUPreparedNativeFrameDraft(
+            GPUPreparedNativeFramePayload(
+                identity = GPUPreparedNativeFrameIdentity(
+                    frameId = GPUFrameID(11),
+                    contextIdentity = fullEncoderPlan.contextIdentity,
+                    encoderPlanId = fullEncoderPlan.planId,
+                    deviceGeneration = generation,
+                    targetGeneration = fullEncoderPlan.targetGeneration,
+                    scopes = listOf(
+                        GPUPreparedNativeScopeKey(
+                            copyScope.sourceStepIndex,
+                            copyScope.operationKind,
+                            copyScope.resourceGenerationLabels,
+                            copyScope.nativeOperandKeys,
+                        ),
+                    ),
+                ),
+                scopeOperands = listOf(copy),
+                scopeOperandKeys = listOf(copyScope.nativeOperandKeys),
+            ),
+        )
+        val output = GPUSurfaceOutputRef("surface.window")
+        val blit = GPUPreparedNativeScopeOperand.SurfaceBlit(
+            sourceStepIndex = surfaceScope.sourceStepIndex,
+            source = GPUPreparedNativeTextureViewOperand(fakeNative("scene.view"), generation),
+            output = output,
+            pipeline = GPUPreparedNativeRenderPipelineOperand(fakeNative("surface.pipeline"), generation),
+            bindGroup = GPUPreparedNativeBindGroupOperand(fakeNative("surface.bind-group"), generation),
+        )
+
+        val decorated = decorateWgpu4kSurfaceBlitDraft(fullEncoderPlan, reusableDraft, blit)
+
+        assertEquals(fullEncoderPlan.scopes.map { it.sourceStepIndex }, decorated.payload.identity.scopes.map { it.sourceStepIndex })
+        assertEquals(listOf(GPUEncoderOperationKind.Copy, GPUEncoderOperationKind.SurfaceBlit), decorated.payload.scopeOperands.map { it.operationKind })
+        assertTrue(decorated.payload.scopeOperands.last() === blit)
+        val acquired = GPUAcquiredSurfaceOutput(output, generation, 19, "surface.acquired")
+        val exactTarget = fakeNative<GPUTextureView>("surface.target")
+        val binding = bindWgpu4kLateSurface(
+            draft = decorated,
+            acquiredSurface = acquired,
+            resolver = GPUAcquiredSurfaceNativeTargetResolver { candidate ->
+                candidate.takeIf { it === acquired }?.let {
+                    GPUPreparedNativeTextureViewOperand(exactTarget, generation)
+                }
+            },
+        )
+        val bound = assertIs<GPUPreparedNativeFrameLateSurfaceBinding.Bound>(binding)
+        assertEquals(output, bound.output)
+        assertTrue(bound.target.view === exactTarget)
+    }
+
+    private fun scope(
+        index: Int,
+        kind: GPUEncoderOperationKind,
+        keys: List<GPUPreparedNativeOperandKey>,
+    ) = GPUCommandEncoderScopePlan(
+        sourceStepIndex = index,
+        operationKind = kind,
+        sourceTaskIds = listOf(GPUTaskID("task.$index")),
+        facadeOperationClasses = listOf("encode"),
+        targetGeneration = 3,
+        resourceGenerationLabels = if (kind == GPUEncoderOperationKind.SurfaceBlit) {
+            listOf("GPUFrameTargetRef:target.scene@3")
+        } else {
+            listOf("copy.source@1", "copy.target@2")
+        },
+    ).attachNativeOperandKeys(keys)
+
+    private fun key(
+        role: GPUPreparedNativeOperandRole,
+        kind: GPUPreparedNativeOperandKind,
+        binding: String,
+    ) = GPUPreparedNativeOperandKey(
+        role = role,
+        kind = kind,
+        bindingKey = gpuPreparedNativeBindingKey(binding),
+        ownership = GPUPreparedNativeOperandOwnership.Borrowed,
+    )
+
+    private inline fun <reified T> fakeNative(label: String): T = Proxy.newProxyInstance(
+        T::class.java.classLoader,
+        arrayOf(T::class.java),
+    ) { _, method, _ ->
+        when (method.name) {
+            "getLabel" -> label
+            "setLabel", "close" -> Unit
+            "toString" -> "FakeNative($label)"
+            else -> error("Unexpected fake native call: ${method.name}")
+        }
+    } as T
 }

@@ -419,7 +419,9 @@ internal class GPUFrameExecutor(
 
         val ticket = preparedFrame.completionTicket
         val registration = preparedFrame.retentionRegistration()
+        val surfaceDiscardClaimed = AtomicBoolean(false)
         fun discardSurfaceAfterSubmit(): GPUDiagnostic? = preparedFrame.acquiredSurfaceOutput?.let { output ->
+            if (!surfaceDiscardClaimed.compareAndSet(false, true)) return@let null
             val release = try {
                 presenter.discardAfterSubmit(output)
             } catch (failure: Throwable) {
@@ -880,6 +882,16 @@ internal class GPUFrameExecutor(
                 }) {
                     GPUPostSubmitPresentResult.Presented -> null
                     is GPUPostSubmitPresentResult.Failed -> result.diagnostic
+                }
+                postSubmitPresentDiagnostic?.let { presentDiagnostic ->
+                    discardSurfaceAfterSubmit()?.let { cleanupDiagnostic ->
+                        postSubmitPresentDiagnostic = presentDiagnostic.copy(
+                            facts = presentDiagnostic.facts + mapOf(
+                                "surfaceCleanupCode" to cleanupDiagnostic.code.value,
+                                "surfaceCleanupMessage" to cleanupDiagnostic.message,
+                            ),
+                        )
+                    }
                 }
             }
             val deliveredDuringArm = synchronized(callbackLock) {

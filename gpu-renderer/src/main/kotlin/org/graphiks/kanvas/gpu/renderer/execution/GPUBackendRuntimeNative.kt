@@ -679,6 +679,8 @@ private class WgpuBackendSession(
         linkedSetOf<GPUWgpu4kSeparableBlurRectSessionCache>()
     private val quarantinedDestinationCopyCaches =
         linkedSetOf<GPUWgpu4kDestinationCopySessionCache>()
+    private val quarantinedSurfaceBlitCaches =
+        linkedSetOf<GPUWgpu4kSurfaceBlitSessionCache>()
     private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits(
         maxTextureDimension2D = minOf(
@@ -800,6 +802,9 @@ private class WgpuBackendSession(
         val destinationCopyCache = setupTransaction.own(
             GPUWgpu4kDestinationCopySessionCache(glfw.wgpuContext.device),
         )
+        val surfaceBlitCache = setupTransaction.own(
+            GPUWgpu4kSurfaceBlitSessionCache(glfw.wgpuContext.device, preparedTarget),
+        )
         telemetryRecorder.recordTextureCreated()
         val encodingBackend = setupTransaction.own(GPUWgpu4kFrameEncodingBackend(
             deviceGeneration = deviceGeneration,
@@ -908,6 +913,9 @@ private class WgpuBackendSession(
                     registeredUniformRectCache,
                     separableBlurRectCache,
                     destinationCopyCache,
+                    surfaceBlitCache,
+                    windowOutput?.nativeTargetResolver
+                        ?: GPUAcquiredSurfaceNativeTargetResolver.Unavailable,
                 )
                 val preflighter = GPUFramePreflighter(
                     context = GPUFramePreflightContext(
@@ -946,6 +954,7 @@ private class WgpuBackendSession(
                             usages = setOf(
                                 GPUFrameResourceUsage.RenderAttachment,
                                 GPUFrameResourceUsage.CopySource,
+                                GPUFrameResourceUsage.TextureBinding,
                             ),
                             sampleCount = 1,
                             deviceGeneration = deviceGeneration,
@@ -970,6 +979,7 @@ private class WgpuBackendSession(
                         registeredUniformRectCache,
                         separableBlurRectCache,
                         destinationCopyCache,
+                        surfaceBlitCache,
                     )
                 } finally {
                     childLease.close()
@@ -1095,6 +1105,14 @@ private class WgpuBackendSession(
                 synchronized(this) { quarantinedDestinationCopyCaches.remove(cache) }
             }
         }
+        val quarantinedSurfaceBlits = synchronized(this) {
+            quarantinedSurfaceBlitCaches.toList()
+        }
+        quarantinedSurfaceBlits.forEach { cache ->
+            runCatching { cache.close() }.onSuccess {
+                synchronized(this) { quarantinedSurfaceBlitCaches.remove(cache) }
+            }
+        }
         queueCompletionRuntime.close()
         try {
             runtimeResourceAdapter.close()
@@ -1120,12 +1138,19 @@ private class WgpuBackendSession(
         registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
         separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
         destinationCopyCache: GPUWgpu4kDestinationCopySessionCache,
+        surfaceBlitCache: GPUWgpu4kSurfaceBlitSessionCache,
     ) {
         var firstFailure: Throwable? = null
         try {
             closePreparedSceneResources(encodingBackend, mappingExecutorCloser)
         } catch (failure: Throwable) {
             firstFailure = failure
+        }
+        try {
+            surfaceBlitCache.close()
+        } catch (failure: Throwable) {
+            synchronized(this) { quarantinedSurfaceBlitCaches += surfaceBlitCache }
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
         }
         try {
             preparedTarget.close()
@@ -2551,7 +2576,7 @@ private class WgpuPreparedWindowOutputController(
     }
 
     override fun acquire(request: GPUSurfaceAcquisitionRequest): GPUSurfaceAcquisitionResult =
-        GPUSurfaceAcquisitionResult.Unavailable(GPUSurfaceAcquisitionStatus.Timeout)
+        GPUSurfaceAcquisitionResult.Unavailable(GPUSurfaceAcquisitionStatus.DependencyUnavailable)
 
     override fun release(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult =
         GPUSurfaceReleaseResult.Released

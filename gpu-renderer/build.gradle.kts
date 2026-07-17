@@ -35,6 +35,16 @@ tasks.withType<Test> {
     }
 }
 
+tasks.register<Test>("gpuWindowFrameLifecycleTest") {
+    group = "verification"
+    description = "Runs only the prepared window frame lifecycle contract tests."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching(
+        "org.graphiks.kanvas.gpu.renderer.execution.GPUWindowFrameLifecycleTest",
+    )
+}
+
 tasks.register<JavaExec>("gpuRendererR6FirstRoutePmEvidenceBundle") {
     group = "verification"
     description = "Writes the validation-owned R6 first-route PM evidence bundle without product route activation."
