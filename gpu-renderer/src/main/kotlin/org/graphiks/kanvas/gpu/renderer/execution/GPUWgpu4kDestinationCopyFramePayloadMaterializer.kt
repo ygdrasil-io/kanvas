@@ -31,10 +31,10 @@ import io.ygdrasil.webgpu.VertexState
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
@@ -55,11 +55,57 @@ internal data class GPUWgpu4kDestinationCopyMaterializationCounters(
     val copyHeight: Int?,
 )
 
+/** Builds the closed destination-solid shader only from the canonical blend-formula authority. */
+internal fun destinationSolidRectWgsl(plan: GPUBlendPlan): String? {
+    if (plan !is GPUBlendPlan.ShaderBlendWithDstRead ||
+        plan.destinationReadRequirement !=
+        GPUBlendDestinationReadRequirement.DestinationTextureRequired ||
+        plan.sourceCoverageEncoding != GPUSourceCoverageEncoding.None
+    ) {
+        return null
+    }
+    val formulaWgsl = GPUBlendFormulaProgramLibrary.selectedFullCoverageFunctionWgsl(
+        modeLabel = plan.mode.gpuLabel,
+        formulaId = plan.formulaId,
+    ) ?: return null
+    return """
+        struct DestinationSolidRectBlock {
+            rect: vec4<f32>,
+            radii: vec4<f32>,
+            color: vec4<f32>,
+            reserved: vec4<f32>,
+            logicalOriginAndExtent: vec4<f32>,
+            inversePhysicalBacking: vec4<f32>,
+        }
+        @group(0) @binding(0) var<uniform> solid: DestinationSolidRectBlock;
+        @group(0) @binding(1) var destinationSnapshot: texture_2d<f32>;
+        @vertex fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+            var p = array<vec2<f32>, 3>(
+                vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0)
+            );
+            return vec4<f32>(p[i], 0.0, 1.0);
+        }
+        $formulaWgsl
+        @fragment fn fs_main(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
+            if (p.x < solid.rect.x || p.x >= solid.rect.z ||
+                p.y < solid.rect.y || p.y >= solid.rect.w) { discard; }
+            let local = vec2<i32>(
+                i32(p.x - solid.logicalOriginAndExtent.x),
+                i32(p.y - solid.logicalOriginAndExtent.y),
+            );
+            let dst = textureLoad(destinationSnapshot, local, 0);
+            let src = vec4<f32>(solid.color.rgb * solid.color.a, solid.color.a);
+            return kanvasBlendPremul(src, dst);
+        }
+    """.trimIndent()
+}
+
 /**
- * Closed 10D pilot: render, bounded destination snapshot, one destination-reading draw, readback.
+ * Closed 10D route: render, bounded destination snapshot, one destination-reading draw, readback.
  *
- * The frame plan remains the only route selector. This materializer accepts one exact consumer and
- * refuses all other shapes before creating a native handle. It does not use the legacy target API.
+ * The frame plan remains the only route selector. This materializer accepts one exact consumer from
+ * the canonical full-coverage blend-formula family and refuses other shapes before creating a native
+ * handle. It does not use the legacy target API.
  */
 internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
     private val device: GPUDevice,
@@ -160,16 +206,11 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
             )
         }
         val consumerBlend = consumerPacket.blendPlan
-        if (consumerBlend !is GPUBlendPlan.ShaderBlendWithDstRead ||
-            consumerBlend.destinationReadRequirement !=
-            GPUBlendDestinationReadRequirement.DestinationTextureRequired ||
-            consumerBlend.mode != GPUBlendMode.DIFFERENCE ||
-            consumerBlend.formulaId != "difference@v1" ||
-            consumerBlend.sourceCoverageEncoding != GPUSourceCoverageEncoding.None
-        ) {
+        val destinationShaderSource = consumerBlend?.let(::destinationSolidRectWgsl)
+        if (destinationShaderSource == null) {
             return refused(
                 "unsupported.native-destination-copy.consumer-blend",
-                "The pilot shader implements only exact difference@v1 without source coverage.",
+                "The destination consumer requires one canonical full-coverage destination-read formula.",
             )
         }
         val backgroundRender = renders.singleOrNull { it !== consumerRender }
@@ -491,7 +532,7 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
             val consumerShader = device.createShaderModule(
                 ShaderModuleDescriptor(
                     label = "Kanvas.frame.destinationCopy.consumerShader",
-                    code = DESTINATION_WGSL,
+                    code = destinationShaderSource,
                 ),
             ).tracked()
             val backgroundPipelineLayout = backgroundLayout?.let { layout ->
@@ -868,34 +909,5 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
             }
         """.trimIndent()
 
-        val DESTINATION_WGSL = """
-            struct DestinationSolidRectBlock {
-                rect: vec4<f32>,
-                radii: vec4<f32>,
-                color: vec4<f32>,
-                reserved: vec4<f32>,
-                logicalOriginAndExtent: vec4<f32>,
-                inversePhysicalBacking: vec4<f32>,
-            }
-            @group(0) @binding(0) var<uniform> solid: DestinationSolidRectBlock;
-            @group(0) @binding(1) var destinationSnapshot: texture_2d<f32>;
-            @vertex fn vs_main(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
-                var p = array<vec2<f32>, 3>(
-                    vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0)
-                );
-                return vec4<f32>(p[i], 0.0, 1.0);
-            }
-            @fragment fn fs_main(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
-                if (p.x < solid.rect.x || p.x >= solid.rect.z ||
-                    p.y < solid.rect.y || p.y >= solid.rect.w) { discard; }
-                let local = vec2<i32>(
-                    i32(p.x - solid.logicalOriginAndExtent.x),
-                    i32(p.y - solid.logicalOriginAndExtent.y),
-                );
-                let dst = textureLoad(destinationSnapshot, local, 0);
-                let src = vec4<f32>(solid.color.rgb * solid.color.a, solid.color.a);
-                return vec4<f32>(abs(dst.rgb - src.rgb), src.a + dst.a - src.a * dst.a);
-            }
-        """.trimIndent()
     }
 }

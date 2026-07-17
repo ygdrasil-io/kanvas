@@ -3,14 +3,21 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import io.ygdrasil.webgpu.glfwContextRenderer
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCoverageKind
+import org.graphiks.kanvas.gpu.renderer.materials.BlendPremulColor
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCpuOracle
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -81,8 +88,85 @@ import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
+import org.graphiks.wgsl.parser.parseWgslResult
 
 class GPUWgpu4kDestinationCopyFrameSmokeTest {
+    @Test
+    fun `destination materializer assembles every canonical full coverage formula`() {
+        GPUBlendMode.entries.filterNot { it == GPUBlendMode.DST }.forEach { mode ->
+            val formula = assertNotNull(
+                GPUBlendFormulaLibrary.formulaFor(mode, GPUBlendCoverageKind.Full),
+            )
+            val source = assertNotNull(
+                destinationSolidRectWgsl(
+                    GPUBlendPlan.ShaderBlendWithDstRead(
+                        mode = mode,
+                        formulaId = formula.formulaId,
+                        sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+                    ),
+                ),
+                mode.name,
+            )
+
+            assertTrue(source.contains(formula.wgsl), mode.name)
+            val parsed = parseWgslResult(source)
+            assertTrue(parsed.isSuccess, "$mode: ${parsed.errors.joinToString { it.message }}")
+        }
+    }
+
+    @Test
+    fun `prepared scene session renders every advanced destination blend formula`() {
+        val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backendSession != null)
+        backendSession!!
+        val runtimeCapabilities = requireNotNull(backendSession.capabilities)
+        val generation = GPUDeviceGenerationID(
+            runtimeCapabilities.snapshotId.substringAfterLast('-').toLong(),
+        )
+        val modes = GPUBlendMode.entries.filter { mode ->
+            mode.ordinal >= GPUBlendMode.MULTIPLY.ordinal && mode != GPUBlendMode.SCREEN
+        }
+        val session = backendSession.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(4, 4, "rgba8unorm"),
+        )
+        try {
+            modes.forEachIndexed { index, mode ->
+                val requestId = GPUReadbackRequestID("readback.prepared.destination-${mode.gpuLabel}")
+                val tasks = destinationCopyTaskList(
+                    generation = generation,
+                    capabilities = runtimeCapabilities,
+                    frameId = GPUFrameID(10_700L + index),
+                    readbackRequestId = requestId,
+                    blendMode = mode,
+                )
+                val terminal = session.renderFrame(
+                    tasks,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+                ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+
+                assertEquals(
+                    GPUFrameStructuralOutcome.Succeeded,
+                    terminal.outcome,
+                    "$mode: ${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
+                )
+                val actual = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
+                assertRgbaNear(expectedAdvancedBlendPixels(mode), actual, 1, mode.name)
+            }
+            val counters = session.nativeCounters()
+            assertEquals(1L, counters.targetCreations)
+            assertEquals(modes.size.toLong(), counters.targetNativeUses)
+            assertEquals(modes.size.toLong(), counters.submits)
+            assertEquals(modes.size.toLong(), counters.readbackCopies)
+            assertEquals(0, counters.activeNativePayloads)
+        } finally {
+            try {
+                session.close()
+            } finally {
+                GPUBackendRuntimeNativeFactory.dispose()
+            }
+        }
+    }
+
     @Test
     fun `prepared scene session dispatches destination copy on its canonical target`() {
         val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
@@ -333,8 +417,6 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
                 InvalidRoute.DuplicateConsumer to "unsupported.native-destination-copy.consumer-ambiguous",
                 InvalidRoute.MismatchedPacket to "unsupported.native-destination-copy.consumer-binding",
                 InvalidRoute.MissingDestinationBlend to "unsupported.native-destination-copy.consumer-blend",
-                InvalidRoute.MultiplyDestinationBlend to "unsupported.native-destination-copy.consumer-blend",
-                InvalidRoute.OverlayDestinationBlend to "unsupported.native-destination-copy.consumer-blend",
                 InvalidRoute.WrongDifferenceFormula to "unsupported.native-destination-copy.consumer-blend",
                 InvalidRoute.WrongDifferenceCoverage to "unsupported.native-destination-copy.consumer-blend",
                 InvalidRoute.CopyOutsideTarget to "unsupported.native-destination-copy.source-bounds",
@@ -437,6 +519,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         frameId: GPUFrameID = GPUFrameID(10_601),
         readbackRequestId: GPUReadbackRequestID =
             GPUReadbackRequestID("readback.destination-copy"),
+        blendMode: GPUBlendMode = GPUBlendMode.DIFFERENCE,
     ): GPUTaskList {
         val seal = GPUFrameCapabilitySeal.capture(frameId, generation, capabilities)
         val recordingId = GPURecordingID("recording.destination-copy")
@@ -460,8 +543,10 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             rect = COPY_BOUNDS,
             color = listOf(1f, 0f, 0f, 1f),
             blendPlan = GPUBlendPlan.ShaderBlendWithDstRead(
-                mode = GPUBlendMode.DIFFERENCE,
-                formulaId = "difference@v1",
+                mode = blendMode,
+                formulaId = requireNotNull(
+                    GPUBlendFormulaLibrary.formulaFor(blendMode, GPUBlendCoverageKind.Full),
+                ).formulaId,
                 sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
             ),
             passId = "pass.destination-copy",
@@ -618,16 +703,6 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         )
         val destinationBlend = when (invalid) {
             InvalidRoute.MissingDestinationBlend -> null
-            InvalidRoute.MultiplyDestinationBlend -> GPUBlendPlan.ShaderBlendWithDstRead(
-                mode = GPUBlendMode.MULTIPLY,
-                formulaId = "multiply@v1",
-                sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
-            )
-            InvalidRoute.OverlayDestinationBlend -> GPUBlendPlan.ShaderBlendWithDstRead(
-                mode = GPUBlendMode.OVERLAY,
-                formulaId = "overlay@v1",
-                sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
-            )
             InvalidRoute.WrongDifferenceFormula -> GPUBlendPlan.ShaderBlendWithDstRead(
                 mode = GPUBlendMode.DIFFERENCE,
                 formulaId = "difference@v2",
@@ -919,6 +994,44 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         }
     }
 
+    private fun expectedAdvancedBlendPixels(mode: GPUBlendMode): ByteArray {
+        val blended = GPUBlendCpuOracle.blendAtFullCoverage(
+            mode,
+            BlendPremulColor(1f, 0f, 0f, 1f),
+            BlendPremulColor(0f, 0f, 1f, 1f),
+        )
+        val blendedBytes = blended.toArray().map { channel ->
+            (channel.coerceIn(0f, 1f) * 255f).roundToInt()
+        }
+        return ByteArray(64).also { bytes ->
+            repeat(16) { pixel ->
+                bytes[pixel * 4 + 2] = 0xff.toByte()
+                bytes[pixel * 4 + 3] = 0xff.toByte()
+            }
+            for (y in 1..2) {
+                for (x in 1..2) {
+                    val offset = (y * 4 + x) * 4
+                    blendedBytes.forEachIndexed { channel, value ->
+                        bytes[offset + channel] = value.toByte()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun assertRgbaNear(
+        expected: ByteArray,
+        actual: ByteArray,
+        tolerance: Int,
+        label: String,
+    ) {
+        assertEquals(expected.size, actual.size, label)
+        expected.indices.forEach { index ->
+            val delta = abs((expected[index].toInt() and 0xff) - (actual[index].toInt() and 0xff))
+            assertTrue(delta <= tolerance, "$label byte[$index] delta=$delta")
+        }
+    }
+
     private fun expectedConsumerFirstClearPixels(): ByteArray = ByteArray(64).also { bytes ->
         for (y in 1 until 3) for (x in 1 until 3) {
             val offset = (y * 4 + x) * 4
@@ -1001,8 +1114,6 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         DuplicateConsumer,
         MismatchedPacket,
         MissingDestinationBlend,
-        MultiplyDestinationBlend,
-        OverlayDestinationBlend,
         WrongDifferenceFormula,
         WrongDifferenceCoverage,
         CopyOutsideTarget,
