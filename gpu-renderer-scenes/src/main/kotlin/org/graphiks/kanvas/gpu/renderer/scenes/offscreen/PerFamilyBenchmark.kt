@@ -233,6 +233,16 @@ class PerFamilyBenchmark(
                     measuredFrames,
                 )
             }
+            if (scene.usesPreparedStrokeRectPilot()) {
+                return@runCatching benchmarkPreparedStrokeRect(
+                    session,
+                    gate,
+                    family,
+                    scene,
+                    warmupFrames,
+                    measuredFrames,
+                )
+            }
             if (scene.usesPreparedRegisteredUniformRectPilot()) {
                 return@runCatching benchmarkPreparedRegisteredUniform(
                     session,
@@ -494,6 +504,94 @@ class PerFamilyBenchmark(
         }
     }
 
+    private fun benchmarkPreparedStrokeRect(
+        session: GPUBackendSession,
+        gate: FrameGatePolicy,
+        family: BenchmarkFamily,
+        scene: org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene<
+            org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand,
+        >,
+        warmupFrames: Int,
+        measuredFrames: Int,
+    ): FamilyBenchmarkResult {
+        val capabilities = session.capabilities ?: return skippedResult(
+            family,
+            BenchmarkFamilyStatus.Unsupported,
+            warmupFrames,
+            measuredFrames,
+            "unsupported: prepared stroke-rect benchmark requires observed capabilities",
+        )
+        val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
+            ?.let(::GPUDeviceGenerationID)
+            ?: return skippedResult(
+                family,
+                BenchmarkFamilyStatus.Unsupported,
+                warmupFrames,
+                measuredFrames,
+                "unsupported: prepared stroke-rect benchmark requires device generation",
+            )
+        return session.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
+        ).use { preparedSession ->
+            fun render(frameOrdinal: Long, withReadback: Boolean): Long {
+                val recorded = when (
+                    val result = PreparedStrokeRectSceneFrameRecorder().record(
+                        scene,
+                        capabilities,
+                        generation,
+                        frameOrdinal,
+                        withReadback,
+                    )
+                ) {
+                    is PreparedStrokeRectSceneFrameResult.Recorded -> result
+                    is PreparedStrokeRectSceneFrameResult.Refused -> error(result.reason)
+                }
+                val output = recorded.readbackRequestId?.let(GPUSceneFrameOutputRequest::ReadbackRgba)
+                    ?: GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly
+                val start = System.nanoTime()
+                val terminal = preparedSession.renderFrame(recorded.taskList, output)
+                    .completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                val duration = (System.nanoTime() - start).coerceAtLeast(1L)
+                check(terminal.outcome == GPUFrameStructuralOutcome.Succeeded) {
+                    terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared stroke-rect benchmark frame failed"
+                }
+                return duration
+            }
+
+            repeat(warmupFrames) { index -> render(index + 1L, withReadback = false) }
+            val samples = List(measuredFrames) { index ->
+                render(warmupFrames + index + 1L, withReadback = false)
+            }
+            render(warmupFrames + measuredFrames + 1L, withReadback = true)
+            val statistics = FrameTimeStatistics.of(samples)
+            val gateResult = gate.evaluate(family.family, statistics.meanMs)
+            val counters = preparedSession.nativeCounters()
+            FamilyBenchmarkResult(
+                family = family.family,
+                sceneId = family.sceneId,
+                status = BenchmarkFamilyStatus.Sampled,
+                warmupFrames = warmupFrames,
+                measuredFrames = measuredFrames,
+                statistics = statistics,
+                diagnostics = listOf(
+                    "sampled ${family.family} scene=${family.sceneId} via prepared submit+completion",
+                    "metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 " +
+                        "finalValidationReadbacks=${counters.readbackCopies}",
+                    "nativeFrames=${warmupFrames + measuredFrames + 1} encoders=${counters.encoders} " +
+                        "commandBuffers=${counters.commandBuffers} submits=${counters.submits}",
+                    "strokeGeometry=analytic-annular-rect.coverage bands=4 legacyStrokeWgsl=false",
+                    "solidRectCache creations=${counters.solidRectInvariantCreations} " +
+                        "reuses=${counters.solidRectInvariantReuses}",
+                    "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
+                        "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
+                        "maxMs=${statistics.maxMs.fmt()}",
+                    "frameGateStatus=${gateResult.status.wireName}",
+                ),
+            )
+        }
+    }
+
     private fun benchmarkPreparedSeparableBlur(
         session: GPUBackendSession,
         gate: FrameGatePolicy,
@@ -607,7 +705,7 @@ class PerFamilyBenchmark(
         private const val COLOR_FORMAT: String = "rgba8unorm"
         private const val HARDWARE_BASELINE: String = "Apple M-series"
 
-        /** The nine wired draw families and their representative benchmark scenes. */
+        /** The ten wired draw families and their representative benchmark scenes. */
         val families: List<BenchmarkFamily> = listOf(
             BenchmarkFamily("FillRect", "solid-card-stack"),
             BenchmarkFamily("LinearGradient", "linear-gradient-lanes"),
@@ -618,6 +716,7 @@ class PerFamilyBenchmark(
             BenchmarkFamily("Text", "glyph-atlas-strip"),
             BenchmarkFamily("Blur", "gaussian-blur-photo"),
             BenchmarkFamily("ColorMatrix", "color-matrix-filter"),
+            BenchmarkFamily("Stroke", "stroke-rect-outline"),
         )
     }
 }

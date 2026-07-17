@@ -227,6 +227,22 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
+    fun `stroke rect outline uses geometry lowering and one prepared submit`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-prepared-stroke-rect")
+        val report = renderGpuRendererSceneOffscreen(arrayOf("stroke-rect-outline", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(report.diagnostics, "strokeRect:geometryRoute=analytic-annular-rect.coverage")
+        assertContains(report.diagnostics, "strokeRect:legacyStrokeWgsl=false")
+        assertContains(
+            report.diagnostics,
+            "strokeRect:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+        )
+        assertContains(report.diagnostics, "strokeRect:pixelExact=64000/64000 maxChannelDelta=0")
+    }
+
+    @Test
     fun `solid frame sampler measures completion only and performs one final readback`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-prepared-samples")
         val scene = org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry.registry

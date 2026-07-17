@@ -11,9 +11,9 @@ import kotlin.test.assertTrue
 class PerFamilyBenchmarkTest {
 
     @Test
-    fun `families cover the nine draw families with representative scenes`() {
+    fun `families cover the ten draw families with representative scenes`() {
         val families = PerFamilyBenchmark.families
-        assertEquals(9, families.size)
+        assertEquals(10, families.size)
         assertEquals(
             listOf(
                 "FillRect" to "solid-card-stack",
@@ -25,6 +25,7 @@ class PerFamilyBenchmarkTest {
                 "Text" to "glyph-atlas-strip",
                 "Blur" to "gaussian-blur-photo",
                 "ColorMatrix" to "color-matrix-filter",
+                "Stroke" to "stroke-rect-outline",
             ),
             families.map { it.family to it.sceneId },
         )
@@ -62,7 +63,7 @@ class PerFamilyBenchmarkTest {
         val outputDir = Files.createTempDirectory("per-family-benchmark")
         val report = PerFamilyBenchmark(sessionFactory = { null }).run(outputDir)
 
-        assertEquals(9, report.results.size)
+        assertEquals(10, report.results.size)
         assertTrue(report.results.all { it.status == BenchmarkFamilyStatus.GpuUnavailable })
         assertTrue(report.results.all { it.statistics == null })
         assertTrue(report.results.all { result -> result.diagnostics.any { it.contains("webgpu-context-unavailable") } })
@@ -78,6 +79,7 @@ class PerFamilyBenchmarkTest {
         val json = outputDir.resolve("per-family-benchmark.json").readText()
         assertTrue(json.contains("\"family\": \"FillRect\""))
         assertTrue(json.contains("\"sceneId\": \"gaussian-blur-photo\""))
+        assertTrue(json.contains("\"sceneId\": \"stroke-rect-outline\""))
         assertTrue(json.contains("\"hardwareBaseline\": \"Apple M-series\""))
         assertTrue(json.contains("\"productActivation\": true"))
         assertTrue(json.contains("\"status\": \"gpu-unavailable\""))
@@ -101,6 +103,7 @@ class PerFamilyBenchmarkTest {
             "SweepGradient",
             "Blur",
             "ColorMatrix",
+            "Stroke",
         )
         val preparedResults = report.results.filter { it.family in preparedFamilies }
         assertEquals(preparedFamilies, preparedResults.map { it.family }.toSet())

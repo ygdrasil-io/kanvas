@@ -40,9 +40,9 @@ class PipelineCacheTelemetryReportTest {
     }
 
     @Test
-    fun `builds telemetry for the nine benchmark families`() {
+    fun `builds telemetry for the ten benchmark families`() {
         val built = PipelineCacheTelemetryReport.forBenchmarkFamilies(frameCount = 100)
-        assertEquals(9, built.sceneTelemetry.size)
+        assertEquals(10, built.sceneTelemetry.size)
         assertTrue(built.sceneTelemetry.all { it.totalPipelineCreations >= 1L })
         assertTrue(built.sceneTelemetry.all { it.moduleCount >= 1L })
         assertEquals(

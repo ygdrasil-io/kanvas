@@ -522,3 +522,62 @@ inputs, local reduced-resolution intermediates, blur styles, crop/tile modes,
 multi-node image-filter DAGs, or general Canvas integration. Those extensions
 must keep explicit bounds, budgets, ownership, CPU/GPU evidence, and stable
 refusal diagnostics. Stroke remains a separate Geometry/Coverage route.
+
+## Slice 10F-f axis-aligned Stroke through Geometry/Coverage
+
+The legacy `StrokeWgsl` route did not represent a rectangular stroke. Its
+packer ignored the supplied half-width and half-height, hard-coded a 4-pixel
+width, and stored center coordinates in fields that the shader also interpreted
+as edge distance and half-height. The result was a small filled analytic shape,
+not a centered rectangular outline.
+
+The promoted `stroke-rect-outline` route now keeps stroke interpretation in the
+Geometry/Coverage layer:
+
+```text
+bounded rect path + stroke facts
+  -> analytic annular-rect lowering
+  -> four disjoint coverage bands
+  -> existing prepared SolidRect batch
+```
+
+The first slice requires an axis-aligned integral path, an even integral stroke
+width, identity or translate transform, exact Miter joins, outer bounds inside
+the target, and a non-empty inner rectangle. Unsupported subpixel, overflow,
+join, miter, transform, and degenerate cases receive stable geometry refusal
+codes. No raw stroke center/width ABI or `StrokeWgsl` source reaches the promoted
+native route.
+
+Native Apple M2 Max evidence for `stroke-rect-outline`:
+
+- four disjoint bands plus the clear packet render in one prepared pass;
+- 1 encoder, 1 command buffer, 1 submit, and 1 final validation readback;
+- 64,000/64,000 pixels exactly equal to an independent CPU analytic-band
+  reference, maximum channel delta 0;
+- a 1-warmup + 2-measured benchmark created the SolidRect invariant cache once
+  and reused it three times;
+- the short sample observed 3.3505 ms mean / 298.4647 FPS and passed the local
+  frame gate; it is route evidence, not a cross-machine performance claim;
+- the per-family benchmark now samples 10/10 families.
+
+Validation commands:
+
+```text
+rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.geometry.GPUAxisAlignedStrokeRectLowererTest' --no-daemon --console=plain
+rtk ./gradlew :gpu-renderer-scenes:test --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.PreparedStrokeRectSceneFrameTest' --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneOffscreenMainTest.stroke rect outline uses geometry lowering and one prepared submit' --no-daemon --console=plain
+rtk ./gradlew :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -PsceneId=stroke-rect-outline -PsceneOutput=/tmp/kanvas-prepared-stroke-rect --no-daemon --console=plain
+rtk ./gradlew :gpu-renderer-scenes:runPerFamilyBenchmark -PwarmupFrames=1 -PmeasuredFrames=2 -PperformanceOutput=/tmp/kanvas-family-benchmark-stroke --no-daemon --console=plain
+rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test --no-daemon --console=plain
+```
+
+The complete renderer and renderer-scenes suites finished with
+`BUILD SUCCESSFUL`: 53 actionable tasks, 3 executed and 50 up-to-date.
+
+### Explicit non-claim
+
+10F-f promotes only the integral axis-aligned `stroke-rect-outline` fixture.
+It does not claim hairlines, odd or subpixel widths, fractional-edge AA, round
+or bevel joins, cap variants, dashes, path effects, rotated/perspective paths,
+general path stroking, the combined `stroke-and-filter-card`, or Canvas route
+retirement. Those cases require their own Geometry/Coverage expansion and
+reference-backed promotion evidence.
