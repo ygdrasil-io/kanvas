@@ -186,6 +186,24 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
+    fun `color matrix uses one prepared submit and matches the independent row-major reference`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-color-matrix")
+        val report = renderGpuRendererSceneOffscreen(arrayOf("color-matrix-filter", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:programs=solid-color-v1,color-matrix-v1",
+        )
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+        )
+        assertContains(report.diagnostics, "registeredUniform:withinOneLsb=64000/64000")
+    }
+
+    @Test
     fun `solid frame sampler measures completion only and performs one final readback`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-prepared-samples")
         val scene = org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry.registry

@@ -11,9 +11,9 @@ import kotlin.test.assertTrue
 class PerFamilyBenchmarkTest {
 
     @Test
-    fun `families cover the eight draw families with representative scenes`() {
+    fun `families cover the nine draw families with representative scenes`() {
         val families = PerFamilyBenchmark.families
-        assertEquals(8, families.size)
+        assertEquals(9, families.size)
         assertEquals(
             listOf(
                 "FillRect" to "solid-card-stack",
@@ -24,6 +24,7 @@ class PerFamilyBenchmarkTest {
                 "BitmapRect" to "bitmap-sampler-matrix",
                 "Text" to "glyph-atlas-strip",
                 "Blur" to "blur-radius-ladder",
+                "ColorMatrix" to "color-matrix-filter",
             ),
             families.map { it.family to it.sceneId },
         )
@@ -61,7 +62,7 @@ class PerFamilyBenchmarkTest {
         val outputDir = Files.createTempDirectory("per-family-benchmark")
         val report = PerFamilyBenchmark(sessionFactory = { null }).run(outputDir)
 
-        assertEquals(8, report.results.size)
+        assertEquals(9, report.results.size)
         assertTrue(report.results.all { it.status == BenchmarkFamilyStatus.GpuUnavailable })
         assertTrue(report.results.all { it.statistics == null })
         assertTrue(report.results.all { result -> result.diagnostics.any { it.contains("webgpu-context-unavailable") } })
@@ -93,7 +94,13 @@ class PerFamilyBenchmarkTest {
 
         if (report.adapterInfo == null) return
 
-        val preparedFamilies = setOf("FillRect", "LinearGradient", "RadialGradient", "SweepGradient")
+        val preparedFamilies = setOf(
+            "FillRect",
+            "LinearGradient",
+            "RadialGradient",
+            "SweepGradient",
+            "ColorMatrix",
+        )
         val preparedResults = report.results.filter { it.family in preparedFamilies }
         assertEquals(preparedFamilies, preparedResults.map { it.family }.toSet())
         preparedResults.forEach { result ->

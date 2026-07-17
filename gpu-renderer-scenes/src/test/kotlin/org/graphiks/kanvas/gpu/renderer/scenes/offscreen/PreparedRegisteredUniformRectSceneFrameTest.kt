@@ -83,6 +83,29 @@ class PreparedRegisteredUniformRectSceneFrameTest {
         )
     }
 
+    @Test
+    fun `color matrix scene lowers row-major programs into the generic prepared batch`() {
+        val recorded = assertIs<PreparedRegisteredUniformRectSceneFrameResult.Recorded>(
+            PreparedRegisteredUniformRectSceneFrameRecorder().record(
+                GPURendererSceneRegistry.registry.requireScene("color-matrix-filter"),
+                capabilities(),
+                GPUDeviceGenerationID(9),
+                frameOrdinal = 5L,
+                withReadback = true,
+            ),
+        )
+
+        assertEquals(4, recorded.semantics.size)
+        assertEquals(GPURegisteredUniformProgram.SolidColor, recorded.semantics.first().program)
+        assertTrue(recorded.semantics.drop(1).all {
+            it.program == GPURegisteredUniformProgram.ColorMatrix && it.uniformBytes.size == 96
+        })
+        assertContains(
+            recorded.diagnostics,
+            "registeredUniform:programs=solid-color-v1,color-matrix-v1",
+        )
+    }
+
     private fun capabilities() = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "unit", "adapter", "device"),
         facts = listOf(GPUCapabilityFact("limits", "test", "observed", true, "prepared-registered-scene")),

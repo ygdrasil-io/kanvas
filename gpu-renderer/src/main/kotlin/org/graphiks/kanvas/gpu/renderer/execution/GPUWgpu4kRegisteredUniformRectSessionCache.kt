@@ -24,6 +24,7 @@ import io.ygdrasil.webgpu.RenderPipelineDescriptor
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.VertexState
 import org.graphiks.kanvas.gpu.renderer.payloads.GPURegisteredUniformProgram
+import org.graphiks.kanvas.gpu.renderer.wgsl.ColorMatrixWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientEntryPoint
@@ -202,6 +203,7 @@ internal fun registeredUniformRectWgsl(program: GPURegisteredUniformProgram): St
     GPURegisteredUniformProgram.LinearGradient -> REGISTERED_UNIFORM_LINEAR_GRADIENT_WGSL
     GPURegisteredUniformProgram.RadialGradient -> REGISTERED_UNIFORM_RADIAL_GRADIENT_WGSL
     GPURegisteredUniformProgram.SweepGradient -> REGISTERED_UNIFORM_SWEEP_GRADIENT_WGSL
+    GPURegisteredUniformProgram.ColorMatrix -> ColorMatrixWgsl
     GPURegisteredUniformProgram.SimpleRuntimeEffect -> REGISTERED_UNIFORM_SIMPLE_RT_WGSL
     else -> error("Registered uniform program ${program.wireId} has no native implementation in this slice")
 }

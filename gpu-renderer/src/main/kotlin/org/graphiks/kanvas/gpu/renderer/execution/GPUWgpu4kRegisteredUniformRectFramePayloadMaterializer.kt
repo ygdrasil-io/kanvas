@@ -126,12 +126,13 @@ internal class GPUWgpu4kRegisteredUniformRectFramePayloadMaterializer(
             GPURegisteredUniformProgram.LinearGradient,
             GPURegisteredUniformProgram.RadialGradient,
             GPURegisteredUniformProgram.SweepGradient,
+            GPURegisteredUniformProgram.ColorMatrix,
             GPURegisteredUniformProgram.SimpleRuntimeEffect,
         )
         if (semanticPackets.any { (_, semantic) -> semantic.program !in supportedPrograms }) {
             return refused(
                 "unsupported.native-registered-uniform.program",
-                "This slice supports solid color, registered two-stop gradients, and SimpleRT.",
+                "This slice supports solid color, registered two-stop gradients, ColorMatrix, and SimpleRT.",
             )
         }
         if (semanticPackets.any { (packet, semantic) ->

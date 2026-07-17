@@ -508,7 +508,7 @@ class PerFamilyBenchmark(
         private const val COLOR_FORMAT: String = "rgba8unorm"
         private const val HARDWARE_BASELINE: String = "Apple M-series"
 
-        /** The eight wired draw families and their representative benchmark scenes. */
+        /** The nine wired draw families and their representative benchmark scenes. */
         val families: List<BenchmarkFamily> = listOf(
             BenchmarkFamily("FillRect", "solid-card-stack"),
             BenchmarkFamily("LinearGradient", "linear-gradient-lanes"),
@@ -518,6 +518,7 @@ class PerFamilyBenchmark(
             BenchmarkFamily("BitmapRect", "bitmap-sampler-matrix"),
             BenchmarkFamily("Text", "glyph-atlas-strip"),
             BenchmarkFamily("Blur", "blur-radius-ladder"),
+            BenchmarkFamily("ColorMatrix", "color-matrix-filter"),
         )
     }
 }

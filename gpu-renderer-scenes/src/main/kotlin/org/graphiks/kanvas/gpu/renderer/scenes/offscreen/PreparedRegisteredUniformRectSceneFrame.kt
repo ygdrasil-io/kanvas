@@ -43,10 +43,12 @@ internal class PreparedRegisteredUniformRectSceneFrameRecorder(
         frameOrdinal: Long,
         withReadback: Boolean,
     ): PreparedRegisteredUniformRectSceneFrameResult {
+        val acceptsColorMatrix = scene.sceneId.value in COLOR_MATRIX_SCENE_IDS
         val unsupported = scene.commands.filterNot {
             it is SceneCommand.Clear || it is SceneCommand.LinearGradientRect ||
                 it is SceneCommand.RadialGradientRect || it is SceneCommand.SweepGradientRect ||
-                (it is SceneCommand.RuntimeEffectTile && it.isRegisteredSimpleRt)
+                (it is SceneCommand.RuntimeEffectTile && it.isRegisteredSimpleRt) ||
+                (acceptsColorMatrix && it is SceneCommand.FillRect)
         }
         if (unsupported.isNotEmpty()) {
             return PreparedRegisteredUniformRectSceneFrameResult.Refused(
@@ -57,7 +59,7 @@ internal class PreparedRegisteredUniformRectSceneFrameRecorder(
             ?: return PreparedRegisteredUniformRectSceneFrameResult.Refused(
                 "prepared registered uniform scene requires exactly one clear command",
             )
-        val registeredDraws = scene.commands.filter { it.isRegisteredUniformRectCommand() }
+        val registeredDraws = scene.commands.filter { it.isRegisteredUniformRectCommand(acceptsColorMatrix) }
         if (registeredDraws.isEmpty()) {
             return PreparedRegisteredUniformRectSceneFrameResult.Refused(
                 "prepared registered uniform scene requires at least one registered draw",
@@ -84,6 +86,7 @@ internal class PreparedRegisteredUniformRectSceneFrameRecorder(
                     is SceneCommand.LinearGradientRect -> GPURegisteredUniformProgram.LinearGradient
                     is SceneCommand.RadialGradientRect -> GPURegisteredUniformProgram.RadialGradient
                     is SceneCommand.SweepGradientRect -> GPURegisteredUniformProgram.SweepGradient
+                    is SceneCommand.FillRect -> GPURegisteredUniformProgram.ColorMatrix
                     is SceneCommand.RuntimeEffectTile -> GPURegisteredUniformProgram.SimpleRuntimeEffect
                     else -> error("unreachable registered uniform command")
                 }
@@ -113,6 +116,8 @@ internal class PreparedRegisteredUniformRectSceneFrameRecorder(
                     )
                     is SceneCommand.RuntimeEffectTile ->
                         UniformPacker.simpleRtBytes(requireNotNull(command.uniformColor))
+                    is SceneCommand.FillRect ->
+                        UniformPacker.colorMatrixBytes(command.color, command.paintOrder)
                 }
                 add(
                     GPURegisteredUniformRectResolvedDraw(
@@ -195,15 +200,19 @@ internal class PreparedRegisteredUniformRectSceneFrameRecorder(
                 repeat(bounds.width) { localX ->
                     val x = bounds.left + localX + 0.5f
                     val y = bounds.top + localY + 0.5f
-                    val straight = if (command is SceneCommand.RuntimeEffectTile) {
-                        val color = requireNotNull(command.uniformColor)
-                        FloatArray(4) { channel -> color.channel(channel) }
-                    } else {
-                        val t = command.registeredGradientT(x, y).coerceIn(0f, 1f)
-                        val startColor = command.registeredGradientStartColor()
-                        val endColor = command.registeredGradientEndColor()
-                        FloatArray(4) { channel ->
-                            startColor.channel(channel) * (1f - t) + endColor.channel(channel) * t
+                    val straight = when (command) {
+                        is SceneCommand.RuntimeEffectTile -> {
+                            val color = requireNotNull(command.uniformColor)
+                            FloatArray(4) { channel -> color.channel(channel) }
+                        }
+                        is SceneCommand.FillRect -> command.color.applyIndependentColorMatrix(command.paintOrder)
+                        else -> {
+                            val t = command.registeredGradientT(x, y).coerceIn(0f, 1f)
+                            val startColor = command.registeredGradientStartColor()
+                            val endColor = command.registeredGradientEndColor()
+                            FloatArray(4) { channel ->
+                                startColor.channel(channel) * (1f - t) + endColor.channel(channel) * t
+                            }
                         }
                     }
                     val sourceAlpha = straight[3]
@@ -235,7 +244,7 @@ internal fun GPURendererScene<SceneCommand>.usesPreparedRegisteredUniformRectPil
         "sweep-disk",
         "runtime-effect-uniform",
         "runtime-effect-child",
-    )
+    ) + COLOR_MATRIX_SCENE_IDS
 
 private fun org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect.toRegisteredIntegralBoundsOrNull(): GPUPixelBounds? {
     val values = listOf(left, top, right, bottom)
@@ -261,13 +270,15 @@ private fun SceneCommand.isRegisteredGradient(): Boolean =
     this is SceneCommand.LinearGradientRect || this is SceneCommand.RadialGradientRect ||
         this is SceneCommand.SweepGradientRect
 
-private fun SceneCommand.isRegisteredUniformRectCommand(): Boolean =
-    isRegisteredGradient() || (this is SceneCommand.RuntimeEffectTile && isRegisteredSimpleRt)
+private fun SceneCommand.isRegisteredUniformRectCommand(acceptsColorMatrix: Boolean): Boolean =
+    isRegisteredGradient() || (this is SceneCommand.RuntimeEffectTile && isRegisteredSimpleRt) ||
+        (acceptsColorMatrix && this is SceneCommand.FillRect)
 
 private fun SceneCommand.registeredUniformRect() = when (this) {
     is SceneCommand.LinearGradientRect -> rect
     is SceneCommand.RadialGradientRect -> rect
     is SceneCommand.SweepGradientRect -> rect
+    is SceneCommand.FillRect -> rect
     is SceneCommand.RuntimeEffectTile -> requireNotNull(rect)
     else -> error("not a registered uniform command")
 }
@@ -276,6 +287,7 @@ private fun SceneCommand.registeredUniformPaintOrder() = when (this) {
     is SceneCommand.LinearGradientRect -> paintOrder
     is SceneCommand.RadialGradientRect -> paintOrder
     is SceneCommand.SweepGradientRect -> paintOrder
+    is SceneCommand.FillRect -> paintOrder
     is SceneCommand.RuntimeEffectTile -> paintOrder
     else -> error("not a registered uniform command")
 }
@@ -322,4 +334,20 @@ private fun SceneCommand.registeredGradientT(x: Float, y: Float): Float = when (
     else -> error("not a registered gradient command")
 }
 
+private fun org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor.applyIndependentColorMatrix(
+    kind: Int,
+): FloatArray {
+    val transformed = when (kind) {
+        1 -> floatArrayOf(r, g, b, a)
+        2 -> {
+            val luma = 0.213f * r + 0.715f * g + 0.072f * b
+            floatArrayOf(luma, luma, luma, a)
+        }
+        3 -> floatArrayOf(g, b, r, a)
+        else -> error("unsupported independent color matrix fixture kind: $kind")
+    }
+    return FloatArray(4) { index -> transformed[index].coerceIn(0f, 1f) }
+}
+
 private const val REGISTERED_UNIFORM_SCENE_FRAME_ID_BASE = 10_800L
+private val COLOR_MATRIX_SCENE_IDS = setOf("color-matrix-filter", "color-matrix-tint")

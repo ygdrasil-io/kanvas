@@ -88,9 +88,9 @@ object UniformPacker {
         buf.putFloat(color.r); buf.putFloat(color.g); buf.putFloat(color.b); buf.putFloat(color.a)
         when (kind) {
             1 -> {
-                buf.putFloat(0.3f); buf.putFloat(0.3f); buf.putFloat(0.3f); buf.putFloat(0f)
-                buf.putFloat(0.6f); buf.putFloat(0.6f); buf.putFloat(0.6f); buf.putFloat(0f)
-                buf.putFloat(0.1f); buf.putFloat(0.1f); buf.putFloat(0.1f); buf.putFloat(0f)
+                buf.putFloat(1f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
+                buf.putFloat(0f); buf.putFloat(1f); buf.putFloat(0f); buf.putFloat(0f)
+                buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(1f); buf.putFloat(0f)
                 buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(1f)
                 buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
             }
@@ -101,13 +101,14 @@ object UniformPacker {
                 buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(1f)
                 buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
             }
-            else -> {
-                buf.putFloat(1f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
+            3 -> {
                 buf.putFloat(0f); buf.putFloat(1f); buf.putFloat(0f); buf.putFloat(0f)
                 buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(1f); buf.putFloat(0f)
+                buf.putFloat(1f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
                 buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(1f)
                 buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f); buf.putFloat(0f)
             }
+            else -> error("unsupported color matrix fixture kind: $kind")
         }
         return buf.array()
     }

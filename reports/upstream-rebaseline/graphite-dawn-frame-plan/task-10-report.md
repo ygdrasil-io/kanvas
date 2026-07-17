@@ -405,3 +405,63 @@ their corrected premultiplied program evidence; the current legacy stroke ABI
 must be diagnosed before promotion. Bitmap/text require sampled-resource
 bindings, and paths require their geometry/coverage route rather than this
 uniform-only contract.
+
+## Slice 10F-d row-major ColorMatrix promotion
+
+The ColorMatrix investigation compared the legacy Kanvas ABI with Skia's
+`SkMatrixColorFilter` and Graphite's `MatrixColorFilterBlock`. The root cause
+was not the 96-byte allocation: Kanvas already stored one input color, four
+matrix rows, and one translation vector. The fragment program multiplied those
+rows as columns and returned straight-alpha output into a premultiplied
+`SrcOver` attachment.
+
+The corrected contract now:
+
+- interprets the four vectors as row-major output rows, matching Skia's 4x5
+  matrix convention;
+- adds the fifth vector as RGBA translation;
+- clamps the filtered unpremultiplied color to `[0, 1]`;
+- premultiplies once before fixed-function `SrcOver`;
+- keeps the exact 96-byte ABI and closed `color-matrix-v1` program identity;
+- retains no WGSL source or native handles in the frame plan.
+
+The `color-matrix-filter` and `color-matrix-tint` scenes now use the prepared
+registered-uniform route. The independent CPU reference applies identity,
+Skia-luma grayscale, or a bounded channel rotation by scene fixture kind, then
+premultiplies and composites independently of the packed GPU bytes.
+
+Native Apple M2 Max evidence for `color-matrix-filter`:
+
+- 1 encoder, 1 command buffer, 1 submit, and 1 validation readback;
+- 2 invariant-cache creations and 2 reuses within the frame;
+- 64,000/64,000 pixels exactly equal to the independent CPU reference;
+- maximum channel delta 0.
+
+The per-family benchmark now contains nine families. ColorMatrix uses prepared
+submit-to-completion measurement with zero measured readbacks and one final
+validation readback. A small 1-warmup + 2-measured run sampled all 9/9
+families; ColorMatrix observed 3.7718 ms mean / 265.1245 FPS. This short sample
+is execution evidence only, not a stable cross-machine performance claim.
+
+Validation commands:
+
+```text
+rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.wgsl.ColorMatrixWgslTest'
+rtk ./gradlew :gpu-renderer-scenes:test --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.PreparedRegisteredUniformRectSceneFrameTest.color matrix scene lowers row-major programs into the generic prepared batch' --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneOffscreenMainTest.color matrix uses one prepared submit and matches the independent row-major reference'
+rtk ./gradlew :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -PsceneId=color-matrix-filter -PsceneOutput=/tmp/kanvas-color-matrix-prepared --no-daemon --console=plain
+rtk ./gradlew :gpu-renderer-scenes:runPerFamilyBenchmark -PwarmupFrames=1 -PmeasuredFrames=2 -PperformanceOutput=/tmp/kanvas-family-benchmark-color-matrix --no-daemon --console=plain
+rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test --no-daemon --console=plain
+```
+
+The complete renderer and renderer-scenes suites finished with
+`BUILD SUCCESSFUL`: 53 actionable tasks, 3 executed and 50 up-to-date. The
+native ColorMatrix test was executed on the available adapter rather than
+returning through its explicit adapter-unavailable guard.
+
+### Explicit non-claim
+
+10F-d promotes only the bounded solid-input ColorMatrix scene program. It does
+not claim arbitrary image-filter DAGs, sampled-image ColorMatrix, HSLA-domain
+matrices, unclamped matrices, blur, or stroke. Blur requires an intermediate
+texture and separable filter passes; stroke belongs to geometry/coverage and
+must not inherit the legacy overlapping center/dimension uniform fields.
