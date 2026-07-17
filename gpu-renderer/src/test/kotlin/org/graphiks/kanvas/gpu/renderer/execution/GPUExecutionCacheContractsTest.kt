@@ -5,11 +5,98 @@ import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheEventResult
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUTelemetryLedger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.TestFactory
 
 class GPUExecutionCacheContractsTest {
+    @TestFactory
+    fun `every execution cache domain retains failed disposal until close retry`(): List<DynamicTest> =
+        GPUExecutionCacheDomain.entries.map { domain ->
+            DynamicTest.dynamicTest(domain.telemetryDomain) {
+                val probe = RetryingCloseProbe(closeFailuresRemaining = 1)
+                val cache = GPUExecutionObjectCache(
+                    domain = domain,
+                    dispose = RetryingCloseProbe::close,
+                )
+                val request = cacheRequest(domain = domain)
+                cache.getOrCreate(request) { probe }
+
+                val incomplete = assertFailsWith<GPUOwnedNativeCloseIncompleteException> {
+                    cache.close()
+                }
+                assertEquals("execution-cache-${domain.telemetryDomain}", incomplete.ownerLabel)
+                assertEquals(1, incomplete.remainingOwnerCount)
+                assertFailsWith<IllegalStateException> {
+                    cache.getOrCreate(request) { RetryingCloseProbe() }
+                }
+
+                cache.close()
+                cache.close()
+
+                assertEquals(2, probe.closeAttempts)
+                assertEquals(1, probe.successfulCloses)
+            }
+        }
+
+    @Test
+    fun `failed execution cache eviction retains the same entry for retry`() {
+        val probe = RetryingCloseProbe(closeFailuresRemaining = 1)
+        val cache = GPUExecutionObjectCache(
+            domain = GPUExecutionCacheDomain.Module,
+            dispose = RetryingCloseProbe::close,
+        )
+        val request = cacheRequest(domain = GPUExecutionCacheDomain.Module)
+        cache.getOrCreate(request) { probe }
+
+        assertFailsWith<IllegalStateException> { cache.evict(request) }
+        val retained = assertIs<GPUExecutionCacheDecision.Ready<RetryingCloseProbe>>(
+            cache.getOrCreate(request) { error("failed eviction must retain the existing entry") },
+        )
+        assertSame(probe, retained.handle)
+
+        cache.evict(request)
+        assertEquals(2, probe.closeAttempts)
+        assertEquals(1, probe.successfulCloses)
+    }
+
+    @Test
+    fun `runtime downstream teardown stops queue and window after persistent execution cache failure`() {
+        val events = mutableListOf<String>()
+        val queueCompletion = RuntimeCloseProbe("queue-completion", events)
+        val executionCaches = RuntimeCloseProbe("execution-cache", events, closeFailuresRemaining = 2)
+        val queueManager = RuntimeCloseProbe("queue-manager", events)
+        val windowBackend = RuntimeCloseProbe("window-backend", events)
+        val teardown = GPUBackendRuntimeDownstreamTeardown(
+            queueCompletion = queueCompletion,
+            executionCaches = executionCaches,
+            queueManager = queueManager,
+            windowBackend = windowBackend,
+        )
+
+        assertFailsWith<GPUOwnedNativeCloseIncompleteException> { teardown.close() }
+        assertFailsWith<GPUOwnedNativeCloseIncompleteException> { teardown.close() }
+        assertEquals(listOf("queue-completion"), events)
+        assertEquals(0, queueManager.closeAttempts)
+        assertEquals(0, windowBackend.closeAttempts)
+
+        teardown.close()
+        teardown.close()
+
+        assertEquals(
+            listOf("queue-completion", "execution-cache", "queue-manager", "window-backend"),
+            events,
+        )
+        assertEquals(3, executionCaches.closeAttempts)
+        listOf(queueCompletion, executionCaches, queueManager, windowBackend).forEach { owner ->
+            assertEquals(1, owner.successfulCloses)
+        }
+    }
+
     @Test
     fun `execution cache records miss create and hit without leaking backend handles`() {
         val cache = GPUExecutionObjectCache<String>(domain = GPUExecutionCacheDomain.Module)
@@ -159,6 +246,47 @@ class GPUExecutionCacheContractsTest {
 
         override fun close() {
             closed = true
+        }
+    }
+
+    private class RetryingCloseProbe(
+        private var closeFailuresRemaining: Int = 0,
+    ) {
+        var closeAttempts: Int = 0
+            private set
+        var successfulCloses: Int = 0
+            private set
+
+        fun close() {
+            closeAttempts += 1
+            if (closeFailuresRemaining > 0) {
+                closeFailuresRemaining -= 1
+                error("execution cache dispose failed")
+            }
+            check(successfulCloses == 0) { "execution cache entry disposed more than once" }
+            successfulCloses += 1
+        }
+    }
+
+    private class RuntimeCloseProbe(
+        private val label: String,
+        private val events: MutableList<String>,
+        private var closeFailuresRemaining: Int = 0,
+    ) : AutoCloseable {
+        var closeAttempts: Int = 0
+            private set
+        var successfulCloses: Int = 0
+            private set
+
+        override fun close() {
+            closeAttempts += 1
+            if (closeFailuresRemaining > 0) {
+                closeFailuresRemaining -= 1
+                error("$label close failed")
+            }
+            check(successfulCloses == 0) { "$label closed more than once" }
+            successfulCloses += 1
+            events += label
         }
     }
 

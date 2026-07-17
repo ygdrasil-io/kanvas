@@ -234,6 +234,7 @@ internal class GPURuntimeResourceAdapter(
             Collections.newSetFromMap(IdentityHashMap<AutoCloseable, Boolean>()),
         ) { ownedHandleOwners.containsKey(it) || borrowedHandleTokens[it].orEmpty().isNotEmpty() }
         draft.detachPendingOwnedHandles(ownedConflicts)
+        if (ownedConflicts.isNotEmpty()) return false
         val pendingOwned = draft.reservedOwnedHandlesSnapshot()
         val borrowed = draft.payload.borrowedHandlesExcludingAnchors()
             .filterNot { ownedHandleOwners.containsKey(it) }

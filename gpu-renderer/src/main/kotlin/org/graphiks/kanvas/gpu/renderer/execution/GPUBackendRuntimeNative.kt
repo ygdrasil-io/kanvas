@@ -79,7 +79,9 @@ import io.ygdrasil.webgpu.toNativeAddress
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -591,20 +593,171 @@ internal class GPUBackendRuntimeTeardownGate(
     }
 }
 
-private fun closePreparedSceneResources(vararg resources: AutoCloseable) {
-    var firstFailure: Throwable? = null
-    resources.forEach { resource ->
-        try {
-            resource.close()
-        } catch (failure: Throwable) {
-            if (firstFailure == null) {
-                firstFailure = failure
-            } else {
-                checkNotNull(firstFailure).addSuppressed(failure)
+/** Sequential runtime tail: an incomplete owner keeps every later device/window dependency alive. */
+internal class GPUBackendRuntimeDownstreamTeardown(
+    queueCompletion: AutoCloseable,
+    executionCaches: AutoCloseable,
+    queueManager: AutoCloseable,
+    windowBackend: AutoCloseable,
+) : AutoCloseable {
+    private data class PendingOwner(val label: String, val owner: AutoCloseable)
+
+    private val pending = mutableListOf(
+        PendingOwner("queue-completion", queueCompletion),
+        PendingOwner("execution-cache", executionCaches),
+        PendingOwner("queue-manager", queueManager),
+        PendingOwner("window-backend", windowBackend),
+    )
+
+    @Synchronized
+    override fun close() {
+        while (pending.isNotEmpty()) {
+            val next = pending.first()
+            try {
+                next.owner.close()
+                pending.removeAt(0)
+            } catch (failure: Throwable) {
+                throw GPUOwnedNativeCloseIncompleteException(
+                    ownerLabel = "runtime-downstream-${next.label}",
+                    remainingOwnerCount = pending.size,
+                    failures = listOf(failure),
+                )
             }
         }
     }
-    firstFailure?.let { throw it }
+}
+
+internal data class GPUPreparedSceneChildOwnerTier(
+    val label: String,
+    val owners: List<AutoCloseable>,
+) {
+    init {
+        require(label.isNotBlank())
+        require(owners.isNotEmpty())
+    }
+}
+
+/** Real prepared-scene child teardown ordered from active work to the target dependency. */
+internal class GPUPreparedSceneChildTeardown(
+    ownerTiers: List<GPUPreparedSceneChildOwnerTier>,
+    private val releaseLease: AutoCloseable,
+) : AutoCloseable {
+    private class PendingTier(
+        val label: String,
+        val owners: MutableList<AutoCloseable>,
+    )
+
+    private val tiers = ownerTiers.map { tier -> PendingTier(tier.label, tier.owners.toMutableList()) }
+    private var leaseReleased = false
+    private var terminal = false
+
+    init {
+        require(ownerTiers.isNotEmpty())
+        val identities = java.util.IdentityHashMap<AutoCloseable, Unit>()
+        ownerTiers.flatMap(GPUPreparedSceneChildOwnerTier::owners).forEach { owner ->
+            require(identities.put(owner, Unit) == null) {
+                "Prepared scene child teardown owners must be identity-unique"
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        if (terminal) return
+        tiers.forEach { tier -> closeTier(tier) }
+        if (!leaseReleased) {
+            try {
+                releaseLease.close()
+                leaseReleased = true
+            } catch (failure: Throwable) {
+                throw GPUOwnedNativeCloseIncompleteException(
+                    ownerLabel = "prepared-scene-child-lease",
+                    remainingOwnerCount = 1,
+                    failures = listOf(failure),
+                )
+            }
+        }
+        terminal = true
+    }
+
+    private fun closeTier(tier: PendingTier) {
+        if (tier.owners.isEmpty()) return
+        val failures = mutableListOf<Throwable>()
+        tier.owners.toList().forEach { owner ->
+            try {
+                owner.close()
+                tier.owners.removeAll { it === owner }
+            } catch (failure: Throwable) {
+                failures += failure
+            }
+        }
+        if (tier.owners.isNotEmpty()) {
+            throw GPUOwnedNativeCloseIncompleteException(
+                ownerLabel = "prepared-scene-child-${tier.label}",
+                remainingOwnerCount = tier.owners.size,
+                failures = failures,
+            )
+        }
+    }
+}
+
+/** Two-phase mapper/executor owner used by the prepared-scene activity tier. */
+internal class GPUPreparedSceneMappingExecutorCloser(
+    private val mappingExecutor: ExecutorService,
+    private val nativeReadbackMapper: AutoCloseable,
+    private val terminationTimeout: Long = 5,
+    private val terminationTimeUnit: TimeUnit = TimeUnit.SECONDS,
+) : AutoCloseable {
+    private var shutdownRequested = false
+    private var mapperClosed = false
+    private var executorTerminated = false
+
+    init {
+        require(terminationTimeout >= 0)
+    }
+
+    @Synchronized
+    override fun close() {
+        if (mapperClosed && executorTerminated) return
+        val failures = mutableListOf<Throwable>()
+        if (!shutdownRequested) {
+            try {
+                mappingExecutor.shutdownNow()
+                shutdownRequested = true
+            } catch (failure: Throwable) {
+                failures += failure
+            }
+        }
+        if (!mapperClosed) {
+            try {
+                nativeReadbackMapper.close()
+                mapperClosed = true
+            } catch (failure: Throwable) {
+                failures += failure
+            }
+        }
+        if (shutdownRequested && !executorTerminated) {
+            try {
+                if (mappingExecutor.awaitTermination(terminationTimeout, terminationTimeUnit)) {
+                    executorTerminated = true
+                } else {
+                    failures += IllegalStateException(
+                        "Prepared scene readback mapping executor did not terminate",
+                    )
+                }
+            } catch (failure: Throwable) {
+                failures += failure
+            }
+        }
+        val remaining = (if (mapperClosed) 0 else 1) + (if (executorTerminated) 0 else 1)
+        if (remaining > 0) {
+            throw GPUOwnedNativeCloseIncompleteException(
+                ownerLabel = "prepared-scene-mapping",
+                remainingOwnerCount = remaining,
+                failures = failures,
+            )
+        }
+    }
 }
 
 internal class GPUPreparedSceneChildRegistry(
@@ -627,6 +780,8 @@ internal class GPUPreparedSceneChildRegistry(
             val bound = synchronized(registry) { child }
             bound?.close()
         }
+
+        internal fun hasBoundChild(): Boolean = synchronized(registry) { child != null }
 
         override fun close() {
             val teardownNow = synchronized(registry) {
@@ -653,12 +808,8 @@ internal class GPUPreparedSceneChildRegistry(
         val children: List<Lease>
         var teardownNow: Boolean
         synchronized(this) {
-            children = if (closeRequested) {
-                emptyList()
-            } else {
-                closeRequested = true
-                leases.toList()
-            }
+            closeRequested = true
+            children = leases.toList()
             teardownNow = claimTeardownIfReady()
         }
         var firstFailure: Throwable? = null
@@ -832,18 +983,12 @@ private class WgpuBackendSession(
                 ),
             ),
             adapter = runtimeResourceAdapter,
-            downstreamBackend = AutoCloseable {
-                queueCompletionRuntime.close()
-                try {
-                    executionCaches.close()
-                } finally {
-                    try {
-                        queueManager.close()
-                    } finally {
-                        glfw.close()
-                    }
-                }
-            },
+            downstreamBackend = GPUBackendRuntimeDownstreamTeardown(
+                queueCompletion = AutoCloseable { queueCompletionRuntime.close() },
+                executionCaches = executionCaches,
+                queueManager = queueManager,
+                windowBackend = glfw,
+            ),
         )
     }
     private val adapterSummary = adapterSummary(glfw)
@@ -981,22 +1126,9 @@ private class WgpuBackendSession(
             Thread(task, "kanvas-prepared-scene-readback").apply { isDaemon = true }
         }
         val nativeReadbackMapper = GPUWgpu4kNativeReadbackMapper(mappingExecutor)
-        val mappingExecutorCloser = setupTransaction.own(AutoCloseable {
-            mappingExecutor.shutdownNow()
-            var firstFailure: Throwable? = null
-            try {
-                nativeReadbackMapper.close()
-            } catch (failure: Throwable) {
-                firstFailure = failure
-            }
-            if (!mappingExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                val failure = IllegalStateException(
-                    "Prepared scene readback mapping executor did not terminate",
-                )
-                if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
-            }
-            firstFailure?.let { throw it }
-        })
+        val mappingExecutorCloser = setupTransaction.own(
+            GPUPreparedSceneMappingExecutorCloser(mappingExecutor, nativeReadbackMapper),
+        )
         val readback = GPUConcreteFrameReadbackAccess(
             resourceProvider,
             nativeReadbackMapper,
@@ -1004,6 +1136,30 @@ private class WgpuBackendSession(
         val retentionObserver = PreparedSceneRetentionObserver()
         val coordinatorCreations = AtomicLong(0L)
         var canonicalTargetRef: GPUFrameTargetRef? = null
+        val childTeardown = GPUPreparedSceneChildTeardown(
+            ownerTiers = listOf(
+                GPUPreparedSceneChildOwnerTier(
+                    label = "activity",
+                    owners = listOf(encodingBackend, mappingExecutorCloser),
+                ),
+                GPUPreparedSceneChildOwnerTier(
+                    label = "cache",
+                    owners = listOf(
+                        surfaceBlitCache,
+                        solidRectCache,
+                        colorGlyphCache,
+                        registeredUniformRectCache,
+                        separableBlurRectCache,
+                        destinationCopyCache,
+                    ),
+                ),
+                GPUPreparedSceneChildOwnerTier(
+                    label = "target",
+                    owners = listOf(preparedTarget),
+                ),
+            ),
+            releaseLease = childLease,
+        )
 
         GPUPreparedSceneFrameSession(
             compatibilityValidator = GPUPreparedSceneCompatibilityValidator { taskList ->
@@ -1150,23 +1306,7 @@ private class WgpuBackendSession(
                     ),
                 )
             },
-            closeAction = {
-                try {
-                    closePreparedSceneChildResources(
-                        encodingBackend,
-                        mappingExecutorCloser,
-                        preparedTarget,
-                        solidRectCache,
-                        colorGlyphCache,
-                        registeredUniformRectCache,
-                        separableBlurRectCache,
-                        destinationCopyCache,
-                        surfaceBlitCache,
-                    )
-                } finally {
-                    childLease.close()
-                }
-            },
+            closeAction = childTeardown::close,
             nativeCountersFactory = {
                 val targetCounts = targetLifecycle.snapshot()
                 val encoding = encodingBackend.counters()
@@ -1224,7 +1364,7 @@ private class WgpuBackendSession(
                 preparedSceneSetupRollbackQuarantine.retain(setupTransaction)
             }
             rollbackFailure?.let { failure.addSuppressed(it) }
-            childLease.close()
+            if (!childLease.hasBoundChild()) childLease.close()
             throw failure
         }
     }
@@ -1245,68 +1385,6 @@ private class WgpuBackendSession(
 
     private fun closeRuntimeResources() {
         runtimeTeardownGate.close()
-    }
-
-    private fun closePreparedSceneChildResources(
-        encodingBackend: GPUWgpu4kFrameEncodingBackend,
-        mappingExecutorCloser: AutoCloseable,
-        preparedTarget: GPUWgpu4kPreparedSceneTarget,
-        solidRectCache: GPUWgpu4kSolidRectSessionCache,
-        colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
-        registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
-        separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
-        destinationCopyCache: GPUWgpu4kDestinationCopySessionCache,
-        surfaceBlitCache: GPUWgpu4kSurfaceBlitSessionCache,
-    ) {
-        var firstFailure: Throwable? = null
-        try {
-            closePreparedSceneResources(encodingBackend, mappingExecutorCloser)
-        } catch (failure: Throwable) {
-            firstFailure = failure
-        }
-        try {
-            surfaceBlitCache.close()
-        } catch (failure: Throwable) {
-            synchronized(this) { quarantinedSurfaceBlitCaches += surfaceBlitCache }
-            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
-        }
-        try {
-            preparedTarget.close()
-        } catch (failure: Throwable) {
-            synchronized(this) { quarantinedPreparedSceneTargets += preparedTarget }
-            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
-        }
-        try {
-            solidRectCache.close()
-        } catch (failure: Throwable) {
-            synchronized(this) { quarantinedSolidRectCaches += solidRectCache }
-            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
-        }
-        try {
-            colorGlyphCache.close()
-        } catch (failure: Throwable) {
-            synchronized(this) { quarantinedColorGlyphCaches += colorGlyphCache }
-            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
-        }
-        try {
-            registeredUniformRectCache.close()
-        } catch (failure: Throwable) {
-            synchronized(this) { quarantinedRegisteredUniformCaches += registeredUniformRectCache }
-            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
-        }
-        try {
-            separableBlurRectCache.close()
-        } catch (failure: Throwable) {
-            synchronized(this) { quarantinedSeparableBlurCaches += separableBlurRectCache }
-            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
-        }
-        try {
-            destinationCopyCache.close()
-        } catch (failure: Throwable) {
-            synchronized(this) { quarantinedDestinationCopyCaches += destinationCopyCache }
-            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
-        }
-        firstFailure?.let { throw it }
     }
 
     private fun nextOffscreenTargetOrdinal(): Long {

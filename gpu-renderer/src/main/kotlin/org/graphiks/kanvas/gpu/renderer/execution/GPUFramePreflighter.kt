@@ -440,20 +440,23 @@ internal class GPUFramePreflighter(
             }
             nativeDraft = when (materialization) {
                 is GPUPreparedNativeFramePayloadMaterialization.Materialized -> materialization.draft
-                is GPUPreparedNativeFramePayloadMaterialization.Refused -> return refuseWithRollback(
-                    rollback,
-                    true,
-                    diagnostic(materialization.code, materialization.message),
-                )
+                is GPUPreparedNativeFramePayloadMaterialization.Refused -> {
+                    materialization.retainedDraft?.let(boundary::terminalizeCallerRetainedDraft)
+                    return refuseWithRollback(
+                        rollback,
+                        true,
+                        diagnostic(materialization.code, materialization.message),
+                    )
+                }
             }
             validateNativeRenderSemanticPayloads(framePlan, requireNotNull(nativeDraft))?.let { invalid ->
-                boundary.releaseOrQuarantineBeforeRegistration(requireNotNull(nativeDraft))
+                boundary.terminalizeCallerRetainedDraft(requireNotNull(nativeDraft))
                 return refuseWithRollback(rollback, true, invalid)
             }
             val registration = try {
                 boundary.register(requireNotNull(nativeDraft))
             } catch (failure: Throwable) {
-                boundary.releaseOrQuarantineBeforeRegistration(requireNotNull(nativeDraft))
+                boundary.terminalizeCallerRetainedDraft(requireNotNull(nativeDraft))
                 return refuseWithRollback(
                     rollback,
                     true,
@@ -479,11 +482,18 @@ internal class GPUFramePreflighter(
                         )
                     }
                 }
-                is GPUPreparedNativeFrameRegistration.Refused -> return refuseWithRollback(
-                    rollback,
-                    true,
-                    diagnostic(registration.code, "Native payload registry refused the reusable draft."),
-                )
+                is GPUPreparedNativeFrameRegistration.Refused -> {
+                    if (registration.ownership ==
+                        GPUPreparedNativeFrameRegistration.RefusalOwnership.CallerRetained
+                    ) {
+                        boundary.terminalizeCallerRetainedDraft(requireNotNull(nativeDraft))
+                    }
+                    return refuseWithRollback(
+                        rollback,
+                        true,
+                        diagnostic(registration.code, "Native payload registry refused the reusable draft."),
+                    )
+                }
             }
         }
 
@@ -1797,4 +1807,15 @@ private fun firstUnsafePreparedIdentity(framePlan: GPUFramePlan): String? {
         }
     }
     return null
+}
+
+/** A first conflict pass detaches identities already owned elsewhere; the second owns the remaining draft. */
+private fun GPUPreparedNativeFrameBoundary.terminalizeCallerRetainedDraft(
+    draft: GPUPreparedNativeFrameDraft,
+) {
+    if (releaseOrQuarantineBeforeRegistration(draft) ==
+        GPUPreparedNativeOwnerTerminalization.CallerRetained
+    ) {
+        releaseOrQuarantineBeforeRegistration(draft)
+    }
 }

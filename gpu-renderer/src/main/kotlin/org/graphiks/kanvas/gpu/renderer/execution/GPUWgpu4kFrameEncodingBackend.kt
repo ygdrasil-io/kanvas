@@ -166,27 +166,60 @@ internal class GPUWgpu4kFrameEncodingBackend(
     )
 
     override fun close() {
-        val encoders: List<GPUCommandEncoder>
-        val buffers: List<GPUCommandBuffer>
-        val retainedEncoders: List<GPUCommandEncoder>
-        val retainedBuffers: List<GPUCommandBuffer>
         synchronized(this) {
-            if (closed) return
+            if (closed && remainingNativeOwnerCount() == 0) return
             closed = true
-            encoders = liveEncoders.values.toList()
-            buffers = commandBuffers.values.toList()
-            retainedEncoders = quarantinedEncoders.toList()
-            retainedBuffers = quarantinedCommandBuffers.toList()
-            liveEncoders.clear()
-            commandBuffers.clear()
-            quarantinedEncoders.clear()
-            quarantinedCommandBuffers.clear()
         }
-        encoders.forEach { runCatching { it.close() } }
-        buffers.forEach { runCatching { it.close() } }
-        retainedEncoders.forEach { runCatching { it.close() } }
-        retainedBuffers.forEach { runCatching { it.close() } }
+        val failures = mutableListOf<Throwable>()
+        closeMapEntries(liveEncoders, failures)
+        closeMapEntries(commandBuffers, failures)
+        closeListEntries(quarantinedEncoders, failures)
+        closeListEntries(quarantinedCommandBuffers, failures)
+        val remaining = synchronized(this) { remainingNativeOwnerCount() }
+        if (remaining > 0) {
+            throw GPUOwnedNativeCloseIncompleteException(
+                ownerLabel = "frame-encoding",
+                remainingOwnerCount = remaining,
+                failures = failures,
+            )
+        }
     }
+
+    private fun <K, T : AutoCloseable> closeMapEntries(
+        entries: MutableMap<K, T>,
+        failures: MutableList<Throwable>,
+    ) {
+        val snapshot = synchronized(this) { entries.entries.toList().asReversed() }
+        snapshot.forEach { (key, handle) ->
+            try {
+                handle.close()
+                synchronized(this) {
+                    if (entries[key] === handle) entries.remove(key)
+                }
+            } catch (failure: Throwable) {
+                failures += failure
+            }
+        }
+    }
+
+    private fun <T : AutoCloseable> closeListEntries(
+        entries: MutableList<T>,
+        failures: MutableList<Throwable>,
+    ) {
+        val snapshot = synchronized(this) { entries.toList().asReversed() }
+        snapshot.forEach { handle ->
+            try {
+                handle.close()
+                synchronized(this) { entries.removeAll { it === handle } }
+            } catch (failure: Throwable) {
+                failures += failure
+            }
+        }
+    }
+
+    private fun remainingNativeOwnerCount(): Int =
+        liveEncoders.size + commandBuffers.size +
+            quarantinedEncoders.size + quarantinedCommandBuffers.size
 
     private inner class NativeFrameEncoder(
         private val id: Long,
@@ -226,9 +259,9 @@ internal class GPUWgpu4kFrameEncodingBackend(
             }
             val token = "wgpu4k.frame-command-buffer.$id"
             synchronized(this@GPUWgpu4kFrameEncodingBackend) {
-                check(!closed) {
-                    nativeBuffer.close()
-                    "GPU frame encoding backend closed while finishing"
+                if (closed) {
+                    closeOrQuarantine(nativeBuffer, quarantinedCommandBuffers)
+                    error("GPU frame encoding backend closed while finishing")
                 }
                 check(commandBuffers.put(token, nativeBuffer) == null)
                 finishCount += 1
@@ -367,7 +400,9 @@ internal class GPUWgpu4kFrameEncodingBackend(
         handle.close()
         GPUFrameDiscardResult.Discarded
     } catch (failure: Throwable) {
-        synchronized(this) { quarantine += handle }
+        synchronized(this) {
+            if (quarantine.none { it === handle }) quarantine += handle
+        }
         GPUFrameDiscardResult.Failed(failure::class.simpleName.orEmpty())
     }
 }

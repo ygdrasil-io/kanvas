@@ -352,7 +352,8 @@ class GPUPreparedSceneFrameSession internal constructor(
     private val sceneTargetResolver: (GPUTaskList) -> GPUFrameTargetRef? = ::resolvePreparedSceneTarget,
 ) : AutoCloseable {
     private var state = State.Idle
-    private var closeActionInvoked = false
+    private var closeActionInProgress = false
+    private var closeActionComplete = false
 
     internal constructor(coordinator: GPUFrameCoordinator) : this(
         coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> coordinator },
@@ -431,12 +432,11 @@ class GPUPreparedSceneFrameSession internal constructor(
                     state = State.CloseRequested
                     false
                 }
-                State.CloseRequested,
-                State.Closed,
-                -> false
+                State.CloseRequested -> false
+                State.Closed -> claimCloseAction()
             }
         }
-        if (closeNow) closeAction()
+        if (closeNow) runCloseAction()
     }
 
     private fun completeFrameState() {
@@ -455,13 +455,26 @@ class GPUPreparedSceneFrameSession internal constructor(
                 -> false
             }
         }
-        if (closeNow) closeAction()
+        if (closeNow) runCloseAction()
     }
 
     private fun claimCloseAction(): Boolean {
-        if (closeActionInvoked) return false
-        closeActionInvoked = true
+        if (closeActionComplete || closeActionInProgress) return false
+        closeActionInProgress = true
         return true
+    }
+
+    private fun runCloseAction() {
+        try {
+            closeAction()
+            synchronized(this) {
+                closeActionComplete = true
+                closeActionInProgress = false
+            }
+        } catch (failure: Throwable) {
+            synchronized(this) { closeActionInProgress = false }
+            throw failure
+        }
     }
 
     private fun localRefusal(

@@ -20,6 +20,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabLeaseRequest
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -737,7 +739,7 @@ class GPURuntimeResourceAdapterTest {
     }
 
     @Test
-    fun `before transfer refusal terminalizes every unique identity despite an existing conflict`() {
+    fun `before transfer refusal retains unique identity for retry after an existing conflict`() {
         val conflict = CountingGPUBuffer("boundary-conflict")
         val unique = CountingGPUBuffer("boundary-unique", closeFailuresRemaining = 1)
         val adapter = GPURuntimeResourceAdapter { point ->
@@ -781,8 +783,96 @@ class GPURuntimeResourceAdapterTest {
         assertEquals(GPUPreparedNativeFrameRegistration.RefusalOwnership.CallerRetained, registration.ownership)
 
         assertEquals(
+            GPUPreparedNativeOwnerTerminalization.CallerRetained,
+            adapter.releaseOrQuarantinePreparedNativeFrameDraft(refusedDraft),
+        )
+        assertEquals(0, conflict.closeCount)
+        assertEquals(0, unique.closeCount)
+        assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount)
+
+        assertEquals(
             GPUPreparedNativeOwnerTerminalization.ReleasedOrAdapterQuarantined,
             adapter.releaseOrQuarantinePreparedNativeFrameDraft(refusedDraft),
+        )
+        assertEquals(0, conflict.closeCount)
+        assertEquals(1, unique.closeCount)
+        assertEquals(2, adapter.quarantinedPreparedNativeFramePayloadCount)
+
+        adapter.close()
+        assertEquals(1, conflict.closeCount)
+        assertEquals(2, unique.closeCount)
+        assertEquals(0, adapter.quarantinedPreparedNativeFramePayloadCount)
+    }
+
+    @Test
+    fun `boundary keeps caller ownership after quarantine conflict until explicit retry`() {
+        val conflict = CountingGPUBuffer("boundary-register-conflict")
+        val unique = CountingGPUBuffer("boundary-register-unique", closeFailuresRemaining = 1)
+        val adapter = GPURuntimeResourceAdapter { point ->
+            if (point == GPUPreparedNativeFrameRegistrationFaultPoint.BeforeOwnershipTransfer) {
+                error("before transfer")
+            }
+        }
+        val provider = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val boundary = adapter.bindNativeFrameBoundary(
+            provider,
+            object : GPUPreparedNativeFramePayloadMaterializer {
+                override fun materializeReusable(
+                    framePlan: GPUFramePlan,
+                    encoderPlan: GPUCommandEncoderPlan,
+                    resources: GPUPreparedResourceSet,
+                    generationSeal: GPUPreparedGenerationSeal,
+                ): GPUPreparedNativeFramePayloadMaterialization = error("must not materialize")
+
+                override fun bindLateSurface(
+                    draft: GPUPreparedNativeFrameDraft,
+                    acquiredSurface: GPUAcquiredSurfaceOutput?,
+                ): GPUPreparedNativeFrameLateSurfaceBinding = error("must not bind a surface")
+            },
+        )
+        assertTrue(
+            adapter.quarantinePreparedNativeFrameDraft(
+                GPUPreparedNativeFrameDraft(
+                    testPayload(
+                        frame = 95,
+                        scopes = emptyList(),
+                        auxiliaryOwnedHandles = listOf(
+                            GPUPreparedNativeAuxiliaryHandle(
+                                conflict,
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val refusedDraft = GPUPreparedNativeFrameDraft(
+            testPayload(
+                frame = 96,
+                scopes = emptyList(),
+                auxiliaryOwnedHandles = listOf(
+                    GPUPreparedNativeAuxiliaryHandle(
+                        conflict,
+                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    ),
+                    GPUPreparedNativeAuxiliaryHandle(
+                        unique,
+                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    ),
+                ),
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedNativeFrameRegistration.Refused>(boundary.register(refusedDraft))
+
+        assertEquals(GPUPreparedNativeFrameRegistration.RefusalOwnership.CallerRetained, refused.ownership)
+        assertEquals(0, conflict.closeCount)
+        assertEquals(0, unique.closeCount)
+        assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount)
+
+        assertEquals(
+            GPUPreparedNativeOwnerTerminalization.ReleasedOrAdapterQuarantined,
+            boundary.releaseOrQuarantineBeforeRegistration(refusedDraft),
         )
         assertEquals(0, conflict.closeCount)
         assertEquals(1, unique.closeCount)

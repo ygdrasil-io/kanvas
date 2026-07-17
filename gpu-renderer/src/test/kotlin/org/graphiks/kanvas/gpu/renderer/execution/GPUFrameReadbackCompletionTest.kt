@@ -6,6 +6,7 @@ import io.ygdrasil.webgpu.GPUBufferMapState
 import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUMapMode
 import io.ygdrasil.webgpu.GPUSize64
+import java.util.concurrent.AbstractExecutorService
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -16,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -131,6 +133,57 @@ class GPUFrameReadbackCompletionTest {
     }
 
     @Test
+    fun `wgpu4k mapper retains a failed teardown delivery until retry accepts it`() {
+        val output = readbackOutput("readback.mapper-teardown-retry")
+        val buffer = RecordingGPUBuffer()
+        var queued: Runnable? = null
+        val mapper = GPUWgpu4kNativeReadbackMapper { task -> queued = task }
+        var sinkAttempts = 0
+        val accepted = mutableListOf<GPUFrameNativeReadbackMapDelivery>()
+        mapper.map(output, readbackOperand(buffer)) { delivery ->
+            sinkAttempts += 1
+            if (sinkAttempts == 1) error("teardown sink failed")
+            accepted += delivery
+        }
+
+        val incomplete = assertFailsWith<GPUOwnedNativeCloseIncompleteException> { mapper.close() }
+        assertEquals("readback-mapper", incomplete.ownerLabel)
+        assertEquals(1, incomplete.remainingOwnerCount)
+
+        mapper.close()
+        mapper.close()
+        requireNotNull(queued).run()
+
+        assertEquals(2, sinkAttempts)
+        val failure = assertIs<GPUFrameNativeReadbackMapDelivery.Failed>(accepted.single())
+        assertEquals("failed.frame-readback.mapping-teardown", failure.diagnostic.code.value)
+        assertEquals(0, buffer.mapCalls)
+    }
+
+    @Test
+    fun `prepared scene mapping closer retains executor timeout until retry terminates`() {
+        val executor = TimeoutThenTerminateExecutor()
+        var mapperCloses = 0
+        val closer = GPUPreparedSceneMappingExecutorCloser(
+            mappingExecutor = executor,
+            nativeReadbackMapper = AutoCloseable { mapperCloses += 1 },
+            terminationTimeout = 1,
+            terminationTimeUnit = TimeUnit.MILLISECONDS,
+        )
+
+        val incomplete = assertFailsWith<GPUOwnedNativeCloseIncompleteException> { closer.close() }
+        assertEquals("prepared-scene-mapping", incomplete.ownerLabel)
+        assertEquals(1, incomplete.remainingOwnerCount)
+
+        closer.close()
+        closer.close()
+
+        assertEquals(1, executor.shutdownCalls)
+        assertEquals(2, executor.awaitTerminationCalls)
+        assertEquals(1, mapperCloses)
+    }
+
+    @Test
     fun `wgpu4k mapper refuses mismatched layout and non-output ownership before mapping`() {
         val output = readbackOutput("readback.invalid-native")
         val buffer = RecordingGPUBuffer()
@@ -204,6 +257,37 @@ class GPUFrameReadbackCompletionTest {
             ),
             layout = base.layout,
         )
+    }
+
+    private class TimeoutThenTerminateExecutor : AbstractExecutorService() {
+        var shutdownCalls: Int = 0
+            private set
+        var awaitTerminationCalls: Int = 0
+            private set
+        private var shutdown = false
+
+        override fun shutdown() {
+            shutdownNow()
+        }
+
+        override fun shutdownNow(): MutableList<Runnable> {
+            shutdownCalls += 1
+            shutdown = true
+            return mutableListOf()
+        }
+
+        override fun isShutdown(): Boolean = shutdown
+
+        override fun isTerminated(): Boolean = shutdown && awaitTerminationCalls >= 2
+
+        override fun awaitTermination(timeout: Long, unit: TimeUnit): Boolean {
+            awaitTerminationCalls += 1
+            return awaitTerminationCalls >= 2
+        }
+
+        override fun execute(command: Runnable) {
+            error("No mapping task expected")
+        }
     }
 
     private class RecordingGPUBuffer(

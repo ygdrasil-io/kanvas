@@ -578,6 +578,7 @@ internal class GPUWgpu4kNativeReadbackMapper(
         private val sink: GPUFrameNativeReadbackMapSink,
     ) : Runnable {
         private val terminal = AtomicBoolean(false)
+        private val deliveryInProgress = AtomicBoolean(false)
 
         override fun run() {
             if (terminal.get()) return
@@ -632,9 +633,14 @@ internal class GPUWgpu4kNativeReadbackMapper(
         }
 
         private fun deliver(delivery: GPUFrameNativeReadbackMapDelivery) {
-            if (!terminal.compareAndSet(false, true)) return
-            synchronized(this@GPUWgpu4kNativeReadbackMapper) { pending.remove(this) }
-            sink.accept(delivery)
+            if (terminal.get() || !deliveryInProgress.compareAndSet(false, true)) return
+            try {
+                sink.accept(delivery)
+                terminal.set(true)
+                synchronized(this@GPUWgpu4kNativeReadbackMapper) { pending.remove(this) }
+            } finally {
+                deliveryInProgress.set(false)
+            }
         }
     }
 
@@ -683,7 +689,14 @@ internal class GPUWgpu4kNativeReadbackMapper(
                 if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
             }
         }
-        firstFailure?.let { throw it }
+        val remaining = synchronized(this) { pending.size }
+        if (remaining > 0) {
+            throw GPUOwnedNativeCloseIncompleteException(
+                ownerLabel = "readback-mapper",
+                remainingOwnerCount = remaining,
+                failures = listOfNotNull(firstFailure),
+            )
+        }
     }
 
     private fun validate(

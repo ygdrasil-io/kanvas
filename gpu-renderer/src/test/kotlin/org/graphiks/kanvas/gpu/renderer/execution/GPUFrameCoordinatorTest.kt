@@ -461,20 +461,93 @@ class GPUFrameCoordinatorTest {
     }
 
     @Test
-    fun `throwing close action remains claimed and cannot run twice`() {
+    fun `throwing close action remains retryable until it completes once`() {
         var closes = 0
+        var failuresRemaining = 1
         val session = GPUPreparedSceneFrameSession(
             coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> error("must not render") },
             closeAction = {
                 closes += 1
-                error("close failed")
+                if (failuresRemaining > 0) {
+                    failuresRemaining -= 1
+                    error("close failed")
+                }
             },
         )
 
         assertFailsWith<IllegalStateException> { session.close() }
         session.close()
+        session.close()
 
-        assertEquals(1, closes)
+        assertEquals(2, closes)
+    }
+
+    @Test
+    fun `real prepared child session retains its lease across persistent tier failures`() {
+        listOf("encoding", "mapping", "cache", "target").forEach { failingLabel ->
+            val events = mutableListOf<String>()
+            val probes = listOf("encoding", "mapping", "cache", "target").associateWith { label ->
+                TierCloseProbe(
+                    label = label,
+                    closeFailuresRemaining = if (label == failingLabel) 2 else 0,
+                    events = events,
+                )
+            }
+            val registry = GPUPreparedSceneChildRegistry { events += "parent" }
+            val lease = registry.reserve()
+            val teardown = GPUPreparedSceneChildTeardown(
+                ownerTiers = listOf(
+                    GPUPreparedSceneChildOwnerTier(
+                        label = "activity",
+                        owners = listOf(probes.getValue("encoding"), probes.getValue("mapping")),
+                    ),
+                    GPUPreparedSceneChildOwnerTier(
+                        label = "cache",
+                        owners = listOf(probes.getValue("cache")),
+                    ),
+                    GPUPreparedSceneChildOwnerTier(
+                        label = "target",
+                        owners = listOf(probes.getValue("target")),
+                    ),
+                ),
+                releaseLease = AutoCloseable {
+                    events += "lease"
+                    lease.close()
+                },
+            )
+            val child = GPUPreparedSceneFrameSession(
+                coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> error("must not render") },
+                closeAction = teardown::close,
+            )
+            lease.bind(child)
+
+            assertFailsWith<GPUOwnedNativeCloseIncompleteException>(failingLabel) { child.close() }
+            assertEquals(0, probes.getValue("target").successfulCloses, failingLabel)
+            assertFalse("lease" in events, failingLabel)
+            assertFalse("parent" in events, failingLabel)
+
+            assertFailsWith<GPUOwnedNativeCloseIncompleteException>(failingLabel) { registry.close() }
+            assertEquals(0, probes.getValue("target").successfulCloses, failingLabel)
+            assertFalse("lease" in events, failingLabel)
+            assertFalse("parent" in events, failingLabel)
+
+            registry.close()
+            registry.close()
+
+            probes.values.forEach { probe -> assertEquals(1, probe.successfulCloses, failingLabel) }
+            assertEquals(3, probes.getValue(failingLabel).closeAttempts, failingLabel)
+            probes.filterKeys { it != failingLabel }.values.forEach { probe ->
+                assertEquals(1, probe.closeAttempts, failingLabel)
+            }
+            val cacheIndex = events.indexOf("cache")
+            assertTrue(events.indexOf("encoding") in 0 until cacheIndex, failingLabel)
+            assertTrue(events.indexOf("mapping") in 0 until cacheIndex, failingLabel)
+            assertTrue(cacheIndex < events.indexOf("target"), failingLabel)
+            assertTrue(events.indexOf("target") < events.indexOf("lease"), failingLabel)
+            assertTrue(events.indexOf("lease") < events.indexOf("parent"), failingLabel)
+            assertEquals(1, events.count { it == "lease" }, failingLabel)
+            assertEquals(1, events.count { it == "parent" }, failingLabel)
+        }
     }
 
     @Test
@@ -551,6 +624,28 @@ class GPUFrameCoordinatorTest {
             encodedScopeKinds = emptyList(),
             telemetry = telemetry,
         )
+    }
+
+    private class TierCloseProbe(
+        private val label: String,
+        private var closeFailuresRemaining: Int,
+        private val events: MutableList<String>,
+    ) : AutoCloseable {
+        var closeAttempts: Int = 0
+            private set
+        var successfulCloses: Int = 0
+            private set
+
+        override fun close() {
+            closeAttempts += 1
+            if (closeFailuresRemaining > 0) {
+                closeFailuresRemaining -= 1
+                error("$label close failed")
+            }
+            check(successfulCloses == 0) { "$label closed more than once" }
+            successfulCloses += 1
+            events += label
+        }
     }
 
     private fun diagnostic(code: String): GPUDiagnostic = GPUDiagnostic(
