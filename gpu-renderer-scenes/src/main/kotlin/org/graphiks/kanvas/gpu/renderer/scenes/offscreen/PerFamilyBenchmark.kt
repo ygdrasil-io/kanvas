@@ -104,8 +104,8 @@ data class FamilyBenchmarkResult(
 /**
  * Per-family benchmark report.
  *
- * `productActivation` stays false: this report measures the wired pipelines and
- * surfaces budget diagnostics, it does not activate or flip any renderer route.
+ * `productActivation` is true because the selected prepared routes are active.
+ * The report still measures only the wired pipelines and flips no renderer route.
  */
 data class PerFamilyBenchmarkReport(
     val backend: String,
@@ -225,6 +225,16 @@ class PerFamilyBenchmark(
             val scene = GPURendererSceneRegistry.registry.requireScene(family.sceneId)
             if (scene.usesPreparedSolidRectPilot()) {
                 return@runCatching benchmarkPreparedSolidRect(
+                    session,
+                    gate,
+                    family,
+                    scene,
+                    warmupFrames,
+                    measuredFrames,
+                )
+            }
+            if (scene.usesPreparedRegisteredUniformRectPilot()) {
+                return@runCatching benchmarkPreparedRegisteredUniform(
                     session,
                     gate,
                     family,
@@ -378,6 +388,93 @@ class PerFamilyBenchmark(
                         "commandBuffers=${counters.commandBuffers} submits=${counters.submits}",
                     "solidRectCache creations=${counters.solidRectInvariantCreations} " +
                         "reuses=${counters.solidRectInvariantReuses}",
+                    "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
+                        "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
+                        "maxMs=${statistics.maxMs.fmt()}",
+                    "frameGateStatus=${gateResult.status.wireName}",
+                ),
+            )
+        }
+    }
+
+    private fun benchmarkPreparedRegisteredUniform(
+        session: GPUBackendSession,
+        gate: FrameGatePolicy,
+        family: BenchmarkFamily,
+        scene: org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene<
+            org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand,
+        >,
+        warmupFrames: Int,
+        measuredFrames: Int,
+    ): FamilyBenchmarkResult {
+        val capabilities = session.capabilities ?: return skippedResult(
+            family,
+            BenchmarkFamilyStatus.Unsupported,
+            warmupFrames,
+            measuredFrames,
+            "unsupported: prepared registered uniform benchmark requires observed capabilities",
+        )
+        val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
+            ?.let(::GPUDeviceGenerationID)
+            ?: return skippedResult(
+                family,
+                BenchmarkFamilyStatus.Unsupported,
+                warmupFrames,
+                measuredFrames,
+                "unsupported: prepared registered uniform benchmark requires device generation",
+            )
+        return session.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
+        ).use { preparedSession ->
+            fun render(frameOrdinal: Long, withReadback: Boolean): Long {
+                val recorded = when (
+                    val result = PreparedRegisteredUniformRectSceneFrameRecorder().record(
+                        scene,
+                        capabilities,
+                        generation,
+                        frameOrdinal,
+                        withReadback,
+                    )
+                ) {
+                    is PreparedRegisteredUniformRectSceneFrameResult.Recorded -> result
+                    is PreparedRegisteredUniformRectSceneFrameResult.Refused -> error(result.reason)
+                }
+                val output = recorded.readbackRequestId?.let(GPUSceneFrameOutputRequest::ReadbackRgba)
+                    ?: GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly
+                val start = System.nanoTime()
+                val terminal = preparedSession.renderFrame(recorded.taskList, output)
+                    .completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                val duration = (System.nanoTime() - start).coerceAtLeast(1L)
+                check(terminal.outcome == GPUFrameStructuralOutcome.Succeeded) {
+                    terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared registered uniform benchmark frame failed"
+                }
+                return duration
+            }
+
+            repeat(warmupFrames) { index -> render(index + 1L, withReadback = false) }
+            val samples = List(measuredFrames) { index ->
+                render(warmupFrames + index + 1L, withReadback = false)
+            }
+            render(warmupFrames + measuredFrames + 1L, withReadback = true)
+            val statistics = FrameTimeStatistics.of(samples)
+            val gateResult = gate.evaluate(family.family, statistics.meanMs)
+            val counters = preparedSession.nativeCounters()
+            FamilyBenchmarkResult(
+                family = family.family,
+                sceneId = family.sceneId,
+                status = BenchmarkFamilyStatus.Sampled,
+                warmupFrames = warmupFrames,
+                measuredFrames = measuredFrames,
+                statistics = statistics,
+                diagnostics = listOf(
+                    "sampled ${family.family} scene=${family.sceneId} via prepared submit+completion",
+                    "metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 " +
+                        "finalValidationReadbacks=${counters.readbackCopies}",
+                    "nativeFrames=${warmupFrames + measuredFrames + 1} encoders=${counters.encoders} " +
+                        "commandBuffers=${counters.commandBuffers} submits=${counters.submits}",
+                    "registeredUniformCache creations=${counters.registeredUniformInvariantCreations} " +
+                        "reuses=${counters.registeredUniformInvariantReuses}",
                     "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
                         "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
                         "maxMs=${statistics.maxMs.fmt()}",

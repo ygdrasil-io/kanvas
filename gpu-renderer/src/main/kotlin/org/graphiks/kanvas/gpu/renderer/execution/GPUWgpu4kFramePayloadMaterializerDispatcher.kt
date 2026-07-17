@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 internal sealed interface GPUWgpu4kPreparedFramePayloadRoute {
     data object SolidRect : GPUWgpu4kPreparedFramePayloadRoute
     data object ColorGlyph : GPUWgpu4kPreparedFramePayloadRoute
+    data object RegisteredUniformRect : GPUWgpu4kPreparedFramePayloadRoute
     data class Refused(val code: String, val message: String) : GPUWgpu4kPreparedFramePayloadRoute
 }
 
@@ -22,6 +23,8 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             GPUWgpu4kPreparedFramePayloadRoute.SolidRect
         distinct == listOf(GPUDrawSemanticPayload.ColorGlyph::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.ColorGlyph
+        distinct == listOf(GPUDrawSemanticPayload.RegisteredUniformRect::class) ->
+            GPUWgpu4kPreparedFramePayloadRoute.RegisteredUniformRect
         distinct.size > 1 -> GPUWgpu4kPreparedFramePayloadRoute.Refused(
             "unsupported.native-frame-payload.mixed-semantic-shape",
             "One prepared native frame may not mix solid-rectangle and color-glyph payload shapes.",
@@ -40,6 +43,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val preparedSceneTarget: GPUWgpu4kPreparedSceneTarget,
     private val solidRectCache: GPUWgpu4kSolidRectSessionCache,
     private val colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
+    private val registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private var delegate: GPUPreparedNativeFramePayloadMaterializer? = null
     private var closed = false
@@ -78,6 +82,18 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     queue,
                     preparedSceneTarget,
                     colorGlyphCache,
+                ),
+                framePlan,
+                encoderPlan,
+                resources,
+                generationSeal,
+            )
+            GPUWgpu4kPreparedFramePayloadRoute.RegisteredUniformRect -> dispatch(
+                GPUWgpu4kRegisteredUniformRectFramePayloadMaterializer(
+                    device,
+                    queue,
+                    preparedSceneTarget,
+                    registeredUniformRectCache,
                 ),
                 framePlan,
                 encoderPlan,

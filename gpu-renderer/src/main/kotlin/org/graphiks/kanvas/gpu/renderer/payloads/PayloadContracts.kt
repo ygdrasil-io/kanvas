@@ -232,6 +232,23 @@ enum class GPUColorGlyphAtlasFormat(val gpuLabel: String) {
 
 const val COLOR_GLYPH_RENDER_STEP_IDENTITY = "text.colrv0.composite"
 
+/** Closed shader identities; each native route accepts and validates an explicit supported subset. */
+enum class GPURegisteredUniformProgram(
+    val wireId: String,
+    val uniformByteSize: Int,
+) {
+    SolidColor("solid-color-v1", 16),
+    LinearGradient("linear-gradient-2stop-v1", 64),
+    RadialGradient("radial-gradient-2stop-v1", 48),
+    SweepGradient("sweep-gradient-2stop-v1", 64),
+    Blur("analytic-blur-v1", 48),
+    ColorMatrix("color-matrix-v1", 96),
+    Stroke("analytic-stroke-v1", 48),
+    SimpleRuntimeEffect("simple-runtime-effect-v1", 16),
+}
+
+const val REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY = "rect.registered-uniform"
+
 /** Typed proof tying one layer to one exact packed atlas placement and strike. */
 data class GPUColorGlyphAtlasPlacementProofInput(
     val atlasArtifactKey: GPUTextArtifactKey,
@@ -287,6 +304,38 @@ sealed interface GPUDrawSemanticPayload {
     class SolidRect internal constructor(payloadRef: GPUDrawPayloadRef) : GPUDrawSemanticPayload {
         override val canonicalType: String = "SolidRect"
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+    }
+
+    /** Exact immutable uniform bytes for one shader from the closed prepared program registry. */
+    class RegisteredUniformRect internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        val program: GPURegisteredUniformProgram,
+        uniformBytes: List<Int>,
+        val targetBounds: GPUPixelBounds,
+        val scissorBounds: GPUPixelBounds,
+        val canonicalHash: String,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "RegisteredUniformRect"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val uniformBytes: List<Int> = immutableList(uniformBytes)
+
+        fun hasCanonicalHashIntegrity(): Boolean =
+            payloadRef.uniformBlock?.let { block ->
+                payloadRef.uniformSlot?.fingerprint == block.fingerprint &&
+                    block.bytes == uniformBytes &&
+                    block.byteSize == program.uniformByteSize.toLong() &&
+                    uniformBytes.size == program.uniformByteSize &&
+                    uniformBytes.all { it in 0..255 } &&
+                    canonicalHash == sha256Hex(
+                        registeredUniformRectCanonicalPreimage(
+                            payloadRef,
+                            program,
+                            uniformBytes,
+                            targetBounds,
+                            scissorBounds,
+                        ),
+                    )
+            } == true
     }
 
     /** Exact immutable COLRv0 atlas, layer, indexed-geometry, and uniform payload. */
@@ -365,6 +414,103 @@ sealed interface GPUDrawSemanticPayload {
                 )
     }
 }
+
+/** Packs one closed registered shader payload without carrying source code or native handles. */
+class GPURegisteredUniformRectPayloadGatherer {
+    fun gatherSemantic(
+        commandIdValue: Int,
+        program: GPURegisteredUniformProgram,
+        uniformBytes: ByteArray,
+        targetBounds: GPUPixelBounds,
+        scissorBounds: GPUPixelBounds,
+    ): GPUDrawSemanticPayload.RegisteredUniformRect {
+        require(commandIdValue >= 0) { "Registered uniform command id must be non-negative" }
+        require(uniformBytes.size == program.uniformByteSize) {
+            "${program.wireId} requires exactly ${program.uniformByteSize} uniform bytes"
+        }
+        require(targetBounds.containsRegisteredUniformRect(scissorBounds)) {
+            "Registered uniform scissor must be non-empty and contained by the target"
+        }
+        val bytes = uniformBytes.map { it.toInt() and 0xff }
+        val packingPlanHash = "registered-uniform.${program.wireId}.abi${program.uniformByteSize}"
+        val fingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                listOf(
+                    "kind=registered-uniform-rect",
+                    "program=${program.wireId}",
+                    "command=$commandIdValue",
+                    "packing=$packingPlanHash",
+                    "bytes=${bytes.joinToString(",")}",
+                ).joinToString("\n"),
+            ),
+        )
+        val block = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = packingPlanHash,
+            byteSize = program.uniformByteSize.toLong(),
+            zeroedPadding = false,
+            scope = "pass.registered-uniform.prepared",
+            bytes = bytes,
+            fields = listOf(
+                GPUUniformPayloadField(
+                    fieldPath = "program.${program.wireId}.uniforms",
+                    byteOffset = 0L,
+                    byteSize = program.uniformByteSize.toLong(),
+                    valueClass = "registered-uniform-bytes",
+                    zeroFilled = bytes.all { it == 0 },
+                ),
+            ),
+        )
+        val ref = GPUDrawPayloadRef(
+            commandIdValue = commandIdValue,
+            renderStepIdentity = REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY,
+            uniformSlot = GPUUniformPayloadSlot(
+                slotId = GPUPayloadSlotID("registered-uniform:$commandIdValue"),
+                fingerprint = fingerprint,
+                byteOffset = 0L,
+            ),
+            uniformBlock = block,
+        )
+        return GPUDrawSemanticPayload.RegisteredUniformRect(
+            payloadRef = ref,
+            program = program,
+            uniformBytes = bytes,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            canonicalHash = sha256Hex(
+                registeredUniformRectCanonicalPreimage(
+                    ref,
+                    program,
+                    bytes,
+                    targetBounds,
+                    scissorBounds,
+                ),
+            ),
+        )
+    }
+}
+
+private fun registeredUniformRectCanonicalPreimage(
+    ref: GPUDrawPayloadRef,
+    program: GPURegisteredUniformProgram,
+    uniformBytes: List<Int>,
+    targetBounds: GPUPixelBounds,
+    scissorBounds: GPUPixelBounds,
+): String = listOf(
+    "type=RegisteredUniformRect",
+    "command=${ref.commandIdValue}",
+    "step=${ref.renderStepIdentity}",
+    "program=${program.wireId}",
+    "fingerprint=${ref.uniformBlock?.fingerprint?.value.orEmpty()}",
+    "packing=${ref.uniformBlock?.packingPlanHash.orEmpty()}",
+    "bytes=${uniformBytes.joinToString(",")}",
+    "target=${targetBounds.left},${targetBounds.top},${targetBounds.right},${targetBounds.bottom}",
+    "scissor=${scissorBounds.left},${scissorBounds.top},${scissorBounds.right},${scissorBounds.bottom}",
+).joinToString("\n")
+
+private fun GPUPixelBounds.containsRegisteredUniformRect(other: GPUPixelBounds): Boolean =
+    other.right > other.left && other.bottom > other.top &&
+        other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
 
 private fun GPUDrawPayloadRef.deepSnapshot(): GPUDrawPayloadRef = copy(
     uniformBlock = uniformBlock?.copy(

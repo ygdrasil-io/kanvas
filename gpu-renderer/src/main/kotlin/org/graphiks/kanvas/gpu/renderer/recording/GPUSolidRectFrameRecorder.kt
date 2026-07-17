@@ -330,7 +330,7 @@ class GPUSolidRectFrameRecorder(
         scissorBoundsHash = draw.scissorBounds.canonicalScissor(),
         targetStateHash = "target.rgba8unorm.single-sample",
         originalPaintOrder = draw.paintOrder,
-        resourceGeneration = 1L,
+        resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
     )
 
     private fun dependency(from: GPUTaskID, to: GPUTaskID, index: Int) = GPUTaskDependency(

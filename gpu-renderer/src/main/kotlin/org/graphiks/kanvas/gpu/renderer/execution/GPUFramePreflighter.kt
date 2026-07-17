@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.passes.fromBatchPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
@@ -32,6 +33,13 @@ import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_RENDER_PIPELINE_KE
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.colorGlyphScissorAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_TARGET_STATE_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_VERTEX_SOURCE_LABEL
+import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalSolidRectSrcOver
+import org.graphiks.kanvas.gpu.renderer.recording.registeredUniformRectPipelineKey
+import org.graphiks.kanvas.gpu.renderer.recording.registeredUniformRectScissorAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
@@ -675,7 +683,17 @@ internal class GPUFramePreflighter(
                         ?: return diagnostic("stale.preflight.resource_generation_missing", "Render target generation is unavailable.")
                     if (step.drawPackets.any { packet ->
                             val colorGlyph = packet.semanticPayload as? GPUDrawSemanticPayload.ColorGlyph
-                            packet.resourceGeneration != (colorGlyph?.planArtifactKey?.generation?.value?.toLong() ?: expected)
+                            val preparedLateBound =
+                                packet.semanticPayload is GPUDrawSemanticPayload.SolidRect ||
+                                    packet.semanticPayload is GPUDrawSemanticPayload.RegisteredUniformRect
+                            val acceptedGeneration = when {
+                                colorGlyph != null -> colorGlyph.planArtifactKey.generation.value.toLong()
+                                preparedLateBound &&
+                                    packet.resourceGeneration == PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ->
+                                    PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
+                                else -> expected
+                            }
+                            packet.resourceGeneration != acceptedGeneration
                         }
                     ) {
                         return diagnostic("stale.preflight.resource_generation", "A render packet resource generation is stale.")
@@ -897,14 +915,86 @@ internal class GPUFramePreflighter(
                     "invalid.preflight.color_glyph_semantic_payload_missing",
                     "Executable color-glyph packets require their gathered typed semantic payload.",
                 )
+                REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY -> diagnostic(
+                    "invalid.preflight.registered_uniform_semantic_payload_missing",
+                    "Executable registered uniform packets require their typed semantic payload.",
+                )
                 else -> null
             }
         }
         return when (semantic) {
             is GPUDrawSemanticPayload.SolidRect -> validateSolidRectSemanticPayload(packet, semantic)
+            is GPUDrawSemanticPayload.RegisteredUniformRect ->
+                validateRegisteredUniformRectSemanticPayload(render, packet, semantic)
             is GPUDrawSemanticPayload.ColorGlyph ->
                 validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
         }
+    }
+
+    private fun validateRegisteredUniformRectSemanticPayload(
+        render: GPUFrameStep.RenderPassStep,
+        packet: GPUDrawPacket,
+        semantic: GPUDrawSemanticPayload.RegisteredUniformRect,
+    ): GPUDiagnostic? {
+        fun refuse(code: String, message: String) = diagnostic(code, message)
+        val ref = semantic.payloadRef
+        if (packet.renderStepId.value != REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY ||
+            ref.renderStepIdentity != REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY
+        ) {
+            return refuse(
+                "invalid.preflight.registered_uniform_semantic_route",
+                "Registered uniform payloads require the exact canonical render step.",
+            )
+        }
+        if (ref.commandIdValue != packet.commandIdValue || packet.uniformSlot != ref.uniformSlot) {
+            return refuse(
+                "invalid.preflight.registered_uniform_packet_identity",
+                "Registered uniform command or slot identity differs from its packet.",
+            )
+        }
+        if (!semantic.hasCanonicalHashIntegrity()) {
+            return refuse(
+                "invalid.preflight.registered_uniform_canonical_hash",
+                "Registered uniform bytes do not match their immutable hash and ABI evidence.",
+            )
+        }
+        if (packet.renderPipelineKey != registeredUniformRectPipelineKey(semantic.program) ||
+            packet.bindingLayoutHash != REGISTERED_UNIFORM_RECT_BINDING_LAYOUT_HASH ||
+            packet.vertexSourceLabel != REGISTERED_UNIFORM_RECT_VERTEX_SOURCE_LABEL ||
+            packet.targetStateHash != REGISTERED_UNIFORM_RECT_TARGET_STATE_HASH ||
+            packet.scissorBoundsHash != registeredUniformRectScissorAuthority(semantic.scissorBounds)
+        ) {
+            return refuse(
+                "invalid.preflight.registered_uniform_packet_authority",
+                "Registered uniform pipeline, binding, vertex, target, or scissor authority differs.",
+            )
+        }
+        if (!packet.blendPlan.isCanonicalSolidRectSrcOver()) {
+            return refuse(
+                "unsupported.preflight.registered_uniform_blend",
+                "Registered uniform rectangles require canonical premultiplied SrcOver.",
+            )
+        }
+        if (render.samplePlan != GPUSamplePlan.SingleSampleFrame ||
+            render.loadStore.loadOp != "clear" || render.loadStore.storePlan != GPUStorePlan.Store
+        ) {
+            return refuse(
+                "unsupported.preflight.registered_uniform_pass_state",
+                "Registered uniform rectangles require one single-sample clear-and-store pass.",
+            )
+        }
+        if (semantic.targetBounds.left != 0 || semantic.targetBounds.top != 0 ||
+            semantic.scissorBounds.left < semantic.targetBounds.left ||
+            semantic.scissorBounds.top < semantic.targetBounds.top ||
+            semantic.scissorBounds.right > semantic.targetBounds.right ||
+            semantic.scissorBounds.bottom > semantic.targetBounds.bottom
+        ) {
+            return refuse(
+                "invalid.preflight.registered_uniform_bounds",
+                "Registered uniform scissor must be contained by a zero-origin target.",
+            )
+        }
+        return null
     }
 
     private fun validateColorGlyphSemanticPayload(

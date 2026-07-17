@@ -83,6 +83,33 @@ class PerFamilyBenchmarkTest {
     }
 
     @Test
+    fun `prepared families remain valid across successive native target generations`() {
+        val outputDir = Files.createTempDirectory("per-family-benchmark-native-generations")
+        val report = PerFamilyBenchmark().run(
+            outputDir = outputDir,
+            warmupFrames = 0,
+            measuredFrames = 1,
+        )
+
+        if (report.adapterInfo == null) return
+
+        val preparedFamilies = setOf("FillRect", "LinearGradient", "RadialGradient", "SweepGradient")
+        val preparedResults = report.results.filter { it.family in preparedFamilies }
+        assertEquals(preparedFamilies, preparedResults.map { it.family }.toSet())
+        preparedResults.forEach { result ->
+            assertEquals(BenchmarkFamilyStatus.Sampled, result.status, result.diagnostics.joinToString("\n"))
+            assertTrue(
+                result.diagnostics.any { it.contains("via prepared submit+completion") },
+                result.diagnostics.joinToString("\n"),
+            )
+            assertTrue(
+                result.diagnostics.none { it.contains("stale.preflight.resource_generation") },
+                result.diagnostics.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
     fun `report sampled measurements only include sampled families`() {
         val sampled = FamilyBenchmarkResult(
             family = "FillRect",

@@ -7,7 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 
 class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
     @Test
-    fun `dispatcher selects solid and color routes from typed semantic classes`() {
+    fun `dispatcher selects every typed prepared route from semantic classes`() {
         assertEquals(
             GPUWgpu4kPreparedFramePayloadRoute.SolidRect,
             selectWgpu4kPreparedFramePayloadRoute(listOf(GPUDrawSemanticPayload.SolidRect::class)),
@@ -15,6 +15,12 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
         assertEquals(
             GPUWgpu4kPreparedFramePayloadRoute.ColorGlyph,
             selectWgpu4kPreparedFramePayloadRoute(listOf(GPUDrawSemanticPayload.ColorGlyph::class)),
+        )
+        assertEquals(
+            GPUWgpu4kPreparedFramePayloadRoute.RegisteredUniformRect,
+            selectWgpu4kPreparedFramePayloadRoute(
+                listOf(GPUDrawSemanticPayload.RegisteredUniformRect::class),
+            ),
         )
     }
 

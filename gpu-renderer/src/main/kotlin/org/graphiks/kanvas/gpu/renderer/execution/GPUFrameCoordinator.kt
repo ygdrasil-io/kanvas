@@ -293,6 +293,8 @@ data class GPUPreparedSceneNativeCounters(
     val solidRectInvariantCreations: Long = 0L,
     val solidRectInvariantReuses: Long = 0L,
     val solidRectInvariantInvalidations: Long = 0L,
+    val registeredUniformInvariantCreations: Long = 0L,
+    val registeredUniformInvariantReuses: Long = 0L,
     val colorGlyphInvariantCreations: Long = 0L,
     val colorGlyphAtlasCreations: Long = 0L,
     val colorGlyphAtlasUploads: Long = 0L,

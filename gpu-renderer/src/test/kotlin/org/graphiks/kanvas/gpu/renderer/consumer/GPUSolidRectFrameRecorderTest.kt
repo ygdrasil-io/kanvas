@@ -46,6 +46,7 @@ class GPUSolidRectFrameRecorderTest {
         assertEquals(2, result.semantics.size)
         val render = result.taskList.tasks.filterIsInstance<GPUTask.Render>().single()
         assertEquals(2, render.drawPackets.size)
+        assertTrue(render.drawPackets.all { it.resourceGeneration == 0L })
         assertEquals(1, result.taskList.tasks.filterIsInstance<GPUTask.PrepareResources>().size)
         assertEquals(1, result.taskList.tasks.filterIsInstance<GPUTask.Readback>().size)
         assertTrue(render.drawPackets.all { it.semanticPayload != null })

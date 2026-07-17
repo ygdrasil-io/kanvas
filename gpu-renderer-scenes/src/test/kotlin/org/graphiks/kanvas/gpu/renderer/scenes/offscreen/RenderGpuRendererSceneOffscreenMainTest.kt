@@ -6,6 +6,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.spi.IIORegistry
 import javax.imageio.spi.ImageWriterSpi
+import javax.imageio.ImageIO
 import kotlin.io.path.exists
 import kotlin.io.path.readBytes
 import kotlin.io.path.readText
@@ -79,6 +80,109 @@ class RenderGpuRendererSceneOffscreenMainTest {
             sceneOutput.resolve("reference.png").readBytes().toList(),
             sceneOutput.resolve("render.png").readBytes().toList(),
         )
+    }
+
+    @Test
+    fun `linear gradients use one generic prepared submit and stay within one unorm lsb`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-registered-uniform")
+
+        val report = renderGpuRendererSceneOffscreen(arrayOf("linear-gradient-lanes", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        val sceneOutput = root.resolve("linear-gradient-lanes")
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:programs=solid-color-v1,linear-gradient-2stop-v1",
+        )
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+        )
+        assertContains(report.diagnostics, "registeredUniform:cache creations=2 reuses=2")
+
+        val actual = ImageIO.read(sceneOutput.resolve("render.png").toFile())
+        val reference = ImageIO.read(sceneOutput.resolve("reference.png").toFile())
+        var maxChannelDelta = 0
+        repeat(actual.height) { y ->
+            repeat(actual.width) { x ->
+                val actualArgb = actual.getRGB(x, y)
+                val referenceArgb = reference.getRGB(x, y)
+                repeat(4) { channel ->
+                    val shift = channel * 8
+                    maxChannelDelta = maxOf(
+                        maxChannelDelta,
+                        kotlin.math.abs(
+                            ((actualArgb ushr shift) and 0xff) -
+                                ((referenceArgb ushr shift) and 0xff),
+                        ),
+                    )
+                }
+            }
+        }
+        assertTrue(maxChannelDelta <= 1, "max channel delta was $maxChannelDelta")
+    }
+
+    @Test
+    fun `radial and sweep gradients use the same generic prepared submit`() {
+        val cases = listOf(
+            "radial-swatch" to "radial-gradient-2stop-v1",
+            "sweep-disk" to "sweep-gradient-2stop-v1",
+        )
+
+        cases.forEach { (sceneId, program) ->
+            val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-$sceneId")
+            val report = renderGpuRendererSceneOffscreen(arrayOf(sceneId, root.toString()))
+            if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return@forEach
+
+            assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+            assertContains(
+                report.diagnostics,
+                "registeredUniform:programs=solid-color-v1,$program",
+            )
+            assertContains(
+                report.diagnostics,
+                "registeredUniform:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+            )
+            val sceneOutput = root.resolve(sceneId)
+            val actual = ImageIO.read(sceneOutput.resolve("render.png").toFile())
+            val reference = ImageIO.read(sceneOutput.resolve("reference.png").toFile())
+            assertEquals(actual.width, reference.width)
+            assertEquals(actual.height, reference.height)
+            repeat(actual.height) { y ->
+                repeat(actual.width) { x ->
+                    val actualArgb = actual.getRGB(x, y)
+                    val referenceArgb = reference.getRGB(x, y)
+                    repeat(4) { channel ->
+                        val shift = channel * 8
+                        val delta = kotlin.math.abs(
+                            ((actualArgb ushr shift) and 0xff) -
+                                ((referenceArgb ushr shift) and 0xff),
+                        )
+                        assertTrue(delta <= 1, "$sceneId pixel=($x,$y) channel=$channel delta=$delta")
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `registered runtime effect uses the generic prepared submit without source in the frame plan`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-runtime-effect")
+        val report = renderGpuRendererSceneOffscreen(arrayOf("runtime-effect-uniform", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:programs=solid-color-v1,simple-runtime-effect-v1",
+        )
+        assertContains(report.diagnostics, "registeredUniform:wgslSourceInFramePlan=false")
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+        )
+        assertContains(report.diagnostics, "registeredUniform:withinOneLsb=64000/64000 maxChannelDelta=0")
     }
 
     @Test

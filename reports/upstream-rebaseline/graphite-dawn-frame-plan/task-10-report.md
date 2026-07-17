@@ -336,3 +336,72 @@ bounded COLRv0 consumers plus completion-only measurement. Gradients, images,
 paths, strokes, filters, runtime effects, mixed frames, saveLayer,
 destination-read, general Canvas integration, and window presentation have not
 yet migrated to this prepared dispatcher and remain later slices.
+
+## Slice 10F-c closed-program uniform rectangle batches
+
+The prepared dispatcher now has one generic, handle-free
+`RegisteredUniformRect` recording contract. A frame carries only a closed
+program identity, exact immutable uniform bytes, target/scissor bounds, paint
+order, and canonical hashes. It never carries WGSL source or native handles.
+The native side validates the exact packet authority, creates one render pass,
+and uses a session cache keyed by program, target format, and sample count.
+
+The first supported program set is deliberately bounded:
+
+- solid color;
+- two-stop linear, radial, and sweep gradients;
+- the registered `SimpleRT` runtime effect.
+
+All shaders emit premultiplied color into the exact fixed-function `SrcOver`
+pipeline. The scene adapter creates an independent CPU premultiplied
+source-over reference. Native evidence on the current Apple M2 Max run is:
+
+- linear gradient: 1 encoder, 1 command buffer, 1 submit, 1 validation
+  readback, 63,998/64,000 exact pixels, and every pixel within one UNORM8 LSB;
+- radial gradient: 1 encoder, 1 command buffer, 1 submit, 1 validation
+  readback, 64,000/64,000 exact pixels;
+- sweep gradient: 1 encoder, 1 command buffer, 1 submit, 1 validation readback,
+  64,000/64,000 exact pixels;
+- registered `SimpleRT`: 1 encoder, 1 command buffer, 1 submit, 1 validation
+  readback, 64,000/64,000 exact pixels, with no source in the frame plan.
+
+The per-family benchmark moves FillRect and all three gradient families to the
+completion-only path. Warmup and measured frames perform no readback; one final
+readback validates the last state outside the measured interval. A regression
+test opens successive prepared targets in one backend session and proves that
+their exact target generations are bound during preflight instead of being
+hard-coded by the handle-free recorder. This prevents the previously observed
+`stale.preflight.resource_generation` refusal while preserving exact device,
+target, capability-seal, and prepared-resource validation.
+
+Validation commands:
+
+```text
+rtk ./gradlew :gpu-renderer-scenes:test --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.PerFamilyBenchmarkTest.prepared families remain valid across successive native target generations'
+rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test --no-daemon --console=plain
+rtk ./gradlew :gpu-renderer-scenes:runPerFamilyBenchmark -PwarmupFrames=1 -PmeasuredFrames=2 -PperformanceOutput=/tmp/kanvas-family-benchmark-2
+```
+
+Observed results:
+
+- successive-target native regression: `BUILD SUCCESSFUL`;
+- complete `gpu-renderer` and `gpu-renderer-scenes` test suites:
+  `BUILD SUCCESSFUL`;
+- small native family benchmark: all 8 families sampled; FillRect and all three
+  gradient families used prepared submit-to-completion measurement with zero
+  measured readbacks.
+
+The published wgpu4k snapshot `0.2.0-20260716.235022-2` runs this slice through
+the unchanged public `GPUQueue.onSubmittedWorkDone(): Result<Unit>` API. Kanvas
+adds no completion workaround. The separately observed optional encoder-label
+setter failure remains outside this route.
+
+### Explicit non-claim
+
+10F-c does not claim that blur, color matrix, stroke, bitmap, text, general
+paths, mixed saveLayer/destination-read frames, Canvas integration, or window
+presentation use the generic prepared dispatcher. Blur and color matrix need
+their corrected premultiplied program evidence; the current legacy stroke ABI
+must be diagnosed before promotion. Bitmap/text require sampled-resource
+bindings, and paths require their geometry/coverage route rather than this
+uniform-only contract.

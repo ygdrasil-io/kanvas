@@ -132,6 +132,9 @@ class RectOnlyOffscreenRenderer internal constructor(
         if (scene.usesPreparedSolidRectPilot()) {
             return renderPreparedSolidRectScene(scene, outputDir)
         }
+        if (scene.usesPreparedRegisteredUniformRectPilot()) {
+            return renderPreparedRegisteredUniformRectScene(scene, outputDir)
+        }
         val drawPlan = prepareRectOnlyDrawPlan(
             sceneId = sceneId,
             commands = scene.commands,
@@ -400,6 +403,132 @@ class RectOnlyOffscreenRenderer internal constructor(
                         "solidRect:cache creations=${counters.solidRectInvariantCreations} " +
                             "reuses=${counters.solidRectInvariantReuses} " +
                             "invalidations=${counters.solidRectInvariantInvalidations}",
+                    ) + session.runtimeTelemetryDumpLines,
+                )
+            }
+        }
+    }
+
+    private fun renderPreparedRegisteredUniformRectScene(
+        scene: GPURendererScene<SceneCommand>,
+        outputDir: Path,
+    ): OffscreenRunReport {
+        val sceneId = scene.sceneId.value
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+            ?: return OffscreenRunReport.failed(sceneId, "webgpu-context-unavailable")
+        runtime.use { session ->
+            val capabilities = session.capabilities
+                ?: return OffscreenRunReport.failed(
+                    sceneId,
+                    "prepared-registered-uniform-capabilities-unavailable",
+                )
+            val generation = capabilities.deviceGenerationOrNull()
+                ?: return OffscreenRunReport.failed(
+                    sceneId,
+                    "prepared-registered-uniform-device-generation-unavailable",
+                )
+            val preparedFrame = when (
+                val result = PreparedRegisteredUniformRectSceneFrameRecorder().record(
+                    scene,
+                    capabilities,
+                    generation,
+                    frameOrdinal = 1L,
+                    withReadback = true,
+                )
+            ) {
+                is PreparedRegisteredUniformRectSceneFrameResult.Refused ->
+                    return OffscreenRunReport.failed(sceneId, result.reason)
+                is PreparedRegisteredUniformRectSceneFrameResult.Recorded -> result
+            }
+            val requestId = requireNotNull(preparedFrame.readbackRequestId)
+            session.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                    OFFSCREEN_COLOR_FORMAT,
+                ),
+            ).use { preparedSession ->
+                val terminal = preparedSession.renderFrame(
+                    preparedFrame.taskList,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+                ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                if (terminal.outcome != GPUFrameStructuralOutcome.Succeeded) {
+                    return OffscreenRunReport.failed(
+                        sceneId,
+                        terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                            ?: "prepared-registered-uniform-frame-failed",
+                        diagnostics = preparedFrame.diagnostics,
+                    )
+                }
+                val pixels = (terminal.output as? GPUSceneFrameOutput.ReadbackRgba)?.bytes
+                    ?: return OffscreenRunReport.failed(
+                        sceneId,
+                        "prepared-registered-uniform-readback-missing",
+                        diagnostics = preparedFrame.diagnostics,
+                    )
+                val counters = preparedSession.nativeCounters()
+                val reference = preparedFrame.cpuReferenceRgba
+                val matchingPixels = pixels.indices.step(BYTES_PER_PIXEL).count { offset ->
+                    pixels[offset] == reference[offset] &&
+                        pixels[offset + 1] == reference[offset + 1] &&
+                        pixels[offset + 2] == reference[offset + 2] &&
+                        pixels[offset + 3] == reference[offset + 3]
+                }
+                val totalPixels = scene.dimensions.width * scene.dimensions.height
+                var maxChannelDelta = 0
+                var withinOneLsbPixels = 0
+                pixels.indices.step(BYTES_PER_PIXEL).forEach { offset ->
+                    var pixelMaxDelta = 0
+                    repeat(BYTES_PER_PIXEL) { channel ->
+                        val actual = pixels[offset + channel].toInt() and 0xff
+                        val expected = reference[offset + channel].toInt() and 0xff
+                        pixelMaxDelta = maxOf(pixelMaxDelta, kotlin.math.abs(actual - expected))
+                    }
+                    maxChannelDelta = maxOf(maxChannelDelta, pixelMaxDelta)
+                    if (pixelMaxDelta <= 1) withinOneLsbPixels += 1
+                }
+                writePng(
+                    pixels,
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                    outputDir.resolve(RENDER_FILE_NAME),
+                )
+                writePng(
+                    reference,
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                    outputDir.resolve("reference.png"),
+                )
+                if (!pixels.contentEquals(reference)) {
+                    writePng(
+                        colorGlyphDiff(pixels, reference),
+                        scene.dimensions.width,
+                        scene.dimensions.height,
+                        outputDir.resolve("diff.png"),
+                    )
+                } else {
+                    outputDir.resolve("diff.png").toFile().delete()
+                }
+                return OffscreenRunReport.rendered(
+                    sceneId = sceneId,
+                    imagePath = RENDER_FILE_NAME,
+                    width = scene.dimensions.width,
+                    height = scene.dimensions.height,
+                    byteCount = pixels.size.toLong(),
+                    nonTransparentPixels = pixels.countNonTransparentPixels(),
+                    diagnostics = listOf(
+                        "rendered $sceneId via prepared WebGPU frame",
+                        "adapter=${session.adapterInfo?.summary ?: "unknown-adapter"}",
+                    ) + preparedFrame.diagnostics + listOf(
+                        "registeredUniform:native encoders=${counters.encoders} " +
+                            "commandBuffers=${counters.commandBuffers} submits=${counters.submits} " +
+                            "readbacks=${counters.readbackCopies}",
+                        "registeredUniform:cache creations=${counters.registeredUniformInvariantCreations} " +
+                            "reuses=${counters.registeredUniformInvariantReuses}",
+                        "registeredUniform:pixelExact=$matchingPixels/$totalPixels",
+                        "registeredUniform:withinOneLsb=$withinOneLsbPixels/$totalPixels " +
+                            "maxChannelDelta=$maxChannelDelta",
+                        "registeredUniform:reference=independent-cpu-premul-source-over",
                     ) + session.runtimeTelemetryDumpLines,
                 )
             }

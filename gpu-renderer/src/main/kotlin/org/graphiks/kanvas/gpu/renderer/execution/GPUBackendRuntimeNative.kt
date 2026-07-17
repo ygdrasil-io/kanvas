@@ -670,6 +670,8 @@ private class WgpuBackendSession(
     private val preparedSceneSetupRollbackQuarantine = GPUPreparedSceneSetupRollbackQuarantine()
     private val quarantinedPreparedSceneTargets = linkedSetOf<GPUWgpu4kPreparedSceneTarget>()
     private val quarantinedSolidRectCaches = linkedSetOf<GPUWgpu4kSolidRectSessionCache>()
+    private val quarantinedRegisteredUniformCaches =
+        linkedSetOf<GPUWgpu4kRegisteredUniformRectSessionCache>()
     private val quarantinedColorGlyphCaches = linkedSetOf<GPUWgpu4kColorGlyphSessionCache>()
     private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits(
@@ -783,6 +785,9 @@ private class WgpuBackendSession(
                 queue = glfw.wgpuContext.device.queue,
             ),
         )
+        val registeredUniformRectCache = setupTransaction.own(
+            GPUWgpu4kRegisteredUniformRectSessionCache(glfw.wgpuContext.device),
+        )
         telemetryRecorder.recordTextureCreated()
         val encodingBackend = setupTransaction.own(GPUWgpu4kFrameEncodingBackend(
             deviceGeneration = deviceGeneration,
@@ -874,6 +879,7 @@ private class WgpuBackendSession(
                     preparedTarget,
                     solidRectCache,
                     colorGlyphCache,
+                    registeredUniformRectCache,
                 )
                 val preflighter = GPUFramePreflighter(
                     context = GPUFramePreflightContext(
@@ -931,6 +937,7 @@ private class WgpuBackendSession(
                         preparedTarget,
                         solidRectCache,
                         colorGlyphCache,
+                        registeredUniformRectCache,
                     )
                 } finally {
                     childLease.close()
@@ -942,6 +949,7 @@ private class WgpuBackendSession(
                 val retention = retentionObserver.snapshot()
                 val solidRect = solidRectCache.counters()
                 val colorGlyph = colorGlyphCache.counters()
+                val registeredUniform = registeredUniformRectCache.counters()
                 GPUPreparedSceneNativeCounters(
                     encoders = encoding.encoders,
                     commandBuffers = encoding.finishes,
@@ -963,6 +971,8 @@ private class WgpuBackendSession(
                     solidRectInvariantCreations = solidRect.invariantCreations,
                     solidRectInvariantReuses = solidRect.invariantReuses,
                     solidRectInvariantInvalidations = solidRect.invariantInvalidations,
+                    registeredUniformInvariantCreations = registeredUniform.invariantCreations,
+                    registeredUniformInvariantReuses = registeredUniform.invariantReuses,
                     colorGlyphInvariantCreations = colorGlyph.invariantCreations,
                     colorGlyphAtlasCreations = colorGlyph.atlasCreations,
                     colorGlyphAtlasUploads = colorGlyph.atlasUploads,
@@ -1019,6 +1029,14 @@ private class WgpuBackendSession(
                 synchronized(this) { quarantinedColorGlyphCaches.remove(cache) }
             }
         }
+        val quarantinedRegisteredUniforms = synchronized(this) {
+            quarantinedRegisteredUniformCaches.toList()
+        }
+        quarantinedRegisteredUniforms.forEach { cache ->
+            runCatching { cache.close() }.onSuccess {
+                synchronized(this) { quarantinedRegisteredUniformCaches.remove(cache) }
+            }
+        }
         queueCompletionRuntime.close()
         try {
             runtimeResourceAdapter.close()
@@ -1041,6 +1059,7 @@ private class WgpuBackendSession(
         preparedTarget: GPUWgpu4kPreparedSceneTarget,
         solidRectCache: GPUWgpu4kSolidRectSessionCache,
         colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
+        registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
     ) {
         var firstFailure: Throwable? = null
         try {
@@ -1064,6 +1083,12 @@ private class WgpuBackendSession(
             colorGlyphCache.close()
         } catch (failure: Throwable) {
             synchronized(this) { quarantinedColorGlyphCaches += colorGlyphCache }
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+        }
+        try {
+            registeredUniformRectCache.close()
+        } catch (failure: Throwable) {
+            synchronized(this) { quarantinedRegisteredUniformCaches += registeredUniformRectCache }
             if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
         }
         firstFailure?.let { throw it }

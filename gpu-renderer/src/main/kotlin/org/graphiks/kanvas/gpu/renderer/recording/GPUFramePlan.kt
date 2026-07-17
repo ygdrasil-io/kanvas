@@ -986,6 +986,13 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
     nullable("resourceBlock", ref.resourceBlock) { block -> string("fingerprint", block.fingerprint.value) }
     when (value) {
         is GPUDrawSemanticPayload.SolidRect -> Unit
+        is GPUDrawSemanticPayload.RegisteredUniformRect -> {
+            string("program", value.program.wireId)
+            string("canonicalHash", value.canonicalHash)
+            int("uniformByteCount", value.uniformBytes.size)
+            bounds("targetBounds", value.targetBounds)
+            bounds("scissorBounds", value.scissorBounds)
+        }
         is GPUDrawSemanticPayload.ColorGlyph -> {
             string("canonicalHash", value.canonicalHash)
             string("planArtifactId", value.planArtifactKey.artifactID.value.toString())
@@ -1298,6 +1305,9 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
         } ?: "none"}"
     return when (this) {
         is GPUDrawSemanticPayload.SolidRect -> "$common)"
+        is GPUDrawSemanticPayload.RegisteredUniformRect ->
+            "$common,program=${program.wireId},registeredUniformHash=$canonicalHash," +
+                "uniformBytes=${uniformBytes.size},target=$targetBounds,scissor=$scissorBounds)"
         is GPUDrawSemanticPayload.ColorGlyph ->
             "$common,colorGlyphHash=$canonicalHash," +
                 "plan=${planArtifactKey.artifactID.value}@${planArtifactKey.generation.value}/" +
