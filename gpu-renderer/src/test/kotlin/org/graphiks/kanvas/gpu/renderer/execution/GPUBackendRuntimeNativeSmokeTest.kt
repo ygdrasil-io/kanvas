@@ -69,6 +69,20 @@ private fun canonicalFixedState(mode: GPUBlendMode): GPUFixedFunctionBlendState 
 }
 
 class GPUBackendRuntimeNativeSmokeTest {
+    @Test
+    fun `prepared scene parent teardown can retry an incomplete native owner close`() {
+        var attempts = 0
+        val registry = GPUPreparedSceneChildRegistry {
+            attempts += 1
+            if (attempts == 1) error("native ownership still quarantined")
+        }
+
+        assertFailsWith<IllegalStateException> { registry.close() }
+        registry.close()
+
+        assertEquals(2, attempts)
+    }
+
     @AfterEach
     fun disposeRuntime() {
         GPUBackendRuntimeFactory.dispose()

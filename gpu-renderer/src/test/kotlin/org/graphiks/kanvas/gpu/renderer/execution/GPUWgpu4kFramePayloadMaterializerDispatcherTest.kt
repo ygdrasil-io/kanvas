@@ -9,6 +9,8 @@ import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
@@ -17,6 +19,32 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 
 class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
+    @Test
+    fun `all five routes retain failed common pre registration ownership`() {
+        listOf(
+            "failed.native-solid-rect.materialization",
+            "failed.native-registered-uniform.materialization",
+            "failed.native-destination-copy.materialization",
+            "failed.native-color-glyph.materialization",
+            "failed.native-separable-blur.materialization",
+        ).forEach { code ->
+            val ledger = GPUPreRegistrationNativeHandleLedger()
+            val handle = FailOnceHandle()
+            ledger.track(handle)
+            ledger.closeRetainingFailures()
+
+            val refused = refusedWgpu4kPreRegistrationMaterialization(
+                code,
+                "route failed",
+                ledger,
+            )
+
+            assertEquals(code, refused.code)
+            assertSame(ledger, refused.retainedPreRegistrationLedger)
+            assertEquals(1, handle.closeAttempts)
+        }
+    }
+
     @Test
     fun `dispatcher selects every typed prepared route from semantic classes`() {
         assertEquals(
@@ -130,6 +158,43 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
     }
 
     @Test
+    fun `failed draft disposal retains ownership for one successful retry`() {
+        val ownedHandle = FailOnceHandle()
+        val draft = ownedDraft(ownedHandle)
+        val delegate = TransferringDraftProbe(ownedHandle, draft)
+
+        val result = materializeWgpu4kSurfaceRoute(
+            format = GPUTextureFormat.BGRA8Unorm,
+            acquireSurfaceBlit = {
+                GPUWgpu4kSurfaceBlitCacheLease(
+                    fakeNative("surface.source.retry"),
+                    fakeNative("surface.pipeline.retry"),
+                    fakeNative("surface.bind-group.retry"),
+                )
+            },
+            materializeWithSurfaceBlit = { delegate.materializeAndTransfer() },
+            decorateMaterializedDraft = { _, _ -> error("surface decoration failed") },
+        )
+        delegate.close()
+        delegate.close()
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result)
+        assertEquals("failed.native-frame-payload.surface-blit-materialization", refused.code)
+        val retainedDraft = assertNotNull(refused.retainedDraft)
+        assertSame(draft, retainedDraft)
+        assertEquals(1, ownedHandle.closeAttempts)
+        assertEquals(0, ownedHandle.successfulCloses)
+        val quarantine = GPURuntimeResourceAdapter()
+        assertTrue(quarantine.quarantinePreparedNativeFrameDraft(retainedDraft))
+        assertEquals(1, quarantine.quarantinedPreparedNativeFramePayloadCount)
+        quarantine.close()
+        assertEquals(0, quarantine.quarantinedPreparedNativeFramePayloadCount)
+        quarantine.close()
+        assertEquals(2, ownedHandle.closeAttempts)
+        assertEquals(1, ownedHandle.successfulCloses)
+    }
+
+    @Test
     fun `common surface decorator restores full payload identity and exact final blit`() {
         val generation = GPUDeviceGenerationID(7)
         val copyScope = scope(
@@ -164,6 +229,7 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             destination = GPUPreparedNativeTextureOperand(fakeNative("copy.target"), generation),
             textureLayout = GPUPreparedNativeTextureCopyLayout(0, 0, 0, 0, 4, 4),
         )
+        val decoratedOwnedHandle = CountingHandle()
         val reusableDraft = GPUPreparedNativeFrameDraft(
             GPUPreparedNativeFramePayload(
                 identity = GPUPreparedNativeFrameIdentity(
@@ -183,6 +249,12 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
                 ),
                 scopeOperands = listOf(copy),
                 scopeOperandKeys = listOf(copyScope.nativeOperandKeys),
+                auxiliaryOwnedHandles = listOf(
+                    GPUPreparedNativeAuxiliaryHandle(
+                        decoratedOwnedHandle,
+                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    ),
+                ),
             ),
         )
         val output = GPUSurfaceOutputRef("surface.window")
@@ -195,6 +267,9 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
         )
 
         val decorated = decorateWgpu4kSurfaceBlitDraft(fullEncoderPlan, reusableDraft, blit)
+
+        assertTrue(reusableDraft.disposeBeforeRegistration())
+        assertEquals(0, decoratedOwnedHandle.closeCount)
 
         assertEquals(fullEncoderPlan.scopes.map { it.sourceStepIndex }, decorated.payload.identity.scopes.map { it.sourceStepIndex })
         assertEquals(listOf(GPUEncoderOperationKind.Copy, GPUEncoderOperationKind.SurfaceBlit), decorated.payload.scopeOperands.map { it.operationKind })
@@ -213,6 +288,8 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
         val bound = assertIs<GPUPreparedNativeFrameLateSurfaceBinding.Bound>(binding)
         assertEquals(output, bound.output)
         assertTrue(bound.target.view === exactTarget)
+        assertTrue(decorated.disposeBeforeRegistration())
+        assertEquals(1, decoratedOwnedHandle.closeCount)
     }
 
     private fun scope(
@@ -282,6 +359,19 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
 
         override fun close() {
             closeCount += 1
+        }
+    }
+
+    private class FailOnceHandle : AutoCloseable {
+        var closeAttempts = 0
+            private set
+        var successfulCloses = 0
+            private set
+
+        override fun close() {
+            closeAttempts += 1
+            if (closeAttempts == 1) error("first close failed")
+            successfulCloses += 1
         }
     }
 

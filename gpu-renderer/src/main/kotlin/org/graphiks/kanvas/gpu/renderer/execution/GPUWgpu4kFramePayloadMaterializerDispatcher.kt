@@ -17,6 +17,18 @@ internal sealed interface GPUWgpu4kPreparedFramePayloadRoute {
     data class Refused(val code: String, val message: String) : GPUWgpu4kPreparedFramePayloadRoute
 }
 
+internal fun refusedWgpu4kPreRegistrationMaterialization(
+    code: String,
+    message: String,
+    ledger: GPUPreRegistrationNativeHandleLedger,
+    retainedCloseOwner: AutoCloseable? = null,
+) = GPUPreparedNativeFramePayloadMaterialization.Refused(
+    code,
+    message,
+    retainedPreRegistrationLedger = ledger.takeIf { it.pendingHandleCount > 0 },
+    retainedCloseOwner = retainedCloseOwner,
+)
+
 internal fun interface GPUAcquiredSurfaceNativeTargetResolver {
     fun resolve(output: GPUAcquiredSurfaceOutput): GPUPreparedNativeTextureViewOperand?
 
@@ -46,7 +58,7 @@ internal fun decorateWgpu4kSurfaceBlitDraft(
             }
         }
     }
-    return GPUPreparedNativeFrameDraft(
+    val decorated = GPUPreparedNativeFrameDraft(
         GPUPreparedNativeFramePayload(
             identity = GPUPreparedNativeFrameIdentity(
                 frameId = reusable.identity.frameId,
@@ -68,6 +80,10 @@ internal fun decorateWgpu4kSurfaceBlitDraft(
             auxiliaryOwnedHandles = reusable.auxiliaryOwnedHandles,
         ),
     )
+    check(reusableDraft.transferOwnershipToDraft(decorated)) {
+        "Reusable native draft ownership could not move to its surface-decorated replacement"
+    }
+    return decorated
 }
 
 internal fun bindWgpu4kLateSurface(
@@ -127,16 +143,20 @@ internal fun materializeWgpu4kSurfaceRoute(
             decorateMaterializedDraft(cached, materialized.draft),
         )
     } catch (failure: Throwable) {
-        materialized.draft.disposeBeforeRegistration()
-        refusedWgpu4kSurfaceBlitMaterialization(failure)
+        val retainedDraft = materialized.draft.takeUnless {
+            it.disposeBeforeRegistration()
+        }
+        refusedWgpu4kSurfaceBlitMaterialization(failure, retainedDraft)
     }
 }
 
 private fun refusedWgpu4kSurfaceBlitMaterialization(
     failure: Throwable,
+    retainedDraft: GPUPreparedNativeFrameDraft? = null,
 ) = GPUPreparedNativeFramePayloadMaterialization.Refused(
     "failed.native-frame-payload.surface-blit-materialization",
     "The typed surface blit payload could not be materialized: ${failure::class.simpleName.orEmpty()}",
+    retainedDraft,
 )
 
 internal fun selectWgpu4kPreparedFramePayloadRoute(

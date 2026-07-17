@@ -447,9 +447,24 @@ internal class GPUFramePreflighter(
                 )
             }
             validateNativeRenderSemanticPayloads(framePlan, requireNotNull(nativeDraft))?.let { invalid ->
+                boundary.releaseOrQuarantineBeforeRegistration(requireNotNull(nativeDraft))
                 return refuseWithRollback(rollback, true, invalid)
             }
-            when (val registration = boundary.register(requireNotNull(nativeDraft))) {
+            val registration = try {
+                boundary.register(requireNotNull(nativeDraft))
+            } catch (failure: Throwable) {
+                boundary.releaseOrQuarantineBeforeRegistration(requireNotNull(nativeDraft))
+                return refuseWithRollback(
+                    rollback,
+                    true,
+                    diagnostic(
+                        "failed.preflight.native_payload_registration",
+                        "Native payload registration failed without a typed result.",
+                        mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                    ),
+                )
+            }
+            when (registration) {
                 is GPUPreparedNativeFrameRegistration.Registered -> {
                     nativeOwnership = registration.ownership
                     if (!rollback.adoptNativePayload(registration.ownership)) {

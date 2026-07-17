@@ -733,6 +733,21 @@ internal class GPUFrameExecutor(
                 }
             }
             var diagnostic = completionDiagnostic ?: postSubmitPresentDiagnostic
+            if (diagnostic != null && completionDiagnostic == null && preparedReadbackOutput != null) {
+                preparedFrame.rollback.quarantineNativeReadbackAfterOutput()
+                val finalizedPool = safeReadbackLifecycle("finalizeAfterNativeClose") {
+                    readback.finalizeAfterNativeClose(
+                        preparedReadbackOutput,
+                        requireNotNull(nativeReadbackOperand),
+                        GPUFrameReadbackNativeOutputSafety.Quarantined,
+                    )
+                }
+                if (finalizedPool is GPUFrameReadbackLifecycleResult.Refused) {
+                    diagnostic = finalizedPool.diagnostic
+                }
+                finishTerminal(diagnostic)
+                return
+            }
             if (diagnostic != null || preparedReadbackOutput == null) {
                 finishTerminal(diagnostic)
                 return

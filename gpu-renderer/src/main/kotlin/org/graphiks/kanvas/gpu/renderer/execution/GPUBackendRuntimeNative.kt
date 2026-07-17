@@ -568,7 +568,7 @@ internal class GPUPreparedSceneChildRegistry(
                 registry.leases.remove(this)
                 registry.claimTeardownIfReady()
             }
-            if (teardownNow) registry.teardown()
+            if (teardownNow) registry.performTeardown()
         }
     }
 
@@ -584,21 +584,50 @@ internal class GPUPreparedSceneChildRegistry(
 
     override fun close() {
         val children: List<Lease>
-        val teardownNow: Boolean
+        var teardownNow: Boolean
         synchronized(this) {
-            if (closeRequested) return
-            closeRequested = true
-            children = leases.toList()
+            children = if (closeRequested) {
+                emptyList()
+            } else {
+                closeRequested = true
+                leases.toList()
+            }
             teardownNow = claimTeardownIfReady()
         }
-        children.forEach { lease -> runCatching { lease.closeChild() } }
-        if (teardownNow) teardown()
+        var firstFailure: Throwable? = null
+        children.forEach { lease ->
+            try {
+                lease.closeChild()
+            } catch (failure: Throwable) {
+                if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+            }
+        }
+        if (!teardownNow) {
+            synchronized(this) { teardownNow = claimTeardownIfReady() }
+        }
+        if (teardownNow) {
+            try {
+                performTeardown()
+            } catch (failure: Throwable) {
+                if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+            }
+        }
+        firstFailure?.let { throw it }
     }
 
     private fun claimTeardownIfReady(): Boolean {
         if (!closeRequested || leases.isNotEmpty() || teardownClaimed) return false
         teardownClaimed = true
         return true
+    }
+
+    private fun performTeardown() {
+        try {
+            teardown()
+        } catch (failure: Throwable) {
+            synchronized(this) { teardownClaimed = false }
+            throw failure
+        }
     }
 }
 
@@ -814,10 +843,26 @@ private class WgpuBackendSession(
         val mappingExecutor = Executors.newSingleThreadExecutor { task ->
             Thread(task, "kanvas-prepared-scene-readback").apply { isDaemon = true }
         }
-        val mappingExecutorCloser = setupTransaction.own(AutoCloseable { mappingExecutor.shutdownNow() })
+        val nativeReadbackMapper = GPUWgpu4kNativeReadbackMapper(mappingExecutor)
+        val mappingExecutorCloser = setupTransaction.own(AutoCloseable {
+            mappingExecutor.shutdownNow()
+            var firstFailure: Throwable? = null
+            try {
+                nativeReadbackMapper.close()
+            } catch (failure: Throwable) {
+                firstFailure = failure
+            }
+            if (!mappingExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                val failure = IllegalStateException(
+                    "Prepared scene readback mapping executor did not terminate",
+                )
+                if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+            }
+            firstFailure?.let { throw it }
+        })
         val readback = GPUConcreteFrameReadbackAccess(
             resourceProvider,
-            GPUWgpu4kNativeReadbackMapper(mappingExecutor),
+            nativeReadbackMapper,
         )
         val retentionObserver = PreparedSceneRetentionObserver()
         val coordinatorCreations = AtomicLong(0L)
@@ -1114,17 +1159,14 @@ private class WgpuBackendSession(
             }
         }
         queueCompletionRuntime.close()
+        runtimeResourceAdapter.close()
         try {
-            runtimeResourceAdapter.close()
+            executionCaches.close()
         } finally {
             try {
-                executionCaches.close()
+                queueManager.close()
             } finally {
-                try {
-                    queueManager.close()
-                } finally {
-                    glfw.close()
-                }
+                glfw.close()
             }
         }
     }

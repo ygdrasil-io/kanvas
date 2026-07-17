@@ -883,7 +883,9 @@ internal class GPUWgpu4kSolidRectFramePayloadMaterializer(
             }
             materialization
         } catch (failure: Throwable) {
-            runCatching { ephemeralCache?.close() }
+            val retainedCache = ephemeralCache?.takeIf { cache ->
+                runCatching { cache.close() }.isFailure
+            }
             synchronized(this) {
                 materializing = false
                 preRegistrationHandles.closeRetainingFailures()
@@ -892,6 +894,7 @@ internal class GPUWgpu4kSolidRectFramePayloadMaterializer(
                 "failed.native-solid-rect.materialization",
                 "Public wgpu4k resource materialization failed: " +
                     "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
+                retainedCache,
             )
         }
     }
@@ -915,8 +918,13 @@ internal class GPUWgpu4kSolidRectFramePayloadMaterializer(
         }
     }
 
-    private fun refused(code: String, message: String) =
-        GPUPreparedNativeFramePayloadMaterialization.Refused(code, message)
+    private fun refused(
+        code: String,
+        message: String,
+        retainedCloseOwner: AutoCloseable? = null,
+    ) = refusedWgpu4kPreRegistrationMaterialization(
+        code, message, preRegistrationHandles, retainedCloseOwner,
+    )
 
     @Synchronized
     private fun recordPayloadResourceCreation() {

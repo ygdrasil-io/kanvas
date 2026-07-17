@@ -4,8 +4,11 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayout
 
 import io.ygdrasil.webgpu.GPUComputePipeline
 import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUBindGroup
+import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureView
 import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -277,7 +280,7 @@ class GPUFrameExecutorTest {
         assertFalse(handle.completion.toCompletableFuture().isDone)
         assertEquals(1, adapter.outputOwnedPreparedNativeFramePayloadCount)
         assertTrue(events.indexOf("readback:map") > events.indexOf("completion:arm:ticket.7"))
-        adapter.close()
+        assertFailsWith<IllegalStateException> { adapter.close() }
         assertEquals(1, adapter.outputOwnedPreparedNativeFramePayloadCount)
 
         val pixels = ByteArray(4 * 4 * 4) { index -> index.toByte() }
@@ -292,6 +295,73 @@ class GPUFrameExecutorTest {
                 events.indexOf("readback:unmapped"),
         )
         assertEquals("readback:pool-finalize:Released", events.last())
+    }
+
+    @Test
+    fun `present failure with successful readback completion terminally quarantines output ownership`() {
+        val events = mutableListOf<String>()
+        val requestId = GPUReadbackRequestID("readback.present-failure")
+        val adapter = GPURuntimeResourceAdapter()
+        val payload = GPUFrameCoreTestFixture.nativePayload(withReadback = true, withSurface = true)
+        val registration = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+            adapter.registerPreparedNativeFrameDraft(GPUPreparedNativeFrameDraft(payload)),
+        )
+        val acquired = GPUAcquiredSurfaceOutput(
+            GPUSurfaceOutputRef("surface.main"),
+            GPUDeviceGenerationID(7),
+            1,
+            "surface-output",
+        )
+        val surface = assertIs<GPUPreparedNativeScopeOperand.SurfaceBlit>(payload.scopeOperands.last())
+        assertIs<GPUPreparedNativeFrameBindingResult.Ready>(
+            registration.ownership.bindLateSurface(
+                acquired,
+                GPUPreparedNativeFrameLateSurfaceBinding.Bound(
+                    acquired.output,
+                    GPUPreparedNativeTextureViewOperand(
+                        GPUFrameCoreTestFixture.fakeNativeHandle("surface.target"),
+                        GPUDeviceGenerationID(7),
+                    ),
+                ),
+            ),
+        )
+        val completion = RecordingCompletion(events)
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = RecordingEncodingBackend(
+                events,
+                requireNativeOperands = true,
+                expectedNativeOperands = payload.scopeOperands,
+            ),
+            completion = completion,
+            retention = RecordingRetention(events),
+            readback = RecordingReadbackAccess(events, delayed = true),
+            presenter = object : GPUPostSubmitPresentAccess {
+                override fun present(output: GPUAcquiredSurfaceOutput) = GPUPostSubmitPresentResult.Failed(
+                    executionDiagnostic("failed.window.present", "present refused"),
+                )
+
+                override fun discardAfterSubmit(output: GPUAcquiredSurfaceOutput) =
+                    GPUSurfaceReleaseResult.Released
+            },
+        ).execute(
+            GPUFrameCoreTestFixture.preparedFrame(
+                withHostActions = true,
+                nativePayloadOwnership = registration.ownership,
+                readbackRequestId = requestId,
+            ),
+        )
+
+        assertIs<GPUFrameImmediateState.FailedAfterSubmit>(handle.immediateState)
+        assertFalse(handle.completion.toCompletableFuture().isDone)
+        completion.complete(GPUQueueCompletionOutcome.Success)
+
+        val result = handle.completion.toCompletableFuture().get(2, TimeUnit.SECONDS)
+        assertEquals("failed.window.present", result.diagnostic?.code?.value)
+        assertEquals(0, adapter.outputOwnedPreparedNativeFramePayloadCount)
+        assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount)
+        assertTrue("readback:map" !in events)
+        assertEquals("readback:pool-finalize:Quarantined", events.last())
     }
 
     @Test
@@ -1962,7 +2032,7 @@ internal object GPUFrameCoreTestFixture {
                             facadeOperationClasses = listOf("beginRenderPass", "surfaceBlit", "endRenderPass"),
                             targetGeneration = 1,
                             resourceGenerationLabels = listOf("GPUFrameTargetRef:target.scene@1"),
-                        ),
+                        ).attachNativeOperandKeys(surfaceNativeOperandKeys()),
                     )
                 }
             },
@@ -2106,10 +2176,12 @@ internal object GPUFrameCoreTestFixture {
         targetGeneration: Long = 1,
         copySourceBindingKey: String = "GPUFrameTargetRef:target.scene@1",
         withReadback: Boolean = false,
+        withSurface: Boolean = false,
     ): GPUPreparedNativeFramePayload {
         val copyKeys = copyNativeOperandKeys(copySourceBindingKey)
         val computeKeys = computeNativeOperandKeys()
         val readbackKeys = readbackNativeOperandKeys()
+        val surfaceKeys = surfaceNativeOperandKeys()
         val targetTexture = fakeNative<GPUTexture>("target.scene")
         val copyTexture = fakeNative<GPUTexture>("texture.copy")
         val scopes = buildList {
@@ -2136,6 +2208,16 @@ internal object GPUFrameCoreTestFixture {
                         GPUEncoderOperationKind.Readback,
                         listOf("GPUFrameTargetRef:target.scene@1", "GPUFrameBufferRef:buffer.readback@1"),
                         readbackKeys,
+                    ),
+                )
+            }
+            if (withSurface) {
+                add(
+                    GPUPreparedNativeScopeKey(
+                        if (withReadback) 6 else 5,
+                        GPUEncoderOperationKind.SurfaceBlit,
+                        listOf("GPUFrameTargetRef:target.scene@1"),
+                        surfaceKeys,
                     ),
                 )
             }
@@ -2193,6 +2275,26 @@ internal object GPUFrameCoreTestFixture {
                     ),
                 )
             }
+            if (withSurface) {
+                add(
+                    GPUPreparedNativeScopeOperand.SurfaceBlit(
+                        sourceStepIndex = if (withReadback) 6 else 5,
+                        source = GPUPreparedNativeTextureViewOperand(
+                            fakeNative<GPUTextureView>("surface.source"),
+                            deviceGeneration,
+                        ),
+                        output = GPUSurfaceOutputRef("surface.main"),
+                        pipeline = GPUPreparedNativeRenderPipelineOperand(
+                            fakeNative<GPURenderPipeline>("surface.pipeline"),
+                            deviceGeneration,
+                        ),
+                        bindGroup = GPUPreparedNativeBindGroupOperand(
+                            fakeNative<GPUBindGroup>("surface.bind-group"),
+                            deviceGeneration,
+                        ),
+                    ),
+                )
+            }
         }
         return GPUPreparedNativeFramePayload(
             identity = GPUPreparedNativeFrameIdentity(
@@ -2208,6 +2310,7 @@ internal object GPUFrameCoreTestFixture {
                 add(copyKeys)
                 add(computeKeys)
                 if (withReadback) add(readbackKeys)
+                if (withSurface) add(surfaceKeys)
             },
         )
     }
@@ -2251,6 +2354,31 @@ internal object GPUFrameCoreTestFixture {
             GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
         ),
     )
+
+    private fun surfaceNativeOperandKeys(): List<GPUPreparedNativeOperandKey> = listOf(
+        GPUPreparedNativeOperandKey(
+            GPUPreparedNativeOperandRole.SurfaceSource,
+            GPUPreparedNativeOperandKind.TextureView,
+            gpuPreparedNativeBindingKey("surface.source"),
+        ),
+        GPUPreparedNativeOperandKey(
+            GPUPreparedNativeOperandRole.SurfaceTarget,
+            GPUPreparedNativeOperandKind.TextureView,
+            gpuPreparedNativeBindingKey("surface.target"),
+        ),
+        GPUPreparedNativeOperandKey(
+            GPUPreparedNativeOperandRole.SurfacePipeline,
+            GPUPreparedNativeOperandKind.RenderPipeline,
+            gpuPreparedNativeBindingKey("surface.pipeline"),
+        ),
+        GPUPreparedNativeOperandKey(
+            GPUPreparedNativeOperandRole.SurfaceBindGroup,
+            GPUPreparedNativeOperandKind.BindGroup,
+            gpuPreparedNativeBindingKey("surface.bind-group"),
+        ),
+    )
+
+    internal inline fun <reified T> fakeNativeHandle(label: String): T = fakeNative(label)
 
     private inline fun <reified T> fakeNative(label: String): T = Proxy.newProxyInstance(
         T::class.java.classLoader,

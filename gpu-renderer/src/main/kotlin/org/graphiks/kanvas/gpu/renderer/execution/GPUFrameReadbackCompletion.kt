@@ -568,51 +568,98 @@ private object GPUFrameReadbackSubmissionIds {
 /** Public-facade-only wgpu4k mapper. Its executor must never be the render thread. */
 internal class GPUWgpu4kNativeReadbackMapper(
     private val mappingExecutor: Executor,
-) : GPUFrameNativeReadbackMapper {
+) : GPUFrameNativeReadbackMapper, AutoCloseable {
+    private val pending = linkedSetOf<MappingTask>()
+    private var closed = false
+
+    private inner class MappingTask(
+        private val output: GPUPreparedReadbackOutput,
+        private val operand: GPUPreparedNativeScopeOperand.Readback,
+        private val sink: GPUFrameNativeReadbackMapSink,
+    ) : Runnable {
+        private val terminal = AtomicBoolean(false)
+
+        override fun run() {
+            if (terminal.get()) return
+            val mapResult = try {
+                runBlocking {
+                    operand.destination.buffer.mapAsync(
+                        GPUMapMode.Read,
+                        0uL,
+                        output.layout.totalBufferBytes.toULong(),
+                    )
+                }
+            } catch (failure: Throwable) {
+                Result.failure(failure)
+            }
+            val failure = mapResult.exceptionOrNull()
+            deliver(
+                if (failure != null) {
+                    GPUFrameNativeReadbackMapDelivery.Failed(
+                        executionDiagnostic(
+                            "failed.frame-readback.map",
+                            "wgpu4k readback mapping failed.",
+                            mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                        ),
+                        GPUFrameReadbackMapFailureSafety.Quarantine,
+                    )
+                } else {
+                    GPUFrameNativeReadbackMapDelivery.Mapped(
+                        WgpuMappedReadbackRange(
+                            operand.destination.buffer,
+                            output.layout.totalBufferBytes,
+                        ),
+                    )
+                },
+            )
+        }
+
+        fun cancelForTeardown() {
+            deliver(
+                GPUFrameNativeReadbackMapDelivery.Failed(
+                    executionDiagnostic(
+                        "failed.frame-readback.mapping-teardown",
+                        "Readback mapping was cancelled by prepared scene teardown.",
+                    ),
+                    GPUFrameReadbackMapFailureSafety.Quarantine,
+                ),
+            )
+        }
+
+        fun abandonRejected() {
+            terminal.set(true)
+            synchronized(this@GPUWgpu4kNativeReadbackMapper) { pending.remove(this) }
+        }
+
+        private fun deliver(delivery: GPUFrameNativeReadbackMapDelivery) {
+            if (!terminal.compareAndSet(false, true)) return
+            synchronized(this@GPUWgpu4kNativeReadbackMapper) { pending.remove(this) }
+            sink.accept(delivery)
+        }
+    }
+
     override fun map(
         output: GPUPreparedReadbackOutput,
         operand: GPUPreparedNativeScopeOperand.Readback,
         sink: GPUFrameNativeReadbackMapSink,
     ): GPUFrameReadbackMapArmResult {
         validate(output, operand)?.let { return GPUFrameReadbackMapArmResult.Refused(it) }
-        return try {
-            mappingExecutor.execute {
-                val mapResult = try {
-                    runBlocking {
-                        operand.destination.buffer.mapAsync(
-                            GPUMapMode.Read,
-                            0uL,
-                            output.layout.totalBufferBytes.toULong(),
-                        )
-                    }
-                } catch (failure: Throwable) {
-                    Result.failure(failure)
-                }
-                val failure = mapResult.exceptionOrNull()
-                if (failure != null) {
-                    sink.accept(
-                        GPUFrameNativeReadbackMapDelivery.Failed(
-                            executionDiagnostic(
-                                "failed.frame-readback.map",
-                                "wgpu4k readback mapping failed.",
-                                mapOf("failureClass" to failure::class.simpleName.orEmpty()),
-                            ),
-                            GPUFrameReadbackMapFailureSafety.Quarantine,
-                        ),
-                    )
-                } else {
-                    sink.accept(
-                        GPUFrameNativeReadbackMapDelivery.Mapped(
-                            WgpuMappedReadbackRange(
-                                operand.destination.buffer,
-                                output.layout.totalBufferBytes,
-                            ),
-                        ),
-                    )
-                }
+        val task = synchronized(this) {
+            if (closed) {
+                return GPUFrameReadbackMapArmResult.Refused(
+                    executionDiagnostic(
+                        "failed.frame-readback.mapping-executor",
+                        "Readback mapping cannot be scheduled after mapper teardown.",
+                    ),
+                )
             }
+            MappingTask(output, operand, sink).also { pending += it }
+        }
+        return try {
+            mappingExecutor.execute(task)
             GPUFrameReadbackMapArmResult.Armed
         } catch (failure: Throwable) {
+            task.abandonRejected()
             GPUFrameReadbackMapArmResult.Refused(
                 executionDiagnostic(
                     "failed.frame-readback.mapping-executor",
@@ -621,6 +668,22 @@ internal class GPUWgpu4kNativeReadbackMapper(
                 ),
             )
         }
+    }
+
+    override fun close() {
+        val cancelling = synchronized(this) {
+            closed = true
+            pending.toList()
+        }
+        var firstFailure: Throwable? = null
+        cancelling.forEach { task ->
+            try {
+                task.cancelForTeardown()
+            } catch (failure: Throwable) {
+                if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+            }
+        }
+        firstFailure?.let { throw it }
     }
 
     private fun validate(

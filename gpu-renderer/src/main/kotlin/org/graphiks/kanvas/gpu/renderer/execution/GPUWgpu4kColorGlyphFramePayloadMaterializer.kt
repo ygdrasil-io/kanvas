@@ -517,7 +517,7 @@ internal class GPUWgpu4kColorGlyphFramePayloadMaterializer(
     }
 
     private fun refused(code: String, message: String) =
-        GPUPreparedNativeFramePayloadMaterialization.Refused(code, message)
+        refusedWgpu4kPreRegistrationMaterialization(code, message, preRegistrationHandles)
 
     private fun <T : AutoCloseable> T.tracked(): T = preRegistrationHandles.track(this)
 

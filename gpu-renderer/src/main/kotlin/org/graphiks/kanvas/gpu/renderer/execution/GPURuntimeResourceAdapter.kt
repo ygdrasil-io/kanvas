@@ -14,8 +14,16 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabLeaseRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseFactory
 
+internal enum class GPUPreparedNativeFrameRegistrationFaultPoint {
+    BeforeOwnershipTransfer,
+    AfterOwnershipTransfer,
+    AfterOwnedHandleReservation,
+    AfterBorrowedHandleReservation,
+}
+
 internal class GPURuntimeResourceAdapter(
     private val requirePreparedResources: Boolean = false,
+    private val nativeRegistrationFaultInjector: (GPUPreparedNativeFrameRegistrationFaultPoint) -> Unit = {},
 ) : GPUResourceLeaseFactory,
     GPUPreparedNativeFramePayloadAccess,
     AutoCloseable {
@@ -28,6 +36,8 @@ internal class GPURuntimeResourceAdapter(
 
     private sealed interface OwnedHandleOwner {
         data class Payload(val token: GPUPreparedNativeFrameToken) : OwnedHandleOwner
+        data class Draft(val token: GPUPreparedNativeFrameToken) : OwnedHandleOwner
+        data class PreRegistration(val token: GPUPreparedNativeFrameToken) : OwnedHandleOwner
         data class UniformSlab(val leaseId: String) : OwnedHandleOwner
         data class BindGroup(val leaseId: String) : OwnedHandleOwner
     }
@@ -79,12 +89,35 @@ internal class GPURuntimeResourceAdapter(
         val hasOutputOwned: Boolean get() = outputOwned.isNotEmpty()
     }
 
+    private data class QuarantinedNativeDraftEntry(
+        val token: GPUPreparedNativeFrameToken,
+        val draft: GPUPreparedNativeFrameDraft,
+        val borrowed: List<AutoCloseable>,
+    )
+
+    private data class QuarantinedPreRegistrationLedgerEntry(
+        val token: GPUPreparedNativeFrameToken,
+        val ledger: GPUPreRegistrationNativeHandleLedger,
+    )
+
     private val preparedNativePayloads = linkedMapOf<GPUPreparedNativeFrameToken, PreparedNativePayloadEntry>()
     private val quarantinedNativePayloads = linkedMapOf<GPUPreparedNativeFrameToken, PreparedNativePayloadEntry>()
+    private val quarantinedNativeDrafts = IdentityHashMap<
+        GPUPreparedNativeFrameDraft,
+        QuarantinedNativeDraftEntry,
+    >()
+    private val quarantinedPreRegistrationLedgers = IdentityHashMap<
+        GPUPreRegistrationNativeHandleLedger,
+        QuarantinedPreRegistrationLedgerEntry,
+    >()
+    private val quarantinedPreRegistrationCloseOwners = Collections.newSetFromMap(
+        IdentityHashMap<AutoCloseable, Boolean>(),
+    )
     private val outputOwnedNativePayloads = linkedMapOf<GPUPreparedNativeFrameToken, PreparedNativePayloadEntry>()
     private val ownedHandleOwners = IdentityHashMap<AutoCloseable, OwnedHandleOwner>()
     private val borrowedHandleTokens = IdentityHashMap<AutoCloseable, MutableSet<GPUPreparedNativeFrameToken>>()
     private val nativePayloadOrdinal = AtomicLong()
+    private val nativePayloadRegistrationCount = AtomicLong()
     private var closed = false
     private val liveLeaseIds = linkedSetOf<String>()
     private val uniformSlabs = linkedMapOf<String, GPUBuffer>()
@@ -96,66 +129,203 @@ internal class GPURuntimeResourceAdapter(
         @Synchronized get() = preparedNativePayloads.size
 
     internal val quarantinedPreparedNativeFramePayloadCount: Int
-        @Synchronized get() = quarantinedNativePayloads.size
+        @Synchronized get() = quarantinedNativePayloads.size + quarantinedNativeDrafts.size +
+            quarantinedPreRegistrationLedgers.size + quarantinedPreRegistrationCloseOwners.size
 
     internal val outputOwnedPreparedNativeFramePayloadCount: Int
         @Synchronized get() = outputOwnedNativePayloads.size
 
     internal val preparedNativeFramePayloadRegistrationCount: Long
-        get() = nativePayloadOrdinal.get()
+        get() = nativePayloadRegistrationCount.get()
 
     @Synchronized
     internal fun registerPreparedNativeFrameDraft(
         draft: GPUPreparedNativeFrameDraft,
-    ): GPUPreparedNativeFrameRegistration = registerPreparedNativeFramePayload(
-        draft.payload,
-        PreparedNativePayloadState.Draft,
-    )
-
-    private fun registerPreparedNativeFramePayload(
-        payload: GPUPreparedNativeFramePayload,
-        initialState: PreparedNativePayloadState,
     ): GPUPreparedNativeFrameRegistration {
+        var entry: PreparedNativePayloadEntry? = null
+        var adapterOwnsDraft = false
+        return try {
+            nativePayloadRegistrationCount.incrementAndGet()
+            val payload = draft.payload
+            val ordinal = nativePayloadOrdinal.incrementAndGet()
+            val token = GPUPreparedNativeFrameToken(
+                "native-frame-${payload.identity.frameId.value}-generation-" +
+                    "${payload.identity.deviceGeneration.value}-payload-$ordinal",
+            )
+            entry = PreparedNativePayloadEntry(
+                token = token,
+                payload = payload,
+                state = PreparedNativePayloadState.Draft,
+            )
+            val ownedConflicts = entry.allOwnedHandles().filterTo(
+                Collections.newSetFromMap(IdentityHashMap<AutoCloseable, Boolean>()),
+            ) { ownedHandleOwners.containsKey(it) || borrowedHandleTokens[it].orEmpty().isNotEmpty() }
+            val borrowedConflicts = entry.borrowed.filterTo(
+                Collections.newSetFromMap(IdentityHashMap<AutoCloseable, Boolean>()),
+            ) { ownedHandleOwners.containsKey(it) }
+
+            nativeRegistrationFaultInjector(
+                GPUPreparedNativeFrameRegistrationFaultPoint.BeforeOwnershipTransfer,
+            )
+            if (!draft.transferOwnershipToAdapter()) {
+                return GPUPreparedNativeFrameRegistration.Refused(
+                    "invalid.native-frame-payload.draft-ownership",
+                    if (draft.isAdapterOwned()) {
+                        GPUPreparedNativeFrameRegistration.RefusalOwnership.ReleasedOrAdapterQuarantined
+                    } else {
+                        GPUPreparedNativeFrameRegistration.RefusalOwnership.CallerRetained
+                    },
+                )
+            }
+            adapterOwnsDraft = true
+            nativeRegistrationFaultInjector(
+                GPUPreparedNativeFrameRegistrationFaultPoint.AfterOwnershipTransfer,
+            )
+
+            if (ownedConflicts.isNotEmpty() || borrowedConflicts.isNotEmpty()) {
+                entry.removeOwnedHandles(ownedConflicts)
+                borrowedConflicts.forEach(entry::removeBorrowedHandle)
+                reservePayloadHandles(entry)
+                terminalizeAdapterOwnedRegistration(entry)
+                return GPUPreparedNativeFrameRegistration.Refused(
+                    "unsupported.native-frame-payload.owned-handle-conflict",
+                    GPUPreparedNativeFrameRegistration.RefusalOwnership.ReleasedOrAdapterQuarantined,
+                )
+            }
+
+            reservePayloadHandles(entry)
+            nativeRegistrationFaultInjector(
+                GPUPreparedNativeFrameRegistrationFaultPoint.AfterOwnedHandleReservation,
+            )
+            reserveBorrowedHandles(entry)
+            nativeRegistrationFaultInjector(
+                GPUPreparedNativeFrameRegistrationFaultPoint.AfterBorrowedHandleReservation,
+            )
+            if (closed) {
+                terminalizeAdapterOwnedRegistration(entry)
+                return GPUPreparedNativeFrameRegistration.Refused(
+                    "unsupported.native-frame-payload.registry-closed",
+                    GPUPreparedNativeFrameRegistration.RefusalOwnership.ReleasedOrAdapterQuarantined,
+                )
+            }
+            preparedNativePayloads[token] = entry
+            GPUPreparedNativeFrameRegistration.Registered(
+                GPUPreparedNativeFrameOwnership(token, this),
+            )
+        } catch (_: Throwable) {
+            entry?.takeIf { adapterOwnsDraft }?.let(::terminalizeAdapterOwnedRegistration)
+            GPUPreparedNativeFrameRegistration.Refused(
+                "failed.native-frame-payload.registration",
+                if (adapterOwnsDraft) {
+                    GPUPreparedNativeFrameRegistration.RefusalOwnership.ReleasedOrAdapterQuarantined
+                } else {
+                    GPUPreparedNativeFrameRegistration.RefusalOwnership.CallerRetained
+                },
+            )
+        }
+    }
+
+    @Synchronized
+    internal fun quarantinePreparedNativeFrameDraft(draft: GPUPreparedNativeFrameDraft): Boolean {
+        if (draft.isAdapterOwned()) return false
+        if (quarantinedNativeDrafts.containsKey(draft)) return true
+        val pendingOwned = draft.pendingOwnedHandlesSnapshot()
+        if (pendingOwned.isEmpty()) return true
+        val borrowed = draft.payload.borrowedHandlesExcludingAnchors()
+        if (pendingOwned.any { ownedHandleOwners.containsKey(it) || borrowedHandleTokens[it].orEmpty().isNotEmpty() } ||
+            borrowed.any { ownedHandleOwners.containsKey(it) }
+        ) {
+            return false
+        }
         val ordinal = nativePayloadOrdinal.incrementAndGet()
         val token = GPUPreparedNativeFrameToken(
-            "native-frame-${payload.identity.frameId.value}-generation-" +
-                "${payload.identity.deviceGeneration.value}-payload-$ordinal",
+            "native-frame-${draft.payload.identity.frameId.value}-generation-" +
+                "${draft.payload.identity.deviceGeneration.value}-draft-quarantine-$ordinal",
         )
-        val entry = PreparedNativePayloadEntry(
-            token = token,
-            payload = payload,
-            state = initialState,
-        )
-        val ownedConflicts = entry.allOwnedHandles().filterTo(
-            Collections.newSetFromMap(IdentityHashMap<AutoCloseable, Boolean>()),
-        ) { ownedHandleOwners.containsKey(it) || borrowedHandleTokens[it].orEmpty().isNotEmpty() }
-        val borrowedConflict = entry.borrowed.any { ownedHandleOwners.containsKey(it) }
-        if (ownedConflicts.isNotEmpty() || borrowedConflict) {
-            entry.removeOwnedHandles(ownedConflicts)
-            reservePayloadHandles(entry)
-            if (!entry.closeAllOwned { releasePayloadHandle(token, it) }) {
-                quarantinedNativePayloads[token] = entry
-            }
-            return GPUPreparedNativeFrameRegistration.Refused(
-                "unsupported.native-frame-payload.owned-handle-conflict",
-            )
+        val owner = OwnedHandleOwner.Draft(token)
+        pendingOwned.forEach { ownedHandleOwners[it] = owner }
+        borrowed.forEach { handle ->
+            borrowedHandleTokens.getOrPut(handle) { linkedSetOf() } += token
         }
-        reservePayloadHandles(entry)
+        quarantinedNativeDrafts[draft] = QuarantinedNativeDraftEntry(token, draft, borrowed)
+        return true
+    }
+
+    @Synchronized
+    internal fun releaseOrQuarantinePreparedNativeFrameDraft(draft: GPUPreparedNativeFrameDraft): Boolean {
+        if (!quarantinePreparedNativeFrameDraft(draft)) return false
+        val entry = quarantinedNativeDrafts[draft] ?: return true
+        retryQuarantinedDraft(entry)
+        return true
+    }
+
+    private fun retryQuarantinedDraft(entry: QuarantinedNativeDraftEntry) {
+        val before = entry.draft.pendingOwnedHandlesSnapshot()
+        val released = entry.draft.disposeBeforeRegistration()
+        val after = entry.draft.pendingOwnedHandlesSnapshot()
+        before.filter { candidate -> after.none { it === candidate } }.forEach { handle ->
+            if (ownedHandleOwners[handle] == OwnedHandleOwner.Draft(entry.token)) {
+                ownedHandleOwners.remove(handle)
+            }
+        }
+        if (!released) return
+        quarantinedNativeDrafts.remove(entry.draft)
+        entry.borrowed.forEach { handle ->
+            borrowedHandleTokens[handle]?.let { tokens ->
+                tokens -= entry.token
+                if (tokens.isEmpty()) borrowedHandleTokens.remove(handle)
+            }
+        }
+    }
+
+    @Synchronized
+    internal fun quarantinePreRegistrationLedger(ledger: GPUPreRegistrationNativeHandleLedger): Boolean {
+        if (quarantinedPreRegistrationLedgers.containsKey(ledger)) return true
+        val handles = ledger.pendingHandlesSnapshot()
+        if (handles.isEmpty()) return true
+        if (handles.any { ownedHandleOwners.containsKey(it) || borrowedHandleTokens[it].orEmpty().isNotEmpty() }) {
+            return false
+        }
+        if (!ledger.transferOwnershipToAdapter()) return false
+        val ordinal = nativePayloadOrdinal.incrementAndGet()
+        val token = GPUPreparedNativeFrameToken("pre-registration-ledger-$ordinal")
+        val owner = OwnedHandleOwner.PreRegistration(token)
+        handles.forEach { ownedHandleOwners[it] = owner }
+        quarantinedPreRegistrationLedgers[ledger] = QuarantinedPreRegistrationLedgerEntry(token, ledger)
+        return true
+    }
+
+    @Synchronized
+    internal fun quarantinePreRegistrationCloseOwner(owner: AutoCloseable): Boolean {
+        quarantinedPreRegistrationCloseOwners += owner
+        return true
+    }
+
+    private fun retryPreRegistrationLedger(entry: QuarantinedPreRegistrationLedgerEntry) {
+        val before = entry.ledger.pendingHandlesSnapshot()
+        val released = entry.ledger.closeRetainingFailuresByAdapter()
+        val after = entry.ledger.pendingHandlesSnapshot()
+        before.filter { candidate -> after.none { it === candidate } }.forEach { handle ->
+            if (ownedHandleOwners[handle] == OwnedHandleOwner.PreRegistration(entry.token)) {
+                ownedHandleOwners.remove(handle)
+            }
+        }
+        if (released) quarantinedPreRegistrationLedgers.remove(entry.ledger)
+    }
+
+    private fun terminalizeAdapterOwnedRegistration(entry: PreparedNativePayloadEntry) {
+        preparedNativePayloads.remove(entry.token)
+        outputOwnedNativePayloads.remove(entry.token)
+        if (entry.closeAllOwned { releasePayloadHandle(entry.token, it) }) {
+            releaseBorrowedHandles(entry)
+            return
+        }
+        val owner = OwnedHandleOwner.Payload(entry.token)
+        entry.allOwnedHandles().forEach { handle ->
+            if (!ownedHandleOwners.containsKey(handle)) ownedHandleOwners[handle] = owner
+        }
         reserveBorrowedHandles(entry)
-        if (closed) {
-            if (!entry.closeAllOwned { releasePayloadHandle(token, it) }) {
-                quarantinedNativePayloads[token] = entry
-            } else {
-                releaseBorrowedHandles(entry)
-            }
-            return GPUPreparedNativeFrameRegistration.Refused(
-                "unsupported.native-frame-payload.registry-closed",
-            )
-        }
-        preparedNativePayloads[token] = entry
-        return GPUPreparedNativeFrameRegistration.Registered(
-            GPUPreparedNativeFrameOwnership(token, this),
-        )
+        quarantinedNativePayloads[entry.token] = entry
     }
 
     private fun reservePayloadHandles(entry: PreparedNativePayloadEntry) {
@@ -533,6 +703,16 @@ internal class GPURuntimeResourceAdapter(
                 quarantinedNativePayloads[token] = entry
             }
         }
+        quarantinedNativeDrafts.values.toList().forEach(::retryQuarantinedDraft)
+        quarantinedPreRegistrationLedgers.values.toList().forEach(::retryPreRegistrationLedger)
+        quarantinedPreRegistrationCloseOwners.toList().forEach { owner ->
+            try {
+                owner.close()
+                quarantinedPreRegistrationCloseOwners.remove(owner)
+            } catch (_: Throwable) {
+                // Retain the exact close owner so a later adapter close can retry it.
+            }
+        }
         outputOwnedNativePayloads.toMap().forEach { (token, entry) ->
             if (entry.outputMappingClaimed) return@forEach
             if (entry.closeAllOwned { releasePayloadHandle(token, it) }) {
@@ -553,6 +733,19 @@ internal class GPURuntimeResourceAdapter(
                 quarantinedNativePayloads.remove(token)
                 releaseBorrowedHandles(entry)
             }
+        }
+        check(
+            quarantinedNativePayloads.isEmpty() && quarantinedNativeDrafts.isEmpty() &&
+                quarantinedPreRegistrationLedgers.isEmpty() &&
+                quarantinedPreRegistrationCloseOwners.isEmpty() &&
+                outputOwnedNativePayloads.values.none(PreparedNativePayloadEntry::outputMappingClaimed),
+        ) {
+            "Native payload teardown remains incomplete: " +
+                "${quarantinedNativePayloads.size} payload(s), ${quarantinedNativeDrafts.size} draft(s), " +
+                "${quarantinedPreRegistrationLedgers.size} setup ledger(s), " +
+                "${quarantinedPreRegistrationCloseOwners.size} close owner(s), " +
+                "${outputOwnedNativePayloads.values.count(PreparedNativePayloadEntry::outputMappingClaimed)} " +
+                "claimed output mapping(s)"
         }
     }
 }
@@ -578,6 +771,12 @@ private fun GPUPreparedNativeFramePayload.anchoredHandles(): MutableList<AutoClo
         .flatMap(GPUPreparedNativeCompletionAnchor::ownedHandlesSnapshot)
         .filter { identities.add(it) }
         .toMutableList()
+}
+
+private fun GPUPreparedNativeFramePayload.borrowedHandlesExcludingAnchors(): List<AutoCloseable> {
+    val anchored = anchoredHandles()
+    return ownedHandles(GPUPreparedNativeOperandOwnership.Borrowed)
+        .filterNot { candidate -> anchored.any { it === candidate } }
 }
 
 private fun MutableList<AutoCloseable>.closeRetainingFailures(

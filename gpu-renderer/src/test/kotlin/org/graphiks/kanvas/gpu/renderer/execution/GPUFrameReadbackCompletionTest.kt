@@ -108,6 +108,29 @@ class GPUFrameReadbackCompletionTest {
     }
 
     @Test
+    fun `wgpu4k mapper teardown terminally quarantines a queued mapping exactly once`() {
+        val output = readbackOutput("readback.mapper-teardown")
+        val buffer = RecordingGPUBuffer()
+        var queued: Runnable? = null
+        val mapper = GPUWgpu4kNativeReadbackMapper { task -> queued = task }
+        val deliveries = mutableListOf<GPUFrameNativeReadbackMapDelivery>()
+
+        val arm = mapper.map(output, readbackOperand(buffer), deliveries::add)
+        assertIs<GPUFrameReadbackMapArmResult.Armed>(arm)
+
+        mapper.close()
+        mapper.close()
+        requireNotNull(queued).run()
+
+        val failure = assertIs<GPUFrameNativeReadbackMapDelivery.Failed>(deliveries.single())
+        assertEquals("failed.frame-readback.mapping-teardown", failure.diagnostic.code.value)
+        assertEquals(GPUFrameReadbackMapFailureSafety.Quarantine, failure.safety)
+        assertEquals(0, buffer.mapCalls)
+        assertEquals(0, buffer.rangeCalls)
+        assertEquals(0, buffer.unmapCalls)
+    }
+
+    @Test
     fun `wgpu4k mapper refuses mismatched layout and non-output ownership before mapping`() {
         val output = readbackOutput("readback.invalid-native")
         val buffer = RecordingGPUBuffer()

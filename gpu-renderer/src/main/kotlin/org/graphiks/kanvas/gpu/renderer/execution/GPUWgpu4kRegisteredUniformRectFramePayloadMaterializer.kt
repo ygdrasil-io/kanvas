@@ -452,7 +452,9 @@ internal class GPUWgpu4kRegisteredUniformRectFramePayloadMaterializer(
             }
             result
         } catch (failure: Throwable) {
-            runCatching { ephemeralCache?.close() }
+            val retainedCache = ephemeralCache?.takeIf { cache ->
+                runCatching { cache.close() }.isFailure
+            }
             synchronized(this) {
                 materializing = false
                 preRegistrationHandles.closeRetainingFailures()
@@ -461,6 +463,7 @@ internal class GPUWgpu4kRegisteredUniformRectFramePayloadMaterializer(
                 "failed.native-registered-uniform.materialization",
                 "Public wgpu4k registered uniform materialization failed: " +
                     "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
+                retainedCache,
             )
         }
     }
@@ -484,8 +487,13 @@ internal class GPUWgpu4kRegisteredUniformRectFramePayloadMaterializer(
         }
     }
 
-    private fun refused(code: String, message: String) =
-        GPUPreparedNativeFramePayloadMaterialization.Refused(code, message)
+    private fun refused(
+        code: String,
+        message: String,
+        retainedCloseOwner: AutoCloseable? = null,
+    ) = refusedWgpu4kPreRegistrationMaterialization(
+        code, message, preRegistrationHandles, retainedCloseOwner,
+    )
 
     private fun <T : AutoCloseable> T.tracked(): T = preRegistrationHandles.track(this)
 
