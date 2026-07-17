@@ -31,6 +31,17 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
     }
 
     @Test
+    fun `dispatcher selects destination copy before the plain solid route`() {
+        assertEquals(
+            GPUWgpu4kPreparedFramePayloadRoute.DestinationCopySolidRect,
+            selectWgpu4kPreparedFramePayloadRoute(
+                semanticClasses = listOf(GPUDrawSemanticPayload.SolidRect::class),
+                hasDestinationCopy = true,
+            ),
+        )
+    }
+
+    @Test
     fun `dispatcher refuses mixed solid and color shapes before invoking a native delegate`() {
         val route = selectWgpu4kPreparedFramePayloadRoute(
             listOf(

@@ -64,6 +64,7 @@ internal data class GPUWgpu4kDestinationCopyMaterializationCounters(
 internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
     private val device: GPUDevice,
     private val queue: GPUQueue,
+    private val preparedSceneTarget: GPUWgpu4kPreparedSceneTarget? = null,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private val preRegistrationHandles = GPUPreRegistrationNativeHandleLedger()
     private var materialized = false
@@ -363,6 +364,18 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
                 "Every pilot draw requires canonical solid uniforms.",
             )
         }
+
+        preparedSceneTarget?.let { prepared ->
+            if (prepared.width != targetBounds.width || prepared.height != targetBounds.height ||
+                prepared.deviceGeneration != generationSeal.deviceGeneration ||
+                prepared.targetGeneration != generationSeal.targetGeneration
+            ) {
+                return refused(
+                    "unsupported.native-destination-copy.prepared-scene-target-incompatible",
+                    "The session-owned native target does not match the sealed destination-copy frame.",
+                )
+            }
+        }
         val backgroundLoad = backgroundRender?.let { render ->
             render.loadStore.toNativeLoadOperation()
                 ?: return refused(
@@ -395,7 +408,8 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
                 copyWidth = bounds.width
                 copyHeight = bounds.height
             }
-            val targetTexture = device.createTexture(
+            val preparedNativeTarget = preparedSceneTarget?.borrow()
+            val targetTexture = preparedNativeTarget?.first ?: device.createTexture(
                 TextureDescriptor(
                     size = Extent3D(targetBounds.width.toUInt(), targetBounds.height.toUInt()),
                     format = GPUTextureFormat.RGBA8Unorm,
@@ -403,7 +417,8 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
                     label = "Kanvas.frame.destinationCopy.target",
                 ),
             ).tracked()
-            val targetView = targetTexture.createView().tracked()
+            val targetView = preparedNativeTarget?.second ?: targetTexture.createView().tracked()
+            val ownsCanonicalTarget = preparedNativeTarget == null
             val snapshotTexture = device.createTexture(
                 TextureDescriptor(
                     size = Extent3D(
@@ -622,7 +637,7 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
                         GPUPreparedNativeAuxiliaryHandle(
                             GPUPreparedNativeCompletionAnchor(
                                 buildList<AutoCloseable> {
-                                    add(targetView)
+                                    if (ownsCanonicalTarget) add(targetView)
                                     backgroundPipeline?.let(::add)
                                     add(consumerPipeline)
                                     backgroundBindGroup?.let(::add)
@@ -652,7 +667,10 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
                     add(
                         GPUPreparedNativeAuxiliaryHandle(
                             GPUPreparedNativeCompletionAnchor(
-                                listOf(targetTexture, snapshotTexture),
+                                buildList {
+                                    if (ownsCanonicalTarget) add(targetTexture)
+                                    add(snapshotTexture)
+                                },
                             ),
                             completionOwned,
                         ),

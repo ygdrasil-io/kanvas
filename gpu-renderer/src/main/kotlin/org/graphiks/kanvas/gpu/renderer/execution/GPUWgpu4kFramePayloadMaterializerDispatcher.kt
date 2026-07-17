@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 
 internal sealed interface GPUWgpu4kPreparedFramePayloadRoute {
+    data object DestinationCopySolidRect : GPUWgpu4kPreparedFramePayloadRoute
     data object SolidRect : GPUWgpu4kPreparedFramePayloadRoute
     data object ColorGlyph : GPUWgpu4kPreparedFramePayloadRoute
     data object RegisteredUniformRect : GPUWgpu4kPreparedFramePayloadRoute
@@ -17,9 +18,16 @@ internal sealed interface GPUWgpu4kPreparedFramePayloadRoute {
 
 internal fun selectWgpu4kPreparedFramePayloadRoute(
     semanticClasses: List<KClass<out GPUDrawSemanticPayload>>,
+    hasDestinationCopy: Boolean = false,
 ): GPUWgpu4kPreparedFramePayloadRoute {
     val distinct = semanticClasses.distinct()
     return when {
+        hasDestinationCopy && distinct == listOf(GPUDrawSemanticPayload.SolidRect::class) ->
+            GPUWgpu4kPreparedFramePayloadRoute.DestinationCopySolidRect
+        hasDestinationCopy -> GPUWgpu4kPreparedFramePayloadRoute.Refused(
+            "unsupported.native-frame-payload.destination-copy-semantic-shape",
+            "A prepared destination-copy frame requires the supported solid-rectangle semantic shape.",
+        )
         distinct == listOf(GPUDrawSemanticPayload.SolidRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.SolidRect
         distinct == listOf(GPUDrawSemanticPayload.ColorGlyph::class) ->
@@ -67,7 +75,24 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
         }
         val semantics = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { step -> step.drawPackets.mapNotNull { it.semanticPayload } }
-        return when (val route = selectWgpu4kPreparedFramePayloadRoute(semantics.map { it::class })) {
+        val hasDestinationCopy = framePlan.steps.any { it is GPUFrameStep.CopyDestinationStep }
+        return when (
+            val route = selectWgpu4kPreparedFramePayloadRoute(
+                semantics.map { it::class },
+                hasDestinationCopy,
+            )
+        ) {
+            GPUWgpu4kPreparedFramePayloadRoute.DestinationCopySolidRect -> dispatch(
+                GPUWgpu4kDestinationCopyFramePayloadMaterializer(
+                    device,
+                    queue,
+                    preparedSceneTarget,
+                ),
+                framePlan,
+                encoderPlan,
+                resources,
+                generationSeal,
+            )
             GPUWgpu4kPreparedFramePayloadRoute.SolidRect -> dispatch(
                 GPUWgpu4kSolidRectFramePayloadMaterializer(
                     device,

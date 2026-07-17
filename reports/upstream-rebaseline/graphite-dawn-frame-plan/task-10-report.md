@@ -79,10 +79,18 @@ all pass. A separate focused batch also passes every `GPUFrameExecutorTest` and
 
 ### Explicit non-claim
 
-This is the 10D pilot primitive and smoke, not the complete general destination-read route. The
-current planner still places the snapshot copy before the whole `GPUTask.Render`; splitting the
-plan immediately before the first destination-reading packet, and supporting every such packet,
-remains slice 10D-b. No global 10D completion or performance claim is made here.
+This remains a closed solid-rectangle `difference@v1` route, not the complete general
+destination-read route. The planner now splits a render task and places every planned snapshot
+operation immediately before its exact first consumer packet. The prepared-session dispatcher also
+selects this route before the plain solid materializer, borrows the session's canonical native
+texture/view without taking ownership, and submits the destination copy and final readback once.
+Native session evidence proves exact pixels, one target creation/use, one submit, one readback copy,
+zero active payloads after completion, and target close only when the session closes.
+
+The remaining 10D work is to replace the closed `difference@v1` shader with the canonical
+destination-read program family, support several consumers/snapshots and mixed direct plus
+destination-reading packets in one frame, and reuse session-owned scratch textures without hidden
+CPU work. No global 10D completion or performance claim is made here.
 
 ## Slice 10E persistent MSAA continuation evidence
 

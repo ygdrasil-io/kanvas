@@ -10,6 +10,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -82,6 +83,59 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 
 class GPUWgpu4kDestinationCopyFrameSmokeTest {
+    @Test
+    fun `prepared scene session dispatches destination copy on its canonical target`() {
+        val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backendSession != null)
+        backendSession!!
+        val runtimeCapabilities = requireNotNull(backendSession.capabilities)
+        val generation = GPUDeviceGenerationID(
+            runtimeCapabilities.snapshotId.substringAfterLast('-').toLong(),
+        )
+        val requestId = GPUReadbackRequestID("readback.prepared.destination-copy")
+        val tasks = destinationCopyTaskList(
+            generation = generation,
+            capabilities = runtimeCapabilities,
+            frameId = GPUFrameID(10_605),
+            readbackRequestId = requestId,
+        )
+        val session = backendSession.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(4, 4, "rgba8unorm"),
+        )
+        var targetClosesAfterSessionClose = -1L
+        try {
+            val handle = session.renderFrame(
+                tasks,
+                GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+            )
+            val terminal = handle.completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                terminal.outcome,
+                "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
+            )
+            val readback = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output)
+            assertEquals(requestId, readback.requestId)
+            assertContentEquals(expectedDifferencePixels(), readback.bytes)
+            val counters = session.nativeCounters()
+            assertEquals(1L, counters.targetCreations)
+            assertEquals(0L, counters.targetCloses)
+            assertEquals(1L, counters.targetNativeUses)
+            assertEquals(1L, counters.submits)
+            assertEquals(1L, counters.readbackCopies)
+            assertEquals(0, counters.activeNativePayloads)
+        } finally {
+            try {
+                session.close()
+                targetClosesAfterSessionClose = session.nativeCounters().targetCloses
+            } finally {
+                GPUBackendRuntimeNativeFactory.dispose()
+            }
+        }
+        assertEquals(1L, targetClosesAfterSessionClose)
+    }
+
     @Test
     fun `real planner splits prefix destination consumer and submits exact pixels once`() = runBlocking {
         val context = glfwContextRenderer(4, 4, "kanvas-destination-copy", deferredRendering = true)
@@ -366,11 +420,24 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
     private fun plannedDestinationCopyPlan(
         generation: GPUDeviceGenerationID,
         includeBackground: Boolean = true,
-    ): GPUFramePlan {
-        val capabilities = capabilities(
-            if (includeBackground) "destination-copy-native" else "destination-copy-consumer-first",
-        )
-        val frameId = GPUFrameID(10_601)
+    ): GPUFramePlan = GPUFramePlanner.plan(
+        destinationCopyTaskList(
+            generation = generation,
+            capabilities = capabilities(
+                if (includeBackground) "destination-copy-native" else "destination-copy-consumer-first",
+            ),
+            includeBackground = includeBackground,
+        ),
+    )
+
+    private fun destinationCopyTaskList(
+        generation: GPUDeviceGenerationID,
+        capabilities: GPUCapabilities,
+        includeBackground: Boolean = true,
+        frameId: GPUFrameID = GPUFrameID(10_601),
+        readbackRequestId: GPUReadbackRequestID =
+            GPUReadbackRequestID("readback.destination-copy"),
+    ): GPUTaskList {
         val seal = GPUFrameCapabilitySeal.capture(frameId, generation, capabilities)
         val recordingId = GPURecordingID("recording.destination-copy")
         val background = packet(
@@ -498,7 +565,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             source = TARGET,
             staging = STAGING,
             request = GPUFrameReadbackRequest(
-                GPUReadbackRequestID("readback.destination-copy"),
+                readbackRequestId,
                 TARGET_BOUNDS,
                 GPUReadbackPixelFormat.Rgba8Unorm,
                 GPUColorInterpretation("srgb-premul"),
@@ -509,19 +576,17 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             taskDependency(destination, render),
             taskDependency(render, readback),
         )
-        return GPUFramePlanner.plan(
-            GPUTaskList(
-                frameId = frameId,
-                capabilitySeal = seal,
-                recordingSeals = listOf(
-                    GPURecordingSeal(recordingId, 0, "compat", "replay", seal.sealHash),
-                ),
-                expectedReplayKeyHash = "replay",
-                tasks = listOf(readback, render, destination, prepare),
-                dependencies = dependencies,
-                phaseOrder = GPUTaskPhase.entries,
-                memoryBudget = memoryBudget(),
+        return GPUTaskList(
+            frameId = frameId,
+            capabilitySeal = seal,
+            recordingSeals = listOf(
+                GPURecordingSeal(recordingId, 0, "compat", "replay", seal.sealHash),
             ),
+            expectedReplayKeyHash = "replay",
+            tasks = listOf(readback, render, destination, prepare),
+            dependencies = dependencies,
+            phaseOrder = GPUTaskPhase.entries,
+            memoryBudget = memoryBudget(),
         )
     }
 
