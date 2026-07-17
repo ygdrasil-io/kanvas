@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUTexture
+import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureView
 import java.lang.reflect.Proxy
 import kotlin.test.Test
@@ -62,6 +63,33 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
 
         val refused = assertIs<GPUWgpu4kPreparedFramePayloadRoute.Refused>(route)
         assertEquals("unsupported.native-frame-payload.mixed-semantic-shape", refused.code)
+    }
+
+    @Test
+    fun `surface cache failure precedes delegate ownership transfer`() {
+        val ownership = DelegateOwnershipProbe()
+
+        val result = materializeWgpu4kSurfaceRoute(
+            format = GPUTextureFormat.BGRA8Unorm,
+            acquireSurfaceBlit = { error("surface pipeline OOM") },
+            materializeWithSurfaceBlit = {
+                ownership.materializeAndTransfer()
+                error("The delegate must not run after a cache acquisition failure")
+            },
+        )
+        ownership.close()
+        ownership.close()
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result)
+        assertEquals("failed.native-frame-payload.surface-blit-materialization", refused.code)
+        assertEquals(
+            "The typed surface blit payload could not be materialized: IllegalStateException",
+            refused.message,
+        )
+        assertEquals(0, ownership.materializationCount)
+        assertEquals(0, ownership.transferredHandleCount)
+        assertEquals(0, ownership.closeCount)
+        assertEquals(0, ownership.doubleCloseCount)
     }
 
     @Test
@@ -189,4 +217,29 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             else -> error("Unexpected fake native call: ${method.name}")
         }
     } as T
+
+    private class DelegateOwnershipProbe : AutoCloseable {
+        var materializationCount = 0
+            private set
+        var transferredHandleCount = 0
+            private set
+        var closeCount = 0
+            private set
+        var doubleCloseCount = 0
+            private set
+        private var pendingHandle = false
+
+        fun materializeAndTransfer() {
+            materializationCount += 1
+            pendingHandle = true
+            transferredHandleCount += 1
+            pendingHandle = false
+        }
+
+        override fun close() {
+            if (!pendingHandle) return
+            if (closeCount == 0) closeCount += 1 else doubleCloseCount += 1
+            pendingHandle = false
+        }
+    }
 }
