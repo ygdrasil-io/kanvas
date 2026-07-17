@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.svg
 
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.test.GpuAvailability
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -10,6 +12,14 @@ import java.io.File
 class SvgIntegrationTest {
     @TempDir
     lateinit var tempDir: File
+
+    companion object {
+        @AfterAll
+        @JvmStatic
+        fun cleanup() {
+            GPUBackendRuntimeFactory.dispose()
+        }
+    }
 
     private fun testSvg(svgPath: String, minSimilarity: Double, tolerance: Int = 0) {
         val svgContent = object {}.javaClass.getResource(svgPath)?.readText()
