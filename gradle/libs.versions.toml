@@ -8,6 +8,7 @@ kotlinxDatetime = "0.7.1"
 kotlinxSerializationJSON = "1.9.0"
 kotlinxCoroutines = "1.10.2"
 kotlinxBenchmark = "0.4.17"
+wgpu4k = "0.2.0-20260716.235022-2"
 wgsl4k = "1.0.0-20260629.231604-1"
 
 [libraries]
@@ -16,6 +17,7 @@ kotlinxDatetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.r
 kotlinxSerialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJSON" }
 kotlinxCoroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlinxBenchmarkRuntime = { module = "org.jetbrains.kotlinx:kotlinx-benchmark-runtime", version.ref = "kotlinxBenchmark" }
+wgpu4kToolkit = { module = "io.ygdrasil:wgpu4k-toolkit", version.ref = "wgpu4k" }
 wgslCoreJvm = { module = "org.graphiks:wgsl-core-jvm", version.ref = "wgsl4k" }
 wgslParserJvm = { module = "org.graphiks:wgsl-parser-jvm", version.ref = "wgsl4k" }
 

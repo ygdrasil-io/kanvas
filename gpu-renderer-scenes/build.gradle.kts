@@ -13,7 +13,7 @@ dependencies {
     implementation(project(":gpu-renderer"))
     implementation(project(":font"))
     implementation(project(":kanvas"))
-    implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
+    implementation(libs.wgpu4kToolkit)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 
     "kadreImplementation"("org.graphiks.kadre:kadre:1.0.0")

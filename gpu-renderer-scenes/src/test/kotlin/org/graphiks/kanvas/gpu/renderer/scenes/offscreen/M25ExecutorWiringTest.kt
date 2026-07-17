@@ -421,7 +421,9 @@ class M25ExecutorWiringTest {
 
     private fun loopPath(vertices: List<Point>): PathData =
         PathData(
-            verbs = vertices.map { PathVerb.LineTo(it) } + listOf(PathVerb.Close),
+            verbs = listOf(PathVerb.MoveTo(vertices.first())) +
+                vertices.drop(1).map { PathVerb.LineTo(it) } +
+                listOf(PathVerb.Close),
             points = emptyList(),
         )
 

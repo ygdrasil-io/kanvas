@@ -110,7 +110,9 @@ class ConvexFanExecutorTest {
             )
         }
         return PathData(
-            verbs = pts.map { PathVerb.LineTo(it) } + listOf(PathVerb.Close),
+            verbs = listOf(PathVerb.MoveTo(pts.first())) +
+                pts.drop(1).map { PathVerb.LineTo(it) } +
+                listOf(PathVerb.Close),
             points = emptyList(),
         )
     }

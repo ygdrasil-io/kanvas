@@ -10,6 +10,12 @@ import kotlin.test.assertTrue
 class GPUCapabilityContractsTest {
     @Test
     fun `GPU abstraction labels dump to stable public strings`() {
+        assertEquals("r16unorm", GPUTextureFormat.R16Unorm.dumpLabel())
+        assertEquals("r16snorm", GPUTextureFormat.R16Snorm.dumpLabel())
+        assertEquals("rg16unorm", GPUTextureFormat.RG16Unorm.dumpLabel())
+        assertEquals("rg16snorm", GPUTextureFormat.RG16Snorm.dumpLabel())
+        assertEquals("rgba16unorm", GPUTextureFormat.RGBA16Unorm.dumpLabel())
+        assertEquals("rgba16snorm", GPUTextureFormat.RGBA16Snorm.dumpLabel())
         assertEquals("rgba8unorm", GPUTextureFormat.RGBA8Unorm.dumpLabel())
         assertEquals("rgba8unorm-srgb", GPUTextureFormat.RGBA8UnormSrgb.dumpLabel())
         assertEquals("bgra8unorm", GPUTextureFormat.BGRA8Unorm.dumpLabel())

@@ -213,7 +213,6 @@ internal class SceneIntermediatePlanAdapter(
                     )
                 }
                 GPUDestinationReadStrategy.None,
-                GPUDestinationReadStrategy.FixedFunction,
                 GPUDestinationReadStrategy.IsolateLayer,
                 GPUDestinationReadStrategy.Refuse,
                 -> return GPUIntermediatePlan(

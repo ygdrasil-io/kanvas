@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
-import ffi.JvmNativeAddress
-import ffi.LibraryLoader
 import io.ygdrasil.webgpu.ArrayBuffer
 import io.ygdrasil.webgpu.BindGroupDescriptor
 import io.ygdrasil.webgpu.BindGroupEntry
@@ -77,7 +75,7 @@ import io.ygdrasil.webgpu.WGPU
 import io.ygdrasil.webgpu.WGPUInstanceBackend
 import io.ygdrasil.webgpu.beginRenderPass
 import io.ygdrasil.webgpu.glfwContextRenderer
-import java.lang.foreign.MemorySegment
+import io.ygdrasil.webgpu.toNativeAddress
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
@@ -420,7 +418,6 @@ object GPUBackendRuntimeNativeFactory {
     fun createOrNull(): GPUBackendSession? {
         if (sharedInner == null) {
             sharedInner = try {
-                LibraryLoader.load()
                 val glfw = runBlocking {
                     glfwContextRenderer(
                         width = 1,
@@ -5915,13 +5912,12 @@ private fun createNativeWindowRuntime(binding: GPUNativeSurfaceBinding): NativeW
         "Unsupported native platform ${binding.platform}"
     }
 
-    LibraryLoader.load()
     val instance = WGPU.createInstance(WGPUInstanceBackend.Metal)
         ?: error("GPU runtime instance creation returned null")
     try {
         val layerAddress = binding.pointerLabels.firstNonZeroPointer("layerHandle", "nsLayer", "metalLayer")
             ?: error("GPUNativeSurfaceBinding.pointerLabels must provide a non-zero native layer pointer")
-        val surface = instance.getSurfaceFromMetalLayer(JvmNativeAddress(MemorySegment.ofAddress(layerAddress)))
+        val surface = instance.getSurfaceFromMetalLayer(layerAddress.toNativeAddress())
             ?: error("GPU surface creation from native layer returned null")
         try {
             val adapter = instance.requestAdapter(surface)
