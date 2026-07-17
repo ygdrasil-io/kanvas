@@ -33,6 +33,7 @@ internal class GPUWgpu4kDestinationCopySnapshotHandles(
 internal class GPUWgpu4kDestinationCopySessionCache(
     private val device: GPUDevice,
 ) : AutoCloseable {
+    private val preRegistrationHandles = GPUPreRegistrationNativeHandleLedger()
     private var snapshots: List<GPUWgpu4kDestinationCopySnapshotHandles> = emptyList()
     private var closed = false
     private var snapshotCreations = 0L
@@ -47,16 +48,18 @@ internal class GPUWgpu4kDestinationCopySessionCache(
             return snapshots
         }
         closeSnapshots()
+        requireCleanSetupLedger()
         val created = mutableListOf<GPUWgpu4kDestinationCopySnapshotHandles>()
         return try {
             specs.forEachIndexed { index, spec ->
                 created += createSnapshot(index, spec)
             }
             snapshots = created.toList()
+            preRegistrationHandles.transferAll()
             snapshotCreations = Math.addExact(snapshotCreations, created.size.toLong())
             snapshots
         } catch (failure: Throwable) {
-            created.asReversed().forEach { runCatching { it.close() } }
+            preRegistrationHandles.closeRetainingFailures()
             throw failure
         }
     }
@@ -67,9 +70,17 @@ internal class GPUWgpu4kDestinationCopySessionCache(
 
     @Synchronized
     override fun close() {
-        if (closed && snapshots.isEmpty()) return
+        if (closed && snapshots.isEmpty() && preRegistrationHandles.pendingHandleCount == 0) return
         closed = true
-        closeSnapshots()
+        var firstFailure = runCatching { closeSnapshots() }.exceptionOrNull()
+        if (!preRegistrationHandles.closeRetainingFailures()) {
+            val failure = IllegalStateException(
+                "Destination-copy session cache retained " +
+                    "${preRegistrationHandles.pendingHandleCount} failed setup handle(s)",
+            )
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+        }
+        firstFailure?.let { throw it }
     }
 
     private fun createSnapshot(
@@ -77,26 +88,30 @@ internal class GPUWgpu4kDestinationCopySessionCache(
         spec: GPUDestinationCopySnapshotSpec,
     ): GPUWgpu4kDestinationCopySnapshotHandles {
         val pending = mutableListOf<AutoCloseable>()
-        fun <T : AutoCloseable> T.track(): T = also { pending += it }
-        return try {
-            val texture = device.createTexture(
+        fun <T : AutoCloseable> T.track(): T = also {
+            pending += it
+            preRegistrationHandles.track(it)
+        }
+        val texture = device.createTexture(
                 TextureDescriptor(
                     size = Extent3D(spec.backingWidth.toUInt(), spec.backingHeight.toUInt()),
                     format = GPUTextureFormat.RGBA8Unorm,
                     usage = GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding,
                     label = "Kanvas.session.destinationCopy.snapshot.$index",
                 ),
-            ).track()
-            val view = texture.createView().track()
-            GPUWgpu4kDestinationCopySnapshotHandles(
-                spec,
-                texture,
-                view,
-                GPUDestinationCopyCachedHandleSet(pending.toList()),
-            )
-        } catch (failure: Throwable) {
-            pending.asReversed().forEach { runCatching { it.close() } }
-            throw failure
+        ).track()
+        val view = texture.createView().track()
+        return GPUWgpu4kDestinationCopySnapshotHandles(
+            spec,
+            texture,
+            view,
+            GPUDestinationCopyCachedHandleSet(pending.toList()),
+        )
+    }
+
+    private fun requireCleanSetupLedger() {
+        check(preRegistrationHandles.closeRetainingFailures()) {
+            "Destination-copy cache cannot allocate while failed setup handles remain quarantined"
         }
     }
 

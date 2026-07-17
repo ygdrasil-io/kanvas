@@ -55,6 +55,7 @@ internal class GPUWgpu4kRegisteredUniformRectInvariantHandles(
 internal class GPUWgpu4kRegisteredUniformRectSessionCache(
     private val device: GPUDevice,
 ) : AutoCloseable {
+    private val preRegistrationHandles = GPUPreRegistrationNativeHandleLedger()
     private val entries = linkedMapOf<
         GPUWgpu4kRegisteredUniformRectPipelineCacheKey,
         GPUWgpu4kRegisteredUniformRectInvariantHandles
@@ -72,10 +73,17 @@ internal class GPUWgpu4kRegisteredUniformRectSessionCache(
             reuses += 1L
             return it
         }
-        val created = createInvariants(key)
-        entries[key] = created
-        creations += 1L
-        return created
+        requireCleanSetupLedger()
+        return try {
+            val created = createInvariants(key)
+            entries[key] = created
+            preRegistrationHandles.transferAll()
+            creations += 1L
+            created
+        } catch (failure: Throwable) {
+            preRegistrationHandles.closeRetainingFailures()
+            throw failure
+        }
     }
 
     @Synchronized
@@ -84,7 +92,7 @@ internal class GPUWgpu4kRegisteredUniformRectSessionCache(
 
     @Synchronized
     override fun close() {
-        if (closed && entries.isEmpty()) return
+        if (closed && entries.isEmpty() && preRegistrationHandles.pendingHandleCount == 0) return
         closed = true
         var firstFailure: Throwable? = null
         val iterator = entries.iterator()
@@ -96,6 +104,13 @@ internal class GPUWgpu4kRegisteredUniformRectSessionCache(
             } catch (failure: Throwable) {
                 if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
             }
+        }
+        if (!preRegistrationHandles.closeRetainingFailures()) {
+            val failure = IllegalStateException(
+                "Registered uniform session cache retained " +
+                    "${preRegistrationHandles.pendingHandleCount} failed setup handle(s)",
+            )
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
         }
         firstFailure?.let { throw it }
     }
@@ -111,7 +126,10 @@ internal class GPUWgpu4kRegisteredUniformRectSessionCache(
         }
         val wgsl = registeredUniformRectWgsl(key.program)
         val pending = mutableListOf<AutoCloseable>()
-        fun <T : AutoCloseable> T.track(): T = also { pending += it }
+        fun <T : AutoCloseable> T.track(): T = also {
+            pending += it
+            preRegistrationHandles.track(it)
+        }
         return try {
             val bindGroupLayout = device.createBindGroupLayout(
                 BindGroupLayoutDescriptor(
@@ -173,8 +191,13 @@ internal class GPUWgpu4kRegisteredUniformRectSessionCache(
                 owned = GPURegisteredUniformRectCachedHandleSet(pending.toList()),
             )
         } catch (failure: Throwable) {
-            pending.asReversed().forEach { runCatching { it.close() } }
             throw failure
+        }
+    }
+
+    private fun requireCleanSetupLedger() {
+        check(preRegistrationHandles.closeRetainingFailures()) {
+            "Registered uniform cache cannot allocate while failed setup handles remain quarantined"
         }
     }
 }

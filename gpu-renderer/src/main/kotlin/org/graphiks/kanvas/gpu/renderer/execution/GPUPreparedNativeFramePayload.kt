@@ -296,6 +296,15 @@ internal class GPUPreRegistrationNativeHandleLedger {
     @Synchronized
     internal fun pendingHandlesSnapshot(): List<AutoCloseable> = pending.toList()
 
+    @Synchronized
+    internal fun detachPendingHandles(handles: Collection<AutoCloseable>) {
+        pending.removeAll { candidate -> handles.any { it === candidate } }
+        if (pending.isEmpty() && owner == Owner.Materializer) owner = Owner.Released
+    }
+
+    @Synchronized
+    internal fun isAdapterOwned(): Boolean = owner == Owner.Adapter
+
     internal val pendingHandleCount: Int
         @Synchronized get() = pending.size
 }
@@ -880,6 +889,30 @@ internal class GPUPreparedNativeFrameDraft internal constructor(
     internal fun pendingOwnedHandlesSnapshot(): List<AutoCloseable> = pendingOwnedHandles.toList()
 
     @Synchronized
+    internal fun reservedOwnedHandlesSnapshot(): List<AutoCloseable> {
+        val identities = java.util.Collections.newSetFromMap(
+            IdentityHashMap<AutoCloseable, Boolean>(),
+        )
+        return buildList {
+            pendingOwnedHandles.forEach { handle ->
+                if (identities.add(handle)) add(handle)
+                (handle as? GPUPreparedNativeCompletionAnchor)
+                    ?.ownedHandlesSnapshot()
+                    ?.filter(identities::add)
+                    ?.let(::addAll)
+            }
+        }
+    }
+
+    @Synchronized
+    internal fun detachPendingOwnedHandles(handles: Collection<AutoCloseable>) {
+        pendingOwnedHandles.filterIsInstance<GPUPreparedNativeCompletionAnchor>().forEach { anchor ->
+            anchor.detachOwnedHandles(handles)
+        }
+        pendingOwnedHandles.removeAll { candidate -> handles.any { it === candidate } }
+    }
+
+    @Synchronized
     internal fun isAdapterOwned(): Boolean = ownershipState == OwnershipState.Adapter
 }
 
@@ -913,6 +946,11 @@ internal sealed interface GPUPreparedNativeFrameRegistration {
         CallerRetained,
         ReleasedOrAdapterQuarantined,
     }
+}
+
+internal enum class GPUPreparedNativeOwnerTerminalization {
+    CallerRetained,
+    ReleasedOrAdapterQuarantined,
 }
 
 internal sealed interface GPUPreparedNativeFrameConsumption {
@@ -1012,10 +1050,22 @@ internal class GPUPreparedNativeFrameBoundary private constructor(
             generationSeal,
         )
         if (result is GPUPreparedNativeFramePayloadMaterialization.Refused) {
-            result.retainedDraft?.let(::releaseOrQuarantineBeforeRegistration)
-            result.retainedPreRegistrationLedger?.let(adapter::quarantinePreRegistrationLedger)
-            result.retainedCloseOwner?.let(adapter::quarantinePreRegistrationCloseOwner)
-            return result
+            val retainedDraft = result.retainedDraft?.takeIf { draft ->
+                releaseOrQuarantineBeforeRegistration(draft) ==
+                    GPUPreparedNativeOwnerTerminalization.CallerRetained
+            }
+            val retainedLedger = result.retainedPreRegistrationLedger?.takeIf { ledger ->
+                adapter.releaseOrQuarantinePreRegistrationLedger(ledger) ==
+                    GPUPreparedNativeOwnerTerminalization.CallerRetained
+            }
+            val retainedCloseOwner = result.retainedCloseOwner?.takeIf { owner ->
+                !adapter.quarantinePreRegistrationCloseOwner(owner)
+            }
+            return result.copy(
+                retainedDraft = retainedDraft,
+                retainedPreRegistrationLedger = retainedLedger,
+                retainedCloseOwner = retainedCloseOwner,
+            )
         }
         result as GPUPreparedNativeFramePayloadMaterialization.Materialized
         val expected = GPUPreparedNativeFrameIdentity(
@@ -1036,10 +1086,14 @@ internal class GPUPreparedNativeFrameBoundary private constructor(
         return if (result.draft.payload.identity == expected) {
             result
         } else {
-            releaseOrQuarantineBeforeRegistration(result.draft)
+            val retainedDraft = result.draft.takeIf { draft ->
+                releaseOrQuarantineBeforeRegistration(draft) ==
+                    GPUPreparedNativeOwnerTerminalization.CallerRetained
+            }
             GPUPreparedNativeFramePayloadMaterialization.Refused(
                 "stale.native-frame-payload.identity-mismatch",
                 "Native payload scope and operand bridge keys do not match the encoder plan.",
+                retainedDraft = retainedDraft,
             )
         }
     }
@@ -1058,15 +1112,18 @@ internal class GPUPreparedNativeFrameBoundary private constructor(
         ) {
             return result
         }
-        releaseOrQuarantineBeforeRegistration(draft)
-        return result.copy(
-            ownership = GPUPreparedNativeFrameRegistration.RefusalOwnership.ReleasedOrAdapterQuarantined,
-        )
+        return when (releaseOrQuarantineBeforeRegistration(draft)) {
+            GPUPreparedNativeOwnerTerminalization.ReleasedOrAdapterQuarantined -> result.copy(
+                ownership = GPUPreparedNativeFrameRegistration.RefusalOwnership.ReleasedOrAdapterQuarantined,
+            )
+            GPUPreparedNativeOwnerTerminalization.CallerRetained -> result
+        }
     }
 
-    internal fun releaseOrQuarantineBeforeRegistration(draft: GPUPreparedNativeFrameDraft) {
+    internal fun releaseOrQuarantineBeforeRegistration(
+        draft: GPUPreparedNativeFrameDraft,
+    ): GPUPreparedNativeOwnerTerminalization =
         adapter.releaseOrQuarantinePreparedNativeFrameDraft(draft)
-    }
 
     internal fun bindLateSurface(
         ownership: GPUPreparedNativeFrameOwnership,

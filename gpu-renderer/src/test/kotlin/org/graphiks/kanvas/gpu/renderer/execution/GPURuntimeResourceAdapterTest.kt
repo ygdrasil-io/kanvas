@@ -633,6 +633,47 @@ class GPURuntimeResourceAdapterTest {
     }
 
     @Test
+    fun `setup ledger terminalization reserves unique handles while detaching an existing conflict`() {
+        val adapter = GPURuntimeResourceAdapter()
+        val conflict = CountingGPUBuffer("setup-ledger-conflict")
+        val unique = CountingGPUBuffer("setup-ledger-unique", closeFailuresRemaining = 1)
+        assertTrue(
+            adapter.quarantinePreparedNativeFrameDraft(
+                GPUPreparedNativeFrameDraft(
+                    testPayload(
+                        frame = 89,
+                        scopes = emptyList(),
+                        auxiliaryOwnedHandles = listOf(
+                            GPUPreparedNativeAuxiliaryHandle(
+                                conflict,
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val ledger = GPUPreRegistrationNativeHandleLedger().apply {
+            track(conflict)
+            track(unique)
+        }
+
+        assertEquals(
+            GPUPreparedNativeOwnerTerminalization.ReleasedOrAdapterQuarantined,
+            adapter.releaseOrQuarantinePreRegistrationLedger(ledger),
+        )
+        assertEquals(0, conflict.closeCount)
+        assertEquals(1, unique.closeCount)
+        assertEquals(2, adapter.quarantinedPreparedNativeFramePayloadCount)
+
+        adapter.close()
+
+        assertEquals(1, conflict.closeCount)
+        assertEquals(2, unique.closeCount)
+        assertEquals(0, adapter.quarantinedPreparedNativeFramePayloadCount)
+    }
+
+    @Test
     fun `registration faults prove the exact owner before and after draft transfer`() {
         val beforeHandle = CountingGPUBuffer("registration-before-transfer")
         val beforeDraft = GPUPreparedNativeFrameDraft(
@@ -693,6 +734,93 @@ class GPURuntimeResourceAdapterTest {
             adapter.close()
             assertEquals(1, owned.closeCount)
         }
+    }
+
+    @Test
+    fun `before transfer refusal terminalizes every unique identity despite an existing conflict`() {
+        val conflict = CountingGPUBuffer("boundary-conflict")
+        val unique = CountingGPUBuffer("boundary-unique", closeFailuresRemaining = 1)
+        val adapter = GPURuntimeResourceAdapter { point ->
+            if (point == GPUPreparedNativeFrameRegistrationFaultPoint.BeforeOwnershipTransfer) {
+                error("before transfer")
+            }
+        }
+        val existingOwner = GPUPreparedNativeFrameDraft(
+            testPayload(
+                frame = 93,
+                scopes = emptyList(),
+                auxiliaryOwnedHandles = listOf(
+                    GPUPreparedNativeAuxiliaryHandle(
+                        conflict,
+                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    ),
+                ),
+            ),
+        )
+        assertTrue(adapter.quarantinePreparedNativeFrameDraft(existingOwner))
+        val refusedDraft = GPUPreparedNativeFrameDraft(
+            testPayload(
+                frame = 94,
+                scopes = emptyList(),
+                auxiliaryOwnedHandles = listOf(
+                    GPUPreparedNativeAuxiliaryHandle(
+                        conflict,
+                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    ),
+                    GPUPreparedNativeAuxiliaryHandle(
+                        unique,
+                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    ),
+                ),
+            ),
+        )
+
+        val registration = assertIs<GPUPreparedNativeFrameRegistration.Refused>(
+            adapter.registerPreparedNativeFrameDraft(refusedDraft),
+        )
+        assertEquals(GPUPreparedNativeFrameRegistration.RefusalOwnership.CallerRetained, registration.ownership)
+
+        assertEquals(
+            GPUPreparedNativeOwnerTerminalization.ReleasedOrAdapterQuarantined,
+            adapter.releaseOrQuarantinePreparedNativeFrameDraft(refusedDraft),
+        )
+        assertEquals(0, conflict.closeCount)
+        assertEquals(1, unique.closeCount)
+        assertEquals(2, adapter.quarantinedPreparedNativeFramePayloadCount)
+
+        adapter.close()
+        assertEquals(1, conflict.closeCount)
+        assertEquals(2, unique.closeCount)
+        assertEquals(0, adapter.quarantinedPreparedNativeFramePayloadCount)
+    }
+
+    @Test
+    fun `draft quarantine reserves completion anchor handles until retry is terminal`() {
+        val adapter = GPURuntimeResourceAdapter()
+        val anchored = CountingGPUBuffer("draft-anchor-reserved", closeFailuresRemaining = 1)
+        val draft = GPUPreparedNativeFrameDraft(anchoredBorrowedPayload(94, anchored))
+
+        assertFalse(draft.disposeBeforeRegistration())
+        assertTrue(adapter.quarantinePreparedNativeFrameDraft(draft))
+
+        val collision = adapter.registerPreparedNativeFrameDraft(
+            GPUPreparedNativeFrameDraft(
+                uploadPayload(
+                    frame = 95,
+                    source = GPUPreparedNativeBufferOperand(
+                        anchored,
+                        GPUDeviceGenerationID(11),
+                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    ),
+                ),
+            ),
+        )
+
+        assertIs<GPUPreparedNativeFrameRegistration.Refused>(collision)
+        assertEquals(1, anchored.closeCount)
+        adapter.close()
+        assertEquals(2, anchored.closeCount)
+        assertEquals(0, adapter.quarantinedPreparedNativeFramePayloadCount)
     }
 
     @Test
@@ -1622,6 +1750,39 @@ class GPURuntimeResourceAdapterTest {
         assertNull(adapter.uniformSlabBuffer(uniformId))
         assertNull(adapter.bindGroup(bindGroupId))
     }
+
+    @Test
+    fun `close remains incomplete while bind group and uniform slab owners require retry`() {
+        val adapter = GPURuntimeResourceAdapter(requirePreparedResources = true)
+        val buffer = CountingGPUBuffer("retry-uniform", closeFailuresRemaining = 1)
+        val bindGroup = CountingGPUBindGroup("retry-bind-group", closeFailuresRemaining = 1)
+        val uniformId = "uniform-slab:fullscreen:retry"
+        val bindGroupId = "bind-group:fullscreen:retry:slot:payload-0"
+        adapter.prepareUniformSlab(uniformId) { buffer }
+        assertIs<GPUResourceLeaseFactoryResult.Created>(
+            adapter.createUniformSlab(fullscreenUniformRequest(leaseId = uniformId)),
+        )
+        adapter.prepareBindGroup(bindGroupId) { bindGroup }
+        assertIs<GPUResourceLeaseFactoryResult.Created>(
+            adapter.createBindGroup(fullscreenBindGroupRequest(bindGroupId)),
+        )
+
+        val failure = assertFailsWith<IllegalStateException> { adapter.close() }
+
+        assertTrue(failure.message.orEmpty().contains("1 bind group"))
+        assertTrue(failure.message.orEmpty().contains("1 uniform slab"))
+        assertSame(buffer, adapter.uniformSlabBuffer(uniformId))
+        assertSame(bindGroup, adapter.bindGroup(bindGroupId))
+        assertEquals(1, buffer.closeCount)
+        assertEquals(1, bindGroup.closeCount)
+
+        adapter.close()
+
+        assertEquals(2, buffer.closeCount)
+        assertEquals(2, bindGroup.closeCount)
+        assertNull(adapter.uniformSlabBuffer(uniformId))
+        assertNull(adapter.bindGroup(bindGroupId))
+    }
 }
 
 private fun GPURuntimeResourceAdapter.registeredToken(
@@ -1922,9 +2083,11 @@ private inline fun <reified T> fakeNative(label: String): T = Proxy.newProxyInst
     }
 } as T
 
-private fun fullscreenUniformRequest(): GPUUniformSlabLeaseRequest =
+private fun fullscreenUniformRequest(
+    leaseId: String = "uniform-slab:fullscreen:frame-1",
+): GPUUniformSlabLeaseRequest =
     GPUUniformSlabLeaseRequest(
-        leaseId = "uniform-slab:fullscreen:frame-1",
+        leaseId = leaseId,
         targetId = "root-target",
         frameId = "frame-1",
         deviceGeneration = 11,
@@ -1975,12 +2138,17 @@ private class CountingGPUBuffer(
 
 private class CountingGPUBindGroup(
     override var label: String,
+    private var closeFailuresRemaining: Int = 0,
 ) : GPUBindGroup {
     var closeCount: Int = 0
         private set
 
     override fun close() {
         closeCount += 1
+        if (closeFailuresRemaining > 0) {
+            closeFailuresRemaining -= 1
+            error("close failed")
+        }
     }
 }
 

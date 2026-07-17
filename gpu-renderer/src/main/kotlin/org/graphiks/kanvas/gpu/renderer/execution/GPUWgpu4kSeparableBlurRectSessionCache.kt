@@ -74,6 +74,7 @@ internal data class GPUWgpu4kSeparableBlurRectCacheLease(
 internal class GPUWgpu4kSeparableBlurRectSessionCache(
     private val device: GPUDevice,
 ) : AutoCloseable {
+    private val preRegistrationHandles = GPUPreRegistrationNativeHandleLedger()
     private var invariants: GPUWgpu4kSeparableBlurRectInvariantHandles? = null
     private var intermediates: GPUWgpu4kSeparableBlurRectIntermediateHandles? = null
     private var closed = false
@@ -88,9 +89,18 @@ internal class GPUWgpu4kSeparableBlurRectSessionCache(
         require(width in 1..2048 && height in 1..2048) {
             "The separable blur first slice accepts dimensions in 1..2048"
         }
-        val invariantHandles = invariants?.also { invariantReuses += 1L } ?: createInvariants().also {
-            invariants = it
-            invariantCreations += 1L
+        val invariantHandles = invariants?.also { invariantReuses += 1L } ?: run {
+            requireCleanSetupLedger()
+            try {
+                createInvariants().also {
+                    invariants = it
+                    preRegistrationHandles.transferAll()
+                    invariantCreations += 1L
+                }
+            } catch (failure: Throwable) {
+                preRegistrationHandles.closeRetainingFailures()
+                throw failure
+            }
         }
         val existing = intermediates
         val intermediateHandles = if (existing != null && existing.width == width && existing.height == height) {
@@ -98,9 +108,16 @@ internal class GPUWgpu4kSeparableBlurRectSessionCache(
             existing
         } else {
             existing?.close()
-            createIntermediates(width, height).also {
-                intermediates = it
-                intermediateCreations += 1L
+            requireCleanSetupLedger()
+            try {
+                createIntermediates(width, height).also {
+                    intermediates = it
+                    preRegistrationHandles.transferAll()
+                    intermediateCreations += 1L
+                }
+            } catch (failure: Throwable) {
+                preRegistrationHandles.closeRetainingFailures()
+                throw failure
             }
         }
         return GPUWgpu4kSeparableBlurRectCacheLease(invariantHandles, intermediateHandles)
@@ -116,7 +133,9 @@ internal class GPUWgpu4kSeparableBlurRectSessionCache(
 
     @Synchronized
     override fun close() {
-        if (closed && invariants == null && intermediates == null) return
+        if (closed && invariants == null && intermediates == null &&
+            preRegistrationHandles.pendingHandleCount == 0
+        ) return
         closed = true
         var firstFailure: Throwable? = null
         intermediates?.let { handles ->
@@ -135,12 +154,22 @@ internal class GPUWgpu4kSeparableBlurRectSessionCache(
                 if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
             }
         }
+        if (!preRegistrationHandles.closeRetainingFailures()) {
+            val failure = IllegalStateException(
+                "Separable blur session cache retained " +
+                    "${preRegistrationHandles.pendingHandleCount} failed setup handle(s)",
+            )
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+        }
         firstFailure?.let { throw it }
     }
 
     private fun createInvariants(): GPUWgpu4kSeparableBlurRectInvariantHandles {
         val pending = mutableListOf<AutoCloseable>()
-        fun <T : AutoCloseable> T.track(): T = also { pending += it }
+        fun <T : AutoCloseable> T.track(): T = also {
+            pending += it
+            preRegistrationHandles.track(it)
+        }
         return try {
             val sourceLayout = device.createBindGroupLayout(
                 BindGroupLayoutDescriptor(
@@ -207,14 +236,16 @@ internal class GPUWgpu4kSeparableBlurRectSessionCache(
                 GPUSeparableBlurCachedHandleSet(pending.toList()),
             )
         } catch (failure: Throwable) {
-            pending.asReversed().forEach { runCatching { it.close() } }
             throw failure
         }
     }
 
     private fun createIntermediates(width: Int, height: Int): GPUWgpu4kSeparableBlurRectIntermediateHandles {
         val pending = mutableListOf<AutoCloseable>()
-        fun <T : AutoCloseable> T.track(): T = also { pending += it }
+        fun <T : AutoCloseable> T.track(): T = also {
+            pending += it
+            preRegistrationHandles.track(it)
+        }
         return try {
             fun texture(label: String): GPUTexture = device.createTexture(
                 TextureDescriptor(
@@ -238,8 +269,13 @@ internal class GPUWgpu4kSeparableBlurRectSessionCache(
                 GPUSeparableBlurCachedHandleSet(pending.toList()),
             )
         } catch (failure: Throwable) {
-            pending.asReversed().forEach { runCatching { it.close() } }
             throw failure
+        }
+    }
+
+    private fun requireCleanSetupLedger() {
+        check(preRegistrationHandles.closeRetainingFailures()) {
+            "Separable blur cache cannot allocate while failed setup handles remain quarantined"
         }
     }
 

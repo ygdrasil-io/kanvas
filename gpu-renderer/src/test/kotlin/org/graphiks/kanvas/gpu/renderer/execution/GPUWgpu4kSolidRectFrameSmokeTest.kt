@@ -3,6 +3,10 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlendPlan
 
 import io.ygdrasil.webgpu.glfwContextRenderer
+import io.ygdrasil.webgpu.GPUDevice
+import io.ygdrasil.webgpu.GPUTexture
+import io.ygdrasil.webgpu.GPUTextureView
+import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.Executors
@@ -85,6 +89,67 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 
 class GPUWgpu4kSolidRectFrameSmokeTest {
+    @Test
+    fun `canonical target create view failure leaves texture in retryable setup ownership`() {
+        val fixture = FailingPreparedTargetNative(failCreateView = true)
+        val setup = GPUPreparedSceneSetupTransaction()
+
+        assertFailsWith<IllegalStateException> {
+            GPUWgpu4kPreparedSceneTarget.create(
+                device = fixture.device,
+                width = 4,
+                height = 4,
+                deviceGeneration = GPUDeviceGenerationID(90),
+                targetGeneration = 3,
+                lifecycle = GPUWgpu4kPreparedSceneTargetLifecycle(),
+                setupTransaction = setup,
+            )
+        }
+        assertEquals(1, setup.pendingResourceCount)
+        assertFailsWith<IllegalStateException> { setup.close() }
+        assertEquals(1, fixture.textureCloseAttempts)
+
+        val quarantine = GPUPreparedSceneSetupRollbackQuarantine()
+        quarantine.retain(setup)
+        quarantine.close()
+
+        assertEquals(2, fixture.textureCloseAttempts)
+        assertEquals(0, setup.pendingResourceCount)
+    }
+
+    @Test
+    fun `canonical target lifecycle failure retains view and texture until setup retry`() {
+        val fixture = FailingPreparedTargetNative(failCreateView = false)
+        val setup = GPUPreparedSceneSetupTransaction()
+        val lifecycle = GPUWgpu4kPreparedSceneTargetLifecycle { _, _ ->
+            error("lifecycle registration failed")
+        }
+
+        assertFailsWith<IllegalStateException> {
+            GPUWgpu4kPreparedSceneTarget.create(
+                device = fixture.device,
+                width = 4,
+                height = 4,
+                deviceGeneration = GPUDeviceGenerationID(91),
+                targetGeneration = 4,
+                lifecycle = lifecycle,
+                setupTransaction = setup,
+            )
+        }
+        assertEquals(2, setup.pendingResourceCount)
+        assertFailsWith<IllegalStateException> { setup.close() }
+        assertEquals(1, fixture.viewCloseAttempts)
+        assertEquals(1, fixture.textureCloseAttempts)
+
+        val quarantine = GPUPreparedSceneSetupRollbackQuarantine()
+        quarantine.retain(setup)
+        quarantine.close()
+
+        assertEquals(1, fixture.viewCloseAttempts)
+        assertEquals(2, fixture.textureCloseAttempts)
+        assertEquals(0, setup.pendingResourceCount)
+    }
+
     @Test
     fun `prepared scene setup transaction closes partial resources once in reverse order`() {
         val releases = mutableListOf<String>()
@@ -547,6 +612,46 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
                 assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
             )
             assertEquals(0L, materializer.counters().payloadResourceCreations)
+        } finally {
+            adapter.close()
+            materializer.close()
+            completion.close()
+            context.close()
+        }
+    }
+
+    @Test
+    fun `unknown solid load operation refuses before ephemeral cache or native allocation`() = runBlocking {
+        val context = glfwContextRenderer(4, 4, "kanvas-solid-load-op", deferredRendering = true)
+        val generation = GPUDeviceGenerationID(10_508L)
+        val adapter = GPURuntimeResourceAdapter()
+        val provider = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val completion = queueCompletion(context, generation)
+        val materializer = GPUWgpu4kSolidRectFramePayloadMaterializer(
+            context.wgpuContext.device,
+            context.wgpuContext.device.queue,
+        )
+        try {
+            val result = GPUFramePreflighter(
+                context = GPUFramePreflightContext(
+                    targetId = TARGET.value,
+                    deviceGeneration = generation,
+                    targetGeneration = 1L,
+                    resourceGenerations = mapOf(TARGET to 1L, STAGING to 1L),
+                ),
+                capabilities = nativeCapabilities(),
+                resourceProvider = provider,
+                completionProvider = completion,
+                surfaceProvider = NoNativeSurfaceOutput,
+                nativeBoundary = adapter.bindNativeFrameBoundary(provider, materializer),
+            ).preflight(solidRectReadbackPlan(generation, loadOp = "future-load"))
+
+            assertEquals(
+                "unsupported.native-solid-rect.load-operation",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertEquals(0L, materializer.counters().payloadResourceCreations)
+            assertEquals(0, adapter.quarantinedPreparedNativeFramePayloadCount)
         } finally {
             adapter.close()
             materializer.close()
@@ -1190,6 +1295,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
         frameId: GPUFrameID = GPUFrameID(10_501L),
         readbackRequestId: GPUReadbackRequestID = GPUReadbackRequestID("readback.native-smoke"),
         blendPlan: GPUBlendPlan = canonicalSolidRectSrcOverBlendPlan(),
+        loadOp: String = "clear",
     ): GPUFramePlan {
         val seal = GPUFrameCapabilitySeal.capture(frameId, generation, capabilities)
         val semantic = GPUSolidPayloadGatherer().gatherSemantic(
@@ -1291,7 +1397,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
         )
         val render = GPUFrameStep.RenderPassStep(
             target = renderTarget,
-            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
+            loadStore = GPULoadStorePlan(loadOp, GPUStorePlan.Store),
             samplePlan = GPUSamplePlan.SingleSampleFrame,
             drawPackets = listOf(packet),
             sourceTaskIds = listOf(GPUTaskID("task.render")),
@@ -1700,3 +1806,65 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
         val lifetime: GPUFrameResourceLifetime,
     )
 }
+
+private class FailingPreparedTargetNative(
+    private val failCreateView: Boolean,
+) {
+    var textureCloseAttempts = 0
+        private set
+    var viewCloseAttempts = 0
+        private set
+    private var textureCloseFailuresRemaining = 1
+
+    private val view: GPUTextureView = preparedTargetProxy(GPUTextureView::class.java) { methodName ->
+        when (methodName) {
+            "close" -> {
+                viewCloseAttempts += 1
+                Unit
+            }
+            "getLabel" -> "canonical-view"
+            "setLabel" -> Unit
+            "toString" -> "CanonicalView"
+            else -> error("Unexpected view call: $methodName")
+        }
+    }
+
+    private val texture: GPUTexture = preparedTargetProxy(GPUTexture::class.java) { methodName ->
+        when (methodName) {
+            "createView" -> if (failCreateView) error("createView failed") else view
+            "close" -> {
+                textureCloseAttempts += 1
+                if (textureCloseFailuresRemaining > 0) {
+                    textureCloseFailuresRemaining -= 1
+                    error("texture close failed")
+                }
+                Unit
+            }
+            "getLabel" -> "canonical-texture"
+            "setLabel" -> Unit
+            "toString" -> "CanonicalTexture"
+            else -> error("Unexpected texture call: $methodName")
+        }
+    }
+
+    val device: GPUDevice = preparedTargetProxy(GPUDevice::class.java) { methodName ->
+        when (methodName) {
+            "createTexture" -> texture
+            "toString" -> "CanonicalTargetDevice"
+            else -> error("Unexpected device call: $methodName")
+        }
+    }
+}
+
+private fun <T : Any> preparedTargetProxy(
+    type: Class<T>,
+    invocation: (String) -> Any?,
+): T = type.cast(
+    Proxy.newProxyInstance(type.classLoader, arrayOf(type)) { proxy, method, arguments ->
+        when (method.name) {
+            "equals" -> proxy === arguments?.singleOrNull()
+            "hashCode" -> System.identityHashCode(proxy)
+            else -> invocation(method.name)
+        }
+    },
+)

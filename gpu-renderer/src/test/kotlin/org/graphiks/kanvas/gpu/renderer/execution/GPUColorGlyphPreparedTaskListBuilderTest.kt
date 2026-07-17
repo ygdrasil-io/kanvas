@@ -203,6 +203,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
             if (methodName == "createTexture") texture else null
         }
         val queue = fakeNative<GPUQueue>(nativeEvents)
+        val targetSetup = GPUPreparedSceneSetupTransaction()
         val target = GPUWgpu4kPreparedSceneTarget.create(
             device = device,
             width = semantic.targetBounds.width,
@@ -210,7 +211,9 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
             deviceGeneration = generation,
             targetGeneration = 1L,
             lifecycle = GPUWgpu4kPreparedSceneTargetLifecycle(),
+            setupTransaction = targetSetup,
         )
+        targetSetup.commit()
         val sessionCache = GPUWgpu4kColorGlyphSessionCache(device, queue)
         nativeEvents.clear()
         try {

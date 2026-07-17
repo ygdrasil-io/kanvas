@@ -359,6 +359,76 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `native identity refusal preserves unique cleanup when one draft identity conflicts`() {
+        val events = mutableListOf<String>()
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val conflict = CountingDraftHandle()
+        val unique = CountingDraftHandle(closeFailuresRemaining = 1)
+        assertTrue(adapter.quarantinePreparedNativeFrameDraft(ownedDraft(70, conflict)))
+        val materializer = RenderOnlyNativePayloadMaterializer(
+            events,
+            encoderPlanIdSuffix = ".stale",
+            ownedHandle = conflict,
+            additionalOwnedHandles = listOf(unique),
+        )
+
+        val result = preflighter(
+            resources = resources,
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+            nativeBoundary = adapter.bindNativeFrameBoundary(resources, materializer),
+        ).preflight(framePlan(listOf(prepareScene(), renderStep())))
+
+        assertEquals(
+            "stale.native-frame-payload.identity-mismatch",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertEquals(0, conflict.closeAttempts)
+        assertEquals(1, unique.closeAttempts)
+        assertEquals(2, adapter.quarantinedPreparedNativeFramePayloadCount)
+        adapter.close()
+        assertEquals(1, conflict.successfulCloses)
+        assertEquals(2, unique.closeAttempts)
+        assertEquals(1, unique.successfulCloses)
+    }
+
+    @Test
+    fun `native semantic refusal preserves unique cleanup when one draft identity conflicts`() {
+        val events = mutableListOf<String>()
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val conflict = CountingDraftHandle()
+        val unique = CountingDraftHandle(closeFailuresRemaining = 1)
+        assertTrue(adapter.quarantinePreparedNativeFrameDraft(ownedDraft(71, conflict)))
+        val materializer = RenderOnlyNativePayloadMaterializer(
+            events,
+            omitSemanticPayloads = true,
+            ownedHandle = conflict,
+            additionalOwnedHandles = listOf(unique),
+        )
+
+        val result = preflighter(
+            resources = resources,
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+            nativeBoundary = adapter.bindNativeFrameBoundary(resources, materializer),
+        ).preflight(framePlan(listOf(prepareScene(), solidRenderStep(solidSemantic()))))
+
+        assertEquals(
+            "invalid.preflight.native_render_semantic_payloads",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertEquals(0, conflict.closeAttempts)
+        assertEquals(1, unique.closeAttempts)
+        assertEquals(2, adapter.quarantinedPreparedNativeFramePayloadCount)
+        adapter.close()
+        assertEquals(1, conflict.successfulCloses)
+        assertEquals(2, unique.closeAttempts)
+        assertEquals(1, unique.successfulCloses)
+    }
+
+    @Test
     fun `native render payload refuses draw without pipeline and ambiguous clear state`() {
         val generation = GPUDeviceGenerationID(11)
         val target = GPUPreparedNativeTextureViewOperand(fakeNative<GPUTextureView>("target"), generation)
@@ -1492,6 +1562,7 @@ class GPUFramePreflighterTest {
         private val omitSemanticPayloads: Boolean = false,
         private val encoderPlanIdSuffix: String = "",
         private val ownedHandle: AutoCloseable? = null,
+        private val additionalOwnedHandles: List<AutoCloseable> = emptyList(),
     ) : GPUPreparedNativeFramePayloadMaterializer {
         var lastRenderOperand: GPUPreparedNativeScopeOperand.Render? = null
             private set
@@ -1555,14 +1626,13 @@ class GPUFramePreflighterTest {
                         ),
                         scopeOperands = listOf(renderOperand),
                         scopeOperandKeys = listOf(scope.nativeOperandKeys),
-                        auxiliaryOwnedHandles = ownedHandle?.let { handle ->
-                            listOf(
+                        auxiliaryOwnedHandles = (listOfNotNull(ownedHandle) + additionalOwnedHandles)
+                            .map { handle ->
                                 GPUPreparedNativeAuxiliaryHandle(
                                     handle,
                                     GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                                ),
-                            )
-                        }.orEmpty(),
+                                )
+                            },
                     ),
                 ),
             )
@@ -1575,7 +1645,30 @@ class GPUFramePreflighterTest {
             GPUPreparedNativeFrameLateSurfaceBinding.NotRequired
     }
 
-    private class CountingDraftHandle : AutoCloseable {
+    private fun ownedDraft(frame: Long, handle: AutoCloseable) = GPUPreparedNativeFrameDraft(
+        GPUPreparedNativeFramePayload(
+            identity = GPUPreparedNativeFrameIdentity(
+                frameId = GPUFrameID(frame),
+                contextIdentity = "conflict.$frame",
+                encoderPlanId = "conflict.$frame",
+                deviceGeneration = GPUDeviceGenerationID(11),
+                targetGeneration = 7,
+                scopes = emptyList(),
+            ),
+            scopeOperands = emptyList(),
+            scopeOperandKeys = emptyList(),
+            auxiliaryOwnedHandles = listOf(
+                GPUPreparedNativeAuxiliaryHandle(
+                    handle,
+                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                ),
+            ),
+        ),
+    )
+
+    private class CountingDraftHandle(
+        private var closeFailuresRemaining: Int = 0,
+    ) : AutoCloseable {
         var closeAttempts = 0
             private set
         var successfulCloses = 0
@@ -1583,6 +1676,10 @@ class GPUFramePreflighterTest {
 
         override fun close() {
             closeAttempts += 1
+            if (closeFailuresRemaining > 0) {
+                closeFailuresRemaining -= 1
+                error("draft close failed")
+            }
             successfulCloses += 1
         }
     }

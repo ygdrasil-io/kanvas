@@ -91,7 +91,9 @@ internal class GPUPreparedSceneNativeTargetCloser(
     }
 }
 
-internal class GPUWgpu4kPreparedSceneTargetLifecycle {
+internal class GPUWgpu4kPreparedSceneTargetLifecycle(
+    private val beforeRecordCreation: (GPUTexture, GPUTextureView) -> Unit = { _, _ -> },
+) {
     private var canonicalTexture: GPUTexture? = null
     private var canonicalView: GPUTextureView? = null
     private var creations = 0L
@@ -101,6 +103,7 @@ internal class GPUWgpu4kPreparedSceneTargetLifecycle {
     @Synchronized
     fun recordCreation(texture: GPUTexture, view: GPUTextureView) {
         check(canonicalTexture == null && canonicalView == null)
+        beforeRecordCreation(texture, view)
         canonicalTexture = texture
         canonicalView = view
         creations += 1L
@@ -154,8 +157,9 @@ internal class GPUWgpu4kPreparedSceneTarget private constructor(
             deviceGeneration: GPUDeviceGenerationID,
             targetGeneration: Long,
             lifecycle: GPUWgpu4kPreparedSceneTargetLifecycle,
+            setupTransaction: GPUPreparedSceneSetupTransaction,
         ): GPUWgpu4kPreparedSceneTarget {
-            val texture = device.createTexture(
+            val texture = setupTransaction.own(device.createTexture(
                 TextureDescriptor(
                     size = Extent3D(width.toUInt(), height.toUInt()),
                     format = GPUTextureFormat.RGBA8Unorm,
@@ -164,10 +168,11 @@ internal class GPUWgpu4kPreparedSceneTarget private constructor(
                         GPUTextureUsage.TextureBinding,
                     label = "Kanvas.preparedScene.canonicalTarget",
                 ),
-            )
-            return try {
-                val view = texture.createView()
-                lifecycle.recordCreation(texture, view)
+            ))
+            val view = setupTransaction.own(texture.createView())
+            lifecycle.recordCreation(texture, view)
+            return setupTransaction.replaceOwned(
+                listOf(texture, view),
                 GPUWgpu4kPreparedSceneTarget(
                     texture,
                     view,
@@ -176,11 +181,8 @@ internal class GPUWgpu4kPreparedSceneTarget private constructor(
                     deviceGeneration,
                     targetGeneration,
                     lifecycle,
-                )
-            } catch (failure: Throwable) {
-                texture.close()
-                throw failure
-            }
+                ),
+            )
         }
     }
 }
@@ -412,6 +414,16 @@ internal class GPUWgpu4kSolidRectFramePayloadMaterializer(
                 "unsupported.native-solid-rect.sample-plan",
                 "All render scopes must use one exact single-sample or 4x MSAA plan.",
             )
+        }
+        val loadOperations = renderSteps.map { step ->
+            when (step.loadStore.loadOp) {
+                "clear" -> GPUPreparedNativeLoadOperation.Clear
+                "load" -> GPUPreparedNativeLoadOperation.Load
+                else -> return refused(
+                    "unsupported.native-solid-rect.load-operation",
+                    "Every native solid rectangle render must use an exact clear or load operation.",
+                )
+            }
         }
         val storeOperations = renderSteps.map { step ->
             val operation = when (step.loadStore.storePlan) {
@@ -703,14 +715,7 @@ internal class GPUWgpu4kSolidRectFramePayloadMaterializer(
                 val renderScopeAtIndex = renderScopes[index]
                 val semanticPacketsAtIndex = semanticPacketsByRenderStep[index]
                 val scissorsAtIndex = scissorsByRenderStep[index]
-                val loadOperation = when (renderStepAtIndex.loadStore.loadOp) {
-                    "clear" -> GPUPreparedNativeLoadOperation.Clear
-                    "load" -> GPUPreparedNativeLoadOperation.Load
-                    else -> return refused(
-                        "unsupported.native-solid-rect.load-operation",
-                        "Every native solid rectangle render must use an exact clear or load operation.",
-                    )
-                }
+                val loadOperation = loadOperations[index]
                 GPUPreparedNativeScopeOperand.Render(
                     sourceStepIndex = renderScopeAtIndex.sourceStepIndex,
                     pass = GPUPreparedNativeRenderPassConfig(

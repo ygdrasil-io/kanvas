@@ -70,6 +70,76 @@ private fun canonicalFixedState(mode: GPUBlendMode): GPUFixedFunctionBlendState 
 
 class GPUBackendRuntimeNativeSmokeTest {
     @Test
+    fun `runtime teardown retries every owner category before adapter and backend resources`() {
+        listOf("setup", "target", "cache").forEach { category ->
+            val events = mutableListOf<String>()
+            var failuresRemaining = 1
+            val owner = AutoCloseable {
+                events += "owner:$category"
+                if (failuresRemaining > 0) {
+                    failuresRemaining -= 1
+                    error("$category owner remains live")
+                }
+            }
+            val pending = mutableListOf(owner)
+            val gate = GPUBackendRuntimeTeardownGate(
+                retryOwnerGroups = listOf(
+                    GPUBackendRuntimeRetryOwnerGroup(
+                        label = category,
+                        snapshot = { pending.toList() },
+                        onClosed = { pending.remove(it) },
+                    ),
+                ),
+                adapter = AutoCloseable { events += "adapter" },
+                downstreamBackend = AutoCloseable { events += "backend" },
+            )
+
+            val failure = assertFailsWith<IllegalStateException> { gate.close() }
+
+            assertContains(failure.message.orEmpty(), category)
+            assertEquals(listOf("owner:$category"), events)
+            assertEquals(1, pending.size)
+
+            gate.close()
+            gate.close()
+
+            assertEquals(listOf("owner:$category", "owner:$category", "adapter", "backend"), events)
+            assertTrue(pending.isEmpty())
+        }
+    }
+
+    @Test
+    fun `runtime teardown never closes target dependency while cache dependent remains incomplete`() {
+        val events = mutableListOf<String>()
+        var cacheFailures = 1
+        val cache = AutoCloseable {
+            events += "cache"
+            if (cacheFailures > 0) {
+                cacheFailures -= 1
+                error("cache remains live")
+            }
+        }
+        val target = AutoCloseable { events += "target" }
+        val caches = mutableListOf(cache)
+        val targets = mutableListOf(target)
+        val gate = GPUBackendRuntimeTeardownGate(
+            retryOwnerGroups = listOf(
+                GPUBackendRuntimeRetryOwnerGroup("cache", { caches.toList() }) { caches.remove(it) },
+                GPUBackendRuntimeRetryOwnerGroup("target", { targets.toList() }) { targets.remove(it) },
+            ),
+            adapter = AutoCloseable { events += "adapter" },
+            downstreamBackend = AutoCloseable { events += "backend" },
+        )
+
+        assertFailsWith<IllegalStateException> { gate.close() }
+        assertEquals(listOf("cache"), events)
+
+        gate.close()
+
+        assertEquals(listOf("cache", "cache", "target", "adapter", "backend"), events)
+    }
+
+    @Test
     fun `prepared scene parent teardown can retry an incomplete native owner close`() {
         var attempts = 0
         val registry = GPUPreparedSceneChildRegistry {
@@ -122,6 +192,7 @@ class GPUBackendRuntimeNativeSmokeTest {
             deferredRendering = true,
         )
         val lifecycle = GPUWgpu4kPreparedSceneTargetLifecycle()
+        val setupTransaction = GPUPreparedSceneSetupTransaction()
         val target = GPUWgpu4kPreparedSceneTarget.create(
             device = context.wgpuContext.device,
             width = 4,
@@ -129,7 +200,9 @@ class GPUBackendRuntimeNativeSmokeTest {
             deviceGeneration = GPUDeviceGenerationID(77),
             targetGeneration = 3,
             lifecycle = lifecycle,
+            setupTransaction = setupTransaction,
         )
+        setupTransaction.commit()
         try {
             GPUWgpu4kSurfaceBlitSessionCache(context.wgpuContext.device, target).use { cache ->
                 val rgba = cache.acquire(GPUTextureFormat.RGBA8Unorm)

@@ -465,6 +465,21 @@ internal class GPUPreparedSceneSetupTransaction : AutoCloseable {
     }
 
     @Synchronized
+    fun <T : AutoCloseable> replaceOwned(
+        resources: List<AutoCloseable>,
+        replacement: T,
+    ): T {
+        check(!committed && !rollbackStarted)
+        require(resources.isNotEmpty())
+        require(resources.all { resource -> owned.any { it === resource } })
+        check(owned.none { it === replacement })
+        val insertionIndex = owned.indexOfFirst { candidate -> resources.any { it === candidate } }
+        owned.removeAll { candidate -> resources.any { it === candidate } }
+        owned.add(insertionIndex, replacement)
+        return replacement
+    }
+
+    @Synchronized
     fun commit() {
         check(!rollbackStarted)
         committed = true
@@ -521,6 +536,58 @@ internal class GPUPreparedSceneSetupRollbackQuarantine : AutoCloseable {
             }
         }
         firstFailure?.let { throw it }
+    }
+}
+
+internal data class GPUBackendRuntimeRetryOwnerGroup(
+    val label: String,
+    val snapshot: () -> List<AutoCloseable>,
+    val onClosed: (AutoCloseable) -> Unit,
+)
+
+internal class GPUBackendRuntimeTeardownGate(
+    private val retryOwnerGroups: List<GPUBackendRuntimeRetryOwnerGroup>,
+    private val adapter: AutoCloseable,
+    private val downstreamBackend: AutoCloseable,
+) : AutoCloseable {
+    private var terminal = false
+
+    @Synchronized
+    override fun close() {
+        if (terminal) return
+        retryOwnerGroups.forEach { group ->
+            val failures = mutableListOf<Throwable>()
+            group.snapshot().forEach { owner ->
+                try {
+                    owner.close()
+                    group.onClosed(owner)
+                } catch (failure: Throwable) {
+                    failures += IllegalStateException(
+                        "GPU runtime ${group.label} retry owner remains incomplete",
+                        failure,
+                    )
+                }
+            }
+            if (failures.isNotEmpty()) {
+                val failure = IllegalStateException(
+                    "GPU runtime ${group.label} retry owners remain incomplete: " +
+                        failures.joinToString { it.message.orEmpty() },
+                    failures.first(),
+                )
+                failures.drop(1).forEach(failure::addSuppressed)
+                throw failure
+            }
+        }
+        try {
+            adapter.close()
+        } catch (failure: Throwable) {
+            throw IllegalStateException(
+                "GPU runtime adapter teardown remains incomplete before backend teardown",
+                failure,
+            )
+        }
+        downstreamBackend.close()
+        terminal = true
     }
 }
 
@@ -710,6 +777,75 @@ private class WgpuBackendSession(
         linkedSetOf<GPUWgpu4kDestinationCopySessionCache>()
     private val quarantinedSurfaceBlitCaches =
         linkedSetOf<GPUWgpu4kSurfaceBlitSessionCache>()
+    private val runtimeTeardownGate by lazy {
+        GPUBackendRuntimeTeardownGate(
+            retryOwnerGroups = listOf(
+                GPUBackendRuntimeRetryOwnerGroup(
+                    label = "setup",
+                    snapshot = {
+                        if (preparedSceneSetupRollbackQuarantine.pendingTransactionCount > 0) {
+                            listOf(preparedSceneSetupRollbackQuarantine)
+                        } else {
+                            emptyList()
+                        }
+                    },
+                    onClosed = {},
+                ),
+                GPUBackendRuntimeRetryOwnerGroup(
+                    label = "cache",
+                    snapshot = {
+                        synchronized(this) {
+                            buildList {
+                                addAll(quarantinedSolidRectCaches)
+                                addAll(quarantinedRegisteredUniformCaches)
+                                addAll(quarantinedColorGlyphCaches)
+                                addAll(quarantinedSeparableBlurCaches)
+                                addAll(quarantinedDestinationCopyCaches)
+                                addAll(quarantinedSurfaceBlitCaches)
+                            }
+                        }
+                    },
+                    onClosed = { owner ->
+                        synchronized(this) {
+                            when (owner) {
+                                is GPUWgpu4kSolidRectSessionCache -> quarantinedSolidRectCaches.remove(owner)
+                                is GPUWgpu4kRegisteredUniformRectSessionCache ->
+                                    quarantinedRegisteredUniformCaches.remove(owner)
+                                is GPUWgpu4kColorGlyphSessionCache -> quarantinedColorGlyphCaches.remove(owner)
+                                is GPUWgpu4kSeparableBlurRectSessionCache ->
+                                    quarantinedSeparableBlurCaches.remove(owner)
+                                is GPUWgpu4kDestinationCopySessionCache ->
+                                    quarantinedDestinationCopyCaches.remove(owner)
+                                is GPUWgpu4kSurfaceBlitSessionCache -> quarantinedSurfaceBlitCaches.remove(owner)
+                            }
+                        }
+                    },
+                ),
+                GPUBackendRuntimeRetryOwnerGroup(
+                    label = "target",
+                    snapshot = { synchronized(this) { quarantinedPreparedSceneTargets.toList() } },
+                    onClosed = { owner ->
+                        synchronized(this) {
+                            quarantinedPreparedSceneTargets.remove(owner)
+                        }
+                    },
+                ),
+            ),
+            adapter = runtimeResourceAdapter,
+            downstreamBackend = AutoCloseable {
+                queueCompletionRuntime.close()
+                try {
+                    executionCaches.close()
+                } finally {
+                    try {
+                        queueManager.close()
+                    } finally {
+                        glfw.close()
+                    }
+                }
+            },
+        )
+    }
     private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits(
         maxTextureDimension2D = minOf(
@@ -805,14 +941,15 @@ private class WgpuBackendSession(
         return try {
         val targetGeneration = nextOffscreenTargetOrdinal()
         val targetLifecycle = GPUWgpu4kPreparedSceneTargetLifecycle()
-        val preparedTarget = setupTransaction.own(GPUWgpu4kPreparedSceneTarget.create(
+        val preparedTarget = GPUWgpu4kPreparedSceneTarget.create(
             device = glfw.wgpuContext.device,
             width = request.width,
             height = request.height,
             deviceGeneration = deviceGeneration,
             targetGeneration = targetGeneration,
             lifecycle = targetLifecycle,
-        ))
+            setupTransaction = setupTransaction,
+        )
         val solidRectCache = setupTransaction.own(
             GPUWgpu4kSolidRectSessionCache(glfw.wgpuContext.device),
         )
@@ -1107,68 +1244,7 @@ private class WgpuBackendSession(
     }
 
     private fun closeRuntimeResources() {
-        runCatching { preparedSceneSetupRollbackQuarantine.close() }
-        val quarantinedTargets = synchronized(this) { quarantinedPreparedSceneTargets.toList() }
-        quarantinedTargets.forEach { target ->
-            runCatching { target.close() }.onSuccess {
-                synchronized(this) { quarantinedPreparedSceneTargets.remove(target) }
-            }
-        }
-        val quarantinedSolidRects = synchronized(this) { quarantinedSolidRectCaches.toList() }
-        quarantinedSolidRects.forEach { cache ->
-            runCatching { cache.close() }.onSuccess {
-                synchronized(this) { quarantinedSolidRectCaches.remove(cache) }
-            }
-        }
-        val quarantinedCaches = synchronized(this) { quarantinedColorGlyphCaches.toList() }
-        quarantinedCaches.forEach { cache ->
-            runCatching { cache.close() }.onSuccess {
-                synchronized(this) { quarantinedColorGlyphCaches.remove(cache) }
-            }
-        }
-        val quarantinedRegisteredUniforms = synchronized(this) {
-            quarantinedRegisteredUniformCaches.toList()
-        }
-        quarantinedRegisteredUniforms.forEach { cache ->
-            runCatching { cache.close() }.onSuccess {
-                synchronized(this) { quarantinedRegisteredUniformCaches.remove(cache) }
-            }
-        }
-        val quarantinedSeparableBlurs = synchronized(this) {
-            quarantinedSeparableBlurCaches.toList()
-        }
-        quarantinedSeparableBlurs.forEach { cache ->
-            runCatching { cache.close() }.onSuccess {
-                synchronized(this) { quarantinedSeparableBlurCaches.remove(cache) }
-            }
-        }
-        val quarantinedDestinationCopies = synchronized(this) {
-            quarantinedDestinationCopyCaches.toList()
-        }
-        quarantinedDestinationCopies.forEach { cache ->
-            runCatching { cache.close() }.onSuccess {
-                synchronized(this) { quarantinedDestinationCopyCaches.remove(cache) }
-            }
-        }
-        val quarantinedSurfaceBlits = synchronized(this) {
-            quarantinedSurfaceBlitCaches.toList()
-        }
-        quarantinedSurfaceBlits.forEach { cache ->
-            runCatching { cache.close() }.onSuccess {
-                synchronized(this) { quarantinedSurfaceBlitCaches.remove(cache) }
-            }
-        }
-        queueCompletionRuntime.close()
-        runtimeResourceAdapter.close()
-        try {
-            executionCaches.close()
-        } finally {
-            try {
-                queueManager.close()
-            } finally {
-                glfw.close()
-            }
-        }
+        runtimeTeardownGate.close()
     }
 
     private fun closePreparedSceneChildResources(

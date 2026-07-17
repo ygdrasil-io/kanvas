@@ -40,8 +40,14 @@ internal class GPUWgpu4kSurfaceBlitCacheLease(
 /** Session-owned fullscreen blit resources keyed by the exact native surface format. */
 internal class GPUWgpu4kSurfaceBlitSessionCache(
     private val device: GPUDevice,
-    private val preparedSceneTarget: GPUWgpu4kPreparedSceneTarget,
+    private val sourceViewProvider: () -> GPUTextureView,
 ) : AutoCloseable {
+    constructor(
+        device: GPUDevice,
+        preparedSceneTarget: GPUWgpu4kPreparedSceneTarget,
+    ) : this(device, { preparedSceneTarget.borrow().second })
+
+    private val preRegistrationHandles = GPUPreRegistrationNativeHandleLedger()
     private val entries = linkedMapOf<GPUTextureFormat, Entry>()
     private var creations = 0L
     private var reuses = 0L
@@ -55,10 +61,17 @@ internal class GPUWgpu4kSurfaceBlitSessionCache(
             reuses += 1L
             return GPUWgpu4kSurfaceBlitCacheLease(entry.sourceView, entry.pipeline, entry.bindGroup)
         }
-        val entry = createEntry(format)
-        entries[format] = entry
-        creations += 1L
-        return GPUWgpu4kSurfaceBlitCacheLease(entry.sourceView, entry.pipeline, entry.bindGroup)
+        requireCleanSetupLedger()
+        return try {
+            val entry = createEntry(format)
+            entries[format] = entry
+            preRegistrationHandles.transferAll()
+            creations += 1L
+            GPUWgpu4kSurfaceBlitCacheLease(entry.sourceView, entry.pipeline, entry.bindGroup)
+        } catch (failure: Throwable) {
+            preRegistrationHandles.closeRetainingFailures()
+            throw failure
+        }
     }
 
     @Synchronized
@@ -66,7 +79,7 @@ internal class GPUWgpu4kSurfaceBlitSessionCache(
 
     @Synchronized
     override fun close() {
-        if (closed && entries.isEmpty()) return
+        if (closed && entries.isEmpty() && preRegistrationHandles.pendingHandleCount == 0) return
         closed = true
         var firstFailure: Throwable? = null
         entries.values.toList().asReversed().forEach { entry ->
@@ -77,12 +90,22 @@ internal class GPUWgpu4kSurfaceBlitSessionCache(
                 if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
             }
         }
+        if (!preRegistrationHandles.closeRetainingFailures()) {
+            val failure = IllegalStateException(
+                "Surface blit session cache retained " +
+                    "${preRegistrationHandles.pendingHandleCount} failed setup handle(s)",
+            )
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+        }
         firstFailure?.let { throw it }
     }
 
     private fun createEntry(format: GPUTextureFormat): Entry {
         val pending = mutableListOf<AutoCloseable>()
-        fun <T : AutoCloseable> T.track(): T = also { pending += it }
+        fun <T : AutoCloseable> T.track(): T = also {
+            pending += it
+            preRegistrationHandles.track(it)
+        }
         return try {
             val layout = device.createBindGroupLayout(
                 BindGroupLayoutDescriptor(
@@ -138,7 +161,7 @@ internal class GPUWgpu4kSurfaceBlitSessionCache(
                     label = "Kanvas.session.surfaceBlit.$format.sampler",
                 ),
             ).track()
-            val (_, sourceView) = preparedSceneTarget.borrow()
+            val sourceView = sourceViewProvider()
             val bindGroup = device.createBindGroup(
                 BindGroupDescriptor(
                     label = "Kanvas.session.surfaceBlit.$format.bindGroup",
@@ -151,8 +174,13 @@ internal class GPUWgpu4kSurfaceBlitSessionCache(
             ).track()
             Entry(sourceView, pipeline, bindGroup, pending.toList())
         } catch (failure: Throwable) {
-            pending.asReversed().forEach { runCatching { it.close() } }
             throw failure
+        }
+    }
+
+    private fun requireCleanSetupLedger() {
+        check(preRegistrationHandles.closeRetainingFailures()) {
+            "Surface blit cache cannot allocate while failed setup handles remain quarantined"
         }
     }
 
