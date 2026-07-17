@@ -1358,11 +1358,14 @@ class GPUReadbackStagingPool internal constructor(
             "unsupported.readback_staging.lease_unknown",
             "Readback staging lease is foreign or no longer active.",
         )
-        if (entry.state !in setOf(
-                GPUReadbackStagingState.GPUCompletedMappingPending,
-                GPUReadbackStagingState.Mapped,
+        val legalState = entry.state in setOf(
+            GPUReadbackStagingState.GPUCompletedMappingPending,
+            GPUReadbackStagingState.Mapped,
+        ) || (
+            entry.state == GPUReadbackStagingState.Depadded &&
+                safety != GPUReadbackMapFailureSafety.SafeUnmapAndReleaseProven
             )
-        ) {
+        if (!legalState) {
             return stagingLifecycleRefused(
                 "unsupported.readback_staging.map_failure_not_pending",
                 "Readback map failure is not legal in the current ownership state.",
@@ -1386,6 +1389,46 @@ class GPUReadbackStagingPool internal constructor(
             }
             entry.lastUseToken = useToken
         }
+        return stagingLifecycleAccepted(listOf(entry))
+    }
+
+    /**
+     * Fail-closed escape hatch for an exact lease after native queue submission. The provider may
+     * still observe Reserved when its submit transition failed before or after mutating the pool.
+     */
+    fun quarantineAfterSubmitFailure(
+        lease: GPUReadbackStagingLease,
+    ): GPUReadbackStagingLifecycleResult {
+        val entry = entryFor(lease) ?: return stagingLifecycleRefused(
+            "unsupported.readback_staging.lease_unknown",
+            "Readback staging lease is foreign or no longer active.",
+        )
+        if (entry.state == GPUReadbackStagingState.Releasable ||
+            entry.state == GPUReadbackStagingState.Quarantined
+        ) {
+            return stagingLifecycleAccepted(listOf(entry))
+        }
+        if (entry.state !in setOf(
+                GPUReadbackStagingState.Reserved,
+                GPUReadbackStagingState.Submitted,
+                GPUReadbackStagingState.GPUCompletedMappingPending,
+                GPUReadbackStagingState.Mapped,
+                GPUReadbackStagingState.Depadded,
+            )
+        ) {
+            return stagingLifecycleRefused(
+                "unsupported.readback_staging.fail_closed_state_invalid",
+                "Readback staging cannot be quarantined from its current ownership state.",
+            )
+        }
+        entry.submissionId?.let { submissionId ->
+            val remaining = submissions[submissionId].orEmpty().filterNot { candidate -> candidate === entry }
+            if (remaining.isEmpty()) submissions.remove(submissionId) else submissions[submissionId] = remaining
+        }
+        entry.state = GPUReadbackStagingState.Quarantined
+        entry.submissionId = null
+        entry.completionFailure = GPUReadbackCompletionFailure.Uncertain
+        entry.mapFailureSafety = GPUReadbackMapFailureSafety.ReleaseUncertain
         return stagingLifecycleAccepted(listOf(entry))
     }
 

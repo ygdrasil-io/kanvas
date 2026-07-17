@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.gpu.renderer.execution
+package org.graphiks.kanvas.gpu.renderer.recording
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature

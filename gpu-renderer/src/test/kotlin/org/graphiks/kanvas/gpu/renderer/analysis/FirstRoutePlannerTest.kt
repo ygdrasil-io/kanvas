@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
@@ -40,6 +41,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterBounds
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterCropPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 
@@ -81,6 +83,34 @@ class FirstRoutePlannerTest {
         assertNull(invocation.resourceSlot)
     }
 
+    @Test
+    fun `solid fill rect packet owns the gatherers exact rectangle color and zero radii payload`() {
+        val command = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(41),
+            rect = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 0.75f),
+        )
+
+        val packet = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command).pass.drawPackets.single()
+        val semantic = assertIs<GPUDrawSemanticPayload.SolidRect>(packet.semanticPayload)
+        val ref = semantic.payloadRef
+        val block = assertNotNull(ref.uniformBlock)
+        val floats = java.nio.ByteBuffer.wrap(block.bytes.map(Int::toByte).toByteArray())
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            .asFloatBuffer()
+            .let { buffer -> List(12) { buffer.get(it) } }
+
+        assertEquals(packet.commandIdValue, ref.commandIdValue)
+        assertEquals(packet.renderStepId.value, ref.renderStepIdentity)
+        assertEquals(packet.uniformSlot, ref.uniformSlot)
+        assertNull(ref.resourceSlot)
+        assertEquals(
+            listOf(2f, 3f, 18f, 21f, 0f, 0f, 0f, 0f, 1f, 0.25f, 0.5f, 0.75f),
+            floats,
+        )
+    }
+
     /** Translate-like transforms remain in the native first FillRect route. */
     @Test
     fun `translated solid fill rect remains native`() {
@@ -116,7 +146,7 @@ class FirstRoutePlannerTest {
         val plan = GPUFirstRoutePlanner(capabilities = firstSliceWithScissorCapabilities()).plan(command)
         assertIs<GPURouteDecision.Native>(plan.routeDecision)
 
-        assertEquals("bounds:4.0,5.0,16.0,17.0", plan.pass.invocations.single().scissorBoundsHash)
+        assertEquals("scissor_4.0_5.0_16.0_17.0", plan.pass.invocations.single().scissorBoundsHash)
     }
 
     /** A DeviceRect clip without the scissor capability refuses with a specific diagnostic. */

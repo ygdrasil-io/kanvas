@@ -7,6 +7,7 @@ import java.nio.file.Path
 import javax.imageio.spi.IIORegistry
 import javax.imageio.spi.ImageWriterSpi
 import kotlin.io.path.exists
+import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -59,6 +60,43 @@ class RenderGpuRendererSceneOffscreenMainTest {
             runJson.contains("\"status\": \"rendered\"") || runJson.contains("webgpu-context-unavailable"),
             "Expected rendered status or webgpu-context-unavailable fallback, got: $runJson",
         )
+    }
+
+    @Test
+    fun `real COLRv0 scene uses one prepared encoder submit and matches its CPU reference`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-colr")
+
+        val report = renderGpuRendererSceneOffscreen(arrayOf("colr-v0-color-glyph", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        val sceneOutput = root.resolve("colr-v0-color-glyph")
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(report.diagnostics, "colorTextRun:fontResource=/fonts/skia/colr.ttf")
+        assertContains(report.diagnostics, "colorTextRun:baseGlyph=2 layerGlyphs=7,8")
+        assertContains(report.diagnostics, "colorTextRun:uniformPack=784-byte-le")
+        assertContains(report.diagnostics, "colorTextRun:native encoders=1 commandBuffers=1 submits=1 readbacks=1")
+        assertEquals(
+            sceneOutput.resolve("reference.png").readBytes().toList(),
+            sceneOutput.resolve("render.png").readBytes().toList(),
+        )
+    }
+
+    @Test
+    fun `solid frame sampler measures completion only and performs one final readback`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-prepared-samples")
+        val scene = org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry.registry
+            .requireScene("solid-card-stack")
+
+        val report = OffscreenFrameSampler().sample(scene, frames = 3, outputDir = root)
+        if (report.runStatus == OffscreenFrameSampleStatus.RenderFailed &&
+            report.diagnostics.any { it.contains("webgpu-context-unavailable") }
+        ) return
+
+        assertEquals(OffscreenFrameSampleStatus.Sampled, report.runStatus)
+        assertEquals("wall-clock-prepared-submit-completion", report.metricSource)
+        assertContains(report.diagnostics, "measuredReadbacks=0 finalValidationReadbacks=1")
+        assertContains(report.diagnostics, "nativeFrames=4 encoders=4 commandBuffers=4 submits=4")
+        assertContains(report.diagnostics, "solidRectCache creations=1 reuses=3")
     }
 
     @Test

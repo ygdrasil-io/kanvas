@@ -50,8 +50,10 @@ enum class GPUFrameResourceRole {
     LayerTarget,
     FilterTarget,
     DestinationSnapshot,
+    CopyScratch,
     UploadStaging,
     ReadbackStaging,
+    GlyphAtlas,
     VertexData,
     IndexData,
     UniformData,
@@ -94,6 +96,27 @@ enum class GPUFrameResourceDescriptorKind {
 /** Handle-free topology used by preflight and later scratch-pool keying. */
 sealed interface GPUFrameResourceDescriptor {
     val kind: GPUFrameResourceDescriptorKind
+}
+
+/** Exact logical-to-physical texture evidence issued by a prepared scratch lease. */
+class GPUPreparedTextureAllocationEvidence(
+    val logicalBounds: GPUPixelBounds,
+    val backingWidth: Int,
+    val backingHeight: Int,
+    val format: GPUColorFormat,
+    val sampleCount: Int,
+    usages: Set<GPUFrameResourceUsage>,
+) {
+    val usages: Set<GPUFrameResourceUsage> = immutableSet(usages)
+
+    init {
+        require(!logicalBounds.isEmpty) { "Prepared texture logical bounds must not be empty" }
+        require(backingWidth >= logicalBounds.width && backingHeight >= logicalBounds.height) {
+            "Prepared texture backing must contain its logical extent"
+        }
+        require(sampleCount > 0) { "Prepared texture sample count must be positive" }
+        require(usages.isNotEmpty()) { "Prepared texture usages must not be empty" }
+    }
 }
 
 /** Complete logical texture topology retained before allocation. */
@@ -1293,6 +1316,11 @@ interface GPUResourceProvider {
     fun markReadbackMapFailed(
         lease: GPUReadbackStagingLease,
         safety: GPUReadbackMapFailureSafety,
+    ): GPUReadbackStagingLifecycleResult = unconfiguredReadbackLifecycle()
+
+    /** Idempotently quarantines one exact lease after queue submission became uncertain. */
+    fun quarantineReadbackAfterSubmit(
+        lease: GPUReadbackStagingLease,
     ): GPUReadbackStagingLifecycleResult = unconfiguredReadbackLifecycle()
 
     /** Rolls back every never-submitted physical reservation owned by one preflight scope. */

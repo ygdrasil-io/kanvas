@@ -49,6 +49,105 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 class GPUFramePlannerDestinationContractTest {
     @Test
+    fun `MSAA render tasks require one exact typed continuation proof before linearization`() {
+        val samplePlan = GPUSamplePlan.MultisampleFrame(4)
+        val valid = continuationKey(samplePlan = samplePlan)
+        val cases = listOf(
+            null to "invalid.frame_plan.msaa_continuation_missing",
+            valid.copy(target = GPUTargetIdentity("target.other")) to
+                "invalid.frame_plan.msaa_continuation_target",
+            valid.copy(samplePlan = GPUSamplePlan.MultisampleFrame(8)) to
+                "invalid.frame_plan.msaa_continuation_sample_plan",
+            valid.copy(deviceGeneration = GPUDeviceGenerationID(99)) to
+                "invalid.frame_plan.msaa_continuation_device_generation",
+        )
+
+        cases.forEachIndexed { index, (proof, expectedCode) ->
+            val render = renderTask(
+                taskId = "task.render.msaa.$index",
+                commandId = 70 + index,
+                blendPlan = directBlendPlan(),
+                samplePlan = samplePlan,
+                sampleContinuationKey = proof,
+            )
+            val plan = GPUFramePlanner.plan(taskList(listOf(render), emptyList()))
+
+            assertEquals(expectedCode, plan.diagnostics.last().code.value)
+        }
+    }
+
+    @Test
+    fun `all MSAA render tasks for one target require the same continuation key`() {
+        val firstKey = continuationKey()
+        val first = renderTask(
+            "task.render.msaa.first",
+            80,
+            blendPlan = directBlendPlan(),
+            samplePlan = firstKey.samplePlan,
+            sampleContinuationKey = firstKey,
+        )
+        val second = renderTask(
+            "task.render.msaa.second",
+            81,
+            blendPlan = directBlendPlan(),
+            samplePlan = firstKey.samplePlan,
+            sampleContinuationKey = firstKey.copy(
+                colorAttachment = GPUTargetIdentity("target.scene.msaa.other"),
+            ),
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(listOf(first, second), listOf(dependency(first, second))),
+        )
+
+        assertEquals("invalid.frame_plan.msaa_continuation_key_mismatch", plan.diagnostics.last().code.value)
+    }
+
+    @Test
+    fun `destination grouping continuation must exactly match its consumer render task proof`() {
+        val renderKey = continuationKey()
+        val destination = destinationTask(
+            GPUDestinationSnapshotTaskPayload(
+                grouping = grouping(
+                    groups = listOf(
+                        group(
+                            0,
+                            "draw.90",
+                            sourceIntermediate = null,
+                            sampleContinuation = renderKey.copy(
+                                colorAttachment = GPUTargetIdentity("target.scene.msaa.grouping"),
+                            ),
+                        ),
+                    ),
+                    materializations = listOf(
+                        GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                    ),
+                ),
+                operations = listOf(
+                    textureCopyOperation(
+                        groupIndex = 0,
+                        groupingCommandId = "draw.90",
+                        renderTaskId = "task.render.90",
+                        commandId = 90,
+                    ),
+                ),
+            ),
+        )
+        val render = renderTask(
+            "task.render.90",
+            90,
+            samplePlan = renderKey.samplePlan,
+            sampleContinuationKey = renderKey,
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(listOf(destination, render), listOf(dependency(destination, render))),
+        )
+
+        assertEquals("invalid.frame_plan.destination_continuation_mismatch", plan.diagnostics.last().code.value)
+    }
+
+    @Test
     fun `payload normalizes Task 5 operations and preserves exact typed sources`() {
         val grouping = grouping(
             groups = listOf(
@@ -474,6 +573,181 @@ class GPUFramePlannerDestinationContractTest {
     }
 
     @Test
+    fun `non overlapping destination snapshot aliases may reuse one texture inside one render task`() {
+        val destination = destinationTask(
+            payload = GPUDestinationSnapshotTaskPayload(
+                grouping = grouping(
+                    groups = listOf(
+                        group(0, "draw.1", sourceIntermediate = null),
+                        group(1, "draw.3", sourceIntermediate = null),
+                    ),
+                    materializations = listOf(
+                        GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                        GPUDestinationSnapshotMaterialization.TextureCopy(1, BOUNDS),
+                    ),
+                ),
+                operations = listOf(
+                    textureCopyOperation(
+                        groupIndex = 0,
+                        groupingCommandId = "draw.1",
+                        renderTaskId = "task.render.alias.non-overlap",
+                        commandId = 1,
+                        snapshot = SHARED_SNAPSHOT_TEXTURE,
+                    ),
+                    textureCopyOperation(
+                        groupIndex = 1,
+                        groupingCommandId = "draw.3",
+                        renderTaskId = "task.render.alias.non-overlap",
+                        commandId = 3,
+                        snapshot = SHARED_SNAPSHOT_TEXTURE,
+                    ),
+                ),
+            ),
+        )
+        val render = renderTask(
+            taskId = "task.render.alias.non-overlap",
+            packets = listOf(
+                packet(1, destinationBlendPlan()),
+                packet(2, directBlendPlan()),
+                packet(3, destinationBlendPlan()),
+            ),
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, render),
+                dependencies = listOf(dependency(destination, render)),
+            ),
+        )
+
+        assertFalse(plan.atomicallyRefused, plan.diagnostics.joinToString { it.code.value })
+        assertEquals(2, plan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().size)
+        assertEquals(
+            listOf("packet.1", "packet.2", "packet.3"),
+            plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .flatMap { it.drawPackets }
+                .map { it.packetId.value },
+        )
+    }
+
+    @Test
+    fun `overlapping destination snapshot aliases inside one render task refuse atomically`() {
+        val destination = destinationTask(
+            payload = GPUDestinationSnapshotTaskPayload(
+                grouping = grouping(
+                    groups = listOf(
+                        group(0, "draw.1", "draw.3", sourceIntermediate = null),
+                        group(1, "draw.2", sourceIntermediate = null),
+                    ),
+                    materializations = listOf(
+                        GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                        GPUDestinationSnapshotMaterialization.TextureCopy(1, BOUNDS),
+                    ),
+                ),
+                operations = listOf(
+                    textureCopyOperation(
+                        groupIndex = 0,
+                        snapshot = SHARED_SNAPSHOT_TEXTURE,
+                        consumers = listOf(
+                            consumer("draw.1", "task.render.alias.overlap", 1),
+                            consumer("draw.3", "task.render.alias.overlap", 3),
+                        ),
+                    ),
+                    textureCopyOperation(
+                        groupIndex = 1,
+                        groupingCommandId = "draw.2",
+                        renderTaskId = "task.render.alias.overlap",
+                        commandId = 2,
+                        snapshot = SHARED_SNAPSHOT_TEXTURE,
+                    ),
+                ),
+            ),
+        )
+        val render = renderTask(
+            taskId = "task.render.alias.overlap",
+            packets = (1..3).map { packet(it, destinationBlendPlan()) },
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, render),
+                dependencies = listOf(dependency(destination, render)),
+            ),
+        )
+
+        assertTrue(plan.atomicallyRefused)
+        assertTrue(plan.steps.isEmpty())
+        assertEquals("invalid.frame_plan.destination_snapshot_alias", plan.diagnostics.last().code.value)
+    }
+
+    @Test
+    fun `render slicing preserves packet order ownership and batch partitions exactly`() {
+        val destination = destinationTask(
+            payload = GPUDestinationSnapshotTaskPayload(
+                grouping = grouping(
+                    groups = listOf(group(0, "draw.2", sourceIntermediate = null)),
+                    materializations = listOf(
+                        GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                    ),
+                ),
+                operations = listOf(
+                    textureCopyOperation(
+                        groupIndex = 0,
+                        groupingCommandId = "draw.2",
+                        renderTaskId = "task.render.batch.first",
+                        commandId = 2,
+                    ),
+                ),
+            ),
+        )
+        val first = renderTask(
+            taskId = "task.render.batch.first",
+            packets = listOf(
+                packet(1, directBlendPlan()),
+                packet(2, destinationBlendPlan()),
+                packet(3, directBlendPlan()),
+            ),
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store, "transparent"),
+        )
+        val second = renderTask(
+            taskId = "task.render.batch.second",
+            packets = listOf(packet(4, directBlendPlan()), packet(5, directBlendPlan())),
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store, "transparent"),
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, first, second),
+                dependencies = listOf(
+                    dependency(destination, first),
+                    dependency(first, second),
+                ),
+            ),
+        )
+
+        assertFalse(plan.atomicallyRefused, plan.diagnostics.joinToString { it.code.value })
+        val renders = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        assertEquals(
+            listOf("packet.1", "packet.2", "packet.3", "packet.4", "packet.5"),
+            renders.flatMap { it.drawPackets }.map { it.packetId.value },
+        )
+        assertEquals(listOf(first.taskId), renders.first().sourceTaskIds)
+        assertEquals(listOf(first.taskId, second.taskId), renders.last().sourceTaskIds)
+        renders.forEach { render ->
+            assertEquals(
+                render.drawPackets.map { it.packetId },
+                render.batches.flatMap { it.packets }.map { it.packetId },
+            )
+            assertEquals(
+                render.sourceTaskIds,
+                render.batches.flatMap { it.sourceTaskIds }.distinct(),
+            )
+        }
+        assertEquals(2, plan.dependencies.size)
+        assertEquals(dependency(first, second), plan.dependencies.single { it.fromTaskId == first.taskId })
+    }
+
+    @Test
     fun `compatible renders remain in one pass across an all NoOp task`() {
         val first = renderTask("task.render.1", 1, blendPlan = directBlendPlan())
         val noOp = renderTask("task.render.2", 2, blendPlan = noOpBlendPlan())
@@ -585,7 +859,7 @@ class GPUFramePlannerDestinationContractTest {
     }
 
     @Test
-    fun `destination copy refuses an earlier source write in the same render task`() {
+    fun `destination copy schedules after an earlier source write in the same render task`() {
         val destination = destinationTask(
             payload = GPUDestinationSnapshotTaskPayload(
                 grouping = grouping(
@@ -609,6 +883,329 @@ class GPUFramePlannerDestinationContractTest {
             packets = listOf(
                 packet(1, directBlendPlan()),
                 packet(2, destinationBlendPlan()),
+            ),
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store, "transparent"),
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, render),
+                dependencies = listOf(dependency(destination, render)),
+            ),
+        )
+
+        assertFalse(plan.atomicallyRefused, plan.diagnostics.joinToString { it.code.value })
+        assertEquals(3, plan.steps.size)
+        val prefix = assertIs<GPUFrameStep.RenderPassStep>(plan.steps[0])
+        assertEquals(listOf("packet.1"), prefix.drawPackets.map { it.packetId.value })
+        assertEquals("clear", prefix.loadStore.loadOp)
+        assertEquals(listOf(render.taskId), prefix.sourceTaskIds)
+        val copy = assertIs<GPUFrameStep.CopyDestinationStep>(plan.steps[1])
+        assertEquals(listOf(destination.taskId), copy.sourceTaskIds)
+        val suffix = assertIs<GPUFrameStep.RenderPassStep>(plan.steps[2])
+        assertEquals(listOf("packet.2"), suffix.drawPackets.map { it.packetId.value })
+        assertEquals("load", suffix.loadStore.loadOp)
+        assertEquals(listOf(render.taskId), suffix.sourceTaskIds)
+    }
+
+    @Test
+    fun `destination copy is inserted at the first middle and last consumer packet`() {
+        data class Case(
+            val name: String,
+            val consumerCommandId: Int,
+            val expectedSteps: List<String>,
+        )
+
+        listOf(
+            Case("first", 1, listOf("copy", "render:1,2,3:clear")),
+            Case("middle", 2, listOf("render:1:clear", "copy", "render:2,3:load")),
+            Case("last", 3, listOf("render:1,2:clear", "copy", "render:3:load")),
+        ).forEach { case ->
+            val destination = destinationTask(
+                payload = GPUDestinationSnapshotTaskPayload(
+                    grouping = grouping(
+                        groups = listOf(
+                            group(0, "draw.${case.consumerCommandId}", sourceIntermediate = null),
+                        ),
+                        materializations = listOf(
+                            GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                        ),
+                    ),
+                    operations = listOf(
+                        textureCopyOperation(
+                            groupIndex = 0,
+                            groupingCommandId = "draw.${case.consumerCommandId}",
+                            renderTaskId = "task.render.${case.name}",
+                            commandId = case.consumerCommandId,
+                        ),
+                    ),
+                ),
+            )
+            val render = renderTask(
+                taskId = "task.render.${case.name}",
+                packets = (1..3).map { commandId ->
+                    packet(
+                        commandId,
+                        if (commandId == case.consumerCommandId) {
+                            destinationBlendPlan()
+                        } else {
+                            directBlendPlan()
+                        },
+                    )
+                },
+                loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store, "transparent"),
+            )
+
+            val plan = GPUFramePlanner.plan(
+                taskList(
+                    tasks = listOf(destination, render),
+                    dependencies = listOf(dependency(destination, render)),
+                ),
+            )
+
+            assertFalse(plan.atomicallyRefused, "${case.name}: ${plan.diagnostics.joinToString { it.code.value }}")
+            assertEquals(case.expectedSteps, plan.steps.map { it.destinationScheduleLabel() }, case.name)
+        }
+    }
+
+    @Test
+    fun `NoOp-only prefix does not turn the first real render after destination copy into load`() {
+        val destination = destinationTask(
+            payload = GPUDestinationSnapshotTaskPayload(
+                grouping = grouping(
+                    groups = listOf(group(0, "draw.2", sourceIntermediate = null)),
+                    materializations = listOf(
+                        GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                    ),
+                ),
+                operations = listOf(
+                    textureCopyOperation(
+                        groupIndex = 0,
+                        groupingCommandId = "draw.2",
+                        renderTaskId = "task.render.noop-prefix",
+                        commandId = 2,
+                    ),
+                ),
+            ),
+        )
+        val render = renderTask(
+            taskId = "task.render.noop-prefix",
+            packets = listOf(packet(1, noOpBlendPlan()), packet(2, destinationBlendPlan())),
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store, "transparent"),
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, render),
+                dependencies = listOf(dependency(destination, render)),
+            ),
+        )
+
+        assertFalse(plan.atomicallyRefused, plan.diagnostics.joinToString { it.code.value })
+        assertEquals(
+            listOf("copy", "render:2:clear"),
+            plan.steps.map { it.destinationScheduleLabel() },
+        )
+    }
+
+    @Test
+    fun `multiple copy boundaries load only after a real render was emitted`() {
+        val secondSnapshot = GPUFrameTextureRef("texture.snapshot.noop-boundary.second")
+        val destination = destinationTask(
+            payload = GPUDestinationSnapshotTaskPayload(
+                grouping = grouping(
+                    groups = listOf(
+                        group(0, "draw.2", sourceIntermediate = null),
+                        group(1, "draw.4", sourceIntermediate = null),
+                    ),
+                    materializations = listOf(
+                        GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                        GPUDestinationSnapshotMaterialization.TextureCopy(1, BOUNDS),
+                    ),
+                ),
+                operations = listOf(
+                    textureCopyOperation(
+                        groupIndex = 0,
+                        groupingCommandId = "draw.2",
+                        renderTaskId = "task.render.noop-boundaries",
+                        commandId = 2,
+                    ),
+                    textureCopyOperation(
+                        groupIndex = 1,
+                        groupingCommandId = "draw.4",
+                        renderTaskId = "task.render.noop-boundaries",
+                        commandId = 4,
+                        snapshot = secondSnapshot,
+                    ),
+                ),
+            ),
+        )
+        val render = renderTask(
+            taskId = "task.render.noop-boundaries",
+            packets = listOf(
+                packet(1, noOpBlendPlan()),
+                packet(2, destinationBlendPlan()),
+                packet(3, noOpBlendPlan()),
+                packet(4, destinationBlendPlan()),
+            ),
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store, "transparent"),
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, render),
+                dependencies = listOf(dependency(destination, render)),
+            ),
+        )
+
+        assertFalse(plan.atomicallyRefused, plan.diagnostics.joinToString { it.code.value })
+        assertEquals(
+            listOf("copy", "render:2:clear", "copy", "render:4:load"),
+            plan.steps.map { it.destinationScheduleLabel() },
+        )
+    }
+
+    @Test
+    fun `multiple consumers of one snapshot schedule one copy in the same render task`() {
+        val destination = destinationTask(
+            payload = GPUDestinationSnapshotTaskPayload(
+                grouping = grouping(
+                    groups = listOf(group(0, "draw.1", "draw.3", sourceIntermediate = null)),
+                    materializations = listOf(
+                        GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                    ),
+                ),
+                operations = listOf(
+                    textureCopyOperation(
+                        groupIndex = 0,
+                        consumers = listOf(
+                            consumer("draw.1", "task.render.shared", 1),
+                            consumer("draw.3", "task.render.shared", 3),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val render = renderTask(
+            taskId = "task.render.shared",
+            packets = listOf(
+                packet(1, destinationBlendPlan()),
+                packet(2, noOpBlendPlan()),
+                packet(3, destinationBlendPlan()),
+            ),
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, render),
+                dependencies = listOf(dependency(destination, render)),
+            ),
+        )
+
+        assertFalse(plan.atomicallyRefused, plan.diagnostics.joinToString { it.code.value })
+        assertEquals(1, plan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().size)
+        assertEquals(
+            listOf("packet.1", "packet.3"),
+            plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .flatMap { it.drawPackets }
+                .map { it.packetId.value },
+        )
+    }
+
+    @Test
+    fun `two destination copies at distinct packets produce two exact render splits`() {
+        val secondSnapshot = GPUFrameTextureRef("texture.snapshot.second")
+        val destination = destinationTask(
+            payload = GPUDestinationSnapshotTaskPayload(
+                grouping = grouping(
+                    groups = listOf(
+                        group(0, "draw.2", sourceIntermediate = null),
+                        group(1, "draw.4", sourceIntermediate = null),
+                    ),
+                    materializations = listOf(
+                        GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                        GPUDestinationSnapshotMaterialization.TextureCopy(1, BOUNDS),
+                    ),
+                ),
+                operations = listOf(
+                    textureCopyOperation(
+                        groupIndex = 0,
+                        groupingCommandId = "draw.2",
+                        renderTaskId = "task.render.two-copies",
+                        commandId = 2,
+                    ),
+                    textureCopyOperation(
+                        groupIndex = 1,
+                        groupingCommandId = "draw.4",
+                        renderTaskId = "task.render.two-copies",
+                        commandId = 4,
+                        snapshot = secondSnapshot,
+                    ),
+                ),
+            ),
+        )
+        val render = renderTask(
+            taskId = "task.render.two-copies",
+            packets = listOf(
+                packet(1, directBlendPlan()),
+                packet(2, destinationBlendPlan()),
+                packet(3, directBlendPlan()),
+                packet(4, destinationBlendPlan()),
+            ),
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store, "transparent"),
+        )
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, render),
+                dependencies = listOf(dependency(destination, render)),
+            ),
+        )
+
+        assertFalse(plan.atomicallyRefused, plan.diagnostics.joinToString { it.code.value })
+        assertEquals(
+            listOf(
+                "render:1:clear",
+                "copy",
+                "render:2,3:load",
+                "copy",
+                "render:4:load",
+            ),
+            plan.steps.map { it.destinationScheduleLabel() },
+        )
+        assertEquals(
+            listOf(SNAPSHOT_TEXTURE, secondSnapshot),
+            plan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().map { it.snapshot },
+        )
+    }
+
+    @Test
+    fun `source write after copy and before the last exact consumer refuses atomically`() {
+        val destination = destinationTask(
+            payload = GPUDestinationSnapshotTaskPayload(
+                grouping = grouping(
+                    groups = listOf(group(0, "draw.1", "draw.3", sourceIntermediate = null)),
+                    materializations = listOf(
+                        GPUDestinationSnapshotMaterialization.TextureCopy(0, BOUNDS),
+                    ),
+                ),
+                operations = listOf(
+                    textureCopyOperation(
+                        groupIndex = 0,
+                        consumers = listOf(
+                            consumer("draw.1", "task.render.unsafe", 1),
+                            consumer("draw.3", "task.render.unsafe", 3),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val render = renderTask(
+            taskId = "task.render.unsafe",
+            packets = listOf(
+                packet(1, destinationBlendPlan()),
+                packet(2, directBlendPlan()),
+                packet(3, destinationBlendPlan()),
             ),
         )
 
@@ -934,9 +1531,10 @@ class GPUFramePlannerDestinationContractTest {
         vararg groupingCommandIds: String,
         sourceIntermediate: GPUIntermediateIdentity?,
         target: GPUFrameTargetRef = SCENE_TARGET,
+        sampleContinuation: GPUSampleContinuationKey? = null,
     ): GPUDestinationSnapshotGroup =
         GPUDestinationSnapshotGroup(
-            key = destinationGroupKey(sourceIntermediate, target),
+            key = destinationGroupKey(sourceIntermediate, target, sampleContinuation),
             logicalBounds = BOUNDS,
             members = groupingCommandIds.mapIndexed { memberIndex, groupingCommandId ->
                 GPUDestinationReadMember(
@@ -952,6 +1550,7 @@ class GPUFramePlannerDestinationContractTest {
     private fun destinationGroupKey(
         sourceIntermediate: GPUIntermediateIdentity?,
         target: GPUFrameTargetRef,
+        sampleContinuation: GPUSampleContinuationKey? = null,
     ): GPUDestinationSnapshotGroupKey =
         GPUDestinationSnapshotGroupKey(
             target = GPUTargetIdentity(target.value),
@@ -959,18 +1558,23 @@ class GPUFramePlannerDestinationContractTest {
             deviceGeneration = DEVICE_GENERATION,
             format = GPUColorFormat("rgba8unorm"),
             colorInterpretation = GPUColorInterpretation("srgb-premul"),
-            sampleContinuation = GPUSampleContinuationKey(
-                target = GPUTargetIdentity(target.value),
-                targetGeneration = 2,
-                deviceGeneration = DEVICE_GENERATION,
-                colorFormat = GPUColorFormat("rgba8unorm"),
-                colorInterpretation = GPUColorInterpretation("srgb-premul"),
-                samplePlan = GPUSamplePlan.MultisampleFrame(4),
-                colorAttachment = GPUTargetIdentity("${target.value}.msaa"),
-                depthStencilAttachment = null,
-            ),
+            sampleContinuation = sampleContinuation,
             sourceIntermediate = sourceIntermediate,
         )
+
+    private fun continuationKey(
+        target: GPUFrameTargetRef = SCENE_TARGET,
+        samplePlan: GPUSamplePlan.MultisampleFrame = GPUSamplePlan.MultisampleFrame(4),
+    ): GPUSampleContinuationKey = GPUSampleContinuationKey(
+        target = GPUTargetIdentity(target.value),
+        targetGeneration = 2,
+        deviceGeneration = DEVICE_GENERATION,
+        colorFormat = GPUColorFormat("rgba8unorm"),
+        colorInterpretation = GPUColorInterpretation("srgb-premul"),
+        samplePlan = samplePlan,
+        colorAttachment = GPUTargetIdentity("${target.value}.msaa"),
+        depthStencilAttachment = null,
+    )
 
     private fun renderTask(
         taskId: String,
@@ -978,6 +1582,8 @@ class GPUFramePlannerDestinationContractTest {
         target: GPUFrameTargetRef = SCENE_TARGET,
         blendPlan: GPUBlendPlan = destinationBlendPlan(),
         loadStore: GPULoadStorePlan = GPULoadStorePlan("load", GPUStorePlan.Store),
+        samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+        sampleContinuationKey: GPUSampleContinuationKey? = null,
     ): GPUTask.Render {
         val packet = packet(commandId, blendPlan)
         return GPUTask.Render(
@@ -986,7 +1592,7 @@ class GPUFramePlannerDestinationContractTest {
             phase = GPUTaskPhase.Render,
             target = target,
             loadStore = loadStore,
-            samplePlan = GPUSamplePlan.SingleSampleFrame,
+            samplePlan = samplePlan,
             drawPackets = listOf(packet),
             batchEligibilityByPacketId = mapOf(
                 packet.packetId to GPUPassBatchEligibility(
@@ -994,6 +1600,7 @@ class GPUFramePlannerDestinationContractTest {
                     queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
                 ),
             ),
+            sampleContinuationKey = sampleContinuationKey,
         )
     }
 
@@ -1001,12 +1608,13 @@ class GPUFramePlannerDestinationContractTest {
         taskId: String,
         packets: List<GPUDrawPacket>,
         target: GPUFrameTargetRef = SCENE_TARGET,
+        loadStore: GPULoadStorePlan = GPULoadStorePlan("load", GPUStorePlan.Store),
     ): GPUTask.Render = GPUTask.Render(
         taskId = GPUTaskID(taskId),
         recordingId = RECORDING_ID,
         phase = GPUTaskPhase.Render,
         target = target,
-        loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+        loadStore = loadStore,
         samplePlan = GPUSamplePlan.SingleSampleFrame,
         drawPackets = packets,
         batchEligibilityByPacketId = packets.associate { packet ->
@@ -1016,6 +1624,13 @@ class GPUFramePlannerDestinationContractTest {
             )
         },
     )
+
+    private fun GPUFrameStep.destinationScheduleLabel(): String = when (this) {
+        is GPUFrameStep.RenderPassStep ->
+            "render:${drawPackets.joinToString(",") { it.commandIdValue.toString() }}:${loadStore.loadOp}"
+        is GPUFrameStep.CopyDestinationStep -> "copy"
+        else -> this::class.simpleName.orEmpty()
+    }
 
     private fun packet(
         commandId: Int,

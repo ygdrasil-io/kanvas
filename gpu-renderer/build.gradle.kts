@@ -19,6 +19,12 @@ dependencies {
     testImplementation(libs.wgslParserJvm)
 }
 
+sourceSets {
+    test {
+        resources.srcDir("../font/scaler/src/test/resources")
+    }
+}
+
 tasks.withType<Test> {
     jvmArgs(
         "--add-opens=java.base/java.lang=ALL-UNNAMED",

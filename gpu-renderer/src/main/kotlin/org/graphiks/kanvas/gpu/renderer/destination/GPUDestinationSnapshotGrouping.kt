@@ -23,7 +23,7 @@ data class GPUDestinationSnapshotGroupKey(
     val deviceGeneration: GPUDeviceGenerationID,
     val format: GPUColorFormat,
     val colorInterpretation: GPUColorInterpretation,
-    val sampleContinuation: GPUSampleContinuationKey,
+    val sampleContinuation: GPUSampleContinuationKey?,
     val sourceIntermediate: GPUIntermediateIdentity?,
 ) {
     init {
@@ -736,18 +736,22 @@ private fun GPUDestinationSnapshotGroup.dumpLines(index: Int): List<String> =
             "members=${members.joinToString(",", transform = GPUDestinationReadMember::commandId)}",
     ) + decisionDump
 
-private fun GPUDestinationSnapshotGroupKey.dumpLabel(): String =
-    "target=${target.value};targetGeneration=$targetGeneration;deviceGeneration=${deviceGeneration.value};" +
-        "format=${format.value};color=${colorInterpretation.value};" +
-        "sampleTarget=${sampleContinuation.target.value};" +
-        "sampleTargetGeneration=${sampleContinuation.targetGeneration};" +
-        "sampleDeviceGeneration=${sampleContinuation.deviceGeneration.value};" +
-        "sampleFormat=${sampleContinuation.colorFormat.value};" +
-        "sampleColor=${sampleContinuation.colorInterpretation.value};" +
-        "sampleCount=${sampleContinuation.samplePlan.sampleCount};" +
-        "colorAttachment=${sampleContinuation.colorAttachment.value};" +
-        "depthStencilAttachment=${sampleContinuation.depthStencilAttachment?.value ?: "none"};" +
+private fun GPUDestinationSnapshotGroupKey.dumpLabel(): String {
+    val continuation = sampleContinuation?.let { value ->
+        "sampleTarget=${value.target.value};" +
+            "sampleTargetGeneration=${value.targetGeneration};" +
+            "sampleDeviceGeneration=${value.deviceGeneration.value};" +
+            "sampleFormat=${value.colorFormat.value};" +
+            "sampleColor=${value.colorInterpretation.value};" +
+            "sampleCount=${value.samplePlan.sampleCount};" +
+            "colorAttachment=${value.colorAttachment.value};" +
+            "depthStencilAttachment=${value.depthStencilAttachment?.value ?: "none"};"
+    } ?: "sampleContinuation=none;"
+    return "target=${target.value};targetGeneration=$targetGeneration;" +
+        "deviceGeneration=${deviceGeneration.value};format=${format.value};" +
+        "color=${colorInterpretation.value};$continuation" +
         "sourceIntermediate=${sourceIntermediate?.value ?: "none"}"
+}
 
 private fun refusal(
     code: String,

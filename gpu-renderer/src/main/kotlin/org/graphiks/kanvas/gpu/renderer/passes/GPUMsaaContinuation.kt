@@ -33,18 +33,24 @@ enum class GPUSampleLoadTransition {
     RetainedLoad,
 }
 
-/** Store/resolve behavior at the end of one render-pass segment. */
-enum class GPUSampleEndTransition {
-    StoreForContinuation,
-    Resolve,
+/** Independent attachment store action at the end of one render-pass segment. */
+enum class GPUSampleStoreAction {
+    Store,
     Discard,
+}
+
+/** Independent canonical-target resolve action at the end of one render-pass segment. */
+enum class GPUSampleResolveAction {
+    ResolveCanonical,
+    Skip,
 }
 
 /** Immutable request for one MSAA pass-segment transition. */
 data class GPUSampleContinuationRequest(
     val key: GPUSampleContinuationKey,
     val loadTransition: GPUSampleLoadTransition,
-    val endTransition: GPUSampleEndTransition,
+    val storeAction: GPUSampleStoreAction,
+    val resolveAction: GPUSampleResolveAction,
 )
 
 /** Complete ordered sequence over which retained attachment authority is evaluated. */
@@ -62,7 +68,8 @@ data class GPUSampleContinuationSequenceRequest(
 data class GPUSampleContinuationTransitionPlan(
     val key: GPUSampleContinuationKey,
     val loadTransition: GPUSampleLoadTransition,
-    val endTransition: GPUSampleEndTransition,
+    val storeAction: GPUSampleStoreAction,
+    val resolveAction: GPUSampleResolveAction,
     val storedForNextTransition: Boolean,
 )
 
@@ -95,16 +102,15 @@ class GPUSampleContinuationPlanner {
                 )
             }
 
-            currentStoredKey = when (transition.endTransition) {
-                GPUSampleEndTransition.StoreForContinuation -> transition.key
-                GPUSampleEndTransition.Resolve,
-                GPUSampleEndTransition.Discard,
-                -> null
+            currentStoredKey = when (transition.storeAction) {
+                GPUSampleStoreAction.Store -> transition.key
+                GPUSampleStoreAction.Discard -> null
             }
             transitions += GPUSampleContinuationTransitionPlan(
                 key = transition.key,
                 loadTransition = transition.loadTransition,
-                endTransition = transition.endTransition,
+                storeAction = transition.storeAction,
+                resolveAction = transition.resolveAction,
                 storedForNextTransition = currentStoredKey != null,
             )
         }
@@ -120,6 +126,12 @@ class GPUSampleContinuationPlanner {
 private fun GPUSampleContinuationRequest.validationDiagnostic(
     currentStoredKey: GPUSampleContinuationKey?,
 ): GPUDiagnostic? {
+    if (resolveAction != GPUSampleResolveAction.ResolveCanonical) {
+        return refusal(
+            code = "unsupported.msaa.continuation_resolve_missing",
+            message = "Every producing MSAA pass must resolve the canonical target.",
+        )
+    }
     if (loadTransition == GPUSampleLoadTransition.FreshClear) {
         return if (currentStoredKey == null) null else refusal(
             code = "unsupported.msaa.continuation_fresh_clear_with_stored_state",

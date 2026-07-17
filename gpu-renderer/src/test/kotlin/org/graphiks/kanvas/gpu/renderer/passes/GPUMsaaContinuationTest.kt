@@ -3,7 +3,6 @@ package org.graphiks.kanvas.gpu.renderer.passes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
@@ -20,15 +19,15 @@ class GPUMsaaContinuationTest {
                 sequence(
                     transition(
                         load = GPUSampleLoadTransition.FreshClear,
-                        end = GPUSampleEndTransition.StoreForContinuation,
+                        store = GPUSampleStoreAction.Store,
                     ),
                     transition(
                         load = GPUSampleLoadTransition.RetainedLoad,
-                        end = GPUSampleEndTransition.StoreForContinuation,
+                        store = GPUSampleStoreAction.Store,
                     ),
                     transition(
                         load = GPUSampleLoadTransition.RetainedLoad,
-                        end = GPUSampleEndTransition.Resolve,
+                        store = GPUSampleStoreAction.Store,
                     ),
                 ),
             ),
@@ -38,8 +37,70 @@ class GPUMsaaContinuationTest {
         assertTrue(plan.transitions[0].storedForNextTransition)
         assertTrue(plan.transitions[1].storedForNextTransition)
         assertEquals(GPUSampleLoadTransition.RetainedLoad, plan.transitions[1].loadTransition)
-        assertEquals(GPUSampleEndTransition.Resolve, plan.transitions[2].endTransition)
-        assertNull(plan.finalStoredKey)
+        assertEquals(GPUSampleResolveAction.ResolveCanonical, plan.transitions[2].resolveAction)
+        assertEquals(continuationKey(), plan.finalStoredKey)
+    }
+
+    @Test
+    fun `resolving the canonical target at every producing pass preserves stored attachment authority`() {
+        val result = planner.plan(
+            sequence(
+                transition(
+                    load = GPUSampleLoadTransition.FreshClear,
+                    store = GPUSampleStoreAction.Store,
+                ),
+                transition(
+                    load = GPUSampleLoadTransition.RetainedLoad,
+                    store = GPUSampleStoreAction.Store,
+                ),
+                transition(
+                    load = GPUSampleLoadTransition.RetainedLoad,
+                    store = GPUSampleStoreAction.Store,
+                ),
+            ),
+        )
+
+        val plan = assertIs<GPUSampleContinuationResult.Accepted>(result).plan
+        assertEquals(3, plan.transitions.size)
+        assertTrue(plan.transitions.all { it.storedForNextTransition })
+        assertEquals(continuationKey(), plan.finalStoredKey)
+    }
+
+    @Test
+    fun `preserve load without a retained proof refuses deterministically`() {
+        val result = planner.plan(
+            sequence(
+                transition(
+                    load = GPUSampleLoadTransition.RetainedLoad,
+                    store = GPUSampleStoreAction.Store,
+                ),
+            ),
+        )
+
+        val refusal = assertIs<GPUSampleContinuationResult.Refused>(result)
+        assertEquals(0, refusal.transitionIndex)
+        assertEquals(
+            "unsupported.msaa.continuation_attachment_not_stored",
+            refusal.diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `device format interpretation and attachment mismatches all refuse retained load`() {
+        val cases = listOf(
+            continuationKey().copy(deviceGeneration = GPUDeviceGenerationID(4)) to
+                "unsupported.msaa.continuation_device_generation",
+            continuationKey().copy(colorFormat = GPUColorFormat("bgra8unorm")) to
+                "unsupported.msaa.continuation_color_contract",
+            continuationKey().copy(colorInterpretation = GPUColorInterpretation("linear-premul")) to
+                "unsupported.msaa.continuation_color_contract",
+            continuationKey().copy(colorAttachment = GPUTargetIdentity("msaa-color:other")) to
+                "unsupported.msaa.continuation_attachment_mismatch",
+        )
+
+        cases.forEach { (nextKey, expectedCode) ->
+            assertEquals(expectedCode, refusedAfterStored(nextKey).diagnostic.code.value)
+        }
     }
 
     @Test
@@ -48,14 +109,14 @@ class GPUMsaaContinuationTest {
             sequence(
                 transition(
                     load = GPUSampleLoadTransition.FreshClear,
-                    end = GPUSampleEndTransition.StoreForContinuation,
+                    store = GPUSampleStoreAction.Store,
                 ),
                 transition(
                     key = continuationKey(
                         colorAttachment = GPUTargetIdentity("msaa-color:fresh"),
                     ),
                     load = GPUSampleLoadTransition.RetainedLoad,
-                    end = GPUSampleEndTransition.StoreForContinuation,
+                    store = GPUSampleStoreAction.Store,
                 ),
             ),
         )
@@ -93,35 +154,48 @@ class GPUMsaaContinuationTest {
     }
 
     @Test
-    fun `resolve and discard make every earlier stored continuation proof stale`() {
-        listOf(
-            GPUSampleEndTransition.Resolve,
-            GPUSampleEndTransition.Discard,
-        ).forEach { terminalTransition ->
-            val result = planner.plan(
-                sequence(
-                    transition(
-                        load = GPUSampleLoadTransition.FreshClear,
-                        end = GPUSampleEndTransition.StoreForContinuation,
-                    ),
-                    transition(
-                        load = GPUSampleLoadTransition.RetainedLoad,
-                        end = terminalTransition,
-                    ),
-                    transition(
-                        load = GPUSampleLoadTransition.RetainedLoad,
-                        end = GPUSampleEndTransition.StoreForContinuation,
-                    ),
+    fun `discard makes earlier stored continuation proof stale`() {
+        val result = planner.plan(
+            sequence(
+                transition(
+                    load = GPUSampleLoadTransition.FreshClear,
+                    store = GPUSampleStoreAction.Store,
                 ),
-            )
+                transition(
+                    load = GPUSampleLoadTransition.RetainedLoad,
+                    store = GPUSampleStoreAction.Discard,
+                ),
+                transition(
+                    load = GPUSampleLoadTransition.RetainedLoad,
+                    store = GPUSampleStoreAction.Store,
+                ),
+            ),
+        )
 
-            val refusal = assertIs<GPUSampleContinuationResult.Refused>(result)
-            assertEquals(2, refusal.transitionIndex)
-            assertEquals(
-                "unsupported.msaa.continuation_attachment_not_stored",
-                refusal.diagnostic.code.value,
-            )
-        }
+        val refusal = assertIs<GPUSampleContinuationResult.Refused>(result)
+        assertEquals(2, refusal.transitionIndex)
+        assertEquals(
+            "unsupported.msaa.continuation_attachment_not_stored",
+            refusal.diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `store without resolving canonical refuses an impossible continuation state`() {
+        val result = planner.plan(
+            sequence(
+                transition(
+                    load = GPUSampleLoadTransition.FreshClear,
+                    store = GPUSampleStoreAction.Store,
+                    resolve = GPUSampleResolveAction.Skip,
+                ),
+            ),
+        )
+
+        assertEquals(
+            "unsupported.msaa.continuation_resolve_missing",
+            assertIs<GPUSampleContinuationResult.Refused>(result).diagnostic.code.value,
+        )
     }
 
     private fun refusedAfterStored(
@@ -131,12 +205,12 @@ class GPUMsaaContinuationTest {
             sequence(
                 transition(
                     load = GPUSampleLoadTransition.FreshClear,
-                    end = GPUSampleEndTransition.StoreForContinuation,
+                    store = GPUSampleStoreAction.Store,
                 ),
                 transition(
                     key = nextKey,
                     load = GPUSampleLoadTransition.RetainedLoad,
-                    end = GPUSampleEndTransition.StoreForContinuation,
+                    store = GPUSampleStoreAction.Store,
                 ),
             ),
         ),
@@ -151,11 +225,13 @@ class GPUMsaaContinuationTest {
     private fun transition(
         key: GPUSampleContinuationKey = continuationKey(),
         load: GPUSampleLoadTransition,
-        end: GPUSampleEndTransition,
+        store: GPUSampleStoreAction,
+        resolve: GPUSampleResolveAction = GPUSampleResolveAction.ResolveCanonical,
     ): GPUSampleContinuationRequest = GPUSampleContinuationRequest(
         key = key,
         loadTransition = load,
-        endTransition = end,
+        storeAction = store,
+        resolveAction = resolve,
     )
 
     private fun continuationKey(

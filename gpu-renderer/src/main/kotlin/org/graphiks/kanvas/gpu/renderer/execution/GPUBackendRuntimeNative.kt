@@ -79,6 +79,7 @@ import io.ygdrasil.webgpu.toNativeAddress
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -86,6 +87,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeys
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
@@ -126,9 +129,15 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabResourceLedger
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabSlotBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabLeaseRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.dumpResourceLeaseLines
 
@@ -436,6 +445,161 @@ private fun nextWindowRuntimeOrdinal(): Long = windowRuntimeOrdinalCounter.incre
 
 internal const val GPU_QUEUE_COMPLETION_READBACK_FAILED = "readback-failed"
 
+internal class GPUPreparedSceneSetupTransaction : AutoCloseable {
+    private val owned = mutableListOf<AutoCloseable>()
+    private var committed = false
+    private var rollbackStarted = false
+
+    @get:Synchronized
+    val pendingResourceCount: Int
+        get() = owned.size
+
+    @Synchronized
+    fun <T : AutoCloseable> own(resource: T): T {
+        check(!committed && !rollbackStarted)
+        check(owned.none { it === resource })
+        owned += resource
+        return resource
+    }
+
+    @Synchronized
+    fun commit() {
+        check(!rollbackStarted)
+        committed = true
+        owned.clear()
+    }
+
+    @Synchronized
+    override fun close() {
+        if (committed || owned.isEmpty()) return
+        rollbackStarted = true
+        var firstFailure: Throwable? = null
+        owned.asReversed().toList().forEach { resource ->
+            try {
+                resource.close()
+                owned.removeAll { it === resource }
+            } catch (failure: Throwable) {
+                if (firstFailure == null) {
+                    firstFailure = failure
+                } else {
+                    checkNotNull(firstFailure).addSuppressed(failure)
+                }
+            }
+        }
+        firstFailure?.let { throw it }
+    }
+}
+
+internal class GPUPreparedSceneSetupRollbackQuarantine : AutoCloseable {
+    private val pending = linkedSetOf<GPUPreparedSceneSetupTransaction>()
+
+    @get:Synchronized
+    val pendingTransactionCount: Int
+        get() = pending.size
+
+    @Synchronized
+    fun retain(transaction: GPUPreparedSceneSetupTransaction) {
+        require(transaction.pendingResourceCount > 0)
+        pending += transaction
+    }
+
+    override fun close() {
+        val retrying = synchronized(this) { pending.toList() }
+        var firstFailure: Throwable? = null
+        retrying.forEach { transaction ->
+            try {
+                transaction.close()
+                synchronized(this) { pending.remove(transaction) }
+            } catch (failure: Throwable) {
+                if (firstFailure == null) {
+                    firstFailure = failure
+                } else {
+                    checkNotNull(firstFailure).addSuppressed(failure)
+                }
+            }
+        }
+        firstFailure?.let { throw it }
+    }
+}
+
+private fun closePreparedSceneResources(vararg resources: AutoCloseable) {
+    var firstFailure: Throwable? = null
+    resources.forEach { resource ->
+        try {
+            resource.close()
+        } catch (failure: Throwable) {
+            if (firstFailure == null) {
+                firstFailure = failure
+            } else {
+                checkNotNull(firstFailure).addSuppressed(failure)
+            }
+        }
+    }
+    firstFailure?.let { throw it }
+}
+
+internal class GPUPreparedSceneChildRegistry(
+    private val teardown: () -> Unit,
+) : AutoCloseable {
+    internal class Lease(private val registry: GPUPreparedSceneChildRegistry) : AutoCloseable {
+        private var child: GPUPreparedSceneFrameSession? = null
+        private var released = false
+
+        fun bind(session: GPUPreparedSceneFrameSession) {
+            val closeNow = synchronized(registry) {
+                check(!released && child == null)
+                child = session
+                registry.closeRequested
+            }
+            if (closeNow) session.close()
+        }
+
+        internal fun closeChild() {
+            val bound = synchronized(registry) { child }
+            bound?.close()
+        }
+
+        override fun close() {
+            val teardownNow = synchronized(registry) {
+                if (released) return
+                released = true
+                registry.leases.remove(this)
+                registry.claimTeardownIfReady()
+            }
+            if (teardownNow) registry.teardown()
+        }
+    }
+
+    private val leases = linkedSetOf<Lease>()
+    private var closeRequested = false
+    private var teardownClaimed = false
+
+    @Synchronized
+    fun reserve(): Lease {
+        check(!closeRequested) { "GPU backend session is closing" }
+        return Lease(this).also { leases += it }
+    }
+
+    override fun close() {
+        val children: List<Lease>
+        val teardownNow: Boolean
+        synchronized(this) {
+            if (closeRequested) return
+            closeRequested = true
+            children = leases.toList()
+            teardownNow = claimTeardownIfReady()
+        }
+        children.forEach { lease -> runCatching { lease.closeChild() } }
+        if (teardownNow) teardown()
+    }
+
+    private fun claimTeardownIfReady(): Boolean {
+        if (!closeRequested || leases.isNotEmpty() || teardownClaimed) return false
+        teardownClaimed = true
+        return true
+    }
+}
+
 object GPUBackendRuntimeNativeFactory {
     private var sharedInner: GPUBackendSession? = null
     private var shutdownHook: Thread? = null
@@ -479,6 +643,10 @@ object GPUBackendRuntimeNativeFactory {
     private class NonClosingSession(
         private val inner: GPUBackendSession,
     ) : GPUBackendSession by inner {
+        override fun prepareSceneFrameSession(
+            request: GPUOffscreenTargetRequest,
+        ): GPUPreparedSceneFrameSession = inner.prepareSceneFrameSession(request)
+
         override fun close() { /* no-op: lifetime managed by GPUBackendRuntimeNativeFactory */ }
     }
 }
@@ -498,6 +666,11 @@ private class WgpuBackendSession(
         deviceGeneration = deviceGeneration,
         queue = glfw.wgpuContext.device.queue,
     )
+    private val preparedSceneChildren = GPUPreparedSceneChildRegistry(::closeRuntimeResources)
+    private val preparedSceneSetupRollbackQuarantine = GPUPreparedSceneSetupRollbackQuarantine()
+    private val quarantinedPreparedSceneTargets = linkedSetOf<GPUWgpu4kPreparedSceneTarget>()
+    private val quarantinedSolidRectCaches = linkedSetOf<GPUWgpu4kSolidRectSessionCache>()
+    private val quarantinedColorGlyphCaches = linkedSetOf<GPUWgpu4kColorGlyphSessionCache>()
     private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits(
         maxTextureDimension2D = minOf(
@@ -530,6 +703,7 @@ private class WgpuBackendSession(
             supportedTextureFormats = setOf(
                 GPUTextureFormat.RGBA8Unorm,
                 GPUTextureFormat.BGRA8Unorm,
+                GPUTextureFormat.R8Unorm,
             ),
             supportedTextureUsage =
                 GPUTextureUsage.CopySrc or
@@ -581,6 +755,238 @@ private class WgpuBackendSession(
             recordRuntimeResourceLeasesAction = { leases -> recordRuntimeResourceLeases(leases) },
         )
 
+    override fun prepareSceneFrameSession(
+        request: GPUOffscreenTargetRequest,
+    ): GPUPreparedSceneFrameSession {
+        require(request.colorFormat.normalizedColorFormat() == "rgba8unorm") {
+            "Prepared scene sessions currently require rgba8unorm"
+        }
+        val childLease = preparedSceneChildren.reserve()
+        val setupTransaction = GPUPreparedSceneSetupTransaction()
+        return try {
+        val targetGeneration = nextOffscreenTargetOrdinal()
+        val targetLifecycle = GPUWgpu4kPreparedSceneTargetLifecycle()
+        val preparedTarget = setupTransaction.own(GPUWgpu4kPreparedSceneTarget.create(
+            device = glfw.wgpuContext.device,
+            width = request.width,
+            height = request.height,
+            deviceGeneration = deviceGeneration,
+            targetGeneration = targetGeneration,
+            lifecycle = targetLifecycle,
+        ))
+        val solidRectCache = setupTransaction.own(
+            GPUWgpu4kSolidRectSessionCache(glfw.wgpuContext.device),
+        )
+        val colorGlyphCache = setupTransaction.own(
+            GPUWgpu4kColorGlyphSessionCache(
+                device = glfw.wgpuContext.device,
+                queue = glfw.wgpuContext.device.queue,
+            ),
+        )
+        telemetryRecorder.recordTextureCreated()
+        val encodingBackend = setupTransaction.own(GPUWgpu4kFrameEncodingBackend(
+            deviceGeneration = deviceGeneration,
+            device = glfw.wgpuContext.device,
+            queue = glfw.wgpuContext.device.queue,
+        ))
+        val mappingExecutor = Executors.newSingleThreadExecutor { task ->
+            Thread(task, "kanvas-prepared-scene-readback").apply { isDaemon = true }
+        }
+        val mappingExecutorCloser = setupTransaction.own(AutoCloseable { mappingExecutor.shutdownNow() })
+        val readback = GPUConcreteFrameReadbackAccess(
+            resourceProvider,
+            GPUWgpu4kNativeReadbackMapper(mappingExecutor),
+        )
+        val retentionObserver = PreparedSceneRetentionObserver()
+        val coordinatorCreations = AtomicLong(0L)
+        var canonicalTargetRef: GPUFrameTargetRef? = null
+
+        GPUPreparedSceneFrameSession(
+            compatibilityValidator = GPUPreparedSceneCompatibilityValidator { taskList ->
+                when {
+                    taskList.capabilitySeal.deviceGeneration != deviceGeneration -> executionDiagnostic(
+                        "stale.prepared-scene-session.device-generation",
+                        "The frame was recorded for a different GPU device generation.",
+                    )
+                    else -> {
+                        val renderTargets = taskList.tasks.filterIsInstance<GPUTask.Render>()
+                            .map { it.target }
+                            .distinct()
+                        val target = renderTargets.singleOrNull()
+                        val preparation = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+                            .flatMap { it.requests }
+                            .singleOrNull { it.resource == target }
+                        val descriptor = preparation?.descriptor as? GPUFrameTextureDescriptor
+                        when {
+                            target == null -> executionDiagnostic(
+                                "unsupported.prepared-scene-session.target-count",
+                                "A prepared scene frame requires exactly one render target.",
+                            )
+                            canonicalTargetRef != null && canonicalTargetRef != target -> executionDiagnostic(
+                                "stale.prepared-scene-session.target-identity",
+                                "Every frame in one prepared session must use the same logical target.",
+                            )
+                            descriptor == null || descriptor.logicalBounds.left != 0 ||
+                                descriptor.logicalBounds.top != 0 || descriptor.logicalBounds.width != request.width ||
+                                descriptor.logicalBounds.height != request.height || descriptor.sampleCount != 1 ||
+                                descriptor.format.value != "rgba8unorm" -> executionDiagnostic(
+                                "unsupported.prepared-scene-session.target-incompatible",
+                                "The frame target does not match the prepared session request.",
+                            )
+                            else -> {
+                                canonicalTargetRef = target
+                                null
+                            }
+                        }
+                    }
+                }
+            },
+            coordinatorFactory = GPUFrameCoordinatorFactory { taskList, _ ->
+                coordinatorCreations.incrementAndGet()
+                val target = taskList.tasks.filterIsInstance<GPUTask.Render>()
+                    .map { it.target }
+                    .distinct()
+                    .single()
+                val generations = linkedMapOf<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef, Long>()
+                generations[target] = targetGeneration
+                val colorGlyph = taskList.tasks.filterIsInstance<GPUTask.Render>()
+                    .flatMap { it.drawPackets }
+                    .mapNotNull { it.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.ColorGlyph }
+                    .singleOrNull()
+                taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+                    .flatMap { it.requests }
+                    .filter { it.resource != target }
+                    .forEachIndexed { index, request ->
+                        generations[request.resource] = when (request.role) {
+                            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.GlyphAtlas ->
+                                colorGlyph?.atlasGeneration ?: (index.toLong() + 2L)
+                            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.VertexData,
+                            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.IndexData,
+                            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.UniformData,
+                            -> colorGlyph?.planArtifactKey?.generation?.value?.toLong() ?: (index.toLong() + 2L)
+                            else -> index.toLong() + 2L
+                        }
+                    }
+
+                val materializer = GPUWgpu4kFramePayloadMaterializerDispatcher(
+                    glfw.wgpuContext.device,
+                    glfw.wgpuContext.device.queue,
+                    preparedTarget,
+                    solidRectCache,
+                    colorGlyphCache,
+                )
+                val preflighter = GPUFramePreflighter(
+                    context = GPUFramePreflightContext(
+                        targetId = target.value,
+                        deviceGeneration = deviceGeneration,
+                        targetGeneration = targetGeneration,
+                        resourceGenerations = generations,
+                    ),
+                    capabilities = capabilities,
+                    resourceProvider = resourceProvider,
+                    completionProvider = queueCompletionRuntime,
+                    surfaceProvider = PreparedSceneNoSurfaceOutput,
+                    nativeBoundary = runtimeResourceAdapter.bindNativeFrameBoundary(
+                        resourceProvider,
+                        materializer,
+                    ),
+                )
+                GPUFrameCoordinator(
+                    preflighter = GPUFramePreflightPort { framePlan ->
+                        try {
+                            preflighter.preflight(framePlan)
+                        } finally {
+                            materializer.close()
+                        }
+                    },
+                    executor = GPUFrameExecutor(
+                        sceneTarget = GPUSceneTarget(
+                            targetId = target.value,
+                            resolvedTexture = GPUTextureResourceRef("prepared:${target.value}"),
+                            retainedMsaaAttachment = null,
+                            width = request.width,
+                            height = request.height,
+                            format = GPUColorFormat("rgba8unorm"),
+                            colorInterpretation = GPUColorInterpretation("srgb-premul"),
+                            usages = setOf(
+                                GPUFrameResourceUsage.RenderAttachment,
+                                GPUFrameResourceUsage.CopySource,
+                            ),
+                            sampleCount = 1,
+                            deviceGeneration = deviceGeneration,
+                            targetGeneration = targetGeneration,
+                        ),
+                        backend = encodingBackend,
+                        completion = queueCompletionRuntime,
+                        retention = retentionObserver,
+                        readback = readback,
+                    ),
+                )
+            },
+            closeAction = {
+                try {
+                    closePreparedSceneChildResources(
+                        encodingBackend,
+                        mappingExecutorCloser,
+                        preparedTarget,
+                        solidRectCache,
+                        colorGlyphCache,
+                    )
+                } finally {
+                    childLease.close()
+                }
+            },
+            nativeCountersFactory = {
+                val targetCounts = targetLifecycle.snapshot()
+                val encoding = encodingBackend.counters()
+                val retention = retentionObserver.snapshot()
+                val solidRect = solidRectCache.counters()
+                val colorGlyph = colorGlyphCache.counters()
+                GPUPreparedSceneNativeCounters(
+                    encoders = encoding.encoders,
+                    commandBuffers = encoding.finishes,
+                    targetCreations = targetCounts.first,
+                    targetCloses = targetCounts.second,
+                    targetNativeUses = targetCounts.third,
+                    submits = encoding.submits,
+                    readbackCopies = encoding.readbackCopies,
+                    activeNativePayloads = runtimeResourceAdapter.activePreparedNativeFramePayloadCount,
+                    outputOwnedNativePayloads = runtimeResourceAdapter.outputOwnedPreparedNativeFramePayloadCount,
+                    quarantinedNativePayloads = runtimeResourceAdapter.quarantinedPreparedNativeFramePayloadCount,
+                    retentionRegistrations = retention.first,
+                    retentionCompletions = retention.second,
+                    retentionQuarantines = retention.third,
+                    frameCoordinatorCreations = coordinatorCreations.get(),
+                    nativePayloadRegistrations =
+                        runtimeResourceAdapter.preparedNativeFramePayloadRegistrationCount,
+                    distinctRetentionTickets = retentionObserver.distinctTicketCount(),
+                    solidRectInvariantCreations = solidRect.invariantCreations,
+                    solidRectInvariantReuses = solidRect.invariantReuses,
+                    solidRectInvariantInvalidations = solidRect.invariantInvalidations,
+                    colorGlyphInvariantCreations = colorGlyph.invariantCreations,
+                    colorGlyphAtlasCreations = colorGlyph.atlasCreations,
+                    colorGlyphAtlasUploads = colorGlyph.atlasUploads,
+                    colorGlyphAtlasReuses = colorGlyph.atlasReuses,
+                    colorGlyphAtlasInvalidations = colorGlyph.atlasInvalidations,
+                    colorGlyphCurrentAtlasBytes = colorGlyph.currentAtlasBytes,
+                    colorGlyphPeakAtlasBytes = colorGlyph.atlasPeakResidentBytes,
+                )
+            },
+        ).also { child ->
+            setupTransaction.commit()
+            childLease.bind(child)
+        }
+        } catch (failure: Throwable) {
+            val rollbackFailure = runCatching { setupTransaction.close() }.exceptionOrNull()
+            if (setupTransaction.pendingResourceCount > 0) {
+                preparedSceneSetupRollbackQuarantine.retain(setupTransaction)
+            }
+            rollbackFailure?.let { failure.addSuppressed(it) }
+            childLease.close()
+            throw failure
+        }
+    }
+
     override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
         WgpuWindowSurface(
             binding = binding,
@@ -590,6 +996,29 @@ private class WgpuBackendSession(
         )
 
     override fun close() {
+        preparedSceneChildren.close()
+    }
+
+    private fun closeRuntimeResources() {
+        runCatching { preparedSceneSetupRollbackQuarantine.close() }
+        val quarantinedTargets = synchronized(this) { quarantinedPreparedSceneTargets.toList() }
+        quarantinedTargets.forEach { target ->
+            runCatching { target.close() }.onSuccess {
+                synchronized(this) { quarantinedPreparedSceneTargets.remove(target) }
+            }
+        }
+        val quarantinedSolidRects = synchronized(this) { quarantinedSolidRectCaches.toList() }
+        quarantinedSolidRects.forEach { cache ->
+            runCatching { cache.close() }.onSuccess {
+                synchronized(this) { quarantinedSolidRectCaches.remove(cache) }
+            }
+        }
+        val quarantinedCaches = synchronized(this) { quarantinedColorGlyphCaches.toList() }
+        quarantinedCaches.forEach { cache ->
+            runCatching { cache.close() }.onSuccess {
+                synchronized(this) { quarantinedColorGlyphCaches.remove(cache) }
+            }
+        }
         queueCompletionRuntime.close()
         try {
             runtimeResourceAdapter.close()
@@ -606,6 +1035,40 @@ private class WgpuBackendSession(
         }
     }
 
+    private fun closePreparedSceneChildResources(
+        encodingBackend: GPUWgpu4kFrameEncodingBackend,
+        mappingExecutorCloser: AutoCloseable,
+        preparedTarget: GPUWgpu4kPreparedSceneTarget,
+        solidRectCache: GPUWgpu4kSolidRectSessionCache,
+        colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
+    ) {
+        var firstFailure: Throwable? = null
+        try {
+            closePreparedSceneResources(encodingBackend, mappingExecutorCloser)
+        } catch (failure: Throwable) {
+            firstFailure = failure
+        }
+        try {
+            preparedTarget.close()
+        } catch (failure: Throwable) {
+            synchronized(this) { quarantinedPreparedSceneTargets += preparedTarget }
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+        }
+        try {
+            solidRectCache.close()
+        } catch (failure: Throwable) {
+            synchronized(this) { quarantinedSolidRectCaches += solidRectCache }
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+        }
+        try {
+            colorGlyphCache.close()
+        } catch (failure: Throwable) {
+            synchronized(this) { quarantinedColorGlyphCaches += colorGlyphCache }
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+        }
+        firstFailure?.let { throw it }
+    }
+
     private fun nextOffscreenTargetOrdinal(): Long {
         offscreenTargetOrdinalCounter += 1L
         return offscreenTargetOrdinalCounter
@@ -614,6 +1077,46 @@ private class WgpuBackendSession(
     private fun recordRuntimeResourceLeases(leases: List<GPUResourceLease>) {
         runtimeResourceLeases += leases
     }
+}
+
+private object PreparedSceneNoSurfaceOutput : GPUSurfaceOutputProvider {
+    override fun acquire(request: GPUSurfaceAcquisitionRequest): GPUSurfaceAcquisitionResult =
+        GPUSurfaceAcquisitionResult.Unavailable(GPUSurfaceAcquisitionStatus.Timeout)
+
+    override fun release(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult =
+        GPUSurfaceReleaseResult.Released
+}
+
+private class PreparedSceneRetentionObserver : GPUFrameResourceRetention {
+    private var registrations = 0L
+    private var completions = 0L
+    private var quarantines = 0L
+    private val ticketIds = linkedSetOf<String>()
+
+    @Synchronized
+    override fun registerAfterSubmit(registration: GPUFrameRetentionRegistration) {
+        registrations += 1L
+        ticketIds += registration.ticket.ticketId.value
+    }
+
+    @Synchronized
+    override fun complete(ticket: GPUQueueCompletionTicket, outcome: GPUQueueCompletionOutcome) {
+        completions += 1L
+    }
+
+    @Synchronized
+    override fun quarantine(
+        registration: GPUFrameRetentionRegistration,
+        diagnostic: org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic,
+    ) {
+        quarantines += 1L
+    }
+
+    @Synchronized
+    fun snapshot(): Triple<Long, Long, Long> = Triple(registrations, completions, quarantines)
+
+    @Synchronized
+    fun distinctTicketCount(): Int = ticketIds.size
 }
 
 private const val MAX_TEXTURE_DIMENSION: Int = 8192

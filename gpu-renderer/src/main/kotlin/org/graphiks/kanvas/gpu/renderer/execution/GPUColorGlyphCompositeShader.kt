@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.gpu.renderer.text
+package org.graphiks.kanvas.gpu.renderer.execution
 
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslReflection
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
@@ -6,29 +6,21 @@ import org.graphiks.kanvas.gpu.renderer.color.validateColorWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.wgsl.colorGlyphCompositeWgsl
 
-/**
- * A parser-backed COLRv0 composite shader plan: the generated WGSL source and
- * its reflection. Renderer-neutral - no GPU handle, no pixels.
- */
-data class GPUColorGlyphCompositePlan(
+/** Parser-backed COLRv0 shader source ready for native pipeline materialization. */
+internal data class GPUColorGlyphCompositePlan(
     val wgslSource: String,
     val wgslReflection: GPUColorWgslReflection?,
 )
 
-/** Outcome of building the COLRv0 composite shader plan. */
-sealed interface GPUColorGlyphCompositeShaderResult {
-    /** Shader generated and validated through parser-backed WGSL validation. */
+/** Outcome of preparing the native COLRv0 shader source. */
+internal sealed interface GPUColorGlyphCompositeShaderResult {
     data class Ready(val plan: GPUColorGlyphCompositePlan) : GPUColorGlyphCompositeShaderResult
 
-    /** Parser-backed WGSL validation rejected the generated shader. */
     data class Rejected(val reason: String, val message: String) : GPUColorGlyphCompositeShaderResult
 }
 
-/**
- * Generates and validates the COLRv0 composite shader through registered WGSL validation, mirroring
- * the color-management WGSL validation path in `GPUColorWgsl`.
- */
-fun buildColorGlyphCompositeShader(
+/** Generates and parser-validates the fixed native COLRv0 composite shader. */
+internal fun buildColorGlyphCompositeShader(
     maxLayers: Int = COLOR_GLYPH_COMPOSITE_MAX_LAYERS,
 ): GPUColorGlyphCompositeShaderResult {
     val wgsl = colorGlyphCompositeWgsl(maxLayers)

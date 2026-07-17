@@ -213,12 +213,15 @@ GPU completion that references them.
 A fresh transient MSAA attachment cannot load pixels from a single-sample
 resolve texture through portable WebGPU. Resolving a partial draw from such an
 attachment would overwrite unchanged scene pixels. The frame planner therefore
-produces one `MSAAContinuationPlan` per target:
+requires every multisample `GPUTask.Render` to own one typed
+`GPUSampleContinuationKey` for the exact attachment identity. It validates
+target, sample plan, device generation, and same-key-per-target invariants,
+then lowers the task proof into `GPUSampleContinuationRequest` values:
 
 ```text
 SingleSampleFrame
-PersistentFrameAttachment(sampleCount, colorLease, depthStencilLease)
-RetainedTargetAttachment(sampleCount, targetGeneration, colorLease, depthStencilLease)
+PersistentFrameColorAttachment(sampleCount, colorLease)
+RetainedTargetAttachment(sampleCount, targetGeneration, colorLease, depthStencilLease) [future]
 Refuse(reason)
 ```
 
@@ -227,22 +230,34 @@ Rules:
 1. A target uses one sample plan for its whole active frame interval. The
    planner never alternates direct single-sample writes and unrelated MSAA
    writes to the same canonical target.
-2. `PersistentFrameAttachment` is valid when the target begins with clear or
-   discard semantics. The first pass clears or discards the MSAA attachment;
-   later pass segments use `LoadOp.Load` and `StoreOp.Store` on the same
-   attachment. Every producing pass resolves to the canonical texture.
-3. The MSAA color attachment and required depth/stencil attachment survive
-   destination-copy pass breaks, filter/layer scheduling gaps, and pipeline
-   changes until the target's final pass.
-4. A preserve-load target may use `RetainedTargetAttachment` only when the
-   matching MSAA attachment has the same target/device generation and remained
-   authoritative alongside its resolve texture. Otherwise it must choose a
-   proven exact single-sample coverage lowering or refuse.
+2. `PersistentFrameColorAttachment` is valid when the target begins with an
+   explicit clear. The first pass clears the MSAA attachment; later pass
+   segments use `LoadOp.Load` on the same attachment. Store and resolve are
+   independent axes: every producing pass must both `Store` that attachment
+   and `ResolveCanonical` into the single-sample scene texture. The render
+   load/store plan and the continuation request must independently agree on
+   `Store`; preflight and native materialization both refuse a contradiction.
+3. The first native slice keeps one color-only MSAA attachment alive across
+   neutral, non-writing `CopyResourceStep` breaks and pipeline changes until
+   the target's final pass. These breaks prove encoder-scope continuation only;
+   they are not destination-read consumers. Depth/stencil continuation refuses
+   until its native ownership and pixel evidence exist.
+4. Inter-frame `RetainedTargetAttachment` remains a stable refusal in the
+   first native slice. It may be enabled only when the matching attachment has
+   the same target/device generation and remained authoritative alongside its
+   resolve texture. Otherwise the route must choose a proven exact
+   single-sample coverage lowering or refuse.
 5. A target that combines shader destination reads with sample-based AA uses
    `SingleSampleFrame` only when every affected GPU geometry/clip coverage plan
    has a proven equivalent analytic, stencil-1x, or sampled-mask lowering. If not, the
    affected atomic scope refuses with
    `unsupported.blend.msaa_destination_read_exactness`.
+6. Both texture-copy and copy-as-draw destination materializations are subject
+   to that exactness gate before native handles exist. A canonical target write
+   by render, copy, upload, compute target, or writable compute resource use
+   invalidates retained attachment authority.
+7. Destination grouping may carry the exact continuation key only to recoup
+   and validate its consumer task proof. It is never the source of that proof.
 6. No route silently drops AA, samples a multisample attachment as a normal
    texture, or assumes Dawn's `ExpandResolveTexture` extension exists.
 
@@ -535,7 +550,7 @@ target identity
 target generation
 device generation
 format and color interpretation
-sample/MSAA continuation state
+sample/MSAA continuation state recouped from the exact consumer render task
 source-intermediate identity, if any
 ```
 
@@ -596,6 +611,48 @@ shader route allow it. Otherwise the payload provides copy origin, logical
 extent, and backing extent separately. Sampling never normalizes by logical
 size while binding a larger backing texture.
 
+### Semantic draw payload continuity
+
+The read-only inspection before native Slice 10C exposes a separate gap from
+native handle materialization: the accepted solid `FillRect` path retains
+packet identity, bounds, pipeline labels, and slot evidence, but the exact
+rectangle and RGBA values are no longer available when the draw reaches
+`GPUTaskList`. A native backend must not guess those values from bounds, labels,
+fingerprints, hashes, or test constants.
+
+`PayloadContracts.kt` therefore owns a closed `GPUDrawSemanticPayload` algebra.
+Its first `SolidRect` variant contains only a recursively snapshotted
+`GPUDrawPayloadRef` produced by the existing `GPUSolidPayloadGatherer`. That
+gatherer remains the single authority for solid-rectangle field validation,
+the packed byte layout, zeroed padding, fingerprint, and uniform-slot facts.
+The wrapper does not introduce a second rectangle/color DTO, packer, byte
+encoder, or alternate shader-input representation.
+
+The payload is deeply immutable: the wrapper snapshots the reference, slot,
+uniform block, exact byte list, and field list, and accepts no caller-owned
+mutable collection. Its variant tag, command/render-step identity, packing
+metadata, exact bytes, fields, slot facts, and fingerprint participate in the
+stable packet dump and canonical frame-plan hash. Two plans with identical
+labels but different solid payload bytes are different plans; mutating source
+collections after construction cannot change either plan.
+
+The exact value is propagated without reinterpretation through:
+
+```text
+GPUSolidPayloadGatherer -> GPUDrawSemanticPayload.SolidRect
+  -> GPUDrawPacket -> GPUTask.Render -> GPUFramePlan
+  -> GPUFramePreflighter -> typed prepared render operand
+```
+
+Every executable packet that selects the solid `FillRect` render step must own
+exactly one matching semantic payload. Preflight validates command ID,
+render-step identity, slot/fingerprint agreement, packed byte count, finite and
+range-constrained source values, field bounds/non-overlap, and zeroed padding.
+An absent, unknown, stale, or malformed payload is a typed pre-submit refusal:
+no native-payload token is registered and no encoder is created. Later draw
+families extend the closed algebra with their own canonical gatherers; they do
+not weaken this fail-closed rule or reconstruct solid values from evidence.
+
 ### Transactional preflight and prepared frame
 
 `GPUFramePreflighter` is the only materialization boundary. It consumes a
@@ -605,16 +662,65 @@ validated `GPUFramePlan` and returns either a terminal diagnostic or one
 - the immutable semantic frame plan;
 - source recording IDs, compatibility keys, task IDs, and dependency seals;
 - the one-to-one `GPUCommandEncoderPlan` used for evidence;
-- an opaque `GPUPreparedResourceSet` whose pipeline, bind-group, buffer,
-  texture, and view handles remain owned by `GPUResourceProvider`;
+- an opaque `GPUPreparedResourceSet` whose handle-free evidence is backed by
+  pipeline, bind-group, buffer, texture, and view objects owned by the resource
+  provider/adapter boundary;
 - target, device, and resource generations;
 - scratch and surface leases with lifetime intervals;
 - destination bindings and snapshot layouts;
+- deeply immutable semantic draw payloads validated one-to-one against render
+  packets and carried into typed prepared render operands;
 - optional `ReadbackLayout`;
 - a pre-reserved `GPUQueueCompletionTicket` from an accepted, version-scoped
   completion adapter;
 - optional acquired surface output and post-submit present action;
 - rollback actions for every newly acquired resource.
+
+The existing prepared evidence is not, by itself, an executable native
+operand set. `GPUPreparedResourceEvidence`, command-resource leases, and
+`GPUPassCommandStream.operandBridge` identify resources and preserve the
+semantic one-to-one mapping, but they do not provide the `GPUTexture`, view,
+buffer, pipeline, or bind group required by an encoder. Task 10 must close
+that gap explicitly; an executor that merely visits labels or delegates to an
+immediate target method is instrumentation, not the production frame path.
+
+Native operand delivery uses a private, typed, frame-scoped registry owned by
+`GPURuntimeResourceAdapter`. During preflight,
+`GPUFrameResourcePreflightProvider`/`GPUConcreteResourceProvider` materializes
+the resource descriptors and the adapter registers one internal
+`GPUPreparedNativeFramePayload` whose ordered typed operands correspond
+exactly to the encoder scopes. Each typed operand retains the exact handle-free
+logical resource/binding key from its encoder scope and `operandBridge`.
+Registration validates those keys one-for-one, so a same-generation texture,
+buffer, pipeline, bind group, source, or destination substitution refuses
+before encoder creation; scope index, operation kind, native type, and device
+generation alone do not prove the association. `PreparedGPUFrame` contains only an opaque,
+dump-safe registry token plus the existing generation seal and evidence; it
+never contains a WebGPU object, native handle, address, or handle-derived
+identity. `GPUFrameExecutor` validates that token and seal, resolves the
+payload through its injected adapter, consumes it exactly once, and encodes
+the typed operands directly on its single command encoder. A render operand
+retains the already-validated `GPUDrawSemanticPayload`; it does not synthesize
+rectangle or color data from the native registry's handle-free labels.
+
+This boundary does not accept arbitrary callbacks or lambdas as encoded work,
+does not wrap `target.encode`, `encodeOffscreenTexture`,
+`copyTargetToOffscreenTexture`, `readRgba`, or any other method that creates or
+submits an internal encoder, and does not treat the evidence-only resource
+factory as native materialization. Instrumented core tests may prove ordering
+before native materialization exists, but no native route or performance gate
+is green until the same scopes execute real WebGPU operations and the relevant
+native pixel/readback evidence passes. Lookup, encode, rollback, completion,
+and device-loss paths release or quarantine the registry payload under the
+same generation and submission lifetime rules as its resources.
+
+`GPURuntimeResourceAdapter` maintains one identity-based ownership ledger across
+all prepared payloads and adapter-retained uniform-slab/bind-group handles.
+Only consistently `Borrowed` references may share a native handle. Payload- or
+output-owned handles cannot be registered twice or overlap another
+adapter-owned registry entry. Their ledger reservation survives submission,
+output mapping, and quarantine and is removed only after successful terminal
+close, preventing both reuse-after-close and double close.
 
 The surface output is acquired as the final ephemeral preflight operation,
 after reusable pipelines and scene resources are ready but before encoder
@@ -742,15 +848,22 @@ alignment, excessive buffer size, or generation mismatch fails preflight.
 The readback staging lifecycle is explicit:
 
 ```text
-Reserved -> Submitted -> GPUCompletedMappingPending
-  -> Mapped -> Depadded -> Releasable
-  -> MapFailed -> Releasable | Quarantined
+Reserved -> EncodedInFinalCopy -> Submitted -> GPUCompletedMappingPending
+  -> MapPending -> Mapped -> DepaddedToOwnedBytes -> Unmapped -> Releasable
+  -> MapFailed -> StateLegalCleanup -> Releasable | Quarantined
 ```
 
 Queue completion may release the frame's other submission resources, but it
 cannot release, destroy, evict, or repool the output-owned staging lease. The
 exact-frame completed stage for `ReadbackRgba` resolves only after terminal
-depadding or map failure and the required unmap/release action. A delayed
+depadding or map failure and the required unmap/release action. The final copy
+is encoded after the last render pass but before the executor's single
+`finish()` and single `queue.submit()`; mapping never submits work. `mapAsync`
+starts only after successful completion of that exact submission. A successful
+map copies and depads rows into a fresh immutable byte owner while the staging
+buffer remains mapped, then unmaps in guaranteed cleanup before the lease is
+reusable or the completed stage exposes pixels. A failed map never reads a
+mapped range; device loss quarantines the submitted staging resource. A delayed
 mapping callback therefore cannot observe a buffer reused by a concurrent
 frame.
 
@@ -802,6 +915,32 @@ call is refused instead of sharing mutable frame-local recording state. An
 exception thrown by the recording callback before submission seals no partial
 frame, is captured as a typed frame failure, and leaves the session reusable
 when its generation remains valid.
+
+The implemented lower-level 10F-a seam applies these rules to
+`GPUPreparedSceneFrameSession` before the Canvas and window facades are added.
+It retains one exact canonical native texture/view pair but creates a fresh
+frame-local coordinator stack and native payload for every accepted task list.
+The Task 10 algebra is closed to `ReadbackRgba` and
+`CurrentFrameCompletionOnly`; the latter performs no readback allocation,
+texture-to-buffer copy, mapping, or synthetic completion submission. Only one
+frame may be in flight per prepared session.
+
+Prepared-session lifetime is nested under its backend session. Closing the
+parent closes idle children before queue/device teardown and waits for a real
+terminal result from an in-flight child; close never fabricates frame
+completion. Setup is transactional and retryable: reverse-order rollback
+removes only resources that closed successfully, transfers remaining failures
+to a parent-owned quarantine ledger, and retries that ledger before device
+teardown. Native texture and view closure are independent, so a successful
+handle is never closed twice when the other handle needs a retry.
+
+The 10F-a native proof executes two distinct frames against the same exact
+native target: completion-only followed by RGBA readback. It proves two
+frame-local coordinators, payload registrations, submits, and distinct
+retention tickets; one target creation; one readback copy; exact premultiplied
+pixels; terminal registry/retention balance; and target destruction only at
+session close. This is reusable-session evidence only. Glyph, scene, benchmark,
+Canvas, and window migrations remain outside the 10F-a claim.
 
 Every coordinator attempt owns one frame-scoped telemetry recorder. Planning,
 preflight, execution, presentation, and completion append observational facts
@@ -912,7 +1051,10 @@ The executor:
 
 - validates the prepared-frame generation seal;
 - creates one command encoder;
-- records planned render/compute/copy/readback/surface-blit scopes in order;
+- records planned render/compute/copy/readback/surface-blit scopes in order,
+  using the exact validated semantic payload attached to each render operand;
+- records the terminal readback `copyTextureToBuffer` on that same encoder,
+  after the last producing render pass and before finish;
 - finishes one command buffer;
 - calls `queue.submit()` once;
 - registers all referenced leases under that submission;
@@ -1349,6 +1491,11 @@ Structural implementation is complete only when:
   attachment;
 - offscreen and window rendering use the same canonical scene-target path;
 - `snapshotTargetToOffscreenTexture()` and CPU snapshot upload are removed;
+- solid `FillRect` semantics are packed once by `GPUSolidPayloadGatherer`,
+  remain deeply immutable through packet/plan/preflight, and participate in
+  stable dumps and canonical hashes without label/hash reconstruction;
+- an absent or invalid semantic payload refuses before native-payload
+  registration and encoder creation;
 - one prepared scene creates one encoder, one command buffer, and one submit;
 - surface acquisition, encoded blit, submit, present, and GPU completion are
   distinct and tested;

@@ -2,15 +2,19 @@ package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import java.nio.file.Path
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSession
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
+import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
 import org.graphiks.kanvas.gpu.renderer.telemetry.FrameGatePolicy
 import org.graphiks.kanvas.gpu.renderer.telemetry.FrameGateStatus
+import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 
 /** One benchmarked draw family and the representative scene that exercises it. */
 data class BenchmarkFamily(val family: String, val sceneId: String)
@@ -219,6 +223,16 @@ class PerFamilyBenchmark(
     ): FamilyBenchmarkResult =
         runCatching {
             val scene = GPURendererSceneRegistry.registry.requireScene(family.sceneId)
+            if (scene.usesPreparedSolidRectPilot()) {
+                return@runCatching benchmarkPreparedSolidRect(
+                    session,
+                    gate,
+                    family,
+                    scene,
+                    warmupFrames,
+                    measuredFrames,
+                )
+            }
             val unsupported = rectOnlyCommandSequenceUnsupportedReason(scene.commands)
             if (unsupported != null) {
                 return@runCatching skippedResult(
@@ -284,6 +298,94 @@ class PerFamilyBenchmark(
                 reason = "render-failed: ${family.sceneId} ${error.message ?: error::class.simpleName}",
             )
         }
+
+    private fun benchmarkPreparedSolidRect(
+        session: GPUBackendSession,
+        gate: FrameGatePolicy,
+        family: BenchmarkFamily,
+        scene: org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene<
+            org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand,
+        >,
+        warmupFrames: Int,
+        measuredFrames: Int,
+    ): FamilyBenchmarkResult {
+        val capabilities = session.capabilities ?: return skippedResult(
+            family,
+            BenchmarkFamilyStatus.Unsupported,
+            warmupFrames,
+            measuredFrames,
+            "unsupported: prepared SolidRect benchmark requires observed capabilities",
+        )
+        val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
+            ?.let(::GPUDeviceGenerationID)
+            ?: return skippedResult(
+                family,
+                BenchmarkFamilyStatus.Unsupported,
+                warmupFrames,
+                measuredFrames,
+                "unsupported: prepared SolidRect benchmark requires device generation",
+            )
+        return session.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
+        ).use { preparedSession ->
+            fun render(frameOrdinal: Long, withReadback: Boolean): Long {
+                val recorded = when (
+                    val result = PreparedSolidRectSceneFrameRecorder().record(
+                        scene,
+                        capabilities,
+                        generation,
+                        frameOrdinal,
+                        withReadback,
+                    )
+                ) {
+                    is PreparedSolidRectSceneFrameResult.Recorded -> result
+                    is PreparedSolidRectSceneFrameResult.Refused -> error(result.reason)
+                }
+                val output = recorded.readbackRequestId?.let(GPUSceneFrameOutputRequest::ReadbackRgba)
+                    ?: GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly
+                val start = System.nanoTime()
+                val terminal = preparedSession.renderFrame(recorded.taskList, output)
+                    .completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                val duration = (System.nanoTime() - start).coerceAtLeast(1L)
+                check(terminal.outcome == GPUFrameStructuralOutcome.Succeeded) {
+                    terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared SolidRect benchmark frame failed"
+                }
+                return duration
+            }
+
+            repeat(warmupFrames) { index -> render(index + 1L, withReadback = false) }
+            val samples = List(measuredFrames) { index ->
+                render(warmupFrames + index + 1L, withReadback = false)
+            }
+            // Validate the last state once, outside every warmup/measured interval.
+            render(warmupFrames + measuredFrames + 1L, withReadback = true)
+            val statistics = FrameTimeStatistics.of(samples)
+            val gateResult = gate.evaluate(family.family, statistics.meanMs)
+            val counters = preparedSession.nativeCounters()
+            FamilyBenchmarkResult(
+                family = family.family,
+                sceneId = family.sceneId,
+                status = BenchmarkFamilyStatus.Sampled,
+                warmupFrames = warmupFrames,
+                measuredFrames = measuredFrames,
+                statistics = statistics,
+                diagnostics = listOf(
+                    "sampled ${family.family} scene=${family.sceneId} via prepared submit+completion",
+                    "metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 " +
+                        "finalValidationReadbacks=${counters.readbackCopies}",
+                    "nativeFrames=${warmupFrames + measuredFrames + 1} encoders=${counters.encoders} " +
+                        "commandBuffers=${counters.commandBuffers} submits=${counters.submits}",
+                    "solidRectCache creations=${counters.solidRectInvariantCreations} " +
+                        "reuses=${counters.solidRectInvariantReuses}",
+                    "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
+                        "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
+                        "maxMs=${statistics.maxMs.fmt()}",
+                    "frameGateStatus=${gateResult.status.wireName}",
+                ),
+            )
+        }
+    }
 
     private fun skippedResult(
         family: BenchmarkFamily,

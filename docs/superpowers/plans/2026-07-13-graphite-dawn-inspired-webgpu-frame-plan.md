@@ -405,7 +405,10 @@ rtk git commit -m 'feat: centralize exact GPU blend formulas'
 **Interfaces:**
 
 - Consumes: the minimal `GPUSamplePlan`, typed target/device generation, color format/interpretation, and blend destination-read facts.
-- Produces: `GPUSampleContinuationKey`, explicit load/resolve/discard transitions, and `GPUFrameMemoryBudgetPlan` consumed by destination grouping, resources, preflight, and telemetry.
+- Produces: `GPUSampleContinuationKey`, an explicit load transition plus
+  independent store and canonical-resolve actions, and
+  `GPUFrameMemoryBudgetPlan` consumed by destination grouping, resources,
+  preflight, and telemetry.
 
 Canonical ownership is fixed before Tasks 5–8 so implementers do not invent duplicate identities or package cycles:
 
@@ -441,7 +444,22 @@ Expected: FAIL because continuation and aggregate budget types do not exist.
 
 - [ ] **Step 3: Implement explicit continuation**
 
-Evolve the minimal `GPUSamplePlan` from Task 2 with fresh-clear, retained-load, resolve, and discard transitions in a pure plan. Put target identity and generation in a typed continuation key. Define handle-free `GPUDeviceGenerationID` in `capabilities/CapabilityContracts.kt`, `GPUColorFormat` and `GPUColorInterpretation` in `color/ColorContracts.kt`, `GPUPixelBounds` in `coordinates/CoordinateContracts.kt`, `GPUTargetIdentity` in `state/StateContracts.kt`, and `GPUIntermediateIdentity` in `intermediates/IntermediateContracts.kt`. Their focused contract tests validate non-empty/stable identities and checked bounds. Semantic planning packages use these foundation types and never import `execution.GPUDeviceGeneration`. Make ordinary single-sample plans explicit so `GPUBlendPlanner` and `GPUIntermediatePlanner` distinguish an exact single-sample frame from a local resolve approximation; neither planner may inspect sample-count integers independently.
+Evolve the minimal `GPUSamplePlan` from Task 2 with fresh-clear and
+retained-load transitions plus separate store/discard and
+resolve-canonical/skip actions in a pure plan. A resolve must not erase the
+stored-attachment continuation proof. Put target identity and generation in a
+typed continuation key. Define handle-free `GPUDeviceGenerationID` in
+`capabilities/CapabilityContracts.kt`, `GPUColorFormat` and
+`GPUColorInterpretation` in `color/ColorContracts.kt`, `GPUPixelBounds` in
+`coordinates/CoordinateContracts.kt`, `GPUTargetIdentity` in
+`state/StateContracts.kt`, and `GPUIntermediateIdentity` in
+`intermediates/IntermediateContracts.kt`. Their focused contract tests validate
+non-empty/stable identities and checked bounds. Semantic planning packages use
+these foundation types and never import `execution.GPUDeviceGeneration`. Make
+ordinary single-sample plans explicit so `GPUBlendPlanner` and
+`GPUIntermediatePlanner` distinguish an exact single-sample frame from a local
+resolve approximation; neither planner may inspect sample-count integers
+independently.
 
 - [ ] **Step 4: Implement checked aggregate accounting**
 
@@ -1096,9 +1114,19 @@ rtk git commit -m 'fix: release GPU resources on real completion'
 **Files:**
 
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUSceneTarget.kt`
+- Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedNativeFramePayload.kt`
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutor.kt`
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinator.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/AnalysisContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/PayloadContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/PassContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlan.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/PreparedGPUFrame.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPURuntimeResourceAdapter.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/TelemetryContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/ResourceContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt`
 - Modify: `gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanExecutor.kt`
@@ -1107,10 +1135,18 @@ rtk git commit -m 'fix: release GPU resources on real completion'
 - Modify: `gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/PerFamilyBenchmark.kt`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutorTest.kt`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinatorTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/FirstRoutePlannerTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPUSolidPayloadGathererTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPURecorderTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlanIntegrityTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighterTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPURuntimeResourceAdapterTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProviderTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererPackageBoundaryTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphRenderSmokeTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphReferenceParityTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaaContinuationTest.kt`
 - Modify: `gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/M25ExecutorWiringTest.kt`
 - Modify: `gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenScenePngParityTest.kt`
 - Create: `gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenFrameSamplerTest.kt`
@@ -1119,41 +1155,249 @@ rtk git commit -m 'fix: release GPU resources on real completion'
 **Interfaces:**
 
 - Consumes: accepted `PreparedGPUFrame`, `GPUSceneTarget`, prepared resources, and reserved completion ticket.
-- Produces: `GPUFrameExecutor.execute(preparedFrame: PreparedGPUFrame): GPUFrameExecutionHandle` with one encoder, one command buffer, one submit, then guarded host output actions; `GPUFrameCoordinator.submit(taskList)` is the sole end-to-end planner → preflight → executor entry point and returns a two-phase `GPUPreparedSceneFrameHandle`. Its completion stage yields the only final result and immutable frame-scoped `GPUFrameStructuralTelemetrySnapshot`; early refusals use an already-completed stage.
+- Produces: `GPUFrameExecutor.execute(preparedFrame: PreparedGPUFrame): GPUFrameExecutionHandle` with one encoder, one command buffer, and one submit; `GPUFrameCoordinator.submit(taskList)` is the sole end-to-end planner → preflight → executor entry point and returns a two-phase `GPUPreparedSceneFrameHandle`. Its completion stage yields the only final result and immutable frame-scoped `GPUFrameStructuralTelemetrySnapshot`; early refusals use an already-completed stage. Preflight also produces one opaque handle-free native-payload token; `GPURuntimeResourceAdapter` privately maps it to typed native operands and the executor consumes that mapping exactly once. Before native encoding, Slice 10C preserves the exact solid `GPUDrawSemanticPayload` produced by the existing gatherer from packet through preflight; no label/hash reconstruction is permitted. Task 10A accepts completion-only output; it defines the closed `ReadbackRgba` request/result algebra but refuses readback execution fail-closed. Only Slice 10C may produce a successful terminal readback after queue completion, map, row depadding, and unmap.
 
-- [ ] **Step 1: Add an instrumented executor test**
+- [ ] **Slice 10A — Step 1: Add the instrumented core tests**
 
-Prepare a frame containing render, bounded destination copy, render, compute/filter, target transition, and optional readback. Assert exactly one encoder creation, ordered GPU scopes matching `GPUCommandEncoderPlan`, separately ordered host actions, one finish, one command buffer, one submit, exact retained resource registration, completion arm immediately after submit, and no intermediate submission. Add stale-seal, synchronous encode failure, post-submit completion-arm failure, and callback failure paths.
+Prepare a frame containing render, bounded destination copy, render, compute/filter, target transition, and optional prepared readback evidence. Assert exactly one encoder creation, ordered GPU scopes matching `GPUCommandEncoderPlan`, one finish, one command buffer, one submit, exact retained resource registration, completion arm immediately after submit, and no intermediate submission. Add stale-seal, synchronous encode failure, post-submit completion-arm failure, and callback failure paths. In 10A, host actions are refused and prepared readback evidence must not be turned into pixels.
 
-Add coordinator cases for recording/planning refusal, preflight refusal, successful readback/completion-only execution, and completion failure. Task 10 has no presentation output; Task 11 adds and tests presentation failure when it extends the closed algebra. Early refusal must never call the executor and returns an already-completed handle. Submitted work first returns a handle with attempt ID and immediate submit/output state; only its exact completion stage seals one immutable `GPUFrameStructuralTelemetrySnapshot` with furthest phase, final outcome/diagnostic, and the counters observed so far. Define `GPUFrameAttemptID`, closed telemetry phase/outcome/event kinds, attempt-scoped sink, and snapshot in `telemetry/TelemetryContracts.kt` without imports from `execution`, `resources`, or `recording`; those later packages depend one-way on telemetry and emit facts after decisions. Assert the package-boundary test remains acyclic, a pending handle cannot expose final telemetry, and completion never blocks the render thread. No global mutable last-frame state or log reconstruction is allowed.
+Add coordinator cases for recording/planning refusal, preflight refusal, successful completion-only execution, readback request refusal, and completion failure. Test the closed `CompletionOnly`/`ReadbackRgba` request and terminal-result algebra, including immutable byte ownership, but do not construct a successful readback result through the 10A coordinator. A readback request is refused before executor entry and claims exclusive rollback ownership; an ownership conflict also fails closed without submission. Successful terminal readback execution is explicitly Slice 10C acceptance, not Slice 10A acceptance. Task 10 has no presentation output; Task 11 adds and tests presentation failure when it extends the closed algebra. Early refusal must never call the executor and returns an already-completed handle. Submitted work first returns a handle with attempt ID and immediate submit/output state; only its exact completion stage seals one immutable `GPUFrameStructuralTelemetrySnapshot` with furthest phase, final outcome/diagnostic, and the counters observed so far. Define `GPUFrameAttemptID`, closed telemetry phase/outcome/event kinds, attempt-scoped sink, and snapshot in `telemetry/TelemetryContracts.kt` without imports from `execution`, `resources`, or `recording`; those later packages depend one-way on telemetry and emit facts after decisions. Assert the package-boundary test remains acyclic, a pending handle cannot expose final telemetry, and completion never blocks the render thread. No global mutable last-frame state or log reconstruction is allowed.
 
-- [ ] **Step 2: Add native pixel tests for copy and MSAA pass breaks**
-
-Verify bounded copy extents and origin math, no CPU upload between passes, untouched old pixels after a partial MSAA draw and pass break, several breaks on retained attachments, logical snapshots backed by larger pooled textures, and aligned readback output. Delay readback mapping after accepted queue completion, request a same-sized staging buffer from a concurrent frame, and prove the first output-owned staging lease is neither released nor reused until map/unmap/depad completes. Cover map failure and device-loss quarantine without leaking the lease.
-
-Migrate the existing color-glyph native smoke/parity tests from direct `createOffscreenTarget`/`target.encode`/`readRgba` calls to a recorded frame plus final planned readback through `GPUFrameCoordinator`. They remain pixel tests, but no test keeps a removed immediate contract alive.
-
-- [ ] **Step 3: Run failing executor tests**
+- [ ] **Slice 10A — Step 2: Run the core tests red**
 
 ```bash
-rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameExecutorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameCoordinatorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest' --tests 'org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest'
+rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameExecutorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameCoordinatorTest' --tests 'org.graphiks.kanvas.gpu.renderer.GPURendererPackageBoundaryTest'
 ```
 
-Expected: FAIL because the current runtime exposes immediate per-operation encoding/submission and CPU-backed `snapshotTargetToOffscreenTexture()`.
+Expected: FAIL because the executor/coordinator and attempt-scoped telemetry do not exist.
 
-- [ ] **Step 4: Implement `GPUSceneTarget` and the ordered encoder**
+- [ ] **Slice 10A — Step 3: Implement the instrumented executor/coordinator core**
 
-Own the canonical resolved texture, optional retained MSAA attachments, dimensions, format/color facts, usage, sample plan, and generation. `GPUFrameExecutor.execute(preparedFrame)` validates the seal, creates one encoder, visits each planned scope, finishes once, submits once, registers resources, arms completion, then performs guarded output actions. It cannot allocate or choose new routes.
+Create the handle/lifecycle, telemetry, `GPUSceneTarget`, executor, and
+coordinator contracts needed by the instrumented tests. The executor validates
+the generation seal, creates one encoder, visits scopes in plan order, finishes
+once, submits once, registers retention, arms completion immediately, and then
+completes without host output actions. `GPUFrameCoordinator` performs no routing
+of its own: it invokes the canonical planner, preflight, then executor once for
+completion-only output. Host actions and `ReadbackRgba` are fail-closed refusals
+in 10A; the latter becomes an executable terminal output only in Slice 10C.
 
-`GPUFrameCoordinator` performs no routing of its own: it invokes the canonical planner, preflight, then executor once. `submit()` returns a sealed `GPUPreparedSceneFrameHandle` containing the stable attempt ID, immediate pre-submit/submit outcome, and `CompletionStage<GPUPreparedSceneCompletedFrameResult>`. Pre-submit failures complete the stage immediately; submitted completion-only work completes it from the exact queue-completion path. `ReadbackRgba` keeps its output-owned staging lease beyond queue completion and completes only after terminal map/unmap/depad or typed map failure. The final result contains the furthest reached phase, final diagnostic/result, and exact immutable telemetry snapshot. It exposes a production `GPUPreparedSceneFrameSession` that retains a valid canonical target/device/resource context across repeated frames and initially accepts recorded task lists plus terminal RGBA readback or exact current-frame completion without readback. Task 11 extends this closed output algebra with window presentation in the same session; no Task 10 type references the not-yet-created window contract. Drawing API callers and scene runners use this boundary rather than invoking backend target creation, preflight, or executor independently.
+This slice proves only orchestration and lifecycle order. Its instrumented
+backend is an internal test seam, not a product route: it cannot accept
+arbitrary encode callbacks, and passing these tests must not mark native
+execution, pixel parity, or the one-submission performance gate green.
 
-Migrate all existing `gpu-renderer-scenes` offscreen consumers in this task. `SceneIntermediatePlanExecutor` records its scene/intermediate work into the canonical task/frame route instead of calling `encodeOffscreenTexture` per operation. `RectOnlyOffscreenRenderer` records direct and destination-reading draws into the same coordinator instead of calling `target.encode` or `copyTargetToOffscreenTexture`; its PNG bytes come only from the final planned output readback after the single submission. `OffscreenFrameSampler` and `PerFamilyBenchmark` reuse `GPUPreparedSceneFrameSession` rather than creating backend offscreen targets. No scene runner or benchmark may remain a second immediate executor.
+- [ ] **Slice 10B — Step 4: Close the native-operand materialization gap**
 
-- [ ] **Step 5: Make destination snapshots native texture-to-texture copies**
+First extend `GPUFramePreflighterTest`, `GPURuntimeResourceAdapterTest`, and
+`GPUConcreteResourceProviderTest` to prove that every encoder scope resolves to
+one typed native operand, a missing/mismatched operand refuses before encoder
+creation, a stale or duplicate token cannot be consumed, rollback removes an
+unsubmitted payload, and submitted payload resources remain retained until
+completion or quarantine. Run them red:
+
+```bash
+rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFramePreflighterTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPURuntimeResourceAdapterTest' --tests 'org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProviderTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameExecutorTest'
+```
+
+Expected: FAIL because current prepared resources and
+`GPUPassCommandStream.operandBridge` are handle-free evidence only; they do not
+deliver textures, views, buffers, pipelines, or bind groups to an encoder.
+
+Add internal `GPUPreparedNativeFrameToken` and
+`GPUPreparedNativeFramePayload` contracts. The payload has closed typed
+render/compute/copy/readback operands in exact `GPUCommandEncoderPlan` order.
+Every operand also carries the exact handle-free logical resource/binding key
+declared by its encoder scope and `operandBridge`; matching only the scope
+index, operation kind, native type, or device generation is insufficient.
+Preflight refuses a key mismatch before encoder creation, including a
+same-generation source/destination or pipeline substitution.
+`GPURuntimeResourceAdapter` owns a private frame-scoped registry; preflight
+registers one payload after `GPUConcreteResourceProvider` has materially
+created the descriptor-backed resources, and `PreparedGPUFrame` stores only
+the opaque dump-safe token. No WebGPU object, native handle/address, or
+handle-derived identity enters `PreparedGPUFrame`, its hash, plan dumps, or
+telemetry. The executor resolves and consumes the token exactly once through
+its injected adapter.
+
+The adapter also owns one identity-based ledger for every payload-owned native
+handle and for handles retained by its uniform-slab/bind-group registries. A
+handle may be shared only when every reference is explicitly `Borrowed`; an
+owned handle cannot enter a second payload or another adapter-owned registry.
+The reservation remains live across submitted, output-pending, and quarantine
+states and is removed only after the corresponding handle closes successfully.
+Registration conflicts refuse before encoder creation and never double-close
+the rejected or already-owned handle.
+
+For this frame path, replace the adapter's callback-based pending creation with
+typed descriptor/materializer calls. Do not pass arbitrary lambdas as encoded
+work. An evidence-only lease/resource factory must return a typed pre-submit
+refusal and cannot activate the native route. Rollback invalidates the token;
+post-submit completion and failure respectively release or quarantine its
+payload with the existing generation rules.
+
+- [ ] **Slice 10C — Step 5a: Preserve the solid draw semantics through preflight**
+
+Start with TDD tests for the read-only gap discovered before native encoding:
+the accepted `FillRect` path currently keeps identities, bounds, slots, and
+hashes but loses the exact rectangle and RGBA values before `GPUTaskList`.
+Prove that the existing `GPUSolidPayloadGatherer` produces the sole packed
+representation, that a closed semantic payload wraps a deeply immutable
+snapshot of its `GPUDrawPayloadRef`, and that the same payload survives
+`GPUDrawPacket` → `GPUTask.Render`/`GPUFramePlan` → `GPUFramePreflighter`.
+
+Tests must mutate every caller-owned list after construction, vary the packed
+rect/color bytes while keeping unrelated labels stable, and assert that plan
+dumps and canonical hashes remain deterministic but change with semantic
+payload content. Missing payload, mismatched command/render-step identity,
+slot/fingerprint mismatch, malformed field ranges, invalid byte count, or
+non-finite/out-of-range values must return a typed pre-submit refusal before
+encoder creation. Run the focused tests red:
+
+```bash
+rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGathererTest' --tests 'org.graphiks.kanvas.gpu.renderer.analysis.FirstRoutePlannerTest' --tests 'org.graphiks.kanvas.gpu.renderer.recording.GPURecorderTest' --tests 'org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanIntegrityTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFramePreflighterTest'
+```
+
+Expected: FAIL because the current production `FillRect` packet carries only
+handle-free labels/slot evidence; it neither owns the gathered block nor keeps
+the rectangle and color available to preflight.
+
+Add a closed `GPUDrawSemanticPayload` algebra in `PayloadContracts.kt`; its
+first `SolidRect` variant owns only a recursively snapshotted and validated
+`GPUDrawPayloadRef` produced by the existing `GPUSolidPayloadGatherer`. Reuse
+that gatherer's existing rectangle/color validation, byte layout, padding,
+fingerprint, and slot facts. Do not add another rectangle/color DTO, packer, or
+byte encoder. Do not reconstruct values from `boundsHash`, labels, fingerprints,
+or diagnostic strings.
+
+Attach the closed payload to `GPUDrawPacket`, preserve it without reinterpretation
+through task and frame planning, and include its canonical type, exact packed
+bytes, field metadata, slot facts, and fingerprint in both stable dump and hash.
+Preflight validates the payload against packet identity and the selected render
+step, then supplies that exact semantic payload to the typed render operand.
+Any absent or invalid payload on the executable solid-rect route fails closed
+before native operand registration and before encoder creation.
+
+- [ ] **Slice 10C — Step 5b: Prove a real solid rectangle and final readback**
+
+Add a native pixel case for clear plus one solid rectangle and
+`ReadbackRgba`. The production backend must obtain the canonical target, typed
+native operands, and the exact semantic draw payload from preflight. On the
+executor's sole encoder it records clear/render setup and draw, ends the render
+pass, then records the final `copyTextureToBuffer` into the preflighted padded
+staging layout. It finishes one command buffer and calls `queue.submit()` once;
+mapping never creates another encoder or submission.
+
+Arm and await the accepted completion ticket for that exact submission before
+calling `mapAsync(Read)` once. On success, copy/depad the mapped padded rows into
+a new immutable RGBA byte owner while the buffer remains mapped, then unmap in
+a guaranteed cleanup path and only then release the output-owned staging lease.
+Only after that cleanup may the completion stage expose pixels and final
+telemetry. On queue-completion failure, do not map and quarantine submitted
+resources. On map failure, never read a mapped range; perform the state-legal
+cleanup, return a typed terminal failure, and quarantine on device loss.
+
+Delay mapping after queue completion, request a same-sized staging buffer from
+a concurrent frame, and prove the first output-owned lease is not reused until
+map/depad/unmap and terminal cleanup finish. `GPUPreparedSceneFrameHandle`
+contains only the stable attempt ID and immediate submit state; its completion
+stage is the sole final pixel/telemetry surface. Do not call or wrap
+`target.encode`, `encodeOffscreenTexture`, `readRgba`, or any other immediate
+method. Only this native pixel evidence can mark the basic offscreen route green.
+
+- [ ] **Slice 10D — Step 6: Encode bounded destination copies natively**
 
 Replace the product use of `snapshotTargetToOffscreenTexture()` with planned `copyTextureToTexture` on the active encoder. Encode destination shader draws against the snapshot texture and logical-origin uniforms. Keep output readback as a final planned buffer copy.
 
-- [ ] **Step 6: Run native and module suites**
+Verify bounded copy extents and origin math, no CPU upload between passes,
+logical snapshots backed by larger pooled textures, exact destination pixels,
+and one submission. The native executor must encode the copy itself; wrapping
+`copyTargetToOffscreenTexture` or `snapshotTargetToOffscreenTexture` is not an
+implementation of this slice.
+
+- [ ] **Slice 10E — Step 7: Add persistent MSAA continuation**
+
+Add native pixel coverage for untouched old pixels after a partial MSAA draw
+and a neutral `CopyResourceStep` pass break, then for several breaks on the
+same attachment. Own one exact frame-local color attachment set in
+`GPUSceneTarget`; keep it alive across encoder scopes, store it, and resolve
+each producing pass to the canonical scene texture. Put the exact typed
+continuation key directly on every multisample `GPUTask.Render`; make those
+render tasks the sole proof authority, and let destination grouping only
+recoup and validate the consumer key. The E1 acceptance smoke must start from
+`GPUTaskList` and cross planner, preflight, and executor; a hand-built
+`GPUFramePlan` is permitted only for focused negative preflight fixtures. The
+native materializer must require the canonical target's exact
+`RenderAttachment + CopySource` usages and expected frame-local lifetime,
+derive store operations from the checked load/store plan, and refuse any
+contradiction with continuation store evidence before native handles exist.
+This slice is explicitly color-only: depth/stencil and inter-frame retained
+attachments refuse until separate ownership and pixel evidence exist. Both
+`CopyDestinationStep` and `CopyAsDrawMaterializationStep` consumers form the
+separate E2 gate and must select a proven exact single-sample geometry/clip
+lowering or refuse with
+`unsupported.blend.msaa_destination_read_exactness`; the E1 neutral copy does
+not claim destination-read support. Treat a write named by either a compute
+target or a writable compute resource use as canonical-authority invalidation.
+Run
+`GPUMsaaContinuationTest` and the native smoke cases before claiming this
+slice green.
+
+- [ ] **Slice 10F — Step 8: Migrate glyph and scene consumers last**
+
+Migrate the existing color-glyph native smoke/parity tests from direct
+`createOffscreenTarget`/`target.encode`/`readRgba` calls to a recorded frame
+plus final planned readback through `GPUFrameCoordinator`. They remain pixel
+tests, but no test keeps a removed immediate contract alive.
+
+Expose a production `GPUPreparedSceneFrameSession` that retains a compatible
+canonical target/device/resource context across frames and accepts recorded
+task lists plus `ReadbackRgba` or `CurrentFrameCompletionOnly`. Task 11 extends
+that closed output algebra with window presentation; no Task 10 type references
+the not-yet-created window contract.
+
+### Slice 10F-a implemented evidence — reusable prepared scene session
+
+The lower-level reusable session seam is implemented without completing the
+glyph and scene-consumer migration in the remainder of Slice 10F. One prepared
+session owns one exact native texture/view pair, reuses it across compatible
+frames, and creates a fresh planner/preflight/coordinator/materialization stack
+for every frame. Its Task 10 output algebra is exactly `ReadbackRgba` or
+`CurrentFrameCompletionOnly`; completion-only frames create no staging buffer,
+copy, map, or empty completion anchor.
+
+The session refuses concurrent frames, use after close, stale device
+generation, logical-target substitution, and incompatible bounds/format before
+native reuse. Parent close is child-aware: an idle child closes before device
+teardown, while an in-flight child defers teardown until its real terminal
+completion. Setup rollback remains retryable: successfully closed resources
+leave the rollback ledger, failed resources stay quarantined and are retried by
+the parent before device teardown, without closing an already closed native
+handle twice.
+
+Native two-frame evidence uses two distinct frame/attempt IDs and two distinct
+retention tickets over one exact target: the first frame requests
+`CurrentFrameCompletionOnly`, the second requests `ReadbackRgba` and returns the
+exact premultiplied RGBA pixels. Counters prove 1 target creation, 2 native
+target uses, 2 submits, 1 readback copy, 2 frame-local coordinator creations,
+2 native-payload registrations, and 0 active/output-owned/quarantined payloads
+after terminal completion. Target close occurs only when the prepared session
+closes. Validation is recorded in the Task 10 report: the focused matrix passes
+329 tests and the complete `gpu-renderer` module passes 1,715 tests with 2
+skipped and no failure or error.
+
+Migrate all existing `gpu-renderer-scenes` offscreen consumers now, after the
+native primitive/copy/MSAA slices are green. `SceneIntermediatePlanExecutor`
+records its scene/intermediate work into the canonical route instead of calling
+`encodeOffscreenTexture` per operation. `RectOnlyOffscreenRenderer` records
+direct and destination-reading draws instead of calling `target.encode` or
+`copyTargetToOffscreenTexture`; PNG bytes come only from final planned
+readback. `OffscreenFrameSampler` and `PerFamilyBenchmark` reuse the prepared
+session rather than creating backend targets. No scene runner, benchmark,
+immediate-method wrapper, or evidence-only provider may remain a second
+executor or be reported as a green native route.
+
+- [ ] **Step 9: Run native and module suites**
 
 ```bash
 rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameExecutorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUFrameCoordinatorTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUColorGlyphRenderSmokeTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUColorGlyphReferenceParityTest' --tests 'org.graphiks.kanvas.gpu.renderer.passes.GPUMsaaContinuationTest'
@@ -1162,10 +1406,11 @@ rtk ./gradlew :gpu-renderer:test
 rtk ./gradlew :gpu-renderer-scenes:test
 ```
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUSceneTarget.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutor.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinator.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/TelemetryContracts.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanExecutor.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/RectOnlyOffscreenRenderer.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenFrameSampler.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/PerFamilyBenchmark.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutorTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinatorTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererPackageBoundaryTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphRenderSmokeTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphReferenceParityTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/M25ExecutorWiringTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenScenePngParityTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenFrameSamplerTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/PerFamilyBenchmarkTest.kt
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/AnalysisContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/PayloadContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/PassContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlan.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/FirstRoutePlannerTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPUSolidPayloadGathererTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPURecorderTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUFramePlanIntegrityTest.kt
+rtk git add gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUSceneTarget.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedNativeFramePayload.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutor.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinator.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/PreparedGPUFrame.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPURuntimeResourceAdapter.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/ResourceContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProvider.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeContracts.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/telemetry/TelemetryContracts.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/SceneIntermediatePlanExecutor.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/RectOnlyOffscreenRenderer.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenFrameSampler.kt gpu-renderer-scenes/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/PerFamilyBenchmark.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameExecutorTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFrameCoordinatorTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighterTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPURuntimeResourceAdapterTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUConcreteResourceProviderTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/GPURendererPackageBoundaryTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNativeSmokeTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphRenderSmokeTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUColorGlyphReferenceParityTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/passes/GPUMsaaContinuationTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/M25ExecutorWiringTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenScenePngParityTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/OffscreenFrameSamplerTest.kt gpu-renderer-scenes/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/scenes/offscreen/PerFamilyBenchmarkTest.kt
 rtk git commit -m 'feat: execute offscreen scenes in one GPU submission'
 ```
 

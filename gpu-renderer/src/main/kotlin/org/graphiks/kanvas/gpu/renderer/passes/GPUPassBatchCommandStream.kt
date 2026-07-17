@@ -47,6 +47,15 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
             "duplicate=${duplicatePacketIds.map { it.value }.ifEmpty { listOf("none") }.joinToString(",")}"
     }
 
+    val materializedOperandBridge =
+        materialization?.dumpOperandBridgeSnapshot
+            ?.map(GPUPassCommandOperandBridge::fromMaterializedBinding)
+            .orEmpty()
+    require(materializedOperandBridge.isEmpty() || operandBridge.isEmpty()) {
+        "GPUPassCommandStream accepts either provider materialization or explicit operandBridge, not both"
+    }
+    val effectiveOperandBridge = materializedOperandBridge.ifEmpty { operandBridge }
+
     val commands = buildList {
         for (batch in batchPlan.batches) {
             add(
@@ -73,6 +82,18 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
                         packetId = packet.packetId,
                     ),
                 )
+                if (effectiveOperandBridge.any { bridge ->
+                        bridge.packetId == packet.packetId && bridge.commandLabel == "setVertexBuffer"
+                    }
+                ) {
+                    add(GPUPassCommand.SetVertexBuffer(slot = 0, packetId = packet.packetId))
+                }
+                if (effectiveOperandBridge.any { bridge ->
+                        bridge.packetId == packet.packetId && bridge.commandLabel == "setIndexBuffer"
+                    }
+                ) {
+                    add(GPUPassCommand.SetIndexBuffer(indexFormatLabel = "uint32", packetId = packet.packetId))
+                }
                 packet.scissorBoundsHash?.let { scissorBoundsHash ->
                     add(
                         GPUPassCommand.SetScissor(
@@ -92,14 +113,6 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
         }
     }
 
-    val materializedOperandBridge =
-        materialization?.dumpOperandBridgeSnapshot
-            ?.map(GPUPassCommandOperandBridge::fromMaterializedBinding)
-            .orEmpty()
-    require(materializedOperandBridge.isEmpty() || operandBridge.isEmpty()) {
-        "GPUPassCommandStream accepts either provider materialization or explicit operandBridge, not both"
-    }
-
     val batchDiagnostics = batchPlan.dumpLines().mapIndexed { index, line ->
         val lineCode = index.toString().padStart(3, '0')
         GPUPassDiagnostic(
@@ -116,7 +129,7 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
         passId = packetStream.passId,
         commands = commands,
         diagnostics = (packetStream.diagnostics + batchPlan.diagnostics + batchDiagnostics).distinct(),
-        operandBridge = materializedOperandBridge.ifEmpty { operandBridge },
+        operandBridge = effectiveOperandBridge,
     )
 }
 
@@ -164,6 +177,14 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
         }
     }
 
+    val materializedOperandBridge = materialization?.dumpOperandBridgeSnapshot
+        ?.map(GPUPassCommandOperandBridge::fromMaterializedBinding)
+        .orEmpty()
+    require(materializedOperandBridge.isEmpty() || operandBridge.isEmpty()) {
+        "GPUPassCommandStream accepts either provider materialization or explicit operandBridge, not both"
+    }
+    val effectiveOperandBridge = materializedOperandBridge.ifEmpty { operandBridge }
+
     val commands = buildList {
         add(GPUPassCommand.BeginRenderPass(targetStateHashes.single(), loadStoreLabel))
         for (packet in packets) {
@@ -179,25 +200,30 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
                     packetId = packet.packetId,
                 ),
             )
+            if (effectiveOperandBridge.any { bridge ->
+                    bridge.packetId == packet.packetId && bridge.commandLabel == "setVertexBuffer"
+                }
+            ) {
+                add(GPUPassCommand.SetVertexBuffer(slot = 0, packetId = packet.packetId))
+            }
+            if (effectiveOperandBridge.any { bridge ->
+                    bridge.packetId == packet.packetId && bridge.commandLabel == "setIndexBuffer"
+                }
+            ) {
+                add(GPUPassCommand.SetIndexBuffer(indexFormatLabel = "uint32", packetId = packet.packetId))
+            }
             packet.scissorBoundsHash?.let { add(GPUPassCommand.SetScissor(it, packet.packetId)) }
             add(GPUPassCommand.Draw(packet.vertexSourceLabel, packet.packetId))
         }
         add(GPUPassCommand.EndRenderPass(batchPlan.passId))
     }
-    val materializedOperandBridge = materialization?.dumpOperandBridgeSnapshot
-        ?.map(GPUPassCommandOperandBridge::fromMaterializedBinding)
-        .orEmpty()
-    require(materializedOperandBridge.isEmpty() || operandBridge.isEmpty()) {
-        "GPUPassCommandStream accepts either provider materialization or explicit operandBridge, not both"
-    }
-
     return GPUPassCommandStream(
         streamId = streamId,
         packetStreamId = batchPlan.streamId,
         passId = batchPlan.passId,
         commands = commands,
         diagnostics = batchPlan.diagnostics,
-        operandBridge = materializedOperandBridge.ifEmpty { operandBridge },
+        operandBridge = effectiveOperandBridge,
         sourcePassIds = packets.map { it.passId }.distinct(),
     )
 }

@@ -51,6 +51,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private fun canonicalFixedState(mode: GPUBlendMode): GPUFixedFunctionBlendState {
@@ -71,6 +72,38 @@ class GPUBackendRuntimeNativeSmokeTest {
     fun disposeRuntime() {
         GPUBackendRuntimeFactory.dispose()
         resetFullscreenUniformSlabTestingHooks()
+    }
+
+    @Test
+    fun `backend session owns the prepared scene session factory for one offscreen request`() {
+        val factory = GPUBackendSession::class.java.methods.singleOrNull {
+            it.name == "prepareSceneFrameSession"
+        }
+
+        assertNotNull(factory)
+        assertContentEquals(arrayOf(GPUOffscreenTargetRequest::class.java), factory.parameterTypes)
+        assertEquals(GPUPreparedSceneFrameSession::class.java, factory.returnType)
+    }
+
+    @Test
+    fun `production frame backend requires typed native operands when backend is available`() = runBlocking {
+        val context = glfwContextRenderer(
+            width = 1,
+            height = 1,
+            title = "frame-backend-native-operands",
+            deferredRendering = true,
+        )
+        try {
+            GPUWgpu4kFrameEncodingBackend(
+                deviceGeneration = GPUDeviceGenerationID(10_500L),
+                device = context.wgpuContext.device,
+                queue = context.wgpuContext.device.queue,
+            ).use { backend ->
+                assertEquals(GPUFrameEncodingMode.NativeOperandsRequired, backend.encodingMode)
+            }
+        } finally {
+            context.close()
+        }
     }
 
     @Test

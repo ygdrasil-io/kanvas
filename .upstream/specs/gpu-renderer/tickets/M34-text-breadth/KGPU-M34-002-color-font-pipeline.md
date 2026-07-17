@@ -18,20 +18,42 @@ legacy_gate: "legacy drawText"
 
 ## PM Note
 
-Le parsing des polices couleur (COLRv0/CPAL, CBDT/CBLC) et le handoff
-`ColorGlyphPlan` existent et sont livrés. La route GPU consomme ce handoff et
-refuse de façon stable le rendu couleur (`text.gpu.color-plan-unsupported`,
-sans fallback texture CPU). Le rendu GPU des glyphes couleur (COLRv0
-rasterisé, COLRv1, SVG, emoji) reste DependencyGated sur l'exécution GPU
-(M10/M11).
+Le sous-ensemble COLRv0 est livré de bout en bout. Le text stack parse COLR/CPAL,
+rasterise chaque contour de couche en A8 et produit l'atlas. Le renderer conserve
+les identités d'artefact et les bornes de chaque couche, puis compose le glyphe
+sur la route WebGPU préparée : un encoder, un command buffer et un submit.
 
-## Claim Split & Re-Scope (2026-06-29)
+La preuve active utilise le vrai fichier Skia `/fonts/skia/colr.ttf`, glyphe 2,
+couches 7 et 8, couleurs CPAL rouge/noire. Le rendu GPU 64×64 est identique pixel
+par pixel à une référence CPU source-over indépendante (4096/4096). L'ancien
+fixture synthétique « A rouge sur B bleu » et son ABI de 528 octets ont été
+retirés. L'ABI active fait 784 octets et porte aussi les bornes device de chaque
+couche.
+
+COLRv1, SVG OpenType, emoji et shaping complexe restent hors de ce sous-ensemble
+et doivent être refusés explicitement ; ils ne sont pas couverts par le statut
+`done` de COLRv0.
+
+## Livraison active (2026-07-17)
+
+- façade publique handle-free : `GPUColorGlyphFrameRecorder` ;
+- payload sémantique immuable avec SHA-256 des octets A8 exacts ;
+- cache de session pour pipeline/layout/sampler et atlas partagé, avec budget de
+  remplacement et compteurs de résidence ;
+- géométrie indexée et bornes device par couche, atlas `r8unorm`, composite
+  prémultiplié source-over ;
+- sortie courante sans readback ou readback final explicite ;
+- scène produit `colr-v0-color-glyph` branchée sur `prepareSceneFrameSession()` ;
+- référence, rendu, statistiques et diagnostics sous
+  `reports/gpu-renderer-scenes/offscreen/colr-v0-color-glyph/`.
+
+## Historique — Claim Split & Re-Scope (2026-06-29)
 
 Audit `fichier:ligne` : les artefacts text-stack supposés manquants existent en
 réalité. Le motif de blocage initial « gated on pure-kotlin-text COLRv0
 parsing artifacts » est faux et corrigé.
 
-**Implémenté mais non promu — reste `DependencyGated` (handoff + facts portés + refus stable) :**
+**État historique au 2026-06-29 — alors implémenté mais non promu :**
 
 - Parsing COLRv0 / CPAL : `font/glyph/src/main/kotlin/org/graphiks/kanvas/glyph/color/ColorGlyphSurface.kt:361` et `:232`.
 - Parsing CBDT/CBLC : `font/sfnt/src/main/kotlin/org/graphiks/kanvas/font/sfnt/SFNT.kt:1977`.
@@ -44,13 +66,14 @@ parsing artifacts » est faux et corrigé.
   (`gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/text/TextContracts.kt`).
 - Validation : `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/text/ColorFontHandoffRouteTest.kt` (4 tests PASSED).
 
-**Dependency-Gated (non livré) — rendu GPU :**
+**Historique au 2026-06-29 — rendu GPU alors non livré :**
 
 - Contrats GPU `GPUColorGlyphLayerPlan`, `GPUColorGlyphCompositePlan`,
   `GPUCBDTCBLCGlyphPlan` : absents (sketch de spec uniquement).
 - Rasterisation GPU d'un glyphe COLRv0, COLRv1, SVG OpenType, emoji ; codes
   `unsupported.text.color_font.format_unavailable` / `.layer_count`.
-- Gated sur exécution GPU M10/M11. `product_activation` reste `false`.
+- Ce gate historique a été levé pour le sous-ensemble COLRv0 décrit dans la
+  livraison active ci-dessus. Il reste applicable aux formats hors scope.
 
 ## Problem
 
@@ -62,12 +85,15 @@ parsing within `:gpu-renderer`.
 
 ## Scope
 
-- `GPUColorGlyphLayerPlan` — COLRv0/v1 layers (solid fill, linear/radial
-  gradient, glyph reference), layer tree composition.
-- `GPUColorGlyphCompositePlan` — composite layered glyph into atlas or direct
-  render target.
-- `GPUCBDTCBLCGlyphPlan` — embedded bitmap decode + color + GPU upload.
-- `GPUSVGOpenTypeGlyphPlan` — SVG per-glyph CPU raster → GPU upload.
+- COLRv0 : couches de glyphes à couleur CPAL solide, raster A8 et composition
+  dans l'ordre déclaré.
+- `GPUColorGlyphCompositePlan` / payload préparé — composition des couches via
+  atlas partagé et bornes device exactes.
+
+Sous-scopes différés, non couverts par le statut `done` :
+
+- `GPUCBDTCBLCGlyphPlan` — embedded bitmap decode + color + GPU upload ;
+- `GPUSVGOpenTypeGlyphPlan` — SVG per-glyph CPU raster → GPU upload ;
 - `GPUEmojiFallbackPlan` — emoji sequence fallback contract.
 
 ## Non-Goals
@@ -91,7 +117,7 @@ parsing within `:gpu-renderer`.
 - [`GFX-TEXT-ATLAS-GLYPH-UPLOAD`](../GRAPHITE-ALGORITHM-REFERENCES.md#gfx-text-atlas-glyph-upload) - source [TextAtlasManager.cpp:237](/Users/chaos/workspace/kanvas-forge/skia-main/src/gpu/graphite/text/TextAtlasManager.cpp:237); Resolve mask format, normalize glyph pixels with padding, add glyphs to a DrawAtlas, and record pending atlas uploads.
 - Boundary: Graphite is a working-algorithm reference only; do not port Graphite or Ganesh, and keep Kanvas WebGPU/WGSL acceptance criteria authoritative.
 
-## Design Sketch
+## Design Sketch historique (formats différés inclus)
 
 ```kotlin
 enum class GPUColorFontVersion {
@@ -127,18 +153,17 @@ data class GPUSVGOpenTypeGlyphPlan(
 
 ## Acceptance Criteria
 
-> Scope (2026-06-29) : le sous-scope borné « Claim Split » (handoff + refus
-> stable) est implémenté et testé, mais ne promeut pas le ticket. Les critères
-> de rendu GPU ci-dessous restent `DependencyGated` (M10/M11) — le ticket reste
-> `blocked`.
+Le statut `done` du sous-ensemble COLRv0 exige et possède :
 
-- `GPUColorGlyphLayerPlan` dump (COLRv0 glyph with ≥2 layers).
-- `GPUCBDTCBLCGlyphPlan` dump.
-- Refusal fixtures:
-  - COLRv1 format.
-  - SVG OpenType format.
-  - Layer count exceeds maximum.
-- GPU evidence: at least one COLRv0 glyph rendered to target.
+- un dump stable d'un glyphe COLRv0 à au moins deux couches ;
+- une autorité unique sur atlas, couleurs, ordre, bornes device et uniform ABI ;
+- un refus avant allocation pour une couche invalide, un budget dépassé ou plus
+  de 16 couches ;
+- une preuve GPU réelle sans snapshot CPU sur le chemin principal ;
+- une référence CPU indépendante, un rendu, un diff/stat et des diagnostics de
+  route stables ;
+- une politique explicite pour COLRv1, SVG OpenType, CBDT/CBLC et emoji, sans
+  promotion implicite.
 
 ## Fallback / Refusal Behavior
 
@@ -151,10 +176,9 @@ data class GPUSVGOpenTypeGlyphPlan(
 ## Dashboard Impact
 
 - Expected row: `gpu-renderer.text.color-font`
-- Expected classification: `DependencyGated` (rendu GPU couleur). Le handoff +
-  refus stable est implémenté/testé mais ne promeut pas le ticket.
-- Claim promotion allowed: no — aucun claim de rendu GPU couleur tant que
-  l'évidence GPU (M10/M11) n'est pas livrée.
+- Expected classification: `TargetNative` pour COLRv0 solide borné.
+- Claim promotion allowed: oui, uniquement pour le sous-ensemble COLRv0 prouvé.
+  Les autres formats restent `DependencyGated` ou explicitement refusés.
 
 ## Validation
 
@@ -191,6 +215,10 @@ rtk git diff --check && rtk ./gradlew --no-daemon :gpu-renderer:test --tests '*C
   (`reports/.../colr-v0-color-glyph/parity.txt`: `similarity=1.0000`, `matchingPixels=4096/4096`,
   maxΔ=0) — référence CPU, rendu GPU, diff/stat, diagnostics de route et politique
   de refus tous présents. Pas d'activation cachée.
+- `done` revalidé (2026-07-17) : l'ancienne preuve A/B, circulaire et non issue
+  d'une table COLR, est remplacée par le vrai `colr.ttf`. La scène passe par la
+  façade publique et la session préparée, utilise l'ABI 784 octets et obtient
+  4096/4096 pixels identiques à l'oracle CPU indépendant.
 
 ## Linear Labels
 

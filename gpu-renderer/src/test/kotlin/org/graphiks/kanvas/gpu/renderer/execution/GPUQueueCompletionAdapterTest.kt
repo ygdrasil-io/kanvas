@@ -51,6 +51,39 @@ class GPUQueueCompletionAdapterTest {
     }
 
     @Test
+    fun `reserved ticket can be abandoned before submit without accumulating records`() {
+        val adapter = enabledTestAdapter { Result.success(Unit) }
+        val ticket = adapter.reserve(frameId = 20L)
+
+        assertEquals(
+            GPUQueueCompletionTicketAbandonResult.Abandoned(ticket.ticketId),
+            adapter.abandonReservedTicket(ticket),
+        )
+        assertEquals(0, adapter.retainedTicketRecordCount)
+        assertEquals(
+            GPUQueueCompletionTicketAbandonResult.Expired(ticket.ticketId),
+            adapter.abandonReservedTicket(ticket),
+        )
+    }
+
+    @Test
+    fun `cancel terminalizes a still reserved ticket`() = runBlocking {
+        val adapter = enabledTestAdapter { Result.success(Unit) }
+        val ticket = adapter.reserve(frameId = 21L)
+
+        val cancelled = adapter.cancel(ticket)
+
+        assertEquals(
+            GPUQueueCompletionDelivery.Accepted(
+                ticket.ticketId,
+                GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.Cancelled),
+            ),
+            cancelled,
+        )
+        assertEquals(cancelled, adapter.awaitCompletion(ticket))
+    }
+
+    @Test
     fun `arm enters completion invoker before returning without waiting for completion`() = runBlocking {
         val release = CompletableDeferred<Unit>()
         val events = mutableListOf<String>()

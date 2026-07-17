@@ -185,6 +185,9 @@ interface GPUBackendSession : AutoCloseable {
     /** Allocates an offscreen render target using the requested size and color format. */
     fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget
 
+    /** Prepares one reusable canonical offscreen target for serialized scene frames. */
+    fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession
+
     /** Binds a native window surface that can encode and present fullscreen passes. */
     fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface
 }

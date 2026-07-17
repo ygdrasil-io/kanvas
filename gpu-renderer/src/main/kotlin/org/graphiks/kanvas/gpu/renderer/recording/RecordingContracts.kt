@@ -30,6 +30,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -693,14 +694,17 @@ sealed interface GPUTask {
         val target: GPUFrameTargetRef,
         val loadStore: GPULoadStorePlan,
         val samplePlan: GPUSamplePlan,
+        resourceUses: List<GPUFrameResourceUse> = emptyList(),
         val provisionalSegmentKey: GPUProvisionalRenderSegmentKey = GPUProvisionalRenderSegmentKey(
             "target.${target.value}.sample.${samplePlan.specializationKey}",
         ),
         drawPackets: List<GPUDrawPacket>,
         batchEligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility>,
+        val sampleContinuationKey: GPUSampleContinuationKey? = null,
         override val compositeMembership: GPUTaskCompositeMembership? = null,
     ) : GPUTask {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
+        val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
         val blendPlans: List<GPUBlendPlan> = immutableList(drawPackets.map { packet ->
             requireNotNull(packet.blendPlan) {
                 "GPUTask.Render packets must retain their canonical GPUBlendPlan"
@@ -1078,7 +1082,8 @@ private fun GPUTask.dumpLine(): String =
     when (this) {
         is GPUTask.Render ->
             "task:render:${taskId.value}:$passId:$analysisRecordId:" +
-                if (preMaterialization) "pre_materialization" else "materialized"
+                (if (preMaterialization) "pre_materialization" else "materialized") +
+                (sampleContinuationKey?.let { ":sampleContinuation=${it.stableLabel()}" } ?: "")
         is GPUTask.PrepareResources ->
             "task:prepare:${taskId.value}:${requests.joinToString(",") { it.resource.value }}"
         is GPUTask.Compute ->
@@ -1094,6 +1099,11 @@ private fun GPUTask.dumpLine(): String =
         is GPUTask.Output -> "task:output:${taskId.value}:${descriptor.output.value}"
         is GPUTask.Refused -> "task:refused:${taskId.value}:${diagnostic.code.value}"
     }
+
+private fun GPUSampleContinuationKey.stableLabel(): String =
+    "${target.value}@${targetGeneration}:${deviceGeneration.value}:" +
+        "${colorFormat.value}:${colorInterpretation.value}:${samplePlan.specializationKey}:" +
+        "${colorAttachment.value}:${depthStencilAttachment?.value ?: "none"}"
 
 private fun GPUTaskDependency.dumpLine(): String =
     "dependency:$dependencyKind:${fromTaskId.value}->${toTaskId.value}:${useToken?.value ?: "none"}"

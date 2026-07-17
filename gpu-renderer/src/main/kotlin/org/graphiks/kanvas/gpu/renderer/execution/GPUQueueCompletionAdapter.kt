@@ -53,8 +53,18 @@ sealed interface GPUQueueCompletionTicketReservation {
     data class Duplicate(val ticketId: GPUQueueCompletionTicketID) : GPUQueueCompletionTicketReservation
 }
 
-fun interface GPUQueueCompletionProvider {
+sealed interface GPUQueueCompletionTicketAbandonResult {
+    data class Abandoned(val ticketId: GPUQueueCompletionTicketID) : GPUQueueCompletionTicketAbandonResult
+    data class NotReserved(val ticketId: GPUQueueCompletionTicketID) : GPUQueueCompletionTicketAbandonResult
+    data class Unknown(val ticketId: GPUQueueCompletionTicketID) : GPUQueueCompletionTicketAbandonResult
+    data class Expired(val ticketId: GPUQueueCompletionTicketID) : GPUQueueCompletionTicketAbandonResult
+}
+
+interface GPUQueueCompletionProvider {
     fun reserveTicket(request: GPUQueueCompletionTicketRequest): GPUQueueCompletionTicketReservation
+
+    /** Atomically releases a ticket that never crossed the queue submit boundary. */
+    fun abandonReservedTicket(ticket: GPUQueueCompletionTicket): GPUQueueCompletionTicketAbandonResult
 }
 
 /** Non-owning queue-completion operations used by the frame executor after a successful submit. */
@@ -219,6 +229,23 @@ internal class GPUQueueCompletionAdapter(
         return GPUQueueCompletionTicketReservation.Reserved(ticket)
     }
 
+    @Synchronized
+    override fun abandonReservedTicket(
+        ticket: GPUQueueCompletionTicket,
+    ): GPUQueueCompletionTicketAbandonResult {
+        val record = tickets[ticket.ticketId] ?: return if (isExpiredOwnedTicket(ticket.ticketId)) {
+            GPUQueueCompletionTicketAbandonResult.Expired(ticket.ticketId)
+        } else {
+            GPUQueueCompletionTicketAbandonResult.Unknown(ticket.ticketId)
+        }
+        if (record.ticket != ticket) return GPUQueueCompletionTicketAbandonResult.Unknown(ticket.ticketId)
+        if (record.state != TicketState.Reserved) {
+            return GPUQueueCompletionTicketAbandonResult.NotReserved(ticket.ticketId)
+        }
+        tickets.remove(ticket.ticketId)
+        return GPUQueueCompletionTicketAbandonResult.Abandoned(ticket.ticketId)
+    }
+
     override fun armAfterSubmit(
         ticket: GPUQueueCompletionTicket,
         sink: GPUQueueCompletionSink,
@@ -306,6 +333,7 @@ internal class GPUQueueCompletionAdapter(
     private fun deliverFailure(
         ticket: GPUQueueCompletionTicket,
         kind: GPUQueueCompletionFailureKind,
+        allowReserved: Boolean = false,
     ): GPUQueueCompletionDelivery {
         val record = synchronized(this) { tickets[ticket.ticketId] }
             ?: return missingDelivery(ticket.ticketId)
@@ -314,12 +342,12 @@ internal class GPUQueueCompletionAdapter(
             record,
             GPUQueueCompletionOutcome.Failure(kind),
             cancelInvocation = true,
-            allowReserved = false,
+            allowReserved = allowReserved,
         )
     }
 
     override fun cancel(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery =
-        deliverFailure(ticket, GPUQueueCompletionFailureKind.Cancelled)
+        deliverFailure(ticket, GPUQueueCompletionFailureKind.Cancelled, allowReserved = true)
 
     override fun deviceLost(
         deviceGeneration: GPUDeviceGenerationID,

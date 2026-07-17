@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnosticCodes
 
 /** Verifies R5 recording, task-list, ordering, and replay policy evidence for the first FillRect route. */
@@ -57,6 +58,10 @@ class GPURecorderTest {
         assertEquals(listOf("pending.pipeline.fill_rect.solid.rgba8unorm.src_over"), task.pipelineKeyHashes)
         assertTrue(task.preMaterialization)
         assertEquals(emptyList(), task.materializedResourceLabels)
+        val semantic = assertIs<GPUDrawSemanticPayload.SolidRect>(task.drawPackets.single().semanticPayload)
+        assertEquals(3, semantic.payloadRef.commandIdValue)
+        assertEquals("rect.fill.coverage", semantic.payloadRef.renderStepIdentity)
+        assertEquals(task.drawPackets.single().uniformSlot, semantic.payloadRef.uniformSlot)
         assertEquals(emptyList(), recording.taskList.dependencies)
         assertFalse(recording.taskList.tasks.any { it is GPUTask.PrepareResources })
         assertFalse(recording.taskList.tasks.any { it is GPUTask.Upload })

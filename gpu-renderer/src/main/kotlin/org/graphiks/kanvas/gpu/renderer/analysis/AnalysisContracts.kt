@@ -42,6 +42,10 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaterialPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadGatherPlan
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
@@ -198,6 +202,8 @@ data class GPUFirstRoutePlan(
 class GPUFirstRoutePlanner(
     private val capabilities: GPUCapabilities,
 ) {
+    private val solidPayloadGatherer = GPUSolidPayloadGatherer()
+
     /**
      * Plans FillRect as native only when first-slice facts are supported.
      *
@@ -272,6 +278,9 @@ class GPUFirstRoutePlanner(
             resourceDeclarations = emptyList(),
             renderStepCandidates = listOf(renderStep),
         )
+        val semanticPayload = (command.material as? GPUMaterialDescriptor.SolidColor)?.let { material ->
+            gatherSolidRect(command, material, renderStep)
+        }
         val pass = GPUFirstRoutePassBuilder.acceptedFillRect(
             commandIdValue = command.commandId.value,
             analysisRecordId = recordId,
@@ -288,6 +297,7 @@ class GPUFirstRoutePlanner(
             } else {
                 org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SolidFill
             },
+            semanticPayload = semanticPayload,
         )
 
         return GPUFirstRoutePlan(
@@ -297,6 +307,44 @@ class GPUFirstRoutePlanner(
             pass = pass,
         )
     }
+
+    private fun gatherSolidRect(
+        command: NormalizedDrawCommand.FillRect,
+        material: GPUMaterialDescriptor.SolidColor,
+        renderStepIdentity: String,
+    ): GPUDrawSemanticPayload.SolidRect = solidPayloadGatherer.gatherSemantic(
+        GPUPayloadGatherPlan(
+            planHash = "first-route.fill-rect.solid.v1",
+            commandFamily = "FillRect",
+            materialAssemblyHash = "first-route.solid-material.v1",
+            renderStepIdentity = renderStepIdentity,
+            writePlanHash = "first-route.solid-write.v1",
+            bindingPlanHash = "first-route.solid-bindings.v1",
+            uploadPlanHash = "first-route.solid-upload.v1",
+            dedupScope = "pass.root.${command.commandId.value}",
+        ),
+        GPUMaterialPayload(
+            materialKeyHash = "pending.material.solid",
+            payloadClass = "solid-rgba-rect",
+            valueFacts = mapOf(
+                "command.id" to command.commandId.value.toString(),
+                "rect.left" to command.rect.left.toString(),
+                "rect.top" to command.rect.top.toString(),
+                "rect.right" to command.rect.right.toString(),
+                "rect.bottom" to command.rect.bottom.toString(),
+                "radii.topLeft" to 0f.toString(),
+                "radii.topRight" to 0f.toString(),
+                "radii.bottomRight" to 0f.toString(),
+                "radii.bottomLeft" to 0f.toString(),
+                "color.r" to material.r.toString(),
+                "color.g" to material.g.toString(),
+                "color.b" to material.b.toString(),
+                "color.a" to material.a.toString(),
+            ),
+            resourceFacts = emptyMap(),
+            diagnosticLabel = command.diagnosticName,
+        ),
+    )
 
     /** Builds an executable blur-mask FillRect route contract. */
     private fun blurMaskFillRectRouteDecision(command: NormalizedDrawCommand.FillRect): GPUFirstRoutePlan {
@@ -1904,11 +1952,15 @@ private fun GPUBounds.stableHash(): String =
 /** Returns the accepted simple scissor bounds hash, or null for wide-open clips. */
 private fun NormalizedDrawCommand.FillRect.scissorBoundsHash(): String? =
     when (clip.kind) {
-        GPUClipKind.DeviceRect -> clip.bounds.stableHash()
+        GPUClipKind.DeviceRect -> clip.bounds.solidRectScissorIdentity()
         GPUClipKind.WideOpen,
         GPUClipKind.ComplexStack,
         -> null
     }
+
+/** Dump-safe exact device-rectangle authority consumed by the native SolidRect encoder. */
+private fun GPUBounds.solidRectScissorIdentity(): String =
+    "scissor_${left}_${top}_${right}_${bottom}"
 
 /** Returns the accepted simple scissor bounds hash, or null for wide-open rrect clips. */
 private fun NormalizedDrawCommand.FillRRect.scissorBoundsHash(): String? =

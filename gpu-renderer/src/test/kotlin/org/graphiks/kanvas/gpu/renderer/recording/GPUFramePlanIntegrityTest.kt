@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
 import io.ygdrasil.webgpu.GPUTextureUsage
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
@@ -42,8 +44,19 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaterialPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadGatherPlan
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphLayerPayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphPayloadGatherer
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphAtlasPlacementProofInput
+import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
@@ -65,6 +78,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
+import kotlin.uuid.Uuid
 
 /** Adversarial integrity contract for the immutable, deterministic Task 6 frame-plan boundary. */
 class GPUFramePlanIntegrityTest {
@@ -250,6 +264,168 @@ class GPUFramePlanIntegrityTest {
             baseHash,
             renderPlan(base.copyPacket(resource = resourceSlot("resource.slot", "resource.fp.a", 7))).stableHash(),
         )
+    }
+
+    @Test
+    fun `render resource uses change stable dump and canonical hash`() {
+        val packet = packet(commandId = 1)
+        fun use(resource: String) = GPUFrameResourceUse(
+            resource = GPUFrameBufferRef(resource),
+            role = GPUFrameResourceRole.VertexData,
+            usage = GPUFrameResourceUsage.Vertex,
+            lifetime = GPUFrameResourceLifetime.FrameLocal,
+            write = false,
+        )
+
+        val first = renderPlan(packet, listOf(use("buffer.vertex.a")))
+        val changed = renderPlan(packet, listOf(use("buffer.vertex.b")))
+
+        assertNotEquals(first.stableHash(), changed.stableHash())
+        assertNotEquals(first.dumpLines(), changed.dumpLines())
+        assertTrue(first.dumpLines().joinToString("\n").contains("buffer.vertex.a"))
+    }
+
+    @Test
+    fun `solid semantic bytes fields slots and fingerprint change stable dump and canonical hash`() {
+        val firstSemantic = solidSemantic(commandId = 1, red = "0.10")
+        val changedSemantic = solidSemantic(commandId = 1, red = "0.90")
+        val first = renderPlan(packet(commandId = 1, semanticPayload = firstSemantic))
+        val changed = renderPlan(packet(commandId = 1, semanticPayload = changedSemantic))
+
+        assertEquals(first.dumpLines(), first.dumpLines())
+        assertEquals(first.stableHash(), first.stableHash())
+        assertNotEquals(first.dumpLines(), changed.dumpLines())
+        assertNotEquals(first.stableHash(), changed.stableHash())
+        val dump = first.dumpLines().joinToString("\n")
+        assertTrue(dump.contains("SolidRect"))
+        assertTrue(dump.contains("solid-rect-layout-v1"))
+        assertTrue(dump.contains(firstSemantic.payloadRef.uniformBlock!!.fingerprint.value))
+        assertTrue(dump.contains("rect.left"))
+        assertTrue(dump.contains("bytes="))
+    }
+
+    @Test
+    fun `color glyph atlas geometry and identities are authoritative and source mutation is inert`() {
+        val atlas = byteArrayOf(255.toByte(), 128.toByte())
+        val vertices = colorGlyphVertices()
+        val semantic = colorGlyphSemantic(atlas, vertices)
+        val plan = renderPlan(packet(commandId = 1, semanticPayload = semantic))
+        val stableHash = plan.stableHash()
+        val stableDump = plan.dumpLines()
+
+        atlas.fill(0)
+        vertices.fill(-1f)
+
+        assertEquals(stableHash, plan.stableHash())
+        assertEquals(stableDump, plan.dumpLines())
+
+        val changedAtlas = colorGlyphSemantic(
+            byteArrayOf(254.toByte(), 128.toByte()),
+            colorGlyphVertices(),
+        )
+        val changedGeometry = colorGlyphSemantic(
+            byteArrayOf(255.toByte(), 128.toByte()),
+            colorGlyphVertices().also { it[4] = 0.75f },
+        )
+        listOf(changedAtlas, changedGeometry).forEach { changed ->
+            val changedPlan = renderPlan(packet(commandId = 1, semanticPayload = changed))
+            assertNotEquals(stableHash, changedPlan.stableHash())
+            assertNotEquals(stableDump, changedPlan.dumpLines())
+        }
+
+        val dump = stableDump.joinToString("\n")
+        assertTrue(dump.contains(semantic.canonicalHash), dump)
+        assertTrue(dump.contains(semantic.planArtifactKey.contentFingerprint), dump)
+        assertTrue(dump.contains(semantic.atlasArtifactKey.contentFingerprint), dump)
+        assertTrue(dump.contains("atlas=2x1"), dump)
+    }
+
+    @Test
+    fun `solid semantic type presence independently changes stable dump and canonical hash`() {
+        val semantic = solidSemantic(commandId = 1, red = "0.10")
+        val withSemantic = renderPlan(packet(commandId = 1, semanticPayload = semantic))
+        val withoutSemantic = renderPlan(
+            packet(
+                commandId = 1,
+                uniform = semantic.payloadRef.uniformSlot,
+                renderStepIdentity = semantic.payloadRef.renderStepIdentity,
+            ),
+        )
+
+        assertNotEquals(withSemantic.dumpLines(), withoutSemantic.dumpLines())
+        assertNotEquals(withSemantic.stableHash(), withoutSemantic.stableHash())
+    }
+
+    @Test
+    fun `solid semantic field metadata independently changes stable dump and canonical hash`() {
+        val base = solidSemantic(commandId = 1, red = "0.10")
+        val block = base.payloadRef.uniformBlock!!
+        val changed = GPUDrawSemanticPayload.SolidRect(
+            base.payloadRef.copy(
+                uniformBlock = block.copy(
+                    fields = block.fields.mapIndexed { index, field ->
+                        if (index == 0) field.copy(zeroFilled = !field.zeroFilled) else field
+                    },
+                ),
+            ),
+        )
+
+        assertSemanticDumpAndHashDiffer(base, changed)
+    }
+
+    @Test
+    fun `solid semantic slot id offset and fingerprint independently change stable dump and canonical hash`() {
+        val base = solidSemantic(commandId = 1, red = "0.10")
+        val slot = base.payloadRef.uniformSlot!!
+        listOf(
+            slot.copy(slotId = GPUPayloadSlotID("pass.scene:uniform:other")),
+            slot.copy(byteOffset = 256),
+            slot.copy(fingerprint = GPUPayloadFingerprint("solid.slot.fingerprint.other")),
+        ).forEach { changedSlot ->
+            val changed = GPUDrawSemanticPayload.SolidRect(base.payloadRef.copy(uniformSlot = changedSlot))
+            val basePlan = renderPlan(
+                packet(commandId = 1, semanticPayload = base, packetUniformSlot = slot),
+            )
+            val changedPlan = renderPlan(
+                packet(commandId = 1, semanticPayload = changed, packetUniformSlot = slot),
+            )
+
+            assertEquals(
+                basePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single().drawPackets.single().uniformSlot,
+                changedPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single().drawPackets.single().uniformSlot,
+            )
+            assertNotEquals(basePlan.dumpLines(), changedPlan.dumpLines())
+            assertNotEquals(basePlan.stableHash(), changedPlan.stableHash())
+        }
+    }
+
+    @Test
+    fun `solid semantic block fingerprint independently changes stable dump and canonical hash`() {
+        val base = solidSemantic(commandId = 1, red = "0.10")
+        val block = base.payloadRef.uniformBlock!!
+        val changed = GPUDrawSemanticPayload.SolidRect(
+            base.payloadRef.copy(
+                uniformBlock = block.copy(
+                    fingerprint = GPUPayloadFingerprint("solid.block.fingerprint.other"),
+                ),
+            ),
+        )
+
+        assertSemanticDumpAndHashDiffer(base, changed)
+    }
+
+    @Test
+    fun `solid semantic bytes independently change stable dump and canonical hash`() {
+        val base = solidSemantic(commandId = 1, red = "0.10")
+        val block = base.payloadRef.uniformBlock!!
+        val changedBytes = block.bytes.toMutableList().apply {
+            this[32] = this[32] xor 1
+        }
+        val changed = GPUDrawSemanticPayload.SolidRect(
+            base.payloadRef.copy(uniformBlock = block.copy(bytes = changedBytes)),
+        )
+
+        assertSemanticDumpAndHashDiffer(base, changed)
     }
 
     @Test
@@ -814,12 +990,16 @@ class GPUFramePlanIntegrityTest {
         }
     }
 
-    private fun renderPlan(packet: GPUDrawPacket): GPUFramePlan =
+    private fun renderPlan(
+        packet: GPUDrawPacket,
+        resourceUses: List<GPUFrameResourceUse> = emptyList(),
+    ): GPUFramePlan =
         framePlan(
             GPUFrameStep.RenderPassStep(
                 target = GPUFrameTargetRef("target.scene"),
                 loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
                 samplePlan = GPUSamplePlan.SingleSampleFrame,
+                resourceUses = resourceUses,
                 drawPackets = listOf(packet),
                 sourceTaskIds = listOf(GPUTaskID("task.render")),
             ),
@@ -961,6 +1141,9 @@ class GPUFramePlanIntegrityTest {
         targetStateHash: String = "target.scene.rgba8",
         blendPlan: GPUBlendPlan = GPUBlendPlan.NoOp(GPUBlendMode.DST, "integrity"),
         diagnostics: List<GPUPassDiagnostic> = emptyList(),
+        semanticPayload: GPUDrawSemanticPayload? = null,
+        renderStepIdentity: String = semanticPayload?.payloadRef?.renderStepIdentity ?: "rect.fill",
+        packetUniformSlot: GPUUniformPayloadSlot? = semanticPayload?.payloadRef?.uniformSlot ?: uniform,
     ): GPUDrawPacket = GPUDrawPacket(
         packetId = GPUDrawPacketID("packet.$commandId"),
         commandIdValue = commandId,
@@ -971,7 +1154,7 @@ class GPUFramePlanIntegrityTest {
         insertionReasonCode = "paint-order",
         sortKey = commandId.toLong(),
         sortKeyPreimage = "paint-order:$commandId",
-        renderStepId = GPURenderStepID("rect.fill"),
+        renderStepId = GPURenderStepID(renderStepIdentity),
         renderStepVersion = 1,
         role = role,
         blendPlan = blendPlan,
@@ -990,8 +1173,9 @@ class GPUFramePlanIntegrityTest {
             null
         },
         bindingLayoutHash = "layout.rect",
-        uniformSlot = uniform,
+        uniformSlot = packetUniformSlot,
         resourceSlot = resource,
+        semanticPayload = semanticPayload,
         vertexSourceLabel = "vertices.rect",
         scissorBoundsHash = scissor,
         targetStateHash = targetStateHash,
@@ -1013,6 +1197,146 @@ class GPUFramePlanIntegrityTest {
         targetStateHash = targetStateHash,
         blendPlan = requireNotNull(blendPlan),
         diagnostics = diagnostics,
+        semanticPayload = semanticPayload,
+        renderStepIdentity = renderStepId.value,
+    )
+
+    private fun assertSemanticDumpAndHashDiffer(
+        base: GPUDrawSemanticPayload.SolidRect,
+        changed: GPUDrawSemanticPayload.SolidRect,
+    ) {
+        val basePlan = renderPlan(packet(commandId = 1, semanticPayload = base))
+        val changedPlan = renderPlan(packet(commandId = 1, semanticPayload = changed))
+
+        assertNotEquals(basePlan.dumpLines(), changedPlan.dumpLines())
+        assertNotEquals(basePlan.stableHash(), changedPlan.stableHash())
+    }
+
+    private fun solidSemantic(commandId: Int, red: String): GPUDrawSemanticPayload.SolidRect =
+        GPUSolidPayloadGatherer().gatherSemantic(
+            GPUPayloadGatherPlan(
+                planHash = "solid.gather",
+                commandFamily = "FillRect",
+                materialAssemblyHash = "solid.material",
+                renderStepIdentity = "rect.fill.coverage",
+                writePlanHash = "solid.write",
+                bindingPlanHash = "solid.binding",
+                uploadPlanHash = "solid.upload",
+                dedupScope = "pass.scene",
+            ),
+            GPUMaterialPayload(
+                materialKeyHash = "solid.material.key",
+                payloadClass = "solid-rgba-rect",
+                valueFacts = mapOf(
+                    "command.id" to commandId.toString(),
+                    "rect.left" to "1.0",
+                    "rect.top" to "2.0",
+                    "rect.right" to "3.0",
+                    "rect.bottom" to "4.0",
+                    "radii.topLeft" to "0.0",
+                    "radii.topRight" to "0.0",
+                    "radii.bottomRight" to "0.0",
+                    "radii.bottomLeft" to "0.0",
+                    "color.r" to red,
+                    "color.g" to "0.20",
+                    "color.b" to "0.30",
+                    "color.a" to "1.0",
+                ),
+                resourceFacts = emptyMap(),
+                diagnosticLabel = "solid.$commandId",
+            ),
+        )
+
+    private fun colorGlyphSemantic(
+        atlasBytes: ByteArray,
+        vertices: FloatArray,
+    ): GPUDrawSemanticPayload.ColorGlyph {
+        val planKey = GPUTextArtifactKey(
+            GPUTextArtifactID(Uuid.parse("550e8400-e29b-41d4-a716-446655440061")),
+            GPUTextArtifactGeneration(7),
+            "integrity-color-glyph-plan",
+        )
+        val atlasKey = GPUTextArtifactKey(
+            GPUTextArtifactID(Uuid.parse("550e8400-e29b-41d4-a716-446655440062")),
+            GPUTextArtifactGeneration(7),
+            "integrity-color-glyph-atlas",
+        )
+        val layers = listOf(
+            GPUColorGlyphLayerPayloadInput(
+                planKey,
+                11u,
+                0,
+                GPUPixelBounds(0, 0, 1, 1),
+                GPUPixelBounds(0, 0, 1, 1),
+                floatArrayOf(1f, 0f, 0f, 1f),
+                false,
+                true,
+                GPUColorGlyphAtlasPlacementProofInput(
+                    atlasKey, 11, 48f, 0, 0, GPUPixelBounds(0, 0, 1, 1),
+                ),
+            ),
+            GPUColorGlyphLayerPayloadInput(
+                planKey,
+                12u,
+                0,
+                GPUPixelBounds(1, 0, 2, 1),
+                GPUPixelBounds(0, 0, 1, 1),
+                floatArrayOf(0f, 0f, 1f, 1f),
+                false,
+                true,
+                GPUColorGlyphAtlasPlacementProofInput(
+                    atlasKey, 12, 48f, 0, 0, GPUPixelBounds(1, 0, 2, 1),
+                ),
+            ),
+        )
+        val uniforms = ByteBuffer.allocate(784).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putFloat(2f)
+            putFloat(1f)
+            putInt(2)
+            putInt(0)
+            repeat(16) { index ->
+                val color = layers.getOrNull(index)?.premultipliedRgba ?: floatArrayOf(0f, 0f, 0f, 0f)
+                color.forEach(::putFloat)
+            }
+            repeat(16) { index ->
+                val bounds = layers.getOrNull(index)?.atlasBounds
+                putFloat((bounds?.left ?: 0) / 2f)
+                putFloat((bounds?.top ?: 0).toFloat())
+                putFloat((bounds?.width ?: 0) / 2f)
+                putFloat((bounds?.height ?: 0).toFloat())
+            }
+            repeat(16) { index ->
+                val bounds = layers.getOrNull(index)?.deviceBounds
+                putFloat((bounds?.left ?: 0).toFloat())
+                putFloat((bounds?.top ?: 0).toFloat())
+                putFloat((bounds?.width ?: 0).toFloat())
+                putFloat((bounds?.height ?: 0).toFloat())
+            }
+        }.array()
+        return GPUColorGlyphPayloadGatherer().gatherSemantic(
+            commandIdValue = 1,
+            renderStepIdentity = COLOR_GLYPH_RENDER_STEP_IDENTITY,
+            planArtifactKey = planKey,
+            atlasArtifactKey = atlasKey,
+            atlasA8Bytes = atlasBytes,
+            atlasWidth = 2,
+            atlasHeight = 1,
+            atlasFormat = "r8unorm",
+            atlasGeneration = 7,
+            layers = layers,
+            vertexData = vertices,
+            indexData = intArrayOf(0, 1, 2, 0, 2, 3),
+            uniformBytes = uniforms,
+            targetBounds = GPUPixelBounds(0, 0, 2, 1),
+            scissorBounds = GPUPixelBounds(0, 0, 1, 1),
+        )
+    }
+
+    private fun colorGlyphVertices(): FloatArray = floatArrayOf(
+        0f, 0f, 0f, 0f,
+        1f, 0f, 1f, 0f,
+        1f, 1f, 1f, 1f,
+        0f, 1f, 0f, 1f,
     )
 
     private fun executableBlend(): GPUBlendPlan = GPUBlendPlan.ShaderBlendNoDstRead(

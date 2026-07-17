@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.passes
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
@@ -279,6 +280,7 @@ class GPUDrawPacket(
     val bindingLayoutHash: String,
     val uniformSlot: GPUUniformPayloadSlot? = null,
     val resourceSlot: GPUResourceBindingSlot? = null,
+    val semanticPayload: GPUDrawSemanticPayload? = null,
     val vertexSourceLabel: String,
     val scissorBoundsHash: String? = null,
     val targetStateHash: String,
@@ -423,6 +425,32 @@ sealed interface GPUPassCommand {
 
         init {
             require(bindingLayoutHash.isNotBlank()) { "SetBindGroup.bindingLayoutHash must not be blank" }
+        }
+    }
+
+    /** Binds the canonical vertex stream required by an indexed draw packet. */
+    data class SetVertexBuffer(
+        val slot: Int,
+        val packetId: GPUDrawPacketID,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "setVertexBuffer"
+        override val sourcePacketId: GPUDrawPacketID get() = packetId
+
+        init {
+            require(slot >= 0) { "SetVertexBuffer.slot must be non-negative" }
+        }
+    }
+
+    /** Binds the canonical index stream required by an indexed draw packet. */
+    data class SetIndexBuffer(
+        val indexFormatLabel: String,
+        val packetId: GPUDrawPacketID,
+    ) : GPUPassCommand {
+        override val commandLabel: String get() = "setIndexBuffer"
+        override val sourcePacketId: GPUDrawPacketID get() = packetId
+
+        init {
+            require(indexFormatLabel.isNotBlank()) { "SetIndexBuffer.indexFormatLabel must not be blank" }
         }
     }
 
@@ -1093,6 +1121,10 @@ private fun GPUPassCommand.dumpLine(): String =
                 "bindingLayout=$bindingLayoutHash " +
                 "uniformSlot=${uniformSlot?.slotId?.value ?: NONE_DUMP_VALUE} " +
                 "resourceSlot=${resourceSlot?.slotId?.value ?: NONE_DUMP_VALUE}"
+        is GPUPassCommand.SetVertexBuffer ->
+            "passes.command setVertexBuffer packet=${packetId.value} slot=$slot"
+        is GPUPassCommand.SetIndexBuffer ->
+            "passes.command setIndexBuffer packet=${packetId.value} format=$indexFormatLabel"
         is GPUPassCommand.SetScissor ->
             "passes.command setScissor packet=${packetId.value} scissor=$scissorBoundsHash"
         is GPUPassCommand.Draw ->
@@ -1188,6 +1220,8 @@ private fun GPUPassCommandOperandBridge.matchesCommandOperandKind(): Boolean =
                 GPUMaterializedCommandOperandKind.TextureView,
                 GPUMaterializedCommandOperandKind.Sampler,
             )
+        "setVertexBuffer" -> operand.kind == GPUMaterializedCommandOperandKind.VertexBuffer
+        "setIndexBuffer" -> operand.kind == GPUMaterializedCommandOperandKind.IndexBuffer
         "draw" ->
             operand.kind in setOf(
                 GPUMaterializedCommandOperandKind.VertexBuffer,
@@ -1249,6 +1283,7 @@ object GPUFirstRoutePassBuilder {
         targetStateHash: String,
         batchKind: GPUPassBatchKind,
         batchAdjacency: GPUPassBatchAdjacency = GPUPassBatchAdjacency.Compatible,
+        semanticPayload: GPUDrawSemanticPayload? = null,
     ): GPUDrawPass {
         val invocation = GPUDrawInvocation(
             commandIdValue = commandIdValue,
@@ -1281,6 +1316,8 @@ object GPUFirstRoutePassBuilder {
             blendPlan = blendPlan,
             renderPipelineKey = pipelineKey,
             bindingLayoutHash = "preflight.pending",
+            uniformSlot = semanticPayload?.payloadRef?.uniformSlot,
+            semanticPayload = semanticPayload,
             vertexSourceLabel = "preflight.pending",
             scissorBoundsHash = scissorBoundsHash,
             targetStateHash = targetStateHash,

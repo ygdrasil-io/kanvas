@@ -26,6 +26,14 @@ dependencies {
     testImplementation(kotlin("test"))
 }
 
+sourceSets {
+    main {
+        // The scene is a conformance fixture: reuse Skia's checked-in COLRv0 font instead of
+        // inventing a synthetic A/B atlas that cannot prove COLR table handling.
+        resources.srcDir("../font/scaler/src/test/resources")
+    }
+}
+
 tasks.register<JavaExec>("gpuRendererScenesCatalogReport") {
     group = "verification"
     description = "Writes the GPU renderer scenes catalog report without WebGPU or Kadre execution."

@@ -1,47 +1,83 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatch
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationResult
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationSequenceRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleLoadTransition
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.passes.fromBatchPlan
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlanner
+import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_RENDER_PIPELINE_KEY
+import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_TARGET_STATE_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_VERTEX_SOURCE_LABEL
+import org.graphiks.kanvas.gpu.renderer.recording.colorGlyphScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreparationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreparationInput
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+
+private const val solidRectRenderStepIdentity = "rect.fill.coverage"
 
 /** Sole transactional join between an immutable semantic frame and materialized resource facts. */
-class GPUFramePreflighter(
+internal class GPUFramePreflighter(
     private val context: GPUFramePreflightContext,
     capabilities: GPUCapabilities,
     private val resourceProvider: GPUFrameResourcePreflightProvider,
     private val completionProvider: GPUQueueCompletionProvider,
     private val surfaceProvider: GPUSurfaceOutputProvider,
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
+    private val nativeBoundary: GPUPreparedNativeFrameBoundary? = null,
 ) {
     private val capabilities: GPUCapabilities = capabilities.preflightSnapshot()
 
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
         pureValidation(framePlan)?.let { return GPUFramePreflightResult.Refused(it) }
+        if (nativeBoundary != null && nativeBoundary.resourceProvider !== resourceProvider) {
+            return GPUFramePreflightResult.Refused(
+                diagnostic(
+                    "invalid.preflight.native_payload_provider_mismatch",
+                    "Native payload boundary does not own the exact resource provider used by preflight.",
+                ),
+            )
+        }
 
         val readbackLayouts = linkedMapOf<GPUFrameResourceRef, GPUReadbackLayoutPlan.Planned>()
         for (step in framePlan.steps) {
@@ -116,6 +152,12 @@ class GPUFramePreflighter(
                 ),
             )
         }
+        val rollback = GPUFrameRollback(
+            ownerScope = ownerScope,
+            resourceProvider = resourceProvider,
+            surfaceProvider = surfaceProvider,
+            completionProvider = completionProvider,
+        )
 
         var acquiredAnyResource = false
         val ordinaryResources = mutableListOf<GPUPreparedResourceEvidence>()
@@ -131,7 +173,7 @@ class GPUFramePreflighter(
             for (preparation in step.requests) {
                 val generation = context.resourceGenerations[preparation.resource]
                     ?: return refuseWithRollback(
-                        ownerScope,
+                        rollback,
                         acquiredAnyResource,
                         diagnostic(
                             "stale.preflight.resource_generation_missing",
@@ -154,7 +196,7 @@ class GPUFramePreflighter(
                     )
                 } catch (failure: Throwable) {
                     return refuseWithRollback(
-                        ownerScope,
+                        rollback,
                         acquiredAnyResource,
                         diagnostic(
                             "invalid.preflight.resource_preparation_input",
@@ -168,7 +210,7 @@ class GPUFramePreflighter(
                     resourceProvider.prepareFrameResource(input)
                 } catch (failure: Throwable) {
                     return refuseWithRollback(
-                        ownerScope,
+                        rollback,
                         acquiredAnyResource,
                         diagnostic(
                             "failed.preflight.resource_provider",
@@ -179,16 +221,16 @@ class GPUFramePreflighter(
                 }
                 when (decision) {
                     is GPUFrameResourcePreparationDecision.Refused ->
-                        return refuseWithRollback(ownerScope, acquiredAnyResource, decision.diagnostic)
+                        return refuseWithRollback(rollback, acquiredAnyResource, decision.diagnostic)
                     is GPUFrameResourcePreparationDecision.Prepared -> {
                         validatePreparedResource(preparation, generation, decision)?.let { invalid ->
-                            return refuseWithRollback(ownerScope, true, invalid)
+                            return refuseWithRollback(rollback, true, invalid)
                         }
                         preparedGenerationMap[preparation.resource] = decision.resourceGeneration
                         if (preparation.role == GPUFrameResourceRole.ReadbackStaging) {
                             val layout = readback
                                 ?: return refuseWithRollback(
-                                    ownerScope,
+                                    rollback,
                                     true,
                                     diagnostic(
                                         "invalid.preflight.readback_layout_missing",
@@ -197,7 +239,7 @@ class GPUFramePreflighter(
                                 )
                             val lease = decision.outputOwnedReadbackLease
                                 ?: return refuseWithRollback(
-                                    ownerScope,
+                                    rollback,
                                     true,
                                     diagnostic(
                                         "invalid.preflight.readback_lease_missing",
@@ -215,7 +257,7 @@ class GPUFramePreflighter(
                                 lease.usages != preparation.usages
                             ) {
                                 return refuseWithRollback(
-                                    ownerScope,
+                                    rollback,
                                     true,
                                     diagnostic(
                                         "invalid.preflight.readback_lease_evidence",
@@ -240,6 +282,7 @@ class GPUFramePreflighter(
                                 role = decision.role,
                                 deviceGeneration = decision.deviceGeneration,
                                 resourceGeneration = decision.resourceGeneration,
+                                textureAllocation = decision.textureAllocation,
                             )
                         }
                     }
@@ -252,7 +295,7 @@ class GPUFramePreflighter(
         val materialized = when (renderMaterialization) {
             is GPUResourceMaterializationDecision.Materialized -> renderMaterialization
             is GPUResourceMaterializationDecision.Refused -> return refuseWithRollback(
-                ownerScope,
+                rollback,
                 acquiredAnyResource,
                 diagnostic(
                     renderMaterialization.diagnostic.code,
@@ -261,14 +304,14 @@ class GPUFramePreflighter(
                 ),
             )
             is GPUResourceMaterializationDecision.Deferred -> return refuseWithRollback(
-                ownerScope,
+                rollback,
                 acquiredAnyResource,
                 diagnostic(renderMaterialization.reasonCode, "Render operand materialization was deferred."),
             )
         }
         materialized.diagnostics.firstOrNull { it.terminal }?.let { terminal ->
             return refuseWithRollback(
-                ownerScope,
+                rollback,
                 acquiredAnyResource,
                 diagnostic(
                     terminal.code,
@@ -278,14 +321,14 @@ class GPUFramePreflighter(
             )
         }
         validateRenderOperands(framePlan, materialized, ownerScope)?.let { invalid ->
-            return refuseWithRollback(ownerScope, acquiredAnyResource, invalid)
+            return refuseWithRollback(rollback, acquiredAnyResource, invalid)
         }
 
         val encoderScopes = try {
             lowerEncoderScopes(framePlan, materialized, preparedGenerationMap)
         } catch (failure: Throwable) {
             return refuseWithRollback(
-                ownerScope,
+                rollback,
                 acquiredAnyResource,
                 diagnostic(
                     "invalid.preflight.encoder_lowering",
@@ -304,7 +347,7 @@ class GPUFramePreflighter(
             )
         } catch (failure: Throwable) {
             return refuseWithRollback(
-                ownerScope,
+                rollback,
                 true,
                 diagnostic(
                     "invalid.preflight.encoder_plan",
@@ -354,7 +397,7 @@ class GPUFramePreflighter(
             )
         } catch (failure: Throwable) {
             return refuseWithRollback(
-                ownerScope,
+                rollback,
                 true,
                 diagnostic(
                     "invalid.preflight.prepared_evidence",
@@ -364,13 +407,63 @@ class GPUFramePreflighter(
             )
         }
 
+        var nativeDraft: GPUPreparedNativeFrameDraft? = null
+        var nativeOwnership: GPUPreparedNativeFrameOwnership? = null
+        nativeBoundary?.let { boundary ->
+            val materialization = try {
+                boundary.materializeReusable(framePlan, encoderPlan, resources, generationSeal)
+            } catch (failure: Throwable) {
+                return refuseWithRollback(
+                    rollback,
+                    true,
+                    diagnostic(
+                        "failed.preflight.native_payload_materialization",
+                        "Reusable native payload materialization failed without a typed result.",
+                        mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                    ),
+                )
+            }
+            nativeDraft = when (materialization) {
+                is GPUPreparedNativeFramePayloadMaterialization.Materialized -> materialization.draft
+                is GPUPreparedNativeFramePayloadMaterialization.Refused -> return refuseWithRollback(
+                    rollback,
+                    true,
+                    diagnostic(materialization.code, materialization.message),
+                )
+            }
+            validateNativeRenderSemanticPayloads(framePlan, requireNotNull(nativeDraft))?.let { invalid ->
+                return refuseWithRollback(rollback, true, invalid)
+            }
+            when (val registration = boundary.register(requireNotNull(nativeDraft))) {
+                is GPUPreparedNativeFrameRegistration.Registered -> {
+                    nativeOwnership = registration.ownership
+                    if (!rollback.adoptNativePayload(registration.ownership)) {
+                        registration.ownership.rollback()
+                        return refuseWithRollback(
+                            rollback,
+                            true,
+                            diagnostic(
+                                "failed.preflight.native_payload_ownership",
+                                "Native payload ownership could not be transferred to rollback.",
+                            ),
+                        )
+                    }
+                }
+                is GPUPreparedNativeFrameRegistration.Refused -> return refuseWithRollback(
+                    rollback,
+                    true,
+                    diagnostic(registration.code, "Native payload registry refused the reusable draft."),
+                )
+            }
+        }
+
         val ticketReservation = try {
             completionProvider.reserveTicket(
                 GPUQueueCompletionTicketRequest(framePlan.frameId, context.deviceGeneration),
             )
         } catch (failure: Throwable) {
             return refuseWithRollback(
-                ownerScope,
+                rollback,
                 true,
                 diagnostic(
                     "failed.preflight.completion_ticket_provider",
@@ -382,17 +475,17 @@ class GPUFramePreflighter(
         val ticket = when (val reservation = ticketReservation) {
             is GPUQueueCompletionTicketReservation.Reserved -> reservation.ticket
             GPUQueueCompletionTicketReservation.Missing -> return refuseWithRollback(
-                ownerScope,
+                rollback,
                 acquiredAnyResource,
                 diagnostic("unsupported.preflight.completion_ticket_missing", "Queue completion proof is missing."),
             )
             is GPUQueueCompletionTicketReservation.Failed -> return refuseWithRollback(
-                ownerScope,
+                rollback,
                 acquiredAnyResource,
                 reservation.diagnostic,
             )
             is GPUQueueCompletionTicketReservation.Duplicate -> return refuseWithRollback(
-                ownerScope,
+                rollback,
                 acquiredAnyResource,
                 diagnostic(
                     "unsupported.preflight.completion_ticket_duplicate",
@@ -401,9 +494,20 @@ class GPUFramePreflighter(
                 ),
             )
         }
+        if (!rollback.adoptCompletionTicket(ticket)) {
+            completionProvider.abandonReservedTicket(ticket)
+            return refuseWithRollback(
+                rollback,
+                acquiredAnyResource,
+                diagnostic(
+                    "failed.preflight.completion_ticket_ownership",
+                    "Reserved completion ticket could not be transferred to rollback.",
+                ),
+            )
+        }
         if (ticket.frameId != framePlan.frameId || ticket.deviceGeneration != context.deviceGeneration) {
             return refuseWithRollback(
-                ownerScope,
+                rollback,
                 acquiredAnyResource,
                 diagnostic(
                     "unsupported.preflight.completion_ticket_mismatch",
@@ -422,7 +526,7 @@ class GPUFramePreflighter(
                 )
             } catch (failure: Throwable) {
                 return refuseWithRollback(
-                    ownerScope,
+                    rollback,
                     true,
                     diagnostic(
                         "failed.preflight.surface_acquisition_provider",
@@ -434,25 +538,62 @@ class GPUFramePreflighter(
             when (acquisition) {
                 is GPUSurfaceAcquisitionResult.Acquired -> acquisition.output
                 is GPUSurfaceAcquisitionResult.Unavailable -> return refuseWithRollback(
-                    ownerScope,
+                    rollback,
                     acquiredAnyResource,
                     surfaceDiagnostic(acquisition.status),
                 )
             }
+        }
+        if (acquiredSurface != null && !rollback.adoptSurface(acquiredSurface)) {
+            runCatching { surfaceProvider.release(acquiredSurface) }
+            return refuseWithRollback(
+                rollback,
+                true,
+                diagnostic(
+                    "failed.preflight.surface_ownership",
+                    "Acquired surface could not be transferred to rollback ownership.",
+                ),
+            )
         }
         if (acquiredSurface != null &&
             (acquiredSurface.output != acquireStep?.descriptor?.output ||
                 acquiredSurface.deviceGeneration != context.deviceGeneration ||
                 acquiredSurface.targetGeneration != context.targetGeneration)
         ) {
-            val rollback = GPUFrameRollback(ownerScope, resourceProvider, surfaceProvider, acquiredSurface).execute()
-            return GPUFramePreflightResult.Refused(
-                diagnostic("stale.preflight.surface_generation", "Acquired surface output generation is stale."),
+            return refuseWithRollback(
                 rollback,
+                true,
+                diagnostic("stale.preflight.surface_generation", "Acquired surface output generation is stale."),
             )
         }
 
-        val rollback = GPUFrameRollback(ownerScope, resourceProvider, surfaceProvider, acquiredSurface)
+        if (nativeBoundary != null) {
+            val binding = try {
+                nativeBoundary.bindLateSurface(
+                    requireNotNull(nativeOwnership),
+                    requireNotNull(nativeDraft),
+                    acquiredSurface,
+                )
+            } catch (failure: Throwable) {
+                return refuseWithRollback(
+                    rollback,
+                    true,
+                    diagnostic(
+                        "failed.preflight.native_payload_surface_binding",
+                        "Late native surface binding failed without a typed result.",
+                        mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                    ),
+                )
+            }
+            if (binding is GPUPreparedNativeFrameBindingResult.Refused) {
+                return refuseWithRollback(
+                    rollback,
+                    true,
+                    diagnostic(binding.code, binding.message),
+                )
+            }
+        }
+
         return try {
             GPUFramePreflightResult.Prepared(
                 PreparedGPUFrame(
@@ -499,6 +640,7 @@ class GPUFramePreflighter(
             return diagnostic("stale.preflight.capability_seal", "The current capability snapshot differs from the frame seal.")
         }
         framePlan.memoryBudget.diagnostic?.let { return it }
+        validateMsaaContinuation(framePlan)?.let { return it }
 
         val acquires = framePlan.steps.filterIsInstance<GPUFrameStep.AcquireSurfaceOutput>()
         val blits = framePlan.steps.filterIsInstance<GPUFrameStep.SurfaceBlitRenderPassStep>()
@@ -531,11 +673,18 @@ class GPUFramePreflighter(
                 is GPUFrameStep.RenderPassStep -> {
                     val expected = context.resourceGenerations[step.target]
                         ?: return diagnostic("stale.preflight.resource_generation_missing", "Render target generation is unavailable.")
-                    if (step.drawPackets.any { it.resourceGeneration != expected }) {
+                    if (step.drawPackets.any { packet ->
+                            val colorGlyph = packet.semanticPayload as? GPUDrawSemanticPayload.ColorGlyph
+                            packet.resourceGeneration != (colorGlyph?.planArtifactKey?.generation?.value?.toLong() ?: expected)
+                        }
+                    ) {
                         return diagnostic("stale.preflight.resource_generation", "A render packet resource generation is stale.")
                     }
                     if (step.drawPackets.any { it.renderPipelineKey == null }) {
                         return diagnostic("invalid.preflight.render_pipeline_key_missing", "Render packets require a pipeline key before materialization.")
+                    }
+                    step.drawPackets.forEach { packet ->
+                        validateSemanticPayload(framePlan, step, packet)?.let { return it }
                     }
                 }
                 is GPUFrameStep.CopyDestinationStep -> {
@@ -580,6 +729,389 @@ class GPUFramePreflighter(
         return null
     }
 
+    private fun validateMsaaContinuation(framePlan: GPUFramePlan): GPUDiagnostic? {
+        val renderSteps = framePlan.steps.withIndex()
+            .filter { it.value is GPUFrameStep.RenderPassStep }
+            .map { indexed -> indexed.index to indexed.value as GPUFrameStep.RenderPassStep }
+
+        framePlan.steps.forEach { step ->
+            val consumers = when (step) {
+                is GPUFrameStep.CopyDestinationStep -> step.consumers
+                is GPUFrameStep.CopyAsDrawMaterializationStep -> step.consumers
+                else -> return@forEach
+            }
+            if (consumers.isEmpty()) return@forEach
+            val consumerUsesMsaa = consumers.any { consumer ->
+                renderSteps.any { (_, render) ->
+                    render.sourceTaskIds.contains(consumer.renderTaskId) &&
+                        render.drawPackets.any { it.packetId == consumer.packetId } &&
+                        render.samplePlan is GPUSamplePlan.MultisampleFrame
+                }
+            }
+            if (consumerUsesMsaa) {
+                return diagnostic(
+                    "unsupported.blend.msaa_destination_read_exactness",
+                    "Destination-reading draws require a typed exact single-sample geometry and clip lowering before MSAA may be removed.",
+                )
+            }
+        }
+
+        val msaaTargets = renderSteps
+            .filter { (_, render) -> render.samplePlan is GPUSamplePlan.MultisampleFrame }
+            .groupBy { (_, render) -> render.target }
+        msaaTargets.forEach { (target, indexedRenders) ->
+            val firstIndex = indexedRenders.minOf { it.first }
+            val lastIndex = indexedRenders.maxOf { it.first }
+            for (index in firstIndex..lastIndex) {
+                when (val step = framePlan.steps[index]) {
+                    is GPUFrameStep.RenderPassStep -> if (
+                        step.target == target && step.samplePlan !is GPUSamplePlan.MultisampleFrame
+                    ) {
+                        return diagnostic(
+                            "unsupported.msaa.continuation_canonical_write",
+                            "A direct canonical-target write invalidates retained MSAA attachment authority.",
+                        )
+                    }
+                    is GPUFrameStep.CopyResourceStep -> if (step.destination == target) {
+                        return diagnostic(
+                            "unsupported.msaa.continuation_canonical_write",
+                            "A copy into the canonical target invalidates retained MSAA attachment authority.",
+                        )
+                    }
+                    is GPUFrameStep.UploadResourceStep -> if (step.destination == target) {
+                        return diagnostic(
+                            "unsupported.msaa.continuation_canonical_write",
+                            "An upload into the canonical target invalidates retained MSAA attachment authority.",
+                        )
+                    }
+                    is GPUFrameStep.ComputePassStep -> if (
+                        step.target == target || step.resourceUses.any { use ->
+                            use.write && use.resource == target
+                        }
+                    ) {
+                        return diagnostic(
+                            "unsupported.msaa.continuation_canonical_write",
+                            "Compute writes cannot preserve MSAA attachment authority in this slice.",
+                        )
+                    }
+                    else -> Unit
+                }
+            }
+
+            val requests = indexedRenders.map { (_, render) ->
+                val request = render.sampleContinuation ?: return diagnostic(
+                    "unsupported.msaa.continuation_attachment_not_stored",
+                    "Every MSAA render segment requires an explicit retained attachment proof.",
+                )
+                if (request.key.target.value != target.value) {
+                    return diagnostic(
+                        "unsupported.msaa.continuation_target_identity",
+                        "The MSAA continuation target does not match the render target.",
+                    )
+                }
+                if (request.key.deviceGeneration != context.deviceGeneration) {
+                    return diagnostic(
+                        "unsupported.msaa.continuation_device_generation",
+                        "The MSAA continuation device generation is stale.",
+                    )
+                }
+                if (request.key.targetGeneration != context.targetGeneration) {
+                    return diagnostic(
+                        "unsupported.msaa.continuation_target_generation",
+                        "The MSAA continuation target generation is stale.",
+                    )
+                }
+                if (request.key.samplePlan != render.samplePlan) {
+                    return diagnostic(
+                        "unsupported.msaa.continuation_sample_plan",
+                        "The MSAA continuation sample plan does not match the render pass.",
+                    )
+                }
+                if (request.key.depthStencilAttachment != null) {
+                    return diagnostic(
+                        "unsupported.msaa.continuation_depth_stencil_unavailable",
+                        "The first native MSAA continuation slice is color-only; depth/stencil authority is unproven.",
+                    )
+                }
+                val expectedLoad = when (render.loadStore.loadOp) {
+                    "clear" -> GPUSampleLoadTransition.FreshClear
+                    "load" -> GPUSampleLoadTransition.RetainedLoad
+                    else -> return diagnostic(
+                        "unsupported.msaa.continuation_load_operation",
+                        "The MSAA continuation load operation is unsupported.",
+                    )
+                }
+                if (request.loadTransition != expectedLoad) {
+                    return diagnostic(
+                        "unsupported.msaa.continuation_load_operation",
+                        "The MSAA continuation transition does not match the render load operation.",
+                    )
+                }
+                if (request.storeAction != GPUSampleStoreAction.Store ||
+                    request.resolveAction != GPUSampleResolveAction.ResolveCanonical
+                ) {
+                    return diagnostic(
+                        "unsupported.msaa.continuation_store_resolve",
+                        "Every producing MSAA pass must store the retained attachment and resolve the canonical target.",
+                    )
+                }
+                if (render.loadStore.storePlan != GPUStorePlan.Store) {
+                    return diagnostic(
+                        "unsupported.msaa.continuation_store_operation",
+                        "A stored MSAA continuation requires the render pass to declare Store.",
+                    )
+                }
+                request
+            }
+            if (requests.first().loadTransition != GPUSampleLoadTransition.FreshClear) {
+                return diagnostic(
+                    "unsupported.msaa.continuation_retained_target_unavailable",
+                    "Inter-frame retained-target MSAA loading is not promoted by the frame-local color-only slice.",
+                )
+            }
+            when (
+                val planned = GPUSampleContinuationPlanner().plan(
+                    GPUSampleContinuationSequenceRequest(requests),
+                )
+            ) {
+                is GPUSampleContinuationResult.Accepted -> Unit
+                is GPUSampleContinuationResult.Refused -> return planned.diagnostic
+            }
+        }
+        return null
+    }
+
+    private fun validateSemanticPayload(
+        framePlan: GPUFramePlan,
+        render: GPUFrameStep.RenderPassStep,
+        packet: GPUDrawPacket,
+    ): GPUDiagnostic? {
+        val semantic = packet.semanticPayload
+        if (semantic == null) {
+            return when (packet.renderStepId.value) {
+                solidRectRenderStepIdentity -> diagnostic(
+                    "invalid.preflight.solid_semantic_payload_missing",
+                    "Executable solid FillRect packets require their gathered semantic payload.",
+                )
+                COLOR_GLYPH_RENDER_STEP_IDENTITY -> diagnostic(
+                    "invalid.preflight.color_glyph_semantic_payload_missing",
+                    "Executable color-glyph packets require their gathered typed semantic payload.",
+                )
+                else -> null
+            }
+        }
+        return when (semantic) {
+            is GPUDrawSemanticPayload.SolidRect -> validateSolidRectSemanticPayload(packet, semantic)
+            is GPUDrawSemanticPayload.ColorGlyph ->
+                validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
+        }
+    }
+
+    private fun validateColorGlyphSemanticPayload(
+        framePlan: GPUFramePlan,
+        render: GPUFrameStep.RenderPassStep,
+        packet: GPUDrawPacket,
+        semantic: GPUDrawSemanticPayload.ColorGlyph,
+    ): GPUDiagnostic? {
+        fun refuse(code: String, message: String) = diagnostic(code, message)
+        if (packet.renderStepId.value != COLOR_GLYPH_RENDER_STEP_IDENTITY ||
+            semantic.payloadRef.renderStepIdentity != COLOR_GLYPH_RENDER_STEP_IDENTITY
+        ) return refuse("invalid.preflight.color_glyph_semantic_route", "ColorGlyph requires the exact canonical render step.")
+        if (semantic.payloadRef.commandIdValue != packet.commandIdValue) {
+            return refuse("invalid.preflight.color_glyph_semantic_command_mismatch", "ColorGlyph command identity differs from its packet.")
+        }
+        if (packet.uniformSlot != semantic.payloadRef.uniformSlot) {
+            return refuse("invalid.preflight.color_glyph_semantic_packet_slot_mismatch", "ColorGlyph uniform slot differs from its packet evidence.")
+        }
+        if (!semantic.hasCanonicalHashIntegrity()) {
+            return refuse("invalid.preflight.color_glyph_canonical_hash_mismatch", "ColorGlyph canonical hash does not match its immutable payload fields.")
+        }
+        if (packet.renderPipelineKey != COLOR_GLYPH_RENDER_PIPELINE_KEY ||
+            packet.bindingLayoutHash != COLOR_GLYPH_BINDING_LAYOUT_HASH ||
+            packet.vertexSourceLabel != COLOR_GLYPH_VERTEX_SOURCE_LABEL ||
+            packet.targetStateHash != COLOR_GLYPH_TARGET_STATE_HASH ||
+            packet.scissorBoundsHash != colorGlyphScissorAuthority(semantic.scissorBounds) ||
+            render.loadStore.loadOp != "clear" ||
+            render.loadStore.storePlan != GPUStorePlan.Store ||
+            render.loadStore.clearColorLabel != "opaque-black"
+        ) {
+            return refuse(
+                "invalid.preflight.color_glyph_packet_authority",
+                "ColorGlyph packet and pass state must match the exact prepared native route authority.",
+            )
+        }
+        if (semantic.planArtifactKey.generation.value < 0 ||
+            semantic.atlasArtifactKey.generation.value.toLong() != semantic.atlasGeneration
+        ) return refuse("stale.preflight.color_glyph_artifact_generation", "ColorGlyph plan or atlas generation evidence is inconsistent.")
+        if (render.samplePlan != GPUSamplePlan.SingleSampleFrame) {
+            return refuse("unsupported.preflight.color_glyph_sample_plan", "ColorGlyph first slice requires exact single-sample rendering.")
+        }
+        val blend = packet.blendPlan as? GPUBlendPlan.FixedFunctionBlend
+        if (blend == null || blend.mode != GPUBlendMode.SRC_OVER || blend.state.stateId != "one_isa" ||
+            blend.state.color.sourceFactor != "one" || blend.state.color.destinationFactor != "one-minus-src-alpha" ||
+            blend.state.alpha.sourceFactor != "one" || blend.state.alpha.destinationFactor != "one-minus-src-alpha" ||
+            blend.state.color.operation != "add" || blend.state.alpha.operation != "add" ||
+            blend.state.writeMask != "rgba"
+        ) return refuse("unsupported.preflight.color_glyph_blend", "ColorGlyph requires canonical fixed-function SRC_OVER.")
+        if (GPUTextureFormat.R8Unorm !in capabilities.supportedTextureFormats) {
+            return refuse("unsupported.preflight.color_glyph_r8unorm", "ColorGlyph requires an explicitly observed r8unorm texture capability.")
+        }
+        if (semantic.scissorBounds.left < semantic.targetBounds.left ||
+            semantic.scissorBounds.top < semantic.targetBounds.top ||
+            semantic.scissorBounds.right > semantic.targetBounds.right ||
+            semantic.scissorBounds.bottom > semantic.targetBounds.bottom
+        ) return refuse("invalid.preflight.color_glyph_scissor_bounds", "ColorGlyph scissor must be contained by its target bounds.")
+
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().flatMap { it.requests }
+        val readbacks = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
+        val expectedResourceCount = if (readbacks.isEmpty()) 5 else 6
+        if (preparations.size != expectedResourceCount) {
+            return refuse("invalid.preflight.color_glyph_resource_count", "ColorGlyph requires exactly five resources, plus staging only when readback is requested.")
+        }
+        fun exact(role: GPUFrameResourceRole): GPUResourcePreparationRequest? =
+            preparations.filter { it.role == role }.singleOrNull()
+        val targets = exact(GPUFrameResourceRole.SceneTarget)
+        val atlases = exact(GPUFrameResourceRole.GlyphAtlas)
+        val vertices = exact(GPUFrameResourceRole.VertexData)
+        val indices = exact(GPUFrameResourceRole.IndexData)
+        val uniforms = exact(GPUFrameResourceRole.UniformData)
+        val stagings = exact(GPUFrameResourceRole.ReadbackStaging)
+        if (listOf(targets, atlases, vertices, indices, uniforms).any { it == null } ||
+            (readbacks.isEmpty() != (stagings == null))
+        ) {
+            return refuse("invalid.preflight.color_glyph_resource_roles", "ColorGlyph requires one target, atlas, vertex, index, uniform, and staging exactly when readback exists.")
+        }
+        val target = requireNotNull(targets)
+        val atlas = requireNotNull(atlases)
+        val vertex = requireNotNull(vertices)
+        val index = requireNotNull(indices)
+        val uniform = requireNotNull(uniforms)
+        val exactRenderUses = listOf(
+            GPUFrameResourceUse(
+                atlas.resource,
+                GPUFrameResourceRole.GlyphAtlas,
+                GPUFrameResourceUsage.TextureBinding,
+                GPUFrameResourceLifetime.SharedCache,
+                write = false,
+            ),
+            GPUFrameResourceUse(
+                vertex.resource,
+                GPUFrameResourceRole.VertexData,
+                GPUFrameResourceUsage.Vertex,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = false,
+            ),
+            GPUFrameResourceUse(
+                index.resource,
+                GPUFrameResourceRole.IndexData,
+                GPUFrameResourceUsage.Index,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = false,
+            ),
+            GPUFrameResourceUse(
+                uniform.resource,
+                GPUFrameResourceRole.UniformData,
+                GPUFrameResourceUsage.Uniform,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = false,
+            ),
+        )
+        if (render.resourceUses.size != exactRenderUses.size || render.resourceUses.toSet() != exactRenderUses.toSet()) {
+            return refuse(
+                "invalid.preflight.color_glyph_render_resource_uses",
+                "ColorGlyph requires exact typed atlas, vertex, index, and uniform render uses.",
+            )
+        }
+        val targetDescriptor = target.descriptor as? GPUFrameTextureDescriptor
+        if (target.resource != render.target || targetDescriptor?.logicalBounds != semantic.targetBounds ||
+            targetDescriptor.format.value != "rgba8unorm" || targetDescriptor.sampleCount != 1 ||
+            target.usages != setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource) ||
+            target.lifetime != GPUFrameResourceLifetime.FrameLocal || target.byteSize != semantic.targetBounds.width.toLong() * semantic.targetBounds.height * 4L
+        ) return refuse("invalid.preflight.color_glyph_target_resource", "ColorGlyph target declaration does not match its semantic bounds and format.")
+        val atlasDescriptor = atlas.descriptor as? GPUFrameTextureDescriptor
+        if (atlasDescriptor?.logicalBounds != org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, semantic.atlasWidth, semantic.atlasHeight) ||
+            atlasDescriptor.format.value != "r8unorm" || atlasDescriptor.sampleCount != 1 ||
+            atlas.usages != setOf(GPUFrameResourceUsage.TextureBinding, GPUFrameResourceUsage.CopyDestination) ||
+            atlas.lifetime != GPUFrameResourceLifetime.SharedCache || atlas.byteSize != semantic.atlasA8Bytes.size.toLong() ||
+            context.resourceGenerations[atlas.resource] != semantic.atlasGeneration
+        ) return refuse("invalid.preflight.color_glyph_atlas_resource", "ColorGlyph atlas declaration or generation does not match its payload.")
+        fun exactBuffer(
+            request: GPUResourcePreparationRequest,
+            roleUsage: GPUFrameResourceUsage,
+            bytes: Long,
+            alignment: Long,
+        ): Boolean {
+            val descriptor = request.descriptor as? GPUFrameBufferDescriptor ?: return false
+            return descriptor.byteSize == bytes && descriptor.alignmentBytes == alignment && request.byteSize == bytes &&
+                request.usages == setOf(roleUsage, GPUFrameResourceUsage.CopyDestination) &&
+                request.lifetime == GPUFrameResourceLifetime.FrameLocal
+        }
+        if (!exactBuffer(vertex, GPUFrameResourceUsage.Vertex, semantic.vertexData.size * 4L, 4L)) {
+            return refuse("invalid.preflight.color_glyph_vertex_resource", "ColorGlyph vertex declaration does not match its payload.")
+        }
+        if (!exactBuffer(index, GPUFrameResourceUsage.Index, semantic.indexData.size * 4L, 4L)) {
+            return refuse("invalid.preflight.color_glyph_index_resource", "ColorGlyph index declaration does not match its payload.")
+        }
+        if (!exactBuffer(uniform, GPUFrameResourceUsage.Uniform, semantic.uniformBytes.size.toLong(), 16L)) {
+            return refuse("invalid.preflight.color_glyph_uniform_resource", "ColorGlyph uniform declaration does not match its payload.")
+        }
+        val planGeneration = semantic.planArtifactKey.generation.value.toLong()
+        if (packet.resourceGeneration != planGeneration || context.resourceGenerations[render.target] != context.targetGeneration ||
+            listOf(vertex, index, uniform).any { context.resourceGenerations[it.resource] != planGeneration } ||
+            preparations.any { context.resourceGenerations[it.resource] == null }
+        ) {
+            return refuse("stale.preflight.color_glyph_resource_generation_missing", "Every ColorGlyph prepared resource requires generation evidence.")
+        }
+        if (readbacks.isEmpty()) return null
+        val staging = requireNotNull(stagings)
+        val readback = readbacks.singleOrNull()
+        val plannedReadback = readback?.let { readbackLayoutPlanner.plan(it.request, capabilities) as? GPUReadbackLayoutPlan.Planned }
+        if (readback == null || readback.source != render.target || readback.staging != staging.resource ||
+            readback.request.sourceBounds != semantic.targetBounds ||
+            staging.usages != setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead) ||
+            staging.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            (staging.descriptor as? GPUFrameBufferDescriptor)?.byteSize != plannedReadback?.stagingDescriptor?.minimumBufferBytes ||
+            staging.byteSize != plannedReadback?.stagingDescriptor?.minimumBufferBytes
+        ) return refuse("invalid.preflight.color_glyph_readback_resource", "ColorGlyph readback declaration does not match the exact target layout.")
+
+        return null
+    }
+
+    private fun validateSolidRectSemanticPayload(
+        packet: GPUDrawPacket,
+        semantic: GPUDrawSemanticPayload.SolidRect,
+    ): GPUDiagnostic? {
+        if (packet.renderStepId.value != solidRectRenderStepIdentity) {
+            return diagnostic(
+                "invalid.preflight.solid_semantic_route",
+                "SolidRect semantic payloads are valid only for the exact solid FillRect render step.",
+            )
+        }
+        val ref = semantic.payloadRef
+        if (ref.commandIdValue != packet.commandIdValue) {
+            return diagnostic(
+                "invalid.preflight.solid_semantic_command_mismatch",
+                "Solid semantic command identity differs from its packet.",
+            )
+        }
+        if (ref.renderStepIdentity != packet.renderStepId.value) {
+            return diagnostic(
+                "invalid.preflight.solid_semantic_render_step_mismatch",
+                "Solid semantic render-step identity differs from its selected packet step.",
+            )
+        }
+        if (packet.uniformSlot != ref.uniformSlot) {
+            return diagnostic(
+                "invalid.preflight.solid_semantic_packet_slot_mismatch",
+                "Solid semantic slot facts differ from their packet slot evidence.",
+            )
+        }
+        GPUSolidPayloadGatherer.semanticValidationFailure(ref)?.let { code ->
+            return diagnostic(code, "Solid semantic payload failed the gatherer ABI validation.")
+        }
+        return null
+    }
+
     private fun materializeRenderOperands(
         framePlan: GPUFramePlan,
         ownerScope: String,
@@ -589,12 +1121,7 @@ class GPUFramePreflighter(
             return GPUResourceMaterializationDecision.Materialized(resources = emptyList(), targetId = context.targetId)
         }
         return try {
-            val operands = packets.flatMap { packet ->
-                listOf(
-                    operand(packet, "setRenderPipeline", GPUMaterializedCommandOperandKind.RenderPipeline, packet.renderPipelineKey!!.value, ownerScope),
-                    operand(packet, "setBindGroup", GPUMaterializedCommandOperandKind.BindGroup, packet.bindingLayoutHash, ownerScope),
-                )
-            }
+            val operands = packets.flatMap { packet -> plannedRenderOperands(packet, ownerScope) }
             resourceProvider.materializeCommandOperands(
                 GPUCommandOperandMaterializationRequest(
                     targetId = context.targetId,
@@ -642,6 +1169,51 @@ class GPUFramePreflighter(
         evidenceFacts = mapOf("resourceGeneration" to packet.resourceGeneration.toString()),
     )
 
+    private fun plannedRenderOperands(
+        packet: GPUDrawPacket,
+        ownerScope: String,
+    ): List<GPUCommandOperandMaterializationPlan> = buildList {
+        add(
+            operand(
+                packet,
+                "setRenderPipeline",
+                GPUMaterializedCommandOperandKind.RenderPipeline,
+                packet.renderPipelineKey!!.value,
+                ownerScope,
+            ),
+        )
+        add(
+            operand(
+                packet,
+                "setBindGroup",
+                GPUMaterializedCommandOperandKind.BindGroup,
+                packet.bindingLayoutHash,
+                ownerScope,
+            ),
+        )
+        val colorGlyph = packet.semanticPayload as? GPUDrawSemanticPayload.ColorGlyph
+        if (colorGlyph != null) {
+            add(
+                operand(
+                    packet,
+                    "setVertexBuffer",
+                    GPUMaterializedCommandOperandKind.VertexBuffer,
+                    "${colorGlyph.canonicalHash}.vertices.${colorGlyph.vertexData.size}",
+                    ownerScope,
+                ),
+            )
+            add(
+                operand(
+                    packet,
+                    "setIndexBuffer",
+                    GPUMaterializedCommandOperandKind.IndexBuffer,
+                    "${colorGlyph.canonicalHash}.indices.${colorGlyph.indexData.size}",
+                    ownerScope,
+                ),
+            )
+        }
+    }
+
     private fun validateRenderOperands(
         framePlan: GPUFramePlan,
         materialized: GPUResourceMaterializationDecision.Materialized,
@@ -651,11 +1223,10 @@ class GPUFramePreflighter(
         val bridge = materialized.operandBridge
         val expectedTasks = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { it.sourceTaskIds }.map { it.value }.distinct()
-        val expectedLabels = packets.flatMap { packet ->
-            listOf("setRenderPipeline.${packet.packetId.value}", "setBindGroup.${packet.packetId.value}")
-        }
+        val expectedPlans = packets.flatMap { packet -> plannedRenderOperands(packet, ownerScope) }
+        val expectedLabels = expectedPlans.map { it.label }
         if (materialized.targetId != context.targetId || materialized.taskIds != expectedTasks ||
-            materialized.resourcePlanLabels != expectedLabels || bridge.size != packets.size * 2
+            materialized.resourcePlanLabels != expectedLabels || bridge.size != expectedPlans.size
         ) {
             return diagnostic("invalid.preflight.render_materialization_scope", "Render materialization scope is not an exact frame match.")
         }
@@ -688,21 +1259,24 @@ class GPUFramePreflighter(
             val packetBridge = bridge.filter { it.packetId == packet.packetId.value }
             val pipelines = packetBridge.filter { it.commandLabel == "setRenderPipeline" && it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline }
             val bindGroups = packetBridge.filter { it.commandLabel == "setBindGroup" && it.operand.kind == GPUMaterializedCommandOperandKind.BindGroup }
-            if (pipelines.size != 1 || bindGroups.size != 1) {
+            val vertices = packetBridge.filter { it.commandLabel == "setVertexBuffer" && it.operand.kind == GPUMaterializedCommandOperandKind.VertexBuffer }
+            val indices = packetBridge.filter { it.commandLabel == "setIndexBuffer" && it.operand.kind == GPUMaterializedCommandOperandKind.IndexBuffer }
+            val colorGlyph = packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+            if (pipelines.size != 1 || bindGroups.size != 1 ||
+                (colorGlyph && (vertices.size != 1 || indices.size != 1)) ||
+                (!colorGlyph && (vertices.isNotEmpty() || indices.isNotEmpty()))
+            ) {
                 return diagnostic(
                     "invalid.preflight.render_operand_bijection",
-                    "Every render packet requires exactly one pipeline and one bind group.",
+                    "Every render packet requires one pipeline and bind group, plus exact indexed buffers for ColorGlyph.",
                     mapOf("packet" to packet.packetId.value),
                 )
             }
-            if ((pipelines + bindGroups).any { it.operand.deviceGeneration != context.deviceGeneration.value }) {
+            if ((pipelines + bindGroups + vertices + indices).any { it.operand.deviceGeneration != context.deviceGeneration.value }) {
                 return diagnostic("stale.preflight.render_operand_generation", "A render operand device generation is stale.")
             }
-            val expected = listOf(
-                operand(packet, "setRenderPipeline", GPUMaterializedCommandOperandKind.RenderPipeline, packet.renderPipelineKey!!.value, ownerScope),
-                operand(packet, "setBindGroup", GPUMaterializedCommandOperandKind.BindGroup, packet.bindingLayoutHash, ownerScope),
-            )
-            val actual = listOf(pipelines.single(), bindGroups.single())
+            val expected = plannedRenderOperands(packet, ownerScope)
+            val actual = pipelines + bindGroups + vertices + indices
             if (actual.zip(expected).any { (binding, plan) ->
                     binding.commandLabel != plan.commandLabel || binding.operand.label != plan.label ||
                         binding.operand.kind != plan.kind || binding.operand.descriptorHash != plan.descriptorHash ||
@@ -713,6 +1287,31 @@ class GPUFramePreflighter(
                 }
             ) {
                 return diagnostic("invalid.preflight.render_operand_evidence", "Render operand evidence differs from its request.")
+            }
+        }
+        return null
+    }
+
+    private fun validateNativeRenderSemanticPayloads(
+        framePlan: GPUFramePlan,
+        draft: GPUPreparedNativeFrameDraft,
+    ): GPUDiagnostic? {
+        framePlan.steps.forEachIndexed { sourceStepIndex, step ->
+            if (step !is GPUFrameStep.RenderPassStep) return@forEachIndexed
+            val renderOperand = draft.payload.scopeOperands
+                .singleOrNull { it.sourceStepIndex == sourceStepIndex } as? GPUPreparedNativeScopeOperand.Render
+                ?: return diagnostic(
+                    "invalid.preflight.native_render_semantic_payloads",
+                    "Native render scope is missing for semantic payload validation.",
+                )
+            val expected = step.drawPackets.mapNotNull(GPUDrawPacket::semanticPayload)
+            if (renderOperand.semanticPayloads.size != expected.size ||
+                renderOperand.semanticPayloads.zip(expected).any { (actual, semantic) -> actual !== semantic }
+            ) {
+                return diagnostic(
+                    "invalid.preflight.native_render_semantic_payloads",
+                    "Native render operand must retain the exact semantic payload instances in packet order.",
+                )
             }
         }
         return null
@@ -774,15 +1373,15 @@ class GPUFramePreflighter(
                     targetGeneration = context.targetGeneration,
                     resourceGenerationLabels = labels,
                     passCommandStream = stream,
-                )
+                ).attachNativeOperandKeys(nativeOperandKeys(step, labels, stream))
             }
-            is GPUFrameStep.ComputePassStep -> scope(index, GPUEncoderOperationKind.Compute, step.sourceTaskIds, listOf("beginComputePass") + List(step.dispatches.size) { "dispatchWorkgroups" } + "endComputePass", labels)
-            is GPUFrameStep.UploadResourceStep -> scope(index, GPUEncoderOperationKind.Upload, step.sourceTaskIds, listOf("writeBufferOrCopyBuffer"), labels)
-            is GPUFrameStep.CopyResourceStep -> scope(index, GPUEncoderOperationKind.Copy, step.sourceTaskIds, List(step.regions.size) { "copyResource" }, labels)
-            is GPUFrameStep.CopyDestinationStep -> scope(index, GPUEncoderOperationKind.CopyDestination, step.sourceTaskIds, listOf("copyTextureToTexture"), labels)
-            is GPUFrameStep.CopyAsDrawMaterializationStep -> scope(index, GPUEncoderOperationKind.CopyAsDraw, step.sourceTaskIds, listOf("beginRenderPass", "copyAsDraw", "endRenderPass"), labels)
-            is GPUFrameStep.ReadbackCopyStep -> scope(index, GPUEncoderOperationKind.Readback, step.sourceTaskIds, listOf("copyTextureToBuffer"), labels)
-            is GPUFrameStep.SurfaceBlitRenderPassStep -> scope(index, GPUEncoderOperationKind.SurfaceBlit, step.sourceTaskIds, listOf("beginRenderPass", "surfaceBlit", "endRenderPass"), labels)
+            is GPUFrameStep.ComputePassStep -> scope(index, GPUEncoderOperationKind.Compute, step.sourceTaskIds, listOf("beginComputePass") + List(step.dispatches.size) { "dispatchWorkgroups" } + "endComputePass", labels, nativeOperandKeys(step, labels))
+            is GPUFrameStep.UploadResourceStep -> scope(index, GPUEncoderOperationKind.Upload, step.sourceTaskIds, listOf("writeBufferOrCopyBuffer"), labels, nativeOperandKeys(step, labels))
+            is GPUFrameStep.CopyResourceStep -> scope(index, GPUEncoderOperationKind.Copy, step.sourceTaskIds, List(step.regions.size) { "copyResource" }, labels, nativeOperandKeys(step, labels))
+            is GPUFrameStep.CopyDestinationStep -> scope(index, GPUEncoderOperationKind.CopyDestination, step.sourceTaskIds, listOf("copyTextureToTexture"), labels, nativeOperandKeys(step, labels))
+            is GPUFrameStep.CopyAsDrawMaterializationStep -> scope(index, GPUEncoderOperationKind.CopyAsDraw, step.sourceTaskIds, listOf("beginRenderPass", "copyAsDraw", "endRenderPass"), labels, nativeOperandKeys(step, labels))
+            is GPUFrameStep.ReadbackCopyStep -> scope(index, GPUEncoderOperationKind.Readback, step.sourceTaskIds, listOf("copyTextureToBuffer"), labels, nativeOperandKeys(step, labels))
+            is GPUFrameStep.SurfaceBlitRenderPassStep -> scope(index, GPUEncoderOperationKind.SurfaceBlit, step.sourceTaskIds, listOf("beginRenderPass", "surfaceBlit", "endRenderPass"), labels, nativeOperandKeys(step, labels))
             else -> null
         }
     }
@@ -793,7 +1392,115 @@ class GPUFramePreflighter(
         tasks: List<org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID>,
         operations: List<String>,
         resources: List<String>,
+        nativeOperandKeys: List<GPUPreparedNativeOperandKey>,
     ) = GPUCommandEncoderScopePlan(index, kind, sourceTaskIds = tasks, facadeOperationClasses = operations, targetGeneration = context.targetGeneration, resourceGenerationLabels = resources)
+        .attachNativeOperandKeys(nativeOperandKeys)
+
+    private fun nativeOperandKeys(
+        step: GPUFrameStep,
+        resources: List<String>,
+        stream: GPUPassCommandStream? = null,
+    ): List<GPUPreparedNativeOperandKey> {
+        fun key(
+            role: GPUPreparedNativeOperandRole,
+            kind: GPUPreparedNativeOperandKind,
+            binding: String,
+            ownership: GPUPreparedNativeOperandOwnership = GPUPreparedNativeOperandOwnership.Borrowed,
+        ) = GPUPreparedNativeOperandKey(
+            role,
+            kind,
+            gpuPreparedNativeBindingKey(binding),
+            ownership,
+        )
+        return when (step) {
+            is GPUFrameStep.RenderPassStep -> {
+                val targetResourceLabel = resources.first()
+                val colorGlyph = step.drawPackets.all { it.semanticPayload is GPUDrawSemanticPayload.ColorGlyph }
+                val drawOperandOwnership = if (colorGlyph) {
+                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion
+                } else {
+                    GPUPreparedNativeOperandOwnership.Borrowed
+                }
+                (step.sampleContinuation?.let { continuation ->
+                listOf(
+                    key(
+                        GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                        GPUPreparedNativeOperandKind.TextureView,
+                        "msaa:${continuation.key.colorAttachment.value}",
+                    ),
+                    key(
+                        GPUPreparedNativeOperandRole.RenderResolveTarget,
+                        GPUPreparedNativeOperandKind.TextureView,
+                        targetResourceLabel,
+                    ),
+                )
+            } ?: listOf(
+                key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel),
+            )) + requireNotNull(stream).operandBridge.map { bridge ->
+                when (bridge.operand.kind) {
+                    org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.RenderPipeline ->
+                        key(
+                            GPUPreparedNativeOperandRole.RenderPipeline,
+                            GPUPreparedNativeOperandKind.RenderPipeline,
+                            "${bridge.commandLabel}:${bridge.operand.label}",
+                            if (colorGlyph) GPUPreparedNativeOperandOwnership.Borrowed else drawOperandOwnership,
+                        )
+                    org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.BindGroup ->
+                        key(
+                            GPUPreparedNativeOperandRole.RenderBindGroup,
+                            GPUPreparedNativeOperandKind.BindGroup,
+                            "${bridge.commandLabel}:${bridge.operand.label}",
+                            drawOperandOwnership,
+                        )
+                    org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.VertexBuffer ->
+                        key(
+                            GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                            GPUPreparedNativeOperandKind.Buffer,
+                            "${bridge.commandLabel}:${bridge.operand.label}",
+                            drawOperandOwnership,
+                        )
+                    org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.IndexBuffer ->
+                        key(
+                            GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                            GPUPreparedNativeOperandKind.Buffer,
+                            "${bridge.commandLabel}:${bridge.operand.label}",
+                            drawOperandOwnership,
+                        )
+                    else -> error("Render native operand bridge contains an unsupported operand kind")
+                }
+            }
+            }
+            is GPUFrameStep.ComputePassStep -> step.dispatches.mapIndexed { index, dispatch ->
+                key(GPUPreparedNativeOperandRole.ComputePipeline, GPUPreparedNativeOperandKind.ComputePipeline, "dispatch.$index:${dispatch.programKey.value}")
+            }
+            is GPUFrameStep.UploadResourceStep -> listOf(
+                key(GPUPreparedNativeOperandRole.UploadSource, GPUPreparedNativeOperandKind.Buffer, resources[0]),
+                key(GPUPreparedNativeOperandRole.UploadDestination, GPUPreparedNativeOperandKind.Buffer, resources[1]),
+            )
+            is GPUFrameStep.CopyResourceStep,
+            is GPUFrameStep.CopyDestinationStep -> listOf(
+                key(GPUPreparedNativeOperandRole.CopySource, GPUPreparedNativeOperandKind.Texture, resources[0]),
+                key(GPUPreparedNativeOperandRole.CopyDestination, GPUPreparedNativeOperandKind.Texture, resources[1]),
+            )
+            is GPUFrameStep.CopyAsDrawMaterializationStep -> listOf(
+                key(GPUPreparedNativeOperandRole.CopyAsDrawSource, GPUPreparedNativeOperandKind.TextureView, resources[0]),
+                key(GPUPreparedNativeOperandRole.CopyAsDrawTarget, GPUPreparedNativeOperandKind.TextureView, resources[1]),
+                key(GPUPreparedNativeOperandRole.CopyAsDrawPipeline, GPUPreparedNativeOperandKind.RenderPipeline, "copy-as-draw:pipeline"),
+                key(GPUPreparedNativeOperandRole.CopyAsDrawBindGroup, GPUPreparedNativeOperandKind.BindGroup, "copy-as-draw:bind-group"),
+            )
+            is GPUFrameStep.ReadbackCopyStep -> listOf(
+                key(GPUPreparedNativeOperandRole.ReadbackSource, GPUPreparedNativeOperandKind.Texture, resources[0]),
+                key(GPUPreparedNativeOperandRole.ReadbackDestination, GPUPreparedNativeOperandKind.Buffer, resources[1], GPUPreparedNativeOperandOwnership.OutputOwnedReadback),
+            )
+            is GPUFrameStep.SurfaceBlitRenderPassStep -> listOf(
+                key(GPUPreparedNativeOperandRole.SurfaceSource, GPUPreparedNativeOperandKind.TextureView, resources.single()),
+                key(GPUPreparedNativeOperandRole.SurfaceTarget, GPUPreparedNativeOperandKind.TextureView, "surface:${step.output.value}:target"),
+                key(GPUPreparedNativeOperandRole.SurfacePipeline, GPUPreparedNativeOperandKind.RenderPipeline, "surface:${step.output.value}:pipeline"),
+                key(GPUPreparedNativeOperandRole.SurfaceBindGroup, GPUPreparedNativeOperandKind.BindGroup, "surface:${step.output.value}:bind-group"),
+            )
+            else -> emptyList()
+        }
+    }
 
     private fun validatePreparedResource(
         preparation: GPUResourcePreparationRequest,
@@ -806,17 +1513,24 @@ class GPUFramePreflighter(
         decision.resourceGeneration != generation -> diagnostic("stale.preflight.resource_generation", "Prepared resource generation is stale.")
         preparation.resource is org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef && decision.concreteResource !is GPUPreparedConcreteResourceRef.Buffer -> diagnostic("invalid.preflight.resource_kind", "Buffer preparation returned a texture reference.")
         preparation.resource !is org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef && decision.concreteResource !is GPUPreparedConcreteResourceRef.Texture -> diagnostic("invalid.preflight.resource_kind", "Texture preparation returned a buffer reference.")
+        decision.textureAllocation != null && preparation.descriptor is GPUFrameTextureDescriptor &&
+            (decision.textureAllocation.logicalBounds != preparation.descriptor.logicalBounds ||
+                decision.textureAllocation.format != preparation.descriptor.format ||
+                decision.textureAllocation.sampleCount != preparation.descriptor.sampleCount ||
+                decision.textureAllocation.usages != preparation.usages) ->
+            diagnostic(
+                "invalid.preflight.texture_allocation_evidence",
+                "Prepared texture allocation does not match its logical declaration.",
+            )
         else -> null
     }
 
     private fun refuseWithRollback(
-        ownerScope: String,
-        acquiredAnyResource: Boolean,
+        rollback: GPUFrameRollback,
+        @Suppress("UNUSED_PARAMETER") acquiredAnyResource: Boolean,
         diagnostic: GPUDiagnostic,
     ): GPUFramePreflightResult.Refused {
-        if (!acquiredAnyResource) return GPUFramePreflightResult.Refused(diagnostic)
-        val rollback = GPUFrameRollback(ownerScope, resourceProvider, surfaceProvider, null).execute()
-        return GPUFramePreflightResult.Refused(diagnostic, rollback)
+        return GPUFramePreflightResult.Refused(diagnostic, rollback.execute())
     }
 }
 
@@ -864,7 +1578,7 @@ private fun referencedResources(framePlan: GPUFramePlan): Set<GPUFrameResourceRe
     framePlan.steps.flatMap(::referencedResources).toSet()
 
 private fun referencedResources(step: GPUFrameStep): List<GPUFrameResourceRef> = when (step) {
-    is GPUFrameStep.RenderPassStep -> listOf(step.target)
+    is GPUFrameStep.RenderPassStep -> listOf(step.target) + step.resourceUses.map { it.resource }
     is GPUFrameStep.ComputePassStep -> listOf(step.target) + step.resourceUses.map { it.resource }
     is GPUFrameStep.PrepareResourcesStep -> emptyList()
     is GPUFrameStep.UploadResourceStep -> listOf(step.staging, step.destination)

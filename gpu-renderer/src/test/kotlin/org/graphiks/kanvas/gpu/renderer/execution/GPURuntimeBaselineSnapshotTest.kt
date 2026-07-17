@@ -156,6 +156,9 @@ class GPURuntimeBaselineSnapshotTest {
             override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
                 error("not used in test")
 
+            override fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession =
+                error("not used in test")
+
             override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
                 error("not used in test")
 

@@ -35,7 +35,6 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
-import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
@@ -689,16 +688,7 @@ class GPUFramePlannerTest {
             deviceGeneration = GPUDeviceGenerationID(3),
             format = GPUColorFormat("rgba8unorm"),
             colorInterpretation = GPUColorInterpretation("srgb-premul"),
-            sampleContinuation = GPUSampleContinuationKey(
-                target = GPUTargetIdentity("target.scene"),
-                targetGeneration = 2,
-                deviceGeneration = GPUDeviceGenerationID(3),
-                colorFormat = GPUColorFormat("rgba8unorm"),
-                colorInterpretation = GPUColorInterpretation("srgb-premul"),
-                samplePlan = GPUSamplePlan.MultisampleFrame(4),
-                colorAttachment = GPUTargetIdentity("target.scene.msaa"),
-                depthStencilAttachment = null,
-            ),
+            sampleContinuation = null,
             sourceIntermediate = sourceIntermediate,
         )
 

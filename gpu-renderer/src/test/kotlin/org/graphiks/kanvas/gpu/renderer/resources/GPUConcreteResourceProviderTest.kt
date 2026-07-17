@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -7,6 +10,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
@@ -15,8 +19,26 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
-import org.graphiks.kanvas.gpu.renderer.execution.GPUReadbackLayoutPlan
-import org.graphiks.kanvas.gpu.renderer.execution.GPUReadbackLayoutPlanner
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlanner
+import org.graphiks.kanvas.gpu.renderer.execution.GPUConcreteFrameReadbackAccess
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameCoreTestFixture
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameNativeReadbackMapper
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameMappedReadbackRange
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameNativeReadbackMapDelivery
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameNativeReadbackMapSink
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameReadbackLifecycleResult
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameReadbackMapFailureSafety
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameReadbackNativeOutputSafety
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameReadbackMapArmResult
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameReadbackMapDelivery
+import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameReadbackMapSink
+import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedNativeScopeOperand
+import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedReadbackOutput
+import org.graphiks.kanvas.gpu.renderer.execution.GPUQueueCompletionTicket
+import org.graphiks.kanvas.gpu.renderer.execution.GPUQueueCompletionTicketID
+import org.graphiks.kanvas.gpu.renderer.execution.GPUQueueCompletionFailureKind
+import org.graphiks.kanvas.gpu.renderer.execution.executionDiagnostic
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
@@ -25,10 +47,20 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 
 class GPUConcreteResourceProviderTest {
+    @Test
+    fun `concrete provider binds its lease factory only by exact identity`() {
+        val adapter = org.graphiks.kanvas.gpu.renderer.execution.GPURuntimeResourceAdapter()
+        val provider = GPUConcreteResourceProvider(leaseFactory = adapter)
+
+        assertTrue(provider.isBackedBy(adapter))
+        assertFalse(provider.isBackedBy(EvidenceOnlyGPUResourceLeaseFactory))
+    }
+
     @Test
     fun `concrete provider materializes null buffer once per generation`() {
         val provider = GPUConcreteResourceProvider()
@@ -868,6 +900,534 @@ class GPUConcreteResourceProviderTest {
     }
 
     @Test
+    fun `concrete frame readback bridge retains staging through delayed map then makes it reusable`() {
+        val provider = GPUConcreteResourceProvider()
+        val events = mutableListOf<String>()
+        val lifecycleProvider = object : GPUFrameResourcePreflightProvider by provider {
+            override fun markReadbackSubmitted(
+                leases: List<GPUReadbackStagingLease>,
+                submissionId: GPUResourceSubmissionID,
+            ): GPUReadbackStagingLifecycleResult {
+                events += "pool:submit"
+                return provider.markReadbackSubmitted(leases, submissionId)
+            }
+
+            override fun acceptReadbackGPUCompletion(
+                submissionId: GPUResourceSubmissionID,
+                deviceGeneration: GPUDeviceGenerationID,
+            ): GPUReadbackStagingLifecycleResult {
+                events += "pool:complete"
+                return provider.acceptReadbackGPUCompletion(submissionId, deviceGeneration)
+            }
+
+            override fun markReadbackMapped(
+                lease: GPUReadbackStagingLease,
+            ): GPUReadbackStagingLifecycleResult {
+                events += "pool:map"
+                return provider.markReadbackMapped(lease)
+            }
+
+            override fun markReadbackDepadded(
+                lease: GPUReadbackStagingLease,
+            ): GPUReadbackStagingLifecycleResult {
+                events += "pool:depad"
+                return provider.markReadbackDepadded(lease)
+            }
+
+            override fun releaseReadbackAfterUnmap(
+                lease: GPUReadbackStagingLease,
+            ): GPUReadbackStagingLifecycleResult {
+                events += "pool:release"
+                return provider.releaseReadbackAfterUnmap(lease)
+            }
+        }
+        val generation = GPUDeviceGenerationID(11)
+        val budget = providerBudget(16_384)
+        val request = GPUFrameReadbackRequest(
+            requestId = GPUReadbackRequestID("bridge-readback"),
+            sourceBounds = GPUPixelBounds(0, 0, 4, 4),
+            pixelFormat = GPUReadbackPixelFormat.Rgba8Unorm,
+            outputColorInterpretation = GPUColorInterpretation("srgb-premul"),
+        )
+        val planned = assertIs<GPUReadbackLayoutPlan.Planned>(
+            GPUReadbackLayoutPlanner().plan(request, providerCapabilities()),
+        )
+        fun reserve(id: String, owner: String): GPUReadbackStagingLease =
+            assertIs<GPUReadbackStagingReservationResult.Accepted>(
+                provider.reserveReadbackStaging(
+                    GPUReadbackStagingReservationRequest(
+                        reservationId = id,
+                        ownerScope = owner,
+                        deviceGeneration = generation,
+                        descriptor = planned.stagingDescriptor,
+                        backingBufferBytes = planned.stagingDescriptor.minimumBufferBytes,
+                        budgetPlan = budget,
+                    ),
+                ),
+            ).lease
+
+        val first = reserve("bridge-a", "frame-a")
+        val output = GPUPreparedReadbackOutput(
+            stagingResource = GPUFrameBufferRef("buffer.bridge-a"),
+            concreteResource = GPUPreparedConcreteResourceRef.Buffer(first.resourceRef),
+            resourceGeneration = 1,
+            request = request,
+            layout = planned.layout,
+            stagingLease = first,
+        )
+        var pendingSink: GPUFrameNativeReadbackMapSink? = null
+        val bridge = GPUConcreteFrameReadbackAccess(
+            lifecycleProvider,
+            GPUFrameNativeReadbackMapper { _, _, sink ->
+                events += "mapper:armed"
+                pendingSink = sink
+                GPUFrameReadbackMapArmResult.Armed
+            },
+        )
+        val ticket = GPUQueueCompletionTicket(
+            GPUQueueCompletionTicketID("ticket.bridge-a"),
+            GPUFrameID(41),
+            generation,
+        )
+        val operand = GPUFrameCoreTestFixture.nativePayload(withReadback = true)
+            .scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>().single()
+
+        assertEquals(GPUFrameReadbackLifecycleResult.Applied, bridge.markSubmitted(ticket, output, operand))
+        assertEquals(
+            GPUFrameReadbackLifecycleResult.Applied,
+            bridge.acceptGPUCompletion(ticket, output, operand),
+        )
+        var terminalDelivery: GPUFrameReadbackMapDelivery? = null
+        assertEquals(
+            GPUFrameReadbackMapArmResult.Armed,
+            bridge.mapAndDepad(
+                output,
+                operand,
+                GPUFrameReadbackMapSink {
+                    events += "terminal"
+                    terminalDelivery = it
+                },
+            ),
+        )
+
+        val concurrent = reserve("bridge-b", "frame-b")
+        assertNotEquals(first.resourceRef, concurrent.resourceRef)
+
+        val mapped = ByteArray(planned.layout.totalBufferBytes.toInt())
+        pendingSink!!.accept(
+            GPUFrameNativeReadbackMapDelivery.Mapped(
+                object : GPUFrameMappedReadbackRange {
+                    override fun copyBytesFromZero(): ByteArray = mapped.copyOf().also {
+                        events += "range:read"
+                    }
+                    override fun unmap() {
+                        events += "range:unmap"
+                    }
+                },
+            ),
+        )
+        assertIs<GPUFrameReadbackMapDelivery.Pixels>(terminalDelivery)
+        assertEquals(
+            listOf(
+                "pool:submit",
+                "pool:complete",
+                "mapper:armed",
+                "pool:map",
+                "range:read",
+                "pool:depad",
+                "range:unmap",
+                "terminal",
+            ),
+            events,
+        )
+        val stillNotReusable = reserve("bridge-c-before-close", "frame-c-before-close")
+        assertNotEquals(first.resourceRef, stillNotReusable.resourceRef)
+        events += "native:close"
+        assertEquals(
+            GPUFrameReadbackLifecycleResult.Applied,
+            bridge.finalizeAfterNativeClose(
+                output,
+                operand,
+                GPUFrameReadbackNativeOutputSafety.Released,
+            ),
+        )
+        assertEquals("pool:release", events.last())
+        val eventsAfterTerminal = events.toList()
+        pendingSink!!.accept(
+            GPUFrameNativeReadbackMapDelivery.Failed(
+                executionDiagnostic("failed.test.duplicate-map", "duplicate"),
+                org.graphiks.kanvas.gpu.renderer.execution.GPUFrameReadbackMapFailureSafety.Quarantine,
+            ),
+        )
+        assertEquals(eventsAfterTerminal, events)
+        val reusable = reserve("bridge-c", "frame-c")
+        assertEquals(first.resourceRef, reusable.resourceRef)
+    }
+
+    @Test
+    fun `duplicate readback reservation refuses before provider and preserves first ticket ledger`() {
+        val provider = GPUConcreteResourceProvider()
+        val generation = GPUDeviceGenerationID(32)
+        val request = GPUFrameReadbackRequest(
+            GPUReadbackRequestID("duplicate-reservation"),
+            GPUPixelBounds(0, 0, 4, 4),
+            GPUReadbackPixelFormat.Rgba8Unorm,
+            GPUColorInterpretation("srgb-premul"),
+        )
+        val planned = assertIs<GPUReadbackLayoutPlan.Planned>(
+            GPUReadbackLayoutPlanner().plan(request, providerCapabilities()),
+        )
+        val lease = assertIs<GPUReadbackStagingReservationResult.Accepted>(
+            provider.reserveReadbackStaging(
+                GPUReadbackStagingReservationRequest(
+                    "duplicate-reservation",
+                    "owner-duplicate",
+                    generation,
+                    planned.stagingDescriptor,
+                    planned.stagingDescriptor.minimumBufferBytes,
+                    providerBudget(16_384),
+                ),
+            ),
+        ).lease
+        val output = GPUPreparedReadbackOutput(
+            GPUFrameBufferRef("buffer.duplicate"),
+            GPUPreparedConcreteResourceRef.Buffer(lease.resourceRef),
+            1,
+            request,
+            planned.layout,
+            lease,
+        )
+        var providerSubmitCalls = 0
+        var providerAcceptCalls = 0
+        var providerRejectCalls = 0
+        val observed = object : GPUFrameResourcePreflightProvider by provider {
+            override fun markReadbackSubmitted(
+                leases: List<GPUReadbackStagingLease>,
+                submissionId: GPUResourceSubmissionID,
+            ): GPUReadbackStagingLifecycleResult {
+                providerSubmitCalls += 1
+                return provider.markReadbackSubmitted(leases, submissionId)
+            }
+
+            override fun acceptReadbackGPUCompletion(
+                submissionId: GPUResourceSubmissionID,
+                deviceGeneration: GPUDeviceGenerationID,
+            ): GPUReadbackStagingLifecycleResult {
+                providerAcceptCalls += 1
+                return provider.acceptReadbackGPUCompletion(submissionId, deviceGeneration)
+            }
+
+            override fun rejectReadbackGPUCompletion(
+                submissionId: GPUResourceSubmissionID,
+                deviceGeneration: GPUDeviceGenerationID,
+                failure: GPUReadbackCompletionFailure,
+            ): GPUReadbackStagingLifecycleResult {
+                providerRejectCalls += 1
+                return provider.rejectReadbackGPUCompletion(submissionId, deviceGeneration, failure)
+            }
+        }
+        val bridge = GPUConcreteFrameReadbackAccess(
+            observed,
+            GPUFrameNativeReadbackMapper { _, _, _ -> error("not mapped") },
+        )
+        val firstTicket = GPUQueueCompletionTicket(
+            GPUQueueCompletionTicketID("ticket.duplicate.first"),
+            GPUFrameID(71),
+            generation,
+        )
+        val secondTicket = GPUQueueCompletionTicket(
+            GPUQueueCompletionTicketID("ticket.duplicate.second"),
+            GPUFrameID(72),
+            generation,
+        )
+
+        val operand = GPUFrameCoreTestFixture.nativePayload(withReadback = true)
+            .scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>().single()
+        assertEquals(
+            GPUFrameReadbackLifecycleResult.Applied,
+            bridge.markSubmitted(firstTicket, output, operand),
+        )
+        val refused = assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+            bridge.markSubmitted(secondTicket, output, operand),
+        )
+        assertEquals("failed.frame-readback.duplicate-reservation", refused.diagnostic.code.value)
+        assertEquals(1, providerSubmitCalls)
+        val copiedTicketRefusal = assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+            bridge.acceptGPUCompletion(firstTicket.copy(), output, operand),
+        )
+        assertEquals(
+            "failed.frame-readback.completion-identity-mismatch",
+            copiedTicketRefusal.diagnostic.code.value,
+        )
+        val copiedOutput = output.copy()
+        val copiedOutputRefusal = assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+            bridge.acceptGPUCompletion(firstTicket, copiedOutput, operand),
+        )
+        assertEquals(
+            "failed.frame-readback.completion-identity-mismatch",
+            copiedOutputRefusal.diagnostic.code.value,
+        )
+        val copiedOperand = GPUFrameCoreTestFixture.nativePayload(withReadback = true)
+            .scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>().single()
+        val copiedOperandRefusal = assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+            bridge.rejectGPUCompletion(
+                firstTicket,
+                output,
+                copiedOperand,
+                GPUQueueCompletionFailureKind.CallbackFailure,
+            ),
+        )
+        assertEquals(
+            "failed.frame-readback.completion-identity-mismatch",
+            copiedOperandRefusal.diagnostic.code.value,
+        )
+        assertEquals(0, providerAcceptCalls)
+        assertEquals(0, providerRejectCalls)
+        assertEquals(
+            GPUFrameReadbackLifecycleResult.Applied,
+            bridge.acceptGPUCompletion(firstTicket, output, operand),
+        )
+        assertEquals(1, providerAcceptCalls)
+        assertEquals(0, providerRejectCalls)
+    }
+
+    @Test
+    fun `physical provider serializes readback callbacks and reservations on one owner monitor`() {
+        val provider = GPUConcreteResourceProvider()
+        val generation = GPUDeviceGenerationID(33)
+        val planned = assertIs<GPUReadbackLayoutPlan.Planned>(
+            GPUReadbackLayoutPlanner().plan(
+                GPUFrameReadbackRequest(
+                    GPUReadbackRequestID("serialized-provider"),
+                    GPUPixelBounds(0, 0, 4, 4),
+                    GPUReadbackPixelFormat.Rgba8Unorm,
+                    GPUColorInterpretation("srgb-premul"),
+                ),
+                providerCapabilities(),
+            ),
+        )
+        fun request(id: String) = GPUReadbackStagingReservationRequest(
+            id,
+            "owner-$id",
+            generation,
+            planned.stagingDescriptor,
+            planned.stagingDescriptor.minimumBufferBytes,
+            providerBudget(16_384),
+        )
+        val first = assertIs<GPUReadbackStagingReservationResult.Accepted>(
+            provider.reserveReadbackStaging(request("serialized-first")),
+        ).lease
+        val submission = GPUResourceSubmissionID(330)
+        assertIs<GPUReadbackStagingLifecycleResult.Accepted>(
+            provider.markReadbackSubmitted(listOf(first), submission),
+        )
+        assertIs<GPUReadbackStagingLifecycleResult.Accepted>(
+            provider.acceptReadbackGPUCompletion(submission, generation),
+        )
+
+        val mappingAttempted = CountDownLatch(1)
+        val mappingDone = CountDownLatch(1)
+        val reservationAttempted = CountDownLatch(1)
+        val reservationDone = CountDownLatch(1)
+        val mappingResult = AtomicReference<GPUReadbackStagingLifecycleResult>()
+        val reservationResult = AtomicReference<GPUReadbackStagingReservationResult>()
+        val mappingThread: Thread
+        val reservationThread: Thread
+        synchronized(provider) {
+            mappingThread = Thread({
+                mappingAttempted.countDown()
+                mappingResult.set(provider.markReadbackMapped(first))
+                mappingDone.countDown()
+            }, "provider-callback")
+            reservationThread = Thread({
+                reservationAttempted.countDown()
+                reservationResult.set(provider.reserveReadbackStaging(request("serialized-second")))
+                reservationDone.countDown()
+            }, "provider-reservation")
+            mappingThread.start()
+            reservationThread.start()
+            assertTrue(mappingAttempted.await(1, TimeUnit.SECONDS))
+            assertTrue(reservationAttempted.await(1, TimeUnit.SECONDS))
+            assertFalse(mappingDone.await(100, TimeUnit.MILLISECONDS))
+            assertFalse(reservationDone.await(100, TimeUnit.MILLISECONDS))
+        }
+        mappingThread.join(1_000)
+        reservationThread.join(1_000)
+
+        assertFalse(mappingThread.isAlive)
+        assertFalse(reservationThread.isAlive)
+        assertIs<GPUReadbackStagingLifecycleResult.Accepted>(mappingResult.get())
+        val second = assertIs<GPUReadbackStagingReservationResult.Accepted>(reservationResult.get()).lease
+        assertNotEquals(first.resourceRef, second.resourceRef)
+    }
+
+    @Test
+    fun `readback mapper refused or throw quarantines pool state and removes exact bridge ledger`() {
+        listOf("refused", "throw").forEachIndexed { index, mode ->
+            val provider = GPUConcreteResourceProvider()
+            val generation = GPUDeviceGenerationID(20 + index.toLong())
+            val request = GPUFrameReadbackRequest(
+                requestId = GPUReadbackRequestID("map-arm-$mode"),
+                sourceBounds = GPUPixelBounds(0, 0, 4, 4),
+                pixelFormat = GPUReadbackPixelFormat.Rgba8Unorm,
+                outputColorInterpretation = GPUColorInterpretation("srgb-premul"),
+            )
+            val planned = assertIs<GPUReadbackLayoutPlan.Planned>(
+                GPUReadbackLayoutPlanner().plan(request, providerCapabilities()),
+            )
+            fun output(id: String): GPUPreparedReadbackOutput {
+                val lease = assertIs<GPUReadbackStagingReservationResult.Accepted>(
+                    provider.reserveReadbackStaging(
+                        GPUReadbackStagingReservationRequest(
+                            reservationId = id,
+                            ownerScope = "owner-$id",
+                            deviceGeneration = generation,
+                            descriptor = planned.stagingDescriptor,
+                            backingBufferBytes = planned.stagingDescriptor.minimumBufferBytes,
+                            budgetPlan = providerBudget(16_384),
+                        ),
+                    ),
+                ).lease
+                return GPUPreparedReadbackOutput(
+                    GPUFrameBufferRef("buffer.$id"),
+                    GPUPreparedConcreteResourceRef.Buffer(lease.resourceRef),
+                    1,
+                    request,
+                    planned.layout,
+                    lease,
+                )
+            }
+            val poolEvents = mutableListOf<String>()
+            val observedProvider = object : GPUFrameResourcePreflightProvider by provider {
+                override fun quarantineReadbackAfterSubmit(
+                    lease: GPUReadbackStagingLease,
+                ): GPUReadbackStagingLifecycleResult {
+                    poolEvents += "fail-closed"
+                    return provider.quarantineReadbackAfterSubmit(lease)
+                }
+            }
+            val bridge = GPUConcreteFrameReadbackAccess(
+                observedProvider,
+                GPUFrameNativeReadbackMapper { _, _, _ ->
+                    if (mode == "throw") error("mapper arm exploded")
+                    GPUFrameReadbackMapArmResult.Refused(
+                        executionDiagnostic("failed.test.mapper-refused", "refused"),
+                    )
+                },
+            )
+            val first = output("$mode-a")
+            val ticket = GPUQueueCompletionTicket(
+                GPUQueueCompletionTicketID("ticket.$mode"),
+                GPUFrameID(50 + index.toLong()),
+                generation,
+            )
+            val operand = GPUFrameCoreTestFixture.nativePayload(withReadback = true)
+                .scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>().single()
+            assertEquals(GPUFrameReadbackLifecycleResult.Applied, bridge.markSubmitted(ticket, first, operand))
+            assertEquals(
+                GPUFrameReadbackLifecycleResult.Applied,
+                bridge.acceptGPUCompletion(ticket, first, operand),
+            )
+
+            assertIs<GPUFrameReadbackMapArmResult.Refused>(
+                bridge.mapAndDepad(first, operand, GPUFrameReadbackMapSink { error("no delivery") }),
+            )
+            assertEquals(listOf("fail-closed"), poolEvents)
+
+            val second = output("$mode-b")
+            val secondOperand = GPUFrameCoreTestFixture.nativePayload(withReadback = true)
+                .scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>().single()
+            assertEquals(
+                GPUFrameReadbackLifecycleResult.Applied,
+                bridge.markSubmitted(ticket, second, secondOperand),
+            )
+            assertNotEquals(first.stagingLease.resourceRef, second.stagingLease.resourceRef)
+        }
+    }
+
+    @Test
+    fun `distinct bridges sharing one provider allocate unique submission ids`() {
+        val provider = GPUConcreteResourceProvider()
+        val generation = GPUDeviceGenerationID(31)
+        val request = GPUFrameReadbackRequest(
+            GPUReadbackRequestID("bridge-id-unique"),
+            GPUPixelBounds(0, 0, 4, 4),
+            GPUReadbackPixelFormat.Rgba8Unorm,
+            GPUColorInterpretation("srgb-premul"),
+        )
+        val planned = assertIs<GPUReadbackLayoutPlan.Planned>(
+            GPUReadbackLayoutPlanner().plan(request, providerCapabilities()),
+        )
+        fun output(id: String): GPUPreparedReadbackOutput {
+            val lease = assertIs<GPUReadbackStagingReservationResult.Accepted>(
+                provider.reserveReadbackStaging(
+                    GPUReadbackStagingReservationRequest(
+                        id,
+                        "owner-$id",
+                        generation,
+                        planned.stagingDescriptor,
+                        planned.stagingDescriptor.minimumBufferBytes,
+                        providerBudget(16_384),
+                    ),
+                ),
+            ).lease
+            return GPUPreparedReadbackOutput(
+                GPUFrameBufferRef("buffer.$id"),
+                GPUPreparedConcreteResourceRef.Buffer(lease.resourceRef),
+                1,
+                request,
+                planned.layout,
+                lease,
+            )
+        }
+        val submissionIds = mutableListOf<GPUResourceSubmissionID>()
+        val observed = object : GPUFrameResourcePreflightProvider by provider {
+            override fun markReadbackSubmitted(
+                leases: List<GPUReadbackStagingLease>,
+                submissionId: GPUResourceSubmissionID,
+            ): GPUReadbackStagingLifecycleResult {
+                submissionIds += submissionId
+                return provider.markReadbackSubmitted(leases, submissionId)
+            }
+        }
+        val unusedMapper = GPUFrameNativeReadbackMapper { _, _, _ ->
+            error("mapping is not part of submission-id evidence")
+        }
+        val first = output("unique-a")
+        val second = output("unique-b")
+        val firstBridge = GPUConcreteFrameReadbackAccess(
+            observed,
+            unusedMapper,
+        )
+        val secondBridge = GPUConcreteFrameReadbackAccess(
+            observed,
+            unusedMapper,
+        )
+        val firstOperand = GPUFrameCoreTestFixture.nativePayload(withReadback = true)
+            .scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>().single()
+        val secondOperand = GPUFrameCoreTestFixture.nativePayload(withReadback = true)
+            .scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>().single()
+
+        assertEquals(
+            GPUFrameReadbackLifecycleResult.Applied,
+            firstBridge.markSubmitted(
+                GPUQueueCompletionTicket(GPUQueueCompletionTicketID("ticket.unique-a"), GPUFrameID(61), generation),
+                first,
+                firstOperand,
+            ),
+        )
+        assertEquals(
+            GPUFrameReadbackLifecycleResult.Applied,
+            secondBridge.markSubmitted(
+                GPUQueueCompletionTicket(GPUQueueCompletionTicketID("ticket.unique-b"), GPUFrameID(62), generation),
+                second,
+                secondOperand,
+            ),
+        )
+        assertEquals(2, submissionIds.distinct().size)
+    }
+
+    @Test
     fun `impossible shared eviction is atomic and preserves every reclaimable entry`() {
         val provider: GPUResourceProvider = GPUConcreteResourceProvider()
         val generation = GPUDeviceGenerationID(11)
@@ -945,6 +1505,353 @@ class GPUConcreteResourceProviderTest {
         )
         assertEquals(4_096, replacement.lease.physicalBytes)
     }
+
+    @Test
+    fun `asynchronous provider exception delivers one quarantined failure and always unmaps`() {
+        listOf("map", "depad").forEachIndexed { index, failurePoint ->
+            val provider = GPUConcreteResourceProvider()
+            val fixture = providerReadbackFixture(
+                provider,
+                "async-provider-$failurePoint",
+                GPUDeviceGenerationID(80 + index.toLong()),
+            )
+            val observed = object : GPUFrameResourcePreflightProvider by provider {
+                override fun markReadbackMapped(
+                    lease: GPUReadbackStagingLease,
+                ): GPUReadbackStagingLifecycleResult {
+                    if (failurePoint == "map") error("map transition failed")
+                    return provider.markReadbackMapped(lease)
+                }
+
+                override fun markReadbackDepadded(
+                    lease: GPUReadbackStagingLease,
+                ): GPUReadbackStagingLifecycleResult {
+                    if (failurePoint == "depad") error("depad transition failed")
+                    return provider.markReadbackDepadded(lease)
+                }
+            }
+            var nativeSink: GPUFrameNativeReadbackMapSink? = null
+            val bridge = GPUConcreteFrameReadbackAccess(
+                observed,
+                GPUFrameNativeReadbackMapper { _, _, sink ->
+                    nativeSink = sink
+                    GPUFrameReadbackMapArmResult.Armed
+                },
+            )
+            assertEquals(
+                GPUFrameReadbackLifecycleResult.Applied,
+                bridge.markSubmitted(fixture.ticket, fixture.output, fixture.operand),
+            )
+            assertEquals(
+                GPUFrameReadbackLifecycleResult.Applied,
+                bridge.acceptGPUCompletion(fixture.ticket, fixture.output, fixture.operand),
+            )
+            val deliveries = mutableListOf<GPUFrameReadbackMapDelivery>()
+            assertEquals(
+                GPUFrameReadbackMapArmResult.Armed,
+                bridge.mapAndDepad(fixture.output, fixture.operand) { deliveries += it },
+            )
+            var unmapCalls = 0
+            val nativeDelivery = GPUFrameNativeReadbackMapDelivery.Mapped(
+                object : GPUFrameMappedReadbackRange {
+                    override fun copyBytesFromZero(): ByteArray =
+                        ByteArray(fixture.output.layout.totalBufferBytes.toInt())
+                    override fun unmap() {
+                        unmapCalls += 1
+                    }
+                },
+            )
+
+            requireNotNull(nativeSink).accept(nativeDelivery)
+            requireNotNull(nativeSink).accept(nativeDelivery)
+
+            val failed = assertIs<GPUFrameReadbackMapDelivery.Failed>(deliveries.single())
+            assertEquals(GPUFrameReadbackMapFailureSafety.Quarantine, failed.safety)
+            assertEquals("failed.frame-readback.terminal-callback", failed.diagnostic.code.value)
+            assertEquals(1, unmapCalls)
+            assertEquals(
+                GPUFrameReadbackLifecycleResult.Applied,
+                bridge.finalizeAfterNativeClose(
+                    fixture.output,
+                    fixture.operand,
+                    GPUFrameReadbackNativeOutputSafety.Quarantined,
+                ),
+            )
+            assertEquals(
+                "failed.frame-readback.finalize-identity-mismatch",
+                assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+                    bridge.finalizeAfterNativeClose(
+                        fixture.output,
+                        fixture.operand,
+                        GPUFrameReadbackNativeOutputSafety.Quarantined,
+                    ),
+                ).diagnostic.code.value,
+            )
+        }
+    }
+
+    @Test
+    fun `accept refusal or throw quarantines exact lease and retains ledger only until cleanup succeeds`() {
+        listOf("refuse", "throw", "cleanup-retry").forEachIndexed { index, mode ->
+            val provider = GPUConcreteResourceProvider()
+            val fixture = providerReadbackFixture(
+                provider,
+                "accept-fail-closed-$mode",
+                GPUDeviceGenerationID(90 + index.toLong()),
+            )
+            var cleanupCalls = 0
+            val observed = object : GPUFrameResourcePreflightProvider by provider {
+                override fun acceptReadbackGPUCompletion(
+                    submissionId: GPUResourceSubmissionID,
+                    deviceGeneration: GPUDeviceGenerationID,
+                ): GPUReadbackStagingLifecycleResult {
+                    if (mode == "throw") error("accept transition failed")
+                    return GPUReadbackStagingLifecycleResult.Refused(
+                        executionDiagnostic("failed.test.accept-refused", "accept refused"),
+                    )
+                }
+
+                override fun quarantineReadbackAfterSubmit(
+                    lease: GPUReadbackStagingLease,
+                ): GPUReadbackStagingLifecycleResult {
+                    cleanupCalls += 1
+                    if (mode == "cleanup-retry" && cleanupCalls == 1) {
+                        return GPUReadbackStagingLifecycleResult.Refused(
+                            executionDiagnostic("failed.test.cleanup-refused", "cleanup refused"),
+                        )
+                    }
+                    return provider.quarantineReadbackAfterSubmit(lease)
+                }
+            }
+            val bridge = GPUConcreteFrameReadbackAccess(
+                observed,
+                GPUFrameNativeReadbackMapper { _, _, _ -> error("must not map") },
+            )
+            assertEquals(
+                GPUFrameReadbackLifecycleResult.Applied,
+                bridge.markSubmitted(fixture.ticket, fixture.output, fixture.operand),
+            )
+
+            assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+                bridge.acceptGPUCompletion(fixture.ticket, fixture.output, fixture.operand),
+            )
+            if (mode == "cleanup-retry") {
+                assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+                    bridge.acceptGPUCompletion(fixture.ticket, fixture.output, fixture.operand),
+                )
+                assertEquals(2, cleanupCalls)
+            } else {
+                assertEquals(1, cleanupCalls)
+            }
+            assertEquals(
+                "failed.frame-readback.submission-missing",
+                assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+                    bridge.acceptGPUCompletion(fixture.ticket, fixture.output, fixture.operand),
+                ).diagnostic.code.value,
+            )
+            assertEquals(
+                GPUFrameReadbackLifecycleResult.Applied,
+                provider.quarantineReadbackAfterSubmit(fixture.output.stagingLease).let {
+                    if (it is GPUReadbackStagingLifecycleResult.Accepted) {
+                        GPUFrameReadbackLifecycleResult.Applied
+                    } else {
+                        error("fail-closed lease must remain exactly quarantined")
+                    }
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `finalize refusal or throw quarantines exact lease and retries retained cleanup record`() {
+        listOf("refuse", "throw", "cleanup-retry").forEachIndexed { index, mode ->
+            val provider = GPUConcreteResourceProvider()
+            val fixture = providerReadbackFixture(
+                provider,
+                "finalize-fail-closed-$mode",
+                GPUDeviceGenerationID(100 + index.toLong()),
+            )
+            var cleanupCalls = 0
+            val observed = object : GPUFrameResourcePreflightProvider by provider {
+                override fun releaseReadbackAfterUnmap(
+                    lease: GPUReadbackStagingLease,
+                ): GPUReadbackStagingLifecycleResult {
+                    if (mode == "throw") error("release transition failed")
+                    return GPUReadbackStagingLifecycleResult.Refused(
+                        executionDiagnostic("failed.test.release-refused", "release refused"),
+                    )
+                }
+
+                override fun quarantineReadbackAfterSubmit(
+                    lease: GPUReadbackStagingLease,
+                ): GPUReadbackStagingLifecycleResult {
+                    cleanupCalls += 1
+                    if (mode == "cleanup-retry" && cleanupCalls == 1) {
+                        return GPUReadbackStagingLifecycleResult.Refused(
+                            executionDiagnostic("failed.test.cleanup-refused", "cleanup refused"),
+                        )
+                    }
+                    return provider.quarantineReadbackAfterSubmit(lease)
+                }
+            }
+            val bridge = GPUConcreteFrameReadbackAccess(
+                observed,
+                GPUFrameNativeReadbackMapper { output, _, sink ->
+                    sink.accept(
+                        GPUFrameNativeReadbackMapDelivery.Mapped(
+                            object : GPUFrameMappedReadbackRange {
+                                override fun copyBytesFromZero(): ByteArray =
+                                    ByteArray(output.layout.totalBufferBytes.toInt())
+                                override fun unmap() = Unit
+                            },
+                        ),
+                    )
+                    GPUFrameReadbackMapArmResult.Armed
+                },
+            )
+            assertEquals(
+                GPUFrameReadbackLifecycleResult.Applied,
+                bridge.markSubmitted(fixture.ticket, fixture.output, fixture.operand),
+            )
+            assertEquals(
+                GPUFrameReadbackLifecycleResult.Applied,
+                bridge.acceptGPUCompletion(fixture.ticket, fixture.output, fixture.operand),
+            )
+            assertEquals(
+                GPUFrameReadbackMapArmResult.Armed,
+                bridge.mapAndDepad(fixture.output, fixture.operand) {
+                    assertIs<GPUFrameReadbackMapDelivery.Pixels>(it)
+                },
+            )
+
+            assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+                bridge.finalizeAfterNativeClose(
+                    fixture.output,
+                    fixture.operand,
+                    GPUFrameReadbackNativeOutputSafety.Released,
+                ),
+            )
+            if (mode == "cleanup-retry") {
+                assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+                    bridge.finalizeAfterNativeClose(
+                        fixture.output,
+                        fixture.operand,
+                        GPUFrameReadbackNativeOutputSafety.Released,
+                    ),
+                )
+                assertEquals(2, cleanupCalls)
+            } else {
+                assertEquals(1, cleanupCalls)
+            }
+            assertEquals(
+                "failed.frame-readback.finalize-identity-mismatch",
+                assertIs<GPUFrameReadbackLifecycleResult.Refused>(
+                    bridge.finalizeAfterNativeClose(
+                        fixture.output,
+                        fixture.operand,
+                        GPUFrameReadbackNativeOutputSafety.Released,
+                    ),
+                ).diagnostic.code.value,
+            )
+        }
+    }
+    @Test
+    fun `prepared destination snapshot carries lease logical bounds and approximate physical backing`() {
+        val provider = GPUConcreteResourceProvider()
+        val generation = GPUDeviceGenerationID(31)
+        val session = provider.beginFramePreparation(91, generation)
+        val logicalBounds = GPUPixelBounds(1, 1, 3, 3)
+        val preparation = GPUResourcePreparationRequest(
+            resource = GPUFrameTextureRef("snapshot.logical-2x2"),
+            descriptor = GPUFrameTextureDescriptor(logicalBounds, GPUColorFormat("rgba8unorm"), 1),
+            role = GPUFrameResourceRole.DestinationSnapshot,
+            usages = setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.TextureBinding),
+            lifetime = GPUFrameResourceLifetime.FrameLocal,
+            byteSize = 16,
+            diagnosticLabel = "snapshot.logical-2x2",
+        )
+
+        val prepared = assertIs<GPUFrameResourcePreparationDecision.Prepared>(
+            provider.prepareFrameResource(
+                GPUFrameResourcePreparationInput(
+                    preparation = preparation,
+                    ownerScope = session.ownerScope,
+                    deviceGeneration = generation,
+                    resourceGeneration = 4,
+                    firstStep = 1,
+                    lastStepExclusive = 4,
+                    budgetPlan = providerBudget(16_384),
+                    capabilities = providerCapabilities(),
+                ),
+            ),
+        )
+        val allocation = requireNotNull(prepared.textureAllocation)
+        assertEquals(logicalBounds, allocation.logicalBounds)
+        assertEquals(16, allocation.backingWidth)
+        assertEquals(16, allocation.backingHeight)
+        assertEquals(GPUColorFormat("rgba8unorm"), allocation.format)
+        assertEquals(1, allocation.sampleCount)
+        assertEquals(
+            setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.TextureBinding),
+            allocation.usages,
+        )
+
+        assertIs<GPUPhysicalPoolMaintenanceDecision.Applied<GPUPhysicalPoolRollbackSummary>>(
+            provider.rollbackFrameResourcesBeforeSubmit(session.ownerScope),
+        )
+        assertEquals(0, provider.pendingPhysicalReservationCount)
+    }
+}
+
+private data class ProviderReadbackFixture(
+    val output: GPUPreparedReadbackOutput,
+    val operand: GPUPreparedNativeScopeOperand.Readback,
+    val ticket: GPUQueueCompletionTicket,
+)
+
+private fun providerReadbackFixture(
+    provider: GPUConcreteResourceProvider,
+    id: String,
+    generation: GPUDeviceGenerationID,
+): ProviderReadbackFixture {
+    val request = GPUFrameReadbackRequest(
+        GPUReadbackRequestID(id),
+        GPUPixelBounds(0, 0, 4, 4),
+        GPUReadbackPixelFormat.Rgba8Unorm,
+        GPUColorInterpretation("srgb-premul"),
+    )
+    val planned = assertIs<GPUReadbackLayoutPlan.Planned>(
+        GPUReadbackLayoutPlanner().plan(request, providerCapabilities()),
+    )
+    val lease = assertIs<GPUReadbackStagingReservationResult.Accepted>(
+        provider.reserveReadbackStaging(
+            GPUReadbackStagingReservationRequest(
+                id,
+                "owner-$id",
+                generation,
+                planned.stagingDescriptor,
+                planned.stagingDescriptor.minimumBufferBytes,
+                providerBudget(16_384),
+            ),
+        ),
+    ).lease
+    return ProviderReadbackFixture(
+        GPUPreparedReadbackOutput(
+            GPUFrameBufferRef("buffer.$id"),
+            GPUPreparedConcreteResourceRef.Buffer(lease.resourceRef),
+            1,
+            request,
+            planned.layout,
+            lease,
+        ),
+        GPUFrameCoreTestFixture.nativePayload(withReadback = true)
+            .scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Readback>().single(),
+        GPUQueueCompletionTicket(
+            GPUQueueCompletionTicketID("ticket.$id"),
+            GPUFrameID(id.hashCode().toLong().let(Math::abs)),
+            generation,
+        ),
+    )
 }
 
 private fun providerScratchRequest(

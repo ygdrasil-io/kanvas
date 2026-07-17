@@ -326,6 +326,9 @@ class GPUBackendRuntimeContractsTest {
         override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
             error("NoopBackendSession cannot create offscreen targets")
 
+        override fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession =
+            error("NoopBackendSession cannot prepare scene frame sessions")
+
         override fun createWindowSurface(binding: GPUNativeSurfaceBinding): GPUBackendWindowSurface =
             error("NoopBackendSession cannot create window surfaces")
 

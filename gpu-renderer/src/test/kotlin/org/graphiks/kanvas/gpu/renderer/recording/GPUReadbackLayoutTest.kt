@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.gpu.renderer.execution
+package org.graphiks.kanvas.gpu.renderer.recording
 
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackCompletionFailure
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackMapFailureSafety
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingDescriptorContract
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingLifecycleResult
+import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingLease
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingPool
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingReservationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingReservationResult
@@ -406,6 +407,70 @@ class GPUReadbackLayoutTest {
             deviceLostPool.markMapFailed(deviceLost, GPUReadbackMapFailureSafety.DeviceLost),
         )
         assertEquals(GPUReadbackStagingState.Quarantined, deviceLostPool.stateOf(deviceLost))
+
+        val nativeCloseFailurePool = GPUReadbackStagingPool()
+        val nativeCloseFailure = nativeCloseFailurePool.reserve(
+            stagingRequest("native-close", "frame-native-close", descriptor, generation),
+        ).acceptedLease()
+        nativeCloseFailurePool.markSubmitted(listOf(nativeCloseFailure), GPUResourceSubmissionID(4))
+        nativeCloseFailurePool.acceptGPUCompletion(GPUResourceSubmissionID(4), generation)
+        nativeCloseFailurePool.markMapped(nativeCloseFailure)
+        nativeCloseFailurePool.markDepadded(nativeCloseFailure)
+        assertIs<GPUReadbackStagingLifecycleResult.Accepted>(
+            nativeCloseFailurePool.markMapFailed(
+                nativeCloseFailure,
+                GPUReadbackMapFailureSafety.ReleaseUncertain,
+            ),
+        )
+        assertEquals(
+            GPUReadbackStagingState.Quarantined,
+            nativeCloseFailurePool.stateOf(nativeCloseFailure),
+        )
+    }
+
+    @Test
+    fun `fail closed quarantine is exact and idempotent from every owned readback state`() {
+        val descriptor = planned(readbackRequest(width = 4, height = 2), capabilities()).stagingDescriptor
+        val generation = GPUDeviceGenerationID(7)
+
+        fun assertFailClosed(
+            id: String,
+            advance: (GPUReadbackStagingPool, GPUReadbackStagingLease, GPUResourceSubmissionID) -> Unit,
+        ) {
+            val pool = GPUReadbackStagingPool()
+            val lease = pool.reserve(stagingRequest(id, "frame-$id", descriptor, generation)).acceptedLease()
+            val submission = GPUResourceSubmissionID(id.hashCode().toLong().let(Math::abs).coerceAtLeast(1))
+            advance(pool, lease, submission)
+
+            assertIs<GPUReadbackStagingLifecycleResult.Accepted>(
+                pool.quarantineAfterSubmitFailure(lease),
+            )
+            assertEquals(GPUReadbackStagingState.Quarantined, pool.stateOf(lease))
+            assertIs<GPUReadbackStagingLifecycleResult.Accepted>(
+                pool.quarantineAfterSubmitFailure(lease),
+            )
+            assertEquals(GPUReadbackStagingState.Quarantined, pool.stateOf(lease))
+        }
+
+        assertFailClosed("reserved") { _, _, _ -> }
+        assertFailClosed("submitted") { pool, lease, submission ->
+            pool.markSubmitted(listOf(lease), submission)
+        }
+        assertFailClosed("completion-pending") { pool, lease, submission ->
+            pool.markSubmitted(listOf(lease), submission)
+            pool.acceptGPUCompletion(submission, generation)
+        }
+        assertFailClosed("mapped") { pool, lease, submission ->
+            pool.markSubmitted(listOf(lease), submission)
+            pool.acceptGPUCompletion(submission, generation)
+            pool.markMapped(lease)
+        }
+        assertFailClosed("depadded") { pool, lease, submission ->
+            pool.markSubmitted(listOf(lease), submission)
+            pool.acceptGPUCompletion(submission, generation)
+            pool.markMapped(lease)
+            pool.markDepadded(lease)
+        }
     }
 
     @Test

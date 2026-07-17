@@ -93,6 +93,123 @@ class GPURendererPackageBoundaryTest {
         }
     }
 
+    /** Keeps task-list construction on the recording side of the recording/execution boundary. */
+    @Test
+    fun `public prepared frame recorders belong to recording not execution`() {
+        val recordingSources = productionFile("recording").walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+        val executionSources = productionFile("execution").walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+
+        listOf("GPUColorGlyphFrameRecorder", "GPUSolidRectFrameRecorder").forEach { recorder ->
+            assertContains(recordingSources, "class $recorder")
+            assertTrue(
+                actual = "class $recorder" !in executionSources,
+                message = "$recorder constructs task lists and must not be owned by execution",
+            )
+        }
+    }
+
+    /** Keeps frame telemetry observational and dependency direction one-way into execution. */
+    @Test
+    fun `frame structural telemetry stays independent from execution resources and recording`() {
+        val telemetrySource = productionFile("telemetry/TelemetryContracts.kt").readText()
+        val executorSource = productionFile("execution/GPUFrameExecutor.kt").readText()
+        val coordinatorSource = productionFile("execution/GPUFrameCoordinator.kt").readText()
+
+        listOf("execution", "resources", "recording").forEach { forbiddenPackage ->
+            assertTrue(
+                actual = "import org.graphiks.kanvas.gpu.renderer.$forbiddenPackage." !in telemetrySource,
+                message = "telemetry must not import $forbiddenPackage",
+            )
+        }
+        assertContains(executorSource, "org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID")
+        assertContains(coordinatorSource, "org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID")
+    }
+
+    /** Keeps low-level execution and preflight seams hidden behind the coordinator product API. */
+    @Test
+    fun `frame execution seams remain internal and coordinator is the product entry`() {
+        val executorSource = productionFile("execution/GPUFrameExecutor.kt").readText()
+        val coordinatorSource = productionFile("execution/GPUFrameCoordinator.kt").readText()
+        val preparedSource = productionFile("execution/PreparedGPUFrame.kt").readText()
+        val preflighterSource = productionFile("execution/GPUFramePreflighter.kt").readText()
+        val targetSource = productionFile("resources/GPUSceneTarget.kt").readText()
+
+        listOf(
+            "internal class GPUFrameExecutor",
+            "internal fun interface GPUFrameExecutionPort",
+            "internal interface GPUFrameEncodingBackend",
+            "internal interface GPUFrameResourceRetention",
+        ).forEach { declaration -> assertContains(executorSource, declaration) }
+        assertContains(coordinatorSource, "class GPUFrameCoordinator internal constructor")
+        assertContains(coordinatorSource, "internal fun interface GPUFramePlanningPort")
+        assertContains(coordinatorSource, "internal fun interface GPUFramePreflightPort")
+        assertContains(preparedSource, "internal class PreparedGPUFrame")
+        assertContains(preparedSource, "internal sealed interface GPUFramePreflightResult")
+        assertContains(preflighterSource, "internal class GPUFramePreflighter")
+        assertContains(targetSource, "internal class GPUSceneTarget")
+    }
+
+    /** Prevents scene callers from bypassing the coordinator through low-level execution types. */
+    @Test
+    fun `scene sources do not call frame executor or preflight seams directly`() {
+        val sceneSources = sceneSourceRoot.walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+        listOf(
+            "GPUFrameExecutor",
+            "GPUFrameExecutionPort",
+            "GPUFramePreflighter",
+            "GPUFramePreflightPort",
+            "PreparedGPUFrame",
+            "GPUSceneTarget",
+        ).forEach { forbiddenType ->
+            assertTrue(
+                actual = forbiddenType !in sceneSources,
+                message = "gpu-renderer-scenes must route through GPUFrameCoordinator, not $forbiddenType",
+            )
+        }
+    }
+
+    /** Keeps color-glyph native evidence on the canonical prepared-frame route. */
+    @Test
+    fun `color glyph native tests use task lists and prepared scene readback only`() {
+        val testFiles = listOf(
+            "execution/GPUColorGlyphRenderSmokeTest.kt",
+            "execution/GPUColorGlyphTrueColrFixtureTest.kt",
+        )
+        val violations = buildList {
+            testFiles.forEach { relativePath ->
+                val source = testFile(relativePath).readText()
+                listOf(
+                    "createOffscreenTarget(" to "legacy offscreen-target creation",
+                    "target.encode(" to "legacy immediate target encoding",
+                    "drawColorGlyphPass(" to "legacy immediate color-glyph draw",
+                    "target.readRgba(" to "legacy immediate readback",
+                ).forEach { (forbiddenCall, description) ->
+                    if (forbiddenCall in source) add("$relativePath uses $description: $forbiddenCall")
+                }
+                listOf(
+                    listOf("GPUTaskList", "buildPreparedColorGlyphTestTaskList(") to "one recorded task list",
+                    listOf("prepareSceneFrameSession(") to "one prepared scene session",
+                    listOf("GPUSceneFrameOutputRequest.ReadbackRgba") to "planned RGBA readback",
+                ).forEach { (acceptedCalls, description) ->
+                    if (acceptedCalls.none(source::contains)) {
+                        add("$relativePath is missing $description: ${acceptedCalls.joinToString(" or ")}")
+                    }
+                }
+            }
+        }
+
+        assertTrue(
+            actual = violations.isEmpty(),
+            message = "Color-glyph native tests bypass the canonical frame route:\n${violations.joinToString("\n")}",
+        )
+    }
+
     /** Ensures active specs expose one frame-planning authority without legacy contradictions. */
     @Test
     fun `active gpu renderer specs expose one coherent frame planning authority`() {
@@ -391,10 +508,20 @@ class GPURendererPackageBoundaryTest {
     private fun productionFile(relativePath: String): File =
         mainSourceRoot.resolve("org/graphiks/kanvas/gpu/renderer").resolve(relativePath)
 
+    /** Resolves one test source file below the canonical renderer root. */
+    private fun testFile(relativePath: String): File =
+        testSourceRoot.resolve("org/graphiks/kanvas/gpu/renderer").resolve(relativePath)
+
     /** Test constants used by package-boundary validation. */
     private companion object {
         /** Main Kotlin source root for the gpu-renderer module under Gradle test execution. */
         val mainSourceRoot = File("src/main/kotlin")
+
+        /** Test Kotlin source root for architecture guards under Gradle test execution. */
+        val testSourceRoot = File("src/test/kotlin")
+
+        /** Scene source root, which may depend only on the coordinator product route. */
+        val sceneSourceRoot = File("../gpu-renderer-scenes/src")
 
         /** Active authority pack root relative to the gpu-renderer Gradle project. */
         val authoritySpecRoot = File("../.upstream/specs/gpu-renderer")

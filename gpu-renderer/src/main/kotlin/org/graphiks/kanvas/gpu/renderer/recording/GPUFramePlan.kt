@@ -24,7 +24,9 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -238,6 +240,7 @@ sealed interface GPUFrameStep {
         val target: GPUFrameTargetRef,
         val loadStore: GPULoadStorePlan,
         val samplePlan: GPUSamplePlan,
+        resourceUses: List<GPUFrameResourceUse> = emptyList(),
         drawPackets: List<GPUDrawPacket>,
         sourceTaskIds: List<GPUTaskID>,
         batches: List<GPUFrameRenderBatch> = listOf(
@@ -248,8 +251,10 @@ sealed interface GPUFrameStep {
                 sourceTaskIds = sourceTaskIds,
             ),
         ),
+        val sampleContinuation: GPUSampleContinuationRequest? = null,
     ) : GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
+        val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
         val batches: List<GPUFrameRenderBatch> = immutableList(batches)
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
@@ -280,6 +285,9 @@ sealed interface GPUFrameStep {
                 batches.flatMap(GPUFrameRenderBatch::sourceTaskIds).distinct() == sourceTaskIds,
             ) {
                 "GPUFrameStep.RenderPassStep batch sourceTaskIds must exactly cover the step sourceTaskIds"
+            }
+            require(sampleContinuation == null || sampleContinuation.key.samplePlan == samplePlan) {
+                "GPUFrameStep.RenderPassStep sample continuation must match the render sample plan"
             }
         }
     }
@@ -777,8 +785,24 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
     when (value) {
         is GPUFrameStep.RenderPassStep -> {
             resourceRef("target", value.target)
+            list("resourceUses", value.resourceUses) { resourceUse(it) }
             loadStore("loadStore", value.loadStore)
             samplePlan("samplePlan", value.samplePlan)
+            nullable("sampleContinuation", value.sampleContinuation) { continuation ->
+                string("target", continuation.key.target.value)
+                long("targetGeneration", continuation.key.targetGeneration)
+                long("deviceGeneration", continuation.key.deviceGeneration.value)
+                string("colorFormat", continuation.key.colorFormat.value)
+                string("colorInterpretation", continuation.key.colorInterpretation.value)
+                string("samplePlan", continuation.key.samplePlan.specializationKey)
+                string("colorAttachment", continuation.key.colorAttachment.value)
+                nullable("depthStencilAttachment", continuation.key.depthStencilAttachment) {
+                    string("target", it.value)
+                }
+                string("loadTransition", continuation.loadTransition.name)
+                string("storeAction", continuation.storeAction.name)
+                string("resolveAction", continuation.resolveAction.name)
+            }
             list("batches", value.batches) { batch ->
                 string("batchId", batch.batchId)
                 string("kind", batch.kind.name)
@@ -912,6 +936,9 @@ private fun CanonicalHashSink.packet(value: GPUDrawPacket) {
         string("fingerprint", slot.fingerprint.value)
         int("bindingIndex", slot.bindingIndex)
     }
+    nullable("semanticPayload", value.semanticPayload) { payload ->
+        semanticPayload(payload)
+    }
     string("vertexSourceLabel", value.vertexSourceLabel)
     nullableString("scissorBoundsHash", value.scissorBoundsHash)
     string("targetStateHash", value.targetStateHash)
@@ -922,6 +949,64 @@ private fun CanonicalHashSink.packet(value: GPUDrawPacket) {
         nullableString("passId", diagnostic.passId)
         nullableString("invocationId", diagnostic.invocationId)
         bool("terminal", diagnostic.terminal)
+    }
+}
+
+private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
+    tag(value.canonicalType)
+    val ref = value.payloadRef
+    int("commandIdValue", ref.commandIdValue)
+    string("renderStepIdentity", ref.renderStepIdentity)
+    nullable("uniformSlot", ref.uniformSlot) { slot ->
+        string("slotId", slot.slotId.value)
+        string("fingerprint", slot.fingerprint.value)
+        long("byteOffset", slot.byteOffset)
+    }
+    nullable("uniformBlock", ref.uniformBlock) { block ->
+        string("fingerprint", block.fingerprint.value)
+        string("packingPlanHash", block.packingPlanHash)
+        long("byteSize", block.byteSize)
+        bool("zeroedPadding", block.zeroedPadding)
+        string("scope", block.scope)
+        list("bytes", block.bytes) { byte -> int("byte", byte) }
+        list("fields", block.fields) { field ->
+            string("fieldPath", field.fieldPath)
+            long("byteOffset", field.byteOffset)
+            long("byteSize", field.byteSize)
+            string("valueClass", field.valueClass)
+            bool("zeroFilled", field.zeroFilled)
+        }
+    }
+    nullable("resourceSlot", ref.resourceSlot) { slot ->
+        string("slotId", slot.slotId.value)
+        string("fingerprint", slot.fingerprint.value)
+        int("bindingIndex", slot.bindingIndex)
+    }
+    nullable("gradientStore", ref.gradientStore) { store -> string("fingerprint", store.fingerprint.value) }
+    nullable("resourceBlock", ref.resourceBlock) { block -> string("fingerprint", block.fingerprint.value) }
+    when (value) {
+        is GPUDrawSemanticPayload.SolidRect -> Unit
+        is GPUDrawSemanticPayload.ColorGlyph -> {
+            string("canonicalHash", value.canonicalHash)
+            string("planArtifactId", value.planArtifactKey.artifactID.value.toString())
+            int("planArtifactGeneration", value.planArtifactKey.generation.value)
+            string("planArtifactFingerprint", value.planArtifactKey.contentFingerprint)
+            string("atlasArtifactId", value.atlasArtifactKey.artifactID.value.toString())
+            int("atlasArtifactGeneration", value.atlasArtifactKey.generation.value)
+            string("atlasArtifactFingerprint", value.atlasArtifactKey.contentFingerprint)
+            string("atlasBytesSha256", value.atlasBytesSha256)
+            long("atlasGeneration", value.atlasGeneration)
+            int("atlasWidth", value.atlasWidth)
+            int("atlasHeight", value.atlasHeight)
+            string("atlasFormat", value.atlasFormat.gpuLabel)
+            int("atlasByteCount", value.atlasA8Bytes.size)
+            int("layerCount", value.layers.size)
+            int("vertexFloatCount", value.vertexData.size)
+            int("indexCount", value.indexData.size)
+            int("uniformByteCount", value.uniformBytes.size)
+            bounds("targetBounds", value.targetBounds)
+            bounds("scissorBounds", value.scissorBounds)
+        }
     }
 }
 
@@ -1078,15 +1163,16 @@ private fun CanonicalHashSink.destinationSourceKey(
     long("deviceGeneration", value.deviceGeneration.value)
     string("format", value.format.value)
     string("colorInterpretation", value.colorInterpretation.value)
-    tag("sampleContinuation")
-    string("sampleTarget", value.sampleContinuation.target.value)
-    long("sampleTargetGeneration", value.sampleContinuation.targetGeneration)
-    long("sampleDeviceGeneration", value.sampleContinuation.deviceGeneration.value)
-    string("sampleColorFormat", value.sampleContinuation.colorFormat.value)
-    string("sampleColorInterpretation", value.sampleContinuation.colorInterpretation.value)
-    int("sampleCount", value.sampleContinuation.samplePlan.sampleCount)
-    string("colorAttachment", value.sampleContinuation.colorAttachment.value)
-    nullableString("depthStencilAttachment", value.sampleContinuation.depthStencilAttachment?.value)
+    nullable("sampleContinuation", value.sampleContinuation) { continuation ->
+        string("sampleTarget", continuation.target.value)
+        long("sampleTargetGeneration", continuation.targetGeneration)
+        long("sampleDeviceGeneration", continuation.deviceGeneration.value)
+        string("sampleColorFormat", continuation.colorFormat.value)
+        string("sampleColorInterpretation", continuation.colorInterpretation.value)
+        int("sampleCount", continuation.samplePlan.sampleCount)
+        string("colorAttachment", continuation.colorAttachment.value)
+        nullableString("depthStencilAttachment", continuation.depthStencilAttachment?.value)
+    }
     nullableString("sourceIntermediate", value.sourceIntermediate?.value)
 }
 
@@ -1119,6 +1205,15 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
         is GPUFrameStep.RenderPassStep ->
             "render target=${target.value} load=${loadStore.loadOp} store=${loadStore.storePlan.name} " +
                 "clear=${loadStore.clearColorLabel ?: "none"} sample=${samplePlan.specializationKey} " +
+                "uses=${resourceUses.joinToString(";") { it.stableDump() }.ifEmpty { "none" }} " +
+                "continuation=${sampleContinuation?.let { continuation ->
+                    "${continuation.key.target.value}@${continuation.key.targetGeneration}:" +
+                        "${continuation.key.deviceGeneration.value}:" +
+                        "${continuation.key.colorAttachment.value}:" +
+                        "${continuation.loadTransition.name}:" +
+                        "${continuation.storeAction.name}:" +
+                        continuation.resolveAction.name
+                } ?: "none"} " +
                 "batches=${batches.joinToString(";") { batch ->
                     "${batch.batchId}:${batch.kind.name}:${batch.packets.joinToString(",") { it.packetId.value }}"
                 }} packets=${drawPackets.joinToString(";") { packet -> packet.stableDump() }}"
@@ -1183,11 +1278,39 @@ private fun GPUDrawPacket.stableDump(): String =
         "computePipeline=${computePipelineKey?.value ?: "none"}|layout=$bindingLayoutHash|" +
         "uniform=${uniformSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.byteOffset}" } ?: "none"}|" +
         "resource=${resourceSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.bindingIndex}" } ?: "none"}|" +
+        "semantic=${semanticPayload?.stableDump() ?: "none"}|" +
         "vertex=$vertexSourceLabel|scissor=${scissorBoundsHash ?: "none"}|target=$targetStateHash|" +
         "order=$originalPaintOrder|generation=$resourceGeneration|" +
         "diagnostics=${diagnostics.joinToString(";") { diagnostic ->
             "${diagnostic.code}|${diagnostic.passId}|${diagnostic.invocationId}|${diagnostic.terminal}"
         }}"
+
+private fun GPUDrawSemanticPayload.stableDump(): String {
+    val ref = payloadRef
+    val block = ref.uniformBlock
+    val common = "$canonicalType(command=${ref.commandIdValue},step=${ref.renderStepIdentity}," +
+        "slot=${ref.uniformSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.byteOffset}" } ?: "none"}," +
+        "fingerprint=${block?.fingerprint?.value ?: "none"},packing=${block?.packingPlanHash ?: "none"}," +
+        "byteSize=${block?.byteSize ?: 0},zeroedPadding=${block?.zeroedPadding ?: false}," +
+        "bytes=${block?.bytes?.joinToString(",") ?: "none"}," +
+        "fields=${block?.fields?.joinToString(",") { field ->
+            "${field.fieldPath}@${field.byteOffset}+${field.byteSize}:${field.valueClass}:zero=${field.zeroFilled}"
+        } ?: "none"}"
+    return when (this) {
+        is GPUDrawSemanticPayload.SolidRect -> "$common)"
+        is GPUDrawSemanticPayload.ColorGlyph ->
+            "$common,colorGlyphHash=$canonicalHash," +
+                "plan=${planArtifactKey.artifactID.value}@${planArtifactKey.generation.value}/" +
+                "${planArtifactKey.contentFingerprint}," +
+                "atlasArtifact=${atlasArtifactKey.artifactID.value}@${atlasArtifactKey.generation.value}/" +
+                "${atlasArtifactKey.contentFingerprint}," +
+                "atlasBytesSha256=$atlasBytesSha256," +
+                "atlas=${atlasWidth}x$atlasHeight:${atlasFormat.gpuLabel}:$atlasGeneration," +
+                "atlasBytes=${atlasA8Bytes.size},layers=${layers.size}," +
+                "vertexFloats=${vertexData.size},indices=${indexData.size},uniformBytes=${uniformBytes.size}," +
+                "target=$targetBounds,scissor=$scissorBounds)"
+    }
+}
 
 private fun GPUFrameResourceUse.stableDump(): String =
     "${resource.value}|${role.name}|${usage.name}|${lifetime.name}|write=$write"
@@ -1215,18 +1338,22 @@ private fun GPUDiagnostic.dumpLine(prefix: String): String =
         "message=$message facts=${facts.toSortedMap().entries.joinToString(",") { (key, value) -> "$key=$value" }} " +
         "terminal=$isTerminal retryable=$isRetryable"
 
-private fun GPUDestinationSnapshotGroupKey.dumpDestinationSourceKey(): String =
-    "sourceTarget=${target.value} targetGeneration=$targetGeneration deviceGeneration=${deviceGeneration.value} " +
-        "format=${format.value} color=${colorInterpretation.value} " +
-        "sampleTarget=${sampleContinuation.target.value} " +
-        "sampleTargetGeneration=${sampleContinuation.targetGeneration} " +
-        "sampleDeviceGeneration=${sampleContinuation.deviceGeneration.value} " +
-        "sampleFormat=${sampleContinuation.colorFormat.value} " +
-        "sampleColor=${sampleContinuation.colorInterpretation.value} " +
-        "sampleCount=${sampleContinuation.samplePlan.sampleCount} " +
-        "colorAttachment=${sampleContinuation.colorAttachment.value} " +
-        "depthStencilAttachment=${sampleContinuation.depthStencilAttachment?.value ?: "none"} " +
+private fun GPUDestinationSnapshotGroupKey.dumpDestinationSourceKey(): String {
+    val continuation = sampleContinuation?.let { value ->
+        "sampleTarget=${value.target.value} " +
+            "sampleTargetGeneration=${value.targetGeneration} " +
+            "sampleDeviceGeneration=${value.deviceGeneration.value} " +
+            "sampleFormat=${value.colorFormat.value} " +
+            "sampleColor=${value.colorInterpretation.value} " +
+            "sampleCount=${value.samplePlan.sampleCount} " +
+            "colorAttachment=${value.colorAttachment.value} " +
+            "depthStencilAttachment=${value.depthStencilAttachment?.value ?: "none"}"
+    } ?: "sampleContinuation=none"
+    return "sourceTarget=${target.value} targetGeneration=$targetGeneration " +
+        "deviceGeneration=${deviceGeneration.value} format=${format.value} " +
+        "color=${colorInterpretation.value} $continuation " +
         "sourceIntermediate=${sourceIntermediate?.value ?: "none"}"
+}
 
 private fun GPUDestinationSnapshotConsumerRef.dumpDestinationConsumer(): String =
     "consumerGrouping=$groupingCommandId,consumerTask=${renderTaskId.value}," +

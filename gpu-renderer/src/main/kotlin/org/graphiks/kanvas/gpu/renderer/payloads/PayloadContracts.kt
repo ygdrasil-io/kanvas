@@ -3,6 +3,10 @@ package org.graphiks.kanvas.gpu.renderer.payloads
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 
 /** Opaque payload slot identifier. */
 @JvmInline
@@ -221,6 +225,602 @@ data class GPUDrawPayloadRef(
     val resourceBlock: GPUResourceBindingBlock? = null,
 )
 
+/** Closed native atlas format accepted by the COLRv0 color-glyph payload. */
+enum class GPUColorGlyphAtlasFormat(val gpuLabel: String) {
+    R8Unorm("r8unorm"),
+}
+
+const val COLOR_GLYPH_RENDER_STEP_IDENTITY = "text.colrv0.composite"
+
+/** Typed proof tying one layer to one exact packed atlas placement and strike. */
+data class GPUColorGlyphAtlasPlacementProofInput(
+    val atlasArtifactKey: GPUTextArtifactKey,
+    val strikeGlyphId: Int,
+    val strikeSize: Float,
+    val strikeSubpixelX: Int,
+    val strikeSubpixelY: Int,
+    val atlasBounds: GPUPixelBounds,
+)
+
+/** Immutable placement proof retained by the semantic payload. */
+class GPUColorGlyphAtlasPlacementProof internal constructor(input: GPUColorGlyphAtlasPlacementProofInput) {
+    val atlasArtifactKey: GPUTextArtifactKey = input.atlasArtifactKey.copy()
+    val strikeGlyphId: Int = input.strikeGlyphId
+    val strikeSize: Float = input.strikeSize
+    val strikeSubpixelX: Int = input.strikeSubpixelX
+    val strikeSubpixelY: Int = input.strikeSubpixelY
+    val atlasBounds: GPUPixelBounds = input.atlasBounds
+}
+
+/** Mutable-boundary layer input consumed and snapshotted by [GPUColorGlyphPayloadGatherer]. */
+data class GPUColorGlyphLayerPayloadInput(
+    /** Boundary proof that this ordered layer belongs to the enclosing color-glyph plan. */
+    val planArtifactKey: GPUTextArtifactKey,
+    val layerGlyphID: UInt,
+    val paletteIndex: Int,
+    val atlasBounds: GPUPixelBounds,
+    val deviceBounds: GPUPixelBounds,
+    val premultipliedRgba: FloatArray,
+    val useForeground: Boolean,
+    val foregroundResolved: Boolean,
+    val placementProof: GPUColorGlyphAtlasPlacementProofInput,
+)
+
+/** Immutable, handle-free color-glyph layer retained through frame planning. */
+class GPUColorGlyphLayerPayload internal constructor(input: GPUColorGlyphLayerPayloadInput) {
+    val layerGlyphID: UInt = input.layerGlyphID
+    val paletteIndex: Int = input.paletteIndex
+    val atlasBounds: GPUPixelBounds = input.atlasBounds
+    val deviceBounds: GPUPixelBounds = input.deviceBounds
+    val premultipliedRgba: List<Float> = immutableList(input.premultipliedRgba.toList())
+    val useForeground: Boolean = input.useForeground
+    val foregroundResolved: Boolean = input.foregroundResolved
+    val placementProof: GPUColorGlyphAtlasPlacementProof = GPUColorGlyphAtlasPlacementProof(input.placementProof)
+}
+
+/** Closed, handle-free semantic payload retained from gathering through preflight. */
+sealed interface GPUDrawSemanticPayload {
+    val canonicalType: String
+    val payloadRef: GPUDrawPayloadRef
+
+    /** Exact solid rectangle block packed by [GPUSolidPayloadGatherer]. */
+    class SolidRect internal constructor(payloadRef: GPUDrawPayloadRef) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "SolidRect"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+    }
+
+    /** Exact immutable COLRv0 atlas, layer, indexed-geometry, and uniform payload. */
+    class ColorGlyph internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        planArtifactKey: GPUTextArtifactKey,
+        atlasArtifactKey: GPUTextArtifactKey,
+        atlasA8Bytes: List<Int>,
+        val atlasWidth: Int,
+        val atlasHeight: Int,
+        val atlasFormat: GPUColorGlyphAtlasFormat,
+        val atlasGeneration: Long,
+        layers: List<GPUColorGlyphLayerPayload>,
+        vertexData: List<Float>,
+        indexData: List<Int>,
+        uniformBytes: List<Int>,
+        val targetBounds: GPUPixelBounds,
+        val scissorBounds: GPUPixelBounds,
+        val canonicalHash: String,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "ColorGlyph"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val planArtifactKey: GPUTextArtifactKey = planArtifactKey.copy()
+        val atlasArtifactKey: GPUTextArtifactKey = atlasArtifactKey.copy()
+        val atlasA8Bytes: List<Int> = immutableList(atlasA8Bytes)
+        /** SHA-256 derived from the exact immutable A8 snapshot, independent of caller artifact labels. */
+        val atlasBytesSha256: String = sha256BytesHex(this.atlasA8Bytes)
+        val layers: List<GPUColorGlyphLayerPayload> = immutableList(layers)
+        val vertexData: List<Float> = immutableList(vertexData)
+        val indexData: List<Int> = immutableList(indexData)
+        val uniformBytes: List<Int> = immutableList(uniformBytes)
+
+        fun stableDumpLines(): List<String> = immutableList(
+            listOf(
+                "payload.color-glyph hash=$canonicalHash command=${payloadRef.commandIdValue} " +
+                    "step=${payloadRef.renderStepIdentity} atlas=${atlasWidth}x$atlasHeight " +
+                    "format=${atlasFormat.gpuLabel} generation=$atlasGeneration " +
+                    "atlasBytesSha256=$atlasBytesSha256 " +
+                    "planArtifact=${planArtifactKey.dumpIdentity()} " +
+                    "atlasArtifact=${atlasArtifactKey.dumpIdentity()} " +
+                    "atlasBytes=${atlasA8Bytes.size} vertices=${vertexData.size / 4} " +
+                    "indices=${indexData.size} uniformBytes=${uniformBytes.size} " +
+                    "target=$targetBounds scissor=$scissorBounds",
+            ) + layers.mapIndexed { index, layer ->
+                "payload.color-glyph.layer index=$index " +
+                    "glyph=${layer.layerGlyphID} palette=${layer.paletteIndex} " +
+                    "atlasBounds=${layer.atlasBounds} " +
+                    "deviceBounds=${layer.deviceBounds.canonicalBounds()} " +
+                    "color=${layer.premultipliedRgba.joinToString(",")} " +
+                    "foreground=${layer.useForeground}:${layer.foregroundResolved} " +
+                    "strike=${layer.placementProof.strikeGlyphId}@${layer.placementProof.strikeSize}:" +
+                    "${layer.placementProof.strikeSubpixelX},${layer.placementProof.strikeSubpixelY}"
+            },
+        )
+
+        internal fun hasCanonicalHashIntegrity(): Boolean =
+            hasCanonicalColorGlyphUniformIntegrity(payloadRef, uniformBytes) &&
+                canonicalHash == sha256Hex(
+                    colorGlyphCanonicalPreimage(
+                        payloadRef,
+                        planArtifactKey,
+                        atlasArtifactKey,
+                        atlasA8Bytes,
+                        atlasWidth,
+                        atlasHeight,
+                        atlasFormat,
+                        atlasGeneration,
+                        atlasBytesSha256,
+                        layers,
+                        vertexData,
+                        indexData,
+                        uniformBytes,
+                        targetBounds,
+                        scissorBounds,
+                    ),
+                )
+    }
+}
+
+private fun GPUDrawPayloadRef.deepSnapshot(): GPUDrawPayloadRef = copy(
+    uniformBlock = uniformBlock?.copy(
+        bytes = immutableList(uniformBlock.bytes),
+        fields = immutableList(uniformBlock.fields),
+    ),
+    resourceBlock = resourceBlock?.copy(
+        resourceDescriptorLabels = immutableList(resourceBlock.resourceDescriptorLabels),
+        dynamicOffsets = immutableList(resourceBlock.dynamicOffsets),
+        bindingFacts = immutableList(
+            resourceBlock.bindingFacts.map { fact ->
+                fact.copy(
+                    requiredUsageLabels = immutableSet(fact.requiredUsageLabels),
+                    availableUsageLabels = immutableSet(fact.availableUsageLabels),
+                )
+            },
+        ),
+    ),
+)
+
+/** Gathers the exact immutable CPU-owned payload required by the native COLRv0 materializer. */
+class GPUColorGlyphPayloadGatherer {
+    fun gatherSemantic(
+        commandIdValue: Int,
+        renderStepIdentity: String,
+        planArtifactKey: GPUTextArtifactKey,
+        atlasArtifactKey: GPUTextArtifactKey,
+        atlasA8Bytes: ByteArray,
+        atlasWidth: Int,
+        atlasHeight: Int,
+        atlasFormat: String,
+        atlasGeneration: Long,
+        layers: List<GPUColorGlyphLayerPayloadInput>,
+        vertexData: FloatArray,
+        indexData: IntArray,
+        uniformBytes: ByteArray,
+        targetBounds: GPUPixelBounds,
+        scissorBounds: GPUPixelBounds,
+    ): GPUDrawSemanticPayload.ColorGlyph {
+        require(commandIdValue >= 0) { "Color-glyph command id must be non-negative" }
+        requireDumpSafeIdentity(renderStepIdentity, "Color-glyph render step")
+        require(renderStepIdentity == COLOR_GLYPH_RENDER_STEP_IDENTITY) {
+            "Color-glyph render step must be $COLOR_GLYPH_RENDER_STEP_IDENTITY"
+        }
+        requireArtifactIdentity(planArtifactKey, "Color-glyph plan artifact")
+        requireArtifactIdentity(atlasArtifactKey, "Color-glyph atlas artifact")
+        require(planArtifactKey != atlasArtifactKey) {
+            "Color-glyph plan and atlas must have distinct artifact identities"
+        }
+        require(atlasWidth > 0 && atlasHeight > 0) { "Color-glyph atlas dimensions must be positive" }
+        val expectedAtlasBytes = atlasWidth.toLong() * atlasHeight.toLong()
+        require(expectedAtlasBytes <= Int.MAX_VALUE && atlasA8Bytes.size.toLong() == expectedAtlasBytes) {
+            "Color-glyph A8 atlas must contain exactly width*height bytes"
+        }
+        val closedFormat = GPUColorGlyphAtlasFormat.entries.singleOrNull { it.gpuLabel == atlasFormat }
+        requireNotNull(closedFormat) { "Color-glyph atlas format must be r8unorm" }
+        require(atlasGeneration >= 0L) { "Color-glyph atlas generation must be non-negative" }
+        require(atlasArtifactKey.generation.value.toLong() == atlasGeneration) {
+            "Color-glyph atlas artifact generation must match the atlas generation"
+        }
+        require(layers.size in 1..MAX_COLOR_GLYPH_LAYERS) {
+            "Color-glyph payload must contain 1..$MAX_COLOR_GLYPH_LAYERS layers"
+        }
+        require(targetBounds.left == 0 && targetBounds.top == 0 && !targetBounds.isEmpty) {
+            "Color-glyph target bounds must be a non-empty zero-origin extent"
+        }
+        require(!scissorBounds.isEmpty && scissorBounds.isContainedBy(targetBounds)) {
+            "Color-glyph scissor bounds must be non-empty and contained by the target"
+        }
+        layers.forEachIndexed { index, layer ->
+            require(layer.planArtifactKey == planArtifactKey) {
+                "Color-glyph layer $index plan identity must match the enclosing plan artifact"
+            }
+            val proof = layer.placementProof
+            require(proof.atlasArtifactKey == atlasArtifactKey) {
+                "Color-glyph layer $index placement atlas identity must match the enclosing atlas artifact"
+            }
+            require(proof.strikeGlyphId >= 0 && layer.layerGlyphID == proof.strikeGlyphId.toUInt()) {
+                "Color-glyph layer $index glyph identity must match its atlas strike placement"
+            }
+            require(proof.strikeSize.isFinite() && proof.strikeSize > 0f) {
+                "Color-glyph layer $index strike size must be finite and positive"
+            }
+            require(proof.atlasBounds == layer.atlasBounds) {
+                "Color-glyph layer $index bounds must match its atlas placement proof"
+            }
+            require(layer.paletteIndex >= 0) { "Color-glyph layer $index palette index must be non-negative" }
+            require(!layer.atlasBounds.isEmpty && layer.atlasBounds.isContainedByAtlas(atlasWidth, atlasHeight)) {
+                "Color-glyph layer $index bounds must be inside the atlas"
+            }
+            require(!layer.deviceBounds.isEmpty && layer.deviceBounds.isContainedBy(targetBounds)) {
+                "Color-glyph layer $index device bounds must be non-empty and inside the target"
+            }
+            require(!layer.useForeground || layer.foregroundResolved) {
+                "Color-glyph foreground layer $index must be resolved before gathering"
+            }
+            require(layer.premultipliedRgba.size == 4) {
+                "Color-glyph layer $index color must contain four channels"
+            }
+            require(layer.premultipliedRgba.all { it.isFinite() && it in 0f..1f }) {
+                "Color-glyph layer $index color channels must be finite and normalized"
+            }
+            val alpha = layer.premultipliedRgba[3]
+            require(layer.premultipliedRgba.take(3).all { it <= alpha }) {
+                "Color-glyph layer $index color must be premultiplied"
+            }
+        }
+        require(layers.map { it.placementProof }.distinctBy { proof ->
+            listOf(
+                proof.strikeGlyphId,
+                proof.strikeSize.toRawBits(),
+                proof.strikeSubpixelX,
+                proof.strikeSubpixelY,
+                proof.atlasBounds,
+            )
+        }.size == layers.size) {
+            "Color-glyph atlas placement proofs must be unique"
+        }
+        require(layers.indices.none { first ->
+            (first + 1 until layers.size).any { second ->
+                layers[first].atlasBounds.overlaps(layers[second].atlasBounds)
+            }
+        }) { "Color-glyph atlas placements must not overlap" }
+        require(vertexData.size == COLOR_GLYPH_QUAD_FLOATS) {
+            "Color-glyph first-slice geometry must contain exactly four packed position/UV vertices"
+        }
+        require(vertexData.all(Float::isFinite)) { "Color-glyph vertices must be finite" }
+        require(vertexData.indices.filter { it % COLOR_GLYPH_VERTEX_FLOATS >= 2 }.all { vertexData[it] in 0f..1f }) {
+            "Color-glyph vertex UV coordinates must be normalized"
+        }
+        val vertexCount = vertexData.size / COLOR_GLYPH_VERTEX_FLOATS
+        require(indexData.contentEquals(COLOR_GLYPH_QUAD_INDICES)) {
+            "Color-glyph first-slice indices must describe the canonical two-triangle quad"
+        }
+        require(indexData.all { it in 0 until vertexCount }) {
+            "Color-glyph indices must reference the provided vertices"
+        }
+        require(uniformBytes.size == COLOR_GLYPH_UNIFORM_BYTES) {
+            "Color-glyph uniform ABI must contain exactly $COLOR_GLYPH_UNIFORM_BYTES bytes"
+        }
+        validateColorGlyphUniform(uniformBytes, targetBounds, atlasWidth, atlasHeight, layers)
+
+        val atlasSnapshot = atlasA8Bytes.map { it.toInt() and 0xff }
+        val layerSnapshots = layers.map(::GPUColorGlyphLayerPayload)
+        val vertexSnapshot = vertexData.toList()
+        val indexSnapshot = indexData.toList()
+        val uniformSnapshot = uniformBytes.map { it.toInt() and 0xff }
+        val uniformFields = colorGlyphUniformFields()
+        val uniformScope = "color-glyph:$commandIdValue"
+        val fingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                colorGlyphUniformIntegrityPreimage(
+                    packingPlanHash = COLOR_GLYPH_UNIFORM_LAYOUT,
+                    byteSize = COLOR_GLYPH_UNIFORM_BYTES.toLong(),
+                    zeroedPadding = true,
+                    scope = uniformScope,
+                    bytes = uniformSnapshot,
+                    fields = uniformFields,
+                ),
+            ),
+        )
+        val uniformBlock = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = COLOR_GLYPH_UNIFORM_LAYOUT,
+            byteSize = COLOR_GLYPH_UNIFORM_BYTES.toLong(),
+            zeroedPadding = true,
+            scope = uniformScope,
+            bytes = uniformSnapshot,
+            fields = uniformFields,
+        )
+        val payloadRef = GPUDrawPayloadRef(
+            commandIdValue = commandIdValue,
+            renderStepIdentity = renderStepIdentity,
+            uniformSlot = GPUUniformPayloadSlot(
+                GPUPayloadSlotID("color-glyph:$commandIdValue:uniform"),
+                fingerprint,
+                0L,
+            ),
+            uniformBlock = uniformBlock,
+        )
+        val atlasBytesSha256 = sha256BytesHex(atlasSnapshot)
+        val canonicalHash = sha256Hex(
+            colorGlyphCanonicalPreimage(
+                payloadRef,
+                planArtifactKey,
+                atlasArtifactKey,
+                atlasSnapshot,
+                atlasWidth,
+                atlasHeight,
+                closedFormat,
+                atlasGeneration,
+                atlasBytesSha256,
+                layerSnapshots,
+                vertexSnapshot,
+                indexSnapshot,
+                uniformSnapshot,
+                targetBounds,
+                scissorBounds,
+            ),
+        )
+        return GPUDrawSemanticPayload.ColorGlyph(
+            payloadRef = payloadRef,
+            planArtifactKey = planArtifactKey,
+            atlasArtifactKey = atlasArtifactKey,
+            atlasA8Bytes = atlasSnapshot,
+            atlasWidth = atlasWidth,
+            atlasHeight = atlasHeight,
+            atlasFormat = closedFormat,
+            atlasGeneration = atlasGeneration,
+            layers = layerSnapshots,
+            vertexData = vertexSnapshot,
+            indexData = indexSnapshot,
+            uniformBytes = uniformSnapshot,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            canonicalHash = canonicalHash,
+        )
+    }
+}
+
+private fun GPUPixelBounds.isContainedBy(container: GPUPixelBounds): Boolean =
+    left >= container.left && top >= container.top && right <= container.right && bottom <= container.bottom
+
+private fun GPUPixelBounds.isContainedByAtlas(width: Int, height: Int): Boolean =
+    left >= 0 && top >= 0 && right <= width && bottom <= height
+
+private fun validateColorGlyphUniform(
+    bytes: ByteArray,
+    targetBounds: GPUPixelBounds,
+    atlasWidth: Int,
+    atlasHeight: Int,
+    layers: List<GPUColorGlyphLayerPayloadInput>,
+) {
+    val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+    require(buffer.float.rawEquals(targetBounds.width.toFloat())) { "Color-glyph uniform target width mismatch" }
+    require(buffer.float.rawEquals(targetBounds.height.toFloat())) { "Color-glyph uniform target height mismatch" }
+    require(buffer.int == layers.size) { "Color-glyph uniform layer count mismatch" }
+    require(buffer.int == 0) { "Color-glyph uniform reserved header must be zero" }
+    repeat(MAX_COLOR_GLYPH_LAYERS) { index ->
+        val expected = layers.getOrNull(index)?.premultipliedRgba ?: ZERO_COLOR
+        repeat(4) { component ->
+            require(buffer.float.rawEquals(expected[component])) {
+                "Color-glyph uniform layer $index color mismatch"
+            }
+        }
+    }
+    repeat(MAX_COLOR_GLYPH_LAYERS) { index ->
+        val bounds = layers.getOrNull(index)?.atlasBounds
+        val expected = if (bounds == null) {
+            ZERO_COLOR
+        } else {
+            floatArrayOf(
+                bounds.left.toFloat() / atlasWidth,
+                bounds.top.toFloat() / atlasHeight,
+                bounds.width.toFloat() / atlasWidth,
+                bounds.height.toFloat() / atlasHeight,
+            )
+        }
+        repeat(4) { component ->
+            require(buffer.float.rawEquals(expected[component])) {
+                "Color-glyph uniform layer $index atlas bounds mismatch"
+            }
+        }
+    }
+    repeat(MAX_COLOR_GLYPH_LAYERS) { index ->
+        val bounds = layers.getOrNull(index)?.deviceBounds
+        val expected = if (bounds == null) {
+            ZERO_COLOR
+        } else {
+            floatArrayOf(
+                bounds.left.toFloat(),
+                bounds.top.toFloat(),
+                bounds.width.toFloat(),
+                bounds.height.toFloat(),
+            )
+        }
+        repeat(4) { component ->
+            require(buffer.float.rawEquals(expected[component])) {
+                "Color-glyph uniform layer $index device bounds mismatch"
+            }
+        }
+    }
+}
+
+private fun Float.rawEquals(other: Float): Boolean = toRawBits() == other.toRawBits()
+
+private fun colorGlyphCanonicalPreimage(
+    payloadRef: GPUDrawPayloadRef,
+    planArtifactKey: GPUTextArtifactKey,
+    atlasArtifactKey: GPUTextArtifactKey,
+    atlasBytes: List<Int>,
+    atlasWidth: Int,
+    atlasHeight: Int,
+    atlasFormat: GPUColorGlyphAtlasFormat,
+    atlasGeneration: Long,
+    atlasBytesSha256: String,
+    layers: List<GPUColorGlyphLayerPayload>,
+    vertices: List<Float>,
+    indices: List<Int>,
+    uniformBytes: List<Int>,
+    targetBounds: GPUPixelBounds,
+    scissorBounds: GPUPixelBounds,
+): String = buildString {
+    appendCanonicalField("type", "ColorGlyph")
+    appendCanonicalField("payloadRef", colorGlyphPayloadRefCanonicalPreimage(payloadRef))
+    appendCanonicalField("planArtifact", planArtifactKey.canonicalIdentity())
+    appendCanonicalField("atlasArtifact", atlasArtifactKey.canonicalIdentity())
+    appendCanonicalField("atlas", "${atlasWidth}x$atlasHeight:${atlasFormat.gpuLabel}:$atlasGeneration")
+    appendCanonicalField("atlasBytesSha256", atlasBytesSha256)
+    layers.forEachIndexed { index, layer ->
+        appendCanonicalField(
+            "layer",
+            "$index:${layer.layerGlyphID}:${layer.paletteIndex}:" +
+                "${layer.atlasBounds.canonicalBounds()}:${layer.deviceBounds.canonicalBounds()}:" +
+                "${layer.premultipliedRgba.joinToString(",") { it.toRawBits().toString() }}:" +
+                "${layer.useForeground}:${layer.foregroundResolved}:" +
+                "${layer.placementProof.atlasArtifactKey.canonicalIdentity()}:" +
+                "${layer.placementProof.strikeGlyphId}:${layer.placementProof.strikeSize.toRawBits()}:" +
+                "${layer.placementProof.strikeSubpixelX}:${layer.placementProof.strikeSubpixelY}:" +
+                layer.placementProof.atlasBounds.canonicalBounds(),
+        )
+    }
+    appendCanonicalField("vertices", vertices.joinToString(",") { it.toRawBits().toString() })
+    appendCanonicalField("indices", indices.joinToString(","))
+    appendCanonicalField("uniform", uniformBytes.joinToString(","))
+    appendCanonicalField("target", targetBounds.canonicalBounds())
+    appendCanonicalField("scissor", scissorBounds.canonicalBounds())
+}
+
+private fun colorGlyphPayloadRefCanonicalPreimage(ref: GPUDrawPayloadRef): String = buildString {
+    appendCanonicalField("command", ref.commandIdValue.toString())
+    appendCanonicalField("step", ref.renderStepIdentity)
+    val slot = ref.uniformSlot
+    appendCanonicalField("uniformSlot.present", (slot != null).toString())
+    if (slot != null) {
+        appendCanonicalField("uniformSlot.id", slot.slotId.value)
+        appendCanonicalField("uniformSlot.fingerprint", slot.fingerprint.value)
+        appendCanonicalField("uniformSlot.offset", slot.byteOffset.toString())
+    }
+    val block = ref.uniformBlock
+    appendCanonicalField("uniformBlock.present", (block != null).toString())
+    if (block != null) {
+        appendCanonicalField("uniformBlock.fingerprint", block.fingerprint.value)
+        appendCanonicalField("uniformBlock.abi", colorGlyphUniformIntegrityPreimage(block))
+    }
+    appendCanonicalField("resourceSlot.present", (ref.resourceSlot != null).toString())
+    appendCanonicalField("gradientStore.present", (ref.gradientStore != null).toString())
+    appendCanonicalField("resourceBlock.present", (ref.resourceBlock != null).toString())
+}
+
+private fun colorGlyphUniformIntegrityPreimage(block: GPUUniformPayloadBlock): String =
+    colorGlyphUniformIntegrityPreimage(
+        packingPlanHash = block.packingPlanHash,
+        byteSize = block.byteSize,
+        zeroedPadding = block.zeroedPadding,
+        scope = block.scope,
+        bytes = block.bytes,
+        fields = block.fields,
+    )
+
+private fun colorGlyphUniformIntegrityPreimage(
+    packingPlanHash: String,
+    byteSize: Long,
+    zeroedPadding: Boolean,
+    scope: String,
+    bytes: List<Int>,
+    fields: List<GPUUniformPayloadField>,
+): String = buildString {
+    appendCanonicalField("packingPlanHash", packingPlanHash)
+    appendCanonicalField("byteSize", byteSize.toString())
+    appendCanonicalField("zeroedPadding", zeroedPadding.toString())
+    appendCanonicalField("scope", scope)
+    appendCanonicalField("bytes", bytes.joinToString(","))
+    fields.forEachIndexed { index, field ->
+        appendCanonicalField(
+            "field",
+            "$index:${field.fieldPath}:${field.byteOffset}:${field.byteSize}:${field.valueClass}:${field.zeroFilled}",
+        )
+    }
+}
+
+private fun colorGlyphUniformFields(): List<GPUUniformPayloadField> = listOf(
+    GPUUniformPayloadField("targetSize.layerCount", 0, 16, "header"),
+    GPUUniformPayloadField("layers.premultipliedRgba", 16, 256, "array<vec4f,16>"),
+    GPUUniformPayloadField("layers.atlasBounds", 272, 256, "array<vec4f,16>"),
+    GPUUniformPayloadField("layers.deviceBounds", 528, 256, "array<vec4f,16>"),
+)
+
+private fun hasCanonicalColorGlyphUniformIntegrity(
+    ref: GPUDrawPayloadRef,
+    uniformBytes: List<Int>,
+): Boolean {
+    val slot = ref.uniformSlot ?: return false
+    val block = ref.uniformBlock ?: return false
+    if (ref.resourceSlot != null || ref.gradientStore != null || ref.resourceBlock != null) return false
+    if (slot.slotId != GPUPayloadSlotID("color-glyph:${ref.commandIdValue}:uniform") || slot.byteOffset != 0L) {
+        return false
+    }
+    if (block.packingPlanHash != COLOR_GLYPH_UNIFORM_LAYOUT ||
+        block.byteSize != COLOR_GLYPH_UNIFORM_BYTES.toLong() ||
+        !block.zeroedPadding ||
+        block.scope != "color-glyph:${ref.commandIdValue}" ||
+        block.bytes != uniformBytes ||
+        block.bytes.size != COLOR_GLYPH_UNIFORM_BYTES ||
+        block.bytes.any { it !in 0..255 } ||
+        block.fields != colorGlyphUniformFields()
+    ) {
+        return false
+    }
+    val expectedFingerprint = GPUPayloadFingerprint(sha256Hex(colorGlyphUniformIntegrityPreimage(block)))
+    return block.fingerprint == expectedFingerprint && slot.fingerprint == expectedFingerprint
+}
+
+private fun sha256BytesHex(bytes: List<Int>): String {
+    if (bytes.any { it !in 0..255 }) return ""
+    return MessageDigest.getInstance("SHA-256")
+        .digest(ByteArray(bytes.size) { index -> bytes[index].toByte() })
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+}
+
+private fun StringBuilder.appendCanonicalField(name: String, value: String) {
+    append(name).append('#').append(value.length).append(':').append(value).append('\n')
+}
+
+private fun GPUTextArtifactKey.canonicalIdentity(): String =
+    "${artifactID.value}:${generation.value}:${contentFingerprint.length}:$contentFingerprint"
+
+private fun GPUTextArtifactKey.dumpIdentity(): String =
+    "${artifactID.value}@${generation.value}/$contentFingerprint"
+
+private fun GPUPixelBounds.canonicalBounds(): String = "$left,$top,$right,$bottom"
+
+private fun GPUPixelBounds.overlaps(other: GPUPixelBounds): Boolean =
+    left < other.right && other.left < right && top < other.bottom && other.top < bottom
+
+private fun requireArtifactIdentity(key: GPUTextArtifactKey, label: String) {
+    require(key.generation.value >= 0) { "$label generation must be non-negative" }
+    requireDumpSafeIdentity(key.contentFingerprint, "$label content fingerprint")
+}
+
+private fun requireDumpSafeIdentity(value: String, label: String) {
+    require(value.isNotBlank()) { "$label must not be blank" }
+    require(value.all { character -> character.code in 0x21..0x7e && character !in DUMP_IDENTITY_DELIMITERS }) {
+        "$label must contain only dump-safe identity characters"
+    }
+}
+
+private const val MAX_COLOR_GLYPH_LAYERS = 16
+private const val COLOR_GLYPH_VERTEX_FLOATS = 4
+private const val COLOR_GLYPH_QUAD_FLOATS = 16
+private const val COLOR_GLYPH_UNIFORM_BYTES = 784
+private const val COLOR_GLYPH_UNIFORM_LAYOUT = "color-glyph-composite-uniform-v2"
+private val ZERO_COLOR = floatArrayOf(0f, 0f, 0f, 0f)
+private val DUMP_IDENTITY_DELIMITERS = setOf('=', ':', ',', '|', '@', '/')
+private val COLOR_GLYPH_QUAD_INDICES = intArrayOf(0, 1, 2, 0, 2, 3)
+
 /** Payload gathering contract. */
 interface GPUPayloadGatherer {
     /** Gathers one payload reference without uploading it. */
@@ -283,6 +883,16 @@ class GPUSolidPayloadGatherer : GPUPayloadGatherer {
             uniformSlot = slot,
             uniformBlock = block,
         )
+    }
+
+    /** Packs once through [gather] and closes the resulting deeply immutable semantic value. */
+    fun gatherSemantic(
+        plan: GPUPayloadGatherPlan,
+        payload: GPUMaterialPayload,
+    ): GPUDrawSemanticPayload.SolidRect = GPUDrawSemanticPayload.SolidRect(gather(plan, payload)).also { semantic ->
+        check(semanticValidationFailure(semantic.payloadRef) == null) {
+            "GPUSolidPayloadGatherer produced an invalid semantic payload"
+        }
     }
 
     override fun reset(scopeId: String) {
@@ -349,7 +959,7 @@ class GPUSolidPayloadGatherer : GPUPayloadGatherer {
         return requireNotNull(rawValue.toIntOrNull()) { "Payload field $fieldPath must be an integer" }
     }
 
-    private companion object {
+    companion object {
         private const val solidPayloadClass = "solid-rgba-rect"
         private const val solidRectPackingPlanHash = "solid-rect-layout-v1"
         private const val solidRectByteSize = 64
@@ -369,6 +979,64 @@ class GPUSolidPayloadGatherer : GPUPayloadGatherer {
             "color.b",
             "color.a",
         )
+
+        /** Revalidates the gatherer's exact ABI without repacking or reconstructing source values. */
+        internal fun semanticValidationFailure(ref: GPUDrawPayloadRef): String? {
+            val slot = ref.uniformSlot ?: return "invalid.preflight.solid_semantic_uniform_missing"
+            val block = ref.uniformBlock ?: return "invalid.preflight.solid_semantic_uniform_missing"
+            if (ref.resourceSlot != null || ref.resourceBlock != null || ref.gradientStore != null) {
+                return "invalid.preflight.solid_semantic_layout"
+            }
+            if (slot.fingerprint != block.fingerprint) {
+                return "invalid.preflight.solid_semantic_fingerprint_mismatch"
+            }
+            if (slot.byteOffset != 0L || block.packingPlanHash != solidRectPackingPlanHash || block.scope.isBlank()) {
+                return "invalid.preflight.solid_semantic_layout"
+            }
+            if (block.byteSize != solidRectByteSize.toLong() || block.bytes.size != solidRectByteSize ||
+                block.bytes.any { it !in 0..255 }
+            ) {
+                return "invalid.preflight.solid_semantic_byte_count"
+            }
+            val expectedFields = solidRectFloatFields.mapIndexed { index, fieldPath ->
+                Triple(fieldPath, index * Float.SIZE_BYTES.toLong(), "f32")
+            } + Triple("padding.reserved", solidRectUsedByteSize.toLong(), "padding")
+            val rangesValid = block.fields.size == expectedFields.size && block.fields.indices.all { index ->
+                val field = block.fields[index]
+                val expected = expectedFields[index]
+                val expectedSize = if (index < solidRectFloatFields.size) {
+                    Float.SIZE_BYTES.toLong()
+                } else {
+                    (solidRectByteSize - solidRectUsedByteSize).toLong()
+                }
+                field.fieldPath == expected.first && field.byteOffset == expected.second &&
+                    field.byteSize == expectedSize && field.valueClass == expected.third &&
+                    field.byteOffset >= 0L && field.byteSize > 0L &&
+                    field.byteOffset <= block.byteSize - field.byteSize
+            } && block.fields.zipWithNext().all { (left, right) ->
+                left.byteOffset + left.byteSize <= right.byteOffset
+            }
+            if (!rangesValid) return "invalid.preflight.solid_semantic_field_ranges"
+
+            if (!block.zeroedPadding || block.bytes.drop(solidRectUsedByteSize).any { it != 0 }) {
+                return "invalid.preflight.solid_semantic_padding"
+            }
+            val fieldZeroFactsValid = block.fields.all { field ->
+                val start = field.byteOffset.toInt()
+                val end = (field.byteOffset + field.byteSize).toInt()
+                field.zeroFilled == block.bytes.subList(start, end).all { it == 0 }
+            }
+            if (!fieldZeroFactsValid) return "invalid.preflight.solid_semantic_field_metadata"
+
+            val byteArray = ByteArray(block.bytes.size) { index -> block.bytes[index].toByte() }
+            val floatBuffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
+            val values = List(solidRectFloatFields.size) { index -> floatBuffer.get(index) }
+            if (values.any { !it.isFinite() }) return "invalid.preflight.solid_semantic_non_finite"
+            if (values.subList(4, 8).any { it < 0f } || values.subList(8, 12).any { it !in 0f..1f }) {
+                return "invalid.preflight.solid_semantic_value_range"
+            }
+            return null
+        }
 
     }
 }

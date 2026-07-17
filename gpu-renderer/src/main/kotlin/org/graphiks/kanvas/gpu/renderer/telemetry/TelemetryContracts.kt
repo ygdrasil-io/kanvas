@@ -1,5 +1,159 @@
 package org.graphiks.kanvas.gpu.renderer.telemetry
 
+import java.util.Collections
+
+/** Stable identity shared by every fact emitted for one frame submission attempt. */
+@JvmInline
+value class GPUFrameAttemptID(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUFrameAttemptID.value must not be blank" }
+    }
+}
+
+/** Closed monotonic phases observed by structural frame telemetry. */
+enum class GPUFrameStructuralPhase {
+    Recording,
+    Planning,
+    Preflight,
+    Encoding,
+    Submitted,
+    Completed,
+}
+
+/** Closed final outcomes for one frame attempt. */
+enum class GPUFrameStructuralOutcome {
+    Refused,
+    Succeeded,
+    Failed,
+}
+
+/** Closed structural counters. Counter names are data, never caller-provided strings. */
+enum class GPUFrameStructuralCounter(val label: String) {
+    EncoderCreate("encoder.create"),
+    EncoderScope("encoder.scope"),
+    EncoderFinish("encoder.finish"),
+    QueueSubmit("queue.submit"),
+    CompletionArm("completion.arm"),
+}
+
+/** Closed event kinds. They report decisions made elsewhere and never select a route. */
+enum class GPUFrameStructuralEventKind {
+    AttemptStarted,
+    PlanningAccepted,
+    PlanningRefused,
+    PreflightAccepted,
+    PreflightRefused,
+    EncoderCreated,
+    ScopeEncoded,
+    EncoderFinished,
+    QueueSubmitted,
+    QueueSubmitFailed,
+    CompletionArmed,
+    CompletionArmFailed,
+    CompletionSucceeded,
+    CompletionFailed,
+}
+
+/** One immutable, attempt-scoped structural observation. */
+data class GPUFrameStructuralTelemetryEvent(
+    val kind: GPUFrameStructuralEventKind,
+    val phase: GPUFrameStructuralPhase,
+    val label: String? = null,
+)
+
+/** The only final structural telemetry value exposed for one frame attempt. */
+class GPUFrameStructuralTelemetrySnapshot(
+    val attemptId: GPUFrameAttemptID,
+    val furthestPhase: GPUFrameStructuralPhase,
+    val outcome: GPUFrameStructuralOutcome,
+    val diagnosticCode: String?,
+    events: List<GPUFrameStructuralTelemetryEvent>,
+    counters: Map<GPUFrameStructuralCounter, Long>,
+) {
+    val events: List<GPUFrameStructuralTelemetryEvent> =
+        Collections.unmodifiableList(ArrayList(events))
+    val counters: Map<GPUFrameStructuralCounter, Long> =
+        Collections.unmodifiableMap(LinkedHashMap(counters))
+}
+
+/**
+ * Mutable only inside one attempt, then one-shot sealed into an immutable snapshot.
+ *
+ * This sink deliberately has no imports from execution, resources, or recording.
+ */
+class GPUFrameAttemptTelemetrySink(val attemptId: GPUFrameAttemptID) {
+    private val events = mutableListOf<GPUFrameStructuralTelemetryEvent>()
+    private val counters = linkedMapOf<GPUFrameStructuralCounter, Long>()
+    private var sealed = false
+    private var furthestRecordedPhase = -1
+
+    @Synchronized
+    fun record(
+        phase: GPUFrameStructuralPhase,
+        kind: GPUFrameStructuralEventKind,
+        counter: GPUFrameStructuralCounter? = null,
+        label: String? = null,
+    ) {
+        check(!sealed) { "GPU frame telemetry attempt is already sealed" }
+        require(phase in kind.allowedPhases) {
+            "GPU frame telemetry event $kind is not valid in phase $phase"
+        }
+        require(phase.ordinal >= furthestRecordedPhase) {
+            "GPU frame telemetry phases must be monotonic"
+        }
+        furthestRecordedPhase = phase.ordinal
+        events += GPUFrameStructuralTelemetryEvent(kind, phase, label)
+        counter?.let { name -> counters[name] = counters.getOrDefault(name, 0L) + 1L }
+    }
+
+    @Synchronized
+    fun seal(
+        furthestPhase: GPUFrameStructuralPhase,
+        outcome: GPUFrameStructuralOutcome,
+        diagnosticCode: String?,
+    ): GPUFrameStructuralTelemetrySnapshot {
+        check(!sealed) { "GPU frame telemetry attempt may be sealed exactly once" }
+        require(furthestPhase.ordinal >= furthestRecordedPhase) {
+            "GPU frame telemetry final phase cannot precede an observed event"
+        }
+        sealed = true
+        return GPUFrameStructuralTelemetrySnapshot(
+            attemptId = attemptId,
+            furthestPhase = furthestPhase,
+            outcome = outcome,
+            diagnosticCode = diagnosticCode,
+            events = events,
+            counters = counters,
+        )
+    }
+}
+
+private val GPUFrameStructuralEventKind.allowedPhases: Set<GPUFrameStructuralPhase>
+    get() = when (this) {
+        GPUFrameStructuralEventKind.AttemptStarted -> setOf(
+            GPUFrameStructuralPhase.Recording,
+            GPUFrameStructuralPhase.Preflight,
+        )
+        GPUFrameStructuralEventKind.PlanningAccepted,
+        GPUFrameStructuralEventKind.PlanningRefused,
+        -> setOf(GPUFrameStructuralPhase.Planning)
+        GPUFrameStructuralEventKind.PreflightAccepted,
+        GPUFrameStructuralEventKind.PreflightRefused,
+        -> setOf(GPUFrameStructuralPhase.Preflight)
+        GPUFrameStructuralEventKind.EncoderCreated,
+        GPUFrameStructuralEventKind.ScopeEncoded,
+        GPUFrameStructuralEventKind.EncoderFinished,
+        -> setOf(GPUFrameStructuralPhase.Encoding)
+        GPUFrameStructuralEventKind.QueueSubmitted,
+        GPUFrameStructuralEventKind.QueueSubmitFailed,
+        GPUFrameStructuralEventKind.CompletionArmed,
+        GPUFrameStructuralEventKind.CompletionArmFailed,
+        -> setOf(GPUFrameStructuralPhase.Submitted)
+        GPUFrameStructuralEventKind.CompletionSucceeded,
+        GPUFrameStructuralEventKind.CompletionFailed,
+        -> setOf(GPUFrameStructuralPhase.Completed)
+    }
+
 /** Counter observed by GPU renderer telemetry. */
 data class GPUTelemetryCounter(
     val name: String,

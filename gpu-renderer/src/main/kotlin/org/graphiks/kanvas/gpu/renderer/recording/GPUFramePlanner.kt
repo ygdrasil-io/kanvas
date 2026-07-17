@@ -14,6 +14,11 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcher
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatcherRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleLoadTransition
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
@@ -158,6 +163,49 @@ object GPUFramePlanner {
                 return diagnostic(
                     "invalid.frame_plan.render_packet_role",
                     "Render task ${task.taskId.value} contains a non-render packet role",
+                )
+            }
+            when (val samplePlan = task.samplePlan) {
+                is GPUSamplePlan.MultisampleFrame -> {
+                    val key = task.sampleContinuationKey ?: return diagnostic(
+                        "invalid.frame_plan.msaa_continuation_missing",
+                        "Every MSAA render task requires one typed continuation key.",
+                    )
+                    if (key.target.value != task.target.value) {
+                        return diagnostic(
+                            "invalid.frame_plan.msaa_continuation_target",
+                            "The MSAA continuation key must identify the exact render target.",
+                        )
+                    }
+                    if (key.samplePlan != samplePlan) {
+                        return diagnostic(
+                            "invalid.frame_plan.msaa_continuation_sample_plan",
+                            "The MSAA continuation key must match the render task sample plan.",
+                        )
+                    }
+                    if (key.deviceGeneration != taskList.capabilitySeal.deviceGeneration) {
+                        return diagnostic(
+                            "invalid.frame_plan.msaa_continuation_device_generation",
+                            "The MSAA continuation key must match the frame capability generation.",
+                        )
+                    }
+                }
+                GPUSamplePlan.SingleSampleFrame,
+                is GPUSamplePlan.LocalResolveApproximation,
+                -> if (task.sampleContinuationKey != null) {
+                    return diagnostic(
+                        "invalid.frame_plan.msaa_continuation_unexpected",
+                        "Only exact multisample render tasks may carry an MSAA continuation key.",
+                    )
+                }
+            }
+        }
+        renderTasks.groupBy(GPUTask.Render::target).forEach { (_, renders) ->
+            val keys = renders.mapNotNull(GPUTask.Render::sampleContinuationKey).distinct()
+            if (keys.size > 1) {
+                return diagnostic(
+                    "invalid.frame_plan.msaa_continuation_key_mismatch",
+                    "All MSAA render tasks for one target must carry the same continuation key.",
                 )
             }
         }
@@ -402,11 +450,10 @@ object GPUFramePlanner {
         val renderTasks = taskList.tasks.filterIsInstance<GPUTask.Render>().associateBy(GPUTask::taskId)
         val orderedIndex = orderedTasks.withIndex().associate { it.value.taskId to it.index }
         val directDependencies = taskList.dependencies.map { it.fromTaskId to it.toTaskId }.toSet()
-        val operationsBeforeTask = linkedMapOf<GPUTaskID, MutableList<ScheduledDestinationOperation>>()
+        val scheduledOperations = mutableListOf<ScheduledDestinationOperation>()
         val destinationTaskIds = mutableSetOf<GPUTaskID>()
         val refusalSourceTaskByRefusedTask = mutableMapOf<GPUTaskID, GPUTaskID>()
         val consumerPacketIds = mutableSetOf<GPUDrawPacketID>()
-        val snapshotIntervals = mutableMapOf<GPUFrameTextureRef, MutableList<IntRange>>()
 
         orderedTasks.filterIsInstance<GPUTask.DestinationSnapshots>().forEach { destination ->
             destinationTaskIds += destination.taskId
@@ -472,6 +519,12 @@ object GPUFramePlanner {
                             "Destination consumer task, packet, command, or dependency is not exact",
                         )
                     }
+                    if (render.sampleContinuationKey != group.key.sampleContinuation) {
+                        return invalidDestination(
+                            "invalid.frame_plan.destination_continuation_mismatch",
+                            "Destination grouping must recoup the exact continuation proof owned by its consumer render task.",
+                        )
+                    }
                     consumerTasks += render
                     consumerPoints += render to packetIndex
                 }
@@ -499,53 +552,24 @@ object GPUFramePlanner {
                     )
                 }
 
-                val consumerTaskIds = consumerTasks.map { it.taskId }.toSet()
-                val firstConsumer = consumerTasks.minBy { orderedIndex.getValue(it.taskId) }
-                val firstIndex = consumerTasks.minOf { orderedIndex.getValue(it.taskId) }
-                val lastIndex = consumerTasks.maxOf { orderedIndex.getValue(it.taskId) }
-                val lastConsumerPacketIndex = consumerPoints
-                    .filter { (render) -> orderedIndex.getValue(render.taskId) == lastIndex }
-                    .maxOf { (_, packetIndex) -> packetIndex }
-                val operationConsumerPacketIds = operation.consumers.map { it.packetId }.toSet()
-                val unsafeWrite = orderedTasks.subList(firstIndex, lastIndex + 1).any { candidate ->
-                    when (candidate) {
-                        is GPUTask.Render -> {
-                            val candidateIndex = orderedIndex.getValue(candidate.taskId)
-                            val packetsInSnapshotLifetime = if (candidateIndex == lastIndex) {
-                                candidate.drawPackets.take(lastConsumerPacketIndex + 1)
-                            } else {
-                                candidate.drawPackets
-                            }
-                            packetsInSnapshotLifetime.any { packet ->
-                                packet.packetId !in operationConsumerPacketIds &&
-                                    (candidate.packetWrites(packet, operation.source) ||
-                                        candidate.packetWrites(packet, operation.snapshot))
-                            }
-                        }
-                        else -> candidate.taskId !in consumerTaskIds &&
-                            (candidate.writes(operation.source) || candidate.writes(operation.snapshot))
-                    }
+                val orderedExecutionPoints = consumerPoints.map { (render, packetIndex) ->
+                    OrderedRenderExecutionPoint(orderedIndex.getValue(render.taskId), packetIndex)
                 }
-                if (unsafeWrite) {
-                    return invalidDestination(
-                        "invalid.frame_plan.destination_order",
-                        "A source or snapshot write invalidates destination-read consumers",
-                    )
-                }
-                val interval = firstIndex..lastIndex
-                val intervals = snapshotIntervals.getOrPut(operation.snapshot, ::mutableListOf)
-                if (intervals.any { existing ->
-                        interval.first <= existing.last && existing.first <= interval.last
-                    }
-                ) {
-                    return invalidDestination(
-                        "invalid.frame_plan.destination_snapshot_alias",
-                        "Destination snapshot aliases must have non-overlapping consumer lifetimes",
-                    )
-                }
-                intervals += interval
-                operationsBeforeTask.getOrPut(firstConsumer.taskId, ::mutableListOf) +=
-                    ScheduledDestinationOperation(destination.taskId, group.key, operation)
+                val firstExecutionPoint = orderedExecutionPoints.first()
+                val lastExecutionPoint = orderedExecutionPoints.last()
+                val firstConsumer = consumerPoints.first()
+                scheduledOperations += ScheduledDestinationOperation(
+                    sourceTaskId = destination.taskId,
+                    sourceKey = group.key,
+                    operation = operation,
+                    schedulePoint = RenderExecutionPoint(
+                        taskId = firstConsumer.first.taskId,
+                        packetIndex = firstConsumer.second,
+                    ),
+                    lifetimeStart = firstExecutionPoint,
+                    lifetimeEnd = lastExecutionPoint,
+                    consumerPacketIds = operation.consumers.map { it.packetId }.toSet(),
+                )
             }
 
             val refusalIds = payload.grouping.refusals.map { it.commandId }
@@ -573,8 +597,30 @@ object GPUFramePlanner {
             }
         }
 
+        val snapshotIntervals = mutableMapOf<GPUFrameTextureRef, MutableList<DestinationSnapshotInterval>>()
+        scheduledOperations.forEach { scheduled ->
+            val interval = DestinationSnapshotInterval(scheduled.lifetimeStart, scheduled.lifetimeEnd)
+            val intervals = snapshotIntervals.getOrPut(scheduled.operation.snapshot, ::mutableListOf)
+            if (intervals.any(interval::overlaps)) {
+                return invalidDestination(
+                    "invalid.frame_plan.destination_snapshot_alias",
+                    "Destination snapshot aliases must have non-overlapping consumer lifetimes",
+                )
+            }
+            intervals += interval
+        }
+
+        scheduledOperations.forEach { scheduled ->
+            if (scheduled.hasUnsafeWrite(orderedTasks)) {
+                return invalidDestination(
+                    "invalid.frame_plan.destination_order",
+                    "A source or snapshot write invalidates destination-read consumers",
+                )
+            }
+        }
+
         return DestinationScheduleValidation.Valid(
-            operationsBeforeTask = operationsBeforeTask,
+            operationsBeforeExecutionPoint = scheduledOperations.groupBy { it.schedulePoint },
             destinationTaskIds = destinationTaskIds,
             refusalSourceTaskByRefusedTask = refusalSourceTaskByRefusedTask,
             consumerPacketIds = consumerPacketIds,
@@ -628,21 +674,43 @@ object GPUFramePlanner {
         val steps = mutableListOf<GPUFrameStep>()
         val diagnostics = mutableListOf<GPUDiagnostic>()
         val openedRenderSegments = mutableSetOf<RenderContinuationKey>()
-        var index = 0
-        while (index < orderedTasks.size) {
-            val task = orderedTasks[index]
-            if (task.taskId in consumedChildIds || task.taskId in destinationSchedule.destinationTaskIds) {
-                index += 1
-                continue
-            }
+        val pendingRenderSlices = mutableListOf<RenderSlice>()
+        fun flushPendingRenderSlices(): GPUDiagnostic? {
+            if (pendingRenderSlices.isEmpty()) return null
+            val continuationKey = pendingRenderSlices.first().task.continuationKey()
+            val renderStep = batchRenderSegment(
+                slices = pendingRenderSlices,
+                continuesStoredTarget = continuationKey in openedRenderSegments,
+            ) ?: return diagnostic("invalid.frame_plan.render_batch", "Batching lost a draw packet")
+            steps += renderStep
+            openedRenderSegments += continuationKey
+            pendingRenderSlices.clear()
+            return null
+        }
 
-            destinationSchedule.operationsBeforeTask[task.taskId]?.forEach { scheduled ->
-                steps += scheduled.toStep(taskList.capabilitySeal)
+        fun enqueueRenderSlice(slice: RenderSlice): GPUDiagnostic? {
+            val firstPendingTask = pendingRenderSlices.firstOrNull()?.task
+            val incomingTaskRequiresBoundary = slice.task.drawPackets.any { packet ->
+                packet.blendPlan is GPUBlendPlan.NoOp || packet.blendPlan is GPUBlendPlan.UnsupportedBlend
+            }
+            if (firstPendingTask != null &&
+                (incomingTaskRequiresBoundary || !firstPendingTask.canShareProvisionalSegment(slice.task))
+            ) {
+                flushPendingRenderSlices()?.let { return it }
+            }
+            pendingRenderSlices += slice
+            return null
+        }
+
+        orderedTasks.forEach { task ->
+            if (task.taskId in consumedChildIds || task.taskId in destinationSchedule.destinationTaskIds) {
+                return@forEach
             }
 
             if (task is GPUTask.Render) {
                 val unsupported = task.drawPackets.singleOrNull()?.blendPlan as? GPUBlendPlan.UnsupportedBlend
                 if (unsupported != null) {
+                    flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
                     val refusal = unsupported.diagnostic.toCanonicalDiagnostic()
                     steps += GPUFrameStep.RefusedLeafDrawStep(
                         commandId = org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID(
@@ -652,51 +720,40 @@ object GPUFramePlanner {
                         sourceTaskIds = listOf(task.taskId),
                     )
                     diagnostics += refusal
-                    index += 1
-                    continue
+                    return@forEach
                 }
                 if (task.drawPackets.all { it.blendPlan is GPUBlendPlan.NoOp }) {
-                    index += 1
-                    continue
+                    return@forEach
                 }
 
-                val renderTasks = mutableListOf(task)
-                var nextIndex = index + 1
-                while (nextIndex < orderedTasks.size) {
-                    val next = orderedTasks[nextIndex]
-                    if (next.taskId in consumedChildIds) {
-                        nextIndex += 1
-                        continue
+                val slicePackets = mutableListOf<GPUDrawPacket>()
+                task.drawPackets.forEachIndexed { packetIndex, packet ->
+                    val executionPoint = RenderExecutionPoint(task.taskId, packetIndex)
+                    destinationSchedule.operationsBeforeExecutionPoint[executionPoint]?.let { scheduled ->
+                        if (slicePackets.isNotEmpty()) {
+                            enqueueRenderSlice(RenderSlice(task, slicePackets.toList()))?.let {
+                                return Linearization.Refused(it)
+                            }
+                            slicePackets.clear()
+                        }
+                        flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
+                        scheduled.forEach { operation ->
+                            steps += operation.toStep(taskList.capabilitySeal)
+                        }
                     }
-                    if (next is GPUTask.Render &&
-                        next.drawPackets.all { it.blendPlan is GPUBlendPlan.NoOp }
-                    ) {
-                        nextIndex += 1
-                        continue
+                    if (packet.blendPlan !is GPUBlendPlan.NoOp) {
+                        slicePackets += packet
                     }
-                    if (next !is GPUTask.Render ||
-                        destinationSchedule.operationsBeforeTask.containsKey(next.taskId) ||
-                        next.drawPackets.any { it.blendPlan is GPUBlendPlan.NoOp ||
-                            it.blendPlan is GPUBlendPlan.UnsupportedBlend } ||
-                        !task.canShareProvisionalSegment(next)
-                    ) break
-                    renderTasks += next
-                    nextIndex += 1
                 }
-                val continuationKey = task.continuationKey()
-                val renderStep = batchRenderSegment(
-                    tasks = renderTasks,
-                    continuesStoredTarget = continuationKey in openedRenderSegments,
-                )
-                    ?: return Linearization.Refused(
-                        diagnostic("invalid.frame_plan.render_batch", "Batching lost a draw packet"),
-                    )
-                steps += renderStep
-                openedRenderSegments += continuationKey
-                index = nextIndex
-                continue
+                if (slicePackets.isNotEmpty()) {
+                    enqueueRenderSlice(RenderSlice(task, slicePackets))?.let {
+                        return Linearization.Refused(it)
+                    }
+                }
+                return@forEach
             }
 
+            flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
             when (task) {
                 is GPUTask.Render -> error("handled above")
                 is GPUTask.PrepareResources -> steps += GPUFrameStep.PrepareResourcesStep(
@@ -768,23 +825,24 @@ object GPUFramePlanner {
                     GPURefusalScope.AtomicFrameFailure -> error("validated before linearization")
                 }
             }
-            index += 1
         }
+        flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
         return Linearization.Planned(steps, diagnostics)
     }
 
     private fun batchRenderSegment(
-        tasks: List<GPUTask.Render>,
+        slices: List<RenderSlice>,
         continuesStoredTarget: Boolean,
     ): GPUFrameStep.RenderPassStep? {
-        val first = tasks.first()
-        val packets = tasks.flatMap(GPUTask.Render::drawPackets)
-            .filterNot { it.blendPlan is GPUBlendPlan.NoOp }
+        val first = slices.first().task
+        val packets = slices.flatMap(RenderSlice::drawPackets)
         val packetOwner = buildMap<GPUDrawPacketID, GPUTaskID> {
-            tasks.forEach { task -> task.drawPackets.forEach { put(it.packetId, task.taskId) } }
+            slices.forEach { slice ->
+                slice.drawPackets.forEach { packet -> put(packet.packetId, slice.task.taskId) }
+            }
         }
         val eligibility = buildMap {
-            tasks.forEach { task -> putAll(task.batchEligibilityByPacketId) }
+            slices.forEach { slice -> putAll(slice.task.batchEligibilityByPacketId) }
         }.filterKeys { it in packets.map(GPUDrawPacket::packetId) }
         val batchPlan = GPUPassBatcher().plan(
             GPUPassBatcherRequest(
@@ -804,17 +862,33 @@ object GPUFramePlanner {
                 sourceTaskIds = batch.packets.map { packetOwner.getValue(it.packetId) }.distinct(),
             )
         }
+        val loadStore = if (continuesStoredTarget) {
+            first.loadStore.copy(loadOp = "load", clearColorLabel = null)
+        } else {
+            first.loadStore
+        }
         return GPUFrameStep.RenderPassStep(
             target = first.target,
-            loadStore = if (continuesStoredTarget) {
-                first.loadStore.copy(loadOp = "load", clearColorLabel = null)
-            } else {
-                first.loadStore
-            },
+            loadStore = loadStore,
             samplePlan = first.samplePlan,
+            resourceUses = slices.flatMap { it.task.resourceUses }.distinct(),
             drawPackets = packets,
             sourceTaskIds = packets.map { packetOwner.getValue(it.packetId) }.distinct(),
             batches = frameBatches,
+            sampleContinuation = first.sampleContinuationKey
+                ?.takeIf { first.samplePlan is GPUSamplePlan.MultisampleFrame }
+                ?.let { key ->
+                    GPUSampleContinuationRequest(
+                        key = key,
+                        loadTransition = if (loadStore.loadOp == "clear") {
+                            GPUSampleLoadTransition.FreshClear
+                        } else {
+                            GPUSampleLoadTransition.RetainedLoad
+                        },
+                        storeAction = GPUSampleStoreAction.Store,
+                        resolveAction = GPUSampleResolveAction.ResolveCanonical,
+                    )
+                },
         )
     }
 
@@ -870,6 +944,32 @@ object GPUFramePlanner {
         is GPUTask.Copy -> destination == resource
         is GPUTask.Upload -> destination == resource
         else -> false
+    }
+
+    private fun ScheduledDestinationOperation.hasUnsafeWrite(
+        orderedTasks: List<GPUTask>,
+    ): Boolean = orderedTasks.withIndex().any { (taskIndex, candidate) ->
+        if (taskIndex !in lifetimeStart.taskIndex..lifetimeEnd.taskIndex) return@any false
+        when (candidate) {
+            is GPUTask.Render -> {
+                val firstPacketIndex = if (taskIndex == lifetimeStart.taskIndex) {
+                    lifetimeStart.packetIndex
+                } else {
+                    0
+                }
+                val lastPacketIndex = if (taskIndex == lifetimeEnd.taskIndex) {
+                    lifetimeEnd.packetIndex
+                } else {
+                    candidate.drawPackets.lastIndex
+                }
+                candidate.drawPackets.subList(firstPacketIndex, lastPacketIndex + 1).any { packet ->
+                    packet.packetId !in consumerPacketIds &&
+                        (candidate.packetWrites(packet, operation.source) ||
+                            candidate.packetWrites(packet, operation.snapshot))
+                }
+            }
+            else -> candidate.writes(operation.source) || candidate.writes(operation.snapshot)
+        }
     }
 
     private fun GPUDrawPacketRole.isRenderEncodable(): Boolean = when (this) {
@@ -954,7 +1054,8 @@ object GPUFramePlanner {
 
     private sealed interface DestinationScheduleValidation {
         data class Valid(
-            val operationsBeforeTask: Map<GPUTaskID, List<ScheduledDestinationOperation>>,
+            val operationsBeforeExecutionPoint:
+                Map<RenderExecutionPoint, List<ScheduledDestinationOperation>>,
             val destinationTaskIds: Set<GPUTaskID>,
             val refusalSourceTaskByRefusedTask: Map<GPUTaskID, GPUTaskID>,
             val consumerPacketIds: Set<GPUDrawPacketID>,
@@ -967,6 +1068,40 @@ object GPUFramePlanner {
         val sourceTaskId: GPUTaskID,
         val sourceKey: GPUDestinationSnapshotGroupKey,
         val operation: GPUDestinationSnapshotOperation,
+        val schedulePoint: RenderExecutionPoint,
+        val lifetimeStart: OrderedRenderExecutionPoint,
+        val lifetimeEnd: OrderedRenderExecutionPoint,
+        val consumerPacketIds: Set<GPUDrawPacketID>,
+    )
+
+    private data class RenderExecutionPoint(
+        val taskId: GPUTaskID,
+        val packetIndex: Int,
+    )
+
+    private data class OrderedRenderExecutionPoint(
+        val taskIndex: Int,
+        val packetIndex: Int,
+    ) : Comparable<OrderedRenderExecutionPoint> {
+        override fun compareTo(other: OrderedRenderExecutionPoint): Int =
+            compareValuesBy(this, other, OrderedRenderExecutionPoint::taskIndex, OrderedRenderExecutionPoint::packetIndex)
+    }
+
+    private data class DestinationSnapshotInterval(
+        val start: OrderedRenderExecutionPoint,
+        val end: OrderedRenderExecutionPoint,
+    ) {
+        init {
+            require(start <= end) { "Destination snapshot lifetime must be ordered" }
+        }
+
+        fun overlaps(other: DestinationSnapshotInterval): Boolean =
+            start <= other.end && other.start <= end
+    }
+
+    private data class RenderSlice(
+        val task: GPUTask.Render,
+        val drawPackets: List<GPUDrawPacket>,
     )
 
     private data class RenderContinuationKey(

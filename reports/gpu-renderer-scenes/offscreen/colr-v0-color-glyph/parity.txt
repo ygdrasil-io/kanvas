@@ -1,15 +1,9 @@
 COLRv0 color glyph parity report
-adapter=Apple M2 Max
-similarity=1,0000
+fixture=/fonts/skia/colr.ttf
+baseGlyph=2
+layerGlyphs=7,8
+reference=independent-cpu-source-over
 matchingPixels=4096/4096
-tolerancePerChannel=2
-maxDeltaR=0
-maxDeltaG=0
-maxDeltaB=0
-maxDeltaA=0
-meanDeltaR=0,0000
-meanDeltaG=0,0000
-meanDeltaB=0,0000
-meanDeltaA=0,0000
+pixelExact=true
 targetSize=64x64
-atlasVersion=AB-48px-59x34
+uniformBytes=784

@@ -68,6 +68,7 @@ sealed interface GPUFrameResourcePreparationDecision {
         val deviceGeneration: GPUDeviceGenerationID,
         val resourceGeneration: Long,
         val outputOwnedReadbackLease: GPUReadbackStagingLease? = null,
+        val textureAllocation: GPUPreparedTextureAllocationEvidence? = null,
     ) : GPUFrameResourcePreparationDecision {
         init {
             require(resourceGeneration >= 0L) {
@@ -77,6 +78,12 @@ sealed interface GPUFrameResourcePreparationDecision {
                 outputOwnedReadbackLease == null || role == GPUFrameResourceRole.ReadbackStaging,
             ) {
                 "Only a ReadbackStaging resource may carry output-owned readback state"
+            }
+            require(textureAllocation == null || concreteResource is GPUPreparedConcreteResourceRef.Texture) {
+                "Only a prepared texture may carry logical-to-physical allocation evidence"
+            }
+            require(textureAllocation == null || role != GPUFrameResourceRole.ReadbackStaging) {
+                "Readback staging cannot carry texture allocation evidence"
             }
         }
     }
@@ -168,12 +175,15 @@ class GPUConcreteResourceProvider(
     private val textureSamplerProvider: GPUResourceProvider = ValidatingTextureSamplerResourceProvider(),
     private val leaseFactory: GPUResourceLeaseFactory = EvidenceOnlyGPUResourceLeaseFactory,
 ) : GPUFrameResourcePreflightProvider {
+    internal fun isBackedBy(factory: GPUResourceLeaseFactory): Boolean = leaseFactory === factory
+
     private val physicalPoolBudgetLedger = GPUPhysicalPoolBudgetLedger()
     private val scratchTexturePool = GPUScratchTexturePool(physicalPoolBudgetLedger)
     private val readbackStagingPool = GPUReadbackStagingPool(physicalPoolBudgetLedger)
     private val pendingPhysicalReservations = mutableListOf<GPUProviderPhysicalReservation>()
     private var framePreparationOrdinal: Long = 0
-    internal val pendingPhysicalReservationCount: Int get() = pendingPhysicalReservations.size
+    internal val pendingPhysicalReservationCount: Int
+        @Synchronized get() = pendingPhysicalReservations.size
     private val nullBufferKeys = linkedSetOf<String>()
     private val uniformSlabLeases = linkedMapOf<GPUUniformSlabLeaseCacheKey, GPUResourceLease>()
     private val bindGroupLeases = linkedMapOf<GPUBindGroupLeaseCacheKey, GPUResourceLease>()
@@ -184,6 +194,7 @@ class GPUConcreteResourceProvider(
     val telemetry: GPUConcreteResourceProviderTelemetry
         get() = mutableTelemetry
 
+    @Synchronized
     override fun reserveScratchTexture(
         request: GPUScratchTextureReservationRequest,
         budget: GPUFrameMemoryBudgetPlan,
@@ -224,6 +235,7 @@ class GPUConcreteResourceProvider(
         )
     }
 
+    @Synchronized
     override fun markScratchSubmitted(
         reservationScope: String,
         submissionId: GPUResourceSubmissionID,
@@ -240,6 +252,7 @@ class GPUConcreteResourceProvider(
             recordScratchLifecycle("submit", result)
         }
 
+    @Synchronized
     override fun acceptScratchCompletion(
         submissionId: GPUResourceSubmissionID,
         deviceGeneration: GPUDeviceGenerationID,
@@ -248,6 +261,7 @@ class GPUConcreteResourceProvider(
             recordScratchLifecycle("complete", result)
         }
 
+    @Synchronized
     override fun rejectScratchCompletion(
         submissionId: GPUResourceSubmissionID,
         deviceGeneration: GPUDeviceGenerationID,
@@ -257,6 +271,7 @@ class GPUConcreteResourceProvider(
             recordScratchLifecycle("quarantine", result)
         }
 
+    @Synchronized
     override fun reserveReadbackStaging(
         request: GPUReadbackStagingReservationRequest,
     ): GPUReadbackStagingReservationResult {
@@ -282,6 +297,7 @@ class GPUConcreteResourceProvider(
         return result
     }
 
+    @Synchronized
     override fun prepareFrameResource(
         input: GPUFrameResourcePreparationInput,
     ): GPUFrameResourcePreparationDecision {
@@ -339,6 +355,7 @@ class GPUConcreteResourceProvider(
         if (preparation.resource is GPUFrameTextureRef &&
             preparation.role in setOf(
                 GPUFrameResourceRole.DestinationSnapshot,
+                GPUFrameResourceRole.CopyScratch,
                 GPUFrameResourceRole.LayerTarget,
                 GPUFrameResourceRole.FilterTarget,
             ) &&
@@ -365,6 +382,14 @@ class GPUConcreteResourceProvider(
                         role = preparation.role,
                         deviceGeneration = input.deviceGeneration,
                         resourceGeneration = input.resourceGeneration,
+                        textureAllocation = GPUPreparedTextureAllocationEvidence(
+                            logicalBounds = reservation.lease.logicalBounds,
+                            backingWidth = reservation.lease.backingWidth,
+                            backingHeight = reservation.lease.backingHeight,
+                            format = reservation.lease.key.format,
+                            sampleCount = reservation.lease.key.sampleCount,
+                            usages = reservation.lease.usages,
+                        ),
                     )
                 is GPUScratchTextureReservationResult.Refused ->
                     GPUFrameResourcePreparationDecision.Refused(reservation.diagnostic)
@@ -404,11 +429,13 @@ class GPUConcreteResourceProvider(
     ): GPUResourceMaterializationDecision =
         commandOperandProvider.materializeCommandOperands(request, context)
 
+    @Synchronized
     override fun rollbackFrameResourcesBeforeSubmit(
         ownerScope: String,
     ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolRollbackSummary> =
         rollbackPhysicalPoolsBeforeSubmit(ownerScope)
 
+    @Synchronized
     override fun markReadbackSubmitted(
         leases: List<GPUReadbackStagingLease>,
         submissionId: GPUResourceSubmissionID,
@@ -423,6 +450,7 @@ class GPUConcreteResourceProvider(
             recordReadbackLifecycle("submit", result)
         }
 
+    @Synchronized
     override fun acceptReadbackGPUCompletion(
         submissionId: GPUResourceSubmissionID,
         deviceGeneration: GPUDeviceGenerationID,
@@ -431,6 +459,7 @@ class GPUConcreteResourceProvider(
             recordReadbackLifecycle("complete", result)
         }
 
+    @Synchronized
     override fun rejectReadbackGPUCompletion(
         submissionId: GPUResourceSubmissionID,
         deviceGeneration: GPUDeviceGenerationID,
@@ -440,16 +469,19 @@ class GPUConcreteResourceProvider(
             recordReadbackLifecycle("quarantine", result)
         }
 
+    @Synchronized
     override fun markReadbackMapped(
         lease: GPUReadbackStagingLease,
     ): GPUReadbackStagingLifecycleResult =
         readbackStagingPool.markMapped(lease).also { result -> recordReadbackLifecycle("map", result) }
 
+    @Synchronized
     override fun markReadbackDepadded(
         lease: GPUReadbackStagingLease,
     ): GPUReadbackStagingLifecycleResult =
         readbackStagingPool.markDepadded(lease).also { result -> recordReadbackLifecycle("depad", result) }
 
+    @Synchronized
     override fun releaseReadbackAfterUnmap(
         lease: GPUReadbackStagingLease,
     ): GPUReadbackStagingLifecycleResult =
@@ -457,6 +489,7 @@ class GPUConcreteResourceProvider(
             recordReadbackLifecycle("release", result)
         }
 
+    @Synchronized
     override fun markReadbackMapFailed(
         lease: GPUReadbackStagingLease,
         safety: GPUReadbackMapFailureSafety,
@@ -465,6 +498,20 @@ class GPUConcreteResourceProvider(
             recordReadbackLifecycle("map-failure", result)
         }
 
+    @Synchronized
+    override fun quarantineReadbackAfterSubmit(
+        lease: GPUReadbackStagingLease,
+    ): GPUReadbackStagingLifecycleResult =
+        readbackStagingPool.quarantineAfterSubmitFailure(lease).also { result ->
+            if (result is GPUReadbackStagingLifecycleResult.Accepted) {
+                pendingPhysicalReservations.removeAll { pending ->
+                    pending is GPUProviderPhysicalReservation.Readback && pending.lease === lease
+                }
+            }
+            recordReadbackLifecycle("fail-closed", result)
+        }
+
+    @Synchronized
     override fun rollbackPhysicalPoolsBeforeSubmit(
         ownerScope: String,
     ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolRollbackSummary> {
@@ -535,6 +582,7 @@ class GPUConcreteResourceProvider(
         )
     }
 
+    @Synchronized
     override fun invalidatePhysicalPoolsBefore(
         currentGeneration: GPUDeviceGenerationID,
     ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolInvalidationSummary> {
@@ -553,6 +601,7 @@ class GPUConcreteResourceProvider(
         )
     }
 
+    @Synchronized
     override fun evictPhysicalPoolsUntil(
         residentBytesAtMost: Long,
     ): GPUPhysicalPoolMaintenanceDecision<GPUPhysicalPoolEvictionSummary> {

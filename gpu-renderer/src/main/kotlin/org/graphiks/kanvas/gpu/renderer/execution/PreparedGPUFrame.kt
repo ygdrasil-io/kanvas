@@ -1,8 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayout
+
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicReference
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
@@ -16,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputDescriptor
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
@@ -77,6 +81,15 @@ class GPUCommandEncoderScopePlan(
     val sourcePacketIds: List<GPUDrawPacketID> = immutableList(sourcePacketIds)
     val facadeOperationClasses: List<String> = immutableList(facadeOperationClasses)
     val resourceGenerationLabels: List<String> = immutableList(resourceGenerationLabels)
+    internal var nativeOperandKeys: List<GPUPreparedNativeOperandKey> = emptyList()
+        private set
+
+    internal fun attachNativeOperandKeys(keys: List<GPUPreparedNativeOperandKey>): GPUCommandEncoderScopePlan {
+        check(nativeOperandKeys.isEmpty()) { "Native operand keys are already attached" }
+        require(keys.isNotEmpty()) { "Native operand keys must not be empty" }
+        nativeOperandKeys = immutableList(keys)
+        return this
+    }
 
     init {
         require(sourceStepIndex >= 0) { "GPUCommandEncoderScopePlan.sourceStepIndex must be non-negative" }
@@ -130,7 +143,14 @@ data class GPUPreparedResourceEvidence(
     val role: GPUFrameResourceRole,
     val deviceGeneration: GPUDeviceGenerationID,
     val resourceGeneration: Long,
-)
+    val textureAllocation: org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedTextureAllocationEvidence? = null,
+) {
+    init {
+        require(textureAllocation == null || concreteResource is GPUPreparedConcreteResourceRef.Texture) {
+            "Only prepared texture evidence may retain a texture allocation"
+        }
+    }
+}
 
 /** Readback state whose ownership survives ordinary GPU completion until map/depad/unmap. */
 data class GPUPreparedReadbackOutput(
@@ -290,13 +310,141 @@ class GPUFrameRollback internal constructor(
     private val ownerScope: String,
     private val resourceProvider: GPUFrameResourcePreflightProvider,
     private val surfaceProvider: GPUSurfaceOutputProvider,
-    private val acquiredSurfaceOutput: GPUAcquiredSurfaceOutput?,
+    acquiredSurfaceOutput: GPUAcquiredSurfaceOutput? = null,
+    nativePayloadOwnership: GPUPreparedNativeFrameOwnership? = null,
+    private val completionProvider: GPUQueueCompletionProvider? = null,
+    completionTicket: GPUQueueCompletionTicket? = null,
 ) {
+    private enum class State { Open, SubmitEntered, RolledBack }
+
+    private var state = State.Open
+    private var acquiredSurfaceOutput: GPUAcquiredSurfaceOutput? = acquiredSurfaceOutput
+    private var nativePayloadOwnership: GPUPreparedNativeFrameOwnership? = nativePayloadOwnership
+    private var completionTicket: GPUQueueCompletionTicket? = completionTicket
     private var result: GPUFrameRollbackResult? = null
+
+    init {
+        require(completionTicket == null || completionProvider != null) {
+            "GPUFrameRollback cannot own a completion ticket without its completion provider"
+        }
+    }
+
+    internal val hasNativePayload: Boolean
+        @Synchronized get() = nativePayloadOwnership != null
+
+    @Synchronized
+    internal fun ownsCompletionTicket(ticket: GPUQueueCompletionTicket): Boolean =
+        completionTicket === ticket
+
+    @Synchronized
+    internal fun adoptNativePayload(ownership: GPUPreparedNativeFrameOwnership): Boolean {
+        if (state != State.Open || nativePayloadOwnership != null) return false
+        nativePayloadOwnership = ownership
+        return true
+    }
+
+    @Synchronized
+    internal fun adoptCompletionTicket(ticket: GPUQueueCompletionTicket): Boolean {
+        if (state != State.Open || completionProvider == null || completionTicket != null) return false
+        completionTicket = ticket
+        return true
+    }
+
+    @Synchronized
+    internal fun adoptSurface(output: GPUAcquiredSurfaceOutput): Boolean {
+        if (state != State.Open || acquiredSurfaceOutput != null) return false
+        acquiredSurfaceOutput = output
+        return true
+    }
+
+    @Synchronized
+    internal fun consumeNativePayload(
+        identity: GPUPreparedNativeFrameIdentity,
+    ): GPUPreparedNativeFrameConsumption {
+        val ownership = nativePayloadOwnership ?: return GPUPreparedNativeFrameConsumption.Refused(
+            "unsupported.native-frame-payload.token-missing",
+        )
+        return try {
+            ownership.consume(identity)
+        } catch (_: Throwable) {
+            GPUPreparedNativeFrameConsumption.Refused(
+                "failed.native-frame-payload.access",
+            )
+        }
+    }
+
+    @Synchronized
+    internal fun enterSubmit(): GPUPreparedNativeFrameBindingResult {
+        if (state != State.Open) return GPUPreparedNativeFrameBindingResult.Refused(
+            "failed.frame-execution.submit-ownership",
+            "Frame rollback ownership is no longer open.",
+        )
+        val ownership = nativePayloadOwnership
+        if (ownership != null) {
+            val marked = try {
+                ownership.markSubmitted()
+            } catch (_: Throwable) {
+                false
+            }
+            if (!marked) return GPUPreparedNativeFrameBindingResult.Refused(
+                "failed.native-frame-payload.submit-transition",
+                "Native payload could not enter submitted ownership.",
+            )
+        }
+        state = State.SubmitEntered
+        return GPUPreparedNativeFrameBindingResult.Ready
+    }
+
+    @Synchronized
+    internal fun releaseNativeAfterCompletion(): Boolean = try {
+        nativePayloadOwnership?.releaseAfterCompletion() ?: true
+    } catch (_: Throwable) {
+        false
+    }
+
+    @Synchronized
+    internal fun claimNativeReadbackMapping(): Boolean = try {
+        nativePayloadOwnership?.claimOutputMapping() ?: true
+    } catch (_: Throwable) {
+        false
+    }
+
+    @Synchronized
+    internal fun releaseNativeReadbackAfterOutput(): Boolean = try {
+        nativePayloadOwnership?.releaseOutputAfterReadback() ?: true
+    } catch (_: Throwable) {
+        false
+    }
+
+    @Synchronized
+    internal fun quarantineNativeReadbackAfterOutput(): Boolean = try {
+        nativePayloadOwnership?.quarantineOutputAfterReadback() ?: true
+    } catch (_: Throwable) {
+        false
+    }
+
+    @Synchronized
+    internal fun quarantineNativeAfterSubmit(): Boolean = try {
+        nativePayloadOwnership?.quarantine() ?: true
+    } catch (_: Throwable) {
+        false
+    }
 
     @Synchronized
     fun execute(): GPUFrameRollbackResult {
         result?.let { return it }
+        if (state == State.SubmitEntered) {
+            return GPUFrameRollbackResult(
+                emptyList(),
+                listOf(
+                    preflightDiagnostic(
+                        "failed.preflight.rollback_after_submit_entry",
+                        "Pre-submit rollback is forbidden after entering queue submission.",
+                    ),
+                ),
+            ).also { result = it }
+        }
+        state = State.RolledBack
         val releases = mutableListOf<String>()
         val diagnostics = mutableListOf<GPUDiagnostic>()
         acquiredSurfaceOutput?.let { output ->
@@ -313,6 +461,48 @@ class GPUFrameRollback internal constructor(
                 diagnostics += preflightDiagnostic(
                     "failed.preflight.surface_release",
                     "Surface release failed during pre-submit rollback.",
+                    mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                )
+            }
+        }
+        completionTicket?.let { ticket ->
+            try {
+                when (completionProvider?.abandonReservedTicket(ticket)) {
+                    is GPUQueueCompletionTicketAbandonResult.Abandoned ->
+                        releases += "completion-ticket:${ticket.ticketId.value}"
+                    else -> {
+                        releases += "completion-ticket:${ticket.ticketId.value}:failed"
+                        diagnostics += preflightDiagnostic(
+                            "failed.preflight.completion_ticket_abandon",
+                            "Reserved completion ticket could not be abandoned before submit.",
+                        )
+                    }
+                }
+            } catch (failure: Throwable) {
+                releases += "completion-ticket:${ticket.ticketId.value}:failed"
+                diagnostics += preflightDiagnostic(
+                    "failed.preflight.completion_ticket_abandon",
+                    "Completion ticket abandonment failed without a typed result.",
+                    mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                )
+            }
+        }
+        nativePayloadOwnership?.let { ownership ->
+            try {
+                if (ownership.rollback()) {
+                    releases += "native-payload:${ownership.token.value}"
+                } else {
+                    releases += "native-payload:${ownership.token.value}:failed"
+                    diagnostics += preflightDiagnostic(
+                        "failed.preflight.native_payload_rollback",
+                        "Prepared native payload could not be invalidated before submission.",
+                    )
+                }
+            } catch (failure: Throwable) {
+                releases += "native-payload:${ownership.token.value}:failed"
+                diagnostics += preflightDiagnostic(
+                    "failed.preflight.native_payload_rollback",
+                    "Prepared native payload rollback failed.",
                     mapOf("failureClass" to failure::class.simpleName.orEmpty()),
                 )
             }
@@ -342,7 +532,13 @@ class GPUFrameRollback internal constructor(
     }
 }
 
-class PreparedGPUFrame(
+internal enum class PreparedGPUFrameOwnershipState {
+    Prepared,
+    Executing,
+    RolledBack,
+}
+
+internal class PreparedGPUFrame(
     val semanticPlan: GPUFramePlan,
     val encoderPlan: GPUCommandEncoderPlan,
     val resources: GPUPreparedResourceSet,
@@ -354,11 +550,39 @@ class PreparedGPUFrame(
     dependencyEvidence: List<GPUPreparedDependencyEvidence>,
     hostActions: List<GPUFrameHostAction>,
 ) {
+    private val ownership = AtomicReference(PreparedGPUFrameOwnershipState.Prepared)
     val stepPartition: List<GPUPreparedStepEvidence> = immutableList(stepPartition)
     val dependencyEvidence: List<GPUPreparedDependencyEvidence> = immutableList(dependencyEvidence)
     val hostActions: List<GPUFrameHostAction> = immutableList(hostActions)
+    internal val hasNativePayload: Boolean get() = rollback.hasNativePayload
+
+    /** Claims this prepared resource graph for the one executor allowed to own it. */
+    internal fun claimForExecution(): Boolean = ownership.compareAndSet(
+        PreparedGPUFrameOwnershipState.Prepared,
+        PreparedGPUFrameOwnershipState.Executing,
+    )
+
+    /** Claims an unexecuted prepared frame for coordinator-owned rollback. */
+    internal fun claimForRollback(): Boolean = ownership.compareAndSet(
+        PreparedGPUFrameOwnershipState.Prepared,
+        PreparedGPUFrameOwnershipState.RolledBack,
+    )
+
+    /** Transitions the executor's exclusive claim to rollback ownership before releasing resources. */
+    internal fun rollbackAfterExecutionClaim(): GPUFrameRollbackResult {
+        check(
+            ownership.compareAndSet(
+                PreparedGPUFrameOwnershipState.Executing,
+                PreparedGPUFrameOwnershipState.RolledBack,
+            ),
+        ) { "Prepared frame rollback requires the executor's active ownership claim" }
+        return rollback.execute()
+    }
 
     init {
+        require(rollback.ownsCompletionTicket(completionTicket)) {
+            "PreparedGPUFrame rollback must own the exact completion ticket instance"
+        }
         require(this.stepPartition.map { it.sourceStepIndex } == semanticPlan.steps.indices.toList()) {
             "PreparedGPUFrame.stepPartition must cover every semantic step exactly once and in order"
         }
@@ -409,8 +633,8 @@ class PreparedGPUFrame(
                 require(stream.commandLabels == scope.facadeOperationClasses) {
                     "PreparedGPUFrame render facade operations must exactly match its command stream"
                 }
-                require(stream.operandBridge.size == expectedPackets.size * 2) {
-                    "PreparedGPUFrame render command stream must bridge one pipeline and bind group per packet"
+                require(stream.operandBridge.size >= expectedPackets.size * 2) {
+                    "PreparedGPUFrame render command stream must bridge at least pipeline and bind group operands per packet"
                 }
             } else {
                 require(scope.sourcePacketIds.isEmpty()) {
@@ -724,7 +948,7 @@ class PreparedGPUFrame(
     }.finish()
 }
 
-sealed interface GPUFramePreflightResult {
+internal sealed interface GPUFramePreflightResult {
     data class Prepared(val frame: PreparedGPUFrame) : GPUFramePreflightResult
     class Refused(
         diagnostic: GPUDiagnostic,
@@ -825,6 +1049,10 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFaca
             drawPackets.forEach { packet ->
                 add("setRenderPipeline")
                 add("setBindGroup")
+                if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph) {
+                    add("setVertexBuffer")
+                    add("setIndexBuffer")
+                }
                 if (packet.scissorBoundsHash != null) add("setScissor")
                 add("draw")
             }
@@ -849,6 +1077,10 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassSt
     drawPackets.forEach { packet ->
         add(packet.packetId)
         add(packet.packetId)
+        if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph) {
+            add(packet.packetId)
+            add(packet.packetId)
+        }
         if (packet.scissorBoundsHash != null) add(packet.packetId)
         add(packet.packetId)
     }
@@ -856,7 +1088,8 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassSt
 
 private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.preparedResourceRefs():
     List<GPUFrameResourceRef> = when (this) {
-    is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> listOf(target)
+    is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep ->
+        listOf(target) + resourceUses.map { it.resource }
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.ComputePassStep ->
         listOf(target) + resourceUses.map { it.resource }
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.UploadResourceStep -> listOf(staging, destination)
