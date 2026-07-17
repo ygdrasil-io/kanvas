@@ -666,6 +666,19 @@ that proves:
 - device-loss, adapter-close, timeout, and cancellation behavior;
 - compatibility with the exact wgpu4k/wgpu-native revision.
 
+Native callback failure is publicly triggerable and must be proved: submit,
+close an isolated public device, then register `onSubmittedWorkDone()` and
+require the facade's `Device is closed` failure to be normalized exactly once.
+Registering before close may legitimately race with fast success and is recorded
+as such, not reclassified as failure. Native device-loss injection is mandatory
+when the stable public facade exposes a deterministic trigger. If it does not,
+the accepted evidence is exhaustive unit normalization plus the explicit
+`not-exercisable-public-api` result in the conformance report. This narrow
+device-loss-only amendment does not relax success, callback failure, ordering,
+lifetime, close, cancellation, revision, checksum, or exactly-once
+requirements. It does not authorize private handle access, native
+status-message parsing, or a Kanvas workaround.
+
 The required fix is an upstream wgpu4k facade implementation with those
 guarantees. This design does not authorize a temporary Kanvas native callback
 implementation. If the facade revision fails conformance, product activation
@@ -1111,9 +1124,12 @@ Instrumented execution asserts:
 The native completion adapter has a separate conformance suite that delays
 callbacks beyond the registering call and allocation scope, churns memory/GC,
 submits many ordered tickets, drives the configured event pump/poll path, and
-proves exactly-once success, failure, device loss, close, and cancellation. It
-records the callback mode and exact wgpu4k/wgpu-native revisions. A facade API
-method without this evidence remains `dependency.resource.queue_completion_unavailable`.
+proves exactly-once success, public callback failure, close, and cancellation.
+It also proves native device loss whenever the stable public facade exposes a
+trigger; otherwise it exhaustively tests device-loss normalization and records
+`not-exercisable-public-api`. It records the callback mode and exact
+wgpu4k/wgpu-native revisions. A facade API method without this evidence remains
+`dependency.resource.queue_completion_unavailable`.
 
 ### Readback and surface tests
 

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
@@ -10,6 +11,22 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandR
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 
 class GPUBackendRuntimeContractsTest {
+    @Test
+    fun `queue completion access exposes only the non-owning consumer view`() {
+        val runtime = GPUQueueCompletionAdapter.disabled("unsupported.queue-completion.test")
+        val access = object : GPUBackendQueueCompletionAccess {
+            override val queueCompletion: GPUQueueCompletionAccess = runtime
+        }
+        val provider: GPUQueueCompletionProvider = access.queueCompletion
+
+        assertTrue(provider === runtime)
+        assertFalse(
+            GPUQueueCompletionAccess::class.java.methods.any {
+                it.name == "close" || it.name == "deviceLost"
+            },
+        )
+    }
+
     @Test
     fun `offscreen request requires positive dimensions and nonblank format`() {
         val request = GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "rgba8unorm")

@@ -1067,6 +1067,8 @@ rtk git tag kanvas-frame-plan-wgpu4k-dependency-2026-07-13 HEAD
 
 Delay callbacks beyond the registering call and allocation scope; churn memory and GC; submit ordered tickets; test success, failure, device loss, adapter close, cancellation, and many in-flight submissions. Record exact wgpu4k and wgpu-native revisions and observed callback order. If any behavior is surprising, keep the product gate closed and create a minimized wgpu4k report instead of adding a Kanvas workaround.
 
+Native callback failure is publicly triggerable and mandatory: submit on an isolated context, close its device, then register `onSubmittedWorkDone()` and prove that the public `Device is closed` failure is normalized exactly once. Registration before close may legitimately race with fast success and must be reported honestly. Native device-loss injection is mandatory only when the stable public facade exposes a deterministic trigger. When it does not, exhaustively test device-loss normalization and record `not-exercisable-public-api` in the report. This is an explicit device-loss-only acceptance amendment: it does not relax success, callback failure, ordering, lifetime, close, cancellation, revision, checksum, or exactly-once evidence, and it must not be implemented with private handle access, native message parsing, or a Kanvas workaround.
+
 - [ ] **Step 6: Run queue, native, and module tests**
 
 ```bash
@@ -1074,7 +1076,7 @@ rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.execu
 rtk ./gradlew :gpu-renderer:test
 ```
 
-Expected: all pass with the corrected dependency and `wgpu4k-completion-conformance.json` records `accepted=true`. The unavailable/refusal unit branch remains tested, but an actual conformance run that produces `accepted=false`, cannot identify the native revision, hangs, reorders callbacks, or lacks exact checksums is a hard stop for this implementation sequence.
+Expected: all pass with the corrected dependency and `wgpu4k-completion-conformance.json` records `accepted=true`. The unavailable/refusal unit branch remains tested. An actual conformance run that produces `accepted=false`, cannot identify the native revision, hangs, reorders callbacks, or lacks exact checksums is a hard stop for this implementation sequence. `not-exercisable-public-api` is accepted only for native device-loss injection under the Step 5 amendment; every other gate remains strict.
 
 - [ ] **Step 7: Apply the stop/go gate**
 

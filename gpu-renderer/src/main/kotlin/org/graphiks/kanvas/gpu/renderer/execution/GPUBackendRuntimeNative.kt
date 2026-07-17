@@ -82,6 +82,7 @@ import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
@@ -142,8 +143,36 @@ private const val RGBA_BYTES_PER_PIXEL: Int = 4
 private const val RECT_COLOR_UNIFORM_SIZE_BYTES: ULong = 16uL
 private const val VERTEX_COLOR_STRIDE_BYTES: Int = 32
 private const val TEXT_ATLAS_VERTEX_STRIDE_BYTES: Int = 16
+private const val WGPU4K_QUEUE_COMPLETION_REVISION = "wgpu4k.0.2.0-20260716.235022-2"
+private const val WGPU4K_QUEUE_COMPLETION_CAPABILITY = "on-submitted-work-done"
+internal const val GPU_NATIVE_DEVICE_LOSS_PROOF = "not-exercisable-public-api"
 private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
+
+/** Preserves every representable adapter limit and saturates wider native values without overflow. */
+internal fun observedMaxBufferSize(value: ULong): Long? = when {
+    value == 0uL -> null
+    value > Long.MAX_VALUE.toULong() -> Long.MAX_VALUE
+    else -> value.toLong()
+}
+
+/** Uses only the public wgpu4k queue facade; callback ownership and polling stay in wgpu4k. */
+private fun wgpuQueueCompletionRuntime(
+    deviceGeneration: GPUDeviceGenerationID,
+    queue: GPUQueue,
+): GPUQueueCompletionAdapter = GPUQueueCompletionAdapter(
+    deviceGeneration = deviceGeneration,
+    requirement = GPUQueueCompletionCapabilityRequirement(
+        implementationRevision = WGPU4K_QUEUE_COMPLETION_REVISION,
+        capability = WGPU4K_QUEUE_COMPLETION_CAPABILITY,
+    ),
+    evidence = GPUQueueCompletionCapabilityEvidence(
+        implementationRevision = WGPU4K_QUEUE_COMPLETION_REVISION,
+        capability = WGPU4K_QUEUE_COMPLETION_CAPABILITY,
+        accepted = true,
+    ),
+    invoker = GPUQueueCompletionInvoker { queue.onSubmittedWorkDone() },
+)
 private val TARGET_SNAPSHOT_WGSL: String = """
 struct Uniforms {
     color: vec4f,
@@ -465,6 +494,10 @@ private class WgpuBackendSession(
     private val resourceProvider = GPUConcreteResourceProvider(leaseFactory = runtimeResourceAdapter)
     private val runtimeResourceLeases = mutableListOf<GPUResourceLease>()
     private val queueManager = GPUQueueManager()
+    private val queueCompletionRuntime = wgpuQueueCompletionRuntime(
+        deviceGeneration = deviceGeneration,
+        queue = glfw.wgpuContext.device.queue,
+    )
     private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits(
         maxTextureDimension2D = minOf(
@@ -475,6 +508,7 @@ private class WgpuBackendSession(
         minUniformBufferOffsetAlignment = glfw.wgpuContext.adapter.limits
             .minUniformBufferOffsetAlignment
             .toLong(),
+        maxBufferSize = observedMaxBufferSize(glfw.wgpuContext.adapter.limits.maxBufferSize),
         source = "adapter.limits",
     )
     private var offscreenTargetOrdinalCounter = 0L
@@ -536,6 +570,7 @@ private class WgpuBackendSession(
             deviceGeneration = deviceGeneration,
             device = glfw.wgpuContext.device,
             queue = glfw.wgpuContext.device.queue,
+            queueCompletion = queueCompletionRuntime,
             request = request,
             capabilities = capabilities,
             executionCaches = executionCaches,
@@ -551,18 +586,22 @@ private class WgpuBackendSession(
             binding = binding,
             capabilities = capabilities,
             telemetryRecorder = telemetryRecorder,
-            queueManager = queueManager,
             recordRuntimeResourceLeasesAction = { leases -> recordRuntimeResourceLeases(leases) },
         )
 
     override fun close() {
+        queueCompletionRuntime.close()
         try {
             runtimeResourceAdapter.close()
         } finally {
             try {
                 executionCaches.close()
             } finally {
-                glfw.close()
+                try {
+                    queueManager.close()
+                } finally {
+                    glfw.close()
+                }
             }
         }
     }
@@ -788,6 +827,7 @@ private class WgpuOffscreenTarget(
     private val deviceGeneration: GPUDeviceGeneration,
     private val device: GPUDevice,
     private val queue: GPUQueue,
+    override val queueCompletion: GPUQueueCompletionAccess,
     private val request: GPUOffscreenTargetRequest,
     private val capabilities: GPUCapabilities,
     private val executionCaches: WgpuExecutionCaches,
@@ -1693,13 +1733,19 @@ private class WgpuWindowSurface(
     binding: GPUNativeSurfaceBinding,
     private val capabilities: GPUCapabilities,
     private val telemetryRecorder: WgpuBackendRuntimeTelemetryRecorder,
-    private val queueManager: GPUQueueManager,
     private val recordRuntimeResourceLeasesAction: (List<GPUResourceLease>) -> Unit,
 ) : GPUBackendWindowSurface {
     private val windowRuntimeOrdinal = nextWindowRuntimeOrdinal()
     private val deviceGeneration = windowSurfaceDeviceGeneration(windowRuntimeOrdinal)
     private val targetId = windowSurfaceTargetId(windowRuntimeOrdinal, binding)
     private val runtime = createNativeWindowRuntime(binding)
+    private val queueCompletionRuntime: GPUQueueCompletionRuntime = wgpuQueueCompletionRuntime(
+        deviceGeneration = deviceGeneration,
+        queue = runtime.device.queue,
+    )
+    override val queueCompletion: GPUQueueCompletionAccess
+        get() = queueCompletionRuntime
+    private val queueManager = GPUQueueManager()
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
     private val runtimeResourceAdapter = GPURuntimeResourceAdapter(requirePreparedResources = true)
     private val resourceProvider = GPUConcreteResourceProvider(leaseFactory = runtimeResourceAdapter)
@@ -1837,13 +1883,18 @@ private class WgpuWindowSurface(
     }
 
     override fun close() {
+        queueCompletionRuntime.close()
         try {
             runtimeResourceAdapter.close()
         } finally {
             try {
                 executionCaches.close()
             } finally {
-                runtime.close()
+                try {
+                    queueManager.close()
+                } finally {
+                    runtime.close()
+                }
             }
         }
     }

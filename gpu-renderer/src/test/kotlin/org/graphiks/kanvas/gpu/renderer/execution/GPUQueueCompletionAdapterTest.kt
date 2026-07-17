@@ -1,9 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import java.util.concurrent.CancellationException
+import java.util.Collections
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
@@ -98,22 +100,35 @@ class GPUQueueCompletionAdapterTest {
 
     @Test
     fun `throw and result failure normalize to typed callback failure`() = runBlocking {
-        listOf<GPUQueueCompletionInvoker>(
-            GPUQueueCompletionInvoker { error("callback threw") },
-            GPUQueueCompletionInvoker { Result.failure(IllegalStateException("callback failed")) },
+        listOf(
+            GPUQueueCompletionInvoker { error("callback threw") } to "callback threw",
+            GPUQueueCompletionInvoker { Result.failure(IllegalStateException("callback failed")) } to "callback failed",
         ).forEachIndexed { index, invoker ->
-            val adapter = enabledTestAdapter(invoker)
+            val adapter = enabledTestAdapter(invoker.first)
             val ticket = adapter.reserve(frameId = 10L + index)
             adapter.armAfterSubmit(ticket)
 
-            assertEquals(
-                GPUQueueCompletionDelivery.Accepted(
-                    ticket.ticketId,
-                    GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.CallbackFailure),
-                ),
-                adapter.awaitCompletion(ticket),
-            )
+            val delivery = assertIs<GPUQueueCompletionDelivery.Accepted>(adapter.awaitCompletion(ticket))
+            val failure = assertIs<GPUQueueCompletionOutcome.Failure>(delivery.outcome)
+            assertEquals(GPUQueueCompletionFailureKind.CallbackFailure, failure.kind)
+            assertEquals(invoker.second, failure.message)
         }
+    }
+
+    @Test
+    fun `backend failure keeps its public message without inferring a native status`() = runBlocking {
+        val adapter = enabledTestAdapter {
+            Result.failure(IllegalStateException("queue completion failed with opaque backend detail"))
+        }
+        val ticket = adapter.reserve(19L)
+        adapter.armAfterSubmit(ticket)
+
+        val delivery = assertIs<GPUQueueCompletionDelivery.Accepted>(adapter.awaitCompletion(ticket))
+        val failure = assertIs<GPUQueueCompletionOutcome.Failure>(delivery.outcome)
+
+        assertEquals(GPUQueueCompletionFailureKind.CallbackFailure, failure.kind)
+        assertEquals(null, failure.status)
+        assertEquals("queue completion failed with opaque backend detail", failure.message)
     }
 
     @Test
@@ -173,6 +188,39 @@ class GPUQueueCompletionAdapterTest {
     }
 
     @Test
+    fun `sink exception cannot escape cancellation or suppress terminal delivery`() = runBlocking {
+        val release = CompletableDeferred<Unit>()
+        val adapter = enabledTestAdapter {
+            release.await()
+            Result.success(Unit)
+        }
+        val ticket = adapter.reserve(33L)
+        var sinkCalls = 0
+        adapter.armAfterSubmit(
+            ticket,
+            GPUQueueCompletionSink {
+                sinkCalls += 1
+                error("sink failed")
+            },
+        )
+
+        val cancelled = adapter.cancel(ticket)
+
+        assertEquals(
+            GPUQueueCompletionDelivery.Accepted(
+                ticket.ticketId,
+                GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.Cancelled),
+            ),
+            cancelled,
+        )
+        assertEquals(cancelled, adapter.awaitCompletion(ticket))
+        assertEquals(1, sinkCalls)
+        assertEquals(1L, adapter.rejectedSinkDeliveryCount)
+        release.complete(Unit)
+        assertEquals(GPUQueueCompletionDelivery.Duplicate(ticket.ticketId), adapter.cancel(ticket))
+    }
+
+    @Test
     fun `unknown duplicate and closed operations are deterministic`() = runBlocking {
         val adapter = enabledTestAdapter { Result.success(Unit) }
         val unknown = GPUQueueCompletionTicket(
@@ -203,12 +251,45 @@ class GPUQueueCompletionAdapterTest {
             GPUQueueCompletionCapabilityEvidence("revision.expected", "other-capability", true),
             GPUQueueCompletionCapabilityEvidence("revision.expected", "completion-capability", false),
         ).forEachIndexed { index, evidence ->
-            val adapter = GPUQueueCompletionAdapter(requirement, evidence) { Result.success(Unit) }
+            val adapter = GPUQueueCompletionAdapter(
+                deviceGeneration = GPUDeviceGenerationID(11L),
+                requirement = requirement,
+                evidence = evidence,
+                invoker = GPUQueueCompletionInvoker { Result.success(Unit) },
+            )
             val refusal = assertIs<GPUQueueCompletionTicketReservation.Failed>(
                 adapter.reserveTicket(ticketRequest(50L + index)),
             )
             assertTrue(refusal.diagnostic.code.value.startsWith("unsupported.queue-completion."))
         }
+    }
+
+    @Test
+    fun `queue adapter refuses tickets from another device generation`() {
+        val adapter = GPUQueueCompletionAdapter(
+            deviceGeneration = GPUDeviceGenerationID(11L),
+            requirement = GPUQueueCompletionCapabilityRequirement(
+                "wgpu4k.test.revision",
+                "on-submitted-work-done",
+            ),
+            evidence = GPUQueueCompletionCapabilityEvidence(
+                "wgpu4k.test.revision",
+                "on-submitted-work-done",
+                true,
+            ),
+            invoker = GPUQueueCompletionInvoker { Result.success(Unit) },
+        )
+
+        val refusal = assertIs<GPUQueueCompletionTicketReservation.Failed>(
+            adapter.reserveTicket(
+                GPUQueueCompletionTicketRequest(
+                    frameId = GPUFrameID(51L),
+                    deviceGeneration = GPUDeviceGenerationID(12L),
+                ),
+            ),
+        )
+
+        assertEquals("unsupported.queue-completion.device-generation-mismatch", refusal.diagnostic.code.value)
     }
 
     @Test
@@ -230,6 +311,34 @@ class GPUQueueCompletionAdapterTest {
         assertEquals(tickets.map { it.ticketId }, deliveries.map { (it as GPUQueueCompletionDelivery.Accepted).ticketId })
         assertEquals(6, deliveries.map { (it as GPUQueueCompletionDelivery.Accepted).ticketId }.distinct().size)
         assertFalse(deliveries.any { it is GPUQueueCompletionDelivery.Unknown })
+    }
+
+    @Test
+    fun `sink deliveries drain in arm order when backend callbacks resume out of order`() = runBlocking {
+        val releases = List(3) { CompletableDeferred<Unit>() }
+        var invocation = 0
+        val adapter = enabledTestAdapter {
+            val current = invocation++
+            releases[current].await()
+            Result.success(Unit)
+        }
+        val tickets = (0 until 3).map { index -> adapter.reserve(66L + index) }
+        val delivered = Collections.synchronizedList(mutableListOf<GPUQueueCompletionTicketID>())
+        tickets.forEach { ticket ->
+            adapter.armAfterSubmit(ticket, GPUQueueCompletionSink { delivery -> delivered += delivery.ticketId })
+        }
+        assertEquals(3, invocation)
+
+        releases[2].complete(Unit)
+        delay(50)
+        assertEquals(emptyList(), delivered.toList())
+        releases[1].complete(Unit)
+        delay(50)
+        assertEquals(emptyList(), delivered.toList())
+        releases[0].complete(Unit)
+        tickets.map { async { adapter.awaitCompletion(it) } }.awaitAll()
+
+        assertEquals(tickets.map { it.ticketId }, delivered.toList())
     }
 
     @Test
@@ -317,6 +426,7 @@ class GPUQueueCompletionAdapterTest {
 private fun enabledTestAdapter(
     invoker: GPUQueueCompletionInvoker,
 ): GPUQueueCompletionAdapter = GPUQueueCompletionAdapter(
+    deviceGeneration = GPUDeviceGenerationID(11L),
     requirement = GPUQueueCompletionCapabilityRequirement(
         implementationRevision = "wgpu4k.test.revision",
         capability = "on-submitted-work-done",

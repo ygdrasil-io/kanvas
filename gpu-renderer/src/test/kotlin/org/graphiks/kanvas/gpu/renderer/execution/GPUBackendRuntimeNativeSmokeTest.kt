@@ -1,8 +1,21 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.glfwContextRenderer
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.net.URLClassLoader
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import java.util.Collections
+import kotlin.concurrent.thread
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.delay
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
@@ -30,6 +43,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Timeout
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertContains
@@ -108,6 +122,278 @@ class GPUBackendRuntimeNativeSmokeTest {
             ),
             rgba,
         )
+    }
+
+    @Test
+    fun `native unsigned max buffer size conversion cannot overflow signed capabilities`() {
+        assertEquals(null, observedMaxBufferSize(0uL))
+        assertEquals(268_435_456L, observedMaxBufferSize(268_435_456uL))
+        assertEquals(Long.MAX_VALUE, observedMaxBufferSize(ULong.MAX_VALUE))
+    }
+
+    @Test
+    fun `native device loss proof is explicitly limited by the public facade`() {
+        assertEquals("not-exercisable-public-api", GPU_NATIVE_DEVICE_LOSS_PROOF)
+    }
+
+    @Test
+    fun `native offscreen queue completion proves a submitted empty pass off the submitter thread`() = runBlocking {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        val submitterThread = Thread.currentThread().threadId()
+
+        session!!.createOffscreenTarget(
+            GPUOffscreenTargetRequest(width = 1, height = 1, colorFormat = "rgba8unorm"),
+        ).use { target ->
+            val runtime = target.queueCompletion
+            val ticket = assertIs<GPUQueueCompletionTicketReservation.Reserved>(
+                runtime.reserveTicket(
+                    GPUQueueCompletionTicketRequest(
+                        frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(9_001L),
+                        deviceGeneration = target.target.deviceGeneration,
+                    ),
+                ),
+            ).ticket
+            val callbackThread = AtomicReference<Long>()
+            target.submitEmptyNativePass()
+
+            assertEquals(
+                GPUQueueCompletionArmResult.Armed(ticket.ticketId),
+                runtime.armAfterSubmit(
+                    ticket,
+                    GPUQueueCompletionSink { callbackThread.set(Thread.currentThread().threadId()) },
+                ),
+            )
+            assertEquals(
+                GPUQueueCompletionDelivery.Accepted(ticket.ticketId, GPUQueueCompletionOutcome.Success),
+                withTimeout(5_000) { runtime.awaitCompletion(ticket) },
+            )
+            assertTrue(callbackThread.get() != submitterThread)
+        }
+    }
+
+    @Test
+    fun `public closed device deterministically normalizes queue completion failure exactly once`() = runBlocking {
+        val context = glfwContextRenderer(
+            width = 1,
+            height = 1,
+            title = "queue-completion-failure-conformance",
+            deferredRendering = true,
+        )
+        try {
+            val deviceGeneration = GPUDeviceGenerationID(9_050L)
+            val adapter = GPUQueueCompletionAdapter(
+                deviceGeneration = deviceGeneration,
+                requirement = GPUQueueCompletionCapabilityRequirement(
+                    implementationRevision = "wgpu4k.0.2.0-20260716.235022-2",
+                    capability = "on-submitted-work-done",
+                ),
+                evidence = GPUQueueCompletionCapabilityEvidence(
+                    implementationRevision = "wgpu4k.0.2.0-20260716.235022-2",
+                    capability = "on-submitted-work-done",
+                    accepted = true,
+                ),
+                invoker = GPUQueueCompletionInvoker {
+                    context.wgpuContext.device.queue.onSubmittedWorkDone()
+                },
+            )
+            val ticket = assertIs<GPUQueueCompletionTicketReservation.Reserved>(
+                adapter.reserveTicket(
+                    GPUQueueCompletionTicketRequest(
+                        frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(9_050L),
+                        deviceGeneration = deviceGeneration,
+                    ),
+                ),
+            ).ticket
+            val delivered = Collections.synchronizedList(
+                mutableListOf<GPUQueueCompletionDelivery.Accepted>(),
+            )
+
+            context.wgpuContext.device.queue.submit(emptyList())
+            context.wgpuContext.device.close()
+            assertEquals(
+                GPUQueueCompletionArmResult.Armed(ticket.ticketId),
+                adapter.armAfterSubmit(ticket, GPUQueueCompletionSink(delivered::add)),
+            )
+
+            val terminal = assertIs<GPUQueueCompletionDelivery.Accepted>(
+                withTimeout(5_000) { adapter.awaitCompletion(ticket) },
+            )
+            val failure = assertIs<GPUQueueCompletionOutcome.Failure>(terminal.outcome)
+            assertEquals(GPUQueueCompletionFailureKind.CallbackFailure, failure.kind)
+            assertEquals("Device is closed", failure.message)
+            delay(50)
+            assertEquals(listOf(terminal), delivered.toList())
+            assertEquals(GPUQueueCompletionDelivery.Duplicate(ticket.ticketId), adapter.cancel(ticket))
+        } finally {
+            context.close()
+        }
+    }
+
+    @Test
+    fun `offscreen targets share non-owning session queue access and target close preserves it`() = runBlocking {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        assertFalse(session is GPUBackendQueueCompletionAccess)
+        val first = session!!.createOffscreenTarget(
+            GPUOffscreenTargetRequest(width = 1, height = 1, colorFormat = "rgba8unorm"),
+        )
+        val second = session.createOffscreenTarget(
+            GPUOffscreenTargetRequest(width = 1, height = 1, colorFormat = "rgba8unorm"),
+        )
+        try {
+            assertTrue(first.queueCompletion === second.queueCompletion)
+            first.close()
+
+            val ticket = second.reserveNativeCompletion(frameId = 9_002L)
+            second.submitEmptyNativePass()
+            second.queueCompletion.armAfterSubmit(ticket, GPUQueueCompletionSink { })
+            assertEquals(
+                GPUQueueCompletionOutcome.Success,
+                assertIs<GPUQueueCompletionDelivery.Accepted>(
+                    withTimeout(5_000) { second.queueCompletion.awaitCompletion(ticket) },
+                ).outcome,
+            )
+        } finally {
+            second.close()
+        }
+    }
+
+    @Test
+    fun `native callback survives scope exit and GC churn`() = runBlocking {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        session!!.createOffscreenTarget(
+            GPUOffscreenTargetRequest(width = 1, height = 1, colorFormat = "rgba8unorm"),
+        ).use { target ->
+            val ticket = target.reserveNativeCompletion(frameId = 9_003L)
+            target.submitEmptyNativePass()
+            target.queueCompletion.armAfterSubmit(ticket, GPUQueueCompletionSink { })
+
+            repeat(32) { ByteArray(64 * 1024) }
+            System.gc()
+
+            assertEquals(
+                GPUQueueCompletionOutcome.Success,
+                assertIs<GPUQueueCompletionDelivery.Accepted>(
+                    withTimeout(5_000) { target.queueCompletion.awaitCompletion(ticket) },
+                ).outcome,
+            )
+        }
+    }
+
+    @Test
+    fun `native queue completes sixty four ordered submissions exactly once and in arm order`() = runBlocking {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        session!!.createOffscreenTarget(
+            GPUOffscreenTargetRequest(width = 1, height = 1, colorFormat = "rgba8unorm"),
+        ).use { target ->
+            val tickets = (0 until 64).map { target.reserveNativeCompletion(frameId = 9_100L + it) }
+            val delivered = Collections.synchronizedList(mutableListOf<GPUQueueCompletionTicketID>())
+            tickets.forEach { ticket ->
+                target.submitEmptyNativePass()
+                assertIs<GPUQueueCompletionArmResult.Armed>(
+                    target.queueCompletion.armAfterSubmit(
+                        ticket,
+                        GPUQueueCompletionSink { delivery -> delivered += delivery.ticketId },
+                    ),
+                )
+            }
+
+            val completions = withTimeout(10_000) {
+                tickets.map { ticket ->
+                    async { target.queueCompletion.awaitCompletion(ticket) }
+                }.awaitAll()
+            }
+
+            assertTrue(completions.all { (it as GPUQueueCompletionDelivery.Accepted).outcome == GPUQueueCompletionOutcome.Success })
+            assertEquals(tickets.map { it.ticketId }, delivered.toList())
+            assertEquals(64, delivered.distinct().size)
+        }
+    }
+
+    @Test
+    fun `native cancel race is exactly once and a following sentinel still completes`() = runBlocking {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        session!!.createOffscreenTarget(
+            GPUOffscreenTargetRequest(width = 1, height = 1, colorFormat = "rgba8unorm"),
+        ).use { target ->
+            val cancelledTicket = target.reserveNativeCompletion(frameId = 9_200L)
+            val cancelledDeliveries = Collections.synchronizedList(mutableListOf<GPUQueueCompletionDelivery.Accepted>())
+            target.submitEmptyNativePass()
+            target.queueCompletion.armAfterSubmit(
+                cancelledTicket,
+                GPUQueueCompletionSink(cancelledDeliveries::add),
+            )
+
+            val cancelResult = target.queueCompletion.cancel(cancelledTicket)
+            val terminal = assertIs<GPUQueueCompletionDelivery.Accepted>(
+                withTimeout(5_000) { target.queueCompletion.awaitCompletion(cancelledTicket) },
+            )
+            when (cancelResult) {
+                is GPUQueueCompletionDelivery.Accepted -> assertEquals(
+                    GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.Cancelled),
+                    terminal.outcome,
+                )
+                is GPUQueueCompletionDelivery.Duplicate ->
+                    assertEquals(GPUQueueCompletionOutcome.Success, terminal.outcome)
+                else -> error("Unexpected native cancel race result: $cancelResult")
+            }
+            delay(50)
+            assertEquals(listOf(terminal), cancelledDeliveries.toList())
+
+            val sentinel = target.reserveNativeCompletion(frameId = 9_201L)
+            target.submitEmptyNativePass()
+            target.queueCompletion.armAfterSubmit(sentinel, GPUQueueCompletionSink { })
+            assertEquals(
+                GPUQueueCompletionOutcome.Success,
+                assertIs<GPUQueueCompletionDelivery.Accepted>(
+                    withTimeout(5_000) { target.queueCompletion.awaitCompletion(sentinel) },
+                ).outcome,
+            )
+        }
+    }
+
+    @Test
+    @Timeout(value = 15, unit = TimeUnit.SECONDS, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    fun `session dispose closes queue completion before device without hanging`() {
+        val output = ByteArrayOutputStream()
+        val command = buildList {
+            add(File(System.getProperty("java.home"), "bin/java").absolutePath)
+            add("--add-opens=java.base/java.lang=ALL-UNNAMED")
+            add("--enable-native-access=ALL-UNNAMED")
+            if (System.getProperty("os.name").contains("Mac", ignoreCase = true)) {
+                add("-XstartOnFirstThread")
+            }
+            add("-cp")
+            add(nativeProbeClasspath())
+            add(GPUBackendRuntimeDisposeProbe::class.java.name)
+        }
+        val process = ProcessBuilder(command).redirectErrorStream(true).start()
+        val outputReader = thread(
+            start = true,
+            isDaemon = true,
+            name = "gpu-runtime-dispose-probe-output",
+        ) {
+            runCatching { process.inputStream.use { it.copyTo(output) } }
+        }
+
+        try {
+            val completed = process.waitFor(10, TimeUnit.SECONDS)
+            outputReader.join(2_000)
+            val probeOutput = output.toString(Charsets.UTF_8)
+            assertTrue(completed, "Native dispose probe timed out. Output:\n$probeOutput")
+            assertEquals(0, process.exitValue(), probeOutput)
+            assertContains(probeOutput, GPU_BACKEND_RUNTIME_DISPOSE_PROBE_OK)
+        } finally {
+            if (process.isAlive) {
+                process.destroyForcibly()
+                process.waitFor(2, TimeUnit.SECONDS)
+            }
+            outputReader.join(2_000)
+        }
     }
 
     @Test
@@ -335,9 +621,15 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertEquals(8192L, limits.maxTextureDimension2D)
             assertEquals(256L, limits.copyBytesPerRowAlignment)
             assertEquals(256L, limits.minUniformBufferOffsetAlignment)
+            assertTrue((limits.maxBufferSize ?: 0L) > 0L)
             assertEquals("adapter.limits", limits.source)
             assertEquals(
-                listOf("maxTextureDimension2D", "copyBytesPerRowAlignment", "minUniformBufferOffsetAlignment"),
+                listOf(
+                    "maxTextureDimension2D",
+                    "copyBytesPerRowAlignment",
+                    "minUniformBufferOffsetAlignment",
+                    "maxBufferSize",
+                ),
                 facts.map { it.name },
             )
             assertTrue(!facts.joinToString("\n").contains("@"))
@@ -2561,4 +2853,102 @@ class GPUBackendRuntimeNativeSmokeTest {
     private fun forbiddenImplementationTokenUpperForAudit(): String = "W" + "GPU"
 
     private fun forbiddenImplementationTokenLowerForAudit(): String = "w" + "gpu"
+
+    private fun GPUBackendOffscreenTarget.reserveNativeCompletion(frameId: Long): GPUQueueCompletionTicket =
+        assertIs<GPUQueueCompletionTicketReservation.Reserved>(
+            queueCompletion.reserveTicket(
+                GPUQueueCompletionTicketRequest(
+                    frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(frameId),
+                    deviceGeneration = target.deviceGeneration,
+                ),
+            ),
+        ).ticket
+
+    private fun GPUBackendOffscreenTarget.submitEmptyNativePass() {
+        encode(GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 0.0)) { }
+    }
+
+    private fun nativeProbeClasspath(): String {
+        val entries = linkedSetOf<String>()
+        System.getProperty("java.class.path")
+            .split(File.pathSeparator)
+            .filterTo(entries, String::isNotBlank)
+        var loader: ClassLoader? = javaClass.classLoader
+        while (loader != null) {
+            (loader as? URLClassLoader)?.urLs
+                ?.filter { it.protocol == "file" }
+                ?.mapTo(entries) { File(it.toURI()).absolutePath }
+            loader = loader.parent
+        }
+        return entries.joinToString(File.pathSeparator)
+    }
+}
+
+private const val GPU_BACKEND_RUNTIME_DISPOSE_PROBE_OK = "gpu-backend-runtime-dispose-probe-ok"
+
+/** Runs native create/submit/arm/dispose on the child JVM main thread while the parent bounds the process. */
+internal object GPUBackendRuntimeDisposeProbe {
+    @JvmStatic
+    fun main(args: Array<String>) = runBlocking {
+        val session = checkNotNull(GPUBackendRuntimeFactory.createOrNull()) {
+            "GPU backend unavailable in native dispose probe"
+        }
+        val target = session.createOffscreenTarget(
+            GPUOffscreenTargetRequest(width = 1, height = 1, colorFormat = "rgba8unorm"),
+        )
+        var targetClosed = false
+        try {
+            val runtime = target.queueCompletion
+            val reservation = runtime.reserveTicket(
+                GPUQueueCompletionTicketRequest(
+                    frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(9_300L),
+                    deviceGeneration = target.target.deviceGeneration,
+                ),
+            )
+            check(reservation is GPUQueueCompletionTicketReservation.Reserved) {
+                "Native dispose probe could not reserve completion ticket: $reservation"
+            }
+            val ticket = reservation.ticket
+            val delivered = Collections.synchronizedList(
+                mutableListOf<GPUQueueCompletionDelivery.Accepted>(),
+            )
+            target.encode(
+                GPUClearColor(red = 0.0, green = 0.0, blue = 0.0, alpha = 0.0),
+            ) { }
+            check(
+                runtime.armAfterSubmit(ticket, GPUQueueCompletionSink(delivered::add)) ==
+                    GPUQueueCompletionArmResult.Armed(ticket.ticketId),
+            )
+            target.close()
+            targetClosed = true
+
+            GPUBackendRuntimeFactory.dispose()
+
+            val terminal = withTimeout(5_000) { runtime.awaitCompletion(ticket) }
+            check(terminal is GPUQueueCompletionDelivery.Accepted) {
+                "Native dispose probe received non-terminal completion: $terminal"
+            }
+            check(
+                terminal.outcome == GPUQueueCompletionOutcome.Success ||
+                    terminal.outcome ==
+                    GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.AdapterClosed),
+            ) { "Native dispose probe received unexpected outcome: ${terminal.outcome}" }
+            check(delivered.toList() == listOf(terminal)) {
+                "Native dispose probe did not deliver exactly once: $delivered"
+            }
+            check(runtime.cancel(ticket) == GPUQueueCompletionDelivery.Duplicate(ticket.ticketId))
+            check(
+                runtime.reserveTicket(
+                    GPUQueueCompletionTicketRequest(
+                        frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(9_301L),
+                        deviceGeneration = ticket.deviceGeneration,
+                    ),
+                ) is GPUQueueCompletionTicketReservation.Failed,
+            )
+            println(GPU_BACKEND_RUNTIME_DISPOSE_PROBE_OK)
+        } finally {
+            if (!targetClosed) runCatching { target.close() }
+            GPUBackendRuntimeFactory.dispose()
+        }
+    }
 }

@@ -192,8 +192,19 @@ interface GPUBackendSession : AutoCloseable {
 val GPUBackendSession.phase0EvidenceDumpLines: List<String>
     get() = phase0BaselineDumpLines + queueDumpLines + resourceProviderDumpLines
 
+/** Provides non-owning access to completion operations managed by the backing queue lifecycle. */
+interface GPUBackendQueueCompletionAccess {
+    val queueCompletion: GPUQueueCompletionAccess
+}
+
+private val unavailableGPUQueueCompletionAccess: GPUQueueCompletionAccess =
+    GPUQueueCompletionAdapter.disabled("unsupported.queue-completion.backend-unavailable")
+
 /** Represents an offscreen target that supports rendering then RGBA readback. */
-interface GPUBackendOffscreenTarget : AutoCloseable {
+interface GPUBackendOffscreenTarget : AutoCloseable, GPUBackendQueueCompletionAccess {
+    override val queueCompletion: GPUQueueCompletionAccess
+        get() = unavailableGPUQueueCompletionAccess
+
     val target: GPUSurfaceTarget
 
     /** Largest 2D texture accepted by this target before offscreen allocation. */
@@ -246,7 +257,10 @@ interface GPUBackendOffscreenTarget : AutoCloseable {
 }
 
 /** Represents a native surface that can be resized and presented to screen. */
-interface GPUBackendWindowSurface : AutoCloseable {
+interface GPUBackendWindowSurface : AutoCloseable, GPUBackendQueueCompletionAccess {
+    override val queueCompletion: GPUQueueCompletionAccess
+        get() = unavailableGPUQueueCompletionAccess
+
     val adapterInfo: GPUBackendAdapterSummary?
 
     val target: GPUSurfaceTarget

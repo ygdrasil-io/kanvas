@@ -1,14 +1,19 @@
 {
-  "schemaVersion": 1,
-  "gate": "closed",
-  "accepted": false,
-  "verifiedAt": "2026-07-14",
+  "schemaVersion": 2,
+  "gate": "open",
+  "accepted": true,
+  "verifiedAt": "2026-07-17",
   "host": {
     "os": "Darwin",
     "architecture": "arm64"
   },
+  "publishedSnapshotJob": {
+    "url": "https://github.com/wgpu4k/wgpu4k/actions/runs/29542588206/job/87767701438",
+    "status": "succeeded",
+    "sourceRevision": "9a35a17effbfbe33ddc436052664ef8651d3fc52"
+  },
   "declaredDependency": {
-    "coordinate": "io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT",
+    "coordinate": "io.ygdrasil:wgpu4k-toolkit:0.2.0-20260716.235022-2",
     "consumers": [
       "gpu-renderer",
       "gpu-renderer-scenes",
@@ -16,104 +21,136 @@
       "integration-tests/skia",
       "integration-tests/svg"
     ],
-    "centralVersionAlias": false
+    "centralVersionAlias": true
   },
   "resolvedDependency": {
-    "snapshotTimestamp": "20260515.203202",
-    "snapshotBuildNumber": 1,
-    "toolkitCoordinate": "io.ygdrasil:wgpu4k-toolkit:0.2.0-20260515.203202-1",
-    "facadeCoordinate": "io.ygdrasil:wgpu4k:0.2.0-20260515.203202-1",
-    "nativeCoordinate": "io.ygdrasil:wgpu4k-native:v27.0.4",
-    "resolutionIsHybrid": true,
-    "hybridReason": "mavenLocal is first and supplies local JVM variants while root snapshot metadata is resolved from the snapshot graph",
-    "sourceRevision": "unknown-not-correlated",
-    "wgpuNativeRevision": "unknown-not-proven-by-resolved-artifact"
+    "toolkitCoordinate": "io.ygdrasil:wgpu4k-toolkit:0.2.0-20260716.235022-2",
+    "facadeCoordinate": "io.ygdrasil:wgpu4k:0.2.0-20260716.235022-2",
+    "ktypesCoordinate": "io.ygdrasil:webgpu-ktypes:0.0.10-20260716.185724-3",
+    "nativeCoordinate": "io.ygdrasil:wgpu4k-native:v29.0.0-20260716.085936-2",
+    "resolutionIsHybrid": false,
+    "wgpu4kRevision": "9a35a17effbfbe33ddc436052664ef8651d3fc52",
+    "wgpu4kNativeRevision": "d3da8969f7968e5f6ab5d7aebd38cf10c0f0e136",
+    "wgpuNativeRevision": "d2e3330ade4ae1bb238d76b485926f067e7ee64c"
   },
   "repositoryProvenance": {
-    "mavenRepositoryOrder": [
-      "mavenLocal",
-      "google",
-      "mavenCentral",
-      "https://central.sonatype.com/repository/maven-snapshots/"
-    ],
-    "reproducible": false,
-    "dependencyVerificationComplete": false,
-    "reason": "The locally selected JVM artifacts are not covered by the checked-in dependency verification metadata and the mutable snapshot is not pinned as one exact ordinary-test graph."
+    "ygdrasilArtifactsResolveFromRemoteRepositoriesOnly": true,
+    "immutableResolutionRules": true,
+    "dependencyVerificationCompleteForTestGraph": true,
+    "verificationMetadataSha256": "5cf093a280602bae7d3d8ca328a75b4aa1190b4b9a1452b5e79dd6ffb297d855"
   },
   "artifacts": [
     {
-      "coordinate": "io.ygdrasil:wgpu4k-toolkit:0.2.0-20260515.203202-1",
-      "origin": "Gradle snapshot cache metadata",
-      "moduleSha256": "7c1665c5ace945db86a12b99e2b548483ce0aecbf46bc5ee4b9fd269df31234e",
-      "pomSha256": "f9ef767bb1eb714cb298a5ebe158e461c7771265410e508358139462fa48e407"
+      "coordinate": "io.ygdrasil:kffi:v29.0.0-20260716.085936-2",
+      "moduleSha256": "42e95fb5fec3a639fbcc5dd81f5d3d3e80e4d30f8b9e75623cb8493489de92df"
     },
     {
-      "coordinate": "io.ygdrasil:wgpu4k:0.2.0-20260515.203202-1",
-      "origin": "Gradle snapshot cache metadata",
-      "moduleSha256": "d3ebbcefa43ac72e080ff114f177db75d93000f6b39812cde7ef63a8e4551f98",
-      "pomSha256": "095d2d0de3de56c0524efba6345c707ae6c99407cfb33b109fc88214c429023b"
+      "coordinate": "io.ygdrasil:kffi-jvm:v29.0.0-20260716.085936-2",
+      "jarSha256": "59e8ea9dec4e1c5762b88663427d6f2c42cfc2dcceef22fa439b52b7bc4e89c7",
+      "moduleSha256": "99c401c004db17619e2df04bc86447280622c590c6e9128750f3a3eedea61d0b"
     },
     {
-      "coordinate": "io.ygdrasil:wgpu4k-toolkit-jvm:0.2.0-SNAPSHOT",
-      "origin": "mavenLocal",
-      "jarSha256": "20463c31e274422b38bd52c4e1bc043dde8b4c72079b979d3101c6905c06ccf0",
-      "moduleSha256": "9b8b35088dfd41c860b92b716183fef2891a121ee5584c3435c835a01201d984",
-      "pomSha256": "fad35aef5c6629442c2dd8030b85eb2713818804cb0df039c73214b465e2f421"
+      "coordinate": "io.ygdrasil:webgpu-ktypes:0.0.10-20260716.185724-3",
+      "moduleSha256": "a615c462afadd165b99db68bacbd8531666a109f8d26209e02dd9ab0a81062d3"
     },
     {
-      "coordinate": "io.ygdrasil:wgpu4k-jvm:0.2.0-SNAPSHOT",
-      "origin": "mavenLocal",
-      "jarSha256": "424b03838f61c6d472d26f788fdda4dffcee99703cfe7c1dbfa54efc8b38c79e",
-      "sourcesJarSha256": "5bd7ece14658932f16c349f99255b1a2d7998f736576d075f15e7fb82cb972a4",
-      "moduleSha256": "55e8ca2cf458d7bc3a954889ff0f87ee507036994faa9e2bf0760a50146a022e",
-      "pomSha256": "ef52ca5f1e89a840abbdc2cbb939331042af286a039abbcf6f116689052ab5d1"
+      "coordinate": "io.ygdrasil:webgpu-ktypes-descriptors:0.0.10-20260716.185724-3",
+      "moduleSha256": "22aab09ebe38d87200118da100fc37274a63e2056402f4e8cd8304d6b4a70877"
+    },
+    {
+      "coordinate": "io.ygdrasil:webgpu-ktypes-descriptors-jvm:0.0.10-20260716.185724-3",
+      "jarSha256": "f4b0f1d5bdfe1defb5b2d7bbca826a4ae18eaac05b0deb8cb5bbeada85c616a6",
+      "moduleSha256": "573d8ca6c3e1729f2990a6bbb2f08d30981e4aa4d425b48526277519130cce25"
+    },
+    {
+      "coordinate": "io.ygdrasil:webgpu-ktypes-jvm:0.0.10-20260716.185724-3",
+      "jarSha256": "de26c37078f2ebbf47abc8cf2b62d9d3254527eda79986ab90115bed790f5a28",
+      "moduleSha256": "031cda1573dba496fe18a2c7faa07957b3bba29be824bc54c0756d1c2393bdab"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k:0.2.0-20260716.235022-2",
+      "moduleSha256": "479262788e73a19585335f24529cce83db2ba8a5e59c83033d0c97f4ab02a91e"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k-jvm:0.2.0-20260716.235022-2",
+      "jarSha256": "80090cacfeebfb198bf03265cc0cebb2b8a49367d01b8bb249098b3dba9e2ca6",
+      "moduleSha256": "606861aa5cde1a27a24fcce658665e1f343994e6eb66e0a4405f32b4c0951387"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k-native:v29.0.0-20260716.085936-2",
+      "moduleSha256": "03448315f109b6c0fbf8a4f96ed313a60da060e6b7b96491ec64c29653213059"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k-native-jvm:v29.0.0-20260716.085936-2",
+      "jarSha256": "a3429a7335e3fbc814cb07088908b4c4a95fa4d7ece3c914f6b9b6f161cc04a8",
+      "moduleSha256": "74b478b19014d7f504dac748b57437dd1de247c6f879d299a35368789ecf5bb0"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k-toolkit:0.2.0-20260716.235022-2",
+      "moduleSha256": "b15d5c09652f3528e503952eeb70e6c227c2eed44fd8b3bf7ea9d3cb3758e8e0"
+    },
+    {
+      "coordinate": "io.ygdrasil:wgpu4k-toolkit-jvm:0.2.0-20260716.235022-2",
+      "jarSha256": "4cff600988aec394a799d933635f11b12cf88f6d20b9f16e16217858dd3b2cd8",
+      "moduleSha256": "bd83b93e476da887f64ecddd66b285412e645b15c407ce340f63f1251d751f3f"
     }
   ],
   "publicApi": {
     "signature": "suspend GPUQueue.onSubmittedWorkDone(): Result<Unit>",
     "unchanged": true,
-    "sourceEvidence": "/Volumes/Cache/wgpu4k/wgpu4k/src/commonMain/kotlin/Queue.kt:9"
+    "kanvasNativeCallbackOrPollingWorkaround": false
   },
-  "blockingFinding": {
-    "code": "wgpu4k.queue-completion.callback-lifetime-unproven",
-    "summary": "The resolved JVM facade bytecode creates a MemoryAllocator, registers the completion callback, calls wgpuQueueOnSubmittedWorkDone, and closes the allocator before asynchronous delivery is proven complete.",
-    "resolvedBytecodeEvidence": "/Users/chaos/.m2/repository/io/ygdrasil/wgpu4k-jvm/0.2.0-SNAPSHOT/wgpu4k-jvm-0.2.0-SNAPSHOT.jar",
-    "resolvedSourcesEvidence": "/Users/chaos/.m2/repository/io/ygdrasil/wgpu4k-jvm/0.2.0-SNAPSHOT/wgpu4k-jvm-0.2.0-SNAPSHOT-sources.jar",
-    "sourceCheckoutCorrelation": "unknown-not-proven",
-    "correctedArtifactResolved": false,
-    "correctedArtifactAvailability": "unknown-not-proven",
-    "kanvasWorkaroundAllowed": false
+  "callbackProgress": {
+    "callbackMode": "AllowProcessEvents",
+    "eventPumpOwner": "wgpu4k",
+    "kanvasEventPump": false
   },
   "nativeConformance": {
-    "status": "not-run-blocked",
-    "callbackMode": "unknown-not-proven",
-    "delayedCallbackLifetime": "not-proven",
-    "orderedTickets": "not-proven",
-    "success": "not-proven",
-    "failure": "not-proven",
-    "deviceLoss": "not-proven",
-    "adapterClose": "not-proven",
-    "cancellation": "not-proven",
-    "manyInFlightSubmissions": "not-proven"
+    "status": "passed",
+    "testCount": 97,
+    "failureCount": 0,
+    "skippedCount": 0,
+    "submittedEmptyRenderPass": "passed",
+    "callbackAfterRegisteringScope": "passed",
+    "callbackOffSubmitterThread": "passed",
+    "memoryAndGcChurn": "passed",
+    "orderedTickets": "passed-64-ordered-submissions",
+    "exactlyOnceSuccess": "passed",
+    "adapterClose": "passed-after-native-submit-and-arm",
+    "cancellation": "passed-native-race-with-following-sentinel",
+    "failure": "passed-public-device-close-before-registration",
+    "failureMessage": "Device is closed",
+    "pendingRegistrationThenClose": "race-with-legitimate-fast-success",
+    "deviceLoss": "not-exercisable-public-api",
+    "unitFailureNormalization": "exhaustive",
+    "unitDeviceLossNormalization": "exhaustive"
   },
-  "kanvasPureBoundaryEvidence": {
-    "commit": "a316676d89a590e99c3a2069dd3fb53578559433",
-    "focusedTests": "40 passed",
-    "nativeSmokeTests": "46 passed on the typed-refusal boundary; corrected callback conformance was not exercised",
-    "fullModule": "1527 tests; only the known ConvexFanExecutorTest regular-octagon failure; 2 skipped",
-    "nativeRouteActivated": false
+  "acceptedAmendment": {
+    "scope": "native-device-loss-triggering-only",
+    "rule": "Native device-loss injection is mandatory when a stable public facade API can trigger it. Otherwise exhaustive normalization tests and an explicit not-exercisable-public-api report are accepted.",
+    "stablePublicFailureTriggerAvailable": true,
+    "stablePublicFailureTriggerSequence": "empty-submit-then-device-close-then-onSubmittedWorkDone-registration",
+    "stablePublicDeviceLossTriggerAvailable": false,
+    "privateHandleAccessAllowed": false,
+    "nativeMessageParsingAllowed": false,
+    "kanvasWorkaroundAllowed": false
   },
-  "requiredActions": [
-    "Publish corrected wgpu4k-native bindings and the adapted wgpu4k facade together while keeping the public suspend API unchanged.",
-    "Keep callback registration alive until exactly one delivery or explicit cancellation/close.",
-    "Document and prove the callback progress mode, including status/message propagation and device loss.",
-    "Resolve one exact non-hybrid dependency graph, pin it in the version catalog, and check in complete SHA-256 verification metadata.",
-    "Run delayed-callback native conformance and set accepted=true only when every required case passes."
+  "kanvasBoundary": {
+    "dependencyPinCommit": "720e703aa9f4f3c0b98122f02b645b8806f829e1",
+    "completionBoundaryAvailable": true,
+    "nativeRouteActivated": false,
+    "capabilityRevision": "wgpu4k.0.2.0-20260716.235022-2",
+    "capabilityAccepted": true,
+    "consumerViewOwnsLifecycle": false
+  },
+  "limitations": [
+    "A real native window surface was not exercised because the test host does not expose an AppKit MetalLayer handle.",
+    "The stable public facade does not expose a deterministic trigger for device loss.",
+    "Closing a device after a pending registration races legitimately with fast success; deterministic callback-failure conformance therefore closes the device before registering onSubmittedWorkDone."
   ],
   "evidenceCommands": [
     "rtk ./gradlew :gpu-renderer:dependencyInsight --configuration runtimeClasspath --dependency wgpu4k",
-    "rtk rg -n wgpu4k gradle/libs.versions.toml settings.gradle.kts gpu-renderer/build.gradle.kts gpu-renderer-scenes/build.gradle.kts integration-tests/test-utils/build.gradle.kts integration-tests/skia/build.gradle.kts integration-tests/svg/build.gradle.kts",
-    "rtk shasum -a 256 <resolved-artifacts>",
-    "rtk ./gradlew :gpu-renderer:test --tests org.graphiks.kanvas.gpu.renderer.execution.GPUQueueManagerTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUQueueCompletionAdapterTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUFramePreflighterTest --rerun-tasks --no-build-cache"
+    "rtk shasum -a 256 gradle/verification-metadata.xml",
+    "rtk ./gradlew :gpu-renderer:test --rerun-tasks --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeSmokeTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeContractsTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUQueueCompletionAdapterTest --tests org.graphiks.kanvas.gpu.renderer.execution.GPUQueueManagerTest"
   ]
 }

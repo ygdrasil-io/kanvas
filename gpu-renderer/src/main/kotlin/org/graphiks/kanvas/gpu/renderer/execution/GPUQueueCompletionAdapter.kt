@@ -57,6 +57,25 @@ fun interface GPUQueueCompletionProvider {
     fun reserveTicket(request: GPUQueueCompletionTicketRequest): GPUQueueCompletionTicketReservation
 }
 
+/** Non-owning queue-completion operations used by the frame executor after a successful submit. */
+interface GPUQueueCompletionAccess : GPUQueueCompletionProvider {
+    fun armAfterSubmit(
+        ticket: GPUQueueCompletionTicket,
+        sink: GPUQueueCompletionSink,
+    ): GPUQueueCompletionArmResult
+
+    suspend fun awaitCompletion(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery
+
+    fun cancel(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery
+}
+
+/** Queue-scoped lifecycle retained by the backend that owns the native queue. */
+internal interface GPUQueueCompletionRuntime : GPUQueueCompletionAccess {
+    fun deviceLost(deviceGeneration: GPUDeviceGenerationID): List<GPUQueueCompletionDelivery>
+
+    fun close(): List<GPUQueueCompletionDelivery>
+}
+
 fun interface GPUQueueCompletionInvoker {
     suspend fun awaitSubmittedWorkDone(): Result<Unit>
 }
@@ -95,7 +114,13 @@ enum class GPUQueueCompletionFailureKind {
 
 sealed interface GPUQueueCompletionOutcome {
     data object Success : GPUQueueCompletionOutcome
-    data class Failure(val kind: GPUQueueCompletionFailureKind) : GPUQueueCompletionOutcome
+    data class Failure(
+        val kind: GPUQueueCompletionFailureKind,
+        /** Structured backend status when the facade exposes one; wgpu4k currently does not. */
+        val status: String? = null,
+        /** Opaque public failure detail preserved without parsing native status text. */
+        val message: String? = null,
+    ) : GPUQueueCompletionOutcome
 }
 
 sealed interface GPUQueueCompletionDelivery {
@@ -121,12 +146,13 @@ sealed interface GPUQueueCompletionArmResult {
     ) : GPUQueueCompletionArmResult
 }
 
-class GPUQueueCompletionAdapter(
+internal class GPUQueueCompletionAdapter(
+    private val deviceGeneration: GPUDeviceGenerationID,
     private val requirement: GPUQueueCompletionCapabilityRequirement,
     private val evidence: GPUQueueCompletionCapabilityEvidence,
     private val disabledReasonCode: String? = null,
     private val invoker: GPUQueueCompletionInvoker,
-) : GPUQueueCompletionProvider {
+) : GPUQueueCompletionRuntime {
     private enum class TicketState { Reserved, Armed, Invoking, Terminal }
 
     private class TicketRecord(
@@ -136,18 +162,29 @@ class GPUQueueCompletionAdapter(
         var sink: GPUQueueCompletionSink? = null,
         var invocationJob: Job? = null,
         var terminalOutcome: GPUQueueCompletionOutcome? = null,
+        var armSequence: Long? = null,
+        var pendingDelivery: GPUQueueCompletionDelivery.Accepted? = null,
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val adapterInstanceId = nextAdapterInstanceId.getAndIncrement()
     private val tickets = linkedMapOf<GPUQueueCompletionTicketID, TicketRecord>()
     private val terminalOrder = ArrayDeque<GPUQueueCompletionTicketID>()
+    private val terminalDeliveryQueue = ArrayDeque<TicketRecord>()
     private var nextTicketId = 1L
+    private var nextArmSequence = 1L
+    private var nextDrainArmSequence = 1L
+    private val armedBySequence = linkedMapOf<Long, TicketRecord>()
     private var closed = false
     private val lostDeviceGenerations = linkedSetOf<GPUDeviceGenerationID>()
+    private var rejectedSinkDeliveries = 0L
+    private var deliveryDrainActive = false
 
     internal val retainedTicketRecordCount: Int
         @Synchronized get() = tickets.size
+
+    internal val rejectedSinkDeliveryCount: Long
+        @Synchronized get() = rejectedSinkDeliveries
 
     @Synchronized
     override fun reserveTicket(
@@ -155,6 +192,8 @@ class GPUQueueCompletionAdapter(
     ): GPUQueueCompletionTicketReservation {
         val reason = disabledReasonCode ?: when {
             closed -> "unsupported.queue-completion.adapter-closed"
+            request.deviceGeneration != deviceGeneration ->
+                "unsupported.queue-completion.device-generation-mismatch"
             request.deviceGeneration in lostDeviceGenerations -> "unsupported.queue-completion.device-lost"
             !evidence.accepted -> "unsupported.queue-completion.capability-unaccepted"
             evidence.implementationRevision != requirement.implementationRevision ->
@@ -180,7 +219,7 @@ class GPUQueueCompletionAdapter(
         return GPUQueueCompletionTicketReservation.Reserved(ticket)
     }
 
-    fun armAfterSubmit(
+    override fun armAfterSubmit(
         ticket: GPUQueueCompletionTicket,
         sink: GPUQueueCompletionSink,
     ): GPUQueueCompletionArmResult {
@@ -213,6 +252,8 @@ class GPUQueueCompletionAdapter(
             }
             current.state = TicketState.Armed
             current.sink = sink
+            current.armSequence = nextArmSequence++
+            armedBySequence[current.armSequence!!] = current
             current
         }
         val job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -229,13 +270,19 @@ class GPUQueueCompletionAdapter(
                 invoker.awaitSubmittedWorkDone().fold(
                     onSuccess = { GPUQueueCompletionOutcome.Success },
                     onFailure = {
-                        GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.CallbackFailure)
+                        GPUQueueCompletionOutcome.Failure(
+                            GPUQueueCompletionFailureKind.CallbackFailure,
+                            message = it.message,
+                        )
                     },
                 )
             } catch (_: CancellationException) {
                 GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.Cancelled)
-            } catch (_: Throwable) {
-                GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.CallbackFailure)
+            } catch (failure: Throwable) {
+                GPUQueueCompletionOutcome.Failure(
+                    GPUQueueCompletionFailureKind.CallbackFailure,
+                    message = failure.message,
+                )
             }
             terminalize(record, outcome, cancelInvocation = false)
         }
@@ -246,7 +293,7 @@ class GPUQueueCompletionAdapter(
         return GPUQueueCompletionArmResult.Armed(ticket.ticketId)
     }
 
-    suspend fun awaitCompletion(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery {
+    override suspend fun awaitCompletion(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery {
         val record = synchronized(this) { tickets[ticket.ticketId] }
             ?: return missingDelivery(ticket.ticketId)
         if (record.ticket != ticket) return GPUQueueCompletionDelivery.Unknown(ticket.ticketId)
@@ -271,10 +318,10 @@ class GPUQueueCompletionAdapter(
         )
     }
 
-    fun cancel(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery =
+    override fun cancel(ticket: GPUQueueCompletionTicket): GPUQueueCompletionDelivery =
         deliverFailure(ticket, GPUQueueCompletionFailureKind.Cancelled)
 
-    fun deviceLost(
+    override fun deviceLost(
         deviceGeneration: GPUDeviceGenerationID,
     ): List<GPUQueueCompletionDelivery> {
         val snapshot = synchronized(this) {
@@ -291,7 +338,7 @@ class GPUQueueCompletionAdapter(
         }
     }
 
-    fun close(): List<GPUQueueCompletionDelivery> {
+    override fun close(): List<GPUQueueCompletionDelivery> {
         val snapshot = synchronized(this) {
             if (closed) return emptyList()
             closed = true
@@ -323,22 +370,86 @@ class GPUQueueCompletionAdapter(
                     val delivery = GPUQueueCompletionDelivery.Accepted(record.ticket.ticketId, outcome)
                     record.state = TicketState.Terminal
                     record.terminalOutcome = outcome
-                    Triple(delivery, record.sink, record.invocationJob)
+                    record.pendingDelivery = delivery
+                    TerminalClaim(
+                        delivery = delivery,
+                        invocationJob = record.invocationJob,
+                        shouldDrain = enqueueTerminalDeliveries(listOf(record)),
+                    )
                 }
                 TicketState.Terminal -> return GPUQueueCompletionDelivery.Duplicate(record.ticket.ticketId)
                 TicketState.Armed, TicketState.Invoking -> {
                     val delivery = GPUQueueCompletionDelivery.Accepted(record.ticket.ticketId, outcome)
                     record.state = TicketState.Terminal
                     record.terminalOutcome = outcome
-                    Triple(delivery, record.sink, record.invocationJob)
+                    record.pendingDelivery = delivery
+                    TerminalClaim(
+                        delivery = delivery,
+                        invocationJob = record.invocationJob,
+                        shouldDrain = enqueueTerminalDeliveries(drainTerminalRecordsInArmOrder()),
+                    )
                 }
             }
         }
+        if (cancelInvocation) claim.invocationJob?.cancel()
+        if (claim.shouldDrain) drainTerminalDeliveries()
+        return claim.delivery
+    }
+
+    private data class TerminalClaim(
+        val delivery: GPUQueueCompletionDelivery.Accepted,
+        val invocationJob: Job?,
+        val shouldDrain: Boolean,
+    )
+
+    /** Claims only the contiguous terminal prefix so observers see queue proofs in arm order. */
+    private fun drainTerminalRecordsInArmOrder(): List<TicketRecord> {
+        val ready = mutableListOf<TicketRecord>()
+        while (true) {
+            val next = armedBySequence[nextDrainArmSequence] ?: break
+            if (next.state != TicketState.Terminal) break
+            armedBySequence.remove(nextDrainArmSequence)
+            nextDrainArmSequence += 1L
+            ready += next
+        }
+        return ready
+    }
+
+    /** Enqueues under the adapter lock so only one observer drainer can preserve the claimed order. */
+    private fun enqueueTerminalDeliveries(records: List<TicketRecord>): Boolean {
+        if (records.isEmpty()) return false
+        terminalDeliveryQueue.addAll(records)
+        if (deliveryDrainActive) return false
+        deliveryDrainActive = true
+        return true
+    }
+
+    private fun drainTerminalDeliveries() {
+        while (true) {
+            val record = synchronized(this) {
+                if (terminalDeliveryQueue.isEmpty()) {
+                    deliveryDrainActive = false
+                    return
+                }
+                terminalDeliveryQueue.removeFirst()
+            }
+            deliverTerminalRecord(record)
+        }
+    }
+
+    private fun deliverTerminalRecord(record: TicketRecord) {
+        val claim = synchronized(this) {
+            val delivery = record.pendingDelivery ?: return
+            record.pendingDelivery = null
+            Triple(delivery, record.sink, record.invocationJob)
+        }
         try {
             claim.second?.accept(claim.first)
+        } catch (_: Throwable) {
+            // Queue state remains terminal even when an observer rejects the notification.
+            synchronized(this) { rejectedSinkDeliveries += 1L }
         } finally {
             record.completion.complete(claim.first)
-            if (cancelInvocation) claim.third?.cancel()
             synchronized(this) {
                 record.sink = null
                 record.invocationJob = null
@@ -346,7 +457,6 @@ class GPUQueueCompletionAdapter(
                 pruneTerminalRecords()
             }
         }
-        return claim.first
     }
 
     private fun pruneTerminalRecords() {
@@ -384,6 +494,7 @@ class GPUQueueCompletionAdapter(
         private val nextAdapterInstanceId = AtomicLong(1L)
 
         fun disabled(reasonCode: String): GPUQueueCompletionAdapter = GPUQueueCompletionAdapter(
+            deviceGeneration = GPUDeviceGenerationID(1L),
             requirement = GPUQueueCompletionCapabilityRequirement("unavailable", "on-submitted-work-done"),
             evidence = GPUQueueCompletionCapabilityEvidence("unavailable", "on-submitted-work-done", false),
             disabledReasonCode = reasonCode,

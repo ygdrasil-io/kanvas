@@ -80,10 +80,59 @@ class GPUQueueManagerTest {
             ),
         )
         assertEquals(emptyList(), manager.releaseCompleted())
-        assertEquals(emptyList(), manager.quarantinedResources(submission.id))
+        assertEquals(listOf(resource), manager.quarantinedResources(submission.id))
         assertEquals(emptyList(), manager.retainedResources(submission.id))
         assertEquals(1L, manager.telemetry.quarantined)
         assertEquals(0L, manager.telemetry.released)
+    }
+
+    @Test
+    fun `quarantined resources stay retained until explicit queue teardown`() {
+        val manager = GPUQueueManager()
+        val ticket = queueCompletionTicket("ticket.teardown", frameId = 31L)
+        val resource = GPUQueuedResourceRef("lease:quarantine:frame-31")
+        val submission = manager.recordSubmitted(
+            ticket = ticket,
+            label = "offscreen-pass:frame-31",
+            retainedResources = listOf(resource),
+        )
+
+        manager.acceptGPUCompletion(
+            ticket.ticketId,
+            GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.DeviceLost),
+        )
+        assertEquals(listOf(resource), manager.quarantinedResources(submission.id))
+
+        manager.close()
+
+        assertEquals(emptyList(), manager.quarantinedResources(submission.id))
+        assertEquals(0, manager.retainedSubmissionRecordCount)
+    }
+
+    @Test
+    fun `quarantine is never evicted by bounded success history before teardown`() {
+        val manager = GPUQueueManager()
+        val firstTicket = queueCompletionTicket("ticket.quarantine.0", frameId = 32L)
+        val firstResource = GPUQueuedResourceRef("lease:quarantine:0")
+        val first = manager.recordSubmitted(
+            firstTicket,
+            "frame:quarantine:0",
+            listOf(firstResource),
+        )
+        manager.acceptGPUCompletion(
+            firstTicket.ticketId,
+            GPUQueueCompletionOutcome.Failure(GPUQueueCompletionFailureKind.CallbackFailure),
+        )
+
+        repeat(GPU_QUEUE_SUBMISSION_HISTORY_LIMIT * 2) { index ->
+            val ticket = queueCompletionTicket("ticket.success.$index", frameId = 100L + index)
+            manager.recordSubmitted(ticket, "frame:success:$index", emptyList())
+            manager.acceptGPUCompletion(ticket.ticketId, GPUQueueCompletionOutcome.Success)
+        }
+
+        assertEquals(listOf(firstResource), manager.quarantinedResources(first.id))
+        manager.close()
+        assertEquals(emptyList(), manager.quarantinedResources(first.id))
     }
 
     @Test
@@ -130,6 +179,30 @@ class GPUQueueManagerTest {
             manager.tryRecordSubmitted(ticket, "frame:after-terminal", listOf(GPUQueuedResourceRef("lease:third"))),
         )
         assertEquals(1L, manager.telemetry.submitted)
+    }
+
+    @Test
+    fun `canonical completion sink rejects mismatched and duplicate acceptance`() {
+        val manager = GPUQueueManager()
+        val ticket = queueCompletionTicket("ticket.sink", frameId = 41L)
+        val registration = assertIs<GPUQueueSubmissionRegistration.Accepted>(
+            manager.tryRecordSubmitted(ticket, "frame:sink", listOf(GPUQueuedResourceRef("lease:sink"))),
+        )
+        val wrong = queueCompletionTicket("ticket.other", frameId = 42L)
+
+        assertFailsWith<IllegalStateException> {
+            registration.completionSink.accept(
+                GPUQueueCompletionDelivery.Accepted(wrong.ticketId, GPUQueueCompletionOutcome.Success),
+            )
+        }
+        registration.completionSink.accept(
+            GPUQueueCompletionDelivery.Accepted(ticket.ticketId, GPUQueueCompletionOutcome.Success),
+        )
+        assertFailsWith<IllegalStateException> {
+            registration.completionSink.accept(
+                GPUQueueCompletionDelivery.Accepted(ticket.ticketId, GPUQueueCompletionOutcome.Success),
+            )
+        }
     }
 
     @Test

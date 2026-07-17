@@ -111,7 +111,7 @@ data class GPUQueueTelemetry(
         }
 }
 
-class GPUQueueManager {
+class GPUQueueManager : AutoCloseable {
     private var nextSubmissionId: Long = 1L
     private val submissions = linkedMapOf<GPUQueueSubmissionId, GPUQueueSubmission>()
     private val submissionsByTicket = linkedMapOf<GPUQueueCompletionTicketID, GPUQueueSubmissionId>()
@@ -166,8 +166,12 @@ class GPUQueueManager {
         val submission = createSubmission(label, retainedResources, ticket.ticketId, outputApplicable)
         submissionsByTicket[ticket.ticketId] = submission.id
         val sink = GPUQueueCompletionSink { delivery ->
-            if (delivery.ticketId == ticket.ticketId) {
-                acceptGPUCompletion(delivery.ticketId, delivery.outcome)
+            check(delivery.ticketId == ticket.ticketId) {
+                "Queue completion sink received a ticket owned by another submission"
+            }
+            val acceptance = acceptGPUCompletion(delivery.ticketId, delivery.outcome)
+            check(acceptance is GPUQueueCompletionAcceptance.Accepted) {
+                "Queue completion sink rejected terminal delivery: ${acceptance::class.simpleName}"
             }
         }
         return GPUQueueSubmissionRegistration.Accepted(submission, sink)
@@ -241,12 +245,11 @@ class GPUQueueManager {
                 )
                 completedCount += 1L
                 releasedCount += 1L
-                retainTerminal(ticketId, id)
+                retainTerminal(ticketId, id, retainUntilTeardown = false)
                 GPUQueueCompletionAcceptance.Accepted(id, current.retainedResources, emptyList())
             }
             is GPUQueueCompletionOutcome.Failure -> {
                 submissions[id] = current.copy(
-                    retainedResources = emptyList(),
                     completed = true,
                     quarantined = true,
                     completion = outcome.kind.dumpLabel,
@@ -254,7 +257,7 @@ class GPUQueueManager {
                 )
                 failedCount += 1L
                 quarantinedCount += 1L
-                retainTerminal(ticketId, id)
+                retainTerminal(ticketId, id, retainUntilTeardown = true)
                 GPUQueueCompletionAcceptance.Accepted(id, emptyList(), current.retainedResources)
             }
         }
@@ -263,9 +266,11 @@ class GPUQueueManager {
     private fun retainTerminal(
         ticketId: GPUQueueCompletionTicketID,
         submissionId: GPUQueueSubmissionId,
+        retainUntilTeardown: Boolean,
     ) {
         submissionsByTicket.remove(ticketId)
         terminalTickets[ticketId] = submissionId
+        if (retainUntilTeardown) return
         terminalSubmissionOrder += submissionId
         while (terminalSubmissionOrder.size > GPU_QUEUE_SUBMISSION_HISTORY_LIMIT) {
             val oldest = terminalSubmissionOrder.removeFirst()
@@ -336,6 +341,15 @@ class GPUQueueManager {
     @Synchronized
     fun recordWait() {
         waitCount += 1L
+    }
+
+    /** Drops terminal queue evidence and every quarantined resource reference at queue teardown. */
+    @Synchronized
+    override fun close() {
+        submissions.clear()
+        submissionsByTicket.clear()
+        terminalTickets.clear()
+        terminalSubmissionOrder.clear()
     }
 }
 
