@@ -11,6 +11,7 @@ internal sealed interface GPUWgpu4kPreparedFramePayloadRoute {
     data object SolidRect : GPUWgpu4kPreparedFramePayloadRoute
     data object ColorGlyph : GPUWgpu4kPreparedFramePayloadRoute
     data object RegisteredUniformRect : GPUWgpu4kPreparedFramePayloadRoute
+    data object SeparableBlurRect : GPUWgpu4kPreparedFramePayloadRoute
     data class Refused(val code: String, val message: String) : GPUWgpu4kPreparedFramePayloadRoute
 }
 
@@ -25,9 +26,11 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             GPUWgpu4kPreparedFramePayloadRoute.ColorGlyph
         distinct == listOf(GPUDrawSemanticPayload.RegisteredUniformRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.RegisteredUniformRect
+        distinct == listOf(GPUDrawSemanticPayload.SeparableBlurRect::class) ->
+            GPUWgpu4kPreparedFramePayloadRoute.SeparableBlurRect
         distinct.size > 1 -> GPUWgpu4kPreparedFramePayloadRoute.Refused(
             "unsupported.native-frame-payload.mixed-semantic-shape",
-            "One prepared native frame may not mix solid-rectangle and color-glyph payload shapes.",
+            "One prepared native frame may not mix typed semantic payload shapes.",
         )
         else -> GPUWgpu4kPreparedFramePayloadRoute.Refused(
             "unsupported.native-frame-payload.semantic-shape",
@@ -44,6 +47,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val solidRectCache: GPUWgpu4kSolidRectSessionCache,
     private val colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
     private val registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
+    private val separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private var delegate: GPUPreparedNativeFramePayloadMaterializer? = null
     private var closed = false
@@ -94,6 +98,18 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     queue,
                     preparedSceneTarget,
                     registeredUniformRectCache,
+                ),
+                framePlan,
+                encoderPlan,
+                resources,
+                generationSeal,
+            )
+            GPUWgpu4kPreparedFramePayloadRoute.SeparableBlurRect -> dispatch(
+                GPUWgpu4kSeparableBlurRectFramePayloadMaterializer(
+                    device,
+                    queue,
+                    preparedSceneTarget,
+                    separableBlurRectCache,
                 ),
                 framePlan,
                 encoderPlan,

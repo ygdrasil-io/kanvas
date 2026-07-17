@@ -248,6 +248,7 @@ enum class GPURegisteredUniformProgram(
 }
 
 const val REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY = "rect.registered-uniform"
+const val SEPARABLE_BLUR_RECT_RENDER_STEP_IDENTITY = "filter.blur.separable-rect"
 
 /** Typed proof tying one layer to one exact packed atlas placement and strike. */
 data class GPUColorGlyphAtlasPlacementProofInput(
@@ -336,6 +337,58 @@ sealed interface GPUDrawSemanticPayload {
                         ),
                     )
             } == true
+    }
+
+    /** Immutable input, kernel, and attachment facts for one bounded three-pass blur. */
+    class SeparableBlurRect internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        sourcePremultipliedRgba: List<Float>,
+        clearPremultipliedRgba: List<Float>,
+        val sourceBounds: GPUPixelBounds,
+        val targetBounds: GPUPixelBounds,
+        val effectiveSigma: Float,
+        val tapCount: Int,
+        weights: List<Float>,
+        val canonicalHash: String,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "SeparableBlurRect"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val sourcePremultipliedRgba: List<Float> = immutableList(sourcePremultipliedRgba)
+        val clearPremultipliedRgba: List<Float> = immutableList(clearPremultipliedRgba)
+        val weights: List<Float> = immutableList(weights)
+
+        fun hasCanonicalHashIntegrity(): Boolean {
+            val expectedBytes = separableBlurRectPayloadBytes(
+                sourcePremultipliedRgba,
+                clearPremultipliedRgba,
+                effectiveSigma,
+                tapCount,
+                weights,
+            )
+            return sourcePremultipliedRgba.isPremultipliedRgba() &&
+                clearPremultipliedRgba.isPremultipliedRgba() &&
+                targetBounds.containsRegisteredUniformRect(sourceBounds) &&
+                effectiveSigma.isFinite() && effectiveSigma in 0.5f..12f &&
+                tapCount in 3..25 && tapCount % 2 == 1 &&
+                weights.size == 25 && weights.all { it.isFinite() && it >= 0f } &&
+                kotlin.math.abs(weights.take(tapCount).sum() - 1f) <= 0.00001f &&
+                weights.drop(tapCount).all { it == 0f } &&
+                payloadRef.renderStepIdentity == SEPARABLE_BLUR_RECT_RENDER_STEP_IDENTITY &&
+                payloadRef.uniformSlot?.fingerprint == payloadRef.uniformBlock?.fingerprint &&
+                payloadRef.uniformBlock?.bytes == expectedBytes &&
+                canonicalHash == sha256Hex(
+                    separableBlurRectCanonicalPreimage(
+                        payloadRef,
+                        sourcePremultipliedRgba,
+                        clearPremultipliedRgba,
+                        sourceBounds,
+                        targetBounds,
+                        effectiveSigma,
+                        tapCount,
+                        weights,
+                    ),
+                )
+        }
     }
 
     /** Exact immutable COLRv0 atlas, layer, indexed-geometry, and uniform payload. */
@@ -489,6 +542,151 @@ class GPURegisteredUniformRectPayloadGatherer {
         )
     }
 }
+
+/** Snapshots the complete CPU-owned input for one bounded separable blur rectangle. */
+class GPUSeparableBlurRectPayloadGatherer {
+    fun gatherSemantic(
+        commandIdValue: Int,
+        sourcePremultipliedRgba: FloatArray,
+        clearPremultipliedRgba: FloatArray,
+        sourceBounds: GPUPixelBounds,
+        targetBounds: GPUPixelBounds,
+        effectiveSigma: Float,
+        tapCount: Int,
+        weights: FloatArray,
+    ): GPUDrawSemanticPayload.SeparableBlurRect {
+        require(commandIdValue >= 0) { "Separable blur command id must be non-negative" }
+        require(sourcePremultipliedRgba.toList().isPremultipliedRgba()) {
+            "Separable blur source color must be finite premultiplied RGBA"
+        }
+        require(clearPremultipliedRgba.toList().isPremultipliedRgba()) {
+            "Separable blur clear color must be finite premultiplied RGBA"
+        }
+        require(targetBounds.containsRegisteredUniformRect(sourceBounds)) {
+            "Separable blur source bounds must be contained by the target"
+        }
+        require(effectiveSigma.isFinite() && effectiveSigma in 0.5f..12f) {
+            "Separable blur effective sigma must be in 0.5..12"
+        }
+        require(tapCount in 3..25 && tapCount % 2 == 1) {
+            "Separable blur tap count must be an odd value in 3..25"
+        }
+        require(weights.size == 25 && weights.all { it.isFinite() && it >= 0f }) {
+            "Separable blur weights must contain 25 finite non-negative values"
+        }
+        require(kotlin.math.abs(weights.take(tapCount).sum() - 1f) <= 0.00001f) {
+            "Separable blur active weights must be normalized"
+        }
+        require(weights.drop(tapCount).all { it == 0f }) {
+            "Separable blur padded weights must be zero"
+        }
+        val source = sourcePremultipliedRgba.toList()
+        val clear = clearPremultipliedRgba.toList()
+        val kernel = weights.toList()
+        val bytes = separableBlurRectPayloadBytes(source, clear, effectiveSigma, tapCount, kernel)
+        val fingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                listOf(
+                    "kind=separable-blur-rect",
+                    "command=$commandIdValue",
+                    "bytes=${bytes.joinToString(",")}",
+                ).joinToString("\n"),
+            ),
+        )
+        val block = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = "separable-blur-rect.input-v1",
+            byteSize = SEPARABLE_BLUR_RECT_PAYLOAD_BYTES.toLong(),
+            zeroedPadding = true,
+            scope = "pass.separable-blur.prepared",
+            bytes = bytes,
+            fields = listOf(
+                GPUUniformPayloadField("source.premul-rgba", 0L, 16L, "float32x4"),
+                GPUUniformPayloadField("clear.premul-rgba", 16L, 16L, "float32x4"),
+                GPUUniformPayloadField("kernel.sigma", 32L, 4L, "float32"),
+                GPUUniformPayloadField("kernel.tap-count", 36L, 4L, "uint32"),
+                GPUUniformPayloadField("kernel.weights", 40L, 100L, "float32x25"),
+                GPUUniformPayloadField("padding", 140L, 4L, "padding", zeroFilled = true),
+            ),
+        )
+        val ref = GPUDrawPayloadRef(
+            commandIdValue = commandIdValue,
+            renderStepIdentity = SEPARABLE_BLUR_RECT_RENDER_STEP_IDENTITY,
+            uniformSlot = GPUUniformPayloadSlot(
+                GPUPayloadSlotID("separable-blur:$commandIdValue"),
+                fingerprint,
+                0L,
+            ),
+            uniformBlock = block,
+        )
+        return GPUDrawSemanticPayload.SeparableBlurRect(
+            payloadRef = ref,
+            sourcePremultipliedRgba = source,
+            clearPremultipliedRgba = clear,
+            sourceBounds = sourceBounds,
+            targetBounds = targetBounds,
+            effectiveSigma = effectiveSigma,
+            tapCount = tapCount,
+            weights = kernel,
+            canonicalHash = sha256Hex(
+                separableBlurRectCanonicalPreimage(
+                    ref,
+                    source,
+                    clear,
+                    sourceBounds,
+                    targetBounds,
+                    effectiveSigma,
+                    tapCount,
+                    kernel,
+                ),
+            ),
+        )
+    }
+}
+
+private fun separableBlurRectPayloadBytes(
+    sourcePremultipliedRgba: List<Float>,
+    clearPremultipliedRgba: List<Float>,
+    effectiveSigma: Float,
+    tapCount: Int,
+    weights: List<Float>,
+): List<Int> = ByteBuffer.allocate(SEPARABLE_BLUR_RECT_PAYLOAD_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+    sourcePremultipliedRgba.forEach(::putFloat)
+    clearPremultipliedRgba.forEach(::putFloat)
+    putFloat(effectiveSigma)
+    putInt(tapCount)
+    weights.forEach(::putFloat)
+    putInt(0)
+}.array().map { it.toInt() and 0xff }
+
+private fun separableBlurRectCanonicalPreimage(
+    ref: GPUDrawPayloadRef,
+    sourcePremultipliedRgba: List<Float>,
+    clearPremultipliedRgba: List<Float>,
+    sourceBounds: GPUPixelBounds,
+    targetBounds: GPUPixelBounds,
+    effectiveSigma: Float,
+    tapCount: Int,
+    weights: List<Float>,
+): String = listOf(
+    "type=SeparableBlurRect",
+    "command=${ref.commandIdValue}",
+    "step=${ref.renderStepIdentity}",
+    "fingerprint=${ref.uniformBlock?.fingerprint?.value.orEmpty()}",
+    "source=${sourcePremultipliedRgba.joinToString(",")}",
+    "clear=${clearPremultipliedRgba.joinToString(",")}",
+    "sourceBounds=${sourceBounds.left},${sourceBounds.top},${sourceBounds.right},${sourceBounds.bottom}",
+    "targetBounds=${targetBounds.left},${targetBounds.top},${targetBounds.right},${targetBounds.bottom}",
+    "sigma=$effectiveSigma",
+    "tapCount=$tapCount",
+    "weights=${weights.joinToString(",")}",
+).joinToString("\n")
+
+private fun List<Float>.isPremultipliedRgba(): Boolean =
+    size == 4 && all { it.isFinite() && it in 0f..1f } &&
+        this[0] <= this[3] && this[1] <= this[3] && this[2] <= this[3]
+
+private const val SEPARABLE_BLUR_RECT_PAYLOAD_BYTES = 144
 
 private fun registeredUniformRectCanonicalPreimage(
     ref: GPUDrawPayloadRef,

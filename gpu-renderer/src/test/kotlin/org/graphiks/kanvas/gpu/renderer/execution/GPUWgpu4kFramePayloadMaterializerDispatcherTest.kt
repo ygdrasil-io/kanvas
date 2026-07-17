@@ -22,6 +22,12 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
                 listOf(GPUDrawSemanticPayload.RegisteredUniformRect::class),
             ),
         )
+        assertEquals(
+            GPUWgpu4kPreparedFramePayloadRoute.SeparableBlurRect,
+            selectWgpu4kPreparedFramePayloadRoute(
+                listOf(GPUDrawSemanticPayload.SeparableBlurRect::class),
+            ),
+        )
     }
 
     @Test

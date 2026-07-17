@@ -993,6 +993,20 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
             bounds("targetBounds", value.targetBounds)
             bounds("scissorBounds", value.scissorBounds)
         }
+        is GPUDrawSemanticPayload.SeparableBlurRect -> {
+            string("canonicalHash", value.canonicalHash)
+            bounds("sourceBounds", value.sourceBounds)
+            bounds("targetBounds", value.targetBounds)
+            int("effectiveSigmaBits", value.effectiveSigma.toRawBits())
+            int("tapCount", value.tapCount)
+            list("sourcePremultipliedRgba", value.sourcePremultipliedRgba) { channel ->
+                int("channelBits", channel.toRawBits())
+            }
+            list("clearPremultipliedRgba", value.clearPremultipliedRgba) { channel ->
+                int("channelBits", channel.toRawBits())
+            }
+            list("weights", value.weights) { weight -> int("weightBits", weight.toRawBits()) }
+        }
         is GPUDrawSemanticPayload.ColorGlyph -> {
             string("canonicalHash", value.canonicalHash)
             string("planArtifactId", value.planArtifactKey.artifactID.value.toString())
@@ -1308,6 +1322,11 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
         is GPUDrawSemanticPayload.RegisteredUniformRect ->
             "$common,program=${program.wireId},registeredUniformHash=$canonicalHash," +
                 "uniformBytes=${uniformBytes.size},target=$targetBounds,scissor=$scissorBounds)"
+        is GPUDrawSemanticPayload.SeparableBlurRect ->
+            "$common,separableBlurHash=$canonicalHash,source=$sourceBounds,target=$targetBounds," +
+                "sigma=$effectiveSigma,taps=$tapCount,weights=${weights.joinToString(",")}," +
+                "sourcePremul=${sourcePremultipliedRgba.joinToString(",")}," +
+                "clearPremul=${clearPremultipliedRgba.joinToString(",")})"
         is GPUDrawSemanticPayload.ColorGlyph ->
             "$common,colorGlyphHash=$canonicalHash," +
                 "plan=${planArtifactKey.artifactID.value}@${planArtifactKey.generation.value}/" +

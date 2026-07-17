@@ -23,7 +23,7 @@ class PerFamilyBenchmarkTest {
                 "PathFill" to "path-fill-stencil",
                 "BitmapRect" to "bitmap-sampler-matrix",
                 "Text" to "glyph-atlas-strip",
-                "Blur" to "blur-radius-ladder",
+                "Blur" to "gaussian-blur-photo",
                 "ColorMatrix" to "color-matrix-filter",
             ),
             families.map { it.family to it.sceneId },
@@ -77,7 +77,7 @@ class PerFamilyBenchmarkTest {
 
         val json = outputDir.resolve("per-family-benchmark.json").readText()
         assertTrue(json.contains("\"family\": \"FillRect\""))
-        assertTrue(json.contains("\"sceneId\": \"blur-radius-ladder\""))
+        assertTrue(json.contains("\"sceneId\": \"gaussian-blur-photo\""))
         assertTrue(json.contains("\"hardwareBaseline\": \"Apple M-series\""))
         assertTrue(json.contains("\"productActivation\": true"))
         assertTrue(json.contains("\"status\": \"gpu-unavailable\""))
@@ -99,6 +99,7 @@ class PerFamilyBenchmarkTest {
             "LinearGradient",
             "RadialGradient",
             "SweepGradient",
+            "Blur",
             "ColorMatrix",
         )
         val preparedResults = report.results.filter { it.family in preparedFamilies }

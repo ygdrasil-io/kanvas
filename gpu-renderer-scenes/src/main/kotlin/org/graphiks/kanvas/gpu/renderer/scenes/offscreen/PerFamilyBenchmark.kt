@@ -243,6 +243,16 @@ class PerFamilyBenchmark(
                     measuredFrames,
                 )
             }
+            if (scene.usesPreparedSeparableBlurRectPilot()) {
+                return@runCatching benchmarkPreparedSeparableBlur(
+                    session,
+                    gate,
+                    family,
+                    scene,
+                    warmupFrames,
+                    measuredFrames,
+                )
+            }
             val unsupported = rectOnlyCommandSequenceUnsupportedReason(scene.commands)
             if (unsupported != null) {
                 return@runCatching skippedResult(
@@ -484,6 +494,95 @@ class PerFamilyBenchmark(
         }
     }
 
+    private fun benchmarkPreparedSeparableBlur(
+        session: GPUBackendSession,
+        gate: FrameGatePolicy,
+        family: BenchmarkFamily,
+        scene: org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene<
+            org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand,
+        >,
+        warmupFrames: Int,
+        measuredFrames: Int,
+    ): FamilyBenchmarkResult {
+        val capabilities = session.capabilities ?: return skippedResult(
+            family,
+            BenchmarkFamilyStatus.Unsupported,
+            warmupFrames,
+            measuredFrames,
+            "unsupported: prepared separable blur benchmark requires observed capabilities",
+        )
+        val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
+            ?.let(::GPUDeviceGenerationID)
+            ?: return skippedResult(
+                family,
+                BenchmarkFamilyStatus.Unsupported,
+                warmupFrames,
+                measuredFrames,
+                "unsupported: prepared separable blur benchmark requires device generation",
+            )
+        return session.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
+        ).use { preparedSession ->
+            fun render(frameOrdinal: Long, withReadback: Boolean): Long {
+                val recorded = when (
+                    val result = PreparedSeparableBlurRectSceneFrameRecorder().record(
+                        scene,
+                        capabilities,
+                        generation,
+                        frameOrdinal,
+                        withReadback,
+                    )
+                ) {
+                    is PreparedSeparableBlurRectSceneFrameResult.Recorded -> result
+                    is PreparedSeparableBlurRectSceneFrameResult.Refused -> error(result.reason)
+                }
+                val output = recorded.readbackRequestId?.let(GPUSceneFrameOutputRequest::ReadbackRgba)
+                    ?: GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly
+                val start = System.nanoTime()
+                val terminal = preparedSession.renderFrame(recorded.taskList, output)
+                    .completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                val duration = (System.nanoTime() - start).coerceAtLeast(1L)
+                check(terminal.outcome == GPUFrameStructuralOutcome.Succeeded) {
+                    terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared separable blur benchmark frame failed"
+                }
+                return duration
+            }
+
+            repeat(warmupFrames) { index -> render(index + 1L, withReadback = false) }
+            val samples = List(measuredFrames) { index ->
+                render(warmupFrames + index + 1L, withReadback = false)
+            }
+            render(warmupFrames + measuredFrames + 1L, withReadback = true)
+            val statistics = FrameTimeStatistics.of(samples)
+            val gateResult = gate.evaluate(family.family, statistics.meanMs)
+            val counters = preparedSession.nativeCounters()
+            FamilyBenchmarkResult(
+                family = family.family,
+                sceneId = family.sceneId,
+                status = BenchmarkFamilyStatus.Sampled,
+                warmupFrames = warmupFrames,
+                measuredFrames = measuredFrames,
+                statistics = statistics,
+                diagnostics = listOf(
+                    "sampled ${family.family} scene=${family.sceneId} via prepared submit+completion",
+                    "metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 " +
+                        "finalValidationReadbacks=${counters.readbackCopies}",
+                    "nativeFrames=${warmupFrames + measuredFrames + 1} encoders=${counters.encoders} " +
+                        "commandBuffers=${counters.commandBuffers} submits=${counters.submits}",
+                    "separableBlurCache invariants=${counters.separableBlurInvariantCreations}/" +
+                        "${counters.separableBlurInvariantReuses} intermediates=" +
+                        "${counters.separableBlurIntermediateCreations}/" +
+                        "${counters.separableBlurIntermediateReuses}",
+                    "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
+                        "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
+                        "maxMs=${statistics.maxMs.fmt()}",
+                    "frameGateStatus=${gateResult.status.wireName}",
+                ),
+            )
+        }
+    }
+
     private fun skippedResult(
         family: BenchmarkFamily,
         status: BenchmarkFamilyStatus,
@@ -517,7 +616,7 @@ class PerFamilyBenchmark(
             BenchmarkFamily("PathFill", "path-fill-stencil"),
             BenchmarkFamily("BitmapRect", "bitmap-sampler-matrix"),
             BenchmarkFamily("Text", "glyph-atlas-strip"),
-            BenchmarkFamily("Blur", "blur-radius-ladder"),
+            BenchmarkFamily("Blur", "gaussian-blur-photo"),
             BenchmarkFamily("ColorMatrix", "color-matrix-filter"),
         )
     }

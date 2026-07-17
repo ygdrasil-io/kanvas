@@ -204,6 +204,29 @@ class RenderGpuRendererSceneOffscreenMainTest {
     }
 
     @Test
+    fun `gaussian blur photo uses three prepared passes in one submit`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-separable-blur")
+        val report = renderGpuRendererSceneOffscreen(arrayOf("gaussian-blur-photo", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(report.diagnostics, "separableBlur:route=prepared-source-horizontal-vertical")
+        assertContains(
+            report.diagnostics,
+            "separableBlur:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+        )
+        assertContains(
+            report.diagnostics,
+            "separableBlur:cache invariants=1/0 intermediates=1/0",
+        )
+        assertContains(report.diagnostics, "separableBlur:pixelExact=64000/64000")
+        assertContains(
+            report.diagnostics,
+            "separableBlur:withinOneLsb=64000/64000 maxChannelDelta=0",
+        )
+    }
+
+    @Test
     fun `solid frame sampler measures completion only and performs one final readback`() {
         val root = Files.createTempDirectory("gpu-renderer-scenes-prepared-samples")
         val scene = org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry.registry

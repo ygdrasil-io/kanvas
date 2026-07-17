@@ -135,6 +135,9 @@ class RectOnlyOffscreenRenderer internal constructor(
         if (scene.usesPreparedRegisteredUniformRectPilot()) {
             return renderPreparedRegisteredUniformRectScene(scene, outputDir)
         }
+        if (scene.usesPreparedSeparableBlurRectPilot()) {
+            return renderPreparedSeparableBlurRectScene(scene, outputDir)
+        }
         val drawPlan = prepareRectOnlyDrawPlan(
             sceneId = sceneId,
             commands = scene.commands,
@@ -529,6 +532,115 @@ class RectOnlyOffscreenRenderer internal constructor(
                         "registeredUniform:withinOneLsb=$withinOneLsbPixels/$totalPixels " +
                             "maxChannelDelta=$maxChannelDelta",
                         "registeredUniform:reference=independent-cpu-premul-source-over",
+                    ) + session.runtimeTelemetryDumpLines,
+                )
+            }
+        }
+    }
+
+    private fun renderPreparedSeparableBlurRectScene(
+        scene: GPURendererScene<SceneCommand>,
+        outputDir: Path,
+    ): OffscreenRunReport {
+        val sceneId = scene.sceneId.value
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+            ?: return OffscreenRunReport.failed(sceneId, "webgpu-context-unavailable")
+        runtime.use { session ->
+            val capabilities = session.capabilities
+                ?: return OffscreenRunReport.failed(sceneId, "prepared-separable-blur-capabilities-unavailable")
+            val generation = capabilities.deviceGenerationOrNull()
+                ?: return OffscreenRunReport.failed(sceneId, "prepared-separable-blur-device-generation-unavailable")
+            val preparedFrame = when (
+                val result = PreparedSeparableBlurRectSceneFrameRecorder().record(
+                    scene,
+                    capabilities,
+                    generation,
+                    frameOrdinal = 1L,
+                    withReadback = true,
+                )
+            ) {
+                is PreparedSeparableBlurRectSceneFrameResult.Refused ->
+                    return OffscreenRunReport.failed(sceneId, result.reason)
+                is PreparedSeparableBlurRectSceneFrameResult.Recorded -> result
+            }
+            val requestId = requireNotNull(preparedFrame.readbackRequestId)
+            session.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                    OFFSCREEN_COLOR_FORMAT,
+                ),
+            ).use { preparedSession ->
+                val terminal = preparedSession.renderFrame(
+                    preparedFrame.taskList,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+                ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                if (terminal.outcome != GPUFrameStructuralOutcome.Succeeded) {
+                    val failureReason = terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared-separable-blur-frame-failed"
+                    return OffscreenRunReport.failed(
+                        sceneId,
+                        failureReason,
+                        diagnostics = listOf(failureReason) + preparedFrame.diagnostics,
+                    )
+                }
+                val pixels = (terminal.output as? GPUSceneFrameOutput.ReadbackRgba)?.bytes
+                    ?: return OffscreenRunReport.failed(
+                        sceneId,
+                        "prepared-separable-blur-readback-missing",
+                        diagnostics = listOf("prepared-separable-blur-readback-missing") +
+                            preparedFrame.diagnostics,
+                    )
+                val reference = preparedFrame.cpuReferenceRgba
+                var matchingPixels = 0
+                var withinOneLsbPixels = 0
+                var maxChannelDelta = 0
+                pixels.indices.step(BYTES_PER_PIXEL).forEach { offset ->
+                    var pixelMaxDelta = 0
+                    repeat(BYTES_PER_PIXEL) { channel ->
+                        val actual = pixels[offset + channel].toInt() and 0xff
+                        val expected = reference[offset + channel].toInt() and 0xff
+                        pixelMaxDelta = maxOf(pixelMaxDelta, kotlin.math.abs(actual - expected))
+                    }
+                    if (pixelMaxDelta == 0) matchingPixels += 1
+                    if (pixelMaxDelta <= 1) withinOneLsbPixels += 1
+                    maxChannelDelta = maxOf(maxChannelDelta, pixelMaxDelta)
+                }
+                val totalPixels = scene.dimensions.width * scene.dimensions.height
+                val counters = preparedSession.nativeCounters()
+                writePng(pixels, scene.dimensions.width, scene.dimensions.height, outputDir.resolve(RENDER_FILE_NAME))
+                writePng(reference, scene.dimensions.width, scene.dimensions.height, outputDir.resolve("reference.png"))
+                if (!pixels.contentEquals(reference)) {
+                    writePng(
+                        colorGlyphDiff(pixels, reference),
+                        scene.dimensions.width,
+                        scene.dimensions.height,
+                        outputDir.resolve("diff.png"),
+                    )
+                } else {
+                    outputDir.resolve("diff.png").toFile().delete()
+                }
+                return OffscreenRunReport.rendered(
+                    sceneId = sceneId,
+                    imagePath = RENDER_FILE_NAME,
+                    width = scene.dimensions.width,
+                    height = scene.dimensions.height,
+                    byteCount = pixels.size.toLong(),
+                    nonTransparentPixels = pixels.countNonTransparentPixels(),
+                    diagnostics = listOf(
+                        "rendered $sceneId via prepared WebGPU frame",
+                        "adapter=${session.adapterInfo?.summary ?: "unknown-adapter"}",
+                    ) + preparedFrame.diagnostics + listOf(
+                        "separableBlur:native encoders=${counters.encoders} " +
+                            "commandBuffers=${counters.commandBuffers} submits=${counters.submits} " +
+                            "readbacks=${counters.readbackCopies}",
+                        "separableBlur:cache invariants=${counters.separableBlurInvariantCreations}/" +
+                            "${counters.separableBlurInvariantReuses} intermediates=" +
+                            "${counters.separableBlurIntermediateCreations}/" +
+                            "${counters.separableBlurIntermediateReuses}",
+                        "separableBlur:pixelExact=$matchingPixels/$totalPixels",
+                        "separableBlur:withinOneLsb=$withinOneLsbPixels/$totalPixels " +
+                            "maxChannelDelta=$maxChannelDelta",
                     ) + session.runtimeTelemetryDumpLines,
                 )
             }

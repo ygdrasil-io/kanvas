@@ -36,9 +36,16 @@ import org.graphiks.kanvas.gpu.renderer.recording.colorGlyphScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_VERTEX_SOURCE_LABEL
+import org.graphiks.kanvas.gpu.renderer.recording.GPUSeparableBlurRectStage
+import org.graphiks.kanvas.gpu.renderer.recording.SEPARABLE_BLUR_FILTER_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.SEPARABLE_BLUR_SOURCE_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.SEPARABLE_BLUR_TARGET_STATE_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.SEPARABLE_BLUR_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalSolidRectSrcOver
 import org.graphiks.kanvas.gpu.renderer.recording.registeredUniformRectPipelineKey
 import org.graphiks.kanvas.gpu.renderer.recording.registeredUniformRectScissorAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.separableBlurRectRenderStepId
+import org.graphiks.kanvas.gpu.renderer.recording.separableBlurRectScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationPlan
@@ -685,7 +692,8 @@ internal class GPUFramePreflighter(
                             val colorGlyph = packet.semanticPayload as? GPUDrawSemanticPayload.ColorGlyph
                             val preparedLateBound =
                                 packet.semanticPayload is GPUDrawSemanticPayload.SolidRect ||
-                                    packet.semanticPayload is GPUDrawSemanticPayload.RegisteredUniformRect
+                                    packet.semanticPayload is GPUDrawSemanticPayload.RegisteredUniformRect ||
+                                    packet.semanticPayload is GPUDrawSemanticPayload.SeparableBlurRect
                             val acceptedGeneration = when {
                                 colorGlyph != null -> colorGlyph.planArtifactKey.generation.value.toLong()
                                 preparedLateBound &&
@@ -926,9 +934,51 @@ internal class GPUFramePreflighter(
             is GPUDrawSemanticPayload.SolidRect -> validateSolidRectSemanticPayload(packet, semantic)
             is GPUDrawSemanticPayload.RegisteredUniformRect ->
                 validateRegisteredUniformRectSemanticPayload(render, packet, semantic)
+            is GPUDrawSemanticPayload.SeparableBlurRect ->
+                validateSeparableBlurRectSemanticPayload(packet, semantic)
             is GPUDrawSemanticPayload.ColorGlyph ->
                 validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
         }
+    }
+
+    private fun validateSeparableBlurRectSemanticPayload(
+        packet: GPUDrawPacket,
+        semantic: GPUDrawSemanticPayload.SeparableBlurRect,
+    ): GPUDiagnostic? {
+        fun refuse(code: String, message: String) = diagnostic(code, message)
+        val stage = GPUSeparableBlurRectStage.entries.singleOrNull {
+            packet.renderStepId.value == separableBlurRectRenderStepId(it)
+        } ?: return refuse(
+            "invalid.preflight.separable_blur_semantic_route",
+            "Separable blur packets require one closed source, horizontal, or vertical stage.",
+        )
+        val expectedScissor = when (stage) {
+            GPUSeparableBlurRectStage.Source -> semantic.sourceBounds
+            GPUSeparableBlurRectStage.Horizontal,
+            GPUSeparableBlurRectStage.Vertical,
+            -> semantic.targetBounds
+        }
+        val expectedLayout = when (stage) {
+            GPUSeparableBlurRectStage.Source -> SEPARABLE_BLUR_SOURCE_BINDING_LAYOUT_HASH
+            GPUSeparableBlurRectStage.Horizontal,
+            GPUSeparableBlurRectStage.Vertical,
+            -> SEPARABLE_BLUR_FILTER_BINDING_LAYOUT_HASH
+        }
+        if (!semantic.hasCanonicalHashIntegrity() ||
+            packet.commandIdValue != semantic.payloadRef.commandIdValue ||
+            packet.uniformSlot != semantic.payloadRef.uniformSlot ||
+            packet.bindingLayoutHash != expectedLayout ||
+            packet.vertexSourceLabel != SEPARABLE_BLUR_VERTEX_SOURCE_LABEL ||
+            packet.targetStateHash != SEPARABLE_BLUR_TARGET_STATE_HASH ||
+            packet.scissorBoundsHash != separableBlurRectScissorAuthority(expectedScissor) ||
+            !packet.blendPlan.isCanonicalSolidRectSrcOver()
+        ) {
+            return refuse(
+                "invalid.preflight.separable_blur_semantic_integrity",
+                "Separable blur packet authority contradicts its immutable semantic input.",
+            )
+        }
+        return null
     }
 
     private fun validateRegisteredUniformRectSemanticPayload(

@@ -673,6 +673,8 @@ private class WgpuBackendSession(
     private val quarantinedRegisteredUniformCaches =
         linkedSetOf<GPUWgpu4kRegisteredUniformRectSessionCache>()
     private val quarantinedColorGlyphCaches = linkedSetOf<GPUWgpu4kColorGlyphSessionCache>()
+    private val quarantinedSeparableBlurCaches =
+        linkedSetOf<GPUWgpu4kSeparableBlurRectSessionCache>()
     private val adapterSummary = adapterSummary(glfw)
     private val backendLimits = GPULimits(
         maxTextureDimension2D = minOf(
@@ -788,6 +790,9 @@ private class WgpuBackendSession(
         val registeredUniformRectCache = setupTransaction.own(
             GPUWgpu4kRegisteredUniformRectSessionCache(glfw.wgpuContext.device),
         )
+        val separableBlurRectCache = setupTransaction.own(
+            GPUWgpu4kSeparableBlurRectSessionCache(glfw.wgpuContext.device),
+        )
         telemetryRecorder.recordTextureCreated()
         val encodingBackend = setupTransaction.own(GPUWgpu4kFrameEncodingBackend(
             deviceGeneration = deviceGeneration,
@@ -817,15 +822,24 @@ private class WgpuBackendSession(
                         val renderTargets = taskList.tasks.filterIsInstance<GPUTask.Render>()
                             .map { it.target }
                             .distinct()
-                        val target = renderTargets.singleOrNull()
-                        val preparation = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+                        val preparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
                             .flatMap { it.requests }
-                            .singleOrNull { it.resource == target }
+                        val preparation = preparations.singleOrNull {
+                            it.role == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.SceneTarget
+                        }
+                        val target = preparation?.resource as? GPUFrameTargetRef
                         val descriptor = preparation?.descriptor as? GPUFrameTextureDescriptor
                         when {
-                            target == null -> executionDiagnostic(
+                            target == null || target !in renderTargets -> executionDiagnostic(
                                 "unsupported.prepared-scene-session.target-count",
-                                "A prepared scene frame requires exactly one render target.",
+                                "A prepared scene frame requires exactly one declared scene target used by rendering.",
+                            )
+                            renderTargets.any { renderTarget ->
+                                preparations.singleOrNull { it.resource == renderTarget }?.descriptor !is
+                                    GPUFrameTextureDescriptor
+                            } -> executionDiagnostic(
+                                "unsupported.prepared-scene-session.render-target-declaration",
+                                "Every prepared render target requires one exact texture declaration.",
                             )
                             canonicalTargetRef != null && canonicalTargetRef != target -> executionDiagnostic(
                                 "stale.prepared-scene-session.target-identity",
@@ -848,10 +862,12 @@ private class WgpuBackendSession(
             },
             coordinatorFactory = GPUFrameCoordinatorFactory { taskList, _ ->
                 coordinatorCreations.incrementAndGet()
-                val target = taskList.tasks.filterIsInstance<GPUTask.Render>()
-                    .map { it.target }
-                    .distinct()
-                    .single()
+                val target = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+                    .flatMap { it.requests }
+                    .single {
+                        it.role == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.SceneTarget
+                    }
+                    .resource as GPUFrameTargetRef
                 val generations = linkedMapOf<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef, Long>()
                 generations[target] = targetGeneration
                 val colorGlyph = taskList.tasks.filterIsInstance<GPUTask.Render>()
@@ -880,6 +896,7 @@ private class WgpuBackendSession(
                     solidRectCache,
                     colorGlyphCache,
                     registeredUniformRectCache,
+                    separableBlurRectCache,
                 )
                 val preflighter = GPUFramePreflighter(
                     context = GPUFramePreflightContext(
@@ -938,6 +955,7 @@ private class WgpuBackendSession(
                         solidRectCache,
                         colorGlyphCache,
                         registeredUniformRectCache,
+                        separableBlurRectCache,
                     )
                 } finally {
                     childLease.close()
@@ -950,6 +968,7 @@ private class WgpuBackendSession(
                 val solidRect = solidRectCache.counters()
                 val colorGlyph = colorGlyphCache.counters()
                 val registeredUniform = registeredUniformRectCache.counters()
+                val separableBlur = separableBlurRectCache.counters()
                 GPUPreparedSceneNativeCounters(
                     encoders = encoding.encoders,
                     commandBuffers = encoding.finishes,
@@ -973,6 +992,10 @@ private class WgpuBackendSession(
                     solidRectInvariantInvalidations = solidRect.invariantInvalidations,
                     registeredUniformInvariantCreations = registeredUniform.invariantCreations,
                     registeredUniformInvariantReuses = registeredUniform.invariantReuses,
+                    separableBlurInvariantCreations = separableBlur.invariantCreations,
+                    separableBlurInvariantReuses = separableBlur.invariantReuses,
+                    separableBlurIntermediateCreations = separableBlur.intermediateCreations,
+                    separableBlurIntermediateReuses = separableBlur.intermediateReuses,
                     colorGlyphInvariantCreations = colorGlyph.invariantCreations,
                     colorGlyphAtlasCreations = colorGlyph.atlasCreations,
                     colorGlyphAtlasUploads = colorGlyph.atlasUploads,
@@ -1037,6 +1060,14 @@ private class WgpuBackendSession(
                 synchronized(this) { quarantinedRegisteredUniformCaches.remove(cache) }
             }
         }
+        val quarantinedSeparableBlurs = synchronized(this) {
+            quarantinedSeparableBlurCaches.toList()
+        }
+        quarantinedSeparableBlurs.forEach { cache ->
+            runCatching { cache.close() }.onSuccess {
+                synchronized(this) { quarantinedSeparableBlurCaches.remove(cache) }
+            }
+        }
         queueCompletionRuntime.close()
         try {
             runtimeResourceAdapter.close()
@@ -1060,6 +1091,7 @@ private class WgpuBackendSession(
         solidRectCache: GPUWgpu4kSolidRectSessionCache,
         colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
         registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
+        separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
     ) {
         var firstFailure: Throwable? = null
         try {
@@ -1089,6 +1121,12 @@ private class WgpuBackendSession(
             registeredUniformRectCache.close()
         } catch (failure: Throwable) {
             synchronized(this) { quarantinedRegisteredUniformCaches += registeredUniformRectCache }
+            if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+        }
+        try {
+            separableBlurRectCache.close()
+        } catch (failure: Throwable) {
+            synchronized(this) { quarantinedSeparableBlurCaches += separableBlurRectCache }
             if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
         }
         firstFailure?.let { throw it }

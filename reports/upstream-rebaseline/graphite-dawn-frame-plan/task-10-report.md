@@ -465,3 +465,60 @@ not claim arbitrary image-filter DAGs, sampled-image ColorMatrix, HSLA-domain
 matrices, unclamped matrices, blur, or stroke. Blur requires an intermediate
 texture and separable filter passes; stroke belongs to geometry/coverage and
 must not inherit the legacy overlapping center/dimension uniform fields.
+
+## Slice 10F-e bounded separable Gaussian blur
+
+The old `BlurWgsl` benchmark was an analytic radial alpha falloff around one
+point. It did not blur the source image and therefore could not be promoted as
+Skia-like blur evidence. The first prepared blur slice now uses a real bounded
+Gaussian route for `gaussian-blur-photo`:
+
+```text
+solid source -> horizontal Gaussian -> vertical Gaussian + SrcOver -> scene target
+```
+
+The handle-free frame plan carries one immutable `SeparableBlurRect` semantic
+payload, three ordered render tasks, two explicit `FilterTarget` resources, and
+an optional final readback. The target is limited to 2048x2048, sigma is limited
+to `[0.5, 12]`, and the fixed shader loop accepts at most 25 uniform-driven taps.
+The lower sigma bound is explicitly normalized to the supported three-tap
+minimum. No WGSL source or backend handle enters the frame plan.
+
+The public-wgpu4k materializer records all three render passes into one command
+encoder and one command buffer, then performs one queue submission. A session
+cache owns the static source/horizontal/vertical pipelines, sampler, and the two
+serialized intermediate textures. Repeated completion-only frames update only
+their two small uniform buffers and frame-local bind groups; the measured loop
+performs no readback.
+
+Native Apple M2 Max evidence for `gaussian-blur-photo`:
+
+- 1 encoder, 1 command buffer, 1 submit, and 1 validation readback;
+- 2 intermediate rgba8unorm textures, 512,000 bytes total;
+- 64,000/64,000 pixels exactly equal to an independent quantized two-pass CPU
+  reference, maximum channel delta 0;
+- a 1-warmup + 2-measured benchmark reused both invariants and intermediates
+  three times after one creation;
+- the short sample observed 4.0170 ms mean / 248.9433 FPS and passes the local
+  frame gate; it is execution evidence, not a cross-machine performance claim.
+
+Validation commands:
+
+```text
+rtk ./gradlew :gpu-renderer:test --tests 'org.graphiks.kanvas.gpu.renderer.consumer.GPUSeparableBlurRectFrameRecorderTest' --tests 'org.graphiks.kanvas.gpu.renderer.execution.GPUWgpu4kFramePayloadMaterializerDispatcherTest' --console=plain
+rtk ./gradlew :gpu-renderer-scenes:test --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.PreparedSeparableBlurRectSceneFrameTest' --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneOffscreenMainTest.gaussian blur photo uses three prepared passes in one submit' --console=plain
+rtk ./gradlew :gpu-renderer-scenes:renderGpuRendererSceneOffscreen -PsceneId=gaussian-blur-photo -PsceneOutput=/tmp/kanvas-separable-blur-prepared --no-daemon --console=plain
+rtk ./gradlew :gpu-renderer-scenes:runPerFamilyBenchmark -PwarmupFrames=1 -PmeasuredFrames=2 -PperformanceOutput=/tmp/kanvas-family-benchmark-separable-blur --no-daemon --console=plain
+rtk ./gradlew :gpu-renderer:test :gpu-renderer-scenes:test --no-daemon --console=plain
+```
+
+The complete renderer and renderer-scenes suites finished with
+`BUILD SUCCESSFUL`: 53 actionable tasks, 3 executed and 50 up-to-date.
+
+### Explicit non-claim
+
+10F-e does not claim the four-object `blur-radius-ladder`, arbitrary image
+inputs, local reduced-resolution intermediates, blur styles, crop/tile modes,
+multi-node image-filter DAGs, or general Canvas integration. Those extensions
+must keep explicit bounds, budgets, ownership, CPU/GPU evidence, and stable
+refusal diagnostics. Stroke remains a separate Geometry/Coverage route.
