@@ -13,7 +13,6 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
 import org.graphiks.kanvas.gpu.renderer.telemetry.FrameGatePolicy
-import org.graphiks.kanvas.gpu.renderer.telemetry.FrameGateStatus
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 
 /** One benchmarked draw family and the representative scene that exercises it. */
@@ -263,62 +262,13 @@ class PerFamilyBenchmark(
                     measuredFrames,
                 )
             }
-            val unsupported = rectOnlyCommandSequenceUnsupportedReason(scene.commands)
-            if (unsupported != null) {
-                return@runCatching skippedResult(
-                    family = family,
-                    status = BenchmarkFamilyStatus.Unsupported,
-                    warmupFrames = warmupFrames,
-                    measuredFrames = measuredFrames,
-                    reason = "unsupported: ${family.sceneId} $unsupported",
-                )
-            }
-            val width = scene.dimensions.width
-            val height = scene.dimensions.height
-            val drawPlan = prepareRectOnlyDrawPlan(
-                sceneId = family.sceneId,
-                commands = scene.commands,
-                width = width,
-                height = height,
+            skippedResult(
+                family = family,
+                status = BenchmarkFamilyStatus.Unsupported,
+                warmupFrames = warmupFrames,
+                measuredFrames = measuredFrames,
+                reason = "unsupported.prepared-scene.family: ${family.sceneId} has no typed prepared semantic route",
             )
-            session.createOffscreenTarget(
-                GPUOffscreenTargetRequest(width = width, height = height, colorFormat = COLOR_FORMAT),
-            ).use { target ->
-                val renderer = RectOnlyOffscreenRenderer()
-                repeat(warmupFrames) { renderer.renderToPixels(target, drawPlan) }
-                val samples = ArrayList<Long>(measuredFrames)
-                repeat(measuredFrames) {
-                    val frameStart = System.nanoTime()
-                    renderer.renderToPixels(target, drawPlan)
-                    samples += (System.nanoTime() - frameStart).coerceAtLeast(1L)
-                }
-                val statistics = FrameTimeStatistics.of(samples)
-                val gateResult = gate.evaluate(family.family, statistics.meanMs)
-                val diagnostics = buildList {
-                    add("sampled ${family.family} scene=${family.sceneId} via WebGPU offscreen render+readback")
-                    add(
-                        "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
-                            "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
-                            "maxMs=${statistics.maxMs.fmt()}",
-                    )
-                    add("frameGateStatus=${gateResult.status.wireName}")
-                    if (gateResult.status != FrameGateStatus.Pass) {
-                        add(
-                            "BUDGET MISS: ${family.family} ${gateResult.status.wireName} " +
-                                "fps=${statistics.fps.fmt()} exceeds ${gate.targetFps}fps target",
-                        )
-                    }
-                }
-                FamilyBenchmarkResult(
-                    family = family.family,
-                    sceneId = family.sceneId,
-                    status = BenchmarkFamilyStatus.Sampled,
-                    warmupFrames = warmupFrames,
-                    measuredFrames = measuredFrames,
-                    statistics = statistics,
-                    diagnostics = diagnostics,
-                )
-            }
         }.getOrElse { error ->
             skippedResult(
                 family = family,

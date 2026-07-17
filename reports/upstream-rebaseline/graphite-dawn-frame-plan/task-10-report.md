@@ -258,6 +258,37 @@ observations:
 - 2 retention registrations, 2 completions, and 0 retention quarantines;
 - 0 target closes before session close and exactly 1 after session close.
 
+## Slice 10F-b scene-consumer migration evidence
+
+`PreparedSceneFrameRecorder` is now the single typed scene-to-task selector for the
+currently executable prepared families: solid rectangles, registered uniform
+rectangles (gradients, color matrix and registered runtime effect), axis-aligned
+stroke rectangles, separable blur rectangles, and COLRv0 color glyphs. Unknown
+families return `unsupported.prepared-scene.family`; the selector never creates an
+immediate target or encodes work.
+
+`OffscreenFrameSampler` now uses one reusable `GPUPreparedSceneFrameSession` for
+every selected family. Measured frames request completion only and the sole final
+validation frame requests planned RGBA readback. `PerFamilyBenchmark` no longer
+measures an immediate render-plus-readback fallback: families without a typed
+prepared semantic route are reported as unsupported, so their numbers cannot be
+mistaken for the target architecture.
+
+The product offscreen renderer still retains the old immediate path for the
+remaining path, image, A8 text, vertices, layer, and composite scenes. Removing it
+now would regress committed pixel evidence. Those exact families are the Task 12
+migration slices; the legacy path remains an explicit non-completion item and is
+not counted as Task 10 performance evidence.
+
+Validation:
+
+```text
+rtk ./gradlew :gpu-renderer-scenes:test --tests 'org.graphiks.kanvas.gpu.renderer.scenes.offscreen.PreparedSceneFrameRecorderTest'
+rtk ./gradlew :gpu-renderer-scenes:test
+```
+
+Observed result: the selector tests and the complete 283-test scene module pass.
+
 Validation commands:
 
 ```text
