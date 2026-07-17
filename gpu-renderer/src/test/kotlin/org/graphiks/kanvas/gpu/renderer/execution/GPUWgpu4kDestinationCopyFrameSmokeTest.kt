@@ -92,6 +92,55 @@ import org.graphiks.wgsl.parser.parseWgslResult
 
 class GPUWgpu4kDestinationCopyFrameSmokeTest {
     @Test
+    fun `prepared scene executes two ordered destination consumers in one submission`() {
+        val backendSession = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backendSession != null)
+        backendSession!!
+        val runtimeCapabilities = requireNotNull(backendSession.capabilities)
+        val generation = GPUDeviceGenerationID(
+            runtimeCapabilities.snapshotId.substringAfterLast('-').toLong(),
+        )
+        val requestId = GPUReadbackRequestID("readback.prepared.destination-twice")
+        val tasks = destinationCopyTaskList(
+            generation = generation,
+            capabilities = runtimeCapabilities,
+            frameId = GPUFrameID(10_750),
+            readbackRequestId = requestId,
+            secondBlendMode = GPUBlendMode.DIFFERENCE,
+        )
+        val session = backendSession.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(4, 4, "rgba8unorm"),
+        )
+        try {
+            val terminal = session.renderFrame(
+                tasks,
+                GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+            ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                terminal.outcome,
+                "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
+            )
+            assertContentEquals(
+                expectedTwoDifferencePixels(),
+                assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes,
+            )
+            val counters = session.nativeCounters()
+            assertEquals(1L, counters.targetCreations)
+            assertEquals(1L, counters.targetNativeUses)
+            assertEquals(1L, counters.submits)
+            assertEquals(1L, counters.readbackCopies)
+        } finally {
+            try {
+                session.close()
+            } finally {
+                GPUBackendRuntimeNativeFactory.dispose()
+            }
+        }
+    }
+
+    @Test
     fun `destination materializer assembles every canonical full coverage formula`() {
         GPUBlendMode.entries.filterNot { it == GPUBlendMode.DST }.forEach { mode ->
             val formula = assertNotNull(
@@ -520,6 +569,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         readbackRequestId: GPUReadbackRequestID =
             GPUReadbackRequestID("readback.destination-copy"),
         blendMode: GPUBlendMode = GPUBlendMode.DIFFERENCE,
+        secondBlendMode: GPUBlendMode? = null,
     ): GPUTaskList {
         val seal = GPUFrameCapabilitySeal.capture(frameId, generation, capabilities)
         val recordingId = GPURecordingID("recording.destination-copy")
@@ -531,7 +581,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             color = listOf(0f, 0f, 1f, 1f),
             blendPlan = GPUBlendPlan.ShaderBlendNoDstRead(
                 mode = GPUBlendMode.SRC,
-                formulaId = "source@v1",
+                formulaId = "src@v1",
                 sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
             ),
             passId = "pass.destination-copy",
@@ -551,6 +601,23 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             ),
             passId = "pass.destination-copy",
         )
+        val secondConsumerPacket = secondBlendMode?.let { mode ->
+            packet(
+                id = "packet.consumer.second",
+                commandId = 3,
+                task = "consumer-second",
+                rect = COPY_BOUNDS,
+                color = listOf(0f, 1f, 0f, 1f),
+                blendPlan = GPUBlendPlan.ShaderBlendWithDstRead(
+                    mode = mode,
+                    formulaId = requireNotNull(
+                        GPUBlendFormulaLibrary.formulaFor(mode, GPUBlendCoverageKind.Full),
+                    ).formulaId,
+                    sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+                ),
+                passId = "pass.destination-copy",
+            )
+        }
         val prepare = GPUTask.PrepareResources(
             taskId = GPUTaskID("task.prepare"),
             recordingId = recordingId,
@@ -574,6 +641,22 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
                     16,
                     "destination-snapshot",
                 ),
+                *listOfNotNull(
+                    secondConsumerPacket?.let {
+                        GPUResourcePreparationRequest(
+                            SNAPSHOT_SECOND,
+                            GPUFrameTextureDescriptor(COPY_BOUNDS, RGBA8, 1),
+                            GPUFrameResourceRole.DestinationSnapshot,
+                            setOf(
+                                GPUFrameResourceUsage.CopyDestination,
+                                GPUFrameResourceUsage.TextureBinding,
+                            ),
+                            GPUFrameResourceLifetime.FrameLocal,
+                            16,
+                            "destination-snapshot-second",
+                        )
+                    },
+                ).toTypedArray(),
                 GPUResourcePreparationRequest(
                     STAGING,
                     GPUFrameBufferDescriptor(1_024, 4),
@@ -592,9 +675,17 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             target = TARGET,
             loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
             samplePlan = GPUSamplePlan.SingleSampleFrame,
-            drawPackets = listOfNotNull(background.takeIf { includeBackground }, consumerPacket),
+            drawPackets = listOfNotNull(
+                background.takeIf { includeBackground },
+                consumerPacket,
+                secondConsumerPacket,
+            ),
             batchEligibilityByPacketId =
-            listOfNotNull(background.takeIf { includeBackground }, consumerPacket).associate { packet ->
+            listOfNotNull(
+                background.takeIf { includeBackground },
+                consumerPacket,
+                secondConsumerPacket,
+            ).associate { packet ->
                 packet.packetId to GPUPassBatchEligibility(
                     kind = GPUPassBatchKind.SolidFill,
                     queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
@@ -607,13 +698,21 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             packetId = consumerPacket.packetId,
             commandId = GPUDrawCommandID(consumerPacket.commandIdValue),
         )
+        val secondConsumer = secondConsumerPacket?.let { packet ->
+            GPUDestinationSnapshotConsumerRef(
+                groupingCommandId = "draw.consumer.second",
+                renderTaskId = render.taskId,
+                packetId = packet.packetId,
+                commandId = GPUDrawCommandID(packet.commandIdValue),
+            )
+        }
         val destination = GPUTask.DestinationSnapshots(
             taskId = GPUTaskID("task.copy.destination"),
             recordingId = recordingId,
             phase = GPUTaskPhase.Copy,
             payload = GPUDestinationSnapshotTaskPayload(
                 grouping = GPUDestinationSnapshotGroupingResult(
-                    groups = listOf(
+                    groups = listOfNotNull(
                         GPUDestinationSnapshotGroup(
                             key = snapshotKey(generation),
                             logicalBounds = COPY_BOUNDS,
@@ -623,15 +722,29 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
                             copiedBytes = 16,
                             decisionDump = listOf("native-planner-smoke"),
                         ),
+                        secondConsumer?.let {
+                            GPUDestinationSnapshotGroup(
+                                key = snapshotKey(generation),
+                                logicalBounds = COPY_BOUNDS,
+                                members = listOf(
+                                    GPUDestinationReadMember("draw.consumer.second", 1, COPY_BOUNDS),
+                                ),
+                                copiedBytes = 16,
+                                decisionDump = listOf("native-planner-smoke-second"),
+                            )
+                        },
                     ),
-                    materializations = listOf(
+                    materializations = listOfNotNull(
                         GPUDestinationSnapshotMaterialization.TextureCopy(0, COPY_BOUNDS),
+                        secondConsumer?.let {
+                            GPUDestinationSnapshotMaterialization.TextureCopy(1, COPY_BOUNDS)
+                        },
                     ),
-                    totalCopiedBytes = 16,
+                    totalCopiedBytes = if (secondConsumer == null) 16 else 32,
                     refusals = emptyList(),
                     decisionDump = listOf("native-planner-smoke"),
                 ),
-                operations = listOf(
+                operations = listOfNotNull(
                     GPUDestinationSnapshotOperation.TextureCopy(
                         groupIndex = 0,
                         source = TARGET,
@@ -640,6 +753,16 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
                         copyLayout = GPUTextureCopyLayout(256, 2),
                         consumers = listOf(consumer),
                     ),
+                    secondConsumer?.let {
+                        GPUDestinationSnapshotOperation.TextureCopy(
+                            groupIndex = 1,
+                            source = TARGET,
+                            snapshot = SNAPSHOT_SECOND,
+                            logicalBounds = COPY_BOUNDS,
+                            copyLayout = GPUTextureCopyLayout(256, 2),
+                            consumers = listOf(it),
+                        )
+                    },
                 ),
             ),
         )
@@ -994,6 +1117,20 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         }
     }
 
+    private fun expectedTwoDifferencePixels(): ByteArray = ByteArray(64).also { bytes ->
+        repeat(16) { pixel ->
+            bytes[pixel * 4 + 2] = 0xff.toByte()
+            bytes[pixel * 4 + 3] = 0xff.toByte()
+        }
+        for (y in 1..2) for (x in 1..2) {
+            val offset = (y * 4 + x) * 4
+            bytes[offset] = 0xff.toByte()
+            bytes[offset + 1] = 0xff.toByte()
+            bytes[offset + 2] = 0xff.toByte()
+            bytes[offset + 3] = 0xff.toByte()
+        }
+    }
+
     private fun expectedAdvancedBlendPixels(mode: GPUBlendMode): ByteArray {
         val blended = GPUBlendCpuOracle.blendAtFullCoverage(
             mode,
@@ -1134,6 +1271,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
     private companion object {
         val TARGET = GPUFrameTargetRef("target.scene")
         val SNAPSHOT = GPUFrameTextureRef("texture.destination-snapshot")
+        val SNAPSHOT_SECOND = GPUFrameTextureRef("texture.destination-snapshot.second")
         val STAGING = GPUFrameBufferRef("buffer.readback")
         val TARGET_BOUNDS = GPUPixelBounds(0, 0, 4, 4)
         val COPY_BOUNDS = GPUPixelBounds(1, 1, 3, 3)

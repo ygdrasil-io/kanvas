@@ -91,10 +91,17 @@ texture/view without taking ownership, and submits the destination copy and fina
 Native session evidence proves exact pixels, one target creation/use, one submit, one readback copy,
 zero active payloads after completion, and target close only when the session closes.
 
-The remaining 10D work is to support several consumers/snapshots and mixed direct plus
-destination-reading packets in one frame, and reuse session-owned scratch textures without hidden
-CPU work. Scalar/LCD coverage still requires its separately bound coverage resource topology. No
-global 10D completion or performance claim is made here.
+The prepared route also executes several conservative snapshot groups in one frame. Native evidence
+uses an opaque blue direct `Src` packet followed by two bounded `Difference` consumers over the same
+2x2 region. The planner produces `render -> copy -> render -> copy -> render -> readback`; the
+materializer binds two distinct prepared snapshot allocations and the second consumer observes the
+first consumer's result. The final center is white, with one target use, one encoder, one command
+buffer, one submit, and one readback.
+
+The remaining 10D work is to reuse session-owned native scratch textures instead of recreating their
+backings, broaden mixed direct packets beyond exact full-coverage `Src`, and bind the separately
+prepared scalar/LCD coverage resource topology. No global 10D completion or performance claim is
+made here.
 
 ## Slice 10E persistent MSAA continuation evidence
 

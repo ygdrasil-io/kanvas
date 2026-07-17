@@ -153,6 +153,15 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
             materialized = true
         }
 
+        if (framePlan.steps.count { it is GPUFrameStep.CopyDestinationStep } > 1) {
+            return materializeMultipleDestinationConsumers(
+                framePlan,
+                encoderPlan,
+                resources,
+                generationSeal,
+            )
+        }
+
         val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         if (renders.size !in 1..2) {
             return refused(
@@ -735,6 +744,555 @@ internal class GPUWgpu4kDestinationCopyFramePayloadMaterializer(
             refused(
                 "failed.native-destination-copy.materialization",
                 "Public wgpu4k destination-copy materialization failed: " +
+                    "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
+            )
+        }
+    }
+
+    private fun materializeMultipleDestinationConsumers(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        data class ConsumerBinding(
+            val copy: GPUFrameStep.CopyDestinationStep,
+            val render: GPUFrameStep.RenderPassStep,
+            val semantic: GPUDrawSemanticPayload.SolidRect,
+            val shaderSource: String,
+            val bounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds,
+            val backingWidth: Int,
+            val backingHeight: Int,
+        )
+        data class SnapshotNative(
+            val binding: ConsumerBinding,
+            val texture: io.ygdrasil.webgpu.GPUTexture,
+            val view: io.ygdrasil.webgpu.GPUTextureView,
+        )
+        data class DrawNative(
+            val render: GPUFrameStep.RenderPassStep,
+            val semantic: GPUDrawSemanticPayload.SolidRect,
+            val uniform: io.ygdrasil.webgpu.GPUBuffer,
+            val layout: io.ygdrasil.webgpu.GPUBindGroupLayout,
+            val shader: io.ygdrasil.webgpu.GPUShaderModule,
+            val pipelineLayout: io.ygdrasil.webgpu.GPUPipelineLayout,
+            val pipeline: io.ygdrasil.webgpu.GPURenderPipeline,
+            val bindGroup: io.ygdrasil.webgpu.GPUBindGroup,
+        )
+
+        val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val copies = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
+        val readback = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().singleOrNull()
+            ?: return refused(
+                "unsupported.native-destination-copy.readback-count",
+                "A multi-consumer destination frame requires exactly one final readback.",
+            )
+        if (copies.size < 2 || renders.size < copies.size) {
+            return refused(
+                "unsupported.native-destination-copy.multi-consumer-shape",
+                "A multi-consumer destination frame requires one or more ordered render segments per copy.",
+            )
+        }
+        if (renders.any { it.samplePlan != GPUSamplePlan.SingleSampleFrame || it.drawPackets.size != 1 }) {
+            return refused(
+                "unsupported.native-destination-copy.multi-render-shape",
+                "The first multi-consumer route requires single-sample render segments with one exact packet.",
+            )
+        }
+
+        val declarations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap { it.requests }
+        val target = renders.first().target
+        val targetPreparation = declarations.singleOrNull { it.resource == target }
+            ?: return refused(
+                "unsupported.native-destination-copy.target-declaration",
+                "The canonical target needs one preparation declaration.",
+            )
+        val targetDescriptor = targetPreparation.descriptor as? GPUFrameTextureDescriptor
+            ?: return refused(
+                "unsupported.native-destination-copy.target-declaration",
+                "The canonical target declaration must be a texture.",
+            )
+        val targetBounds = targetDescriptor.logicalBounds
+        if (renders.any { it.target != target } || readback.source != target ||
+            targetPreparation.role != GPUFrameResourceRole.SceneTarget ||
+            targetDescriptor.logicalBounds.left != 0 || targetDescriptor.logicalBounds.top != 0 ||
+            targetDescriptor.format.value != RGBA8_UNORM || targetDescriptor.sampleCount != 1 ||
+            targetPreparation.usages != setOf(
+                GPUFrameResourceUsage.RenderAttachment,
+                GPUFrameResourceUsage.CopySource,
+            )
+        ) {
+            return refused(
+                "unsupported.native-destination-copy.target-topology",
+                "Every multi-consumer segment must share one origin-zero rgba8unorm target.",
+            )
+        }
+
+        fun preparedTexture(resource: org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef) =
+            resources.ordinaryResources.singleOrNull {
+                it.logicalResource == resource &&
+                    it.deviceGeneration == generationSeal.deviceGeneration &&
+                    it.resourceGeneration == generationSeal.resourceGenerations[resource] &&
+                    it.concreteResource is GPUPreparedConcreteResourceRef.Texture
+            }
+        if (preparedTexture(target) == null) {
+            return refused(
+                "unsupported.native-destination-copy.prepared-target",
+                "The canonical target preparation evidence is missing or substituted.",
+            )
+        }
+
+        val consumerBindings = mutableListOf<ConsumerBinding>()
+        val consumerPacketIds = mutableSetOf<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID>()
+        val snapshotResources = mutableSetOf<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef>()
+        for (copy in copies) {
+            val consumer = copy.consumers.singleOrNull()
+                ?: return refused(
+                    "unsupported.native-destination-copy.consumer-ambiguous",
+                    "Each bounded destination snapshot requires one exact consumer.",
+                )
+            if (!consumerPacketIds.add(consumer.packetId) || !snapshotResources.add(copy.snapshot)) {
+                return refused(
+                    "unsupported.native-destination-copy.consumer-ambiguous",
+                    "Destination consumers and snapshot resources must be unique within one frame.",
+                )
+            }
+            val render = renders.singleOrNull { candidate ->
+                consumer.renderTaskId in candidate.sourceTaskIds &&
+                    candidate.drawPackets.single().packetId == consumer.packetId
+            } ?: return refused(
+                "unsupported.native-destination-copy.consumer-binding",
+                "Each destination consumer must own one exact split render segment.",
+            )
+            val packet = render.drawPackets.single()
+            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.SolidRect
+                ?: return refused(
+                    "unsupported.native-destination-copy.consumer-semantic",
+                    "Every destination consumer requires one canonical solid-rectangle payload.",
+                )
+            if (packet.commandIdValue != consumer.commandId.value ||
+                semantic.payloadRef.commandIdValue != consumer.commandId.value || !canonicalUniform(semantic)
+            ) {
+                return refused(
+                    "unsupported.native-destination-copy.consumer-binding",
+                    "Destination consumer command and semantic identities must match their packet.",
+                )
+            }
+            val shaderSource = packet.blendPlan?.let(::destinationSolidRectWgsl)
+                ?: return refused(
+                    "unsupported.native-destination-copy.consumer-blend",
+                    "Every destination consumer requires one canonical full-coverage formula.",
+                )
+            val snapshotPreparation = declarations.singleOrNull { it.resource == copy.snapshot }
+                ?: return refused(
+                    "unsupported.native-destination-copy.snapshot-declaration",
+                    "Each destination snapshot needs one preparation declaration.",
+                )
+            val snapshotDescriptor = snapshotPreparation.descriptor as? GPUFrameTextureDescriptor
+                ?: return refused(
+                    "unsupported.native-destination-copy.snapshot-declaration",
+                    "Each destination snapshot declaration must be a texture.",
+                )
+            if (copy.source != target || snapshotPreparation.role != GPUFrameResourceRole.DestinationSnapshot ||
+                snapshotDescriptor.logicalBounds != copy.logicalBounds ||
+                snapshotDescriptor.format != targetDescriptor.format || snapshotDescriptor.sampleCount != 1 ||
+                snapshotPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.TextureBinding,
+                )
+            ) {
+                return refused(
+                    "unsupported.native-destination-copy.snapshot-declaration",
+                    "Each snapshot must exactly match its bounded logical destination-copy region.",
+                )
+            }
+            val bounds = copy.logicalBounds
+            if (bounds.left < targetBounds.left || bounds.top < targetBounds.top ||
+                bounds.right > targetBounds.right || bounds.bottom > targetBounds.bottom || bounds.isEmpty
+            ) {
+                return refused(
+                    "unsupported.native-destination-copy.source-bounds",
+                    "Every destination-copy source region must be contained by the canonical target.",
+                )
+            }
+            val sourceKey = copy.sourceKey
+            if (sourceKey.target.value != target.value ||
+                sourceKey.targetGeneration != generationSeal.targetGeneration ||
+                sourceKey.deviceGeneration != generationSeal.deviceGeneration ||
+                sourceKey.format != targetDescriptor.format ||
+                sourceKey.colorInterpretation != readback.request.outputColorInterpretation ||
+                sourceKey.sampleContinuation != null || sourceKey.sourceIntermediate != null
+            ) {
+                return refused(
+                    "unsupported.native-destination-copy.source-key",
+                    "Every snapshot source key must identify the exact canonical target.",
+                )
+            }
+            val preparedSnapshot = preparedTexture(copy.snapshot)
+                ?: return refused(
+                    "unsupported.native-destination-copy.prepared-snapshot",
+                    "Prepared destination snapshot evidence is missing or substituted.",
+                )
+            val allocation = preparedSnapshot.textureAllocation
+                ?: return refused(
+                    "unsupported.native-destination-copy.snapshot-backing",
+                    "Every destination snapshot must retain logical and physical lease evidence.",
+                )
+            if (allocation.logicalBounds != bounds || allocation.format != snapshotDescriptor.format ||
+                allocation.sampleCount != 1 || allocation.usages != snapshotPreparation.usages ||
+                allocation.backingWidth < bounds.width || allocation.backingHeight < bounds.height
+            ) {
+                return refused(
+                    "unsupported.native-destination-copy.snapshot-backing",
+                    "A destination snapshot lease does not contain its logical copy extent.",
+                )
+            }
+            val copyIndex = framePlan.steps.indexOf(copy)
+            val renderIndex = framePlan.steps.indexOf(render)
+            if (copyIndex >= renderIndex) {
+                return refused(
+                    "unsupported.native-destination-copy.scope-order",
+                    "Each destination copy must immediately precede its consumer segment.",
+                )
+            }
+            consumerBindings += ConsumerBinding(
+                copy,
+                render,
+                semantic,
+                shaderSource,
+                bounds,
+                allocation.backingWidth,
+                allocation.backingHeight,
+            )
+        }
+
+        val directRenders = renders.filterNot { render -> consumerBindings.any { it.render == render } }
+        for (render in directRenders) {
+            val packet = render.drawPackets.single()
+            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.SolidRect
+                ?: return refused(
+                    "unsupported.native-destination-copy.direct-semantic",
+                    "Mixed direct destination frames require canonical solid-rectangle packets.",
+                )
+            val blend = packet.blendPlan as? GPUBlendPlan.ShaderBlendNoDstRead
+            if (!canonicalUniform(semantic) ||
+                semantic.payloadRef.commandIdValue != packet.commandIdValue ||
+                blend?.mode?.gpuLabel != "src" ||
+                blend.formulaId != "src@v1" || blend.sourceCoverageEncoding != GPUSourceCoverageEncoding.None
+            ) {
+                return refused(
+                    "unsupported.native-destination-copy.direct-blend",
+                    "The first mixed route accepts only exact full-coverage Src direct packets.",
+                )
+            }
+        }
+
+        val expectedScopes = framePlan.steps.mapIndexedNotNull { index, step ->
+            when (step) {
+                is GPUFrameStep.RenderPassStep -> index to GPUEncoderOperationKind.Render
+                is GPUFrameStep.CopyDestinationStep -> index to GPUEncoderOperationKind.CopyDestination
+                is GPUFrameStep.ReadbackCopyStep -> index to GPUEncoderOperationKind.Readback
+                else -> null
+            }
+        }
+        if (encoderPlan.scopes.map { it.sourceStepIndex to it.operationKind } != expectedScopes) {
+            return refused(
+                "unsupported.native-destination-copy.encoder-plan",
+                "The encoder plan must preserve every split render, destination copy, and final readback.",
+            )
+        }
+        val output = resources.outputOwnedReadbacks.singleOrNull()
+            ?: return refused(
+                "unsupported.native-destination-copy.readback-output",
+                "A multi-consumer destination frame requires one output-owned staging lease.",
+            )
+        if (output.request != readback.request || readback.request.sourceBounds != targetBounds ||
+            output.layout.width != targetBounds.width || output.layout.height != targetBounds.height ||
+            output.layout.unpaddedBytesPerRow != targetBounds.width.toLong() * RGBA_BYTES_PER_PIXEL ||
+            output.layout.totalBufferBytes > output.stagingLease.backingBufferBytes
+        ) {
+            return refused(
+                "unsupported.native-destination-copy.readback-layout",
+                "The final output must read the exact canonical target as rgba8.",
+            )
+        }
+        preparedSceneTarget?.let { prepared ->
+            if (prepared.width != targetBounds.width || prepared.height != targetBounds.height ||
+                prepared.deviceGeneration != generationSeal.deviceGeneration ||
+                prepared.targetGeneration != generationSeal.targetGeneration
+            ) {
+                return refused(
+                    "unsupported.native-destination-copy.prepared-scene-target-incompatible",
+                    "The session-owned target does not match the sealed multi-consumer frame.",
+                )
+            }
+        }
+        val loadsByRender = renders.associateWith { render ->
+            render.loadStore.toNativeLoadOperation()
+                ?: return refused(
+                    "unsupported.native-destination-copy.load-operation",
+                    "Every split render segment requires an exact clear or load operation.",
+                )
+        }
+
+        synchronized(this) {
+            if (closed) {
+                return refused(
+                    "unsupported.native-destination-copy.materializer-state",
+                    "The destination-copy materializer closed during validation.",
+                )
+            }
+            val firstBinding = consumerBindings.first()
+            logicalBounds = firstBinding.bounds
+            backingWidth = firstBinding.backingWidth
+            backingHeight = firstBinding.backingHeight
+            sourceOriginX = firstBinding.bounds.left
+            sourceOriginY = firstBinding.bounds.top
+            copyWidth = firstBinding.bounds.width
+            copyHeight = firstBinding.bounds.height
+            materializing = true
+        }
+        return try {
+            val preparedNativeTarget = preparedSceneTarget?.borrow()
+            val targetTexture = preparedNativeTarget?.first ?: device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(targetBounds.width.toUInt(), targetBounds.height.toUInt()),
+                    format = GPUTextureFormat.RGBA8Unorm,
+                    usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopySrc,
+                    label = "Kanvas.frame.destinationCopy.multi.target",
+                ),
+            ).tracked()
+            val targetView = preparedNativeTarget?.second ?: targetTexture.createView().tracked()
+            val ownsCanonicalTarget = preparedNativeTarget == null
+            val snapshots = consumerBindings.mapIndexed { index, binding ->
+                val texture = device.createTexture(
+                    TextureDescriptor(
+                        size = Extent3D(binding.backingWidth.toUInt(), binding.backingHeight.toUInt()),
+                        format = GPUTextureFormat.RGBA8Unorm,
+                        usage = GPUTextureUsage.CopyDst or GPUTextureUsage.TextureBinding,
+                        label = "Kanvas.frame.destinationCopy.multi.snapshot.$index",
+                    ),
+                ).tracked()
+                SnapshotNative(binding, texture, texture.createView().tracked())
+            }
+            val snapshotByRender = snapshots.associateBy { it.binding.render }
+            val draws = renders.mapIndexed { index, render ->
+                val semantic = render.drawPackets.single().semanticPayload as GPUDrawSemanticPayload.SolidRect
+                val snapshot = snapshotByRender[render]
+                val uniformBytes = if (snapshot == null) {
+                    semantic.payloadRef.uniformBlock!!.bytes.toByteArray()
+                } else {
+                    destinationUniformBytes(
+                        semantic,
+                        snapshot.binding.bounds,
+                        snapshot.binding.backingWidth,
+                        snapshot.binding.backingHeight,
+                    )
+                }
+                val uniform = createUniform(
+                    "Kanvas.frame.destinationCopy.multi.uniform.$index",
+                    uniformBytes,
+                )
+                val layout = device.createBindGroupLayout(
+                    BindGroupLayoutDescriptor(
+                        label = "Kanvas.frame.destinationCopy.multi.layout.$index",
+                        entries = buildList {
+                            add(uniformLayoutEntry())
+                            if (snapshot != null) {
+                                add(
+                                    BindGroupLayoutEntry(
+                                        binding = 1u,
+                                        visibility = GPUShaderStage.Fragment,
+                                        texture = TextureBindingLayout(
+                                            sampleType = GPUTextureSampleType.Float,
+                                            viewDimension = GPUTextureViewDimension.TwoD,
+                                            multisampled = false,
+                                        ),
+                                    ),
+                                )
+                            }
+                        },
+                    ),
+                ).tracked()
+                val shader = device.createShaderModule(
+                    ShaderModuleDescriptor(
+                        label = "Kanvas.frame.destinationCopy.multi.shader.$index",
+                        code = snapshot?.binding?.shaderSource ?: SOLID_WGSL,
+                    ),
+                ).tracked()
+                val pipelineLayout = device.createPipelineLayout(
+                    PipelineLayoutDescriptor(
+                        label = "Kanvas.frame.destinationCopy.multi.pipelineLayout.$index",
+                        bindGroupLayouts = listOf(layout),
+                    ),
+                ).tracked()
+                val pipeline = createPipeline(
+                    "Kanvas.frame.destinationCopy.multi.pipeline.$index",
+                    pipelineLayout,
+                    shader,
+                )
+                val bindGroup = device.createBindGroup(
+                    BindGroupDescriptor(
+                        label = "Kanvas.frame.destinationCopy.multi.bindGroup.$index",
+                        layout = layout,
+                        entries = buildList {
+                            add(
+                                uniformEntry(
+                                    uniform,
+                                    if (snapshot == null) CANONICAL_UNIFORM_BYTES else DESTINATION_UNIFORM_BYTES,
+                                ),
+                            )
+                            if (snapshot != null) add(BindGroupEntry(binding = 1u, resource = snapshot.view))
+                        },
+                    ),
+                ).tracked()
+                DrawNative(render, semantic, uniform, layout, shader, pipelineLayout, pipeline, bindGroup)
+            }
+            val staging = device.createBuffer(
+                BufferDescriptor(
+                    size = output.stagingLease.backingBufferBytes.toULong(),
+                    usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                    label = "Kanvas.frame.destinationCopy.multi.readback",
+                ),
+            ).tracked()
+            val borrowed = GPUPreparedNativeOperandOwnership.Borrowed
+            val completionOwned = GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion
+            val operands = mutableMapOf<Int, GPUPreparedNativeScopeOperand>()
+            for (draw in draws) {
+                val stepIndex = framePlan.steps.indexOf(draw.render)
+                val scope = encoderPlan.scopes.single { it.sourceStepIndex == stepIndex }
+                operands[stepIndex] = renderOperand(
+                    scope,
+                    targetView,
+                    draw.pipeline,
+                    draw.bindGroup,
+                    draw.semantic,
+                    loadsByRender.getValue(draw.render),
+                    generationSeal.deviceGeneration,
+                )
+            }
+            for (snapshot in snapshots) {
+                val stepIndex = framePlan.steps.indexOf(snapshot.binding.copy)
+                operands[stepIndex] = GPUPreparedNativeScopeOperand.Copy(
+                    sourceStepIndex = stepIndex,
+                    operationKind = GPUEncoderOperationKind.CopyDestination,
+                    source = GPUPreparedNativeTextureOperand(
+                        targetTexture,
+                        generationSeal.deviceGeneration,
+                        borrowed,
+                    ),
+                    destination = GPUPreparedNativeTextureOperand(
+                        snapshot.texture,
+                        generationSeal.deviceGeneration,
+                        borrowed,
+                    ),
+                    textureLayout = GPUPreparedNativeTextureCopyLayout(
+                        sourceOriginX = snapshot.binding.bounds.left,
+                        sourceOriginY = snapshot.binding.bounds.top,
+                        destinationOriginX = 0,
+                        destinationOriginY = 0,
+                        width = snapshot.binding.bounds.width,
+                        height = snapshot.binding.bounds.height,
+                    ),
+                )
+            }
+            val readbackIndex = framePlan.steps.indexOf(readback)
+            operands[readbackIndex] = GPUPreparedNativeScopeOperand.Readback(
+                sourceStepIndex = readbackIndex,
+                source = GPUPreparedNativeTextureOperand(
+                    targetTexture,
+                    generationSeal.deviceGeneration,
+                    borrowed,
+                ),
+                destination = GPUPreparedNativeBufferOperand(
+                    staging,
+                    generationSeal.deviceGeneration,
+                    GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
+                ),
+                layout = GPUPreparedNativeReadbackLayout(
+                    originX = 0,
+                    originY = 0,
+                    width = output.layout.width,
+                    height = output.layout.height,
+                    bytesPerRow = output.layout.paddedBytesPerRow,
+                    rowsPerImage = output.layout.rowsPerImage,
+                    bufferOffset = output.layout.bufferOffset,
+                    mappedSize = output.layout.totalBufferBytes,
+                    format = GPUTextureFormat.RGBA8Unorm,
+                ),
+            )
+            val scopeOperands = encoderPlan.scopes.map { scope ->
+                requireNotNull(operands[scope.sourceStepIndex])
+            }
+            val payload = GPUPreparedNativeFramePayload(
+                identity = GPUPreparedNativeFrameIdentity(
+                    framePlan.frameId,
+                    encoderPlan.contextIdentity,
+                    encoderPlan.planId,
+                    generationSeal.deviceGeneration,
+                    generationSeal.targetGeneration,
+                    encoderPlan.scopes.map { scope ->
+                        GPUPreparedNativeScopeKey(
+                            scope.sourceStepIndex,
+                            scope.operationKind,
+                            scope.resourceGenerationLabels,
+                            scope.nativeOperandKeys,
+                        )
+                    },
+                ),
+                scopeOperands = scopeOperands,
+                scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys },
+                auxiliaryOwnedHandles = buildList {
+                    add(
+                        GPUPreparedNativeAuxiliaryHandle(
+                            GPUPreparedNativeCompletionAnchor(
+                                buildList {
+                                    if (ownsCanonicalTarget) add(targetView)
+                                    draws.forEach { add(it.pipeline) }
+                                    draws.forEach { add(it.bindGroup) }
+                                },
+                            ),
+                            completionOwned,
+                        ),
+                    )
+                    snapshots.forEach {
+                        add(GPUPreparedNativeAuxiliaryHandle(it.view, completionOwned))
+                    }
+                    draws.forEach { add(GPUPreparedNativeAuxiliaryHandle(it.uniform, completionOwned)) }
+                    draws.forEach { add(GPUPreparedNativeAuxiliaryHandle(it.pipelineLayout, completionOwned)) }
+                    draws.forEach { add(GPUPreparedNativeAuxiliaryHandle(it.shader, completionOwned)) }
+                    draws.forEach { add(GPUPreparedNativeAuxiliaryHandle(it.layout, completionOwned)) }
+                    add(
+                        GPUPreparedNativeAuxiliaryHandle(
+                            GPUPreparedNativeCompletionAnchor(
+                                buildList {
+                                    if (ownsCanonicalTarget) add(targetTexture)
+                                    snapshots.forEach { add(it.texture) }
+                                },
+                            ),
+                            completionOwned,
+                        ),
+                    )
+                },
+            )
+            val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
+                GPUPreparedNativeFrameDraft(payload),
+            )
+            synchronized(this) {
+                check(!closed) { "Destination-copy materializer closed during materialization" }
+                preRegistrationHandles.transferAll()
+                materializing = false
+            }
+            result
+        } catch (failure: Throwable) {
+            synchronized(this) {
+                materializing = false
+                preRegistrationHandles.closeRetainingFailures()
+            }
+            refused(
+                "failed.native-destination-copy.materialization",
+                "Public wgpu4k multi-consumer materialization failed: " +
                     "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
             )
         }
