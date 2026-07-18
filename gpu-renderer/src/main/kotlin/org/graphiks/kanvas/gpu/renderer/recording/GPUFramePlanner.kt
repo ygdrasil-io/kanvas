@@ -990,6 +990,8 @@ object GPUFramePlanner {
         GPUDrawPacketRole.DepthOnly,
         GPUDrawPacketRole.StencilProducer,
         GPUDrawPacketRole.StencilConsumer,
+        GPUDrawPacketRole.PathStencilProducer,
+        GPUDrawPacketRole.PathStencilCover,
         GPUDrawPacketRole.ClipProducer,
         GPUDrawPacketRole.Clear,
         GPUDrawPacketRole.Composite,

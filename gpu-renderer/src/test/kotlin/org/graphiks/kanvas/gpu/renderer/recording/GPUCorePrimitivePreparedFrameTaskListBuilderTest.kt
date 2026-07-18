@@ -50,14 +50,18 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
@@ -659,30 +663,404 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `stencil edge fan refuses before frame memory planning until geometry topology exists`() {
-        val base = recording(command(33, 0)).taskList.withClipPlans(
-            mapOf(33 to GPUClipExecutionPlan.NoClip),
+    fun `stencil edge fans become one ordered path render with exact attachment and authorities`() {
+        val base = recording(command(33, 0), command(34, 1)).taskList.withClipPlans(
+            mapOf(33 to GPUClipExecutionPlan.NoClip, 34 to GPUClipExecutionPlan.NoClip),
         )
-        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
-        val stencilGeometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
-            vertices = listOf(-1f, -1f, 1f, 1f, 7f, 1f, -1f, -1f, 7f, 1f, 4f, 7f, -1f, -1f, 4f, 7f, 1f, 1f),
-            indices = (0..8).toList(),
-            sourceContourStarts = listOf(0),
-            sourceVertexCount = 3,
-            coverBounds = GPUPixelBounds(0, 0, 8, 8),
-            geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
-        )
-
-        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
-            request(base, mapOf(33 to semantic(packet, stencilGeometry))).copy(
-                configuredAggregateBudgetBytes = 1,
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+        val normalBounds = GPUPixelBounds(1, 2, 8, 9)
+        val inverseBounds = GPUPixelBounds(4, 4, 12, 12)
+        val semantics = mapOf(
+            33 to semantic(
+                packets.single { it.commandIdValue == 33 },
+                stencilGeometry(normalBounds),
+                GPUCorePrimitiveCoverageMode.Stencil1x,
+            ),
+            34 to semantic(
+                packets.single { it.commandIdValue == 34 },
+                stencilGeometry(inverseBounds, inverseFill = true, fillRule = GPUCorePrimitiveFillRule.EvenOdd),
+                GPUCorePrimitiveCoverageMode.Stencil1x,
             ),
         )
 
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(request(base, semantics)),
+        ).taskList
+        val render = taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+        val prepared = render.drawPackets
+
         assertEquals(
-            "unsupported.recording.core_primitive_geometry_stencil_topology_unavailable",
-            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+            listOf(
+                GPUDrawPacketRole.PathStencilProducer,
+                GPUDrawPacketRole.PathStencilCover,
+                GPUDrawPacketRole.PathStencilProducer,
+                GPUDrawPacketRole.PathStencilCover,
+            ),
+            prepared.map(GPUDrawPacket::role),
         )
+        assertEquals(listOf(33, 33, 34, 34), prepared.map(GPUDrawPacket::commandIdValue))
+        assertEquals(1, prepared.map(GPUDrawPacket::passId).distinct().size)
+        assertEquals(
+            listOf(normalBounds, normalBounds, targetBounds, targetBounds).map(::corePrimitiveScissorAuthority),
+            prepared.map(GPUDrawPacket::scissorBoundsHash),
+        )
+        assertEquals(
+            listOf(normalBounds, normalBounds, targetBounds, targetBounds),
+            prepared.map { packet ->
+                assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload).scissorBounds
+            },
+        )
+        assertEquals(GPULoadStorePlan("clear", GPUStorePlan.Store), render.loadStore)
+        assertEquals(
+            GPUDepthStencilLoadStorePlan.WritableStencil(
+                GPUStencilLoadOperation.Clear,
+                GPUStorePlan.Discard,
+                0u,
+            ),
+            render.depthStencilLoadStore,
+        )
+        val pathUse = render.resourceUses.single { it.role == GPUFrameResourceRole.PathDepthStencil }
+        assertEquals(GPUFrameResourceUsage.RenderAttachment, pathUse.usage)
+        assertEquals(GPUFrameResourceLifetime.FrameLocal, pathUse.lifetime)
+        assertTrue(pathUse.write)
+
+        val preparation = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+            .single { it.role == GPUFrameResourceRole.PathDepthStencil }
+        val descriptor = assertIs<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor>(
+            preparation.descriptor,
+        )
+        val pathDepthStencilBytes = targetBounds.width.toLong() * targetBounds.height * 4L
+        assertEquals(targetBounds, descriptor.logicalBounds)
+        assertEquals("depth24plus-stencil8", descriptor.format.value)
+        assertEquals(1, descriptor.sampleCount)
+        assertEquals(setOf(GPUFrameResourceUsage.RenderAttachment), preparation.usages)
+        assertEquals(GPUFrameResourceLifetime.FrameLocal, preparation.lifetime)
+        assertEquals(pathDepthStencilBytes, preparation.byteSize)
+        val geometryPreparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+        assertEquals(
+            2L * (18L * Float.SIZE_BYTES + 4L * 2L * Float.SIZE_BYTES),
+            geometryPreparations.single { it.role == GPUFrameResourceRole.VertexData }.byteSize,
+        )
+        assertEquals(
+            2L * (9L * Int.SIZE_BYTES + 6L * Int.SIZE_BYTES),
+            geometryPreparations.single { it.role == GPUFrameResourceRole.IndexData }.byteSize,
+        )
+        assertEquals(
+            pathDepthStencilBytes,
+            taskList.memoryBudget.categoryTotals.getValue(GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil),
+        )
+
+        prepared.chunked(2).forEach { (producer, cover) ->
+            val producerAuthority = requireNotNull(producer.corePrimitivePreparedAuthority)
+            val coverAuthority = requireNotNull(cover.corePrimitivePreparedAuthority)
+            assertEquals(
+                org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey.Role
+                    .PathStencilProducer,
+                producerAuthority.structuralPipelineKey.role,
+            )
+            assertEquals(
+                org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey.Role
+                    .PathStencilCover,
+                coverAuthority.structuralPipelineKey.role,
+            )
+            assertNotEquals(producer.renderPipelineKey, cover.renderPipelineKey)
+            assertSame(producerAuthority.uniformSlabSeal, coverAuthority.uniformSlabSeal)
+            assertTrue(producerAuthority.uniformSlabSeal != null)
+        }
+
+        val exactBudget = Math.addExact(
+            taskList.memoryBudget.targetResidentBytes,
+            taskList.memoryBudget.peakFrameTransientBytes,
+        )
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, semantics).copy(configuredAggregateBudgetBytes = exactBudget),
+            ),
+        )
+        assertEquals(
+            "unsupported.frame_memory.aggregate_budget_exceeded",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(
+                GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                    request(base, semantics).copy(configuredAggregateBudgetBytes = exactBudget - 1L),
+                ),
+            ).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `path stencil contradictions refuse before any prepared topology escapes`() {
+        val base = recording(command(35, 0)).taskList.withClipPlans(
+            mapOf(35 to GPUClipExecutionPlan.NoClip),
+        )
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val geometry = stencilGeometry(GPUPixelBounds(1, 1, 8, 8))
+
+        val wrongCoverage = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                base,
+                mapOf(35 to semantic(packet, geometry, GPUCorePrimitiveCoverageMode.FullOrScissor)),
+            ).copy(configuredAggregateBudgetBytes = 1),
+        )
+        assertEquals(
+            "unsupported.recording.core_primitive_path_stencil_coverage",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(wrongCoverage).diagnostic.code.value,
+        )
+
+        val clippedBase = base.withClipPlans(mapOf(35 to stencilPlan()))
+        val clippedPacket = clippedBase.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val wrongClip = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                clippedBase,
+                mapOf(35 to semantic(clippedPacket, geometry, GPUCorePrimitiveCoverageMode.Stencil1x)),
+            ).copy(configuredAggregateBudgetBytes = 1),
+        )
+        assertEquals(
+            "unsupported.recording.core_primitive_path_stencil_clip",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(wrongClip).diagnostic.code.value,
+        )
+
+        val stroke = stencilGeometry(
+            coverBounds = GPUPixelBounds(1, 1, 8, 8),
+            geometryMode = GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
+        )
+        val unsupportedStroke = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                base,
+                mapOf(35 to semantic(packet, stroke, GPUCorePrimitiveCoverageMode.Stencil1x)),
+            ).copy(configuredAggregateBudgetBytes = 1),
+        )
+        assertEquals(
+            "unsupported.recording.core_primitive_path_stroke_stencil",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(unsupportedStroke).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `path stencil scissor intersects normal bounds but inverse target viewport`() {
+        val clipBounds = GPUPixelBounds(3, 3, 10, 10)
+        val base = recording(command(36, 0), command(37, 1)).taskList.withClipPlans(
+            mapOf(
+                36 to GPUClipExecutionPlan.ScissorOnly(clipBounds),
+                37 to GPUClipExecutionPlan.ScissorOnly(clipBounds),
+            ),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+        val semantics = mapOf(
+            36 to semantic(
+                packets.single { it.commandIdValue == 36 },
+                stencilGeometry(GPUPixelBounds(1, 1, 8, 8)),
+                GPUCorePrimitiveCoverageMode.Stencil1x,
+            ),
+            37 to semantic(
+                packets.single { it.commandIdValue == 37 },
+                stencilGeometry(GPUPixelBounds(1, 1, 8, 8), inverseFill = true),
+                GPUCorePrimitiveCoverageMode.Stencil1x,
+            ),
+        )
+
+        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(request(base, semantics)),
+        ).taskList.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets
+
+        assertEquals(
+            listOf(
+                GPUPixelBounds(3, 3, 8, 8),
+                GPUPixelBounds(3, 3, 8, 8),
+                clipBounds,
+                clipBounds,
+            ).map(::corePrimitiveScissorAuthority),
+            prepared.map(GPUDrawPacket::scissorBoundsHash),
+        )
+    }
+
+    @Test
+    fun `mixed direct path direct frame uses one depth stencil compatible render`() {
+        val base = recording(command(38, 0), command(39, 1), command(40, 2)).taskList.withClipPlans(
+            mapOf(
+                38 to GPUClipExecutionPlan.NoClip,
+                39 to GPUClipExecutionPlan.NoClip,
+                40 to GPUClipExecutionPlan.NoClip,
+            ),
+        )
+        val basePackets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val semantics = mapOf(
+            38 to semantic(basePackets.single { it.commandIdValue == 38 }),
+            39 to semantic(
+                basePackets.single { it.commandIdValue == 39 },
+                stencilGeometry(GPUPixelBounds(1, 1, 8, 8)),
+                GPUCorePrimitiveCoverageMode.Stencil1x,
+            ),
+            40 to semantic(basePackets.single { it.commandIdValue == 40 }),
+        )
+
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(request(base, semantics)),
+        ).taskList
+        val render = taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+        val prepared = render.drawPackets
+
+        assertEquals(
+            listOf(
+                GPUDrawPacketRole.Shading,
+                GPUDrawPacketRole.PathStencilProducer,
+                GPUDrawPacketRole.PathStencilCover,
+                GPUDrawPacketRole.Shading,
+            ),
+            prepared.map(GPUDrawPacket::role),
+        )
+        assertEquals(listOf(38, 39, 39, 40), prepared.map(GPUDrawPacket::commandIdValue))
+        assertEquals(
+            listOf(
+                basePackets.single { it.commandIdValue == 38 }.packetId.value,
+                "${basePackets.single { it.commandIdValue == 39 }.packetId.value}.path-stencil-producer",
+                "${basePackets.single { it.commandIdValue == 39 }.packetId.value}.path-stencil-cover",
+                basePackets.single { it.commandIdValue == 40 }.packetId.value,
+            ),
+            prepared.map { it.packetId.value },
+        )
+        assertEquals(prepared.size, prepared.map(GPUDrawPacket::packetId).distinct().size)
+        assertEquals(1, prepared.map(GPUDrawPacket::passId).distinct().size)
+        assertEquals(
+            GPUDepthStencilLoadStorePlan.WritableStencil(
+                GPUStencilLoadOperation.Clear,
+                GPUStorePlan.Discard,
+                0u,
+            ),
+            render.depthStencilLoadStore,
+        )
+        listOf(
+            GPUFrameResourceRole.VertexData,
+            GPUFrameResourceRole.IndexData,
+            GPUFrameResourceRole.UniformData,
+            GPUFrameResourceRole.PathDepthStencil,
+        ).forEach { role ->
+            assertEquals(1, render.resourceUses.count { it.role == role }, "resource role $role")
+        }
+        val preparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+        listOf(
+            GPUFrameResourceRole.VertexData,
+            GPUFrameResourceRole.IndexData,
+            GPUFrameResourceRole.UniformData,
+            GPUFrameResourceRole.PathDepthStencil,
+        ).forEach { role ->
+            assertEquals(1, preparations.count { it.role == role }, "preparation role $role")
+        }
+
+        val directAuthorities = prepared.filter { it.role == GPUDrawPacketRole.Shading }
+            .map { requireNotNull(it.corePrimitivePreparedAuthority) }
+        val neutralState = directAuthorities.map { authority ->
+            assertIs<GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil>(
+                authority.structuralPipelineKey.depthStencil,
+            )
+        }
+        assertEquals(1, neutralState.distinct().size)
+        neutralState.forEach { state ->
+            assertEquals(
+                GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencilFormat.Depth24PlusStencil8,
+                state.format,
+            )
+            assertEquals(0u, state.readMask)
+            assertEquals(0u, state.writeMask)
+            listOf(state.front, state.back).forEach { face ->
+                assertEquals(GPUClipStencilCompare.Always, face.compare)
+                assertEquals(GPUClipStencilOperation.Keep, face.passOperation)
+                assertEquals(GPUClipStencilOperation.Keep, face.failOperation)
+                assertEquals(GPUClipStencilOperation.Keep, face.depthFailOperation)
+            }
+        }
+        assertEquals(1, directAuthorities.map { it.renderPipelineKey }.distinct().size)
+        val slab = requireNotNull(directAuthorities.first().uniformSlabSeal)
+        prepared.forEach { packet ->
+            assertSame(slab, requireNotNull(packet.corePrimitivePreparedAuthority).uniformSlabSeal)
+        }
+
+        val directOnlyBase = recording(command(41, 0)).taskList.withClipPlans(
+            mapOf(41 to GPUClipExecutionPlan.NoClip),
+        )
+        val directOnlyPacket = directOnlyBase.tasks.filterIsInstance<GPUTask.Render>()
+            .single().drawPackets.single()
+        val directOnly = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(directOnlyBase, mapOf(41 to semantic(directOnlyPacket))),
+            ),
+        ).taskList.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val directOnlyAuthority = requireNotNull(directOnly.corePrimitivePreparedAuthority)
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None,
+            directOnlyAuthority.structuralPipelineKey.depthStencil,
+        )
+        assertNotEquals(directOnlyAuthority.renderPipelineKey, directAuthorities.first().renderPipelineKey)
+        assertFalse(GPUFramePlanner.plan(taskList).atomicallyRefused)
+    }
+
+    @Test
+    fun `non batchable mixed frame keeps direct attachment free and isolates path stencil`() {
+        val base = recording(command(42, 0), command(43, 1), command(44, 2)).taskList.withClipPlans(
+            mapOf(
+                42 to GPUClipExecutionPlan.NoClip,
+                43 to GPUClipExecutionPlan.NoClip,
+                44 to GPUClipExecutionPlan.NoClip,
+            ),
+        )
+        val basePackets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val semantics = mapOf(
+            42 to semantic(basePackets.single { it.commandIdValue == 42 }),
+            43 to semantic(
+                basePackets.single { it.commandIdValue == 43 },
+                stencilGeometry(GPUPixelBounds(1, 1, 8, 8)),
+                GPUCorePrimitiveCoverageMode.Stencil1x,
+            ),
+            44 to semantic(
+                basePackets.single { it.commandIdValue == 44 },
+                GPUCorePrimitiveGeometryInput.RRect(1f, 1f, 8f, 8f, List(8) { 1f }),
+                GPUCorePrimitiveCoverageMode.ScalarAA,
+            ),
+        )
+
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(request(base, semantics)),
+        ).taskList
+        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(3, renders.size)
+
+        val direct = renders.single { render ->
+            render.drawPackets.map(GPUDrawPacket::commandIdValue) == listOf(42)
+        }
+        val path = renders.single { render ->
+            render.drawPackets.map(GPUDrawPacket::commandIdValue) == listOf(43, 43)
+        }
+        val analytic = renders.single { render ->
+            render.drawPackets.map(GPUDrawPacket::commandIdValue) == listOf(44)
+        }
+
+        listOf(direct, analytic).forEach { render ->
+            assertEquals(null, render.depthStencilLoadStore)
+            assertFalse(render.resourceUses.any { it.role == GPUFrameResourceRole.PathDepthStencil })
+            assertEquals(
+                GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None,
+                requireNotNull(render.drawPackets.single().corePrimitivePreparedAuthority)
+                    .structuralPipelineKey.depthStencil,
+            )
+        }
+        assertEquals(
+            GPUDepthStencilLoadStorePlan.WritableStencil(
+                GPUStencilLoadOperation.Clear,
+                GPUStorePlan.Discard,
+                0u,
+            ),
+            path.depthStencilLoadStore,
+        )
+        assertEquals(1, path.resourceUses.count { it.role == GPUFrameResourceRole.PathDepthStencil })
+        path.drawPackets.forEach { packet ->
+            assertIs<GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil>(
+                requireNotNull(packet.corePrimitivePreparedAuthority).structuralPipelineKey.depthStencil,
+            )
+        }
     }
 
     @Test
@@ -956,6 +1334,48 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         GPURect(geometry.left, geometry.top, geometry.right, geometry.bottom),
         GPUTransformFacts.identity(),
     )
+
+    private fun stencilGeometry(
+        coverBounds: GPUPixelBounds,
+        inverseFill: Boolean = false,
+        fillRule: GPUCorePrimitiveFillRule = GPUCorePrimitiveFillRule.Winding,
+        geometryMode: GPUCorePrimitiveGeometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+    ): GPUCorePrimitiveGeometryInput.TriangulatedPath = when (geometryMode) {
+        GPUCorePrimitiveGeometryMode.StencilEdgeFan -> GPUCorePrimitiveGeometryInput.TriangulatedPath(
+            vertices = listOf(
+                -1f, -1f, 1f, 1f, 7f, 1f,
+                -1f, -1f, 7f, 1f, 4f, 7f,
+                -1f, -1f, 4f, 7f, 1f, 1f,
+            ),
+            indices = (0..8).toList(),
+            sourceContourStarts = listOf(0),
+            sourceVertexCount = 3,
+            coverBounds = coverBounds,
+            geometryMode = geometryMode,
+            fillRule = fillRule,
+            inverseFill = inverseFill,
+        )
+        GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan -> GPUCorePrimitiveGeometryInput.TriangulatedPath(
+            vertices = listOf(0f, 0f, 8f, 0f, 8f, 8f),
+            indices = listOf(0, 1, 2),
+            sourceContourStarts = listOf(0),
+            sourceVertexCount = 2,
+            coverBounds = coverBounds,
+            geometryMode = geometryMode,
+            fillRule = fillRule,
+            inverseFill = inverseFill,
+            strokeStyle = GPUCorePrimitiveStrokeStyle(
+                width = 2f,
+                cap = "butt",
+                join = "miter",
+                miterLimit = 4f,
+                dashIntervals = emptyList(),
+                dashPhase = 0f,
+                loweringProof = GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1,
+            ),
+        )
+        GPUCorePrimitiveGeometryMode.DirectTriangles -> error("Direct triangles are not stencil geometry")
+    }
 
     private fun recording(vararg commands: org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand) =
         GPURecorder(GPURecordingID("recording.core.authority"), GPUFrameID(91), capabilities()).apply {

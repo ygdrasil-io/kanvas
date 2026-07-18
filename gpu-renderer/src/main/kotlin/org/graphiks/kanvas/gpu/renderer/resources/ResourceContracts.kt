@@ -52,6 +52,7 @@ enum class GPUFrameResourceRole {
     DestinationSnapshot,
     ClipMask,
     ClipDepthStencil,
+    PathDepthStencil,
     CopyScratch,
     UploadStaging,
     ReadbackStaging,

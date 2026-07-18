@@ -249,6 +249,8 @@ enum class GPUDrawPacketRole {
     DepthOnly,
     StencilProducer,
     StencilConsumer,
+    PathStencilProducer,
+    PathStencilCover,
     ClipProducer,
     Clear,
     Discard,

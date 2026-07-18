@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
@@ -28,6 +29,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitivePathStencilRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
@@ -223,6 +226,11 @@ private data class GPUCorePrimitiveDirectGeometryBytes(
     val indexBytes: Long,
 )
 
+private data class GPUCorePrimitivePathStencilPacketPlan(
+    val semantic: GPUDrawSemanticPayload.CorePrimitive,
+    val scissorBounds: GPUPixelBounds,
+)
+
 private fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
     capabilities: GPUCapabilities,
@@ -294,6 +302,41 @@ private fun directCorePrimitiveGeometryBytes(
         vertexBytes = Math.multiplyExact(vertexCount.toLong(), Float.SIZE_BYTES.toLong()),
         indexBytes = Math.multiplyExact(indexCount.toLong(), Int.SIZE_BYTES.toLong()),
     )
+}
+
+private fun pathStencilGeometryBytes(
+    semantic: GPUDrawSemanticPayload.CorePrimitive,
+): GPUCorePrimitiveDirectGeometryBytes? {
+    val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return null
+    if (geometry.geometryMode != GPUCorePrimitiveGeometryMode.StencilEdgeFan) return null
+    return GPUCorePrimitiveDirectGeometryBytes(
+        vertexBytes = Math.addExact(
+            Math.multiplyExact(geometry.vertices.size.toLong(), Float.SIZE_BYTES.toLong()),
+            4L * 2L * Float.SIZE_BYTES,
+        ),
+        indexBytes = Math.addExact(
+            Math.multiplyExact(geometry.indices.size.toLong(), Int.SIZE_BYTES.toLong()),
+            6L * Int.SIZE_BYTES,
+        ),
+    )
+}
+
+private fun pathStencilScissorBounds(
+    geometry: GPUCorePrimitiveGeometry.TriangulatedPath,
+    clipExecutionPlan: GPUClipExecutionPlan,
+    targetBounds: GPUPixelBounds,
+): GPUPixelBounds? {
+    val clipBounds = when (clipExecutionPlan) {
+        GPUClipExecutionPlan.NoClip -> targetBounds
+        is GPUClipExecutionPlan.ScissorOnly -> clipExecutionPlan.scissor
+        else -> return null
+    }
+    val coverViewport = if (geometry.inverseFill) targetBounds else geometry.coverBounds
+    val left = maxOf(coverViewport.left, clipBounds.left)
+    val top = maxOf(coverViewport.top, clipBounds.top)
+    val right = minOf(coverViewport.right, clipBounds.right)
+    val bottom = minOf(coverViewport.bottom, clipBounds.bottom)
+    return if (right <= left || bottom <= top) null else GPUPixelBounds(left, top, right, bottom)
 }
 
 private fun corePrimitiveGeometryBufferPreparation(
@@ -794,15 +837,47 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 "Coverage-mask depth/stencil requires the B3.4 full-target attachment topology.",
             )
         }
-        request.semanticsByCommandId.values.firstOrNull { semantic ->
+        val pathStencilPlansByCommandId = linkedMapOf<Int, GPUCorePrimitivePathStencilPacketPlan>()
+        basePackets.forEach { packet ->
+            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
             val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath
-            geometry?.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan ||
-                geometry?.geometryMode == GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan
-        }?.let {
-            return refused(
-                "unsupported.recording.core_primitive_geometry_stencil_topology_unavailable",
-                "Core primitive stencil geometry requires the B3.2 target-sized depth/stencil topology.",
-            )
+                ?: return@forEach
+            when (geometry.geometryMode) {
+                GPUCorePrimitiveGeometryMode.DirectTriangles -> Unit
+                GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan -> return refused(
+                    "unsupported.recording.core_primitive_path_stroke_stencil",
+                    "Prepared path stencil topology does not yet accept stroke edge fans.",
+                )
+                GPUCorePrimitiveGeometryMode.StencilEdgeFan -> {
+                    if (packet.role != GPUDrawPacketRole.Shading ||
+                        semantic.coverageMode != GPUCorePrimitiveCoverageMode.Stencil1x
+                    ) {
+                        return refused(
+                            "unsupported.recording.core_primitive_path_stencil_coverage",
+                            "Prepared fill path stencil topology requires one Shading packet with Stencil1x coverage.",
+                        )
+                    }
+                    val clipExecutionPlan = requireNotNull(packet.clipExecutionPlan)
+                    if (clipExecutionPlan != GPUClipExecutionPlan.NoClip &&
+                        clipExecutionPlan !is GPUClipExecutionPlan.ScissorOnly
+                    ) {
+                        return refused(
+                            "unsupported.recording.core_primitive_path_stencil_clip",
+                            "Prepared path stencil topology accepts only NoClip or ScissorOnly execution.",
+                        )
+                    }
+                    val scissorBounds = pathStencilScissorBounds(
+                        geometry,
+                        clipExecutionPlan,
+                        request.targetBounds,
+                    ) ?: return refused(
+                        "unsupported.recording.core_primitive_path_stencil_scissor",
+                        "Prepared path stencil geometry and its classified scissor must overlap.",
+                    )
+                    pathStencilPlansByCommandId[packet.commandIdValue] =
+                        GPUCorePrimitivePathStencilPacketPlan(semantic, scissorBounds)
+                }
+            }
         }
         val clipArtifacts = linkedMapOf<String, GPUClipExecutionPlan>()
         basePackets.forEach { packet ->
@@ -872,8 +947,18 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 "Core primitive direct geometry byte size exceeds signed 64-bit arithmetic.",
             )
         }
-        val directVertexBytes = try {
-            directGeometryBytesByCommandId.values.fold(0L) { total, geometry ->
+        val geometryBytesByCommandId = try {
+            directGeometryBytesByCommandId + pathStencilPlansByCommandId.mapValues { (_, plan) ->
+                requireNotNull(pathStencilGeometryBytes(plan.semantic))
+            }
+        } catch (_: ArithmeticException) {
+            return refused(
+                "unsupported.recording.core_primitive_geometry_size",
+                "Core primitive path stencil geometry byte size exceeds signed 64-bit arithmetic.",
+            )
+        }
+        val geometryVertexBytes = try {
+            geometryBytesByCommandId.values.fold(0L) { total, geometry ->
                 Math.addExact(total, geometry.vertexBytes)
             }
         } catch (_: ArithmeticException) {
@@ -882,8 +967,8 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 "Core primitive shared vertex byte size exceeds signed 64-bit arithmetic.",
             )
         }
-        val directIndexBytes = try {
-            directGeometryBytesByCommandId.values.fold(0L) { total, geometry ->
+        val geometryIndexBytes = try {
+            geometryBytesByCommandId.values.fold(0L) { total, geometry ->
                 Math.addExact(total, geometry.indexBytes)
             }
         } catch (_: ArithmeticException) {
@@ -892,8 +977,8 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 "Core primitive shared index byte size exceeds signed 64-bit arithmetic.",
             )
         }
-        val directPackets = basePackets.filter { it.commandIdValue in directGeometryBytesByCommandId }
-        val uniformSlabPlan = if (directPackets.isEmpty()) {
+        val geometryPackets = basePackets.filter { it.commandIdValue in geometryBytesByCommandId }
+        val uniformSlabPlan = if (geometryPackets.isEmpty()) {
             null
         } else {
             val maxBufferSize = limits.maxBufferSize ?: return refused(
@@ -912,7 +997,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 uploadBudgetBytes = minOf(request.configuredAggregateBudgetBytes, maxBufferSize),
                 maxBufferSize = maxBufferSize,
                 maxDynamicUniformBuffersPerPipelineLayout = maxDynamicUniformBuffers,
-                payloads = directPackets.map { packet ->
+                payloads = geometryPackets.map { packet ->
                     val bytes = requireNotNull(
                         request.semanticsByCommandId.getValue(packet.commandIdValue).payloadRef.uniformBlock,
                     ).bytes
@@ -937,7 +1022,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         }
         val uniformSlabSeal = uniformSlabPlan?.let { plan ->
             val packedBytes = ByteArray(plan.totalBytes.toInt())
-            directPackets.zip(plan.slots).forEach { (packet, slot) ->
+            geometryPackets.zip(plan.slots).forEach { (packet, slot) ->
                 val bytes = requireNotNull(
                     request.semanticsByCommandId.getValue(packet.commandIdValue).payloadRef.uniformBlock,
                 ).bytes
@@ -947,18 +1032,33 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             }
             GPUCorePrimitiveUniformSlabSeal(
                 plan = plan,
-                commandIds = directPackets.map(GPUDrawPacket::commandIdValue),
+                commandIds = geometryPackets.map(GPUDrawPacket::commandIdValue),
                 packedBytes = packedBytes,
             )
         }
-        val geometryVertex = directGeometryBytesByCommandId.takeIf { it.isNotEmpty() }?.let {
+        val geometryVertex = geometryBytesByCommandId.takeIf { it.isNotEmpty() }?.let {
             GPUFrameBufferRef("buffer.core-primitive.vertices.${request.baseTaskList.frameId.value}")
         }
-        val geometryIndex = directGeometryBytesByCommandId.takeIf { it.isNotEmpty() }?.let {
+        val geometryIndex = geometryBytesByCommandId.takeIf { it.isNotEmpty() }?.let {
             GPUFrameBufferRef("buffer.core-primitive.indices.${request.baseTaskList.frameId.value}")
         }
         val uniformSlab = uniformSlabPlan?.let {
             GPUFrameBufferRef("buffer.core-primitive.uniforms.${request.baseTaskList.frameId.value}")
+        }
+        val pathDepthStencilBytes = if (pathStencilPlansByCommandId.isEmpty()) {
+            null
+        } else {
+            try {
+                corePrimitiveDepthStencilByteSize(request.targetBounds, 1)
+            } catch (_: ArithmeticException) {
+                return refused(
+                    "unsupported.recording.core_primitive_path_depth_stencil_size",
+                    "Core primitive path depth/stencil byte size exceeds signed 64-bit arithmetic.",
+                )
+            }
+        }
+        val pathDepthStencil = pathDepthStencilBytes?.let {
+            GPUFrameTextureRef("texture.core-primitive.path-depth-stencil.${request.baseTaskList.frameId.value}")
         }
         val clipTopologies = clipArtifacts.map { (contentKey, plan) ->
             clipTopology(
@@ -980,14 +1080,14 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         if (geometryVertex != null && geometryIndex != null) {
             preparations += corePrimitiveGeometryBufferPreparation(
                 geometryVertex,
-                directVertexBytes,
+                geometryVertexBytes,
                 GPUFrameResourceRole.VertexData,
                 GPUFrameResourceUsage.Vertex,
                 "core-primitive.vertices",
             )
             preparations += corePrimitiveGeometryBufferPreparation(
                 geometryIndex,
-                directIndexBytes,
+                geometryIndexBytes,
                 GPUFrameResourceRole.IndexData,
                 GPUFrameResourceUsage.Index,
                 "core-primitive.indices",
@@ -1005,6 +1105,21 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 lifetime = GPUFrameResourceLifetime.FrameLocal,
                 byteSize = uniformSlabPlan.totalBytes,
                 diagnosticLabel = "core-primitive.uniforms",
+            )
+        }
+        if (pathDepthStencil != null && pathDepthStencilBytes != null) {
+            preparations += GPUResourcePreparationRequest(
+                resource = pathDepthStencil,
+                descriptor = GPUFrameTextureDescriptor(
+                    request.targetBounds,
+                    GPUColorFormat("depth24plus-stencil8"),
+                    1,
+                ),
+                role = GPUFrameResourceRole.PathDepthStencil,
+                usages = setOf(GPUFrameResourceUsage.RenderAttachment),
+                lifetime = GPUFrameResourceLifetime.FrameLocal,
+                byteSize = pathDepthStencilBytes,
+                diagnosticLabel = "core-primitive.path-depth-stencil",
             )
         }
         preparations += clipTopologies.flatMap(GPUCoreClipArtifactTopology::preparations)
@@ -1032,14 +1147,14 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             allocations += GPUFrameMemoryAllocation(
                 "core-primitive.vertices",
                 GPUFrameMemoryCategory.ReusableScratch,
-                directVertexBytes,
+                geometryVertexBytes,
                 GPUFrameMemoryResourceKind.Buffer,
                 null,
             )
             allocations += GPUFrameMemoryAllocation(
                 "core-primitive.indices",
                 GPUFrameMemoryCategory.ReusableScratch,
-                directIndexBytes,
+                geometryIndexBytes,
                 GPUFrameMemoryResourceKind.Buffer,
                 null,
             )
@@ -1051,6 +1166,15 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 uniformSlabPlan.totalBytes,
                 GPUFrameMemoryResourceKind.Buffer,
                 null,
+            )
+        }
+        if (pathDepthStencilBytes != null) {
+            allocations += GPUFrameMemoryAllocation(
+                "core-primitive.path-depth-stencil",
+                GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil,
+                pathDepthStencilBytes,
+                GPUFrameMemoryResourceKind.Texture2D,
+                request.targetBounds,
             )
         }
         allocations += clipTopologies.flatMap(GPUCoreClipArtifactTopology::allocations)
@@ -1070,59 +1194,151 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
 
         val prepareId = GPUTaskID("task.core-primitive.prepare.${request.baseTaskList.frameId.value}")
         val topologiesByContentKey = clipTopologies.associateBy(GPUCoreClipArtifactTopology::contentKey)
+        val pathDepthStencilLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
+            GPUStencilLoadOperation.Clear,
+            GPUStorePlan.Discard,
+            0u,
+        )
+
+        fun consumerResourceUses(
+            baseRender: GPUTask.Render,
+            basePacket: GPUDrawPacket,
+            pathPlan: GPUCorePrimitivePathStencilPacketPlan?,
+        ): List<GPUFrameResourceUse> {
+            val topology = basePacket.clipExecutionPlan?.contentKeyOrNull()?.let(topologiesByContentKey::get)
+            val geometryUses = if (
+                basePacket.commandIdValue in geometryBytesByCommandId &&
+                geometryVertex != null && geometryIndex != null
+            ) {
+                listOf(
+                    GPUFrameResourceUse(
+                        geometryVertex,
+                        GPUFrameResourceRole.VertexData,
+                        GPUFrameResourceUsage.Vertex,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        write = false,
+                    ),
+                    GPUFrameResourceUse(
+                        geometryIndex,
+                        GPUFrameResourceRole.IndexData,
+                        GPUFrameResourceUsage.Index,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        write = false,
+                    ),
+                )
+            } else {
+                emptyList()
+            }
+            val uniformUses = if (
+                basePacket.commandIdValue in geometryBytesByCommandId && uniformSlab != null
+            ) {
+                listOf(
+                    GPUFrameResourceUse(
+                        uniformSlab,
+                        GPUFrameResourceRole.UniformData,
+                        GPUFrameResourceUsage.Uniform,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        write = false,
+                    ),
+                )
+            } else {
+                emptyList()
+            }
+            val pathDepthStencilUses = if (pathPlan != null && pathDepthStencil != null) {
+                listOf(
+                    GPUFrameResourceUse(
+                        pathDepthStencil,
+                        GPUFrameResourceRole.PathDepthStencil,
+                        GPUFrameResourceUsage.RenderAttachment,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        write = true,
+                    ),
+                )
+            } else {
+                emptyList()
+            }
+            return baseRender.resourceUses + geometryUses + uniformUses +
+                pathDepthStencilUses + listOfNotNull(topology?.consumerResourceUse)
+        }
+
+        fun consumerDepthStencilLoadStore(
+            pathPlan: GPUCorePrimitivePathStencilPacketPlan?,
+            resourceUses: List<GPUFrameResourceUse>,
+        ): GPUDepthStencilLoadStorePlan? = when {
+            pathPlan != null -> pathDepthStencilLoadStore
+            resourceUses.any { it.role == GPUFrameResourceRole.ClipDepthStencil } ->
+                GPUDepthStencilLoadStorePlan.ReadOnlyKeep
+            else -> null
+        }
+
+        fun isGeometryBatchCompatible(
+            commandIds: List<Int>,
+            resourceUses: List<GPUFrameResourceUse>,
+            depthStencilLoadStore: GPUDepthStencilLoadStorePlan?,
+        ): Boolean = commandIds.all { it in geometryBytesByCommandId } &&
+            resourceUses.none { it.role == GPUFrameResourceRole.ClipDepthStencil } &&
+            (depthStencilLoadStore == null || depthStencilLoadStore == pathDepthStencilLoadStore)
+
+        val geometryBatchPredicted = baseRenders.isNotEmpty() && baseRenders.all { baseRender ->
+            baseRender.drawPackets.all { basePacket ->
+                val pathPlan = pathStencilPlansByCommandId[basePacket.commandIdValue]
+                val resourceUses = consumerResourceUses(baseRender, basePacket, pathPlan)
+                isGeometryBatchCompatible(
+                    commandIds = if (pathPlan == null) {
+                        listOf(basePacket.commandIdValue)
+                    } else {
+                        listOf(basePacket.commandIdValue, basePacket.commandIdValue)
+                    },
+                    resourceUses = resourceUses,
+                    depthStencilLoadStore = consumerDepthStencilLoadStore(pathPlan, resourceUses),
+                )
+            }
+        }
+        val directPathDepthStencilCompatible =
+            pathStencilPlansByCommandId.isNotEmpty() && geometryBatchPredicted
         val publicPipelineKeys = mutableMapOf<GPUCorePrimitiveRenderPipelineStructuralKey, GPURenderPipelineKey>()
         val consumersByBaseTask = linkedMapOf<GPUTaskID, List<GPUTask.Render>>()
         var consumerOrdinal = 0
         baseRenders.forEach { baseRender ->
             consumersByBaseTask[baseRender.taskId] = baseRender.drawPackets.mapIndexed { packetIndex, basePacket ->
-                val preparedPacket = packet(
-                    basePacket,
-                    requireNotNull(request.semanticsByCommandId[basePacket.commandIdValue]),
-                    direct = basePacket.commandIdValue in directGeometryBytesByCommandId,
-                    uniformSlabSeal = uniformSlabSeal,
-                    publicPipelineKeys = publicPipelineKeys,
-                )
-                val topology = basePacket.clipExecutionPlan?.contentKeyOrNull()?.let(topologiesByContentKey::get)
-                val geometryUses = if (
-                    basePacket.commandIdValue in directGeometryBytesByCommandId &&
-                    geometryVertex != null && geometryIndex != null
-                ) {
+                val pathPlan = pathStencilPlansByCommandId[basePacket.commandIdValue]
+                val preparedPackets = if (pathPlan == null) {
                     listOf(
-                        GPUFrameResourceUse(
-                            geometryVertex,
-                            GPUFrameResourceRole.VertexData,
-                            GPUFrameResourceUsage.Vertex,
-                            GPUFrameResourceLifetime.FrameLocal,
-                            write = false,
-                        ),
-                        GPUFrameResourceUse(
-                            geometryIndex,
-                            GPUFrameResourceRole.IndexData,
-                            GPUFrameResourceUsage.Index,
-                            GPUFrameResourceLifetime.FrameLocal,
-                            write = false,
+                        packet(
+                            basePacket,
+                            requireNotNull(request.semanticsByCommandId[basePacket.commandIdValue]),
+                            direct = basePacket.commandIdValue in directGeometryBytesByCommandId,
+                            pathDepthStencilCompatible = directPathDepthStencilCompatible &&
+                                basePacket.commandIdValue in directGeometryBytesByCommandId,
+                            uniformSlabSeal = uniformSlabSeal,
+                            publicPipelineKeys = publicPipelineKeys,
                         ),
                     )
                 } else {
-                    emptyList()
-                }
-                val uniformUses = if (
-                    basePacket.commandIdValue in directGeometryBytesByCommandId && uniformSlab != null
-                ) {
                     listOf(
-                        GPUFrameResourceUse(
-                            uniformSlab,
-                            GPUFrameResourceRole.UniformData,
-                            GPUFrameResourceUsage.Uniform,
-                            GPUFrameResourceLifetime.FrameLocal,
-                            write = false,
+                        pathStencilPacket(
+                            basePacket,
+                            pathPlan,
+                            GPUDrawPacketRole.PathStencilProducer,
+                            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+                            corePrimitiveColorWriteNoneBlendPlan(),
+                            requireNotNull(uniformSlabSeal),
+                            publicPipelineKeys,
+                        ),
+                        pathStencilPacket(
+                            basePacket,
+                            pathPlan,
+                            GPUDrawPacketRole.PathStencilCover,
+                            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+                            requireNotNull(basePacket.blendPlan),
+                            requireNotNull(uniformSlabSeal),
+                            publicPipelineKeys,
                         ),
                     )
-                } else {
-                    emptyList()
                 }
-                val resourceUses = baseRender.resourceUses + geometryUses + uniformUses +
-                    listOfNotNull(topology?.consumerResourceUse)
+                val resourceUses = consumerResourceUses(baseRender, basePacket, pathPlan)
+                val batchEligibility = baseRender.batchEligibilityByPacketId[basePacket.packetId]
+                    ?: producerBatchEligibility()
                 GPUTask.Render(
                     taskId = GPUTaskID("${baseRender.taskId.value}.core-consumer.$packetIndex"),
                     recordingId = baseRender.recordingId,
@@ -1135,32 +1351,39 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                     samplePlan = GPUSamplePlan.SingleSampleFrame,
                     resourceUses = resourceUses,
                     provisionalSegmentKey = baseRender.provisionalSegmentKey,
-                    drawPackets = listOf(preparedPacket),
-                    batchEligibilityByPacketId = mapOf(
-                        preparedPacket.packetId to (
-                            baseRender.batchEligibilityByPacketId[basePacket.packetId]
-                                ?: producerBatchEligibility()
-                            ),
-                    ),
+                    drawPackets = preparedPackets,
+                    batchEligibilityByPacketId = preparedPackets.associate { packet ->
+                        packet.packetId to batchEligibility
+                    },
                     sampleContinuationKey = null,
                     compositeMembership = baseRender.compositeMembership,
-                    depthStencilLoadStore = if (resourceUses.any {
-                            it.role == GPUFrameResourceRole.ClipDepthStencil
-                        }
-                    ) GPUDepthStencilLoadStorePlan.ReadOnlyKeep else null,
+                    depthStencilLoadStore = consumerDepthStencilLoadStore(pathPlan, resourceUses),
                 )
             }
         }
         val unbatchedPreparedRenders = consumersByBaseTask.values.flatten()
-        val directBatch = unbatchedPreparedRenders.takeIf { renders ->
-            renders.isNotEmpty() && renders.all { render ->
-                render.drawPackets.single().commandIdValue in directGeometryBytesByCommandId &&
-                    render.depthStencilLoadStore == null
+        val geometryBatchConstructedCompatible = unbatchedPreparedRenders.isNotEmpty() &&
+            unbatchedPreparedRenders.all { render ->
+                isGeometryBatchCompatible(
+                    commandIds = render.drawPackets.map(GPUDrawPacket::commandIdValue),
+                    resourceUses = render.resourceUses,
+                    depthStencilLoadStore = render.depthStencilLoadStore,
+                )
             }
-        }?.let { renders ->
+        if (geometryBatchPredicted != geometryBatchConstructedCompatible) {
+            return refused(
+                "invalid.recording.core_primitive_geometry_batch_prediction",
+                "Core primitive geometry batch prediction diverged from its constructed renders.",
+            )
+        }
+        val geometryBatch = unbatchedPreparedRenders.takeIf { geometryBatchConstructedCompatible }?.let { renders ->
             val packets = renders.flatMap(GPUTask.Render::drawPackets)
+            val hasPathStencil = pathStencilPlansByCommandId.isNotEmpty()
             GPUTask.Render(
-                taskId = GPUTaskID("task.core-primitive.direct-batch.${request.baseTaskList.frameId.value}"),
+                taskId = GPUTaskID(
+                    "task.core-primitive.${if (hasPathStencil) "path-stencil" else "direct"}-batch." +
+                        request.baseTaskList.frameId.value,
+                ),
                 recordingId = renders.first().recordingId,
                 phase = GPUTaskPhase.Render,
                 target = request.target,
@@ -1168,17 +1391,55 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 samplePlan = GPUSamplePlan.SingleSampleFrame,
                 resourceUses = renders.flatMap(GPUTask.Render::resourceUses).distinct(),
                 provisionalSegmentKey = GPUProvisionalRenderSegmentKey(
-                    "core-primitive.direct-batch.${request.baseTaskList.frameId.value}",
+                    "core-primitive.${if (hasPathStencil) "path-stencil" else "direct"}-batch." +
+                        request.baseTaskList.frameId.value,
                 ),
                 drawPackets = packets,
                 batchEligibilityByPacketId = renders
                     .flatMap { render -> render.batchEligibilityByPacketId.entries }
                     .associate { it.toPair() },
+                depthStencilLoadStore = pathDepthStencilLoadStore.takeIf { hasPathStencil },
             )
         }
-        val preparedRenders = directBatch?.let(::listOf) ?: unbatchedPreparedRenders
-        if (directBatch != null) {
-            baseRenders.forEach { baseRender -> consumersByBaseTask[baseRender.taskId] = listOf(directBatch) }
+        val preparedRenders = geometryBatch?.let(::listOf) ?: unbatchedPreparedRenders
+        val invalidPathDepthStencilRender = preparedRenders.firstOrNull { render ->
+            val pathUses = render.resourceUses.filter { it.role == GPUFrameResourceRole.PathDepthStencil }
+            val exactPathAttachment = pathDepthStencil != null && pathUses.size == 1 &&
+                pathUses.single() == GPUFrameResourceUse(
+                    pathDepthStencil,
+                    GPUFrameResourceRole.PathDepthStencil,
+                    GPUFrameResourceUsage.RenderAttachment,
+                    GPUFrameResourceLifetime.FrameLocal,
+                    write = true,
+                ) && render.depthStencilLoadStore == pathDepthStencilLoadStore
+            val hasPathAttachmentState = pathUses.isNotEmpty() ||
+                render.depthStencilLoadStore == pathDepthStencilLoadStore
+            val authorities = render.drawPackets.mapNotNull(GPUDrawPacket::corePrimitivePreparedAuthority)
+            authorities.size != render.drawPackets.size ||
+                hasPathAttachmentState != exactPathAttachment ||
+                authorities.any { authority ->
+                    val structuralKey = authority.structuralPipelineKey
+                    when (structuralKey.role) {
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading -> if (exactPathAttachment) {
+                            structuralKey.depthStencil != corePrimitiveDirectPathDepthStencilState()
+                        } else {
+                            structuralKey.depthStencil !=
+                                GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None
+                        }
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+                        -> !exactPathAttachment
+                    }
+                }
+        }
+        if (invalidPathDepthStencilRender != null) {
+            return refused(
+                "invalid.recording.core_primitive_path_depth_stencil_authority",
+                "Core primitive pipeline depth/stencil authority must exactly match its render attachment.",
+            )
+        }
+        if (geometryBatch != null) {
+            baseRenders.forEach { baseRender -> consumersByBaseTask[baseRender.taskId] = listOf(geometryBatch) }
         }
         val tasks = mutableListOf<GPUTask>(
             GPUTask.PrepareResources(
@@ -1548,21 +1809,121 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         atomicGroupId?.let(::GPUTaskAtomicGroupID),
     )
 
+    private fun pathStencilPacket(
+        basePacket: GPUDrawPacket,
+        pathPlan: GPUCorePrimitivePathStencilPacketPlan,
+        packetRole: GPUDrawPacketRole,
+        structuralRole: GPUCorePrimitiveRenderPipelineStructuralKey.Role,
+        blendPlan: GPUBlendPlan,
+        uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+        publicPipelineKeys: MutableMap<GPUCorePrimitiveRenderPipelineStructuralKey, GPURenderPipelineKey>,
+    ): GPUDrawPacket {
+        require(
+            packetRole == GPUDrawPacketRole.PathStencilProducer &&
+                structuralRole == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer ||
+                packetRole == GPUDrawPacketRole.PathStencilCover &&
+                structuralRole == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+        ) { "Path stencil packet and structural roles must agree" }
+        val clipExecutionPlan = requireNotNull(basePacket.clipExecutionPlan)
+        val preparedSemantic = pathPlan.semantic.withPathPacketState(
+            scissorBounds = pathPlan.scissorBounds,
+            clipExecutionPlanIdentity = clipExecutionPlan.canonicalIdentity(),
+            blendPlanIdentity = blendPlan.canonicalIdentity(),
+        )
+        val structuralPipelineKey = corePrimitivePathStencilRenderPipelineStructuralKey(
+            preparedSemantic,
+            structuralRole,
+            clipExecutionPlan,
+            blendPlan,
+        )
+        val renderPipelineKey = publicPipelineKeys.getOrPut(structuralPipelineKey) {
+            structuralPipelineKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
+        }
+        val roleLabel = when (packetRole) {
+            GPUDrawPacketRole.PathStencilProducer -> "producer"
+            GPUDrawPacketRole.PathStencilCover -> "cover"
+            else -> error("Validated above")
+        }
+        return GPUDrawPacket(
+            packetId = GPUDrawPacketID("${basePacket.packetId.value}.path-stencil-$roleLabel"),
+            commandIdValue = basePacket.commandIdValue,
+            analysisRecordId = basePacket.analysisRecordId,
+            passId = "pass.core-primitive.path-stencil",
+            layerId = basePacket.layerId,
+            bindingListId = basePacket.bindingListId,
+            insertionReasonCode = "core-primitive.path-stencil-$roleLabel",
+            sortKey = basePacket.sortKey,
+            sortKeyPreimage = basePacket.sortKeyPreimage,
+            renderStepId = GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY),
+            renderStepVersion = 1,
+            role = packetRole,
+            blendPlan = blendPlan,
+            renderPipelineKey = renderPipelineKey,
+            bindingLayoutHash = CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
+            uniformSlot = preparedSemantic.payloadRef.uniformSlot,
+            resourceSlot = basePacket.resourceSlot,
+            semanticPayload = preparedSemantic,
+            vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
+            scissorBoundsHash = corePrimitiveScissorAuthority(preparedSemantic.scissorBounds),
+            targetStateHash = CORE_PRIMITIVE_TARGET_STATE_HASH,
+            originalPaintOrder = basePacket.originalPaintOrder,
+            resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+            frameProvenance = basePacket.frameProvenance,
+            clipCoveragePlan = basePacket.clipCoveragePlan,
+            clipExecutionPlan = clipExecutionPlan,
+            diagnostics = basePacket.diagnostics,
+        ).attachCorePrimitivePreparedAuthority(
+            GPUCorePrimitivePreparedPacketAuthority(
+                structuralPipelineKey = structuralPipelineKey,
+                renderPipelineKey = renderPipelineKey,
+                uniformSlabSeal = uniformSlabSeal,
+            ),
+        )
+    }
+
+    private fun GPUDrawSemanticPayload.CorePrimitive.withPathPacketState(
+        scissorBounds: GPUPixelBounds,
+        clipExecutionPlanIdentity: String,
+        blendPlanIdentity: String,
+    ) = GPUDrawSemanticPayload.CorePrimitive(
+        payloadRef = payloadRef,
+        sourceFamily = sourceFamily,
+        geometry = geometry,
+        premultipliedRgba = premultipliedRgba,
+        targetBounds = targetBounds,
+        scissorBounds = scissorBounds,
+        clipCoveragePlan = clipCoveragePlan,
+        clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+        blendPlanIdentity = blendPlanIdentity,
+        frameProvenance = frameProvenance,
+        coverageMode = coverageMode,
+        analysisRecordId = analysisRecordId,
+        analysisCommandFamily = analysisCommandFamily,
+        rectRouteAuthority = rectRouteAuthority,
+        rectGeometryAuthority = rectGeometryAuthority,
+    )
+
 
     private fun packet(
         basePacket: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.CorePrimitive,
         direct: Boolean,
+        pathDepthStencilCompatible: Boolean,
         uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
         publicPipelineKeys: MutableMap<GPUCorePrimitiveRenderPipelineStructuralKey, GPURenderPipelineKey>,
     ): GPUDrawPacket {
         val clipExecutionPlan = requireNotNull(basePacket.clipExecutionPlan)
         val preparedSemantic = semantic.withClipExecutionPlanIdentity(clipExecutionPlan.canonicalIdentity())
-        val structuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
+        val baseStructuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
             preparedSemantic,
             clipExecutionPlan,
             requireNotNull(basePacket.blendPlan),
         )
+        val structuralPipelineKey = if (pathDepthStencilCompatible) {
+            baseStructuralPipelineKey.copy(depthStencil = corePrimitiveDirectPathDepthStencilState())
+        } else {
+            baseStructuralPipelineKey
+        }
         val renderPipelineKey = publicPipelineKeys.getOrPut(structuralPipelineKey) {
             structuralPipelineKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
         }
@@ -1570,7 +1931,11 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         packetId = basePacket.packetId,
         commandIdValue = basePacket.commandIdValue,
         analysisRecordId = basePacket.analysisRecordId,
-        passId = if (direct) "pass.core-primitive.direct" else basePacket.passId,
+        passId = when {
+            pathDepthStencilCompatible -> "pass.core-primitive.path-stencil"
+            direct -> "pass.core-primitive.direct"
+            else -> basePacket.passId
+        },
         layerId = basePacket.layerId,
         bindingListId = basePacket.bindingListId,
         insertionReasonCode = basePacket.insertionReasonCode,

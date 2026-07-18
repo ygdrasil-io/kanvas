@@ -29,10 +29,12 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
 
 /** Closed native programs materialized by the bounded CorePrimitive WebGPU lane. */
 internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
     DirectSrcOver,
+    DirectSrcOverWithPathDepthStencil,
     PathStencilProducerWinding,
     PathStencilProducerEvenOdd,
     PathStencilCoverRegular,
@@ -50,7 +52,7 @@ internal sealed interface GPUWgpu4kCorePrimitivePipelineMapping {
 }
 
 /**
- * Consumes the handle-free structural authority and accepts only one of the five exact native
+ * Consumes the handle-free structural authority and accepts only one of the six exact native
  * descriptors. Dynamic geometry, bounds, scissor, load/store, and stencil reference never enter
  * this identity.
  */
@@ -82,13 +84,16 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
     ) return null
 
     return when (role) {
-        GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading ->
-            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver.takeIf {
-                shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry &&
-                    topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
-                    depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None &&
-                    blend.isCanonicalPremulSrcOver()
-            }
+        GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading -> when {
+            shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ||
+                topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
+                !blend.isCanonicalPremulSrcOver() -> null
+            depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None ->
+                GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver
+            depthStencil == corePrimitiveDirectPathDepthStencilState() ->
+                GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil
+            else -> null
+        }
         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer -> when {
             shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.PathStencil ||
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StencilEdgeFan &&
@@ -292,6 +297,13 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthSten
                 ),
                 0xffu,
                 0xffu,
+            )
+        GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil ->
+            NativeStencilState(
+                face(pass = GPUStencilOperation.Keep),
+                face(pass = GPUStencilOperation.Keep),
+                0u,
+                0u,
             )
         GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver ->
             error("DirectSrcOver has no depth/stencil state")

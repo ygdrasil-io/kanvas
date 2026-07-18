@@ -50,6 +50,30 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
+    fun `direct shading has distinct native identities with and without the path attachment`() {
+        assertEquals(
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
+            mappedIdentity(directKey()).program,
+        )
+        assertEquals(
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
+            mappedIdentity(directWithPathDepthStencilKey()).program,
+        )
+
+        val withoutAttachment = descriptor(directKey())
+        val withAttachment = descriptor(directWithPathDepthStencilKey())
+        assertNull(withoutAttachment.depthStencil)
+        assertCoverCommon(withAttachment)
+        assertDepthStencil(
+            withAttachment,
+            front = face(pass = GPUStencilOperation.Keep),
+            back = face(pass = GPUStencilOperation.Keep),
+            readMask = 0u,
+            writeMask = 0u,
+        )
+    }
+
+    @Test
     fun `winding and even odd producers lower exact stencil8 state with no color writes`() {
         val winding = descriptor(pathKey(producerWinding()))
         val evenOdd = descriptor(pathKey(producerEvenOdd()))
@@ -115,6 +139,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     fun `direct and all stencil programs share exact vertex and primitive state`() {
         val descriptors = listOf(
             descriptor(directKey()),
+            descriptor(directWithPathDepthStencilKey()),
             descriptor(pathKey(producerWinding())),
             descriptor(pathKey(producerEvenOdd())),
             descriptor(pathKey(regularCover(), cover = true)),
@@ -209,6 +234,16 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
         topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
         blend = srcOverBlend(),
         clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+    )
+
+    private fun directWithPathDepthStencilKey() = directKey().copy(
+        depthStencil = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil(
+            format = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencilFormat.Depth24PlusStencil8,
+            front = structuralFace(pass = GPUClipStencilOperation.Keep),
+            back = structuralFace(pass = GPUClipStencilOperation.Keep),
+            readMask = 0u,
+            writeMask = 0u,
+        ),
     )
 
     private fun pathKey(

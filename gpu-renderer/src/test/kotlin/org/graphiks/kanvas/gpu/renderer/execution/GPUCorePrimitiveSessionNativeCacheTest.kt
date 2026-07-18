@@ -49,11 +49,12 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     }
 
     @Test
-    fun `production cache normalizes four path semantics to four stencil pipelines and shared components`() {
+    fun `production cache retains six exact pipelines with shared immutable components`() {
         val native = SessionNativeProxy()
         val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION)
         val programs = listOf(
             GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
             GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding,
             GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,
             GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding,
@@ -62,6 +63,7 @@ class GPUCorePrimitiveSessionNativeCacheTest {
             GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,
             GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd,
             GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse,
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
         )
 
         val acquisitions = programs.map { program ->
@@ -78,12 +80,12 @@ class GPUCorePrimitiveSessionNativeCacheTest {
             val matching = acquisitions.filter { it.first == program }.map { it.second.pipeline }
             assertTrue(matching.all { it === matching.first() })
         }
-        assertEquals(5, acquisitions.map { it.second.pipeline }.distinctBy { System.identityHashCode(it) }.size)
+        assertEquals(6, acquisitions.map { it.second.pipeline }.distinctBy { System.identityHashCode(it) }.size)
         assertEquals(1, native.creationCount("createBindGroupLayout"))
         assertEquals(1, native.creationCount("createShaderModule"))
         assertEquals(1, native.creationCount("createPipelineLayout"))
-        assertEquals(5, native.pipelineCreationCount)
-        assertEquals(GPUCorePrimitiveNativeCacheCounters(5, 4, 0), cache.counters())
+        assertEquals(6, native.pipelineCreationCount)
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(6, 5, 0), cache.counters())
 
         cache.close()
     }

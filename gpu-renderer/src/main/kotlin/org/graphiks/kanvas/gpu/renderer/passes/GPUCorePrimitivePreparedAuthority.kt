@@ -56,10 +56,23 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             val writeMask: UInt,
         ) : DepthStencil {
             init {
-                require(readMask <= 0xffu && writeMask in 1u..0xffu) {
-                    "CorePrimitive path stencil masks must fit stencil8 and retain a reset write mask"
+                require(readMask <= 0xffu && writeMask <= 0xffu) {
+                    "CorePrimitive stencil masks must fit stencil8"
+                }
+                require(writeMask != 0u || isDirectPathAttachmentNeutral()) {
+                    "A zero-write stencil state must be the exact direct path-attachment state"
                 }
             }
+
+            internal fun isDirectPathAttachmentNeutral(): Boolean =
+                readMask == 0u && writeMask == 0u &&
+                    front.isDirectPathAttachmentNeutral() && back.isDirectPathAttachmentNeutral()
+
+            private fun StencilFace.isDirectPathAttachmentNeutral(): Boolean =
+                compare == GPUClipStencilCompare.Always &&
+                    passOperation == GPUClipStencilOperation.Keep &&
+                    failOperation == GPUClipStencilOperation.Keep &&
+                    depthFailOperation == GPUClipStencilOperation.Keep
         }
     }
 
@@ -116,8 +129,11 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     init {
         require(sampleCount > 0) { "CorePrimitive structural sample count must be positive" }
         when (role) {
-            Role.Shading -> require(depthStencil == DepthStencil.None) {
-                "CorePrimitive shading keys cannot retain path stencil state"
+            Role.Shading -> require(
+                depthStencil == DepthStencil.None ||
+                    (depthStencil as? DepthStencil.Stencil)?.isDirectPathAttachmentNeutral() == true
+            ) {
+                "CorePrimitive shading keys accept only no attachment or the neutral path attachment state"
             }
             Role.PathStencilProducer,
             Role.PathStencilCover,
@@ -143,6 +159,9 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 append("|samples=").append(sampleCount)
                 append("|blend=").append(blend)
                 append("|clip=").append(clip)
+                if (depthStencil != DepthStencil.None) {
+                    append("|depthStencil=").append(depthStencil)
+                }
             }
             Role.PathStencilProducer,
             Role.PathStencilCover,
@@ -165,6 +184,27 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
         return GPURenderPipelineKey("$prefix.$digest")
     }
+}
+
+/** Exact no-op D24S8 state required when a direct draw shares a pass with path stencil draws. */
+internal fun corePrimitiveDirectPathDepthStencilState():
+    GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil =
+    CORE_PRIMITIVE_DIRECT_PATH_DEPTH_STENCIL_STATE
+
+private val CORE_PRIMITIVE_DIRECT_PATH_DEPTH_STENCIL_STATE = run {
+    val neutralFace = GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace(
+        compare = GPUClipStencilCompare.Always,
+        passOperation = GPUClipStencilOperation.Keep,
+        failOperation = GPUClipStencilOperation.Keep,
+        depthFailOperation = GPUClipStencilOperation.Keep,
+    )
+    GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil(
+        format = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencilFormat.Depth24PlusStencil8,
+        front = neutralFace,
+        back = neutralFace,
+        readMask = 0u,
+        writeMask = 0u,
+    )
 }
 
 internal fun corePrimitiveRenderPipelineStructuralKey(
