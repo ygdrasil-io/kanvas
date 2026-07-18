@@ -44,6 +44,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
@@ -51,6 +52,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
@@ -387,7 +390,7 @@ class GPUFramePlannerTest {
             ),
         )
 
-        assertTrue(plan.atomicallyRefused)
+        assertTrue(plan.atomicallyRefused, plan.dumpLines().joinToString("\n"))
         assertTrue(plan.steps.isEmpty())
         assertEquals("invalid.frame_plan.atomic_order", plan.diagnostics.last().code.value)
     }
@@ -457,6 +460,77 @@ class GPUFramePlannerTest {
     }
 
     @Test
+    fun `color write mask none does not invalidate destination snapshot lifetime`() {
+        val destination = destinationTask(
+            GPUDestinationSnapshotMaterialization.TextureCopy(0, GPUPixelBounds(0, 0, 4, 4)),
+            consumerCommandIds = listOf(7, 9),
+        )
+        val first = renderTask("task.render.7", "recording.a", 7, blendPlan = destinationBlend())
+        val colorWriteNone = renderTask(
+            "task.render.8",
+            "recording.a",
+            8,
+            blendPlan = colorWriteNoneBlend(),
+        )
+        val last = renderTask("task.render.9", "recording.a", 9, blendPlan = destinationBlend())
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, first, colorWriteNone, last),
+                dependencies = listOf(
+                    dependency(destination, first),
+                    dependency(destination, colorWriteNone),
+                    dependency(destination, last),
+                    dependency(colorWriteNone, last),
+                ),
+            ),
+        )
+
+        assertFalse(plan.atomicallyRefused)
+    }
+
+    @Test
+    fun `render resource use write invalidates destination snapshot lifetime`() {
+        val destination = destinationTask(
+            GPUDestinationSnapshotMaterialization.TextureCopy(0, GPUPixelBounds(0, 0, 4, 4)),
+            consumerCommandIds = listOf(7, 9),
+        )
+        val first = renderTask("task.render.7", "recording.a", 7, blendPlan = destinationBlend())
+        val attachmentWriter = renderTask(
+            "task.render.8",
+            "recording.a",
+            8,
+            target = "target.other",
+            blendPlan = colorWriteNoneBlend(),
+            resourceUses = listOf(
+                GPUFrameResourceUse(
+                    GPUFrameTextureRef("texture.snapshot"),
+                    GPUFrameResourceRole.ClipDepthStencil,
+                    GPUFrameResourceUsage.RenderAttachment,
+                    GPUFrameResourceLifetime.FrameLocal,
+                    true,
+                ),
+            ),
+        )
+        val last = renderTask("task.render.9", "recording.a", 9, blendPlan = destinationBlend())
+
+        val plan = GPUFramePlanner.plan(
+            taskList(
+                tasks = listOf(destination, first, attachmentWriter, last),
+                dependencies = listOf(
+                    dependency(destination, first),
+                    dependency(destination, attachmentWriter),
+                    dependency(destination, last),
+                    dependency(attachmentWriter, last),
+                ),
+            ),
+        )
+
+        assertTrue(plan.atomicallyRefused, plan.dumpLines().joinToString("\n"))
+        assertEquals("invalid.frame_plan.destination_order", plan.diagnostics.last().code.value)
+    }
+
+    @Test
     fun `texture preparation keeps complete typed scratch key facts`() {
         val descriptor = GPUFrameTextureDescriptor(
             logicalBounds = GPUPixelBounds(1, 2, 9, 10),
@@ -509,6 +583,7 @@ class GPUFramePlannerTest {
         target: String = "target.scene",
         compositeMembership: GPUTaskCompositeMembership? = null,
         blendPlan: GPUBlendPlan = executableBlend(),
+        resourceUses: List<GPUFrameResourceUse> = emptyList(),
     ): GPUTask.Render {
         val packet = packet(commandId, blendPlan)
         return GPUTask.Render(
@@ -518,6 +593,7 @@ class GPUFramePlannerTest {
             target = GPUFrameTargetRef(target),
             loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
             samplePlan = GPUSamplePlan.SingleSampleFrame,
+            resourceUses = resourceUses,
             drawPackets = listOf(packet),
             batchEligibilityByPacketId = mapOf(
                 packet.packetId to GPUPassBatchEligibility(
@@ -561,6 +637,23 @@ class GPUFramePlannerTest {
             formulaId = "source",
             sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
         )
+
+    private fun destinationBlend(): GPUBlendPlan = GPUBlendPlan.ShaderBlendWithDstRead(
+        mode = GPUBlendMode.OVERLAY,
+        formulaId = "overlay",
+        sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+    )
+
+    private fun colorWriteNoneBlend(): GPUBlendPlan = GPUBlendPlan.FixedFunctionBlend(
+        mode = GPUBlendMode.SRC,
+        state = GPUFixedFunctionBlendState(
+            stateId = "color-write-none",
+            color = GPUFixedFunctionBlendComponent("zero", "one", "add"),
+            alpha = GPUFixedFunctionBlendComponent("zero", "one", "add"),
+            writeMask = "none",
+        ),
+        sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+    )
 
     private fun seal(
         recordingId: String,
@@ -621,6 +714,7 @@ class GPUFramePlannerTest {
 
     private fun destinationTask(
         materialization: org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotMaterialization,
+        consumerCommandIds: List<Int> = listOf(7),
     ): GPUTask.DestinationSnapshots {
         val bounds = materialization.logicalBounds
         val sourceIntermediate = (materialization as? CopyAsDrawMaterialization)?.sourceIntermediate
@@ -629,7 +723,9 @@ class GPUFramePlannerTest {
                 GPUDestinationSnapshotGroup(
                     key = destinationGroupKey(sourceIntermediate),
                     logicalBounds = bounds,
-                    members = listOf(GPUDestinationReadMember("draw.7", 0, bounds)),
+                    members = consumerCommandIds.mapIndexed { index, commandId ->
+                        GPUDestinationReadMember("draw.$commandId", index, bounds)
+                    },
                     copiedBytes = 64,
                     decisionDump = listOf("fixture"),
                 ),
@@ -654,7 +750,7 @@ class GPUFramePlannerTest {
                                 snapshot = GPUFrameTextureRef("texture.snapshot"),
                                 logicalBounds = bounds,
                                 copyLayout = GPUTextureCopyLayout(256, 4),
-                                consumers = listOf(destinationConsumer()),
+                                consumers = consumerCommandIds.map(::destinationConsumer),
                             )
                         is CopyAsDrawMaterialization ->
                             GPUDestinationSnapshotOperation.CopyAsDraw(
@@ -663,7 +759,7 @@ class GPUFramePlannerTest {
                                 sourceIntermediate = materialization.sourceIntermediate,
                                 snapshot = GPUFrameTextureRef("texture.snapshot"),
                                 logicalBounds = bounds,
-                                consumers = listOf(destinationConsumer()),
+                                consumers = consumerCommandIds.map(::destinationConsumer),
                             )
                     },
                 ),
@@ -671,12 +767,12 @@ class GPUFramePlannerTest {
         )
     }
 
-    private fun destinationConsumer(): GPUDestinationSnapshotConsumerRef =
+    private fun destinationConsumer(commandId: Int = 7): GPUDestinationSnapshotConsumerRef =
         GPUDestinationSnapshotConsumerRef(
-            groupingCommandId = "draw.7",
-            renderTaskId = GPUTaskID("task.render.7"),
-            packetId = GPUDrawPacketID("packet.7"),
-            commandId = GPUDrawCommandID(7),
+            groupingCommandId = "draw.$commandId",
+            renderTaskId = GPUTaskID("task.render.$commandId"),
+            packetId = GPUDrawPacketID("packet.$commandId"),
+            commandId = GPUDrawCommandID(commandId),
         )
 
     private fun destinationGroupKey(

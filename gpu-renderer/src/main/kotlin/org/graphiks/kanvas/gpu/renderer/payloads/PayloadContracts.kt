@@ -366,6 +366,7 @@ data class GPUCorePrimitivePayloadInput(
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
     val clipCoveragePlan: GPUClipCoveragePlan,
+    val clipExecutionPlanIdentity: String? = null,
     val blendPlanIdentity: String,
     val frameProvenance: GPUFrameProvenance,
     val coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
@@ -463,6 +464,7 @@ sealed interface GPUDrawSemanticPayload {
         val targetBounds: GPUPixelBounds,
         val scissorBounds: GPUPixelBounds,
         val clipCoveragePlan: GPUClipCoveragePlan,
+        val clipExecutionPlanIdentity: String? = null,
         val blendPlanIdentity: String,
         val frameProvenance: GPUFrameProvenance,
         val canonicalHash: String,
@@ -476,26 +478,55 @@ sealed interface GPUDrawSemanticPayload {
             payloadRef.renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
                 payloadRef.uniformSlot?.fingerprint == payloadRef.uniformBlock?.fingerprint &&
                 payloadRef.uniformBlock?.byteSize == CORE_PRIMITIVE_UNIFORM_BYTES.toLong() &&
-                payloadRef.uniformBlock?.bytes?.size == CORE_PRIMITIVE_UNIFORM_BYTES &&
+                payloadRef.uniformBlock.bytes.size == CORE_PRIMITIVE_UNIFORM_BYTES &&
                 premultipliedRgba.isPremultipliedRgba() &&
                 targetBounds.containsRegisteredUniformRect(scissorBounds) &&
                 clipCoveragePlan !is GPUClipCoveragePlan.Refused &&
-                canonicalHash == sha256Hex(
-                    listOf(
-                        "type=CorePrimitive",
-                        "command=${payloadRef.commandIdValue}",
-                        "family=${sourceFamily.name}",
-                        "fingerprint=${payloadRef.uniformBlock?.fingerprint?.value.orEmpty()}",
-                        "geometry=${geometry.canonicalPreimage()}",
-                        "color=${premultipliedRgba.joinToString(",")}",
-                        "target=${targetBounds.canonicalBounds()}",
-                        "scissor=${scissorBounds.canonicalBounds()}",
-                        "clip=${clipCoveragePlan.canonicalPreimage()}",
-                        "blend=$blendPlanIdentity",
-                        "provenance=${frameProvenance.annotationValue}",
-                        "coverage=${coverageMode.name}",
-                    ).joinToString("\n"),
+                (clipExecutionPlanIdentity == null || clipExecutionPlanIdentity.isNotBlank()) &&
+                canonicalHash == corePrimitiveCanonicalHash(
+                    payloadRef = payloadRef,
+                    sourceFamily = sourceFamily,
+                    geometry = geometry,
+                    premultipliedRgba = premultipliedRgba,
+                    targetBounds = targetBounds,
+                    scissorBounds = scissorBounds,
+                    clipCoveragePlan = clipCoveragePlan,
+                    clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+                    blendPlanIdentity = blendPlanIdentity,
+                    frameProvenance = frameProvenance,
+                    coverageMode = coverageMode,
                 )
+
+        internal fun withClipExecutionPlanIdentity(identity: String): CorePrimitive {
+            require(identity.isNotBlank()) { "Core clip execution plan identity must not be blank" }
+            if (clipExecutionPlanIdentity == identity) return this
+            return CorePrimitive(
+                payloadRef = payloadRef,
+                sourceFamily = sourceFamily,
+                geometry = geometry,
+                premultipliedRgba = premultipliedRgba,
+                targetBounds = targetBounds,
+                scissorBounds = scissorBounds,
+                clipCoveragePlan = clipCoveragePlan,
+                clipExecutionPlanIdentity = identity,
+                blendPlanIdentity = blendPlanIdentity,
+                frameProvenance = frameProvenance,
+                coverageMode = coverageMode,
+                canonicalHash = corePrimitiveCanonicalHash(
+                    payloadRef,
+                    sourceFamily,
+                    geometry,
+                    premultipliedRgba,
+                    targetBounds,
+                    scissorBounds,
+                    clipCoveragePlan,
+                    identity,
+                    blendPlanIdentity,
+                    frameProvenance,
+                    coverageMode,
+                ),
+            )
+        }
     }
 
     /** Exact immutable uniform bytes for one shader from the closed prepared program registry. */
@@ -732,28 +763,56 @@ class GPUCorePrimitivePayloadGatherer {
             targetBounds = input.targetBounds,
             scissorBounds = input.scissorBounds,
             clipCoveragePlan = input.clipCoveragePlan.snapshot(),
+            clipExecutionPlanIdentity = input.clipExecutionPlanIdentity,
             blendPlanIdentity = input.blendPlanIdentity,
             frameProvenance = input.frameProvenance,
             coverageMode = input.coverageMode,
-            canonicalHash = sha256Hex(
-                listOf(
-                    "type=CorePrimitive",
-                    "command=${input.commandIdValue}",
-                    "family=${input.sourceFamily.name}",
-                    "fingerprint=${fingerprint.value}",
-                    "geometry=${geometry.canonicalPreimage()}",
-                    "color=${color.joinToString(",")}",
-                    "target=${input.targetBounds.canonicalBounds()}",
-                    "scissor=${input.scissorBounds.canonicalBounds()}",
-                    "clip=${input.clipCoveragePlan.canonicalPreimage()}",
-                    "blend=${input.blendPlanIdentity}",
-                    "provenance=${input.frameProvenance.annotationValue}",
-                    "coverage=${input.coverageMode.name}",
-                ).joinToString("\n"),
+            canonicalHash = corePrimitiveCanonicalHash(
+                ref,
+                input.sourceFamily,
+                geometry,
+                color,
+                input.targetBounds,
+                input.scissorBounds,
+                input.clipCoveragePlan,
+                input.clipExecutionPlanIdentity,
+                input.blendPlanIdentity,
+                input.frameProvenance,
+                input.coverageMode,
             ),
         )
     }
 }
+
+private fun corePrimitiveCanonicalHash(
+    payloadRef: GPUDrawPayloadRef,
+    sourceFamily: GPUCorePrimitiveSourceFamily,
+    geometry: GPUCorePrimitiveGeometry,
+    premultipliedRgba: List<Float>,
+    targetBounds: GPUPixelBounds,
+    scissorBounds: GPUPixelBounds,
+    clipCoveragePlan: GPUClipCoveragePlan,
+    clipExecutionPlanIdentity: String?,
+    blendPlanIdentity: String,
+    frameProvenance: GPUFrameProvenance,
+    coverageMode: GPUCorePrimitiveCoverageMode,
+): String = sha256Hex(
+    listOf(
+        "type=CorePrimitive",
+        "command=${payloadRef.commandIdValue}",
+        "family=${sourceFamily.name}",
+        "fingerprint=${requireNotNull(payloadRef.uniformBlock).fingerprint.value}",
+        "geometry=${geometry.canonicalPreimage()}",
+        "color=${premultipliedRgba.joinToString(",")}",
+        "target=${targetBounds.canonicalBounds()}",
+        "scissor=${scissorBounds.canonicalBounds()}",
+        "clip=${clipCoveragePlan.canonicalPreimage()}",
+        "clipExecution=${clipExecutionPlanIdentity ?: "none"}",
+        "blend=$blendPlanIdentity",
+        "provenance=${frameProvenance.annotationValue}",
+        "coverage=${coverageMode.name}",
+    ).joinToString("\n"),
+)
 
 private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
     target: GPUPixelBounds,

@@ -5,6 +5,9 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
@@ -14,6 +17,9 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
@@ -21,6 +27,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
@@ -39,21 +47,209 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
-const val CORE_PRIMITIVE_RENDER_PIPELINE_KEY = "pipeline.core-primitive.rgba8unorm.single-sample"
+const val CORE_PRIMITIVE_RENDER_PIPELINE_KEY = "pipeline.core-primitive.structural-v1"
 const val CORE_PRIMITIVE_BINDING_LAYOUT_HASH = "layout.core-primitive.uniform32"
 const val CORE_PRIMITIVE_TARGET_STATE_HASH = "target.rgba8unorm.single-sample"
 const val CORE_PRIMITIVE_VERTEX_SOURCE_LABEL = "core-primitive-device-geometry"
+const val CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL = "opaque-white"
 
-internal fun corePrimitiveRenderPipelineKey(): GPURenderPipelineKey =
-    GPURenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
+internal fun corePrimitiveRenderPipelineKey(
+    semantic: GPUDrawSemanticPayload.CorePrimitive,
+    clipExecutionPlan: GPUClipExecutionPlan,
+    blendPlan: GPUBlendPlan,
+): GPURenderPipelineKey = structuralCorePrimitivePipelineKey(
+    role = "shading",
+    shader = when (semantic.geometry) {
+        is GPUCorePrimitiveGeometry.Rect -> "core-rect-v1"
+        is GPUCorePrimitiveGeometry.RRect -> "core-rrect-v1"
+        is GPUCorePrimitiveGeometry.TriangulatedPath -> "core-path-v1"
+    },
+    layout = CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
+    topology = semantic.geometry.pipelineTopologyIdentity(),
+    sampleCount = 1,
+    blendState = blendPlan.structuralPipelineIdentity(),
+    clipAbi = clipExecutionPlan.consumerPipelineStateIdentity(),
+)
+
+internal fun corePrimitiveClipProducerPipelineKey(
+    plan: GPUClipExecutionPlan,
+    authority: GPUClipProducerAuthority,
+): GPURenderPipelineKey {
+    val facts = when (authority) {
+        is GPUClipProducerAuthority.Stencil -> listOf(
+            "role=clip-stencil-producer",
+            "shader=clip-stencil-v1",
+            "layout=layout.clip-stencil.none-v1",
+            "topology=${authority.producer.geometry.pipelineTopologyIdentity()}",
+            "frontFace=ccw",
+            "cull=none",
+            "target=rgba8unorm",
+            "samples=${(plan as? GPUClipExecutionPlan.StencilCoverage)?.sampleCount ?: "invalid-plan"}",
+            "blend=color-write-none",
+            "clipAbi=${authority.producer.pipelineStateIdentity()}",
+        )
+        is GPUClipProducerAuthority.Mask -> listOf(
+            "role=clip-mask-producer",
+            "shader=clip-mask-v1",
+            "layout=layout.clip-mask.none-v1",
+            "topology=${authority.producer.geometry.pipelineTopologyIdentity()}",
+            "frontFace=ccw",
+            "cull=none",
+            "target=rgba8unorm",
+            "samples=${(plan as? GPUClipExecutionPlan.CoverageMask)?.sampleCount ?: "invalid-plan"}",
+            "blend=mask-${authority.producer.combine.name.lowercase()}",
+            "clipAbi=aa-${authority.producer.antiAlias}",
+        )
+    }
+    return GPURenderPipelineKey("$CORE_PRIMITIVE_RENDER_PIPELINE_KEY.${sha256(facts.joinToString("|"))}")
+}
+
+private fun structuralCorePrimitivePipelineKey(
+    role: String,
+    shader: String,
+    layout: String,
+    topology: String,
+    sampleCount: Int,
+    blendState: String,
+    clipAbi: String,
+): GPURenderPipelineKey = GPURenderPipelineKey(
+    "$CORE_PRIMITIVE_RENDER_PIPELINE_KEY.${sha256(listOf(
+        "role=$role",
+        "shader=$shader",
+        "layout=$layout",
+        "topology=$topology",
+        "frontFace=ccw",
+        "cull=none",
+        "target=rgba8unorm",
+        "samples=$sampleCount",
+        "blend=$blendState",
+        "clipAbi=$clipAbi",
+    ).joinToString("|"))}",
+)
+
+private fun GPUCorePrimitiveGeometry.pipelineTopologyIdentity(): String = when (this) {
+    is GPUCorePrimitiveGeometry.Rect -> "triangle-list-device-xy-v1"
+    is GPUCorePrimitiveGeometry.RRect -> "analytic-rrect-device-xy-v1"
+    is GPUCorePrimitiveGeometry.TriangulatedPath -> "${geometryMode.name.lowercase()}-triangle-list-device-xy-v1"
+}
+
+private fun GPUClipExecutionGeometry.pipelineTopologyIdentity(): String = when (this) {
+    is GPUClipExecutionGeometry.Rect -> "rect-triangle-list-v1"
+    is GPUClipExecutionGeometry.RRect -> "rrect-analytic-v1"
+    is GPUClipExecutionGeometry.Path -> "path-edge-fan-v1"
+}
+
+private fun GPUClipExecutionPlan.consumerPipelineStateIdentity(): String = when (this) {
+    GPUClipExecutionPlan.NoClip,
+    is GPUClipExecutionPlan.ScissorOnly,
+    -> "none-v1"
+    is GPUClipExecutionPlan.AnalyticCoverage ->
+        "analytic-${geometry.pipelineTopologyIdentity()}-aa-$antiAlias-v1"
+    is GPUClipExecutionPlan.StencilCoverage -> "stencil-${consumer.pipelineStateIdentity()}-v1"
+    is GPUClipExecutionPlan.CoverageMask ->
+        "mask-${consumer.sampling.name.lowercase()}-invert-${consumer.invert}-depth-$depthStencilRequired-v1"
+    is GPUClipExecutionPlan.Refused -> "refused-v1"
+}
+
+private fun GPUBlendPlan.structuralPipelineIdentity(): String = when (this) {
+    is GPUBlendPlan.FixedFunctionBlend -> listOf(
+        "fixed",
+        mode.name,
+        sourceCoverageEncoding.name,
+        state.color.sourceFactor,
+        state.color.destinationFactor,
+        state.color.operation,
+        state.alpha.sourceFactor,
+        state.alpha.destinationFactor,
+        state.alpha.operation,
+        state.writeMask,
+    ).joinToString(":")
+    is GPUBlendPlan.ShaderBlendNoDstRead ->
+        "shader-no-dst:${mode.name}:$formulaId:${sourceCoverageEncoding.name}"
+    is GPUBlendPlan.ShaderBlendWithDstRead ->
+        "shader-dst:${mode.name}:$formulaId:${sourceCoverageEncoding.name}"
+    is GPUBlendPlan.LayerCompositeBlend -> child.structuralPipelineIdentity()
+    is GPUBlendPlan.NoOp -> "noop:${mode.name}"
+    is GPUBlendPlan.UnsupportedBlend -> "unsupported:${mode.name}"
+}
+
+private fun org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan.pipelineStateIdentity(): String =
+    listOf(
+        fillRule.name,
+        compare.name,
+        frontPassOperation.name,
+        backPassOperation.name,
+        failOperation.name,
+        depthFailOperation.name,
+        readMask.toString(),
+        writeMask.toString(),
+    ).joinToString("-")
+
+private fun org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilConsumerPlan.pipelineStateIdentity(): String =
+    listOf(
+        compare.name,
+        passOperation.name,
+        failOperation.name,
+        depthFailOperation.name,
+        readMask.toString(),
+        writeMask.toString(),
+    ).joinToString("-")
+
+private fun sha256(value: String): String = MessageDigest.getInstance("SHA-256")
+    .digest(value.toByteArray(Charsets.UTF_8))
+    .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+private fun corePrimitiveColorWriteNoneBlendPlan(): GPUBlendPlan.FixedFunctionBlend =
+    GPUBlendPlan.FixedFunctionBlend(
+        mode = GPUBlendMode.SRC,
+        state = GPUFixedFunctionBlendState(
+            stateId = "core-primitive-color-write-none",
+            color = GPUFixedFunctionBlendComponent("zero", "one", "add"),
+            alpha = GPUFixedFunctionBlendComponent("zero", "one", "add"),
+            writeMask = "none",
+        ),
+        sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+    )
+
+private fun corePrimitiveClipProducerBlendPlan(
+    authority: GPUClipProducerAuthority,
+): GPUBlendPlan.FixedFunctionBlend = when (authority) {
+    is GPUClipProducerAuthority.Stencil -> corePrimitiveColorWriteNoneBlendPlan()
+    is GPUClipProducerAuthority.Mask -> {
+        val difference = authority.producer.combine == org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine.Difference
+        GPUBlendPlan.FixedFunctionBlend(
+            mode = if (difference) GPUBlendMode.DST_OUT else GPUBlendMode.DST_IN,
+            state = GPUFixedFunctionBlendState(
+                stateId = if (difference) "core-primitive-mask-dst-out" else "core-primitive-mask-dst-in",
+                color = GPUFixedFunctionBlendComponent(
+                    "zero",
+                    if (difference) "one-minus-src-alpha" else "src-alpha",
+                    "add",
+                ),
+                alpha = GPUFixedFunctionBlendComponent(
+                    "zero",
+                    if (difference) "one-minus-src-alpha" else "src-alpha",
+                    "add",
+                ),
+                writeMask = "rgba",
+            ),
+            sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+        )
+    }
+}
 
 internal fun corePrimitiveTargetDescriptor(bounds: GPUPixelBounds): GPUFrameTextureDescriptor =
     GPUFrameTextureDescriptor(bounds, GPUColorFormat("rgba8unorm"), 1)
 
 internal fun corePrimitiveTargetByteSize(bounds: GPUPixelBounds): Long =
     Math.multiplyExact(Math.multiplyExact(bounds.width.toLong(), bounds.height.toLong()), 4L)
+
+internal fun corePrimitiveDepthStencilByteSize(bounds: GPUPixelBounds, sampleCount: Int): Long =
+    Math.multiplyExact(corePrimitiveTargetByteSize(bounds), sampleCount.toLong())
 
 internal fun corePrimitiveTargetPreparation(
     target: GPUFrameTargetRef,
@@ -113,7 +309,317 @@ private data class GPUCoreClipArtifactTopology(
     val finalProducerId: GPUTaskID,
     val consumerResourceUse: GPUFrameResourceUse,
     val orderingToken: String,
+    val atomicGroupId: String?,
 )
+
+internal data class GPUCorePrimitiveClipProducerValidation(
+    val sealedProducerPacketIds: Set<GPUDrawPacketID>,
+    val diagnostic: GPUDiagnostic? = null,
+)
+
+internal fun validateCorePrimitiveClipProducerAuthority(
+    framePlan: GPUFramePlan,
+): GPUCorePrimitiveClipProducerValidation {
+    val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+    val renderIndices = renders.associateWith(framePlan.steps::indexOf)
+    val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+        .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+    fun refuse(message: String) = GPUCorePrimitiveClipProducerValidation(
+        emptySet(),
+        GPUDiagnostic(
+            GPUDiagnosticCode("invalid.preflight.core_primitive_clip_producer_authority"),
+            GPUDiagnosticDomain.Execution,
+            GPUDiagnosticSeverity.Error,
+            message,
+        ),
+    )
+    data class ProducerEntry(
+        val index: Int,
+        val render: GPUFrameStep.RenderPassStep,
+        val packet: GPUDrawPacket,
+        val plan: GPUClipExecutionPlan,
+        val authority: GPUClipProducerAuthority,
+    )
+    fun consumers(plan: GPUClipExecutionPlan): List<Pair<Int, GPUFrameStep.RenderPassStep>> =
+        renders.mapNotNull { render ->
+            val matches = render.drawPackets.any { draw ->
+                draw.role == GPUDrawPacketRole.Shading &&
+                    (draw.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive)
+                        ?.clipExecutionPlanIdentity == plan.canonicalIdentity() &&
+                    draw.clipExecutionPlan?.canonicalIdentity() == plan.canonicalIdentity()
+            }
+            if (matches) renderIndices.getValue(render) to render else null
+        }
+    fun exactDependency(
+        from: GPUTaskID,
+        to: GPUTaskID,
+        token: String,
+        reason: String,
+        atomicGroup: String?,
+    ): Boolean {
+        val pairEdges = framePlan.dependencies.filter { dependency ->
+            dependency.fromTaskId == from && dependency.toTaskId == to
+        }
+        val matches = pairEdges.filter { dependency ->
+            dependency.fromTaskId == from && dependency.toTaskId == to &&
+                dependency.dependencyKind == "clip-producer-consumer" &&
+                dependency.useToken?.value == token && dependency.reasonCode == reason &&
+                dependency.atomicGroupId?.value == atomicGroup
+        }
+        return pairEdges.size == 1 && matches.size == 1 && framePlan.dependencies.none { dependency ->
+            dependency.fromTaskId == to && dependency.toTaskId == from &&
+                dependency.useToken?.value == token
+        }
+    }
+    val entries = mutableListOf<ProducerEntry>()
+    for (render in renders) {
+        for (packet in render.drawPackets) {
+            if (packet.role != GPUDrawPacketRole.StencilProducer &&
+                packet.role != GPUDrawPacketRole.ClipProducer
+            ) continue
+            if (render.drawPackets.size != 1 || render.sourceTaskIds.size != 1 ||
+                render.batches.size != 1 || render.batches.single().packets.singleOrNull() != packet ||
+                render.batches.single().sourceTaskIds != render.sourceTaskIds
+            ) return refuse("Core clip producer must be one sealed packet, task, and batch.")
+            if (packet.resourceGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
+                packet.renderStepVersion != 1 || packet.vertexSourceLabel != "clip-producer-authority"
+            ) return refuse("Core clip producer packet authority is stale or incomplete.")
+            val plan = packet.clipExecutionPlan
+                ?: return refuse("Core clip producer is missing its classified execution plan.")
+            val authority = packet.clipProducerAuthority
+                ?: return refuse("Core clip producer is missing its typed producer authority.")
+            when (packet.role) {
+                GPUDrawPacketRole.StencilProducer -> if (
+                    plan !is GPUClipExecutionPlan.StencilCoverage ||
+                    authority !is GPUClipProducerAuthority.Stencil
+                ) return refuse("Stencil producer requires one exact typed stencil plan and authority.")
+                GPUDrawPacketRole.ClipProducer -> if (
+                    plan !is GPUClipExecutionPlan.CoverageMask ||
+                    authority !is GPUClipProducerAuthority.Mask
+                ) return refuse("Mask producer requires one exact typed mask plan and authority.")
+            }
+            if (packet.blendPlan != corePrimitiveClipProducerBlendPlan(authority)) {
+                return refuse("Core clip producer blend authority contradicts its typed producer role.")
+            }
+            if (packet.renderPipelineKey != corePrimitiveClipProducerPipelineKey(plan, authority)) {
+                return refuse("Core clip producer pipeline key contradicts its structural state.")
+            }
+            when (packet.role) {
+                GPUDrawPacketRole.StencilProducer -> {
+                    val stencilPlan = plan as GPUClipExecutionPlan.StencilCoverage
+                    val stencilAuthority = authority as GPUClipProducerAuthority.Stencil
+                    if (stencilAuthority.producer != stencilPlan.producer ||
+                        packet.renderStepId.value != "clip.stencil.producer" ||
+                        packet.bindingLayoutHash != "layout.clip.stencil.producer.none" ||
+                        packet.targetStateHash != "target.clip.stencil.producer.single-sample"
+                    ) return refuse("Stencil producer packet fields contradict the classified plan.")
+                    if (stencilPlan.producer.loadOperation != GPUClipStencilLoadOperation.Clear ||
+                        stencilPlan.producer.storeOperation != GPUClipStencilStoreOperation.Store ||
+                        stencilPlan.producer.clearValue != 0u ||
+                        stencilPlan.consumer.loadOperation != GPUClipStencilLoadOperation.Load ||
+                        stencilPlan.consumer.storeOperation != GPUClipStencilStoreOperation.Store ||
+                        stencilPlan.consumer.clearValue != null ||
+                        stencilPlan.consumer.passOperation != org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation.Keep ||
+                        stencilPlan.consumer.failOperation != org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation.Keep ||
+                        stencilPlan.consumer.depthFailOperation != org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation.Keep
+                    ) return refuse("Stencil artifact requires Clear(0)+Store and read-only Load+Keep consumers.")
+                    val targetPreparation = preparations.singleOrNull { request ->
+                        request.resource == render.target && request.role == GPUFrameResourceRole.SceneTarget
+                    }
+                    val targetDescriptor = targetPreparation?.descriptor as? GPUFrameTextureDescriptor
+                        ?: return refuse("Stencil producer target is not the canonical scene texture.")
+                    val bounds = targetDescriptor.logicalBounds
+                    if (!isCanonicalCorePrimitiveTargetPreparation(targetPreparation, render.target, bounds)) {
+                        return refuse("Stencil producer target preparation is not canonical.")
+                    }
+                    if (stencilPlan.bounds.left < bounds.left || stencilPlan.bounds.top < bounds.top ||
+                        stencilPlan.bounds.right > bounds.right || stencilPlan.bounds.bottom > bounds.bottom
+                    ) return refuse("Stencil work bounds escape the canonical target.")
+                    val expectedDepthStencil = GPUDepthStencilLoadStorePlan.WritableStencil(
+                        when (stencilPlan.producer.loadOperation) {
+                            GPUClipStencilLoadOperation.Clear -> GPUStencilLoadOperation.Clear
+                            GPUClipStencilLoadOperation.Load -> GPUStencilLoadOperation.Load
+                        },
+                        when (stencilPlan.producer.storeOperation) {
+                            GPUClipStencilStoreOperation.Store -> GPUStorePlan.Store
+                            GPUClipStencilStoreOperation.Discard -> GPUStorePlan.Discard
+                        },
+                        stencilPlan.producer.clearValue,
+                    )
+                    if (render.loadStore != GPULoadStorePlan("load", GPUStorePlan.Store) ||
+                        render.depthStencilLoadStore != expectedDepthStencil ||
+                        render.samplePlan != GPUSamplePlan.SingleSampleFrame || stencilPlan.sampleCount != 1
+                    ) return refuse("Stencil producer color/stencil load-store or sample authority contradicts the plan.")
+                    val stencilUse = render.resourceUses.singleOrNull()?.takeIf { use ->
+                        use.role == GPUFrameResourceRole.ClipDepthStencil &&
+                            use.usage == GPUFrameResourceUsage.RenderAttachment && use.write &&
+                            use.lifetime == GPUFrameResourceLifetime.FrameLocal
+                    } ?: return refuse("Stencil producer requires one writable depth/stencil attachment use.")
+                    val stencilPreparation = preparations.singleOrNull { it.resource == stencilUse.resource }
+                        ?: return refuse("Stencil producer depth/stencil preparation is missing.")
+                    val stencilDescriptor = stencilPreparation.descriptor as? GPUFrameTextureDescriptor
+                        ?: return refuse("Stencil producer depth/stencil resource is not a texture.")
+                    val expectedBytes = try {
+                        corePrimitiveDepthStencilByteSize(bounds, stencilPlan.sampleCount)
+                    } catch (_: ArithmeticException) {
+                        return refuse("Stencil producer depth/stencil byte size overflowed.")
+                    }
+                    if (stencilPreparation.role != GPUFrameResourceRole.ClipDepthStencil ||
+                        stencilPreparation.usages != setOf(GPUFrameResourceUsage.RenderAttachment) ||
+                        stencilPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                        stencilDescriptor.logicalBounds != bounds ||
+                        stencilDescriptor.format.value != "depth24plus-stencil8" ||
+                        stencilDescriptor.sampleCount != stencilPlan.sampleCount ||
+                        stencilPreparation.byteSize != expectedBytes
+                    ) return refuse("Stencil producer depth/stencil dimensions, format, samples, or bytes mismatch.")
+                    val stencilConsumers = consumers(stencilPlan)
+                    if (stencilConsumers.isEmpty() || stencilConsumers.any { (_, consumer) ->
+                            val exactUses = consumer.resourceUses.filter {
+                                it.role == GPUFrameResourceRole.ClipDepthStencil
+                            }
+                            consumer.target != render.target || exactUses.size != 1 ||
+                                exactUses.single() != stencilUse.copy(write = false) ||
+                                consumer.depthStencilLoadStore != GPUDepthStencilLoadStorePlan.ReadOnlyKeep ||
+                                consumer.resourceUses.any { it.role == GPUFrameResourceRole.ClipMask } ||
+                                consumer.samplePlan != GPUSamplePlan.SingleSampleFrame
+                        }
+                    ) return refuse("Stencil producer and consumers do not share one exact attachment authority.")
+                }
+                GPUDrawPacketRole.ClipProducer -> {
+                    val maskPlan = plan as GPUClipExecutionPlan.CoverageMask
+                    val maskAuthority = authority as GPUClipProducerAuthority.Mask
+                    if (maskAuthority.producer !in maskPlan.producers ||
+                        packet.renderStepId.value != "clip.mask.producer" ||
+                        packet.bindingLayoutHash != "layout.clip.mask.producer.none" ||
+                        packet.targetStateHash != "target.clip.mask.producer.single-sample"
+                    ) return refuse("Mask producer packet fields contradict the classified plan.")
+                    if (maskPlan.depthStencilRequired || maskPlan.sampleCount != 1 ||
+                        render.samplePlan != GPUSamplePlan.SingleSampleFrame || render.depthStencilLoadStore != null ||
+                        render.resourceUses.any { it.role == GPUFrameResourceRole.ClipDepthStencil }
+                    ) return refuse("Mask producer requires the B3.0 single-sample color-only topology.")
+                    val maskUse = render.resourceUses.singleOrNull()?.takeIf { use ->
+                        use.resource == render.target && use.role == GPUFrameResourceRole.ClipMask &&
+                            use.usage == GPUFrameResourceUsage.RenderAttachment && use.write &&
+                            use.lifetime == GPUFrameResourceLifetime.FrameLocal
+                    } ?: return refuse("Mask producer requires one writable mask target use.")
+                    val maskPreparation = preparations.singleOrNull { request ->
+                        request.resource == maskUse.resource && request.role == GPUFrameResourceRole.ClipMask
+                    }
+                    val maskDescriptor = maskPreparation?.descriptor as? GPUFrameTextureDescriptor
+                        ?: return refuse("Mask producer target preparation is missing.")
+                    if (maskPreparation.usages != setOf(
+                            GPUFrameResourceUsage.RenderAttachment,
+                            GPUFrameResourceUsage.TextureBinding,
+                        ) || maskPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                        maskPreparation.byteSize != maskPlan.resolvedBytes ||
+                        maskDescriptor.logicalBounds != maskPlan.bounds || maskDescriptor.sampleCount != 1 ||
+                        maskDescriptor.format.value != "rgba8unorm"
+                    ) return refuse("Mask producer preparation dimensions, format, usages, lifetime, samples, or bytes mismatch.")
+                }
+            }
+            entries += ProducerEntry(renderIndices.getValue(render), render, packet, plan, authority)
+        }
+    }
+    entries.filter { it.plan is GPUClipExecutionPlan.StencilCoverage }
+        .groupBy { it.plan.canonicalIdentity() }
+        .forEach { (_, stencilEntries) ->
+            if (stencilEntries.size != 1) return refuse("Stencil plans require one unique producer.")
+            val entry = stencilEntries.single()
+            val plan = entry.plan as GPUClipExecutionPlan.StencilCoverage
+            val consumers = consumers(plan)
+            val producerTask = entry.render.sourceTaskIds.single()
+            val depthStencil = entry.render.resourceUses.single().resource
+            consumers.forEach { (consumerIndex, consumer) ->
+                if (entry.index >= consumerIndex) return refuse("Stencil producer must precede every consumer step.")
+                consumer.sourceTaskIds.forEach { consumerTask ->
+                    if (!exactDependency(
+                            producerTask,
+                            consumerTask,
+                            plan.orderingToken.value,
+                            "preserve.core-primitive.clip.producer-before-consumer",
+                            plan.atomicGroup.value,
+                        )
+                    ) return refuse("Stencil producer-consumer dependency authority is missing or inverted.")
+                }
+                if (renders.any { candidate ->
+                        val index = renderIndices.getValue(candidate)
+                        index in (entry.index + 1)..consumerIndex && candidate !== consumer &&
+                            candidate.resourceUses.any { it.resource == depthStencil && it.write }
+                    }
+                ) return refuse("A foreign depth/stencil write splits one stencil atomic group.")
+            }
+        }
+    entries.filter { it.plan is GPUClipExecutionPlan.CoverageMask }
+        .groupBy { it.plan.canonicalIdentity() }
+        .forEach { (_, maskEntries) ->
+            val plan = maskEntries.first().plan as GPUClipExecutionPlan.CoverageMask
+            val ordered = maskEntries.sortedBy(ProducerEntry::index)
+            val authorities = ordered.map { (it.authority as GPUClipProducerAuthority.Mask).producer }
+            if (authorities != plan.producers || ordered.map { it.index } != ordered.map { it.index }.sorted()) {
+                return refuse("Mask producers must retain exact strict source order.")
+            }
+            if (ordered.map { it.render.target }.distinct().size != 1 ||
+                ordered.map { it.render.resourceUses.single().resource }.distinct().size != 1
+            ) return refuse("Mask producers must share one exact target and writable mask resource.")
+            ordered.forEachIndexed { index, entry ->
+                val expected = GPULoadStorePlan(
+                    loadOp = if (index == 0) "clear" else "load",
+                    storePlan = GPUStorePlan.Store,
+                    clearColorLabel = if (index == 0) CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL else null,
+                )
+                if (entry.render.loadStore != expected) {
+                    return refuse("Mask producer color load/store contradicts its source order.")
+                }
+            }
+            ordered.zipWithNext().forEachIndexed { index, (from, to) ->
+                if (!exactDependency(
+                        from.render.sourceTaskIds.single(),
+                        to.render.sourceTaskIds.single(),
+                        plan.orderingToken.value,
+                        "preserve.core-primitive.clip.mask-producer.$index",
+                        null,
+                    )
+                ) return refuse("Mask producer chain dependency authority is missing or inverted.")
+            }
+            val final = ordered.last()
+            val maskResource = final.render.target
+            val maskConsumers = consumers(plan)
+            if (maskConsumers.isEmpty()) return refuse("Mask producer has no exact consumer.")
+            maskConsumers.forEach { (consumerIndex, consumer) ->
+                val uses = consumer.resourceUses.filter { it.role == GPUFrameResourceRole.ClipMask }
+                val expectedUse = GPUFrameResourceUse(
+                    maskResource,
+                    GPUFrameResourceRole.ClipMask,
+                    GPUFrameResourceUsage.TextureBinding,
+                    GPUFrameResourceLifetime.FrameLocal,
+                    false,
+                )
+                if (final.index >= consumerIndex || uses.size != 1 || uses.single() != expectedUse ||
+                    consumer.resourceUses.any { it.role == GPUFrameResourceRole.ClipDepthStencil } ||
+                    consumer.depthStencilLoadStore != null
+                ) return refuse("Mask consumer binding or producer-before-consumer order is invalid.")
+                consumer.sourceTaskIds.forEach { consumerTask ->
+                    if (!exactDependency(
+                            final.render.sourceTaskIds.single(),
+                            consumerTask,
+                            plan.orderingToken.value,
+                            "preserve.core-primitive.clip.producer-before-consumer",
+                            null,
+                        )
+                    ) return refuse("Mask producer-consumer dependency authority is missing or inverted.")
+                }
+            }
+        }
+    val resourceConsumerPlans = renders.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        .filter { it.role == GPUDrawPacketRole.Shading }
+        .mapNotNull(GPUDrawPacket::clipExecutionPlan)
+        .filter { it is GPUClipExecutionPlan.StencilCoverage || it is GPUClipExecutionPlan.CoverageMask }
+    if (resourceConsumerPlans.any { consumerPlan ->
+            entries.none { it.plan.canonicalIdentity() == consumerPlan.canonicalIdentity() }
+        }
+    ) return refuse("Resource-backed clip consumer is missing its sealed producer topology.")
+    return GPUCorePrimitiveClipProducerValidation(entries.map { it.packet.packetId }.toSet())
+}
 
 data class GPUCorePrimitivePreparedFrameRequest(
     val baseTaskList: GPUTaskList,
@@ -182,6 +688,44 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             .filterIsInstance<GPUClipExecutionPlan.Refused>()
             .firstOrNull()
             ?.let { return refused(it.code, it.message) }
+        basePackets.mapNotNull(GPUDrawPacket::clipExecutionPlan)
+            .filterIsInstance<GPUClipExecutionPlan.StencilCoverage>()
+            .firstOrNull { plan ->
+                plan.producer.loadOperation != GPUClipStencilLoadOperation.Clear ||
+                    plan.producer.storeOperation != GPUClipStencilStoreOperation.Store ||
+                    plan.producer.clearValue != 0u ||
+                    plan.consumer.loadOperation != GPUClipStencilLoadOperation.Load ||
+                    plan.consumer.storeOperation != GPUClipStencilStoreOperation.Store ||
+                    plan.consumer.clearValue != null ||
+                    plan.consumer.passOperation != org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation.Keep ||
+                    plan.consumer.failOperation != org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation.Keep ||
+                    plan.consumer.depthFailOperation != org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation.Keep
+            }
+            ?.let {
+                return refused(
+                    "unsupported.recording.core_primitive_clip_stencil_artifact_state",
+                    "Frame-local stencil artifacts require Clear(0)+Store and read-only Load+Keep consumers.",
+                )
+            }
+        if (basePackets.mapNotNull(GPUDrawPacket::clipExecutionPlan)
+                .filterIsInstance<GPUClipExecutionPlan.CoverageMask>()
+                .any(GPUClipExecutionPlan.CoverageMask::depthStencilRequired)
+        ) {
+            return refused(
+                "unsupported.recording.core_primitive_clip_mask_depth_stencil_topology_unavailable",
+                "Coverage-mask depth/stencil requires the B3.4 full-target attachment topology.",
+            )
+        }
+        request.semanticsByCommandId.values.firstOrNull { semantic ->
+            val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath
+            geometry?.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan ||
+                geometry?.geometryMode == GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan
+        }?.let {
+            return refused(
+                "unsupported.recording.core_primitive_geometry_stencil_topology_unavailable",
+                "Core primitive stencil geometry requires the B3.2 target-sized depth/stencil topology.",
+            )
+        }
         val clipArtifacts = linkedMapOf<String, GPUClipExecutionPlan>()
         basePackets.forEach { packet ->
             val plan = requireNotNull(packet.clipExecutionPlan)
@@ -242,6 +786,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 contentKey = contentKey,
                 plan = plan,
                 target = request.target,
+                targetBounds = request.targetBounds,
                 representative = basePackets.first { packet ->
                     packet.clipExecutionPlan?.contentKeyOrNull() == contentKey
                 },
@@ -322,6 +867,10 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                     ),
                     sampleContinuationKey = null,
                     compositeMembership = baseRender.compositeMembership,
+                    depthStencilLoadStore = if (resourceUses.any {
+                            it.role == GPUFrameResourceRole.ClipDepthStencil
+                        }
+                    ) GPUDepthStencilLoadStorePlan.ReadOnlyKeep else null,
                 )
             }
         }
@@ -383,6 +932,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                         firstProducer,
                         topology.orderingToken,
                         "paint-before-producer",
+                        topology.atomicGroupId,
                     )
                 }
             }
@@ -393,6 +943,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                         consumer.taskId,
                         topology.orderingToken,
                         "producer-before-consumer",
+                        topology.atomicGroupId,
                     )
                     if (previous != null && !firstArtifactUse) {
                         addPreparedOrderIfMissing(previous.taskId, consumer.taskId, dependencies.size + index)
@@ -435,12 +986,14 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         contentKey: String,
         plan: GPUClipExecutionPlan,
         target: GPUFrameTargetRef,
+        targetBounds: GPUPixelBounds,
         representative: GPUDrawPacket,
         recordingId: GPURecordingID,
     ): GPUCoreClipArtifactTopology {
         val key = plan.clipResourceKey()
         return when (plan) {
             is GPUClipExecutionPlan.StencilCoverage -> {
+                val depthStencilBytes = corePrimitiveDepthStencilByteSize(targetBounds, plan.sampleCount)
                 val resource = GPUFrameTextureRef("texture.core-primitive.clip-depth-stencil.$key")
                 val producerId = GPUTaskID("task.core-primitive.clip-stencil.$key")
                 val packet = clipProducerPacket(
@@ -465,14 +1018,14 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                         GPUResourcePreparationRequest(
                             resource,
                             GPUFrameTextureDescriptor(
-                                plan.bounds,
+                                targetBounds,
                                 GPUColorFormat("depth24plus-stencil8"),
                                 plan.sampleCount,
                             ),
                             GPUFrameResourceRole.ClipDepthStencil,
                             setOf(GPUFrameResourceUsage.RenderAttachment),
                             GPUFrameResourceLifetime.FrameLocal,
-                            plan.depthStencilBytes,
+                            depthStencilBytes,
                             "core-primitive.clip-depth-stencil.$key",
                         ),
                     ),
@@ -480,9 +1033,9 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                         GPUFrameMemoryAllocation(
                             "core-primitive.clip-depth-stencil.$key",
                             GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil,
-                            plan.depthStencilBytes,
+                            depthStencilBytes,
                             GPUFrameMemoryResourceKind.Texture2D,
-                            plan.bounds,
+                            targetBounds,
                         ),
                     ),
                     listOf(
@@ -497,12 +1050,24 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                             GPUProvisionalRenderSegmentKey("clip.stencil.$key"),
                             listOf(packet),
                             mapOf(packet.packetId to producerBatchEligibility()),
+                            depthStencilLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
+                                loadOperation = when (plan.producer.loadOperation) {
+                                    GPUClipStencilLoadOperation.Clear -> GPUStencilLoadOperation.Clear
+                                    GPUClipStencilLoadOperation.Load -> GPUStencilLoadOperation.Load
+                                },
+                                storeOperation = when (plan.producer.storeOperation) {
+                                    GPUClipStencilStoreOperation.Store -> GPUStorePlan.Store
+                                    GPUClipStencilStoreOperation.Discard -> GPUStorePlan.Discard
+                                },
+                                clearValue = plan.producer.clearValue,
+                            ),
                         ),
                     ),
                     emptyList(),
                     producerId,
                     use.copy(write = false),
                     plan.orderingToken.value,
+                    plan.atomicGroup.value,
                 )
             }
             is GPUClipExecutionPlan.CoverageMask -> {
@@ -582,7 +1147,11 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                         recordingId,
                         GPUTaskPhase.Render,
                         mask,
-                        GPULoadStorePlan(if (index == 0) "clear" else "load", GPUStorePlan.Store),
+                        GPULoadStorePlan(
+                            loadOp = if (index == 0) "clear" else "load",
+                            storePlan = GPUStorePlan.Store,
+                            clearColorLabel = if (index == 0) CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL else null,
+                        ),
                         GPUSamplePlan.SingleSampleFrame,
                         producerUses,
                         GPUProvisionalRenderSegmentKey("clip.mask.$key.${producer.sourceOrder}"),
@@ -591,7 +1160,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                     )
                 }
                 val producerDependencies = producerTasks.zipWithNext().mapIndexed { index, (from, to) ->
-                    clipDependency(from.taskId, to.taskId, plan.orderingToken.value, "mask-producer.$index")
+                    clipDependency(from.taskId, to.taskId, plan.orderingToken.value, "mask-producer.$index", null)
                 }
                 GPUCoreClipArtifactTopology(
                     contentKey,
@@ -608,6 +1177,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                         false,
                     ),
                     plan.orderingToken.value,
+                    null,
                 )
             }
             GPUClipExecutionPlan.NoClip,
@@ -639,10 +1209,8 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         renderStepId = GPURenderStepID(renderStep),
         renderStepVersion = 1,
         role = role,
-        blendPlan = canonicalSolidRectSrcOverBlendPlan(),
-        renderPipelineKey = GPURenderPipelineKey(
-            "pipeline.$renderStep.${plan.clipResourceKey()}.${authority.selectorIdentity}",
-        ),
+        blendPlan = corePrimitiveClipProducerBlendPlan(authority),
+        renderPipelineKey = corePrimitiveClipProducerPipelineKey(plan, authority),
         bindingLayoutHash = "layout.$renderStep.none",
         vertexSourceLabel = "clip-producer-authority",
         targetStateHash = "target.$renderStep.single-sample",
@@ -664,19 +1232,24 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         to: GPUTaskID,
         orderingToken: String,
         reason: String,
+        atomicGroupId: String?,
     ) = GPUTaskDependency(
         from,
         to,
         "clip-producer-consumer",
         GPUTaskUseToken(orderingToken),
         "preserve.core-primitive.clip.$reason",
+        atomicGroupId?.let(::GPUTaskAtomicGroupID),
     )
 
 
     private fun packet(
         basePacket: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.CorePrimitive,
-    ): GPUDrawPacket = GPUDrawPacket(
+    ): GPUDrawPacket {
+        val clipExecutionPlan = requireNotNull(basePacket.clipExecutionPlan)
+        val preparedSemantic = semantic.withClipExecutionPlanIdentity(clipExecutionPlan.canonicalIdentity())
+        return GPUDrawPacket(
         packetId = basePacket.packetId,
         commandIdValue = basePacket.commandIdValue,
         analysisRecordId = basePacket.analysisRecordId,
@@ -690,21 +1263,26 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         renderStepVersion = 1,
         role = basePacket.role,
         blendPlan = basePacket.blendPlan,
-        renderPipelineKey = corePrimitiveRenderPipelineKey(),
+        renderPipelineKey = corePrimitiveRenderPipelineKey(
+            preparedSemantic,
+            clipExecutionPlan,
+            requireNotNull(basePacket.blendPlan),
+        ),
         bindingLayoutHash = CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
-        uniformSlot = semantic.payloadRef.uniformSlot,
+        uniformSlot = preparedSemantic.payloadRef.uniformSlot,
         resourceSlot = basePacket.resourceSlot,
-        semanticPayload = semantic,
+        semanticPayload = preparedSemantic,
         vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
-        scissorBoundsHash = corePrimitiveScissorAuthority(semantic.scissorBounds),
+        scissorBoundsHash = corePrimitiveScissorAuthority(preparedSemantic.scissorBounds),
         targetStateHash = CORE_PRIMITIVE_TARGET_STATE_HASH,
         originalPaintOrder = basePacket.originalPaintOrder,
         resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
         frameProvenance = basePacket.frameProvenance,
         clipCoveragePlan = basePacket.clipCoveragePlan,
-        clipExecutionPlan = basePacket.clipExecutionPlan,
+        clipExecutionPlan = clipExecutionPlan,
         diagnostics = basePacket.diagnostics,
     )
+    }
 
     private fun dependency(from: GPUTaskID, to: GPUTaskID, index: Int) = GPUTaskDependency(
         from,

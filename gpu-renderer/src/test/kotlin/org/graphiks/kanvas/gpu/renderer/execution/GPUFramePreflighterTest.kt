@@ -12,6 +12,20 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipOrderingToken
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
@@ -23,6 +37,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
@@ -54,7 +69,10 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUCompositeProvenanceToken
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveRenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveClipProducerPipelineKey
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDepthStencilByteSize
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotConsumerRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
@@ -70,7 +88,11 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputDescriptor
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskDependency
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskAtomicGroupID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskUseToken
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTargetTransitionKind
 import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
@@ -87,6 +109,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreparationInp
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreparationSession
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
@@ -146,6 +169,184 @@ class GPUFramePreflighterTest {
 
             assertEquals(
                 "invalid.preflight.core_primitive_semantic_integrity",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertTrue(events.isEmpty(), "pure validation side effects: $events")
+        }
+    }
+
+    @Test
+    fun `core semantic clip execution identity mismatch refuses before preflight side effects`() {
+        val semantic = coreSemantic(GPUClipExecutionPlan.NoClip)
+        val substituted = GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(0, 0, 4, 4))
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+        ).preflight(
+            framePlan(
+                listOf(
+                    prepareScene(),
+                    coreRenderStep(semantic, clipExecutionPlan = substituted),
+                ),
+            ),
+        )
+
+        assertEquals(
+            "invalid.preflight.core_primitive_semantic_integrity",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertTrue(events.isEmpty(), "pure validation side effects: $events")
+    }
+
+    @Test
+    fun `core stencil producer target depth stencil and generation corruption refuse before side effects`() {
+        val scenarios = listOf(
+            coreStencilFramePlan(producerTarget = GPUFrameTargetRef("target.substituted")),
+            coreStencilFramePlan(depthStencilBounds = GPUPixelBounds(0, 0, 3, 4)),
+            coreStencilFramePlan(producerGeneration = 1L),
+            coreStencilFramePlan(producerDepthStencilWrite = false),
+        )
+
+        scenarios.forEach { plan ->
+            val events = mutableListOf<String>()
+            val result = preflighter(
+                resources = RecordingResourceProvider(events),
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+            ).preflight(plan)
+
+            assertEquals(
+                "invalid.preflight.core_primitive_clip_producer_authority",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertTrue(events.isEmpty(), "pure validation side effects: $events")
+        }
+    }
+
+    @Test
+    fun `sealed core stencil producer and consumer accept late bound packet with scene and clip generations`() {
+        val plan = coreStencilFramePlan()
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+        ).preflight(plan)
+
+        assertIs<GPUFramePreflightResult.Prepared>(result)
+        assertTrue(events.any { it.startsWith("resource:prepare:") })
+    }
+
+    @Test
+    fun `core stencil ordering authority corruption refuses before side effects`() {
+        val mismatchedAuthority = GPUClipStencilProducerPlan(
+            geometry = GPUClipExecutionGeometry.Rect(GPUBounds(0f, 0f, 2f, 2f)),
+            scissor = GPUPixelBounds(0, 0, 2, 2),
+            fillRule = GPUClipFillRule.EvenOdd,
+            reference = 3u,
+            compare = GPUClipStencilCompare.Always,
+            frontPassOperation = GPUClipStencilOperation.Invert,
+            backPassOperation = GPUClipStencilOperation.Invert,
+            loadOperation = GPUClipStencilLoadOperation.Clear,
+            storeOperation = GPUClipStencilStoreOperation.Store,
+            clearValue = 0u,
+        )
+        val scenarios = listOf(
+            coreStencilFramePlan(includeDependency = false),
+            coreStencilFramePlan(invertDependency = true),
+            coreStencilFramePlan(dependencyToken = "token.substituted"),
+            coreStencilFramePlan(consumerBeforeProducer = true),
+            coreStencilFramePlan(consumerDepthStencilLifetime = GPUFrameResourceLifetime.RecordingLocal),
+            coreStencilFramePlan(
+                producerLoadOperation = GPUClipStencilLoadOperation.Load,
+                producerClearValue = null,
+            ),
+            coreStencilFramePlan(producerStoreOperation = GPUClipStencilStoreOperation.Discard),
+            coreStencilFramePlan(producerClearValue = 1u),
+            coreStencilFramePlan(consumerPassOperation = GPUClipStencilOperation.Replace),
+            coreStencilFramePlan(consumerStoreOperation = GPUClipStencilStoreOperation.Discard),
+            coreStencilFramePlan(consumerHasClipMaskUse = true),
+            coreStencilFramePlan(duplicateContradictoryEdge = true),
+            coreStencilFramePlan(foreignDepthStencilWrite = true),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            coreStencilFramePlan(producerAuthorityOverride = mismatchedAuthority)
+        }
+
+        scenarios.forEach { plan ->
+            val events = mutableListOf<String>()
+            val result = preflighter(
+                resources = RecordingResourceProvider(events),
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+            ).preflight(plan)
+
+            assertEquals(
+                "invalid.preflight.core_primitive_clip_producer_authority",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertTrue(events.isEmpty(), "pure validation side effects: $events")
+        }
+    }
+
+    @Test
+    fun `sealed core mask producer chain and consumer preflight with exact generations`() {
+        val plan = coreMaskFramePlan()
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+        ).preflight(plan)
+
+        assertIs<GPUFramePreflightResult.Prepared>(result)
+    }
+
+    @Test
+    fun `core mask seal corruption matrix refuses before side effects`() {
+        val scenarios = listOf(
+            coreMaskFramePlan(maskByteDelta = 4),
+            coreMaskFramePlan(maskDescriptorBoundsMismatch = true),
+            coreMaskFramePlan(maskFormat = "rgba16float"),
+            coreMaskFramePlan(maskPreparationLifetime = GPUFrameResourceLifetime.RecordingLocal),
+            coreMaskFramePlan(maskPreparationUsages = setOf(GPUFrameResourceUsage.RenderAttachment)),
+            coreMaskFramePlan(consumerUsage = GPUFrameResourceUsage.RenderAttachment),
+            coreMaskFramePlan(consumerWrite = true),
+            coreMaskFramePlan(consumerLifetime = GPUFrameResourceLifetime.RecordingLocal),
+            coreMaskFramePlan(firstProducerLoad = "load"),
+            coreMaskFramePlan(firstProducerClearColorLabel = "transparent"),
+            coreMaskFramePlan(producerStore = GPUStorePlan.Discard),
+            coreMaskFramePlan(includeChainDependency = false),
+            coreMaskFramePlan(invertChainDependency = true),
+            coreMaskFramePlan(dependencyToken = "token.substituted"),
+            coreMaskFramePlan(duplicateContradictoryEdge = true),
+            coreMaskFramePlan(reverseProducerSteps = true),
+            coreMaskFramePlan(secondProducerTargetMismatch = true),
+            coreMaskFramePlan(includeProducers = false),
+            coreMaskFramePlan(sampleCount = 4),
+            coreMaskFramePlan(depthStencilRequired = true),
+        )
+
+        scenarios.forEach { plan ->
+            val events = mutableListOf<String>()
+            val result = preflighter(
+                resources = RecordingResourceProvider(events),
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+            ).preflight(plan)
+
+            assertEquals(
+                "invalid.preflight.core_primitive_clip_producer_authority",
                 assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
             )
             assertTrue(events.isEmpty(), "pure validation side effects: $events")
@@ -2156,7 +2357,7 @@ class GPUFramePreflighterTest {
         blendPlan: GPUBlendPlan = coreBlend(GPUBlendMode.SRC_OVER),
         provenance: GPUFrameProvenance = GPUFrameProvenance.GmContent,
         clip: GPUClipCoveragePlan = GPUClipCoveragePlan.NoClip,
-        renderPipelineKey: GPURenderPipelineKey = corePrimitiveRenderPipelineKey(),
+        renderPipelineKey: GPURenderPipelineKey? = null,
         bindingLayoutHash: String = CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
         vertexSourceLabel: String = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
         targetStateHash: String = CORE_PRIMITIVE_TARGET_STATE_HASH,
@@ -2164,6 +2365,7 @@ class GPUFramePreflighterTest {
         renderStepVersion: Int = 1,
         role: GPUDrawPacketRole = GPUDrawPacketRole.Shading,
         samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+        clipExecutionPlan: GPUClipExecutionPlan = GPUClipExecutionPlan.NoClip,
     ): GPUFrameStep.RenderPassStep {
         val packet = GPUDrawPacket(
             packetId = GPUDrawPacketID("packet.core"),
@@ -2179,7 +2381,9 @@ class GPUFramePreflighterTest {
             renderStepVersion = renderStepVersion,
             role = role,
             blendPlan = blendPlan,
-            renderPipelineKey = renderPipelineKey,
+            renderPipelineKey = renderPipelineKey ?: semantic?.let {
+                corePrimitiveRenderPipelineKey(it, clipExecutionPlan, blendPlan)
+            } ?: GPURenderPipelineKey("pipeline.core.missing-semantic"),
             bindingLayoutHash = bindingLayoutHash,
             uniformSlot = semantic?.payloadRef?.uniformSlot,
             semanticPayload = semantic,
@@ -2190,6 +2394,7 @@ class GPUFramePreflighterTest {
             resourceGeneration = if (semantic == null) 1L else PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
             frameProvenance = provenance,
             clipCoveragePlan = clip,
+            clipExecutionPlan = clipExecutionPlan,
         )
         return GPUFrameStep.RenderPassStep(
             target = GPUFrameTargetRef("target.scene"),
@@ -2201,7 +2406,371 @@ class GPUFramePreflighterTest {
         )
     }
 
-    private fun coreSemantic(): GPUDrawSemanticPayload.CorePrimitive {
+    private fun coreStencilFramePlan(
+        producerTarget: GPUFrameTargetRef = GPUFrameTargetRef("target.scene"),
+        depthStencilBounds: GPUPixelBounds = GPUPixelBounds(0, 0, 4, 4),
+        producerGeneration: Long = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+        producerDepthStencilWrite: Boolean = true,
+        producerAuthorityOverride: GPUClipStencilProducerPlan? = null,
+        includeDependency: Boolean = true,
+        invertDependency: Boolean = false,
+        dependencyToken: String? = null,
+        consumerBeforeProducer: Boolean = false,
+        consumerDepthStencilLifetime: GPUFrameResourceLifetime = GPUFrameResourceLifetime.FrameLocal,
+        producerLoadOperation: GPUClipStencilLoadOperation = GPUClipStencilLoadOperation.Clear,
+        producerStoreOperation: GPUClipStencilStoreOperation = GPUClipStencilStoreOperation.Store,
+        producerClearValue: UInt? = 0u,
+        consumerPassOperation: GPUClipStencilOperation = GPUClipStencilOperation.Keep,
+        consumerStoreOperation: GPUClipStencilStoreOperation = GPUClipStencilStoreOperation.Store,
+        consumerHasClipMaskUse: Boolean = false,
+        duplicateContradictoryEdge: Boolean = false,
+        foreignDepthStencilWrite: Boolean = false,
+    ): GPUFramePlan {
+        val scene = GPUFrameTargetRef("target.scene")
+        val depthStencil = GPUFrameTextureRef("texture.core.clip.depth-stencil")
+        val targetBounds = GPUPixelBounds(0, 0, 4, 4)
+        val plan = GPUClipExecutionPlan.StencilCoverage(
+            contentKey = "clip.preflight.stencil",
+            bounds = GPUPixelBounds(1, 1, 3, 3),
+            sampleCount = 1,
+            atomicGroup = GPUClipAtomicGroupID("atomic.preflight.stencil"),
+            orderingToken = GPUClipOrderingToken("token.preflight.stencil"),
+            producer = GPUClipStencilProducerPlan(
+                geometry = GPUClipExecutionGeometry.Rect(GPUBounds(1f, 1f, 3f, 3f)),
+                scissor = GPUPixelBounds(1, 1, 3, 3),
+                fillRule = GPUClipFillRule.Winding,
+                reference = 1u,
+                compare = GPUClipStencilCompare.Always,
+                frontPassOperation = GPUClipStencilOperation.Replace,
+                backPassOperation = GPUClipStencilOperation.Replace,
+                loadOperation = producerLoadOperation,
+                storeOperation = producerStoreOperation,
+                clearValue = producerClearValue,
+            ),
+            consumer = GPUClipStencilConsumerPlan(
+                scissor = targetBounds,
+                reference = 1u,
+                compare = GPUClipStencilCompare.Equal,
+                passOperation = consumerPassOperation,
+                storeOperation = consumerStoreOperation,
+            ),
+        )
+        val authority = GPUClipProducerAuthority.Stencil(producerAuthorityOverride ?: plan.producer)
+        val producerPacket = GPUDrawPacket(
+            packetId = GPUDrawPacketID("packet.core.clip.stencil"),
+            commandIdValue = 41,
+            analysisRecordId = "analysis.core.clip.stencil",
+            passId = "pass.core.clip.stencil",
+            layerId = "root",
+            bindingListId = "bindings.core.clip.stencil",
+            insertionReasonCode = "clip.stencil.producer",
+            sortKey = 0L,
+            sortKeyPreimage = "paint-order:0",
+            renderStepId = GPURenderStepID("clip.stencil.producer"),
+            renderStepVersion = 1,
+            role = GPUDrawPacketRole.StencilProducer,
+            blendPlan = coreColorWriteNoneBlend(),
+            renderPipelineKey = corePrimitiveClipProducerPipelineKey(plan, authority),
+            bindingLayoutHash = "layout.clip.stencil.producer.none",
+            vertexSourceLabel = "clip-producer-authority",
+            targetStateHash = "target.clip.stencil.producer.single-sample",
+            originalPaintOrder = 0,
+            resourceGeneration = producerGeneration,
+            frameProvenance = GPUFrameProvenance.GmContent,
+            clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+            clipExecutionPlan = plan,
+            clipProducerAuthority = authority,
+        )
+        val producerTaskId = GPUTaskID("task.core.clip.stencil")
+        val producer = GPUFrameStep.RenderPassStep(
+            target = producerTarget,
+            loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+            resourceUses = listOf(
+                GPUFrameResourceUse(
+                    depthStencil,
+                    GPUFrameResourceRole.ClipDepthStencil,
+                    GPUFrameResourceUsage.RenderAttachment,
+                    GPUFrameResourceLifetime.FrameLocal,
+                    producerDepthStencilWrite,
+                ),
+            ),
+            drawPackets = listOf(producerPacket),
+            sourceTaskIds = listOf(producerTaskId),
+            batches = listOf(batch("batch.core.clip.stencil", producerPacket, producerTaskId.value)),
+            depthStencilLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
+                GPUStencilLoadOperation.Clear,
+                GPUStorePlan.Store,
+                0u,
+            ),
+        )
+        val semantic = coreSemantic(plan)
+        val baseConsumer = coreRenderStep(semantic, clipExecutionPlan = plan)
+        val consumer = GPUFrameStep.RenderPassStep(
+            target = scene,
+            loadStore = baseConsumer.loadStore,
+            samplePlan = baseConsumer.samplePlan,
+            resourceUses = listOf(
+                GPUFrameResourceUse(
+                    depthStencil,
+                    GPUFrameResourceRole.ClipDepthStencil,
+                    GPUFrameResourceUsage.RenderAttachment,
+                    consumerDepthStencilLifetime,
+                    false,
+                ),
+            ) + if (consumerHasClipMaskUse) listOf(
+                GPUFrameResourceUse(
+                    GPUFrameTargetRef("target.unexpected.clip-mask"),
+                    GPUFrameResourceRole.ClipMask,
+                    GPUFrameResourceUsage.TextureBinding,
+                    GPUFrameResourceLifetime.FrameLocal,
+                    false,
+                ),
+            ) else emptyList(),
+            drawPackets = baseConsumer.drawPackets,
+            sourceTaskIds = baseConsumer.sourceTaskIds,
+            batches = baseConsumer.batches,
+            depthStencilLoadStore = GPUDepthStencilLoadStorePlan.ReadOnlyKeep,
+        )
+        val scenePreparation = prepareScene().requests.single()
+        val prepare = GPUFrameStep.PrepareResourcesStep(
+            requests = listOf(
+                scenePreparation,
+                GPUResourcePreparationRequest(
+                    depthStencil,
+                    GPUFrameTextureDescriptor(
+                        depthStencilBounds,
+                        GPUColorFormat("depth24plus-stencil8"),
+                        1,
+                    ),
+                    GPUFrameResourceRole.ClipDepthStencil,
+                    setOf(GPUFrameResourceUsage.RenderAttachment),
+                    GPUFrameResourceLifetime.FrameLocal,
+                    corePrimitiveDepthStencilByteSize(depthStencilBounds, 1),
+                    "core.clip.depth-stencil",
+                ),
+            ),
+            sourceTaskIds = listOf(GPUTaskID("task.prepare.core.stencil")),
+        )
+        val dependency = GPUTaskDependency(
+            if (invertDependency) consumer.sourceTaskIds.single() else producerTaskId,
+            if (invertDependency) producerTaskId else consumer.sourceTaskIds.single(),
+            "clip-producer-consumer",
+            GPUTaskUseToken(dependencyToken ?: plan.orderingToken.value),
+            "preserve.core-primitive.clip.producer-before-consumer",
+            GPUTaskAtomicGroupID(plan.atomicGroup.value),
+        )
+        val foreign = coreRenderStep(coreSemantic()).let { base ->
+            GPUFrameStep.RenderPassStep(
+                target = base.target,
+                loadStore = base.loadStore,
+                samplePlan = base.samplePlan,
+                resourceUses = listOf(
+                    GPUFrameResourceUse(
+                        depthStencil,
+                        GPUFrameResourceRole.ClipDepthStencil,
+                        GPUFrameResourceUsage.RenderAttachment,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        true,
+                    ),
+                ),
+                drawPackets = base.drawPackets,
+                sourceTaskIds = base.sourceTaskIds,
+                batches = base.batches,
+                depthStencilLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
+                    GPUStencilLoadOperation.Load,
+                    GPUStorePlan.Store,
+                    null,
+                ),
+            )
+        }
+        val orderedSteps = when {
+            consumerBeforeProducer -> listOf(prepare, consumer, producer)
+            foreignDepthStencilWrite -> listOf(prepare, producer, foreign, consumer)
+            else -> listOf(prepare, producer, consumer)
+        }
+        return framePlan(
+            orderedSteps,
+            dependencies = if (includeDependency) buildList {
+                add(dependency)
+                if (duplicateContradictoryEdge) add(dependency.copy(useToken = GPUTaskUseToken("token.conflict")))
+            } else emptyList(),
+        )
+    }
+
+    private fun coreMaskFramePlan(
+        maskByteDelta: Long = 0,
+        maskPreparationLifetime: GPUFrameResourceLifetime = GPUFrameResourceLifetime.FrameLocal,
+        maskPreparationUsages: Set<GPUFrameResourceUsage> = setOf(
+            GPUFrameResourceUsage.RenderAttachment,
+            GPUFrameResourceUsage.TextureBinding,
+        ),
+        consumerUsage: GPUFrameResourceUsage = GPUFrameResourceUsage.TextureBinding,
+        consumerWrite: Boolean = false,
+        consumerLifetime: GPUFrameResourceLifetime = GPUFrameResourceLifetime.FrameLocal,
+        firstProducerLoad: String = "clear",
+        firstProducerClearColorLabel: String? = CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL,
+        producerStore: GPUStorePlan = GPUStorePlan.Store,
+        includeChainDependency: Boolean = true,
+        invertChainDependency: Boolean = false,
+        dependencyToken: String? = null,
+        reverseProducerSteps: Boolean = false,
+        includeProducers: Boolean = true,
+        sampleCount: Int = 1,
+        depthStencilRequired: Boolean = false,
+        secondProducerTargetMismatch: Boolean = false,
+        maskDescriptorBoundsMismatch: Boolean = false,
+        maskFormat: String = "rgba8unorm",
+        duplicateContradictoryEdge: Boolean = false,
+    ): GPUFramePlan {
+        val scene = GPUFrameTargetRef("target.scene")
+        val mask = GPUFrameTargetRef("target.core.clip.mask")
+        val bounds = GPUPixelBounds(0, 0, 4, 4)
+        val producers = listOf(
+            GPUClipMaskProducerPlan(
+                0,
+                GPUClipExecutionGeometry.Rect(GPUBounds(0f, 0f, 4f, 4f)),
+                GPUClipMaskCombine.Intersect,
+                true,
+            ),
+            GPUClipMaskProducerPlan(
+                1,
+                GPUClipExecutionGeometry.Rect(GPUBounds(1f, 1f, 3f, 3f)),
+                GPUClipMaskCombine.Difference,
+                true,
+            ),
+        )
+        val plan = GPUClipExecutionPlan.CoverageMask(
+            contentKey = "clip.preflight.mask",
+            bounds = bounds,
+            sampleCount = sampleCount,
+            depthStencilRequired = depthStencilRequired,
+            orderingToken = GPUClipOrderingToken("token.preflight.mask"),
+            producers = producers,
+            consumer = GPUClipMaskConsumerPlan(),
+        )
+        val maskWrite = GPUFrameResourceUse(
+            mask,
+            GPUFrameResourceRole.ClipMask,
+            GPUFrameResourceUsage.RenderAttachment,
+            GPUFrameResourceLifetime.FrameLocal,
+            true,
+        )
+        fun producerStep(index: Int): GPUFrameStep.RenderPassStep {
+            val producer = producers[index]
+            val authority = GPUClipProducerAuthority.Mask(producer)
+            val taskId = GPUTaskID("task.core.clip.mask.$index")
+            val packet = GPUDrawPacket(
+                packetId = GPUDrawPacketID("packet.core.clip.mask.$index"),
+                commandIdValue = 41,
+                analysisRecordId = "analysis.core.clip.mask.$index",
+                passId = "pass.core.clip.mask.$index",
+                layerId = "root",
+                bindingListId = "bindings.core.clip.mask.$index",
+                insertionReasonCode = "clip.mask.producer.$index",
+                sortKey = index.toLong(),
+                sortKeyPreimage = "paint-order:$index",
+                renderStepId = GPURenderStepID("clip.mask.producer"),
+                renderStepVersion = 1,
+                role = GPUDrawPacketRole.ClipProducer,
+                blendPlan = coreMaskProducerBlend(producer.combine),
+                renderPipelineKey = corePrimitiveClipProducerPipelineKey(plan, authority),
+                bindingLayoutHash = "layout.clip.mask.producer.none",
+                vertexSourceLabel = "clip-producer-authority",
+                targetStateHash = "target.clip.mask.producer.single-sample",
+                originalPaintOrder = index,
+                resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+                frameProvenance = GPUFrameProvenance.GmContent,
+                clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+                clipExecutionPlan = plan,
+                clipProducerAuthority = authority,
+            )
+            return GPUFrameStep.RenderPassStep(
+                target = if (index == 1 && secondProducerTargetMismatch) {
+                    GPUFrameTargetRef("target.core.clip.mask.substituted")
+                } else mask,
+                loadStore = GPULoadStorePlan(
+                    if (index == 0) firstProducerLoad else "load",
+                    producerStore,
+                    if (index == 0) firstProducerClearColorLabel else null,
+                ),
+                samplePlan = GPUSamplePlan.SingleSampleFrame,
+                resourceUses = listOf(maskWrite),
+                drawPackets = listOf(packet),
+                sourceTaskIds = listOf(taskId),
+                batches = listOf(batch("batch.core.clip.mask.$index", packet, taskId.value)),
+            )
+        }
+        val producerSteps = listOf(producerStep(0), producerStep(1))
+        val baseConsumer = coreRenderStep(coreSemantic(plan), clipExecutionPlan = plan)
+        val consumer = GPUFrameStep.RenderPassStep(
+            target = scene,
+            loadStore = baseConsumer.loadStore,
+            samplePlan = baseConsumer.samplePlan,
+            resourceUses = listOf(
+                GPUFrameResourceUse(
+                    mask,
+                    GPUFrameResourceRole.ClipMask,
+                    consumerUsage,
+                    consumerLifetime,
+                    consumerWrite,
+                ),
+            ),
+            drawPackets = baseConsumer.drawPackets,
+            sourceTaskIds = baseConsumer.sourceTaskIds,
+            batches = baseConsumer.batches,
+        )
+        val prepare = GPUFrameStep.PrepareResourcesStep(
+            requests = listOf(
+                prepareScene().requests.single(),
+                GPUResourcePreparationRequest(
+                    mask,
+                    GPUFrameTextureDescriptor(
+                        if (maskDescriptorBoundsMismatch) GPUPixelBounds(0, 0, 3, 4) else bounds,
+                        GPUColorFormat(maskFormat),
+                        1,
+                    ),
+                    GPUFrameResourceRole.ClipMask,
+                    maskPreparationUsages,
+                    maskPreparationLifetime,
+                    plan.resolvedBytes + maskByteDelta,
+                    "core.clip.mask",
+                ),
+            ),
+            sourceTaskIds = listOf(GPUTaskID("task.prepare.core.mask")),
+        )
+        val firstTask = producerSteps[0].sourceTaskIds.single()
+        val secondTask = producerSteps[1].sourceTaskIds.single()
+        val chain = GPUTaskDependency(
+            if (invertChainDependency) secondTask else firstTask,
+            if (invertChainDependency) firstTask else secondTask,
+            "clip-producer-consumer",
+            GPUTaskUseToken(dependencyToken ?: plan.orderingToken.value),
+            "preserve.core-primitive.clip.mask-producer.0",
+        )
+        val consumerDependency = GPUTaskDependency(
+            secondTask,
+            consumer.sourceTaskIds.single(),
+            "clip-producer-consumer",
+            GPUTaskUseToken(plan.orderingToken.value),
+            "preserve.core-primitive.clip.producer-before-consumer",
+        )
+        val orderedProducers = if (reverseProducerSteps) producerSteps.reversed() else producerSteps
+        return framePlan(
+            listOf(prepare) + (if (includeProducers) orderedProducers else emptyList()) + consumer,
+            dependencies = if (includeProducers) {
+                buildList {
+                    if (includeChainDependency) add(chain)
+                    if (duplicateContradictoryEdge) add(chain.copy(useToken = GPUTaskUseToken("token.conflict")))
+                    add(consumerDependency)
+                }
+            } else emptyList(),
+        )
+    }
+
+    private fun coreSemantic(
+        clipExecutionPlan: GPUClipExecutionPlan = GPUClipExecutionPlan.NoClip,
+    ): GPUDrawSemanticPayload.CorePrimitive {
         val blend = coreBlend(GPUBlendMode.SRC_OVER)
         return GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(
@@ -2212,6 +2781,7 @@ class GPUFramePreflighterTest {
                 targetBounds = GPUPixelBounds(0, 0, 4, 4),
                 scissorBounds = GPUPixelBounds(0, 0, 4, 4),
                 clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+                clipExecutionPlanIdentity = clipExecutionPlan.canonicalIdentity(),
                 blendPlanIdentity = blend.canonicalIdentity(),
                 frameProvenance = GPUFrameProvenance.GmContent,
             ),
@@ -2228,6 +2798,41 @@ class GPUFramePreflighterTest {
         ),
         sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
     )
+
+    private fun coreColorWriteNoneBlend(): GPUBlendPlan = GPUBlendPlan.FixedFunctionBlend(
+        mode = GPUBlendMode.SRC,
+        state = GPUFixedFunctionBlendState(
+            stateId = "core-primitive-color-write-none",
+            color = GPUFixedFunctionBlendComponent("zero", "one", "add"),
+            alpha = GPUFixedFunctionBlendComponent("zero", "one", "add"),
+            writeMask = "none",
+        ),
+        sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+    )
+
+    private fun coreMaskProducerBlend(combine: GPUClipMaskCombine): GPUBlendPlan =
+        GPUBlendPlan.FixedFunctionBlend(
+            mode = if (combine == GPUClipMaskCombine.Difference) GPUBlendMode.DST_OUT else GPUBlendMode.DST_IN,
+            state = GPUFixedFunctionBlendState(
+                stateId = if (combine == GPUClipMaskCombine.Difference) {
+                    "core-primitive-mask-dst-out"
+                } else {
+                    "core-primitive-mask-dst-in"
+                },
+                color = GPUFixedFunctionBlendComponent(
+                    "zero",
+                    if (combine == GPUClipMaskCombine.Difference) "one-minus-src-alpha" else "src-alpha",
+                    "add",
+                ),
+                alpha = GPUFixedFunctionBlendComponent(
+                    "zero",
+                    if (combine == GPUClipMaskCombine.Difference) "one-minus-src-alpha" else "src-alpha",
+                    "add",
+                ),
+                writeMask = "rgba",
+            ),
+            sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+        )
 
     private fun preflightSolid(
         payload: GPUDrawSemanticPayload,
@@ -2428,6 +3033,7 @@ class GPUFramePreflighterTest {
     private fun framePlan(
         steps: List<GPUFrameStep>,
         capabilities: GPUCapabilities = capabilities(),
+        dependencies: List<GPUTaskDependency> = emptyList(),
     ): GPUFramePlan {
         val frameId = GPUFrameID(7)
         val seal = GPUFrameCapabilitySeal.capture(frameId, GPUDeviceGenerationID(7), capabilities)
@@ -2438,6 +3044,7 @@ class GPUFramePreflighterTest {
             steps = steps,
             memoryBudget = budget(),
             diagnostics = emptyList(),
+            dependencies = dependencies,
         )
     }
 
@@ -2456,6 +3063,16 @@ class GPUFramePreflighterTest {
             GPUFrameBufferRef("buffer.readback"),
         ).associateWith { resourceGeneration },
     )
+
+    private fun clipPreflightContext(plan: GPUFramePlan): GPUFramePreflightContext =
+        GPUFramePreflightContext(
+            targetId = "target.scene",
+            deviceGeneration = GPUDeviceGenerationID(7),
+            targetGeneration = 1,
+            resourceGenerations = plan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+                .associate { it.resource to 1L },
+        )
 
     private fun capabilities(
         snapshotId: String = "capabilities.current",

@@ -256,6 +256,7 @@ sealed interface GPUFrameStep {
             ),
         ),
         val sampleContinuation: GPUSampleContinuationRequest? = null,
+        val depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = null,
     ) : GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -543,7 +544,7 @@ private fun GPUDiagnostic.snapshot(): GPUDiagnostic = copy(facts = immutableMap(
 
 private fun GPUTaskDependency.dumpLine(index: Int): String =
     "dependency index=$index kind=$dependencyKind from=${fromTaskId.value} to=${toTaskId.value} " +
-        "useToken=${useToken?.value ?: "none"} reason=$reasonCode"
+        "useToken=${useToken?.value ?: "none"} atomicGroup=${atomicGroupId?.value ?: "none"} reason=$reasonCode"
 
 private fun GPUFrameCapabilitySeal.dumpLine(): String {
     val copyAsDraw = copyAsDrawCapability?.let { capability ->
@@ -631,6 +632,7 @@ private fun GPUFramePlan.canonicalPreimageHash(): String =
             string("toTaskId", dependency.toTaskId.value)
             string("dependencyKind", dependency.dependencyKind)
             nullableString("useToken", dependency.useToken?.value)
+            nullableString("atomicGroupId", dependency.atomicGroupId?.value)
             string("reasonCode", dependency.reasonCode)
         }
         list("elidedNoOpDraws", elidedNoOpDraws) { evidence ->
@@ -794,6 +796,17 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
             resourceRef("target", value.target)
             list("resourceUses", value.resourceUses) { resourceUse(it) }
             loadStore("loadStore", value.loadStore)
+            nullable("depthStencilLoadStore", value.depthStencilLoadStore) { authority ->
+                when (authority) {
+                    is GPUDepthStencilLoadStorePlan.WritableStencil -> {
+                        tag("WritableStencil")
+                        string("loadOperation", authority.loadOperation.name)
+                        string("storeOperation", authority.storeOperation.name)
+                        nullable("clearValue", authority.clearValue) { long("value", it.toLong()) }
+                    }
+                    GPUDepthStencilLoadStorePlan.ReadOnlyKeep -> tag("ReadOnlyKeep")
+                }
+            }
             samplePlan("samplePlan", value.samplePlan)
             nullable("sampleContinuation", value.sampleContinuation) { continuation ->
                 string("target", continuation.key.target.value)
@@ -999,6 +1012,7 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
             string("sourceFamily", value.sourceFamily.name)
             string("canonicalHash", value.canonicalHash)
             string("blendPlanIdentity", value.blendPlanIdentity)
+            nullableString("clipExecutionPlanIdentity", value.clipExecutionPlanIdentity)
             string("frameProvenance", value.frameProvenance.annotationValue)
             string("coverageMode", value.coverageMode.name)
             bounds("targetBounds", value.targetBounds)
@@ -1316,6 +1330,7 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
         is GPUFrameStep.RenderPassStep ->
             "render target=${target.value} load=${loadStore.loadOp} store=${loadStore.storePlan.name} " +
                 "clear=${loadStore.clearColorLabel ?: "none"} sample=${samplePlan.specializationKey} " +
+                "depthStencil=${depthStencilLoadStore.stableDump()} " +
                 "uses=${resourceUses.joinToString(";") { it.stableDump() }.ifEmpty { "none" }} " +
                 "continuation=${sampleContinuation?.let { continuation ->
                     "${continuation.key.target.value}@${continuation.key.targetGeneration}:" +
@@ -1381,6 +1396,13 @@ private fun GPUFrameMemoryBudgetPlan.dumpLine(): String =
             "${fact.name}|${fact.source}|${fact.value}|${fact.affectsValidity}|${fact.evidenceLabel}"
         }} budgetDiagnostic=${diagnostic?.dumpLine("budget") ?: "none"}"
 
+private fun GPUDepthStencilLoadStorePlan?.stableDump(): String = when (this) {
+    null -> "none"
+    GPUDepthStencilLoadStorePlan.ReadOnlyKeep -> "read-only-keep"
+    is GPUDepthStencilLoadStorePlan.WritableStencil ->
+        "writable-stencil:${loadOperation.name}:${storeOperation.name}:${clearValue ?: "none"}"
+}
+
 private fun GPUDrawPacket.stableDump(): String =
     "${packetId.value}|command=$commandIdValue|analysis=$analysisRecordId|pass=$passId|layer=$layerId|" +
         "bindings=$bindingListId|insertion=$insertionReasonCode|sort=$sortKey|preimage=$sortKeyPreimage|" +
@@ -1415,6 +1437,7 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
             "$common,corePrimitiveHash=$canonicalHash,family=${sourceFamily.name}," +
                 "geometry=${geometry.canonicalType},color=${premultipliedRgba.joinToString(",")}," +
                 "target=$targetBounds,scissor=$scissorBounds,clip=${clipCoveragePlan.stableCoreDump()}," +
+                "clipExecution=${clipExecutionPlanIdentity ?: "none"}," +
                 "blend=$blendPlanIdentity,provenance=${frameProvenance.annotationValue})"
         is GPUDrawSemanticPayload.RegisteredUniformRect ->
             "$common,program=${program.wireId},registeredUniformHash=$canonicalHash," +

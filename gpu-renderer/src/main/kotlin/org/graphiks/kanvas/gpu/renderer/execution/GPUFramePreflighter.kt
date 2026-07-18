@@ -40,6 +40,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveRenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.recording.validateCorePrimitiveClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalCorePrimitiveTargetPreparation
 import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_BINDING_LAYOUT_HASH
@@ -690,6 +691,8 @@ internal class GPUFramePreflighter(
         }
         framePlan.memoryBudget.diagnostic?.let { return it }
         validateCorePrimitiveRenderAuthority(framePlan)?.let { return it }
+        val clipProducerValidation = validateCorePrimitiveClipProducerAuthority(framePlan)
+        clipProducerValidation.diagnostic?.let { return it }
         validateMsaaContinuation(framePlan)?.let { return it }
 
         val acquires = framePlan.steps.filterIsInstance<GPUFrameStep.AcquireSurfaceOutput>()
@@ -732,7 +735,7 @@ internal class GPUFramePreflighter(
                                     packet.semanticPayload is GPUDrawSemanticPayload.SeparableBlurRect
                             val acceptedGeneration = when {
                                 colorGlyph != null -> colorGlyph.planArtifactKey.generation.value.toLong()
-                                preparedLateBound &&
+                                (preparedLateBound || packet.packetId in clipProducerValidation.sealedProducerPacketIds) &&
                                     packet.resourceGeneration == PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ->
                                     PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
                                 else -> expected
@@ -1006,6 +1009,7 @@ internal class GPUFramePreflighter(
         packet: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.CorePrimitive,
     ): GPUDiagnostic? {
+        val clipExecutionPlan = packet.clipExecutionPlan
         if (packet.renderStepId.value != CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
             semantic.payloadRef.renderStepIdentity != CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
             packet.commandIdValue != semantic.payloadRef.commandIdValue ||
@@ -1013,6 +1017,8 @@ internal class GPUFramePreflighter(
             packet.clipCoveragePlan != semantic.clipCoveragePlan ||
             packet.blendPlan?.canonicalIdentity() != semantic.blendPlanIdentity ||
             packet.frameProvenance != semantic.frameProvenance ||
+            clipExecutionPlan == null ||
+            semantic.clipExecutionPlanIdentity != clipExecutionPlan.canonicalIdentity() ||
             !semantic.hasCanonicalHashIntegrity()
         ) {
             return diagnostic(
@@ -1020,7 +1026,8 @@ internal class GPUFramePreflighter(
                 "Core primitive packet authority contradicts its immutable semantic input.",
             )
         }
-        if (packet.renderPipelineKey != corePrimitiveRenderPipelineKey() ||
+        val blendPlan = packet.blendPlan
+        if (packet.renderPipelineKey != corePrimitiveRenderPipelineKey(semantic, clipExecutionPlan, blendPlan) ||
             packet.renderStepVersion != 1 ||
             packet.role != GPUDrawPacketRole.Shading ||
             packet.bindingLayoutHash != CORE_PRIMITIVE_BINDING_LAYOUT_HASH ||

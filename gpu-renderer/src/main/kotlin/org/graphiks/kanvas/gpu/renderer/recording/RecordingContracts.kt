@@ -682,6 +682,25 @@ data class GPUTaskCompositeMembership(
     }
 }
 
+/** Handle-free stencil load authority kept separate from the color attachment load/store plan. */
+enum class GPUStencilLoadOperation { Clear, Load }
+
+sealed interface GPUDepthStencilLoadStorePlan {
+    data class WritableStencil(
+        val loadOperation: GPUStencilLoadOperation,
+        val storeOperation: GPUStorePlan,
+        val clearValue: UInt?,
+    ) : GPUDepthStencilLoadStorePlan {
+        init {
+            require(storeOperation == GPUStorePlan.Store || storeOperation == GPUStorePlan.Discard)
+            require((loadOperation == GPUStencilLoadOperation.Clear) == (clearValue != null))
+            require(clearValue == null || clearValue <= 0xffu)
+        }
+    }
+
+    data object ReadOnlyKeep : GPUDepthStencilLoadStorePlan
+}
+
 /** Task emitted by recording and planning with one typed semantic payload. */
 sealed interface GPUTask {
     val taskId: GPUTaskID
@@ -705,6 +724,7 @@ sealed interface GPUTask {
         batchEligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility>,
         val sampleContinuationKey: GPUSampleContinuationKey? = null,
         override val compositeMembership: GPUTaskCompositeMembership? = null,
+        val depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = null,
     ) : GPUTask {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -911,7 +931,15 @@ data class GPUTaskDependency(
     val dependencyKind: String,
     val useToken: GPUTaskUseToken? = null,
     val reasonCode: String,
+    val atomicGroupId: GPUTaskAtomicGroupID? = null,
 )
+
+@JvmInline
+value class GPUTaskAtomicGroupID(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUTaskAtomicGroupID.value must not be blank" }
+    }
+}
 
 /**
  * Diagnostic emitted by recording.
@@ -1088,7 +1116,8 @@ private fun GPUTask.dumpLine(): String =
         is GPUTask.Render ->
             "task:render:${taskId.value}:$passId:$analysisRecordId:" +
                 (if (preMaterialization) "pre_materialization" else "materialized") +
-                (sampleContinuationKey?.let { ":sampleContinuation=${it.stableLabel()}" } ?: "")
+                (sampleContinuationKey?.let { ":sampleContinuation=${it.stableLabel()}" } ?: "") +
+                (depthStencilLoadStore?.let { ":depthStencil=$it" } ?: "")
         is GPUTask.PrepareResources ->
             "task:prepare:${taskId.value}:${requests.joinToString(",") { it.resource.value }}"
         is GPUTask.Compute ->
@@ -1111,7 +1140,8 @@ private fun GPUSampleContinuationKey.stableLabel(): String =
         "${colorAttachment.value}:${depthStencilAttachment?.value ?: "none"}"
 
 private fun GPUTaskDependency.dumpLine(): String =
-    "dependency:$dependencyKind:${fromTaskId.value}->${toTaskId.value}:${useToken?.value ?: "none"}"
+    "dependency:$dependencyKind:${fromTaskId.value}->${toTaskId.value}:${useToken?.value ?: "none"}" +
+        (atomicGroupId?.let { ":atomicGroup=${it.value}" } ?: "")
 
 private fun GPUAnalysisDiagnostic.toCanonicalRecordingDiagnostic(): GPUDiagnostic =
     GPUDiagnostic(

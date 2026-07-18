@@ -889,6 +889,7 @@ object GPUFramePlanner {
                         resolveAction = GPUSampleResolveAction.ResolveCanonical,
                     )
                 },
+            depthStencilLoadStore = first.depthStencilLoadStore,
         )
     }
 
@@ -919,6 +920,7 @@ object GPUFramePlanner {
     private fun GPUTask.Render.canShareProvisionalSegment(other: GPUTask.Render): Boolean =
         target == other.target &&
             loadStore == other.loadStore &&
+            depthStencilLoadStore == other.depthStencilLoadStore &&
             samplePlan == other.samplePlan &&
             provisionalSegmentKey == other.provisionalSegmentKey &&
             drawPackets.first().targetStateHash == other.drawPackets.first().targetStateHash
@@ -932,18 +934,29 @@ object GPUFramePlanner {
     private fun GPUTask.Render.packetWrites(
         packet: GPUDrawPacket,
         resource: GPUFrameResourceRef,
-    ): Boolean = target == resource &&
-        packet.blendPlan !is GPUBlendPlan.NoOp &&
-        packet.blendPlan !is GPUBlendPlan.UnsupportedBlend
+    ): Boolean = target == resource && packet.blendPlan.writesColorAttachment() ||
+        resourceUses.any { it.write && it.resource == resource }
 
     private fun GPUTask.writes(resource: GPUFrameResourceRef): Boolean = when (this) {
-        is GPUTask.Render -> target == resource && drawPackets.any { packet ->
-            packet.blendPlan !is GPUBlendPlan.NoOp && packet.blendPlan !is GPUBlendPlan.UnsupportedBlend
-        }
+        is GPUTask.Render ->
+            target == resource && drawPackets.any { it.blendPlan.writesColorAttachment() } ||
+                resourceUses.any { it.write && it.resource == resource }
         is GPUTask.Compute -> target == resource || resourceUses.any { it.write && it.resource == resource }
         is GPUTask.Copy -> destination == resource
         is GPUTask.Upload -> destination == resource
         else -> false
+    }
+
+    private fun GPUBlendPlan?.writesColorAttachment(): Boolean = when (this) {
+        is GPUBlendPlan.FixedFunctionBlend -> state.writeMask.lowercase() !in setOf("", "none")
+        is GPUBlendPlan.LayerCompositeBlend -> child.writesColorAttachment()
+        is GPUBlendPlan.ShaderBlendNoDstRead,
+        is GPUBlendPlan.ShaderBlendWithDstRead,
+        -> true
+        is GPUBlendPlan.NoOp,
+        is GPUBlendPlan.UnsupportedBlend,
+        null,
+        -> false
     }
 
     private fun ScheduledDestinationOperation.hasUnsafeWrite(

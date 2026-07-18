@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -45,7 +46,10 @@ import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
@@ -54,6 +58,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     @Test
@@ -194,6 +200,16 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
         val producer = renders.single { it.drawPackets.single().role == GPUDrawPacketRole.StencilProducer }
         val consumer = renders.single { it.drawPackets.single().role == GPUDrawPacketRole.Shading }
+        assertEquals(GPULoadStorePlan("load", GPUStorePlan.Store), producer.loadStore)
+        assertEquals(
+            GPUDepthStencilLoadStorePlan.WritableStencil(
+                GPUStencilLoadOperation.Clear,
+                GPUStorePlan.Store,
+                0u,
+            ),
+            producer.depthStencilLoadStore,
+        )
+        assertEquals(GPUDepthStencilLoadStorePlan.ReadOnlyKeep, consumer.depthStencilLoadStore)
         assertTrue(taskList.dependencies.any {
             it.fromTaskId == producer.taskId && it.toTaskId == consumer.taskId &&
                 it.useToken?.value == plan.orderingToken.value
@@ -203,6 +219,210 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             taskList.memoryBudget.categoryTotals.getValue(GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil),
         )
         assertFalse(GPUFramePlanner.plan(taskList).atomicallyRefused)
+    }
+
+    @Test
+    fun `no clip and dynamic scissor share one shading pipeline key`() {
+        val base = recording(command(29, 0)).taskList.withClipPlans(mapOf(29 to GPUClipExecutionPlan.NoClip))
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val semantic = semantic(packet)
+
+        assertEquals(
+            corePrimitiveRenderPipelineKey(semantic, GPUClipExecutionPlan.NoClip, requireNotNull(packet.blendPlan)),
+            corePrimitiveRenderPipelineKey(
+                semantic,
+                GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(2, 3, 10, 11)),
+                requireNotNull(packet.blendPlan),
+            ),
+        )
+    }
+
+    @Test
+    fun `shading pipeline blend identity ignores layer ordering token but retains fixed state`() {
+        val base = recording(command(28, 0)).taskList.withClipPlans(mapOf(28 to GPUClipExecutionPlan.NoClip))
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val semantic = semantic(packet)
+        val child = requireNotNull(packet.blendPlan)
+        val first = GPUBlendPlan.LayerCompositeBlend(child, "layer.order.first")
+        val second = GPUBlendPlan.LayerCompositeBlend(child, "layer.order.second")
+        val changedState = GPUBlendPlan.LayerCompositeBlend(
+            (child as GPUBlendPlan.FixedFunctionBlend).copy(state = child.state.copy(writeMask = "rgb")),
+            "layer.order.first",
+        )
+
+        assertEquals(
+            corePrimitiveRenderPipelineKey(semantic, GPUClipExecutionPlan.NoClip, first),
+            corePrimitiveRenderPipelineKey(semantic, GPUClipExecutionPlan.NoClip, second),
+        )
+        assertNotEquals(
+            corePrimitiveRenderPipelineKey(semantic, GPUClipExecutionPlan.NoClip, first),
+            corePrimitiveRenderPipelineKey(semantic, GPUClipExecutionPlan.NoClip, changedState),
+        )
+    }
+
+    @Test
+    fun `separate stencil artifacts never clear color between scene draws`() {
+        val first = stencilPlan(contentKey = "clip.stencil.first")
+        val second = stencilPlan(contentKey = "clip.stencil.second").copy(
+            atomicGroup = GPUClipAtomicGroupID("atomic.clip.second"),
+            orderingToken = GPUClipOrderingToken("token.clip.second"),
+        )
+        val base = recording(command(26, 0), command(27, 1)).taskList.withClipPlans(
+            mapOf(26 to first, 27 to second),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            ),
+        ).taskList
+        val producers = taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .filter { it.drawPackets.single().role == GPUDrawPacketRole.StencilProducer }
+        val consumers = taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .filter { it.drawPackets.single().role == GPUDrawPacketRole.Shading }
+
+        assertTrue(producers.all { it.loadStore == GPULoadStorePlan("load", GPUStorePlan.Store) })
+        assertTrue(producers.all {
+            it.depthStencilLoadStore is GPUDepthStencilLoadStorePlan.WritableStencil
+        })
+        assertEquals(listOf("clear", "load"), consumers.map { it.loadStore.loadOp })
+    }
+
+    @Test
+    fun `stencil pipeline key ignores clip content identity but changes with stencil state`() {
+        fun producerKey(plan: GPUClipExecutionPlan.StencilCoverage) = run {
+            val base = recording(command(31, 0)).taskList.withClipPlans(mapOf(31 to plan))
+            val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+            val recorded = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+                GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                    request(base, packets.associate { it.commandIdValue to semantic(it) }),
+                ),
+            ).taskList
+            recorded.tasks.filterIsInstance<GPUTask.Render>()
+                .single { it.drawPackets.single().role == GPUDrawPacketRole.StencilProducer }
+                .drawPackets.single().renderPipelineKey
+        }
+        val first = stencilPlan(contentKey = "clip.first")
+        val sameStateDifferentContent = stencilPlan(contentKey = "clip.second")
+        val sameStateDifferentDynamicValues = stencilPlan(contentKey = "clip.dynamic").copy(
+            producer = stencilPlan(contentKey = "clip.dynamic").producer.copy(
+                reference = 7u,
+            ),
+        )
+        val unsupportedLoadStore = stencilPlan(contentKey = "clip.load-store").copy(
+            producer = stencilPlan(contentKey = "clip.load-store").producer.copy(
+                loadOperation = GPUClipStencilLoadOperation.Load,
+                storeOperation = GPUClipStencilStoreOperation.Discard,
+                clearValue = null,
+            ),
+        )
+        val differentState = stencilPlan(contentKey = "clip.third").copy(
+            producer = stencilPlan(contentKey = "clip.third").producer.copy(
+                frontPassOperation = GPUClipStencilOperation.Invert,
+            ),
+        )
+
+        assertEquals(producerKey(first), producerKey(sameStateDifferentContent))
+        assertEquals(producerKey(first), producerKey(sameStateDifferentDynamicValues))
+        assertEquals(
+            corePrimitiveClipProducerPipelineKey(first, GPUClipProducerAuthority.Stencil(first.producer)),
+            corePrimitiveClipProducerPipelineKey(
+                unsupportedLoadStore,
+                GPUClipProducerAuthority.Stencil(unsupportedLoadStore.producer),
+            ),
+        )
+        assertNotEquals(producerKey(first), producerKey(differentState))
+    }
+
+    @Test
+    fun `stencil attachment uses full target extent and semantic retains exact execution identity`() {
+        val workBounds = GPUPixelBounds(2, 3, 10, 11)
+        val plan = stencilPlan(bounds = workBounds)
+        val base = recording(command(32, 0)).taskList.withClipPlans(mapOf(32 to plan))
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            ),
+        ).taskList
+
+        val preparation = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap { it.requests }
+            .single { it.role == GPUFrameResourceRole.ClipDepthStencil }
+        val descriptor = assertIs<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor>(
+            preparation.descriptor,
+        )
+        assertEquals(targetBounds, descriptor.logicalBounds)
+        assertEquals(targetBounds.width.toLong() * targetBounds.height * 4L, preparation.byteSize)
+        assertNotEquals(plan.requiredBytes, preparation.byteSize)
+        val consumerSemantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(
+            taskList.tasks.filterIsInstance<GPUTask.Render>()
+                .single { it.drawPackets.single().role == GPUDrawPacketRole.Shading }
+                .drawPackets.single().semanticPayload,
+        )
+        assertEquals(plan.canonicalIdentity(), consumerSemantic.clipExecutionPlanIdentity)
+        assertTrue(consumerSemantic.hasCanonicalHashIntegrity())
+    }
+
+    @Test
+    fun `stencil edge fan refuses before frame memory planning until geometry topology exists`() {
+        val base = recording(command(33, 0)).taskList.withClipPlans(
+            mapOf(33 to GPUClipExecutionPlan.NoClip),
+        )
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val stencilGeometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+            vertices = listOf(-1f, -1f, 1f, 1f, 7f, 1f, -1f, -1f, 7f, 1f, 4f, 7f, -1f, -1f, 4f, 7f, 1f, 1f),
+            indices = (0..8).toList(),
+            sourceContourStarts = listOf(0),
+            sourceVertexCount = 3,
+            coverBounds = GPUPixelBounds(0, 0, 8, 8),
+            geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+        )
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, mapOf(33 to semantic(packet, stencilGeometry))).copy(
+                configuredAggregateBudgetBytes = 1,
+            ),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_geometry_stencil_topology_unavailable",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `multisample clip refuses before a partial depth stencil allocation can be planned`() {
+        val plan = stencilPlan(bounds = GPUPixelBounds(2, 3, 10, 11)).copy(sampleCount = 4)
+        val base = recording(command(34, 0)).taskList.withClipPlans(mapOf(34 to plan))
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, mapOf(34 to semantic(packet))).copy(configuredAggregateBudgetBytes = 1),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_clip_multisample_topology",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `mask depth stencil refuses until its full target topology is available`() {
+        val plan = maskPlan(depthStencilRequired = true)
+        val base = recording(command(35, 0)).taskList.withClipPlans(mapOf(35 to plan))
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, mapOf(35 to semantic(packet))).copy(configuredAggregateBudgetBytes = 1),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_clip_mask_depth_stencil_topology_unavailable",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
     }
 
     @Test
@@ -312,6 +532,49 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `mask producer blend writes exact dst in and dst out while stencil disables color writes`() {
+        val stencil = stencilPlan()
+        val mask = maskPlan()
+        val base = recording(command(72, 0), command(73, 1)).taskList.withClipPlans(
+            mapOf(72 to stencil, 73 to mask),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            ),
+        ).taskList
+        val producerTasks = taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .filter {
+                it.drawPackets.single().role == GPUDrawPacketRole.StencilProducer ||
+                    it.drawPackets.single().role == GPUDrawPacketRole.ClipProducer
+            }
+        val producers = producerTasks.map { it.drawPackets.single() }
+        val stencilBlend = assertIs<GPUBlendPlan.FixedFunctionBlend>(
+            producers.single { it.role == GPUDrawPacketRole.StencilProducer }.blendPlan,
+        )
+        val maskBlends = producers.filter { it.role == GPUDrawPacketRole.ClipProducer }
+            .map { assertIs<GPUBlendPlan.FixedFunctionBlend>(it.blendPlan) }
+
+        assertEquals("none", stencilBlend.state.writeMask)
+        assertEquals(listOf(GPUBlendMode.DST_IN, GPUBlendMode.DST_OUT), maskBlends.map { it.mode })
+        assertTrue(maskBlends.all { it.state.writeMask == "rgba" })
+        assertEquals(listOf("src-alpha", "one-minus-src-alpha"), maskBlends.map {
+            it.state.color.destinationFactor
+        })
+        val maskLoadStores = producerTasks.filter { it.drawPackets.single().role == GPUDrawPacketRole.ClipProducer }
+            .map(GPUTask.Render::loadStore)
+        assertEquals(
+            listOf(
+                GPULoadStorePlan("clear", GPUStorePlan.Store, CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL),
+                GPULoadStorePlan("load", GPUStorePlan.Store),
+            ),
+            maskLoadStores,
+        )
+        assertNotEquals(maskBlends[0], maskBlends[1])
+    }
+
+    @Test
     fun `base DAG translation preserves dependency authority and only replaces task ids`() {
         val base = recording(command(80, 0), command(81, 1)).taskList.withClipPlans(
             mapOf(80 to GPUClipExecutionPlan.NoClip, 81 to GPUClipExecutionPlan.NoClip),
@@ -347,12 +610,15 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         semanticsByCommandId = semantics,
     )
 
-    private fun semantic(packet: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket) =
+    private fun semantic(
+        packet: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket,
+        geometry: GPUCorePrimitiveGeometryInput = GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f),
+    ) =
         GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = packet.commandIdValue,
                 sourceFamily = GPUCorePrimitiveSourceFamily.Rect,
-                geometry = GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f),
+                geometry = geometry,
                 premultipliedRgba = listOf(0.25f, 0.5f, 0.75f, 1f),
                 targetBounds = targetBounds,
                 scissorBounds = targetBounds,
@@ -406,9 +672,12 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         resourceGeneration, frameProvenance, clipCoveragePlan, plan, diagnostics,
     )
 
-    private fun stencilPlan() = GPUClipExecutionPlan.StencilCoverage(
-        contentKey = "clip.shared.stencil",
-        bounds = targetBounds,
+    private fun stencilPlan(
+        contentKey: String = "clip.shared.stencil",
+        bounds: GPUPixelBounds = targetBounds,
+    ) = GPUClipExecutionPlan.StencilCoverage(
+        contentKey = contentKey,
+        bounds = bounds,
         sampleCount = 1,
         atomicGroup = GPUClipAtomicGroupID("atomic.clip.shared.stencil"),
         orderingToken = GPUClipOrderingToken("token.clip.shared.stencil"),
@@ -434,11 +703,12 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     private fun maskPlan(
         differenceAntiAlias: Boolean = true,
         contentKey: String = "clip.shared.mask",
+        depthStencilRequired: Boolean = false,
     ) = GPUClipExecutionPlan.CoverageMask(
         contentKey = contentKey,
         bounds = targetBounds,
         sampleCount = 1,
-        depthStencilRequired = false,
+        depthStencilRequired = depthStencilRequired,
         orderingToken = GPUClipOrderingToken("token.clip.shared.mask"),
         producers = listOf(
             GPUClipMaskProducerPlan(
