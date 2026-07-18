@@ -379,10 +379,69 @@ internal class GPUPreparedNativeRenderPassConfig(
     val loadOperation: GPUPreparedNativeLoadOperation = GPUPreparedNativeLoadOperation.Load,
     val storeOperation: GPUPreparedNativeStoreOperation = GPUPreparedNativeStoreOperation.Store,
     val clearColor: GPUPreparedNativeClearColor? = null,
+    val depthClearValue: Float? = null,
+    val depthLoadOperation: GPUPreparedNativeLoadOperation? = null,
+    val depthStoreOperation: GPUPreparedNativeStoreOperation? = null,
+    val depthReadOnly: Boolean = true,
+    val stencilClearValue: UInt? = null,
+    val stencilLoadOperation: GPUPreparedNativeLoadOperation? = null,
+    val stencilStoreOperation: GPUPreparedNativeStoreOperation? = null,
+    val stencilReadOnly: Boolean = true,
 ) {
     init {
         require((loadOperation == GPUPreparedNativeLoadOperation.Clear) == (clearColor != null)) {
             "Clear load operation requires exactly one clear color"
+        }
+        require(depthClearValue == null || depthClearValue.isFinite() && depthClearValue in 0.0f..1.0f) {
+            "Depth clear value must be finite and in the inclusive range 0.0 to 1.0"
+        }
+        require(stencilClearValue == null || stencilClearValue <= 0xffu) {
+            "Stencil clear value must fit the WebGPU stencil8 range"
+        }
+        validatePreparedDepthStencilAspect(
+            aspect = "depth",
+            target = depthStencilTarget,
+            loadOperation = depthLoadOperation,
+            storeOperation = depthStoreOperation,
+            clearValuePresent = depthClearValue != null,
+            readOnly = depthReadOnly,
+        )
+        validatePreparedDepthStencilAspect(
+            aspect = "stencil",
+            target = depthStencilTarget,
+            loadOperation = stencilLoadOperation,
+            storeOperation = stencilStoreOperation,
+            clearValuePresent = stencilClearValue != null,
+            readOnly = stencilReadOnly,
+        )
+    }
+}
+
+private fun validatePreparedDepthStencilAspect(
+    aspect: String,
+    target: GPUPreparedNativeTextureViewOperand?,
+    loadOperation: GPUPreparedNativeLoadOperation?,
+    storeOperation: GPUPreparedNativeStoreOperation?,
+    clearValuePresent: Boolean,
+    readOnly: Boolean,
+) {
+    require((loadOperation == GPUPreparedNativeLoadOperation.Clear) == clearValuePresent) {
+        "$aspect clear load operation requires exactly one clear value"
+    }
+    require((loadOperation == null) == (storeOperation == null)) {
+        "$aspect load and store operations must either both be present or both be absent"
+    }
+    if (target == null) {
+        require(loadOperation == null && storeOperation == null && !clearValuePresent) {
+            "$aspect operations require a depth-stencil target"
+        }
+    } else if (readOnly) {
+        require(loadOperation == null && storeOperation == null && !clearValuePresent) {
+            "$aspect read-only state cannot carry load, clear, or store operations"
+        }
+    } else {
+        require(loadOperation != null && storeOperation != null) {
+            "$aspect writable state requires explicit load and store operations"
         }
     }
 }
@@ -419,6 +478,11 @@ internal sealed interface GPUPreparedNativeRenderCommand {
         GPUPreparedNativeRenderCommand {
         override val operands = emptyList<GPUPreparedNativeOperand>()
         init { require(x >= 0 && y >= 0 && width > 0 && height > 0) }
+    }
+
+    data class SetStencilReference(val reference: UInt) : GPUPreparedNativeRenderCommand {
+        override val operands = emptyList<GPUPreparedNativeOperand>()
+        init { require(reference <= 0xffu) { "Stencil reference must fit the WebGPU stencil8 range" } }
     }
 
     class SetVertexBuffer(
@@ -499,6 +563,7 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                     is GPUPreparedNativeRenderCommand.SetVertexBuffer -> vertexBufferBound = true
                     is GPUPreparedNativeRenderCommand.SetIndexBuffer -> indexBufferBound = true
                     is GPUPreparedNativeRenderCommand.SetScissor -> scissorBound = true
+                    is GPUPreparedNativeRenderCommand.SetStencilReference -> Unit
                     is GPUPreparedNativeRenderCommand.Draw -> require(pipelineBound) {
                         "Every native draw requires a preceding SetPipeline command"
                     }
@@ -513,7 +578,6 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                                 command.drawCall.baseVertex == 0 && command.drawCall.firstInstance == 0,
                         ) { "The first public-wgpu4k indexed bridge requires default draw offsets and one instance" }
                     }
-                    else -> Unit
                 }
             }
         }

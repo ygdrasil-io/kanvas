@@ -10,6 +10,7 @@ import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPUStoreOp
 import io.ygdrasil.webgpu.Origin3D
 import io.ygdrasil.webgpu.RenderPassColorAttachment
+import io.ygdrasil.webgpu.RenderPassDepthStencilAttachment
 import io.ygdrasil.webgpu.RenderPassDescriptor
 import io.ygdrasil.webgpu.TexelCopyBufferInfo
 import io.ygdrasil.webgpu.TexelCopyTextureInfo
@@ -33,6 +34,7 @@ internal data class GPUWgpu4kFrameEncodingCounters(
 
 internal class GPUWgpu4kRenderCommandActions(
     val setPipeline: (io.ygdrasil.webgpu.GPURenderPipeline) -> Unit,
+    val setStencilReference: (UInt) -> Unit,
     val setBindGroup: (UInt, io.ygdrasil.webgpu.GPUBindGroup) -> Unit,
     val setVertexBuffer: (UInt, io.ygdrasil.webgpu.GPUBuffer) -> Unit,
     val setIndexBuffer: (io.ygdrasil.webgpu.GPUBuffer, io.ygdrasil.webgpu.GPUIndexFormat) -> Unit,
@@ -49,6 +51,7 @@ internal fun encodeWgpu4kRenderCommands(
     commands.forEach { command ->
         when (command) {
             is GPUPreparedNativeRenderCommand.SetPipeline -> actions.setPipeline(command.pipeline.pipeline)
+            is GPUPreparedNativeRenderCommand.SetStencilReference -> actions.setStencilReference(command.reference)
             is GPUPreparedNativeRenderCommand.SetBindGroup ->
                 actions.setBindGroup(command.index.toUInt(), command.bindGroup.bindGroup)
             is GPUPreparedNativeRenderCommand.SetScissor -> actions.setScissor(
@@ -86,6 +89,77 @@ internal fun encodeWgpu4kRenderCommands(
         }
     }
     return draws
+}
+
+internal fun buildWgpu4kRenderPassDescriptor(
+    pass: GPUPreparedNativeRenderPassConfig,
+): RenderPassDescriptor = RenderPassDescriptor(
+    colorAttachments = listOf(
+        RenderPassColorAttachment(
+            view = pass.colorTarget.view,
+            resolveTarget = pass.resolveTarget?.view,
+            loadOp = when (pass.loadOperation) {
+                GPUPreparedNativeLoadOperation.Load -> GPULoadOp.Load
+                GPUPreparedNativeLoadOperation.Clear -> GPULoadOp.Clear
+            },
+            clearValue = pass.clearColor?.let {
+                Color(it.red, it.green, it.blue, it.alpha)
+            } ?: Color(0.0, 0.0, 0.0, 0.0),
+            storeOp = when (pass.storeOperation) {
+                GPUPreparedNativeStoreOperation.Store -> GPUStoreOp.Store
+                GPUPreparedNativeStoreOperation.Discard -> GPUStoreOp.Discard
+            },
+        ),
+    ),
+    depthStencilAttachment = pass.depthStencilTarget?.let { target ->
+        RenderPassDepthStencilAttachment(
+            view = target.view,
+            depthClearValue = pass.depthClearValue,
+            depthLoadOp = pass.depthLoadOperation?.toWgpu4kLoadOperation(),
+            depthStoreOp = pass.depthStoreOperation?.toWgpu4kStoreOperation(),
+            depthReadOnly = pass.depthReadOnly,
+            stencilClearValue = pass.stencilClearValue ?: 0u,
+            stencilLoadOp = pass.stencilLoadOperation?.toWgpu4kLoadOperation(),
+            stencilStoreOp = pass.stencilStoreOperation?.toWgpu4kStoreOperation(),
+            stencilReadOnly = pass.stencilReadOnly,
+        )
+    },
+)
+
+private fun GPUPreparedNativeLoadOperation.toWgpu4kLoadOperation(): GPULoadOp = when (this) {
+    GPUPreparedNativeLoadOperation.Load -> GPULoadOp.Load
+    GPUPreparedNativeLoadOperation.Clear -> GPULoadOp.Clear
+}
+
+private fun GPUPreparedNativeStoreOperation.toWgpu4kStoreOperation(): GPUStoreOp = when (this) {
+    GPUPreparedNativeStoreOperation.Store -> GPUStoreOp.Store
+    GPUPreparedNativeStoreOperation.Discard -> GPUStoreOp.Discard
+}
+
+internal fun encodeWgpu4kRenderPass(
+    encoder: GPUCommandEncoder,
+    render: GPUPreparedNativeScopeOperand.Render,
+): Int {
+    var encodedDraws = 0
+    encoder.beginRenderPass(buildWgpu4kRenderPassDescriptor(render.pass)) {
+        encodedDraws = encodeWgpu4kRenderCommands(
+            render.commands,
+            GPUWgpu4kRenderCommandActions(
+                setPipeline = { pipeline -> setPipeline(pipeline) },
+                setStencilReference = { reference -> setStencilReference(reference) },
+                setBindGroup = { index, bindGroup -> setBindGroup(index, bindGroup) },
+                setVertexBuffer = { slot, buffer -> setVertexBuffer(slot, buffer) },
+                setIndexBuffer = { buffer, format -> setIndexBuffer(buffer, format) },
+                setScissor = { x, y, width, height -> setScissorRect(x, y, width, height) },
+                draw = { vertices, instances, firstVertex, firstInstance ->
+                    draw(vertices, instances, firstVertex, firstInstance)
+                },
+                drawIndexed = { count -> drawIndexed(count) },
+            ),
+        )
+        end()
+    }
+    return encodedDraws
 }
 
 /** Production one-encoder backend. Native command buffers never escape its one-shot token table. */
@@ -280,44 +354,8 @@ internal class GPUWgpu4kFrameEncodingBackend(
 
         private fun encodeRender(render: GPUPreparedNativeScopeOperand.Render) {
             val pass = render.pass
-            native.beginRenderPass(
-                RenderPassDescriptor(
-                    colorAttachments = listOf(
-                        RenderPassColorAttachment(
-                            view = pass.colorTarget.view,
-                            resolveTarget = pass.resolveTarget?.view,
-                            loadOp = when (pass.loadOperation) {
-                                GPUPreparedNativeLoadOperation.Load -> GPULoadOp.Load
-                                GPUPreparedNativeLoadOperation.Clear -> GPULoadOp.Clear
-                            },
-                            clearValue = pass.clearColor?.let {
-                                Color(it.red, it.green, it.blue, it.alpha)
-                            } ?: Color(0.0, 0.0, 0.0, 0.0),
-                            storeOp = when (pass.storeOperation) {
-                                GPUPreparedNativeStoreOperation.Store -> GPUStoreOp.Store
-                                GPUPreparedNativeStoreOperation.Discard -> GPUStoreOp.Discard
-                            },
-                        ),
-                    ),
-                ),
-            ) {
-                val encodedDraws = encodeWgpu4kRenderCommands(
-                    render.commands,
-                    GPUWgpu4kRenderCommandActions(
-                        setPipeline = { pipeline -> setPipeline(pipeline) },
-                        setBindGroup = { index, bindGroup -> setBindGroup(index, bindGroup) },
-                        setVertexBuffer = { slot, buffer -> setVertexBuffer(slot, buffer) },
-                        setIndexBuffer = { buffer, format -> setIndexBuffer(buffer, format) },
-                        setScissor = { x, y, width, height -> setScissorRect(x, y, width, height) },
-                        draw = { vertices, instances, firstVertex, firstInstance ->
-                            draw(vertices, instances, firstVertex, firstInstance)
-                        },
-                        drawIndexed = { count -> drawIndexed(count) },
-                    ),
-                )
-                synchronized(this@GPUWgpu4kFrameEncodingBackend) { drawCount += encodedDraws }
-                end()
-            }
+            val encodedDraws = encodeWgpu4kRenderPass(native, render)
+            synchronized(this@GPUWgpu4kFrameEncodingBackend) { drawCount += encodedDraws }
             synchronized(this@GPUWgpu4kFrameEncodingBackend) { renderPassCount += 1 }
             if (pass.resolveTarget != null) {
                 synchronized(this@GPUWgpu4kFrameEncodingBackend) { msaaResolveCount += 1 }

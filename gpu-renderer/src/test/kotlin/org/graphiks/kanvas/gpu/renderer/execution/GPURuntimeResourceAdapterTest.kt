@@ -33,6 +33,40 @@ import kotlin.test.assertFailsWith
 
 class GPURuntimeResourceAdapterTest {
     @Test
+    fun `wgpu4k stencil reference command preserves exact backend call order and draw count`() {
+        val generation = GPUDeviceGenerationID(11)
+        val pipeline = GPUPreparedNativeRenderPipelineOperand(fakeNative("stencil-pipeline"), generation)
+        val events = mutableListOf<String>()
+
+        val draws = encodeWgpu4kRenderCommands(
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(pipeline),
+                GPUPreparedNativeRenderCommand.SetStencilReference(0x7fu),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
+            ),
+            GPUWgpu4kRenderCommandActions(
+                setPipeline = { actual -> assertSame(pipeline.pipeline, actual); events += "pipeline" },
+                setStencilReference = { reference ->
+                    assertEquals(0x7fu, reference)
+                    events += "stencil-reference"
+                },
+                setBindGroup = { _, _ -> error("bind group must not be emitted") },
+                setVertexBuffer = { _, _ -> error("vertex buffer must not be emitted") },
+                setIndexBuffer = { _, _ -> error("index buffer must not be emitted") },
+                setScissor = { _, _, _, _ -> error("scissor must not be emitted") },
+                draw = { vertices, instances, firstVertex, firstInstance ->
+                    assertEquals(listOf(3u, 1u, 0u, 0u), listOf(vertices, instances, firstVertex, firstInstance))
+                    events += "draw"
+                },
+                drawIndexed = { error("indexed draw must not be emitted") },
+            ),
+        )
+
+        assertEquals(1, draws)
+        assertEquals(listOf("pipeline", "stencil-reference", "draw"), events)
+    }
+
+    @Test
     fun `wgpu4k indexed command lowering preserves exact backend call order and uint32 draw`() {
         val generation = GPUDeviceGenerationID(11)
         val pipeline = GPUPreparedNativeRenderPipelineOperand(fakeNative("backend-pipeline"), generation)
@@ -51,6 +85,7 @@ class GPURuntimeResourceAdapterTest {
             ),
             GPUWgpu4kRenderCommandActions(
                 setPipeline = { actual -> assertSame(pipeline.pipeline, actual); events += "pipeline" },
+                setStencilReference = { error("stencil reference must not be emitted") },
                 setBindGroup = { slot, actual ->
                     assertEquals(0u, slot)
                     assertSame(bindGroup.bindGroup, actual)
@@ -157,6 +192,7 @@ class GPURuntimeResourceAdapterTest {
                     is GPUPreparedNativeRenderCommand.SetVertexBuffer -> "vertex"
                     is GPUPreparedNativeRenderCommand.SetIndexBuffer -> "index"
                     is GPUPreparedNativeRenderCommand.SetScissor -> "scissor"
+                    is GPUPreparedNativeRenderCommand.SetStencilReference -> "stencil-reference"
                     is GPUPreparedNativeRenderCommand.DrawIndexed -> "draw-indexed"
                     is GPUPreparedNativeRenderCommand.Draw -> "draw"
                 }
