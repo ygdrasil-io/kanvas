@@ -1937,6 +1937,9 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
                         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
                         -> !exactPathAttachment
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer,
+                        GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer,
+                        -> true
                     }
                 }
         }

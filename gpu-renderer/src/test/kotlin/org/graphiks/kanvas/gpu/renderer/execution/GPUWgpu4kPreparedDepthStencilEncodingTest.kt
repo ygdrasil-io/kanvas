@@ -25,11 +25,13 @@ class GPUWgpu4kPreparedDepthStencilEncodingTest {
         val colorView = proxiedTextureView("color-view")
         val depthStencilView = proxiedTextureView("depth-stencil-view")
         val pipeline = proxiedNative(GPURenderPipeline::class.java, "pipeline")
+        val bindGroup = proxiedNative(GPUBindGroup::class.java, "bind-group")
         val events = mutableListOf<String>()
         var capturedDescriptor: GPURenderPassDescriptor? = null
         val renderPass = proxiedNative(GPURenderPassEncoder::class.java, "render-pass") { method, arguments ->
             when {
                 method == "setPipeline" -> events += "pipeline"
+                method.startsWith("setBindGroup") -> events += "bind-group"
                 method.startsWith("setStencilReference") -> {
                     assertEquals(0x7f, arguments.single())
                     events += "stencil-reference"
@@ -66,6 +68,10 @@ class GPUWgpu4kPreparedDepthStencilEncodingTest {
                 GPUPreparedNativeRenderCommand.SetPipeline(
                     GPUPreparedNativeRenderPipelineOperand(pipeline, generation),
                 ),
+                GPUPreparedNativeRenderCommand.SetBindGroup(
+                    0,
+                    GPUPreparedNativeBindGroupOperand(bindGroup, generation),
+                ),
                 GPUPreparedNativeRenderCommand.SetStencilReference(0x7fu),
                 GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
             ),
@@ -76,7 +82,7 @@ class GPUWgpu4kPreparedDepthStencilEncodingTest {
         val attachment = requireNotNull(descriptor.depthStencilAttachment)
 
         assertEquals(1, draws)
-        assertEquals(listOf("begin", "pipeline", "stencil-reference", "draw", "end"), events)
+        assertEquals(listOf("begin", "pipeline", "bind-group", "stencil-reference", "draw", "end"), events)
         assertSame(depthStencilView, attachment.view)
         assertNull(attachment.depthClearValue)
         assertNull(attachment.depthLoadOp)

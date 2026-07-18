@@ -1391,6 +1391,7 @@ class GPURuntimeResourceAdapterTest {
         val generation = GPUDeviceGenerationID(11)
         val renderTarget = fakeNative<GPUTextureView>("render-target")
         val renderPipeline = fakeNative<GPURenderPipeline>("render-pipeline")
+        val renderBindGroup = fakeNative<GPUBindGroup>("render-bind-group")
         val computePipeline = fakeNative<io.ygdrasil.webgpu.GPUComputePipeline>("compute-pipeline")
         val uploadSource = CountingGPUBuffer("upload-source")
         val uploadDestination = CountingGPUBuffer("upload-destination")
@@ -1418,6 +1419,10 @@ class GPURuntimeResourceAdapterTest {
                 commands = listOf(
                     GPUPreparedNativeRenderCommand.SetPipeline(
                         GPUPreparedNativeRenderPipelineOperand(renderPipeline, generation),
+                    ),
+                    GPUPreparedNativeRenderCommand.SetBindGroup(
+                        0,
+                        GPUPreparedNativeBindGroupOperand(renderBindGroup, generation),
                     ),
                     GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
                 ),
@@ -1536,7 +1541,7 @@ class GPURuntimeResourceAdapterTest {
         assertSame(payload, consumed.payload)
 
         val expectedHandles = listOf(
-            listOf(renderTarget, renderPipeline),
+            listOf(renderTarget, renderPipeline, renderBindGroup),
             listOf(computePipeline),
             listOf(uploadSource, uploadDestination),
             listOf(copySource, copyDestination),

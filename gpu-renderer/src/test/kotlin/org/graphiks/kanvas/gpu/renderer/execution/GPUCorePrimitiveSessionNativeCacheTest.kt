@@ -7,6 +7,7 @@ import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUShaderModule
+import io.ygdrasil.webgpu.GPUTextureView
 import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -23,6 +24,111 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class GPUCorePrimitiveSessionNativeCacheTest {
+    @Test
+    fun `cache acquisition exposes no constructible raw invariant handles`() {
+        assertTrue(GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired::class.java.isSealed)
+        assertTrue(
+            GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired::class.java.declaredConstructors.isEmpty(),
+        )
+        assertFailsWith<ClassNotFoundException> {
+            Class.forName(
+                "org.graphiks.kanvas.gpu.renderer.execution.GPUWgpu4kCorePrimitiveInvariantHandles",
+            )
+        }
+    }
+
+    @Test
+    fun `prepared pipeline operand exposes no directly forgeable binding policy constructor`() {
+        assertFalse(
+            GPUPreparedNativeRenderPipelineOperand::class.java.declaredConstructors.any { constructor ->
+                constructor.parameterTypes.any { type ->
+                    type == GPUPreparedNativeRenderPipelineBindingPolicy::class.java
+                }
+            },
+        )
+    }
+
+    @Test
+    fun `acquired component identity derives the exact prepared pipeline binding policy`() {
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        val dynamicHandles = cache.acquire(productionKey()).acquiredHandles()
+        val noBindingsHandles = cache.acquire(clipStencilProducerProductionKey()).acquiredHandles()
+
+        val dynamicOperand = GPUPreparedNativeRenderPipelineOperand.fromCorePrimitiveAcquisition(
+            dynamicHandles,
+            GENERATION,
+        )
+        val noBindingsOperand = GPUPreparedNativeRenderPipelineOperand.fromCorePrimitiveAcquisition(
+            noBindingsHandles,
+            GENERATION,
+        )
+
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY, dynamicHandles.componentIdentity)
+        assertEquals(
+            PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY,
+            noBindingsHandles.componentIdentity,
+        )
+        assertSame(dynamicHandles.pipeline, dynamicOperand.pipeline)
+        assertSame(noBindingsHandles.pipeline, noBindingsOperand.pipeline)
+        assertEquals(
+            GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired,
+            dynamicOperand.bindingPolicy,
+        )
+        assertEquals(
+            GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings,
+            noBindingsOperand.bindingPolicy,
+        )
+
+        cache.close()
+    }
+
+    @Test
+    fun `non indexed draw requires a bind group for an acquired dynamic uniform pipeline`() {
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        val dynamicPipeline = GPUPreparedNativeRenderPipelineOperand.fromCorePrimitiveAcquisition(
+            cache.acquire(productionKey()).acquiredHandles(),
+            GENERATION,
+        )
+        val target = GPUPreparedNativeTextureViewOperand(native.textureView("target"), GENERATION)
+
+        assertFailsWith<IllegalArgumentException> {
+            GPUPreparedNativeScopeOperand.Render(
+                sourceStepIndex = 0,
+                pass = GPUPreparedNativeRenderPassConfig(target),
+                commands = listOf(
+                    GPUPreparedNativeRenderCommand.SetPipeline(dynamicPipeline),
+                    GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(vertexCount = 3)),
+                ),
+            )
+        }
+
+        cache.close()
+    }
+
+    @Test
+    fun `non indexed draw accepts no bind group for an acquired no bindings pipeline`() {
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        val noBindingsPipeline = GPUPreparedNativeRenderPipelineOperand.fromCorePrimitiveAcquisition(
+            cache.acquire(clipStencilProducerProductionKey()).acquiredHandles(),
+            GENERATION,
+        )
+        val target = GPUPreparedNativeTextureViewOperand(native.textureView("target"), GENERATION)
+
+        GPUPreparedNativeScopeOperand.Render(
+            sourceStepIndex = 0,
+            pass = GPUPreparedNativeRenderPassConfig(target),
+            commands = listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(noBindingsPipeline),
+                GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(vertexCount = 3)),
+            ),
+        )
+
+        cache.close()
+    }
+
     @Test
     fun `concrete cache shares one component set across two factory accepted pipeline identities`() {
         val native = SessionNativeProxy(acceptPipelineIdentity = { true })
@@ -429,12 +535,17 @@ class GPUCorePrimitiveSessionNativeCacheTest {
             componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY,
         )
 
+    private fun clipStencilProducerProductionKey() =
+        productionKey(GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerWinding).copy(
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY,
+        )
+
     private fun testKey(identity: String) = productionKey().copy(
         pipelineIdentity = productionKey().pipelineIdentity.copy(targetFormat = "test:$identity"),
     )
 
     private fun GPUWgpu4kCorePrimitiveSessionCacheAcquire.acquiredHandles() =
-        assertIs<GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired>(this).handles
+        assertIs<GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired>(this)
 
     private class SessionNativeProxy(
         private val acceptPipelineIdentity: (GPUWgpu4kCorePrimitiveRenderPipelineIdentity) -> Boolean = {
@@ -485,7 +596,10 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         ): GPUShaderModule =
             createdHandle("component.shader", GPUShaderModule::class.java)
 
-        override fun createPipelineLayout(bindGroupLayout: GPUBindGroupLayout): GPUPipelineLayout =
+        override fun createPipelineLayout(
+            componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+            bindGroupLayout: GPUBindGroupLayout,
+        ): GPUPipelineLayout =
             createdHandle("component.pipelineLayout", GPUPipelineLayout::class.java)
 
         override fun createRenderPipeline(
@@ -506,6 +620,8 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         fun creationCount(label: String): Int = creationEvents.count { it == label }
 
         fun closeCount(label: String): Int = closeAttempts.getOrDefault(label, 0)
+
+        fun textureView(label: String): GPUTextureView = handle(label, GPUTextureView::class.java)
 
         fun failCloseOnce(label: String) {
             closeFailuresRemaining[label] = 1

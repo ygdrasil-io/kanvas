@@ -31,12 +31,19 @@ internal data class GPUCorePrimitiveNativeCacheCounters(
     val invariantInvalidations: Long = 0,
 )
 
-private const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 16
+internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 16
+
+internal enum class GPUWgpu4kCorePrimitiveBindingPolicy {
+    DynamicUniformRequired,
+    NoBindings,
+}
 
 internal data class GPUWgpu4kCorePrimitiveComponentIdentity(
     val shaderIdentity: String,
     val bindingLayoutIdentity: String,
     val vertexLayoutIdentity: String,
+    val bindingPolicy: GPUWgpu4kCorePrimitiveBindingPolicy =
+        GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired,
 ) {
     init {
         require(listOf(shaderIdentity, bindingLayoutIdentity, vertexLayoutIdentity).all(String::isNotBlank))
@@ -77,6 +84,14 @@ internal val PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY =
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
 
+internal val PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_SHADER_IDENTITY,
+        bindingLayoutIdentity = CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_BINDING_LAYOUT_IDENTITY,
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+        bindingPolicy = GPUWgpu4kCorePrimitiveBindingPolicy.NoBindings,
+    )
+
 internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY =
     GPUWgpu4kCorePrimitiveComponentIdentity(
         shaderIdentity = CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_SHADER_IDENTITY,
@@ -107,6 +122,8 @@ internal fun isSupportedCorePrimitivePipelineCacheKey(
     key.hasCompatibleComponentIdentity()
 
 private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentity(): Boolean = when {
+    pipelineIdentity.program.isClipStencilProducer() ->
+        componentIdentity == PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY
     pipelineIdentity.program.isAnalyticIntersection4() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
     pipelineIdentity.program.isAnalyticClip() ->
@@ -145,21 +162,26 @@ internal sealed interface GPUWgpu4kCorePrimitiveSessionCacheRefusal {
 }
 
 internal sealed interface GPUWgpu4kCorePrimitiveSessionCacheAcquire {
-    data class Acquired(
-        val handles: GPUWgpu4kCorePrimitiveInvariantHandles,
-    ) : GPUWgpu4kCorePrimitiveSessionCacheAcquire
+    sealed interface Acquired : GPUWgpu4kCorePrimitiveSessionCacheAcquire {
+        val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity
+        val bindGroupLayout: GPUBindGroupLayout
+        val shader: GPUShaderModule
+        val pipelineLayout: GPUPipelineLayout
+        val pipeline: GPURenderPipeline
+    }
 
     data class Refused(
         val reason: GPUWgpu4kCorePrimitiveSessionCacheRefusal,
     ) : GPUWgpu4kCorePrimitiveSessionCacheAcquire
 }
 
-internal class GPUWgpu4kCorePrimitiveInvariantHandles(
-    val bindGroupLayout: GPUBindGroupLayout,
-    val shader: GPUShaderModule,
-    val pipelineLayout: GPUPipelineLayout,
-    val pipeline: GPURenderPipeline,
-)
+private class IssuedGPUWgpu4kCorePrimitiveSessionCacheAcquisition(
+    override val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+    override val bindGroupLayout: GPUBindGroupLayout,
+    override val shader: GPUShaderModule,
+    override val pipelineLayout: GPUPipelineLayout,
+    override val pipeline: GPURenderPipeline,
+) : GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired
 
 /** Native creation seam. Production accepts only the closed exact executable pipeline identities. */
 internal interface GPUWgpu4kCorePrimitiveSessionNativeFactory {
@@ -169,7 +191,10 @@ internal interface GPUWgpu4kCorePrimitiveSessionNativeFactory {
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
         plan: GPUCorePrimitiveNativeShaderPlan,
     ): GPUShaderModule
-    fun createPipelineLayout(bindGroupLayout: GPUBindGroupLayout): GPUPipelineLayout
+    fun createPipelineLayout(
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+        bindGroupLayout: GPUBindGroupLayout,
+    ): GPUPipelineLayout
     fun createRenderPipeline(
         identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
         shader: GPUShaderModule,
@@ -186,22 +211,7 @@ private class GPUWgpu4kCorePrimitiveDeviceSessionNativeFactory(
 
     override fun createBindGroupLayout(
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
-    ): GPUBindGroupLayout = device.createBindGroupLayout(
-        BindGroupLayoutDescriptor(
-            label = "Kanvas.session.corePrimitive.bindGroupLayout0.${componentIdentity.bindingLayoutIdentity}",
-            entries = listOf(
-                BindGroupLayoutEntry(
-                    binding = 0u,
-                    visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
-                    buffer = BufferBindingLayout(
-                        type = GPUBufferBindingType.Uniform,
-                        hasDynamicOffset = true,
-                        minBindingSize = componentIdentity.uniformBindingSizeBytes(),
-                    ),
-                ),
-            ),
-        ),
-    )
+    ): GPUBindGroupLayout = device.createBindGroupLayout(corePrimitiveBindGroupLayoutDescriptor(componentIdentity))
 
     override fun createShaderModule(
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
@@ -214,13 +224,12 @@ private class GPUWgpu4kCorePrimitiveDeviceSessionNativeFactory(
             ),
         )
 
-    override fun createPipelineLayout(bindGroupLayout: GPUBindGroupLayout): GPUPipelineLayout =
-        device.createPipelineLayout(
-            PipelineLayoutDescriptor(
-                label = "Kanvas.session.corePrimitive.pipelineLayout",
-                bindGroupLayouts = listOf(bindGroupLayout),
-            ),
-        )
+    override fun createPipelineLayout(
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+        bindGroupLayout: GPUBindGroupLayout,
+    ): GPUPipelineLayout = device.createPipelineLayout(
+        corePrimitivePipelineLayoutDescriptor(componentIdentity, bindGroupLayout),
+    )
 
     override fun createRenderPipeline(
         identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
@@ -283,7 +292,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     >()
     private val live = linkedMapOf<
         GPUWgpu4kCorePrimitivePipelineCacheKey,
-        GPUWgpu4kCorePrimitiveInvariantHandles,
+        GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired,
     >()
     private var creations = 0L
     private var reuses = 0L
@@ -393,7 +402,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         }
         live[key]?.let { handles ->
             reuses += 1
-            return GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired(handles)
+            return handles
         }
         if (live.size >= CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES) {
             return refused(
@@ -468,6 +477,8 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         return try {
             val shaderPlan = when (
                 val shader = when (key.componentIdentity) {
+                    PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY ->
+                        buildCorePrimitiveClipStencilProducerNativeShader()
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY ->
                         buildCorePrimitiveAnalyticClipNativeShader()
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY ->
@@ -485,7 +496,10 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
             resource = GPUWgpu4kCorePrimitiveSessionCacheNativeResource.ShaderModule
             components.shader = nativeFactory.createShaderModule(key.componentIdentity, shaderPlan)
             resource = GPUWgpu4kCorePrimitiveSessionCacheNativeResource.PipelineLayout
-            components.pipelineLayout = nativeFactory.createPipelineLayout(requireNotNull(components.bindGroupLayout))
+            components.pipelineLayout = nativeFactory.createPipelineLayout(
+                key.componentIdentity,
+                requireNotNull(components.bindGroupLayout),
+            )
             resource = GPUWgpu4kCorePrimitiveSessionCacheNativeResource.RenderPipeline
             val pipeline = nativeFactory.createRenderPipeline(
                 key.pipelineIdentity,
@@ -534,7 +548,8 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         components: GPUWgpu4kCorePrimitiveSharedComponentJournal,
         pipeline: GPURenderPipeline,
     ): GPUWgpu4kCorePrimitiveSessionCacheAcquire {
-        val handles = GPUWgpu4kCorePrimitiveInvariantHandles(
+        val handles = IssuedGPUWgpu4kCorePrimitiveSessionCacheAcquisition(
+            key.componentIdentity,
             requireNotNull(components.bindGroupLayout),
             requireNotNull(components.shader),
             requireNotNull(components.pipelineLayout),
@@ -542,7 +557,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         )
         live[key] = handles
         creations += 1
-        return GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired(handles)
+        return handles
     }
 
     private fun refused(
@@ -552,7 +567,42 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
 }
 
 private fun GPUWgpu4kCorePrimitiveComponentIdentity.uniformBindingSizeBytes(): ULong = when (this) {
+    PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY ->
+        error("Clip-stencil producer has no uniform binding")
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY -> 64uL
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY -> 160uL
     else -> 32uL
 }
+
+internal fun corePrimitiveBindGroupLayoutDescriptor(
+    componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+): BindGroupLayoutDescriptor = BindGroupLayoutDescriptor(
+    label = "Kanvas.session.corePrimitive.bindGroupLayout0.${componentIdentity.bindingLayoutIdentity}",
+    entries = if (componentIdentity.bindingPolicy == GPUWgpu4kCorePrimitiveBindingPolicy.NoBindings) {
+        emptyList()
+    } else {
+        listOf(
+            BindGroupLayoutEntry(
+                binding = 0u,
+                visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                buffer = BufferBindingLayout(
+                    type = GPUBufferBindingType.Uniform,
+                    hasDynamicOffset = true,
+                    minBindingSize = componentIdentity.uniformBindingSizeBytes(),
+                ),
+            ),
+        )
+    },
+)
+
+internal fun corePrimitivePipelineLayoutDescriptor(
+    componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+    bindGroupLayout: GPUBindGroupLayout,
+): PipelineLayoutDescriptor = PipelineLayoutDescriptor(
+    label = "Kanvas.session.corePrimitive.pipelineLayout",
+    bindGroupLayouts = if (componentIdentity.bindingPolicy == GPUWgpu4kCorePrimitiveBindingPolicy.NoBindings) {
+        emptyList()
+    } else {
+        listOf(bindGroupLayout)
+    },
+)

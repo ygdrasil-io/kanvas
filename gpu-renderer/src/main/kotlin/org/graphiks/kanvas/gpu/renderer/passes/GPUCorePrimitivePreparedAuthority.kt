@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.passes
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskSampling
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
@@ -29,9 +30,10 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     val colorFormat: ColorFormat = ColorFormat.Rgba8Unorm,
     val depthStencil: DepthStencil = DepthStencil.None,
     val sampleCount: Int = 1,
+    val clipStencilFillRule: GPUClipFillRule? = null,
 ) {
-    enum class Role { Shading, PathStencilProducer, PathStencilCover }
-    enum class Shader { DirectGeometry, AnalyticRRect, PathStencil }
+    enum class Role { Shading, PathStencilProducer, PathStencilCover, ClipStencilProducer, ClipStencilConsumer }
+    enum class Shader { DirectGeometry, AnalyticRRect, PathStencil, ClipStencilProducer }
     enum class Topology { DirectTriangleList, AnalyticRRect, StencilEdgeFan, StrokeStencilEdgeFan }
     enum class FrontFace { Ccw }
     enum class CullMode { None }
@@ -42,11 +44,13 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
         DynamicUniform32V2("dynamic-uniform32-v2"),
         AnalyticClipUniform64V1("dynamic-uniform64-analytic-clip-v1"),
         AnalyticClipUniform160V1("dynamic-uniform160-analytic-clip-intersection4-v1"),
+        NoBindingsV1("no-bindings-v1"),
     }
 
     /** Derived executable ABI axis. It deliberately leaves the legacy constructor and hashes intact. */
     val uniformLayout: UniformLayout
         get() = when {
+            role == Role.ClipStencilProducer -> UniformLayout.NoBindingsV1
             role == Role.Shading && clip is Clip.Analytic -> UniformLayout.AnalyticClipUniform64V1
             role == Role.Shading && clip == Clip.AnalyticIntersection4 ->
                 UniformLayout.AnalyticClipUniform160V1
@@ -74,8 +78,8 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 require(readMask <= 0xffu && writeMask <= 0xffu) {
                     "CorePrimitive stencil masks must fit stencil8"
                 }
-                require(writeMask != 0u || isDirectPathAttachmentNeutral()) {
-                    "A zero-write stencil state must be the exact direct path-attachment state"
+                require(writeMask != 0u || isDirectPathAttachmentNeutral() || isReadOnlyClipConsumer()) {
+                    "A zero-write stencil state must be an exact neutral or read-only clip-consumer state"
                 }
             }
 
@@ -85,6 +89,16 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
 
             private fun StencilFace.isDirectPathAttachmentNeutral(): Boolean =
                 compare == GPUClipStencilCompare.Always &&
+                    passOperation == GPUClipStencilOperation.Keep &&
+                    failOperation == GPUClipStencilOperation.Keep &&
+                    depthFailOperation == GPUClipStencilOperation.Keep
+
+            internal fun isReadOnlyClipConsumer(): Boolean =
+                readMask == 0xffu && writeMask == 0u &&
+                    front.isReadOnlyClipConsumer() && back.isReadOnlyClipConsumer()
+
+            private fun StencilFace.isReadOnlyClipConsumer(): Boolean =
+                compare in setOf(GPUClipStencilCompare.NotEqual, GPUClipStencilCompare.Equal) &&
                     passOperation == GPUClipStencilOperation.Keep &&
                     failOperation == GPUClipStencilOperation.Keep &&
                     depthFailOperation == GPUClipStencilOperation.Keep
@@ -146,6 +160,9 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
 
     init {
         require(sampleCount > 0) { "CorePrimitive structural sample count must be positive" }
+        require(role == Role.ClipStencilProducer || clipStencilFillRule == null) {
+            "Only the CorePrimitive clip-stencil producer may retain clip fill-rule authority"
+        }
         when (role) {
             Role.Shading -> require(
                 depthStencil == DepthStencil.None ||
@@ -160,6 +177,24 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                     "CorePrimitive path stencil roles require the path shader and exact stencil state"
                 }
                 require(sampleCount == 1) { "CorePrimitive path stencil roles are single-sample" }
+            }
+            Role.ClipStencilProducer -> {
+                require(shader == Shader.ClipStencilProducer && depthStencil is DepthStencil.Stencil) {
+                    "CorePrimitive clip-stencil producer requires the sealed producer shader and stencil state"
+                }
+                require(clipStencilFillRule != null && blend == Blend.ColorWriteNone && clip == Clip.None) {
+                    "CorePrimitive clip-stencil producer requires fill-rule authority with no color or nested clip"
+                }
+                require(sampleCount == 1) { "CorePrimitive clip-stencil producer is single-sample" }
+            }
+            Role.ClipStencilConsumer -> {
+                require(shader == Shader.DirectGeometry && depthStencil is DepthStencil.Stencil) {
+                    "CorePrimitive clip-stencil consumer requires direct geometry and stencil state"
+                }
+                require(clipStencilFillRule == null && clip == Clip.None) {
+                    "CorePrimitive clip-stencil consumer keeps fill and dynamic clip facts outside its key"
+                }
+                require(sampleCount == 1) { "CorePrimitive clip-stencil consumer is single-sample" }
             }
         }
     }
@@ -183,10 +218,12 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             }
             Role.PathStencilProducer,
             Role.PathStencilCover,
+            Role.ClipStencilProducer,
+            Role.ClipStencilConsumer,
             -> buildString {
                 append("role=").append(role.name)
                 append("|shader=").append(shader.name)
-                append("|layout=dynamic-uniform32-v2")
+                append("|layout=").append(uniformLayout.stableIdentity)
                 append("|topology=").append(topology.name)
                 append("|frontFace=").append(frontFace.name)
                 append("|cull=").append(cullMode.name)
@@ -195,6 +232,9 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 append("|samples=").append(sampleCount)
                 append("|blend=").append(blend)
                 append("|clip=").append(clip)
+                if (clipStencilFillRule != null) {
+                    append("|clipStencilFillRule=").append(clipStencilFillRule.name)
+                }
             }
         }
         val digest = MessageDigest.getInstance("SHA-256")
@@ -225,6 +265,113 @@ internal fun GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.pathStenci
     PATH_STENCIL_COVER_INVERSE_STATE -> GPUCorePrimitivePathStencilStructuralProgram.CoverInverse
     else -> null
 }
+
+/** Four exact clip-stencil programs; dynamic reference, geometry, bounds, and order stay outside. */
+internal enum class GPUCorePrimitiveClipStencilStructuralProgram {
+    ProducerWinding,
+    ProducerEvenOdd,
+    ConsumerRegular,
+    ConsumerInverse,
+}
+
+internal fun GPUCorePrimitiveRenderPipelineStructuralKey.clipStencilStructuralProgramOrNull():
+    GPUCorePrimitiveClipStencilStructuralProgram? = when {
+    role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer &&
+        clipStencilFillRule == GPUClipFillRule.Winding &&
+        depthStencil == CLIP_STENCIL_PRODUCER_WINDING_STATE ->
+        GPUCorePrimitiveClipStencilStructuralProgram.ProducerWinding
+    role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer &&
+        clipStencilFillRule == GPUClipFillRule.EvenOdd &&
+        depthStencil == CLIP_STENCIL_PRODUCER_EVEN_ODD_STATE ->
+        GPUCorePrimitiveClipStencilStructuralProgram.ProducerEvenOdd
+    role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer &&
+        depthStencil == CLIP_STENCIL_CONSUMER_REGULAR_STATE ->
+        GPUCorePrimitiveClipStencilStructuralProgram.ConsumerRegular
+    role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer &&
+        depthStencil == CLIP_STENCIL_CONSUMER_INVERSE_STATE ->
+        GPUCorePrimitiveClipStencilStructuralProgram.ConsumerInverse
+    else -> null
+}
+
+internal fun corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
+    fillRule: GPUClipFillRule,
+): GPUCorePrimitiveRenderPipelineStructuralKey = GPUCorePrimitiveRenderPipelineStructuralKey(
+    shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.ClipStencilProducer,
+    topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StencilEdgeFan,
+    blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone,
+    clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+    role = GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer,
+    depthStencil = when (fillRule) {
+        GPUClipFillRule.Winding -> CLIP_STENCIL_PRODUCER_WINDING_STATE
+        GPUClipFillRule.EvenOdd -> CLIP_STENCIL_PRODUCER_EVEN_ODD_STATE
+    },
+    sampleCount = 1,
+    clipStencilFillRule = fillRule,
+)
+
+internal fun corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
+    inverseFill: Boolean,
+    blendPlan: GPUBlendPlan,
+): GPUCorePrimitiveRenderPipelineStructuralKey = GPUCorePrimitiveRenderPipelineStructuralKey(
+    shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
+    topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
+    blend = blendPlan.corePrimitiveStructuralBlend(),
+    clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+    role = GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer,
+    depthStencil = if (inverseFill) {
+        CLIP_STENCIL_CONSUMER_INVERSE_STATE
+    } else {
+        CLIP_STENCIL_CONSUMER_REGULAR_STATE
+    },
+    sampleCount = 1,
+)
+
+private fun clipStencilState(
+    front: GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace,
+    back: GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace,
+    writeMask: UInt,
+): GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil =
+    GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil(
+        format = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencilFormat.Depth24PlusStencil8,
+        front = front,
+        back = back,
+        readMask = 0xffu,
+        writeMask = writeMask,
+    )
+
+private fun clipStencilFace(
+    compare: GPUClipStencilCompare = GPUClipStencilCompare.Always,
+    pass: GPUClipStencilOperation = GPUClipStencilOperation.Keep,
+) = GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace(
+    compare = compare,
+    passOperation = pass,
+    failOperation = GPUClipStencilOperation.Keep,
+    depthFailOperation = GPUClipStencilOperation.Keep,
+)
+
+private val CLIP_STENCIL_PRODUCER_WINDING_STATE = clipStencilState(
+    front = clipStencilFace(pass = GPUClipStencilOperation.IncrementWrap),
+    back = clipStencilFace(pass = GPUClipStencilOperation.DecrementWrap),
+    writeMask = 0xffu,
+)
+
+private val CLIP_STENCIL_PRODUCER_EVEN_ODD_STATE = clipStencilState(
+    front = clipStencilFace(pass = GPUClipStencilOperation.Invert),
+    back = clipStencilFace(pass = GPUClipStencilOperation.Invert),
+    writeMask = 0xffu,
+)
+
+private val CLIP_STENCIL_CONSUMER_REGULAR_STATE = clipStencilState(
+    front = clipStencilFace(compare = GPUClipStencilCompare.NotEqual),
+    back = clipStencilFace(compare = GPUClipStencilCompare.NotEqual),
+    writeMask = 0u,
+)
+
+private val CLIP_STENCIL_CONSUMER_INVERSE_STATE = clipStencilState(
+    front = clipStencilFace(compare = GPUClipStencilCompare.Equal),
+    back = clipStencilFace(compare = GPUClipStencilCompare.Equal),
+    writeMask = 0u,
+)
 
 private val CORE_PRIMITIVE_DIRECT_PATH_DEPTH_STENCIL_STATE = run {
     val neutralFace = GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace(
@@ -285,7 +432,10 @@ internal fun corePrimitivePathStencilRenderPipelineStructuralKey(
     clipExecutionPlan: GPUClipExecutionPlan,
     blendPlan: GPUBlendPlan,
 ): GPUCorePrimitiveRenderPipelineStructuralKey {
-    require(role != GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading) {
+    require(
+        role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer ||
+            role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+    ) {
         "Path stencil structural authority requires a producer or cover role"
     }
     require(semantic.coverageMode == GPUCorePrimitiveCoverageMode.Stencil1x) {
@@ -316,14 +466,12 @@ internal fun corePrimitivePathStencilRenderPipelineStructuralKey(
             }
             GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover ->
                 GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
-            GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading -> error("Validated above")
         },
         blend = when (role) {
             GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer ->
                 GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone
             GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover ->
                 blendPlan.corePrimitiveStructuralBlend()
-            GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading -> error("Validated above")
         },
         clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
         depthStencil = pathStencilState(role, geometry.fillRule, geometry.inverseFill),
@@ -364,7 +512,7 @@ private fun pathStencilState(
             val depthFail = if (inverseFill) GPUClipStencilOperation.Keep else GPUClipStencilOperation.Zero
             face(compare, pass, fail, depthFail) to face(compare, pass, fail, depthFail)
         }
-        GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading ->
+        else ->
             error("Path stencil state cannot be built for shading")
     }
     return GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil(
@@ -378,7 +526,6 @@ private fun pathStencilState(
                 GPUCorePrimitiveFillRule.EvenOdd -> 0x01u
             }
             GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover -> 0xffu
-            GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading -> error("Validated above")
         },
     )
 }

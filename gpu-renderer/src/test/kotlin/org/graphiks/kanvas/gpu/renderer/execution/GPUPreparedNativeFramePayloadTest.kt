@@ -1,18 +1,81 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUBindGroup
+import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUDevice
+import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPURenderPipeline
+import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUTextureView
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertSame
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 
 class GPUPreparedNativeFramePayloadTest {
+    @Test
+    fun `indexed draw binding requirement follows the acquired pipeline policy`() {
+        val generation = GPUDeviceGenerationID(7)
+        val target = textureViewOperand("target", generation)
+        val vertex = bufferOperand("vertices", generation)
+        val index = bufferOperand("indices", generation)
+        noBindingsPipelineFixture(generation).use { fixture ->
+            GPUPreparedNativeScopeOperand.Render(
+                sourceStepIndex = 2,
+                pass = GPUPreparedNativeRenderPassConfig(target),
+                commands = listOf(
+                    GPUPreparedNativeRenderCommand.SetPipeline(fixture.operand),
+                    vertexCommand(vertex),
+                    indexCommand(index),
+                    GPUPreparedNativeRenderCommand.SetScissor(0, 0, 8, 8),
+                    drawCommand(),
+                ),
+            )
+        }
+
+        val requiredPipeline = pipelineOperand("consumer", generation)
+        assertFailsWith<IllegalArgumentException> {
+            GPUPreparedNativeScopeOperand.Render(
+                sourceStepIndex = 2,
+                pass = GPUPreparedNativeRenderPassConfig(target),
+                commands = listOf(
+                    GPUPreparedNativeRenderCommand.SetPipeline(requiredPipeline),
+                    vertexCommand(vertex),
+                    indexCommand(index),
+                    GPUPreparedNativeRenderCommand.SetScissor(0, 0, 8, 8),
+                    drawCommand(),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `acquired no bindings pipeline refuses a bind group command`() {
+        val generation = GPUDeviceGenerationID(7)
+        val target = textureViewOperand("target", generation)
+        noBindingsPipelineFixture(generation).use { fixture ->
+            assertFailsWith<IllegalArgumentException> {
+                GPUPreparedNativeScopeOperand.Render(
+                    sourceStepIndex = 2,
+                    pass = GPUPreparedNativeRenderPassConfig(target),
+                    commands = listOf(
+                        GPUPreparedNativeRenderCommand.SetPipeline(fixture.operand),
+                        GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroupOperand("unexpected", generation)),
+                        vertexCommand(bufferOperand("vertices", generation)),
+                        indexCommand(bufferOperand("indices", generation)),
+                        GPUPreparedNativeRenderCommand.SetScissor(0, 0, 8, 8),
+                        drawCommand(),
+                    ),
+                )
+            }
+        }
+    }
+
     @Test
     fun `command order remains the default direct render operand layout`() {
         val generation = GPUDeviceGenerationID(7)
@@ -322,8 +385,74 @@ class GPUPreparedNativeFramePayloadTest {
     private fun textureViewOperand(label: String, generation: GPUDeviceGenerationID) =
         GPUPreparedNativeTextureViewOperand(fakeNative<GPUTextureView>(label), generation)
 
-    private fun pipelineOperand(label: String, generation: GPUDeviceGenerationID) =
-        GPUPreparedNativeRenderPipelineOperand(fakeNative<GPURenderPipeline>(label), generation)
+    private fun pipelineOperand(
+        label: String,
+        generation: GPUDeviceGenerationID,
+    ) = GPUPreparedNativeRenderPipelineOperand(
+        fakeNative<GPURenderPipeline>(label),
+        generation,
+    )
+
+    private fun noBindingsPipelineFixture(
+        generation: GPUDeviceGenerationID,
+    ): NoBindingsPipelineFixture {
+        val nativeFactory = PayloadSessionNativeFactory()
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(nativeFactory.device, generation, nativeFactory)
+        val acquired = assertIs<GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired>(
+            cache.acquire(
+                GPUWgpu4kCorePrimitivePipelineCacheKey(
+                    componentIdentity = PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY,
+                    pipelineIdentity = GPUWgpu4kCorePrimitiveRenderPipelineIdentity(
+                        targetFormat = "rgba8unorm",
+                        sampleCount = 1,
+                        topology = "triangle-list",
+                        frontFace = "ccw",
+                        cullMode = "none",
+                        program = GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerWinding,
+                    ),
+                ),
+            ),
+        )
+        return NoBindingsPipelineFixture(
+            GPUPreparedNativeRenderPipelineOperand.fromCorePrimitiveAcquisition(acquired, generation),
+            cache,
+        )
+    }
+
+    private class NoBindingsPipelineFixture(
+        val operand: GPUPreparedNativeRenderPipelineOperand,
+        private val cache: GPUWgpu4kCorePrimitiveSessionCache,
+    ) : AutoCloseable {
+        override fun close() = cache.close()
+    }
+
+    private class PayloadSessionNativeFactory : GPUWgpu4kCorePrimitiveSessionNativeFactory {
+        val device = fakeNative<GPUDevice>("device")
+
+        override fun acceptsPipelineIdentity(
+            identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
+        ) = true
+
+        override fun createBindGroupLayout(
+            componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+        ) = fakeNative<GPUBindGroupLayout>("bind-group-layout")
+
+        override fun createShaderModule(
+            componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+            plan: GPUCorePrimitiveNativeShaderPlan,
+        ) = fakeNative<GPUShaderModule>("shader")
+
+        override fun createPipelineLayout(
+            componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+            bindGroupLayout: GPUBindGroupLayout,
+        ) = fakeNative<GPUPipelineLayout>("pipeline-layout")
+
+        override fun createRenderPipeline(
+            identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
+            shader: GPUShaderModule,
+            pipelineLayout: GPUPipelineLayout,
+        ) = fakeNative<GPURenderPipeline>("pipeline")
+    }
 
     private fun bindGroupOperand(label: String, generation: GPUDeviceGenerationID) =
         GPUPreparedNativeBindGroupOperand(fakeNative<GPUBindGroup>(label), generation)

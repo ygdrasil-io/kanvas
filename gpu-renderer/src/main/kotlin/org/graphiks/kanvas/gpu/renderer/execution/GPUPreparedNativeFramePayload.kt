@@ -350,11 +350,63 @@ internal class GPUPreparedNativeBufferOperand(
     init { require(byteCapacity == null || byteCapacity > 0L) }
 }
 
-internal class GPUPreparedNativeRenderPipelineOperand(
+internal enum class GPUPreparedNativeRenderPipelineBindingPolicy {
+    BindGroupRequired,
+    NoBindings,
+}
+
+internal class GPUPreparedNativeRenderPipelineOperand private constructor(
     val pipeline: GPURenderPipeline,
     override val deviceGeneration: GPUDeviceGenerationID,
     override val ownership: GPUPreparedNativeOperandOwnership = GPUPreparedNativeOperandOwnership.Borrowed,
-) : GPUPreparedNativeOperand
+    private val bindingAuthority: GPUPreparedNativeRenderPipelineBindingAuthority,
+) : GPUPreparedNativeOperand {
+    val bindingPolicy: GPUPreparedNativeRenderPipelineBindingPolicy
+        get() = bindingAuthority.bindingPolicy
+
+    internal constructor(
+        pipeline: GPURenderPipeline,
+        deviceGeneration: GPUDeviceGenerationID,
+        ownership: GPUPreparedNativeOperandOwnership = GPUPreparedNativeOperandOwnership.Borrowed,
+    ) : this(
+        pipeline,
+        deviceGeneration,
+        ownership,
+        GPUPreparedNativeRenderPipelineBindingAuthority.BindGroupRequired,
+    )
+
+    companion object {
+        internal fun fromCorePrimitiveAcquisition(
+            acquired: GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired,
+            deviceGeneration: GPUDeviceGenerationID,
+            ownership: GPUPreparedNativeOperandOwnership = GPUPreparedNativeOperandOwnership.Borrowed,
+        ) = GPUPreparedNativeRenderPipelineOperand(
+            acquired.pipeline,
+            deviceGeneration,
+            ownership,
+            GPUPreparedNativeRenderPipelineBindingAuthority.CorePrimitiveAcquired(acquired),
+        )
+    }
+}
+
+private sealed interface GPUPreparedNativeRenderPipelineBindingAuthority {
+    val bindingPolicy: GPUPreparedNativeRenderPipelineBindingPolicy
+
+    data object BindGroupRequired : GPUPreparedNativeRenderPipelineBindingAuthority {
+        override val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
+    }
+
+    class CorePrimitiveAcquired(
+        acquired: GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired,
+    ) : GPUPreparedNativeRenderPipelineBindingAuthority {
+        override val bindingPolicy = when (acquired.componentIdentity.bindingPolicy) {
+            GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired ->
+                GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
+            GPUWgpu4kCorePrimitiveBindingPolicy.NoBindings ->
+                GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
+        }
+    }
+}
 
 internal class GPUPreparedNativeComputePipelineOperand(
     val pipeline: GPUComputePipeline,
@@ -618,7 +670,8 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                     } else {
                         require(
                             first.deviceGeneration == command.pipeline.deviceGeneration &&
-                                first.ownership == command.pipeline.ownership,
+                                first.ownership == command.pipeline.ownership &&
+                                first.bindingPolicy == command.pipeline.bindingPolicy,
                         ) {
                             "One indexed CorePrimitive native pipeline identity cannot carry ambiguous metadata"
                         }
@@ -646,6 +699,7 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                 "Render payload requires at least one closed typed draw"
             }
             var pipelineBound = false
+            var activeBindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
             var bindGroupBound = false
             var vertexBufferBound = false
             var indexBufferBound = false
@@ -656,8 +710,18 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             var scissorBound = false
             this.commands.forEach { command ->
                 when (command) {
-                    is GPUPreparedNativeRenderCommand.SetPipeline -> pipelineBound = true
-                    is GPUPreparedNativeRenderCommand.SetBindGroup -> bindGroupBound = true
+                    is GPUPreparedNativeRenderCommand.SetPipeline -> {
+                        pipelineBound = true
+                        activeBindingPolicy = command.pipeline.bindingPolicy
+                        bindGroupBound = false
+                    }
+                    is GPUPreparedNativeRenderCommand.SetBindGroup -> {
+                        require(pipelineBound) { "SetBindGroup requires an active native pipeline" }
+                        require(activeBindingPolicy == GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired) {
+                            "The active native pipeline declares no bindings"
+                        }
+                        bindGroupBound = true
+                    }
                     is GPUPreparedNativeRenderCommand.SetVertexBuffer -> {
                         vertexBufferBound = true
                         vertexSliceBytes = command.size
@@ -670,12 +734,23 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                     }
                     is GPUPreparedNativeRenderCommand.SetScissor -> scissorBound = true
                     is GPUPreparedNativeRenderCommand.SetStencilReference -> Unit
-                    is GPUPreparedNativeRenderCommand.Draw -> require(pipelineBound) {
-                        "Every native draw requires a preceding SetPipeline command"
+                    is GPUPreparedNativeRenderCommand.Draw -> {
+                        require(pipelineBound) {
+                            "Every native draw requires a preceding SetPipeline command"
+                        }
+                        if (activeBindingPolicy == GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired) {
+                            require(bindGroupBound) {
+                                "Every binding pipeline draw requires a preceding SetBindGroup command"
+                            }
+                        }
                     }
                     is GPUPreparedNativeRenderCommand.DrawIndexed -> {
                         require(pipelineBound) { "Every native indexed draw requires a preceding SetPipeline command" }
-                        require(bindGroupBound) { "Every native indexed draw requires a preceding SetBindGroup command" }
+                        if (activeBindingPolicy == GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired) {
+                            require(bindGroupBound) {
+                                "Every binding pipeline indexed draw requires a preceding SetBindGroup command"
+                            }
+                        }
                         require(vertexBufferBound) { "Every native indexed draw requires a preceding SetVertexBuffer command" }
                         require(indexBufferBound) { "Every native indexed draw requires a preceding SetIndexBuffer command" }
                         require(scissorBound) { "Every native indexed draw requires a preceding SetScissor command" }

@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import io.ygdrasil.webgpu.ColorTargetState
 import io.ygdrasil.webgpu.DepthStencilState
 import io.ygdrasil.webgpu.GPUBlendFactor
+import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUColorWrite
 import io.ygdrasil.webgpu.GPUCompareFunction
 import io.ygdrasil.webgpu.GPUCullMode
@@ -22,13 +23,120 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilConsumerRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilProducerRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
+    @Test
+    fun `four clip stencil structural keys map to four exact native programs and binding policies`() {
+        val cases = listOf(
+            corePrimitiveClipStencilProducerRenderPipelineStructuralKey(GPUClipFillRule.Winding) to
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerWinding,
+            corePrimitiveClipStencilProducerRenderPipelineStructuralKey(GPUClipFillRule.EvenOdd) to
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerEvenOdd,
+            corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(false, srcOverBlendPlan()) to
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRegular,
+            corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(true, srcOverBlendPlan()) to
+                GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerInverse,
+        )
+
+        cases.forEach { (key, program) ->
+            val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+            )
+            assertEquals(program, mapped.identity.program)
+            assertTrue(
+                isSupportedCorePrimitivePipelineCacheKey(
+                    GPUWgpu4kCorePrimitivePipelineCacheKey(mapped.componentIdentity, mapped.identity),
+                ),
+            )
+            if (key.role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer) {
+                assertEquals(PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY, mapped.componentIdentity)
+                assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.NoBindings, mapped.componentIdentity.bindingPolicy)
+            } else {
+                assertEquals(PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY, mapped.componentIdentity)
+                assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired, mapped.componentIdentity.bindingPolicy)
+            }
+        }
+        assertEquals(15, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(16, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+    }
+
+    @Test
+    fun `clip stencil producer has an exact empty binding and pipeline layout`() {
+        val producer = PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY
+
+        assertEquals(emptyList(), corePrimitiveBindGroupLayoutDescriptor(producer).entries)
+        assertEquals(emptyList(), corePrimitivePipelineLayoutDescriptor(producer, bindGroupLayout).bindGroupLayouts)
+        assertEquals(1, corePrimitiveBindGroupLayoutDescriptor(PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY).entries.size)
+        assertEquals(
+            listOf(bindGroupLayout),
+            corePrimitivePipelineLayoutDescriptor(
+                PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+                bindGroupLayout,
+            ).bindGroupLayouts,
+        )
+    }
+
+    @Test
+    fun `clip stencil descriptors keep producer colorless and consumers read only`() {
+        val winding = descriptor(
+            corePrimitiveClipStencilProducerRenderPipelineStructuralKey(GPUClipFillRule.Winding),
+        )
+        val evenOdd = descriptor(
+            corePrimitiveClipStencilProducerRenderPipelineStructuralKey(GPUClipFillRule.EvenOdd),
+        )
+        val regular = descriptor(
+            corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(false, srcOverBlendPlan()),
+        )
+        val inverse = descriptor(
+            corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(true, srcOverBlendPlan()),
+        )
+
+        listOf(winding, evenOdd).forEach { producer ->
+            assertProducerCommon(producer)
+            assertEquals(CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_VERTEX_ENTRY_POINT, producer.vertex.entryPoint)
+            assertEquals(
+                CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_FRAGMENT_ENTRY_POINT,
+                requireNotNull(producer.fragment).entryPoint,
+            )
+        }
+        assertDepthStencil(
+            winding,
+            front = face(pass = GPUStencilOperation.IncrementWrap),
+            back = face(pass = GPUStencilOperation.DecrementWrap),
+            readMask = 0xffu,
+            writeMask = 0xffu,
+        )
+        assertDepthStencil(
+            evenOdd,
+            front = face(pass = GPUStencilOperation.Invert),
+            back = face(pass = GPUStencilOperation.Invert),
+            readMask = 0xffu,
+            writeMask = 0xffu,
+        )
+        assertDepthStencil(
+            regular,
+            front = face(compare = GPUCompareFunction.NotEqual, pass = GPUStencilOperation.Keep),
+            back = face(compare = GPUCompareFunction.NotEqual, pass = GPUStencilOperation.Keep),
+            readMask = 0xffu,
+            writeMask = 0u,
+        )
+        assertDepthStencil(
+            inverse,
+            front = face(compare = GPUCompareFunction.Equal, pass = GPUStencilOperation.Keep),
+            back = face(compare = GPUCompareFunction.Equal, pass = GPUStencilOperation.Keep),
+            readMask = 0xffu,
+            writeMask = 0u,
+        )
+    }
+
     @Test
     fun `four structural stencil variants normalize to four material pipeline programs`() {
         assertEquals(
@@ -289,6 +397,17 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
         clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic(geometry, antiAlias),
     )
 
+    private fun srcOverBlendPlan() = org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan.FixedFunctionBlend(
+        mode = GPUBlendMode.SRC_OVER,
+        state = GPUFixedFunctionBlendState(
+            stateId = "src-over",
+            color = GPUFixedFunctionBlendComponent("one", "one-minus-src-alpha", "add"),
+            alpha = GPUFixedFunctionBlendComponent("one", "one-minus-src-alpha", "add"),
+            writeMask = "rgba",
+        ),
+        sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+    )
+
     private fun directWithPathDepthStencilKey() = directKey().copy(
         depthStencil = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil(
             format = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencilFormat.Depth24PlusStencil8,
@@ -404,5 +523,6 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     } as T
 
     private val shader: GPUShaderModule = proxy(GPUShaderModule::class.java)
+    private val bindGroupLayout: GPUBindGroupLayout = proxy(GPUBindGroupLayout::class.java)
     private val pipelineLayout: GPUPipelineLayout = proxy(GPUPipelineLayout::class.java)
 }

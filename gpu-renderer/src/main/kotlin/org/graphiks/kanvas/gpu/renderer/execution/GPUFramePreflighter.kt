@@ -1064,6 +1064,9 @@ internal class GPUFramePreflighter(
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
                 -> corePrimitivePathStencilRenderPipelineStructuralKey(semantic, role, clip, blend)
+                GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer,
+                GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer,
+                -> return null
             }
             val authority = packet.corePrimitivePreparedAuthority ?: return null
             if (authority.structuralPipelineKey != expected ||
@@ -1657,6 +1660,11 @@ internal class GPUFramePreflighter(
         )
         val uniformLayout = structuralPipelineKey.uniformLayout
         when (uniformLayout) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
+                return diagnostic(
+                    "unsupported.native-core-primitive.no-bindings-direct-route",
+                    "The no-bindings clip-stencil producer is not a direct CorePrimitive route.",
+                )
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 -> {
                 if (packetAuthorities.any { authority ->
                         authority.analyticClipUniformSeal != null ||
@@ -1684,6 +1692,8 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
             -> null
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
+                error("NoBindingsV1 was refused before direct uniform authority selection")
         }
         if (uniformSeal != null && packetAuthorities.any { authority -> authority.uniformSlabSeal !== uniformSeal }) {
             return refuse("Direct CorePrimitive packets must share one exact builder uniform32 slab seal.")
@@ -1697,6 +1707,8 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
             -> emptyList()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
+                error("NoBindingsV1 was refused before analytic uniform authority selection")
         }
         val analyticIntersectionSeals = when (uniformLayout) {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
@@ -1707,6 +1719,8 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
             -> emptyList()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
+                error("NoBindingsV1 was refused before intersection uniform authority selection")
         }
         val uniformPlan = when (uniformLayout) {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
@@ -1715,6 +1729,8 @@ internal class GPUFramePreflighter(
                 analyticSeals.first().plan
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 analyticIntersectionSeals.first().plan
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
+                error("NoBindingsV1 was refused before direct uniform plan selection")
         }
         val maxBufferSize = limits.maxBufferSize ?: return diagnostic(
             "unsupported.native-core-primitive.max-buffer-size-unavailable",
@@ -1741,6 +1757,8 @@ internal class GPUFramePreflighter(
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
                 -> false
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
+                    error("NoBindingsV1 was refused before direct uniform validation")
             }
         ) {
             return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
@@ -2258,6 +2276,10 @@ internal class GPUFramePreflighter(
                 CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 -> return diagnostic(
+                "unsupported.native-core-primitive.no-bindings-direct-route",
+                "The no-bindings clip-stencil producer is not an executable direct packet role.",
+            )
         }
         if (preparedAuthority == null ||
             preparedAuthority.structuralPipelineKey != expectedStructuralPipelineKey ||

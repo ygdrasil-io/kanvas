@@ -10,6 +10,36 @@ import kotlin.test.assertTrue
 
 class GPUCorePrimitiveNativeShaderTest {
     @Test
+    fun `clip stencil producer shader is reflected without bindings and consumes sealed NDC vertices`() {
+        val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveClipStencilProducerNativeShader(),
+        )
+        val reflection = requireNotNull(ready.plan.wgslReflection).report
+
+        assertTrue(reflection.validation.success)
+        assertEquals(emptyList(), reflection.bindings)
+        assertEquals(
+            setOf(
+                CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_VERTEX_ENTRY_POINT to "vertex",
+                CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_FRAGMENT_ENTRY_POINT to "fragment",
+            ),
+            reflection.entryPoints.map { it.name to it.stage }.toSet(),
+        )
+        assertContains(ready.plan.wgslSource, "fn vs_main(@location(0) ndc_position: vec2<f32>)")
+        assertContains(ready.plan.wgslSource, "return vec4<f32>(ndc_position, 0.0, 1.0);")
+        assertTrue("target_size" !in ready.plan.wgslSource)
+        assertTrue("@group" !in ready.plan.wgslSource)
+        assertEquals(
+            "core-primitive-clip-stencil-producer-ndc-wgsl-v1",
+            CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_SHADER_IDENTITY,
+        )
+        assertEquals(
+            "no-bindings-v1",
+            CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_BINDING_LAYOUT_IDENTITY,
+        )
+    }
+
+    @Test
     fun `shader is parser validated and converts device coordinates with y inversion`() {
         val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
             buildCorePrimitiveNativeShader(),

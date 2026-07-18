@@ -30,6 +30,25 @@ internal fun buildCorePrimitiveNativeShader(): GPUCorePrimitiveNativeShaderResul
         )
     }
 
+internal fun buildCorePrimitiveClipStencilProducerNativeShader(): GPUCorePrimitiveNativeShaderResult =
+    when (
+        val validation = validateColorWgsl(
+            sourceId = CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_SHADER_IDENTITY,
+            wgslSource = CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_WGSL,
+        )
+    ) {
+        is GPUColorWgslValidation.Validated -> GPUCorePrimitiveNativeShaderResult.Ready(
+            GPUCorePrimitiveNativeShaderPlan(
+                CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_WGSL,
+                validation.reflection,
+            ),
+        )
+        is GPUColorWgslValidation.Rejected -> GPUCorePrimitiveNativeShaderResult.Rejected(
+            validation.reason,
+            validation.message,
+        )
+    }
+
 internal fun buildCorePrimitiveAnalyticClipNativeShader(): GPUCorePrimitiveNativeShaderResult =
     when (
         val validation = validateColorWgsl(
@@ -75,6 +94,12 @@ internal const val CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY = "float32x2-uin
 internal const val CORE_PRIMITIVE_NATIVE_VERTEX_ENTRY_POINT = "vs_main"
 internal const val CORE_PRIMITIVE_NATIVE_COLOR_FRAGMENT_ENTRY_POINT = "fs_main"
 internal const val CORE_PRIMITIVE_NATIVE_STENCIL_FRAGMENT_ENTRY_POINT = "fs_stencil"
+internal const val CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_SHADER_IDENTITY =
+    "core-primitive-clip-stencil-producer-ndc-wgsl-v1"
+internal const val CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_BINDING_LAYOUT_IDENTITY =
+    "no-bindings-v1"
+internal const val CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_VERTEX_ENTRY_POINT = "vs_main"
+internal const val CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_FRAGMENT_ENTRY_POINT = "fs_stencil"
 internal const val CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_SHADER_IDENTITY =
     "core-primitive-analytic-clip-device-geometry-wgsl-v1"
 internal const val CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_BINDING_LAYOUT_IDENTITY =
@@ -107,6 +132,19 @@ internal val CORE_PRIMITIVE_NATIVE_WGSL = """
     @fragment
     fn fs_main() -> @location(0) vec4<f32> {
         return core.premul_rgba;
+    }
+
+    @fragment
+    fn fs_stencil() -> @location(0) vec4<f32> {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+""".trimIndent()
+
+/** The pure route seals device coordinates to NDC before this shader ever sees a vertex. */
+internal val CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_WGSL = """
+    @vertex
+    fn vs_main(@location(0) ndc_position: vec2<f32>) -> @builtin(position) vec4<f32> {
+        return vec4<f32>(ndc_position, 0.0, 1.0);
     }
 
     @fragment
