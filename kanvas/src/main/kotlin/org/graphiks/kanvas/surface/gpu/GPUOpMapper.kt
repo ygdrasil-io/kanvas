@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.min
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -41,8 +42,6 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
-import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
-import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.paint.BlendMode
@@ -54,6 +53,8 @@ import org.graphiks.kanvas.types.isAxisAlignedAffine
 import org.graphiks.kanvas.types.mapAxisAligned
 import org.graphiks.kanvas.types.mapAxisAlignedRect
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.RRect
+import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Color
@@ -98,6 +99,7 @@ internal object GPUOpMapper {
                     stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.FlushSnapshot)
                 else -> {
                     val paintOrder = visual.size
+                    var loweringRefusal: GPUCorePrimitiveGeometryRefusal? = null
                     val rawNormalized = mapCoreOperation(
                         operation = operation,
                         commandId = GPUDrawCommandID(paintOrder),
@@ -105,10 +107,12 @@ internal object GPUOpMapper {
                         provenance = provenance,
                         target = target,
                         config = config,
+                        onGeometryRefusal = { refusal -> loweringRefusal = refusal },
                     )
                     if (rawNormalized == null) {
                         if (legacy.accepts(operation)) legacy.recordInvocation(operation)
                     } else {
+                        val geometryRefusal = loweringRefusal ?: operation.coreGeometryRefusalOrNull()
                         val coverage = rawNormalized.geometryCoverage()
                         val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
                             GPUClipCoveragePlanner.plan(request, config, maxOf(target.width, target.height))
@@ -119,9 +123,9 @@ internal object GPUOpMapper {
                             targetSpaceBounds = normalized.bounds,
                             geometryCoverage = coverage,
                             clipCoverage = clipPlan,
-                            clipExecution = clipPlan.executionKinds(),
                             blendPlan = normalized.blend.canonicalBlendPlan(coverage),
                             provenance = provenance,
+                            geometryRefusal = geometryRefusal,
                         )
                     }
                 }
@@ -141,17 +145,42 @@ internal object GPUOpMapper {
         provenance: GPUFrameProvenance,
         target: GPUTargetFacts,
         config: RenderConfig,
+        onGeometryRefusal: (GPUCorePrimitiveGeometryRefusal) -> Unit,
     ): NormalizedDrawCommand? {
-        val command = when (operation) {
+        var loweringRefusal: GPUCorePrimitiveGeometryRefusal? = null
+        val command = try {
+            when (operation) {
             is DisplayOp.DrawColor -> operation.toNormalizedCommand(commandId, target)
             is DisplayOp.Clear -> operation.toNormalizedCommand(commandId, target)
-            is DisplayOp.DrawPoint -> operation.toNormalizedCommand(commandId, target)
+            is DisplayOp.DrawPoint -> DisplayOp.DrawPoints(
+                PointMode.POINTS,
+                listOf(Point(operation.x, operation.y)),
+                operation.paint,
+                operation.transform,
+                operation.clip,
+            ).let { points ->
+                DisplayOp.DrawPath(
+                    points.toPath(),
+                    points.paint,
+                    points.transform,
+                    points.clip,
+                ).toPathCommand(commandId, target, config).copy(stroke = false)
+            }
             is DisplayOp.DrawRect -> if (operation.paint.isStroke()) {
                 operation.toStrokePathCommand(commandId, target)
             } else {
                 operation.toNormalizedCommand(commandId, target)
             }
-            is DisplayOp.DrawRRect -> operation.toNormalizedCommand(commandId, target)
+            is DisplayOp.DrawRRect -> if (operation.paint.isStroke()) {
+                DisplayOp.DrawPath(
+                    Path().addRRect(operation.rrect),
+                    operation.paint,
+                    operation.transform,
+                    operation.clip,
+                ).toPathCommand(commandId, target, config)
+            } else {
+                operation.toNormalizedCommand(commandId, target)
+            }
             is DisplayOp.DrawPath -> operation.toPathCommand(commandId, target, config)
             is DisplayOp.DrawPoints -> DisplayOp.DrawPath(
                 operation.toPath(),
@@ -161,16 +190,39 @@ internal object GPUOpMapper {
             ).toPathCommand(commandId, target, config).copy(
                 stroke = operation.mode != PointMode.POINTS,
             )
-            is DisplayOp.DrawDRRect -> DisplayOp.DrawPath(
-                operation.toPath(),
-                operation.paint,
-                operation.transform,
-                operation.clip,
-            ).toPathCommand(commandId, target, config)
-            else -> null
+            is DisplayOp.DrawDRRect -> {
+                DisplayOp.DrawPath(
+                    operation.toPath(),
+                    operation.paint,
+                    operation.transform,
+                    operation.clip,
+                ).toPathCommand(commandId, target, config)
+            }
+                else -> null
+            }
+        } catch (failure: IllegalStateException) {
+            if (!failure.isPathVertexBudgetFailure() || !operation.isCorePathOperation()) throw failure
+            loweringRefusal = GPUCorePrimitiveGeometryRefusal(
+                code = "unsupported.core_primitive.path_vertex_budget",
+                refusalFacts = mapOf(
+                    "maxPathVertices" to config.maxPathVertices.toString(),
+                    "reason" to (failure.message ?: "path_vertex_budget"),
+                ),
+            ).also(onGeometryRefusal)
+            operation.toPathBudgetPlaceholder(commandId, target)
         } ?: return null
 
-        val targetBounds = command.localBounds().mappedBy(operation.transformOrIdentity()).clampedTo(target)
+        val targetBounds = when {
+            loweringRefusal != null -> command.clip.bounds.clampedTo(target)
+            operation is DisplayOp.DrawPath && operation.path.fillType.isInverse ->
+                command.clip.bounds.clampedTo(target)
+            operation.coreGeometryRefusalOrNull() != null -> command.clip.bounds.clampedTo(target)
+            else -> operation.localGeometryBounds(command)
+                .outset(operation.conservativeStrokeOutset())
+                .mappedBy(operation.transformOrIdentity())
+                .outset(operation.deviceAntiAliasOutset())
+                .clampedTo(target)
+        }
         val coverage = command.geometryCoverage()
         val blendPlan = command.blend.canonicalBlendPlan(coverage)
         val ordering = GPUOrderingFacts(
@@ -201,13 +253,111 @@ internal object GPUOpMapper {
     }
 }
 
+private fun Throwable.isPathVertexBudgetFailure(): Boolean =
+    message?.let { it.startsWith("Path flattened to ") || it.startsWith("Path has ") } == true
+
+private fun DisplayOp.isCorePathOperation(): Boolean = when (this) {
+    is DisplayOp.DrawPoint,
+    is DisplayOp.DrawPoints,
+    is DisplayOp.DrawPath,
+    is DisplayOp.DrawDRRect,
+    is DisplayOp.DrawRRect,
+    is DisplayOp.DrawRect,
+    -> true
+    else -> false
+}
+
+private fun DisplayOp.toPathBudgetPlaceholder(
+    commandId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+): NormalizedDrawCommand.FillPath {
+    val (paint, clip) = when (this) {
+        is DisplayOp.DrawPoint -> paint to clip
+        is DisplayOp.DrawPoints -> paint to clip
+        is DisplayOp.DrawRect -> paint to clip
+        is DisplayOp.DrawRRect -> paint to clip
+        is DisplayOp.DrawDRRect -> paint to clip
+        is DisplayOp.DrawPath -> paint to clip
+        else -> error("Path budget placeholder requires a core path operation")
+    }
+    return DisplayOp.DrawPath(Path(), paint, transformOrIdentity(), clip).toNormalizedCommand(
+        commandId,
+        target,
+        tessellatedVertices = emptyList(),
+        contourStarts = listOf(0),
+        edgeCount = 0,
+    )
+}
+
+private fun DisplayOp.coreGeometryRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? {
+    val transform = transformOrIdentity()
+    val transformValues = listOf(
+        transform.scaleX, transform.skewX, transform.transX,
+        transform.skewY, transform.scaleY, transform.transY,
+        transform.persp0, transform.persp1, transform.persp2,
+    )
+    if (!transformValues.all(Float::isFinite)) {
+        return GPUCorePrimitiveGeometryRefusal(
+            "unsupported.core_primitive.geometry.non_finite_transform",
+            mapOf("operation" to coreSourceOperation()),
+        )
+    }
+    if (!transform.isAffine()) {
+        return GPUCorePrimitiveGeometryRefusal(
+            "unsupported.core_primitive.geometry.non_affine_transform",
+            mapOf("operation" to coreSourceOperation()),
+        )
+    }
+    if (this is DisplayOp.DrawRRect && (transform.skewX != 0f || transform.skewY != 0f)) {
+        return GPUCorePrimitiveGeometryRefusal(
+            "unsupported.core_primitive.rrect.non_axis_aligned_transform",
+            mapOf("operation" to coreSourceOperation()),
+        )
+    }
+    return (this as? DisplayOp.DrawDRRect)?.exactLoweringRefusalOrNull()
+}
+
+private fun DisplayOp.DrawDRRect.exactLoweringRefusalOrNull(): GPUCorePrimitiveGeometryRefusal? {
+    val outerRect = outer.rect
+    val innerRect = inner.rect
+    if (!listOf(
+        outerRect.left, outerRect.top, outerRect.right, outerRect.bottom,
+        innerRect.left, innerRect.top, innerRect.right, innerRect.bottom,
+        outer.topLeft.x, outer.topLeft.y, outer.topRight.x, outer.topRight.y,
+        outer.bottomRight.x, outer.bottomRight.y, outer.bottomLeft.x, outer.bottomLeft.y,
+        inner.topLeft.x, inner.topLeft.y, inner.topRight.x, inner.topRight.y,
+        inner.bottomRight.x, inner.bottomRight.y, inner.bottomLeft.x, inner.bottomLeft.y,
+    ).all(Float::isFinite)) {
+        return GPUCorePrimitiveGeometryRefusal("unsupported.core_primitive.drrect.non_finite", emptyMap())
+    }
+    if (!listOf(
+        outer.topLeft.x, outer.topLeft.y, outer.topRight.x, outer.topRight.y,
+        outer.bottomRight.x, outer.bottomRight.y, outer.bottomLeft.x, outer.bottomLeft.y,
+        inner.topLeft.x, inner.topLeft.y, inner.topRight.x, inner.topRight.y,
+        inner.bottomRight.x, inner.bottomRight.y, inner.bottomLeft.x, inner.bottomLeft.y,
+    ).all { it >= 0f }) {
+        return GPUCorePrimitiveGeometryRefusal("unsupported.core_primitive.drrect.negative_radius", emptyMap())
+    }
+    if (!(outerRect.left < outerRect.right && outerRect.top < outerRect.bottom &&
+        innerRect.left < innerRect.right && innerRect.top < innerRect.bottom
+    )) {
+        return GPUCorePrimitiveGeometryRefusal("unsupported.core_primitive.drrect.empty", emptyMap())
+    }
+    if (!(innerRect.left >= outerRect.left && innerRect.top >= outerRect.top &&
+        innerRect.right <= outerRect.right && innerRect.bottom <= outerRect.bottom
+    )) {
+        return GPUCorePrimitiveGeometryRefusal("unsupported.core_primitive.drrect.inner_outside_outer", emptyMap())
+    }
+    return null
+}
+
 private fun DisplayOp.coreSourceOperation(): String = when (this) {
     is DisplayOp.DrawColor -> "drawColor"
     is DisplayOp.Clear -> "clear"
     is DisplayOp.DrawPoint -> "drawPoint"
     is DisplayOp.DrawPoints -> "drawPoints.${mode.name.lowercase()}"
     is DisplayOp.DrawRect -> if (paint.isStroke()) "drawRect.stroke" else "drawRect"
-    is DisplayOp.DrawRRect -> "drawRRect"
+    is DisplayOp.DrawRRect -> if (paint.isStroke()) "drawRRect.stroke" else "drawRRect"
     is DisplayOp.DrawDRRect -> "drawDRRect"
     is DisplayOp.DrawPath -> "drawPath"
     else -> error("Non-core operation has no Slice 12A source identity")
@@ -255,20 +405,6 @@ private fun NormalizedDrawCommand.withClipCoveragePlan(
     else -> error("Clip coverage attached to a non-Slice-12A command")
 }
 
-private fun GPUClipCoveragePlan.executionKinds(): List<GPUFrameClipExecution> = when (this) {
-    GPUClipCoveragePlan.NoClip,
-    is GPUClipCoveragePlan.Scissor,
-    is GPUClipCoveragePlan.Refused,
-    -> emptyList()
-    is GPUClipCoveragePlan.Mask -> elements.map { element ->
-        when {
-            element.kind == GPUClipCoverageElementKind.Path -> GPUFrameClipExecution.Stencil
-            element.operation == GPUClipCoverageOperation.Difference -> GPUFrameClipExecution.Mask
-            else -> GPUFrameClipExecution.Analytic
-        }
-    }
-}
-
 private fun NormalizedDrawCommand.localBounds(): GPUBounds = when (this) {
     is NormalizedDrawCommand.FillRect -> GPUBounds(rect.left, rect.top, rect.right, rect.bottom)
     is NormalizedDrawCommand.FillRRect -> GPUBounds(
@@ -279,6 +415,52 @@ private fun NormalizedDrawCommand.localBounds(): GPUBounds = when (this) {
     )
     is NormalizedDrawCommand.FillPath -> computeBounds(tessellatedVertices)
     else -> bounds
+}
+
+private fun DisplayOp.localGeometryBounds(command: NormalizedDrawCommand): GPUBounds = when (this) {
+    else -> command.localBounds()
+}
+
+private fun DisplayOp.conservativeStrokeOutset(): Float {
+    val paint = when (this) {
+        is DisplayOp.DrawPoints -> paint.takeIf { mode != PointMode.POINTS }
+        is DisplayOp.DrawRect -> paint.takeIf { it.isStroke() }
+        is DisplayOp.DrawRRect -> paint.takeIf { it.isStroke() }
+        is DisplayOp.DrawPath -> paint.takeIf { it.isStroke() }
+        else -> null
+    } ?: return 0f
+    val halfWidth = if (paint.strokeWidth == 0f) 0f else paint.strokeWidth * 0.5f
+    val hasJoins = when (this) {
+        is DisplayOp.DrawRect,
+        is DisplayOp.DrawRRect,
+        is DisplayOp.DrawPath,
+        -> true
+        else -> false
+    }
+    val joinMultiplier = if (hasJoins && paint.strokeJoin.name == "MITER") {
+        paint.strokeMiter.coerceAtLeast(1f)
+    } else {
+        1f
+    }
+    return halfWidth * joinMultiplier
+}
+
+private fun DisplayOp.deviceAntiAliasOutset(): Float {
+    val antiAlias = when (this) {
+        is DisplayOp.DrawPoint -> paint.antiAlias
+        is DisplayOp.DrawPoints -> paint.antiAlias
+        is DisplayOp.DrawRect -> paint.antiAlias
+        is DisplayOp.DrawRRect -> paint.antiAlias
+        is DisplayOp.DrawPath -> paint.antiAlias
+        else -> false
+    }
+    return if (antiAlias) 0.5f else 0f
+}
+
+private fun GPUBounds.outset(amount: Float): GPUBounds = if (amount == 0f) {
+    this
+} else {
+    GPUBounds(left - amount, top - amount, right + amount, bottom + amount)
 }
 
 private fun GPUBounds.mappedBy(matrix: Matrix33): GPUBounds {
@@ -304,7 +486,7 @@ private fun GPUBounds.clampedTo(target: GPUTargetFacts): GPUBounds = GPUBounds(
 )
 
 private fun DisplayOp.transformOrIdentity(): Matrix33 = when (this) {
-    is DisplayOp.DrawColor -> transform
+    is DisplayOp.DrawColor -> Matrix33.identity()
     is DisplayOp.DrawPoint -> transform
     is DisplayOp.DrawPoints -> transform
     is DisplayOp.DrawRect -> transform
@@ -320,6 +502,7 @@ private fun DisplayOp.pathVerbCount(): Int = when (this) {
     is DisplayOp.DrawPoints -> toPath().verbs().size
     is DisplayOp.DrawDRRect -> toPath().verbs().size
     is DisplayOp.DrawRect -> 5
+    is DisplayOp.DrawRRect -> Path().addRRect(rrect).verbs().size
     else -> 0
 }
 
@@ -403,6 +586,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
         dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
         strokeCap = paint.strokeCap.name.lowercase(),
         strokeJoin = paint.strokeJoin.name.lowercase(),
+        strokeMiterLimit = paint.strokeMiter,
         antiAlias = paint.antiAlias,
         blend = paint.blendMode.toGpuBlendFacts(),
         maskFilter = maskFilter,
@@ -463,6 +647,7 @@ internal fun DisplayOp.DrawRect.toStrokePathCommand(
         dashPhase = (paint.pathEffect as? PathEffect.Dash)?.phase ?: 0f,
         strokeCap = paint.strokeCap.name.lowercase(),
         strokeJoin = paint.strokeJoin.name.lowercase(),
+        strokeMiterLimit = paint.strokeMiter,
         antiAlias = paint.antiAlias,
         maskFilter = paint.maskFilter.toNormalizedMaskFilter(),
     )
@@ -474,16 +659,17 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
 ): NormalizedDrawCommand.FillRRect {
     val paint = this.paint
     val material = paint.toMaterial()
+    val normalizedRRect = this.rrect.normalizedForCorePrimitive()
     val gpRect = GPURect(
-        this.rrect.rect.left, this.rrect.rect.top,
-        this.rrect.rect.right, this.rrect.rect.bottom,
+        normalizedRRect.rect.left, normalizedRRect.rect.top,
+        normalizedRRect.rect.right, normalizedRRect.rect.bottom,
     )
     val gpRRect = GPURRect(
         gpRect,
-        topLeft = GPURRectCornerRadii(this.rrect.topLeft.x, this.rrect.topLeft.y),
-        topRight = GPURRectCornerRadii(this.rrect.topRight.x, this.rrect.topRight.y),
-        bottomRight = GPURRectCornerRadii(this.rrect.bottomRight.x, this.rrect.bottomRight.y),
-        bottomLeft = GPURRectCornerRadii(this.rrect.bottomLeft.x, this.rrect.bottomLeft.y),
+        topLeft = GPURRectCornerRadii(normalizedRRect.topLeft.x, normalizedRRect.topLeft.y),
+        topRight = GPURRectCornerRadii(normalizedRRect.topRight.x, normalizedRRect.topRight.y),
+        bottomRight = GPURRectCornerRadii(normalizedRRect.bottomRight.x, normalizedRRect.bottomRight.y),
+        bottomLeft = GPURRectCornerRadii(normalizedRRect.bottomLeft.x, normalizedRRect.bottomLeft.y),
     )
     val bounds = GPUBounds(gpRect.left, gpRect.top, gpRect.right, gpRect.bottom)
     val clip = this.clip.toGPUClipFacts(target)
@@ -641,7 +827,7 @@ internal fun DisplayOp.DrawColor.toNormalizedCommand(
     val gpRect = GPURect(0f, 0f, w, h)
     val bounds = GPUBounds(0f, 0f, w, h)
     val clip = this.clip.toGPUClipFacts(target)
-    val transform = this.transform.toGPUTransformFacts()
+    val transform = GPUTransformFacts.identity()
     return NormalizedDrawCommand.FillRect(
         commandId = cmdId,
         rect = gpRect,
@@ -722,8 +908,14 @@ internal fun DisplayOp.DrawPoint.toNormalizedCommand(
 
 internal fun DisplayOp.DrawPoints.toPath(): Path = when (this.mode) {
     PointMode.POINTS -> Path().also { path ->
+        val halfWidth = paint.strokeWidth * 0.5f
         for (pt in this.points) {
-            path.addRect(Rect.fromLTRB(pt.x, pt.y, pt.x + 1f, pt.y + 1f))
+            path.addRect(Rect.fromLTRB(
+                pt.x - halfWidth,
+                pt.y - halfWidth,
+                pt.x + halfWidth,
+                pt.y + halfWidth,
+            ))
         }
     }
     PointMode.LINES -> Path().also { path ->
@@ -742,6 +934,33 @@ internal fun DisplayOp.DrawPoints.toPath(): Path = when (this.mode) {
         }
         path.close()
     }
+}
+
+private val org.graphiks.kanvas.geometry.FillType.isInverse: Boolean
+    get() = this == org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING ||
+        this == org.graphiks.kanvas.geometry.FillType.INVERSE_EVEN_ODD
+
+private fun RRect.normalizedForCorePrimitive(): RRect {
+    val width = rect.width.coerceAtLeast(0f)
+    val height = rect.height.coerceAtLeast(0f)
+    fun CornerRadii.nonNegative() = CornerRadii(x.coerceAtLeast(0f), y.coerceAtLeast(0f))
+    val tl = topLeft.nonNegative()
+    val tr = topRight.nonNegative()
+    val br = bottomRight.nonNegative()
+    val bl = bottomLeft.nonNegative()
+    fun ratioOrOne(limit: Float, sum: Float) = if (sum > limit && sum > 0f) limit / sum else 1f
+    val scale = min(
+        1f,
+        min(
+            ratioOrOne(width, tl.x + tr.x),
+            min(
+                ratioOrOne(width, bl.x + br.x),
+                min(ratioOrOne(height, tl.y + bl.y), ratioOrOne(height, tr.y + br.y)),
+            ),
+        ),
+    )
+    fun CornerRadii.scaled() = CornerRadii(x * scale, y * scale)
+    return RRect(rect, tl.scaled(), tr.scaled(), br.scaled(), bl.scaled())
 }
 
 // ────────────────────────────────────────────────────────────────────────────

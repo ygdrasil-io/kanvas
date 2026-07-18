@@ -1,8 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
-import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
-import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -13,7 +11,6 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
@@ -41,21 +38,56 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 const val CORE_PRIMITIVE_RENDER_PIPELINE_KEY = "pipeline.core-primitive.rgba8unorm.single-sample"
 const val CORE_PRIMITIVE_BINDING_LAYOUT_HASH = "layout.core-primitive.uniform32"
 const val CORE_PRIMITIVE_TARGET_STATE_HASH = "target.rgba8unorm.single-sample"
+const val CORE_PRIMITIVE_VERTEX_SOURCE_LABEL = "core-primitive-device-geometry"
 
-data class GPUCorePrimitivePreparedDraw(
-    val commandIdValue: Int,
-    val paintOrder: Int,
-    val blendPlan: GPUBlendPlan,
-    val frameProvenance: GPUFrameProvenance,
-    val clipCoveragePlan: GPUClipCoveragePlan,
+internal fun corePrimitiveRenderPipelineKey(): GPURenderPipelineKey =
+    GPURenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
+
+internal fun corePrimitiveTargetDescriptor(bounds: GPUPixelBounds): GPUFrameTextureDescriptor =
+    GPUFrameTextureDescriptor(bounds, GPUColorFormat("rgba8unorm"), 1)
+
+internal fun corePrimitiveTargetByteSize(bounds: GPUPixelBounds): Long =
+    Math.multiplyExact(Math.multiplyExact(bounds.width.toLong(), bounds.height.toLong()), 4L)
+
+internal fun corePrimitiveTargetPreparation(
+    target: GPUFrameTargetRef,
+    bounds: GPUPixelBounds,
+): GPUResourcePreparationRequest = GPUResourcePreparationRequest(
+    resource = target,
+    descriptor = corePrimitiveTargetDescriptor(bounds),
+    role = GPUFrameResourceRole.SceneTarget,
+    usages = setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource),
+    lifetime = GPUFrameResourceLifetime.FrameLocal,
+    byteSize = corePrimitiveTargetByteSize(bounds),
+    diagnosticLabel = "core-primitive.scene-target",
 )
+
+internal fun isCanonicalCorePrimitiveTargetPreparation(
+    request: GPUResourcePreparationRequest,
+    target: GPUFrameTargetRef,
+    bounds: GPUPixelBounds,
+): Boolean {
+    val expected = try {
+        corePrimitiveTargetPreparation(target, bounds)
+    } catch (_: ArithmeticException) {
+        return false
+    }
+    return request.resource == expected.resource &&
+        request.descriptor == expected.descriptor &&
+        request.role == expected.role &&
+        request.usages == expected.usages &&
+        request.lifetime == expected.lifetime &&
+        request.byteSize == expected.byteSize
+}
+
+internal fun corePrimitiveScissorAuthority(bounds: GPUPixelBounds): String =
+    "scissor_${bounds.left.toFloat()}_${bounds.top.toFloat()}_${bounds.right.toFloat()}_${bounds.bottom.toFloat()}"
 
 data class GPUCorePrimitivePreparedFrameRequest(
     val baseTaskList: GPUTaskList,
     val capabilities: GPUCapabilities,
     val target: GPUFrameTargetRef,
     val targetBounds: GPUPixelBounds,
-    val draws: List<GPUCorePrimitivePreparedDraw>,
     val semanticsByCommandId: Map<Int, GPUDrawSemanticPayload.CorePrimitive>,
     val readbackRequestId: GPUReadbackRequestID? = null,
     val configuredAggregateBudgetBytes: Long = 1L shl 30,
@@ -71,6 +103,12 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
 ) {
     fun build(request: GPUCorePrimitivePreparedFrameRequest): GPUCorePrimitivePreparedFrameResult {
+        request.baseTaskList.tasks.filterIsInstance<GPUTask.Refused>().firstOrNull()?.let {
+            return GPUCorePrimitivePreparedFrameResult.Refused(it.diagnostic)
+        }
+        request.baseTaskList.diagnostics.firstOrNull(GPUDiagnostic::isTerminal)?.let {
+            return GPUCorePrimitivePreparedFrameResult.Refused(it)
+        }
         if (request.targetBounds.left != 0 || request.targetBounds.top != 0 ||
             request.targetBounds.width <= 0 || request.targetBounds.height <= 0
         ) {
@@ -85,18 +123,27 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 "Core primitive aggregate budget must be positive.",
             )
         }
-        if (request.draws.isEmpty() || request.draws.map { it.commandIdValue }.distinct().size != request.draws.size) {
+        val baseRenders = request.baseTaskList.tasks.filterIsInstance<GPUTask.Render>()
+        if (baseRenders.isEmpty() || request.baseTaskList.tasks.any { it !is GPUTask.Render }) {
             return refused(
                 "unsupported.recording.core_primitive_base_tasks",
-                "Every Slice 12A visual command must produce one uniquely identified prepared draw.",
+                "Prepared core primitives require an accepted render-only base task list.",
             )
         }
-        if (request.draws.map(GPUCorePrimitivePreparedDraw::commandIdValue).toSet() !=
-            request.semanticsByCommandId.keys
+        val basePackets = baseRenders.flatMap(GPUTask.Render::drawPackets)
+        if (basePackets.any { it.clipCoveragePlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Mask }) {
+            return refused(
+                "unsupported.recording.core_primitive_clip_topology_unavailable",
+                "Complex clip coverage requires B2 producer and consumer tasks before prepared recording.",
+            )
+        }
+        if (basePackets.map(GPUDrawPacket::commandIdValue).distinct().size != basePackets.size ||
+            basePackets.map(GPUDrawPacket::commandIdValue).toSet() != request.semanticsByCommandId.keys ||
+            basePackets.any { it.clipCoveragePlan == null }
         ) {
             return refused(
                 "invalid.recording.core_primitive_semantics",
-                "Every core packet requires exactly one gathered semantic payload.",
+                "Every accepted base packet requires exactly one gathered semantic payload and clip plan.",
             )
         }
         val limits = request.capabilities.limits ?: return refused(
@@ -104,10 +151,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             "Prepared core primitive recording requires observed device limits.",
         )
         val targetBytes = try {
-            Math.multiplyExact(
-                Math.multiplyExact(request.targetBounds.width.toLong(), request.targetBounds.height.toLong()),
-                4L,
-            )
+            corePrimitiveTargetByteSize(request.targetBounds)
         } catch (_: ArithmeticException) {
             return refused(
                 "unsupported.recording.core_primitive_target_size",
@@ -132,19 +176,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             GPUFrameBufferRef("buffer.core-primitive.readback.${request.baseTaskList.frameId.value}")
         }
         val preparations = mutableListOf(
-            GPUResourcePreparationRequest(
-                resource = request.target,
-                descriptor = GPUFrameTextureDescriptor(
-                    request.targetBounds,
-                    GPUColorFormat("rgba8unorm"),
-                    1,
-                ),
-                role = GPUFrameResourceRole.SceneTarget,
-                usages = setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource),
-                lifetime = GPUFrameResourceLifetime.FrameLocal,
-                byteSize = targetBytes,
-                diagnosticLabel = "core-primitive.scene-target",
-            ),
+            corePrimitiveTargetPreparation(request.target, request.targetBounds),
         )
         if (readbackPlan != null && staging != null) {
             preparations += GPUResourcePreparationRequest(
@@ -181,27 +213,36 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         memoryBudget.diagnostic?.let { return GPUCorePrimitivePreparedFrameResult.Refused(it) }
 
         val prepareId = GPUTaskID("task.core-primitive.prepare.${request.baseTaskList.frameId.value}")
-        val recordingId = request.baseTaskList.recordingSeals.single().recordingId
-        val preparedPackets = request.draws.sortedBy(GPUCorePrimitivePreparedDraw::paintOrder).map { draw ->
-            packet(draw, requireNotNull(request.semanticsByCommandId[draw.commandIdValue]))
-        }
-        val preparedRenders = listOf(
+        val preparedRenders = baseRenders.mapIndexed { renderIndex, baseRender ->
+            val preparedPackets = baseRender.drawPackets.map { basePacket ->
+                packet(basePacket, requireNotNull(request.semanticsByCommandId[basePacket.commandIdValue]))
+            }
             GPUTask.Render(
-                taskId = GPUTaskID("task.core-primitive.render.${request.baseTaskList.frameId.value}"),
-                recordingId = recordingId,
+                taskId = baseRender.taskId,
+                recordingId = baseRender.recordingId,
                 phase = GPUTaskPhase.Render,
                 target = request.target,
-                loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
+                loadStore = GPULoadStorePlan(
+                    if (renderIndex == 0) "clear" else "load",
+                    GPUStorePlan.Store,
+                ),
                 samplePlan = GPUSamplePlan.SingleSampleFrame,
+                resourceUses = baseRender.resourceUses,
+                provisionalSegmentKey = baseRender.provisionalSegmentKey,
                 drawPackets = preparedPackets,
                 batchEligibilityByPacketId = preparedPackets.associate { packet ->
-                    packet.packetId to GPUPassBatchEligibility(
-                        kind = GPUPassBatchKind.SolidFill,
-                        queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
-                    )
+                    packet.packetId to (
+                        baseRender.batchEligibilityByPacketId[packet.packetId]
+                            ?: GPUPassBatchEligibility(
+                                kind = GPUPassBatchKind.SolidFill,
+                                queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
+                            )
+                        )
                 },
-            ),
-        )
+                sampleContinuationKey = baseRender.sampleContinuationKey,
+                compositeMembership = baseRender.compositeMembership,
+            )
+        }
         val tasks = mutableListOf<GPUTask>(
             GPUTask.PrepareResources(
                 prepareId,
@@ -211,11 +252,21 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             ),
         )
         tasks += preparedRenders
-        val dependencies = mutableListOf<GPUTaskDependency>()
-        val orderedIds = listOf(prepareId) + preparedRenders.map(GPUTask.Render::taskId)
-        orderedIds.zipWithNext().forEachIndexed { index, (from, to) ->
-            dependencies += dependency(from, to, index)
+        val renderIds = preparedRenders.map(GPUTask.Render::taskId).toSet()
+        val baseDependencies = request.baseTaskList.dependencies.filter {
+            it.fromTaskId in renderIds && it.toTaskId in renderIds
         }
+        if (baseDependencies.size != request.baseTaskList.dependencies.size) {
+            return refused(
+                "unsupported.recording.core_primitive_base_dependencies",
+                "Prepared core primitives cannot discard non-render base dependencies.",
+            )
+        }
+        val incomingRenderIds = baseDependencies.map(GPUTaskDependency::toTaskId).toSet()
+        val dependencies = baseDependencies.toMutableList()
+        preparedRenders.map(GPUTask.Render::taskId)
+            .filterNot(incomingRenderIds::contains)
+            .forEachIndexed { index, root -> dependencies += dependency(prepareId, root, index) }
         if (readbackRequest != null && staging != null) {
             val readbackId = GPUTaskID("task.core-primitive.readback.${request.baseTaskList.frameId.value}")
             tasks += GPUTask.Readback(
@@ -226,7 +277,12 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 staging,
                 readbackRequest,
             )
-            dependencies += dependency(preparedRenders.last().taskId, readbackId, dependencies.size)
+            val outgoingRenderIds = baseDependencies.map(GPUTaskDependency::fromTaskId).toSet()
+            preparedRenders.map(GPUTask.Render::taskId)
+                .filterNot(outgoingRenderIds::contains)
+                .forEachIndexed { index, sink ->
+                    dependencies += dependency(sink, readbackId, dependencies.size + index)
+                }
         }
         return GPUCorePrimitivePreparedFrameResult.Recorded(
             GPUTaskList(
@@ -238,39 +294,41 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 dependencies = dependencies,
                 phaseOrder = request.baseTaskList.phaseOrder,
                 memoryBudget = memoryBudget,
-                diagnostics = emptyList(),
+                diagnostics = request.baseTaskList.diagnostics,
             ),
         )
     }
 
     private fun packet(
-        draw: GPUCorePrimitivePreparedDraw,
+        basePacket: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.CorePrimitive,
     ): GPUDrawPacket = GPUDrawPacket(
-        packetId = GPUDrawPacketID("packet.${draw.commandIdValue}.0"),
-        commandIdValue = draw.commandIdValue,
-        analysisRecordId = "analysis.core-primitive.${draw.commandIdValue}",
-        passId = "pass.core-primitive.prepared",
-        layerId = "root",
-        bindingListId = "bindings.core-primitive.${draw.commandIdValue}",
-        insertionReasonCode = "core-primitive",
-        sortKey = draw.paintOrder.toLong(),
-        sortKeyPreimage = "paint-order:${draw.paintOrder}",
+        packetId = basePacket.packetId,
+        commandIdValue = basePacket.commandIdValue,
+        analysisRecordId = basePacket.analysisRecordId,
+        passId = basePacket.passId,
+        layerId = basePacket.layerId,
+        bindingListId = basePacket.bindingListId,
+        insertionReasonCode = basePacket.insertionReasonCode,
+        sortKey = basePacket.sortKey,
+        sortKeyPreimage = basePacket.sortKeyPreimage,
         renderStepId = GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY),
         renderStepVersion = 1,
-        role = GPUDrawPacketRole.Shading,
-        blendPlan = draw.blendPlan,
-        renderPipelineKey = GPURenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY),
+        role = basePacket.role,
+        blendPlan = basePacket.blendPlan,
+        renderPipelineKey = corePrimitiveRenderPipelineKey(),
         bindingLayoutHash = CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
         uniformSlot = semantic.payloadRef.uniformSlot,
+        resourceSlot = basePacket.resourceSlot,
         semanticPayload = semantic,
-        vertexSourceLabel = "core-primitive-device-geometry",
-        scissorBoundsHash = semantic.scissorBounds.canonicalScissor(),
+        vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
+        scissorBoundsHash = corePrimitiveScissorAuthority(semantic.scissorBounds),
         targetStateHash = CORE_PRIMITIVE_TARGET_STATE_HASH,
-        originalPaintOrder = draw.paintOrder,
+        originalPaintOrder = basePacket.originalPaintOrder,
         resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
-        frameProvenance = draw.frameProvenance,
-        clipCoveragePlan = draw.clipCoveragePlan,
+        frameProvenance = basePacket.frameProvenance,
+        clipCoveragePlan = basePacket.clipCoveragePlan,
+        diagnostics = basePacket.diagnostics,
     )
 
     private fun dependency(from: GPUTaskID, to: GPUTaskID, index: Int) = GPUTaskDependency(
@@ -290,6 +348,3 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         ),
     )
 }
-
-private fun GPUPixelBounds.canonicalScissor(): String =
-    "scissor_${left.toFloat()}_${top.toFloat()}_${right.toFloat()}_${bottom.toFloat()}"

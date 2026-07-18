@@ -1023,6 +1023,8 @@ sealed interface NormalizedDrawCommand {
         val strokeCap: String = "butt",
         /** Stroke join style: "miter", "round", "bevel". */
         val strokeJoin: String = "miter",
+        /** Source miter limit retained until canonical stroke lowering consumes it. */
+        val strokeMiterLimit: Float = 4f,
         val antiAlias: Boolean = true,
         /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
         val maskFilter: NormalizedMaskFilter? = null,

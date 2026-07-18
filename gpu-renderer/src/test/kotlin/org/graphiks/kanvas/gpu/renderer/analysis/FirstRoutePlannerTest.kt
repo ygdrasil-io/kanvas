@@ -808,6 +808,37 @@ class FirstRoutePlannerTest {
         )
     }
 
+    /** FillPath stroke analysis consumes the captured miter limit instead of a hard-coded default. */
+    @Test
+    fun `fill path stroke refuses the captured subminimum miter limit`() {
+        val command = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(127),
+            pathKey = "path:miter:v1",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:miter:v1",
+                verbCount = 4,
+                pointCount = 3,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 3,
+            ),
+            tessellatedVertices = listOf(0f, 0f, 16f, 0f, 8f, 16f),
+            contourStarts = listOf(0),
+            edgeCount = 3,
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+            stroke = true,
+        ).copy(strokeMiterLimit = 0.5f)
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSlicePathFillCapabilities()).plan(command)
+
+        assertIs<GPURouteDecision.Refused>(plan.routeDecision)
+        assertEquals("unsupported.stroke.miter_limit", plan.pass.diagnostics.single().code)
+    }
+
     /** FillPath with stroke and SimpleRepeat dash (≤4 elements) builds prepared CPU stroke route. */
     @Test
     fun `fill path with stroke and simple repeat dash builds prepared CPU route`() {

@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 /** Opaque payload slot identifier. */
 @JvmInline
@@ -262,6 +263,55 @@ enum class GPUCorePrimitiveSourceFamily {
     Path,
 }
 
+/** Exact fill authority retained for path stencil-cover materialization. */
+enum class GPUCorePrimitiveFillRule {
+    Winding,
+    EvenOdd,
+}
+
+/** Geometry preparation strategy already selected before native materialization. */
+enum class GPUCorePrimitiveGeometryMode {
+    DirectTriangles,
+    StencilEdgeFan,
+    StrokeStencilEdgeFan,
+}
+
+/** Geometry coverage authority retained independently from paint blending. */
+enum class GPUCorePrimitiveCoverageMode {
+    FullOrScissor,
+    ScalarAA,
+    Stencil1x,
+    StencilAA,
+}
+
+/** Closed proof for the only stroke outlines currently demonstrated exact. */
+enum class GPUCorePrimitiveStrokeLoweringProof {
+    SingleSegmentButtV1,
+    SingleSegmentSquareV1,
+}
+
+/** Exact source stroke facts plus the named lowering implementation that consumed them. */
+data class GPUCorePrimitiveStrokeStyle(
+    val width: Float,
+    val cap: String,
+    val join: String,
+    val miterLimit: Float,
+    val dashIntervals: List<Float>,
+    val dashPhase: Float,
+    val loweringProof: GPUCorePrimitiveStrokeLoweringProof,
+) {
+    init {
+        require(width.isFinite() && width >= 0f) { "Core stroke width must be finite and non-negative" }
+        require(cap in setOf("butt", "round", "square")) { "Core stroke cap must be butt, round, or square" }
+        require(join in setOf("miter", "round", "bevel")) { "Core stroke join must be miter, round, or bevel" }
+        require(miterLimit.isFinite() && miterLimit >= 0f) { "Core stroke miter limit must be finite and non-negative" }
+        require(dashIntervals.all { it.isFinite() && it > 0f }) {
+            "Core stroke dash intervals must be finite and positive"
+        }
+        require(dashPhase.isFinite()) { "Core stroke dash phase must be finite" }
+    }
+}
+
 /** Handle-free device-space geometry consumed by the sole native core materializer. */
 sealed interface GPUCorePrimitiveGeometry {
     val canonicalType: String
@@ -289,12 +339,21 @@ sealed interface GPUCorePrimitiveGeometry {
     class TriangulatedPath internal constructor(
         vertices: List<Float>,
         indices: List<Int>,
-        contourStarts: List<Int>,
+        sourceContourStarts: List<Int>,
+        val sourceVertexCount: Int,
+        val coverBounds: GPUPixelBounds,
+        val geometryMode: GPUCorePrimitiveGeometryMode,
+        val fillRule: GPUCorePrimitiveFillRule,
+        val inverseFill: Boolean,
+        strokeStyle: GPUCorePrimitiveStrokeStyle?,
     ) : GPUCorePrimitiveGeometry {
         override val canonicalType: String = "TriangulatedPath"
         val vertices: List<Float> = immutableList(vertices)
         val indices: List<Int> = immutableList(indices)
-        val contourStarts: List<Int> = immutableList(contourStarts)
+        val sourceContourStarts: List<Int> = immutableList(sourceContourStarts)
+        val strokeStyle: GPUCorePrimitiveStrokeStyle? = strokeStyle?.copy(
+            dashIntervals = immutableList(strokeStyle.dashIntervals),
+        )
     }
 }
 
@@ -307,6 +366,9 @@ data class GPUCorePrimitivePayloadInput(
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
     val clipCoveragePlan: GPUClipCoveragePlan,
+    val blendPlanIdentity: String,
+    val frameProvenance: GPUFrameProvenance,
+    val coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
 )
 
 /** Closed geometry input; callers cannot smuggle backend handles into frame planning. */
@@ -325,7 +387,13 @@ sealed interface GPUCorePrimitiveGeometryInput {
     data class TriangulatedPath(
         val vertices: List<Float>,
         val indices: List<Int>,
-        val contourStarts: List<Int>,
+        val sourceContourStarts: List<Int>,
+        val sourceVertexCount: Int,
+        val coverBounds: GPUPixelBounds,
+        val geometryMode: GPUCorePrimitiveGeometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+        val fillRule: GPUCorePrimitiveFillRule = GPUCorePrimitiveFillRule.Winding,
+        val inverseFill: Boolean = false,
+        val strokeStyle: GPUCorePrimitiveStrokeStyle? = null,
     ) : GPUCorePrimitiveGeometryInput
 }
 
@@ -395,7 +463,10 @@ sealed interface GPUDrawSemanticPayload {
         val targetBounds: GPUPixelBounds,
         val scissorBounds: GPUPixelBounds,
         val clipCoveragePlan: GPUClipCoveragePlan,
+        val blendPlanIdentity: String,
+        val frameProvenance: GPUFrameProvenance,
         val canonicalHash: String,
+        val coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
     ) : GPUDrawSemanticPayload {
         override val canonicalType: String = "CorePrimitive"
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
@@ -420,6 +491,9 @@ sealed interface GPUDrawSemanticPayload {
                         "target=${targetBounds.canonicalBounds()}",
                         "scissor=${scissorBounds.canonicalBounds()}",
                         "clip=${clipCoveragePlan.canonicalPreimage()}",
+                        "blend=$blendPlanIdentity",
+                        "provenance=${frameProvenance.annotationValue}",
+                        "coverage=${coverageMode.name}",
                     ).joinToString("\n"),
                 )
     }
@@ -602,6 +676,9 @@ class GPUCorePrimitivePayloadGatherer {
         require(input.clipCoveragePlan !is GPUClipCoveragePlan.Refused) {
             "Refused clip coverage cannot enter a core semantic payload"
         }
+        require(input.blendPlanIdentity.isNotBlank()) {
+            "Core primitive blend identity must not be blank"
+        }
 
         val geometry = input.geometry.snapshotAndValidate(input.targetBounds)
         val color = input.premultipliedRgba.toList()
@@ -620,6 +697,7 @@ class GPUCorePrimitivePayloadGatherer {
                     "family=${input.sourceFamily.name}",
                     "geometry=${geometry.canonicalPreimage()}",
                     "color=${color.joinToString(",")}",
+                    "target=${input.targetBounds.canonicalBounds()}",
                 ).joinToString("\n"),
             ),
         )
@@ -654,6 +732,9 @@ class GPUCorePrimitivePayloadGatherer {
             targetBounds = input.targetBounds,
             scissorBounds = input.scissorBounds,
             clipCoveragePlan = input.clipCoveragePlan.snapshot(),
+            blendPlanIdentity = input.blendPlanIdentity,
+            frameProvenance = input.frameProvenance,
+            coverageMode = input.coverageMode,
             canonicalHash = sha256Hex(
                 listOf(
                     "type=CorePrimitive",
@@ -665,6 +746,9 @@ class GPUCorePrimitivePayloadGatherer {
                     "target=${input.targetBounds.canonicalBounds()}",
                     "scissor=${input.scissorBounds.canonicalBounds()}",
                     "clip=${input.clipCoveragePlan.canonicalPreimage()}",
+                    "blend=${input.blendPlanIdentity}",
+                    "provenance=${input.frameProvenance.annotationValue}",
+                    "coverage=${input.coverageMode.name}",
                 ).joinToString("\n"),
             ),
         )
@@ -678,9 +762,6 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
         require(listOf(left, top, right, bottom).all(Float::isFinite) && left < right && top < bottom) {
             "Core Rect geometry must have finite non-empty bounds"
         }
-        require(left >= target.left && top >= target.top && right <= target.right && bottom <= target.bottom) {
-            "Core Rect geometry must be contained by its target"
-        }
         GPUCorePrimitiveGeometry.Rect(left, top, right, bottom)
     }
     is GPUCorePrimitiveGeometryInput.RRect -> {
@@ -689,9 +770,6 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
         }
         require(radii.size == 8 && radii.all { it.isFinite() && it >= 0f }) {
             "Core RRect geometry requires four finite non-negative xy radii pairs"
-        }
-        require(left >= target.left && top >= target.top && right <= target.right && bottom <= target.bottom) {
-            "Core RRect geometry must be contained by its target"
         }
         GPUCorePrimitiveGeometry.RRect(left, top, right, bottom, radii.toList())
     }
@@ -703,21 +781,137 @@ private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
         require(indices.size >= 3 && indices.size % 3 == 0 && indices.all { it in 0 until vertexCount }) {
             "Core path geometry requires complete in-range triangles"
         }
-        require(contourStarts.isNotEmpty() && contourStarts.first() == 0 &&
-            contourStarts.zipWithNext().all { (left, right) -> left < right } &&
-            contourStarts.last() < vertexCount) {
-            "Core path contour starts must be strictly ordered from zero"
+        require(sourceVertexCount > 0 && sourceContourStarts.isNotEmpty() && sourceContourStarts.first() == 0 &&
+            sourceContourStarts.zipWithNext().all { (left, right) -> left < right } &&
+            sourceContourStarts.last() < sourceVertexCount) {
+            "Core path source contour starts must be strictly ordered within the source geometry"
         }
-        GPUCorePrimitiveGeometry.TriangulatedPath(vertices.toList(), indices.toList(), contourStarts.toList())
+        require(target.containsRegisteredUniformRect(coverBounds)) {
+            "Core path cover bounds must be contained by its target"
+        }
+        val stroke = strokeStyle?.copy(dashIntervals = dashIntervalsSnapshot(strokeStyle.dashIntervals))
+        when (geometryMode) {
+            GPUCorePrimitiveGeometryMode.DirectTriangles -> require(stroke == null) {
+                "Direct core triangles cannot retain stroke lowering facts"
+            }
+            GPUCorePrimitiveGeometryMode.StencilEdgeFan -> {
+                require(stroke == null) {
+                    "Fill stencil edge fans cannot retain stroke lowering facts"
+                }
+                require(sourceVertexCount <= CORE_PRIMITIVE_STENCIL_EDGE_FAN_SOURCE_VERTEX_BUDGET) {
+                    CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC
+                }
+                require(sourceContourStarts.hasCanonicalContourLengths(sourceVertexCount)) {
+                    "Core stencil edge fan contours must each retain at least two source vertices"
+                }
+                require(
+                    hasCanonicalStencilEdgeFanTopology(
+                        vertices = vertices,
+                        indices = indices,
+                        sourceContourStarts = sourceContourStarts,
+                        sourceVertexCount = sourceVertexCount,
+                    ),
+                ) {
+                    "Core stencil edge fan topology must exactly match its source contour metadata"
+                }
+            }
+            GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan -> {
+                require(stroke != null) {
+                    "Stroke stencil edge fans require exact stroke lowering facts"
+                }
+                require(sourceContourStarts == listOf(0) && sourceVertexCount == 2) {
+                    "Core single-segment stroke proof requires exactly one two-vertex source contour"
+                }
+                require(fillRule == GPUCorePrimitiveFillRule.Winding && !inverseFill) {
+                    "Core single-segment stroke proof requires non-inverse winding fill"
+                }
+                require(stroke.dashIntervals.isEmpty()) {
+                    "Core single-segment stroke proof does not support dashes"
+                }
+                require(
+                    when (stroke.loweringProof) {
+                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentButtV1 -> stroke.cap == "butt"
+                        GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1 -> stroke.cap == "square"
+                    },
+                ) {
+                    "Core single-segment stroke cap must match its closed lowering proof"
+                }
+            }
+        }
+        GPUCorePrimitiveGeometry.TriangulatedPath(
+            vertices.toList(),
+            indices.toList(),
+            sourceContourStarts.toList(),
+            sourceVertexCount,
+            coverBounds,
+            geometryMode,
+            fillRule,
+            inverseFill,
+            stroke,
+        )
     }
+}
+
+private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_SOURCE_VERTEX_BUDGET = 256
+private const val CORE_PRIMITIVE_STENCIL_EDGE_FAN_BUDGET_DIAGNOSTIC =
+    "unsupported.core_primitive.stencil_edge_fan_budget"
+
+private fun List<Int>.hasCanonicalContourLengths(sourceVertexCount: Int): Boolean =
+    indices.all { contourIndex ->
+        val start = this[contourIndex]
+        val end = getOrElse(contourIndex + 1) { sourceVertexCount }
+        end - start >= 2
+    }
+
+private fun hasCanonicalStencilEdgeFanTopology(
+    vertices: List<Float>,
+    indices: List<Int>,
+    sourceContourStarts: List<Int>,
+    sourceVertexCount: Int,
+): Boolean {
+    val emittedVertexCount = vertices.size / 2
+    if (emittedVertexCount != sourceVertexCount * 3 || indices != indices.indices.toList()) return false
+
+    fun samePoint(leftFloatIndex: Int, rightFloatIndex: Int): Boolean =
+        vertices[leftFloatIndex].toRawBits() == vertices[rightFloatIndex].toRawBits() &&
+            vertices[leftFloatIndex + 1].toRawBits() == vertices[rightFloatIndex + 1].toRawBits()
+
+    if ((1 until sourceVertexCount).any { sourceIndex -> !samePoint(0, sourceIndex * 6) }) return false
+    sourceContourStarts.forEachIndexed { contourIndex, start ->
+        val end = sourceContourStarts.getOrElse(contourIndex + 1) { sourceVertexCount }
+        for (sourceIndex in start until end) {
+            val nextSourceIndex = if (sourceIndex + 1 == end) start else sourceIndex + 1
+            val edgeNextPoint = sourceIndex * 6 + 4
+            val nextEdgePoint = nextSourceIndex * 6 + 2
+            if (!samePoint(edgeNextPoint, nextEdgePoint)) return false
+        }
+    }
+    return true
 }
 
 private fun GPUCorePrimitiveGeometry.canonicalPreimage(): String = when (this) {
     is GPUCorePrimitiveGeometry.Rect -> "$canonicalType:$left,$top,$right,$bottom"
     is GPUCorePrimitiveGeometry.RRect -> "$canonicalType:$left,$top,$right,$bottom:${radii.joinToString(",")}" 
     is GPUCorePrimitiveGeometry.TriangulatedPath ->
-        "$canonicalType:${vertices.joinToString(",")}:${indices.joinToString(",")}:${contourStarts.joinToString(",")}" 
+        "$canonicalType:${vertices.joinToString(",")}:${indices.joinToString(",")}:" +
+            "${sourceContourStarts.joinToString(",")}:$sourceVertexCount:${coverBounds.canonicalBounds()}:" +
+            "${geometryMode.name}:${fillRule.name}:$inverseFill:" +
+            strokeStyle.canonicalPreimage()
 }
+
+private fun GPUCorePrimitiveStrokeStyle?.canonicalPreimage(): String = this?.let { stroke ->
+    listOf(
+        stroke.width,
+        stroke.cap,
+        stroke.join,
+        stroke.miterLimit,
+        stroke.dashIntervals.joinToString(","),
+        stroke.dashPhase,
+        stroke.loweringProof.name,
+    ).joinToString(":")
+} ?: "fill"
+
+private fun dashIntervalsSnapshot(intervals: List<Float>): List<Float> = immutableList(intervals)
 
 private fun GPUClipCoveragePlan.snapshot(): GPUClipCoveragePlan = when (this) {
     GPUClipCoveragePlan.NoClip -> this
@@ -728,13 +922,21 @@ private fun GPUClipCoveragePlan.snapshot(): GPUClipCoveragePlan = when (this) {
 
 private fun GPUClipCoveragePlan.canonicalPreimage(): String = when (this) {
     GPUClipCoveragePlan.NoClip -> "none"
-    is GPUClipCoveragePlan.Scissor -> "scissor:${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}"
+    is GPUClipCoveragePlan.Scissor ->
+        "scissor:${bounds.left.toRawBits()}:${bounds.top.toRawBits()}:" +
+            "${bounds.right.toRawBits()}:${bounds.bottom.toRawBits()}"
     is GPUClipCoveragePlan.Mask -> buildString {
-        append("mask:").append(contentKey).append(':').append(width).append('x').append(height)
+        append("mask:").append(contentKey)
+        append(":size=").append(width).append('x').append(height)
+        append(":samples=").append(sampleCount)
+        append(":resolvedBytes=").append(resolvedBytes)
+        append(":requiredBytes=").append(requiredBytes)
         elements.forEach { element ->
             append(':').append(element.operation.name).append('/').append(element.kind.name)
-            append('/').append(element.antiAlias).append('/').append(element.fillRule.name)
-            append('/').append(element.inverseFill).append('/').append(element.values.joinToString(","))
+            append("/vertices=").append(element.vertexCount)
+            append("/aa=").append(element.antiAlias).append("/fill=").append(element.fillRule.name)
+            append("/inverse=").append(element.inverseFill).append("/values=")
+            append(element.values.joinToString(",") { value -> value.toRawBits().toString() })
         }
     }
     is GPUClipCoveragePlan.Refused -> "refused:$code"

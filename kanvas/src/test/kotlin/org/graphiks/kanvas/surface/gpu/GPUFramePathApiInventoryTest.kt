@@ -1,31 +1,40 @@
 package org.graphiks.kanvas.surface.gpu
 
-import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.Path
+import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
-import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
-import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeFactory
-import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
-import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
-import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PathEffect
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
@@ -36,17 +45,573 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
-import org.junit.jupiter.api.Assumptions.assumeTrue
 
 class GPUFramePathApiInventoryTest {
     @Test
-    fun `mixed core frame reaches one native coordinator encoder command buffer submit and readback`() {
+    fun `drawColor and clear cover the exact target independently of the current transform`() {
+        val surface = Surface(40, 30)
+        surface.canvas {
+            translate(13f, 17f)
+            drawColor(Color.RED)
+            clear(Color.BLUE)
+        }
+
+        val plan = GPUFramePathApiInventory.plan(surface.snapshotOps(), target(40, 30), RenderConfig.DEFAULT)
+
+        assertEquals(2, plan.visualCommands.size)
+        plan.visualCommands.forEach { visual ->
+            val command = assertIs<NormalizedDrawCommand.FillRect>(visual.normalized)
+            assertEquals(0f, command.rect.left)
+            assertEquals(0f, command.rect.top)
+            assertEquals(40f, command.rect.right)
+            assertEquals(30f, command.rect.bottom)
+            assertEquals(0f, visual.targetSpaceBounds.left)
+            assertEquals(0f, visual.targetSpaceBounds.top)
+            assertEquals(40f, visual.targetSpaceBounds.right)
+            assertEquals(30f, visual.targetSpaceBounds.bottom)
+            assertEquals(0f, command.transform.translateX)
+            assertEquals(0f, command.transform.translateY)
+        }
+    }
+
+    @Test
+    fun `point and line bounds include stroke width square cap and antialiasing`() {
+        val surface = Surface(48, 40)
+        surface.canvas {
+            drawPoint(
+                20f,
+                20f,
+                Paint.stroke(Color.RED, 6f).copy(strokeCap = StrokeCap.ROUND, antiAlias = true),
+            )
+            drawPoints(
+                PointMode.LINES,
+                listOf(Point(10f, 10f), Point(30f, 10f)),
+                Paint.stroke(Color.BLUE, 4f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = true),
+            )
+        }
+
+        val plan = GPUFramePathApiInventory.plan(surface.snapshotOps(), target(48, 40), RenderConfig.DEFAULT)
+
+        assertEquals(2, plan.visualCommands.size)
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.commands.GPUBounds(16f, 16f, 24f, 24f),
+            plan.visualCommands[0].targetSpaceBounds,
+        )
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.commands.GPUBounds(7f, 7f, 33f, 13f),
+            plan.visualCommands[1].targetSpaceBounds,
+        )
+    }
+
+    @Test
+    fun `drawPoint lowers positive square stroke width around the point`() {
+        val operation = DisplayOp.DrawPoint(
+            10f,
+            12f,
+            Paint.stroke(Color.RED, 4f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        )
+        val inventory = inventoryFor(operation)
+        val command = assertIs<NormalizedDrawCommand.FillPath>(inventory.normalizedCommands.single())
+        val semantic = gatheredSemantic(inventory)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+
+        assertEquals(8f, command.tessellatedVertices.filterIndexed { index, _ -> index % 2 == 0 }.min())
+        assertEquals(12f, command.tessellatedVertices.filterIndexed { index, _ -> index % 2 == 0 }.max())
+        assertEquals(10f, command.tessellatedVertices.filterIndexed { index, _ -> index % 2 == 1 }.min())
+        assertEquals(14f, command.tessellatedVertices.filterIndexed { index, _ -> index % 2 == 1 }.max())
+        assertEquals(5, geometry.sourceVertexCount)
+        assertEquals(GPUCorePrimitiveSourceFamily.PointLine, semantic.sourceFamily)
+    }
+
+    @Test
+    fun `drawPoints points mode lowers every positive butt point as a width sized square`() {
+        val operation = DisplayOp.DrawPoints(
+            PointMode.POINTS,
+            listOf(Point(5f, 5f), Point(15f, 10f)),
+            Paint.stroke(Color.BLUE, 6f).copy(strokeCap = StrokeCap.BUTT, antiAlias = false),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        )
+        val inventory = inventoryFor(operation)
+        val command = assertIs<NormalizedDrawCommand.FillPath>(inventory.normalizedCommands.single())
+        val semantic = gatheredSemantic(inventory)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+
+        assertEquals(2f, command.tessellatedVertices.filterIndexed { index, _ -> index % 2 == 0 }.min())
+        assertEquals(18f, command.tessellatedVertices.filterIndexed { index, _ -> index % 2 == 0 }.max())
+        assertEquals(2f, command.tessellatedVertices.filterIndexed { index, _ -> index % 2 == 1 }.min())
+        assertEquals(13f, command.tessellatedVertices.filterIndexed { index, _ -> index % 2 == 1 }.max())
+        assertEquals(10, geometry.sourceVertexCount)
+        assertEquals(2, geometry.sourceContourStarts.size)
+    }
+
+    @Test
+    fun `drawPoint hairline refuses with a stable geometry diagnostic`() {
+        val inventory = inventoryFor(DisplayOp.DrawPoint(
+            10f,
+            12f,
+            Paint.fill(Color.RED).copy(strokeWidth = 0f, strokeCap = StrokeCap.SQUARE),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.point.hairline_exact_lowering", refused.code)
+        assertEquals("drawPoint", refused.facts["source"])
+    }
+
+    @Test
+    fun `drawPoints round points refuse with a stable geometry diagnostic`() {
+        val inventory = inventoryFor(DisplayOp.DrawPoints(
+            PointMode.POINTS,
+            listOf(Point(5f, 5f), Point(15f, 10f)),
+            Paint.stroke(Color.BLUE, 6f).copy(strokeCap = StrokeCap.ROUND),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.point.round_cap_exact_lowering", refused.code)
+        assertEquals("drawPoints.points", refused.facts["source"])
+    }
+
+    @Test
+    fun `stroked rrect lowers to path and preserves stroke facts`() {
+        val paint = Paint.stroke(Color.GREEN, 4f).copy(
+            strokeCap = StrokeCap.ROUND,
+            strokeJoin = StrokeJoin.ROUND,
+            pathEffect = PathEffect.Dash(floatArrayOf(3f, 2f), phase = 1f),
+            antiAlias = true,
+        )
+        val operation = DisplayOp.DrawRRect(
+            RRect(Rect.fromLTRB(10f, 10f, 30f, 24f), radius = 4f),
+            paint,
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        )
+
+        val visual = GPUFramePathApiInventory.plan(
+            listOf(operation),
+            target(48, 40),
+            RenderConfig.DEFAULT,
+        ).visualCommands.single()
+        val command = assertIs<NormalizedDrawCommand.FillPath>(visual.normalized)
+
+        assertTrue(command.stroke)
+        assertEquals(4f, command.strokeWidth)
+        assertEquals("round", command.strokeCap)
+        assertEquals("round", command.strokeJoin)
+        assertTrue(command.dashIntervals!!.contentEquals(floatArrayOf(3f, 2f)))
+        assertEquals(1f, command.dashPhase)
+        assertEquals("drawRRect.stroke", command.source.operation)
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.commands.GPUBounds(7f, 7f, 33f, 27f),
+            visual.targetSpaceBounds,
+        )
+    }
+
+    @Test
+    fun `concave path uses stencil edge fan and retains even odd fill`() {
+        val path = Path().apply {
+            fillType = FillType.EVEN_ODD
+            moveTo(2f, 2f)
+            lineTo(20f, 2f)
+            lineTo(8f, 9f)
+            lineTo(20f, 20f)
+            lineTo(2f, 20f)
+            close()
+        }
+
+        val semantic = semanticFor(DisplayOp.DrawPath(
+            path,
+            Paint.fill(Color.RED).copy(antiAlias = true),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+
+        assertEquals(GPUCorePrimitiveGeometryMode.StencilEdgeFan, geometry.geometryMode)
+        assertEquals(GPUCorePrimitiveFillRule.EvenOdd, geometry.fillRule)
+        assertFalse(geometry.inverseFill)
+        assertEquals(GPUCorePrimitiveCoverageMode.StencilAA, semantic.coverageMode)
+        assertEquals(geometry.vertices.size / 2, geometry.indices.size)
+        assertEquals(geometry.indices.indices.toList(), geometry.indices)
+    }
+
+    @Test
+    fun `multi contour hole preserves contour starts for stencil lowering`() {
+        val path = Path().apply {
+            addRect(Rect.fromLTRB(2f, 2f, 28f, 28f))
+            reverseAddPath(Path().apply { addRect(Rect.fromLTRB(9f, 9f, 21f, 21f)) })
+        }
+        val semantic = semanticFor(DisplayOp.DrawPath(
+            path,
+            Paint.fill(Color.GREEN).copy(antiAlias = false),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+
+        assertEquals(GPUCorePrimitiveGeometryMode.StencilEdgeFan, geometry.geometryMode)
+        assertEquals(GPUCorePrimitiveFillRule.Winding, geometry.fillRule)
+        assertFalse(geometry.inverseFill)
+        assertEquals(2, geometry.sourceContourStarts.size)
+        assertTrue(geometry.sourceContourStarts[1] > geometry.sourceContourStarts[0])
+        assertEquals(GPUCorePrimitiveCoverageMode.Stencil1x, semantic.coverageMode)
+    }
+
+    @Test
+    fun `inverse path preserves inverse even odd stencil facts`() {
+        val path = Path().apply {
+            fillType = FillType.INVERSE_EVEN_ODD
+            addRect(Rect.fromLTRB(6f, 6f, 20f, 20f))
+        }
+        val semantic = semanticFor(DisplayOp.DrawPath(
+            path,
+            Paint.fill(Color.BLUE),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+
+        assertEquals(GPUCorePrimitiveFillRule.EvenOdd, geometry.fillRule)
+        assertTrue(geometry.inverseFill)
+        assertEquals(GPUCorePrimitiveGeometryMode.StencilEdgeFan, geometry.geometryMode)
+        assertEquals(GPUPixelBounds(0, 0, 32, 32), geometry.coverBounds)
+    }
+
+    @Test
+    fun `inverse path normalized bounds cover its device clip before recorder`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipRect(Rect.fromLTRB(4f, 5f, 24f, 26f), ClipOp.INTERSECT, antiAlias = false)
+            drawPath(
+                Path().apply {
+                    fillType = FillType.INVERSE_WINDING
+                    addRect(Rect.fromLTRB(10f, 11f, 15f, 16f))
+                },
+                Paint.fill(Color.RED),
+            )
+        }
+
+        val command = assertIs<NormalizedDrawCommand.FillPath>(
+            GPUFramePathApiInventory.plan(
+                surface.snapshotOps(),
+                target(),
+                RenderConfig.DEFAULT,
+            ).normalizedCommands.single(),
+        )
+
+        assertEquals(org.graphiks.kanvas.gpu.renderer.commands.GPUBounds(4f, 5f, 24f, 26f), command.bounds)
+    }
+
+    @Test
+    fun `empty inverse path refuses instead of presenting a degenerate edge fan`() {
+        val path = Path().apply { fillType = FillType.INVERSE_WINDING }
+        val inventory = GPUFramePathApiInventory.plan(
+            listOf(DisplayOp.DrawPath(
+                path,
+                Paint.fill(Color.RED),
+                Matrix33.identity(),
+                org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+            )),
+            target(),
+            RenderConfig.DEFAULT,
+        )
+
+        val refused = assertIs<GPUCorePrimitiveSemanticGatherResult.Refused>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 32, 32),
+            ),
+        )
+        assertEquals("unsupported.core_primitive.inverse_empty_path", refused.code)
+    }
+
+    @Test
+    fun `drrect preserves outer and inner contours instead of filling two fans`() {
+        val semantic = semanticFor(DisplayOp.DrawDRRect(
+            RRect(Rect.fromLTRB(2f, 2f, 30f, 30f), radius = 4f),
+            RRect(Rect.fromLTRB(9f, 9f, 23f, 23f), radius = 2f),
+            Paint.fill(Color.WHITE),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+
+        assertEquals(GPUCorePrimitiveSourceFamily.DRRect, semantic.sourceFamily)
+        assertEquals(GPUCorePrimitiveGeometryMode.StencilEdgeFan, geometry.geometryMode)
+        assertEquals(2, geometry.sourceContourStarts.size)
+        assertEquals(GPUCorePrimitiveFillRule.Winding, geometry.fillRule)
+        assertFalse(geometry.inverseFill)
+    }
+
+    @Test
+    fun `invalid drrect inner outside outer becomes a stable geometry refusal`() {
+        val inventory = inventoryFor(DisplayOp.DrawDRRect(
+            RRect(Rect.fromLTRB(4f, 4f, 20f, 20f), radius = 2f),
+            RRect(Rect.fromLTRB(2f, 8f, 12f, 16f), radius = 1f),
+            Paint.fill(Color.WHITE),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.drrect.inner_outside_outer", refused.code)
+        assertEquals("drawDRRect", refused.facts["source"])
+    }
+
+    @Test
+    fun `direct rrect normalizes oversized radii before semantic gathering`() {
+        val semantic = semanticFor(DisplayOp.DrawRRect(
+            RRect(
+                Rect.fromLTRB(2f, 3f, 12f, 11f),
+                topLeft = CornerRadii(8f, 6f),
+                topRight = CornerRadii(8f, 6f),
+                bottomRight = CornerRadii(8f, 6f),
+                bottomLeft = CornerRadii(8f, 6f),
+            ),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(semantic.geometry)
+
+        assertEquals(listOf(5f, 3.75f, 5f, 3.75f, 5f, 3.75f, 5f, 3.75f), geometry.radii)
+    }
+
+    @Test
+    fun `direct rrect reflection permutes normalized corners into device order`() {
+        val semantic = semanticFor(DisplayOp.DrawRRect(
+            RRect(
+                Rect.fromLTRB(2f, 4f, 12f, 14f),
+                topLeft = CornerRadii(1f, 1f),
+                topRight = CornerRadii(2f, 1f),
+                bottomRight = CornerRadii(3f, 1f),
+                bottomLeft = CornerRadii(4f, 1f),
+            ),
+            Paint.fill(Color.RED),
+            Matrix33.makeAll(-1f, 0f, 32f, 0f, -1f, 32f),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(semantic.geometry)
+
+        assertEquals(listOf(3f, 1f, 4f, 1f, 1f, 1f, 2f, 1f), geometry.radii)
+    }
+
+    @Test
+    fun `skewed direct rrect becomes a stable geometry refusal`() {
+        val inventory = inventoryFor(DisplayOp.DrawRRect(
+            RRect(Rect.fromLTRB(2f, 4f, 12f, 14f), radius = 2f),
+            Paint.fill(Color.RED),
+            Matrix33.skew(0.25f, 0f),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.rrect.non_axis_aligned_transform", refused.code)
+    }
+
+    @Test
+    fun `partially outside rect retains exact geometry with target bounded coverage`() {
+        val semantic = semanticFor(DisplayOp.DrawRect(
+            Rect.fromLTRB(-4f, 3f, 12f, 15f),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.Rect>(semantic.geometry)
+
+        assertEquals(-4f, geometry.left)
+        assertEquals(12f, geometry.right)
+        assertEquals(GPUPixelBounds(0, 0, 32, 32), semantic.scissorBounds)
+    }
+
+    @Test
+    fun `partially outside rrect retains exact geometry with target bounded coverage`() {
+        val semantic = semanticFor(DisplayOp.DrawRRect(
+            RRect(Rect.fromLTRB(-4f, 3f, 12f, 15f), radius = 3f),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(semantic.geometry)
+
+        assertEquals(-4f, geometry.left)
+        assertEquals(12f, geometry.right)
+        assertEquals(GPUPixelBounds(0, 0, 32, 32), semantic.scissorBounds)
+    }
+
+    @Test
+    fun `non solid core material becomes a stable refusal instead of an exception`() {
+        val gradient = Shader.LinearGradient(
+            start = Point(0f, 0f),
+            end = Point(16f, 0f),
+            stops = listOf(GradientStop(0f, Color.RED), GradientStop(1f, Color.BLUE)),
+        )
+        val inventory = inventoryFor(DisplayOp.DrawRect(
+            Rect.fromLTRB(2f, 3f, 18f, 20f),
+            Paint(shader = gradient),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.material.non_solid", refused.code)
+        assertEquals("LinearGradient", refused.facts["materialKind"])
+    }
+
+    @Test
+    fun `path over RenderConfig vertex budget becomes a stable refusal during mapping`() {
+        val path = Path().apply {
+            moveTo(1f, 1f)
+            lineTo(5f, 1f)
+            lineTo(6f, 3f)
+            lineTo(5f, 6f)
+            lineTo(1f, 6f)
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            listOf(DisplayOp.DrawPath(
+                path,
+                Paint.fill(Color.RED),
+                Matrix33.identity(),
+                org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+            )),
+            target(),
+            RenderConfig(maxPathVertices = 4u),
+        )
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.path_vertex_budget", refused.code)
+        assertEquals("4", refused.facts["maxPathVertices"])
+    }
+
+    @Test
+    fun `stencil edge fan over 256 source vertices preserves its budget diagnostic`() {
+        val path = Path().apply {
+            moveTo(1f, 1f)
+            repeat(256) { index ->
+                lineTo(
+                    1f + (index % 28),
+                    2f + ((index * 7) % 27),
+                )
+            }
+            close()
+        }
+        val inventory = GPUFramePathApiInventory.plan(
+            listOf(DisplayOp.DrawPath(
+                path,
+                Paint.fill(Color.RED),
+                Matrix33.identity(),
+                org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+            )),
+            target(),
+            RenderConfig(maxPathVertices = 512u),
+        )
+
+        val refused = gatherRefusal(inventory)
+
+        assertEquals("unsupported.core_primitive.stencil_edge_fan_budget", refused.code)
+    }
+
+    @Test
+    fun `path AA mode changes semantic identity without changing fill authority`() {
+        val path = triangle()
+        val aa = semanticFor(DisplayOp.DrawPath(
+            path,
+            Paint.fill(Color.RED).copy(antiAlias = true),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val binary = semanticFor(DisplayOp.DrawPath(
+            path,
+            Paint.fill(Color.RED).copy(antiAlias = false),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+
+        assertEquals(GPUCorePrimitiveCoverageMode.StencilAA, aa.coverageMode)
+        assertEquals(GPUCorePrimitiveCoverageMode.Stencil1x, binary.coverageMode)
+        assertNotEquals(aa.canonicalHash, binary.canonicalHash)
+    }
+
+    @Test
+    fun `stroked path uses canonical stroke outline and retains all stroke facts`() {
+        val semantic = semanticFor(DisplayOp.DrawPoints(
+            PointMode.LINES,
+            listOf(Point(4f, 8f), Point(24f, 8f)),
+            Paint.stroke(Color.RED, 4f).copy(
+                strokeCap = StrokeCap.SQUARE,
+                strokeJoin = StrokeJoin.BEVEL,
+                strokeMiter = 3f,
+                antiAlias = true,
+            ),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        val stroke = assertNotNull(geometry.strokeStyle)
+
+        assertEquals(GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan, geometry.geometryMode)
+        assertEquals(4f, stroke.width)
+        assertEquals("square", stroke.cap)
+        assertEquals("bevel", stroke.join)
+        assertEquals(3f, stroke.miterLimit)
+        assertEquals(emptyList(), stroke.dashIntervals)
+        assertEquals(0f, stroke.dashPhase)
+        assertEquals(GPUCorePrimitiveStrokeLoweringProof.SingleSegmentSquareV1, stroke.loweringProof)
+        assertEquals(GPUCorePrimitiveCoverageMode.StencilAA, semantic.coverageMode)
+    }
+
+    @Test
+    fun `complex dashed round stroke refuses with stable exact lowering code`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            listOf(DisplayOp.DrawPath(
+                triangle(),
+                Paint.stroke(Color.RED, 4f).copy(
+                    strokeCap = StrokeCap.ROUND,
+                    strokeJoin = StrokeJoin.BEVEL,
+                    pathEffect = PathEffect.Dash(floatArrayOf(5f, 2f), phase = 1f),
+                ),
+                Matrix33.identity(),
+                org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+            )),
+            target(),
+            RenderConfig.DEFAULT,
+        )
+
+        val refused = assertIs<GPUCorePrimitiveSemanticGatherResult.Refused>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, 32, 32),
+            ),
+        )
+        assertEquals("unsupported.core_primitive.stroke.dash_exact_lowering", refused.code)
+        assertEquals("round", refused.facts["cap"])
+        assertEquals("5.0,2.0", refused.facts["dashIntervals"])
+    }
+
+    @Test
+    fun `mixed core frame remains fail closed until native core capability exists`() {
         val surface = Surface(48, 40)
         surface.canvas {
             drawColor(Color.fromRGBA(0.05f, 0.06f, 0.07f, 1f))
             translate(1f, 2f)
             clipRect(Rect.fromLTRB(0f, 0f, 46f, 38f), ClipOp.INTERSECT, antiAlias = false)
-            drawPoint(2f, 3f, Paint.fill(Color.WHITE).copy(antiAlias = false))
+            drawPoint(
+                2f,
+                3f,
+                Paint.stroke(Color.WHITE, 1f).copy(strokeCap = StrokeCap.SQUARE, antiAlias = false),
+            )
             drawPoints(
                 PointMode.LINES,
                 listOf(Point(3f, 4f), Point(14f, 9f)),
@@ -82,62 +647,28 @@ class GPUFramePathApiInventoryTest {
             flushAndSnapshot(Rect.fromLTRB(0f, 0f, 48f, 40f))
         }
 
-        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
-        assumeTrue(backend != null, "GPU backend unavailable in current environment")
-        backend!!
-        val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
         val frame = GPUFramePathApiInventory.plan(
             surface.snapshotOps(),
             target(48, 40),
             RenderConfig.DEFAULT,
-            capabilities,
-            generation,
         )
         val readbackId = GPUReadbackRequestID("readback.kanvas.slice-12a.core")
         val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
             frame,
-            capabilities,
+            org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig().buildCapabilities(),
             GPUPixelBounds(0, 0, 48, 40),
             readbackId,
         )
-        val prepared = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+        val refused = assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(
             preparation,
             (preparation as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
                 "${it.code.value}: ${it.message}"
             },
         )
-        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(48, 40, "rgba8unorm"))
-        try {
-            val terminal = session.renderFrame(
-                prepared.taskList,
-                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
-            ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
-
-            assertEquals(
-                GPUFrameStructuralOutcome.Succeeded,
-                terminal.outcome,
-                "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
-            )
-            assertEquals(
-                frame.visualCommands.map { "packet.${it.normalized.commandId.value}.0" },
-                frame.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
-                    .flatMap { step -> step.drawPackets.map { it.packetId.value } },
-            )
-            val counters = session.nativeCounters()
-            assertEquals(1L, counters.frameCoordinatorCreations)
-            assertEquals(1L, counters.encoders)
-            assertEquals(1L, counters.commandBuffers)
-            assertEquals(1L, counters.submits)
-            assertEquals(1L, counters.readbackCopies)
-            assertEquals(0L, counters.destinationSnapshotCreations)
-        } finally {
-            try {
-                session.close()
-            } finally {
-                GPUBackendRuntimeNativeFactory.dispose()
-            }
-        }
+        assertEquals(
+            "unsupported.pipeline.capability_missing",
+            refused.diagnostic.code.value,
+        )
     }
 
     @Test
@@ -145,9 +676,13 @@ class GPUFramePathApiInventoryTest {
         val surface = Surface(32, 32)
         surface.canvas {
             drawAnnotation(Rect.EMPTY, GPU_FRAME_PROVENANCE_ANNOTATION_KEY, "harness-background")
-            drawRect(Rect.fromLTRB(1f, 2f, 5f, 7f), Paint.fill(Color.RED))
+            drawRRect(RRect(Rect.fromLTRB(1f, 2f, 5f, 7f), radius = 1f), Paint.fill(Color.RED))
             drawAnnotation(Rect.EMPTY, GPU_FRAME_PROVENANCE_ANNOTATION_KEY, "gm-content")
-            drawRRect(RRect(Rect.fromLTRB(8f, 3f, 14f, 11f), radius = 2f), Paint.fill(Color.GREEN))
+            drawDRRect(
+                RRect(Rect.fromLTRB(8f, 3f, 16f, 13f), radius = 2f),
+                RRect(Rect.fromLTRB(10f, 5f, 14f, 11f), radius = 1f),
+                Paint.fill(Color.GREEN),
+            )
             drawAnnotation(Rect.EMPTY, GPU_FRAME_PROVENANCE_ANNOTATION_KEY, "none")
             drawPath(
                 Path().apply {
@@ -160,7 +695,11 @@ class GPUFramePathApiInventoryTest {
             )
         }
 
-        val plan = GPUFramePathApiInventory.plan(surface.snapshotOps(), target(), RenderConfig.DEFAULT)
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+        )
 
         assertEquals(
             listOf(
@@ -282,7 +821,7 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `complex clip exposes analytic mask and stencil element execution without marker packets`() {
+    fun `complex clip captures source elements and remains fail closed before B2 topology`() {
         val surface = Surface(32, 32)
         surface.canvas {
             clipRect(Rect.fromLTRB(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true)
@@ -302,21 +841,13 @@ class GPUFramePathApiInventoryTest {
                 ClipOp.INTERSECT,
                 antiAlias = false,
             )
-            drawRect(Rect.fromLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+            drawRRect(RRect(Rect.fromLTRB(0f, 0f, 32f, 32f), radius = 2f), Paint.fill(Color.RED))
         }
 
         val plan = GPUFramePathApiInventory.plan(surface.snapshotOps(), target(), RenderConfig.DEFAULT)
         val visual = plan.visualCommands.single()
         val clip = assertIs<GPUClipCoveragePlan.Mask>(visual.clipCoverage)
 
-        assertEquals(
-            setOf(
-                GPUFrameClipExecution.Analytic,
-                GPUFrameClipExecution.Mask,
-                GPUFrameClipExecution.Stencil,
-            ),
-            visual.clipExecution.toSet(),
-        )
         assertEquals(
             setOf(
                 GPUClipCoverageElementKind.Rect,
@@ -326,8 +857,15 @@ class GPUFramePathApiInventoryTest {
             clip.elements.map { it.kind }.toSet(),
         )
         assertEquals(3, plan.stateEvents.count { it.kind == GPUFramePathStateKind.Clip })
-        assertEquals(1, plan.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
-            .sumOf { it.drawPackets.size })
+        val preparation = GPUFramePathApiInventory.prepareNativeTaskList(
+            plan,
+            org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig().buildCapabilities(),
+            GPUPixelBounds(0, 0, 32, 32),
+        )
+        assertEquals(
+            "unsupported.clip.complex_stack",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(preparation).diagnostic.code.value,
+        )
     }
 
     @Test
@@ -383,6 +921,36 @@ class GPUFramePathApiInventoryTest {
 
     private fun target(width: Int = 32, height: Int = 32) =
         org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts(width, height, "rgba8unorm")
+
+    private fun semanticFor(operation: DisplayOp): GPUDrawSemanticPayload.CorePrimitive {
+        val inventory = inventoryFor(operation)
+        return gatheredSemantic(inventory)
+    }
+
+    private fun gatheredSemantic(
+        inventory: GPUFramePathInventoryPlan,
+    ): GPUDrawSemanticPayload.CorePrimitive {
+        val target = target()
+        val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
+            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+                inventory,
+                GPUPixelBounds(0, 0, target.width, target.height),
+            ),
+        )
+        return gathered.semantics.values.single()
+    }
+
+    private fun inventoryFor(operation: DisplayOp): GPUFramePathInventoryPlan =
+        GPUFramePathApiInventory.plan(listOf(operation), target(), RenderConfig.DEFAULT)
+
+    private fun gatherRefusal(
+        inventory: GPUFramePathInventoryPlan,
+    ): GPUCorePrimitiveSemanticGatherResult.Refused = assertIs(
+        GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+            inventory,
+            GPUPixelBounds(0, 0, 32, 32),
+        ),
+    )
 
     private fun paint(mode: BlendMode) = Paint.fill(Color.RED).copy(blendMode = mode)
 

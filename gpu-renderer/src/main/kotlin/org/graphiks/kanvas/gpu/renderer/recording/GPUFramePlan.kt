@@ -995,6 +995,9 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
         is GPUDrawSemanticPayload.CorePrimitive -> {
             string("sourceFamily", value.sourceFamily.name)
             string("canonicalHash", value.canonicalHash)
+            string("blendPlanIdentity", value.blendPlanIdentity)
+            string("frameProvenance", value.frameProvenance.annotationValue)
+            string("coverageMode", value.coverageMode.name)
             bounds("targetBounds", value.targetBounds)
             bounds("scissorBounds", value.scissorBounds)
             list("premultipliedRgba", value.premultipliedRgba) { channel ->
@@ -1018,7 +1021,23 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
                 is GPUCorePrimitiveGeometry.TriangulatedPath -> {
                     list("vertices", geometry.vertices) { coordinate -> int("coordinateBits", coordinate.toRawBits()) }
                     list("indices", geometry.indices) { index -> int("index", index) }
-                    list("contourStarts", geometry.contourStarts) { index -> int("index", index) }
+                    list("sourceContourStarts", geometry.sourceContourStarts) { index -> int("index", index) }
+                    int("sourceVertexCount", geometry.sourceVertexCount)
+                    bounds("coverBounds", geometry.coverBounds)
+                    string("geometryMode", geometry.geometryMode.name)
+                    string("fillRule", geometry.fillRule.name)
+                    bool("inverseFill", geometry.inverseFill)
+                    nullable("strokeStyle", geometry.strokeStyle) { stroke ->
+                        int("widthBits", stroke.width.toRawBits())
+                        string("cap", stroke.cap)
+                        string("join", stroke.join)
+                        int("miterLimitBits", stroke.miterLimit.toRawBits())
+                        list("dashIntervals", stroke.dashIntervals) { interval ->
+                            int("intervalBits", interval.toRawBits())
+                        }
+                        int("dashPhaseBits", stroke.dashPhase.toRawBits())
+                        string("loweringProof", stroke.loweringProof.name)
+                    }
                 }
             }
             when (val clip = value.clipCoveragePlan) {
@@ -1390,7 +1409,8 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
         is GPUDrawSemanticPayload.CorePrimitive ->
             "$common,corePrimitiveHash=$canonicalHash,family=${sourceFamily.name}," +
                 "geometry=${geometry.canonicalType},color=${premultipliedRgba.joinToString(",")}," +
-                "target=$targetBounds,scissor=$scissorBounds,clip=${clipCoveragePlan.stableCoreDump()})"
+                "target=$targetBounds,scissor=$scissorBounds,clip=${clipCoveragePlan.stableCoreDump()}," +
+                "blend=$blendPlanIdentity,provenance=${frameProvenance.annotationValue})"
         is GPUDrawSemanticPayload.RegisteredUniformRect ->
             "$common,program=${program.wireId},registeredUniformHash=$canonicalHash," +
                 "uniformBytes=${uniformBytes.size},target=$targetBounds,scissor=$scissorBounds)"
@@ -1413,13 +1433,18 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
     }
 }
 
-private fun GPUClipCoveragePlan.stableCoreDump(): String = when (this) {
+internal fun GPUClipCoveragePlan.stableCoreDump(): String = when (this) {
     GPUClipCoveragePlan.NoClip -> "none"
-    is GPUClipCoveragePlan.Scissor -> "scissor:${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}"
-    is GPUClipCoveragePlan.Mask -> "mask:$contentKey:${width}x$height:${elements.joinToString(";") { element ->
-        "${element.operation.name}/${element.kind.name}/${element.antiAlias}/${element.fillRule.name}/" +
-            "${element.inverseFill}/${element.values.joinToString(",")}"
-    }}"
+    is GPUClipCoveragePlan.Scissor ->
+        "scissor:${bounds.left.toRawBits()}:${bounds.top.toRawBits()}:" +
+            "${bounds.right.toRawBits()}:${bounds.bottom.toRawBits()}"
+    is GPUClipCoveragePlan.Mask ->
+        "mask:$contentKey:${width}x$height:samples=$sampleCount:resolvedBytes=$resolvedBytes:" +
+            "requiredBytes=$requiredBytes:${elements.joinToString(";") { element ->
+                "${element.operation.name}/${element.kind.name}/vertices=${element.vertexCount}/" +
+                    "aa=${element.antiAlias}/fill=${element.fillRule.name}/inverse=${element.inverseFill}/" +
+                    "values=${element.values.joinToString(",") { value -> value.toRawBits().toString() }}"
+            }}"
     is GPUClipCoveragePlan.Refused -> "refused:$code"
 }
 

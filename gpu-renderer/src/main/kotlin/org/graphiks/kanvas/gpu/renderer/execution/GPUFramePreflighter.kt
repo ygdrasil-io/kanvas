@@ -6,8 +6,10 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatch
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
@@ -34,6 +36,12 @@ import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_RENDER_PIPELINE_KE
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.colorGlyphScissorAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveRenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalCorePrimitiveTargetPreparation
 import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_VERTEX_SOURCE_LABEL
@@ -681,6 +689,7 @@ internal class GPUFramePreflighter(
             return diagnostic("stale.preflight.capability_seal", "The current capability snapshot differs from the frame seal.")
         }
         framePlan.memoryBudget.diagnostic?.let { return it }
+        validateCorePrimitiveRenderAuthority(framePlan)?.let { return it }
         validateMsaaContinuation(framePlan)?.let { return it }
 
         val acquires = framePlan.steps.filterIsInstance<GPUFrameStep.AcquireSurfaceOutput>()
@@ -780,6 +789,23 @@ internal class GPUFramePreflighter(
             )
         }
         return null
+    }
+
+    private fun validateCorePrimitiveRenderAuthority(framePlan: GPUFramePlan): GPUDiagnostic? {
+        val invalidRender = framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .firstOrNull { render ->
+                render.samplePlan != GPUSamplePlan.SingleSampleFrame &&
+                    render.drawPackets.any { packet ->
+                        packet.renderStepId.value == CORE_PRIMITIVE_RENDER_STEP_IDENTITY
+                    }
+            }
+        return invalidRender?.let {
+            diagnostic(
+                "invalid.preflight.core_primitive_render_authority",
+                "Core primitive render passes require the canonical single-sample plan.",
+            )
+        }
     }
 
     private fun validateMsaaContinuation(framePlan: GPUFramePlan): GPUDiagnostic? {
@@ -954,12 +980,17 @@ internal class GPUFramePreflighter(
                     "invalid.preflight.registered_uniform_semantic_payload_missing",
                     "Executable registered uniform packets require their typed semantic payload.",
                 )
+                CORE_PRIMITIVE_RENDER_STEP_IDENTITY -> diagnostic(
+                    "invalid.preflight.core_primitive_semantic_payload_missing",
+                    "Executable core primitive packets require their gathered semantic payload.",
+                )
                 else -> null
             }
         }
         return when (semantic) {
             is GPUDrawSemanticPayload.SolidRect -> validateSolidRectSemanticPayload(packet, semantic)
-            is GPUDrawSemanticPayload.CorePrimitive -> validateCorePrimitiveSemanticPayload(packet, semantic)
+            is GPUDrawSemanticPayload.CorePrimitive ->
+                validateCorePrimitiveSemanticPayload(framePlan, render, packet, semantic)
             is GPUDrawSemanticPayload.RegisteredUniformRect ->
                 validateRegisteredUniformRectSemanticPayload(render, packet, semantic)
             is GPUDrawSemanticPayload.SeparableBlurRect ->
@@ -970,6 +1001,8 @@ internal class GPUFramePreflighter(
     }
 
     private fun validateCorePrimitiveSemanticPayload(
+        framePlan: GPUFramePlan,
+        render: GPUFrameStep.RenderPassStep,
         packet: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.CorePrimitive,
     ): GPUDiagnostic? {
@@ -978,11 +1011,39 @@ internal class GPUFramePreflighter(
             packet.commandIdValue != semantic.payloadRef.commandIdValue ||
             packet.uniformSlot != semantic.payloadRef.uniformSlot ||
             packet.clipCoveragePlan != semantic.clipCoveragePlan ||
+            packet.blendPlan?.canonicalIdentity() != semantic.blendPlanIdentity ||
+            packet.frameProvenance != semantic.frameProvenance ||
             !semantic.hasCanonicalHashIntegrity()
         ) {
             return diagnostic(
                 "invalid.preflight.core_primitive_semantic_integrity",
                 "Core primitive packet authority contradicts its immutable semantic input.",
+            )
+        }
+        if (packet.renderPipelineKey != corePrimitiveRenderPipelineKey() ||
+            packet.renderStepVersion != 1 ||
+            packet.role != GPUDrawPacketRole.Shading ||
+            packet.bindingLayoutHash != CORE_PRIMITIVE_BINDING_LAYOUT_HASH ||
+            packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
+            packet.targetStateHash != CORE_PRIMITIVE_TARGET_STATE_HASH ||
+            packet.scissorBoundsHash != corePrimitiveScissorAuthority(semantic.scissorBounds)
+        ) {
+            return diagnostic(
+                "invalid.preflight.core_primitive_packet_authority",
+                "Core primitive executable packet fields contradict the canonical route authority.",
+            )
+        }
+        val targetPreparations = framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .filter { request -> request.resource == render.target }
+        val targetPreparation = targetPreparations.singleOrNull()
+        if (targetPreparation == null ||
+            !isCanonicalCorePrimitiveTargetPreparation(targetPreparation, render.target, semantic.targetBounds)
+        ) {
+            return diagnostic(
+                "invalid.preflight.core_primitive_target_authority",
+                "Core primitive target preparation must match the complete canonical target authority.",
             )
         }
         return null

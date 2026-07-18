@@ -120,6 +120,24 @@ sealed interface GPUBlendPlan {
     }
 }
 
+/** Exact handle-free identity retained by semantic payloads without importing pass contracts. */
+fun GPUBlendPlan.canonicalIdentity(): String = when (this) {
+    is GPUBlendPlan.FixedFunctionBlend ->
+        "fixed:${mode.name}:${sourceCoverageEncoding.name}:${state.stateId}:" +
+            "${state.color.sourceFactor}:${state.color.destinationFactor}:${state.color.operation}:" +
+            "${state.alpha.sourceFactor}:${state.alpha.destinationFactor}:${state.alpha.operation}:${state.writeMask}"
+    is GPUBlendPlan.ShaderBlendNoDstRead ->
+        "shader-no-dst:${mode.name}:$formulaId:${sourceCoverageEncoding.name}"
+    is GPUBlendPlan.ShaderBlendWithDstRead ->
+        "shader-dst:${mode.name}:$formulaId:${sourceCoverageEncoding.name}"
+    is GPUBlendPlan.LayerCompositeBlend ->
+        "layer:$layerOrderingToken:${child.canonicalIdentity()}"
+    is GPUBlendPlan.NoOp -> "noop:${mode.name}:$reason"
+    is GPUBlendPlan.UnsupportedBlend ->
+        "unsupported:${mode.name}:${diagnostic.code}:${diagnostic.mode.name}:" +
+            "${diagnostic.message}:${diagnostic.terminal}:${refusalScope.name}"
+}
+
 /** Immutable inputs to exact blend specialization. */
 data class GPUBlendSpecializationRequest(
     val mode: GPUBlendMode,

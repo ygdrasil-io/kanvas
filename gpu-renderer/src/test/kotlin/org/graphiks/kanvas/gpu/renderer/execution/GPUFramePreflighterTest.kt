@@ -10,12 +10,16 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
@@ -30,7 +34,14 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleLoadTransition
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadGatherPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
@@ -40,6 +51,11 @@ import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.recording.GPUComputeDispatch
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCompositeProvenanceToken
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveRenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotConsumerRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
@@ -56,6 +72,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskUseToken
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTargetTransitionKind
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -92,6 +109,9 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 import kotlin.test.Test
@@ -104,6 +124,157 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class GPUFramePreflighterTest {
+    @Test
+    fun `core semantic blend provenance and clip mismatches refuse before preflight side effects`() {
+        val semantic = coreSemantic()
+        val cases = listOf(
+            coreRenderStep(semantic, blendPlan = coreBlend(GPUBlendMode.SRC)),
+            coreRenderStep(semantic, provenance = GPUFrameProvenance.HarnessBackground),
+            coreRenderStep(
+                semantic,
+                clip = GPUClipCoveragePlan.Scissor(GPUBounds(0f, 0f, 4f, 4f)),
+            ),
+        )
+
+        cases.forEach { render ->
+            val events = mutableListOf<String>()
+            val result = preflighter(
+                resources = RecordingResourceProvider(events),
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+            ).preflight(framePlan(listOf(prepareScene(), render)))
+
+            assertEquals(
+                "invalid.preflight.core_primitive_semantic_integrity",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertTrue(events.isEmpty(), "pure validation side effects: $events")
+        }
+    }
+
+    @Test
+    fun `core packet without semantic payload refuses before every preflight side effect`() {
+        val events = mutableListOf<String>()
+        val result = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+        ).preflight(framePlan(listOf(prepareScene(), coreRenderStep(null))))
+
+        assertEquals(
+            "invalid.preflight.core_primitive_semantic_payload_missing",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertTrue(events.isEmpty(), "pure validation side effects: $events")
+    }
+
+    @Test
+    fun `core executable packet authority mismatches refuse before every preflight side effect`() {
+        val semantic = coreSemantic()
+        val cases = listOf(
+            coreRenderStep(semantic, renderPipelineKey = GPURenderPipelineKey("pipeline.core.stale")),
+            coreRenderStep(semantic, bindingLayoutHash = "layout.core.stale"),
+            coreRenderStep(semantic, vertexSourceLabel = "vertices.core.stale"),
+            coreRenderStep(semantic, targetStateHash = "target.core.stale"),
+            coreRenderStep(semantic, scissorBoundsHash = "scissor.stale"),
+            coreRenderStep(semantic, renderStepVersion = 2),
+            coreRenderStep(semantic, role = GPUDrawPacketRole.DepthOnly),
+        )
+
+        cases.forEach { render ->
+            val events = mutableListOf<String>()
+            val result = preflighter(
+                resources = RecordingResourceProvider(events),
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+            ).preflight(framePlan(listOf(prepareScene(), render)))
+
+            assertEquals(
+                "invalid.preflight.core_primitive_packet_authority",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertTrue(events.isEmpty(), "pure validation side effects: $events")
+        }
+    }
+
+    @Test
+    fun `core multisample render authority refuses before every preflight side effect`() {
+        val events = mutableListOf<String>()
+        val result = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+        ).preflight(
+            framePlan(
+                listOf(
+                    prepareScene(),
+                    coreRenderStep(coreSemantic(), samplePlan = GPUSamplePlan.MultisampleFrame(4)),
+                ),
+            ),
+        )
+
+        assertEquals(
+            "invalid.preflight.core_primitive_render_authority",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertTrue(events.isEmpty(), "pure validation side effects: $events")
+    }
+
+    @Test
+    fun `core prepared target bounds mismatch refuses before every preflight side effect`() {
+        val events = mutableListOf<String>()
+        val result = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+        ).preflight(
+            framePlan(
+                listOf(
+                    prepareScene(GPUPixelBounds(0, 0, 3, 4)),
+                    coreRenderStep(coreSemantic()),
+                ),
+            ),
+        )
+
+        assertEquals(
+            "invalid.preflight.core_primitive_target_authority",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertTrue(events.isEmpty(), "pure validation side effects: $events")
+    }
+
+    @Test
+    fun `core prepared target structural mismatches refuse before every preflight side effect`() {
+        val cases = listOf(
+            prepareScene(role = GPUFrameResourceRole.LayerTarget),
+            prepareScene(usages = setOf(GPUFrameResourceUsage.RenderAttachment)),
+            prepareScene(
+                usages = setOf(
+                    GPUFrameResourceUsage.RenderAttachment,
+                    GPUFrameResourceUsage.CopySource,
+                    GPUFrameResourceUsage.TextureBinding,
+                ),
+            ),
+            prepareScene(lifetime = GPUFrameResourceLifetime.RecordingLocal),
+            prepareScene(byteSize = 63L),
+        )
+
+        cases.forEach { preparation ->
+            val events = mutableListOf<String>()
+            val result = preflighter(
+                resources = RecordingResourceProvider(events),
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+            ).preflight(framePlan(listOf(preparation, coreRenderStep(coreSemantic()))))
+
+            assertEquals(
+                "invalid.preflight.core_primitive_target_authority",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertTrue(events.isEmpty(), "pure validation side effects: $events")
+        }
+    }
+
     @Test
     fun `solid semantic payload refuses every non solid route before any preflight side effect`() {
         listOf(
@@ -1919,19 +2090,26 @@ class GPUFramePreflighterTest {
         sourceTaskIds = listOf(GPUTaskID("task.prepare")),
     )
 
-    private fun prepareScene(): GPUFrameStep.PrepareResourcesStep = GPUFrameStep.PrepareResourcesStep(
+    private fun prepareScene(
+        bounds: GPUPixelBounds = GPUPixelBounds(0, 0, 4, 4),
+        role: GPUFrameResourceRole = GPUFrameResourceRole.SceneTarget,
+        usages: Set<GPUFrameResourceUsage> =
+            setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource),
+        lifetime: GPUFrameResourceLifetime = GPUFrameResourceLifetime.FrameLocal,
+        byteSize: Long = bounds.width.toLong() * bounds.height * 4L,
+    ): GPUFrameStep.PrepareResourcesStep = GPUFrameStep.PrepareResourcesStep(
         requests = listOf(
             GPUResourcePreparationRequest(
                 resource = GPUFrameTargetRef("target.scene"),
                 descriptor = GPUFrameTextureDescriptor(
-                    GPUPixelBounds(0, 0, 4, 4),
+                    bounds,
                     GPUColorFormat("rgba8unorm"),
                     1,
                 ),
-                role = GPUFrameResourceRole.SceneTarget,
-                usages = setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource),
-                lifetime = GPUFrameResourceLifetime.FrameLocal,
-                byteSize = 64,
+                role = role,
+                usages = usages,
+                lifetime = lifetime,
+                byteSize = byteSize,
                 diagnosticLabel = "scene",
             ),
         ),
@@ -1972,6 +2150,84 @@ class GPUFramePreflighterTest {
             batches = listOf(batch("batch.solid", packet, "task.render")),
         )
     }
+
+    private fun coreRenderStep(
+        semantic: GPUDrawSemanticPayload.CorePrimitive?,
+        blendPlan: GPUBlendPlan = coreBlend(GPUBlendMode.SRC_OVER),
+        provenance: GPUFrameProvenance = GPUFrameProvenance.GmContent,
+        clip: GPUClipCoveragePlan = GPUClipCoveragePlan.NoClip,
+        renderPipelineKey: GPURenderPipelineKey = corePrimitiveRenderPipelineKey(),
+        bindingLayoutHash: String = CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
+        vertexSourceLabel: String = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
+        targetStateHash: String = CORE_PRIMITIVE_TARGET_STATE_HASH,
+        scissorBoundsHash: String = corePrimitiveScissorAuthority(GPUPixelBounds(0, 0, 4, 4)),
+        renderStepVersion: Int = 1,
+        role: GPUDrawPacketRole = GPUDrawPacketRole.Shading,
+        samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+    ): GPUFrameStep.RenderPassStep {
+        val packet = GPUDrawPacket(
+            packetId = GPUDrawPacketID("packet.core"),
+            commandIdValue = semantic?.payloadRef?.commandIdValue ?: 41,
+            analysisRecordId = "analysis.core",
+            passId = "pass.core",
+            layerId = "root",
+            bindingListId = "bindings.core",
+            insertionReasonCode = "ordered",
+            sortKey = 1L,
+            sortKeyPreimage = "paint-order:1",
+            renderStepId = GPURenderStepID(CORE_PRIMITIVE_RENDER_STEP_IDENTITY),
+            renderStepVersion = renderStepVersion,
+            role = role,
+            blendPlan = blendPlan,
+            renderPipelineKey = renderPipelineKey,
+            bindingLayoutHash = bindingLayoutHash,
+            uniformSlot = semantic?.payloadRef?.uniformSlot,
+            semanticPayload = semantic,
+            vertexSourceLabel = vertexSourceLabel,
+            scissorBoundsHash = scissorBoundsHash,
+            targetStateHash = targetStateHash,
+            originalPaintOrder = 1,
+            resourceGeneration = if (semantic == null) 1L else PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+            frameProvenance = provenance,
+            clipCoveragePlan = clip,
+        )
+        return GPUFrameStep.RenderPassStep(
+            target = GPUFrameTargetRef("target.scene"),
+            loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+            samplePlan = samplePlan,
+            drawPackets = listOf(packet),
+            sourceTaskIds = listOf(GPUTaskID("task.render")),
+            batches = listOf(batch("batch.core", packet, "task.render")),
+        )
+    }
+
+    private fun coreSemantic(): GPUDrawSemanticPayload.CorePrimitive {
+        val blend = coreBlend(GPUBlendMode.SRC_OVER)
+        return GPUCorePrimitivePayloadGatherer().gatherSemantic(
+            GPUCorePrimitivePayloadInput(
+                commandIdValue = 41,
+                sourceFamily = GPUCorePrimitiveSourceFamily.Rect,
+                geometry = GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 3f, 3f),
+                premultipliedRgba = listOf(0.25f, 0.5f, 0.75f, 1f),
+                targetBounds = GPUPixelBounds(0, 0, 4, 4),
+                scissorBounds = GPUPixelBounds(0, 0, 4, 4),
+                clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+                blendPlanIdentity = blend.canonicalIdentity(),
+                frameProvenance = GPUFrameProvenance.GmContent,
+            ),
+        )
+    }
+
+    private fun coreBlend(mode: GPUBlendMode): GPUBlendPlan = GPUBlendPlan.FixedFunctionBlend(
+        mode = mode,
+        state = GPUFixedFunctionBlendState(
+            stateId = "state.${mode.name.lowercase()}",
+            color = GPUFixedFunctionBlendComponent("one", "one-minus-src-alpha", "add"),
+            alpha = GPUFixedFunctionBlendComponent("one", "one-minus-src-alpha", "add"),
+            writeMask = "rgba",
+        ),
+        sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+    )
 
     private fun preflightSolid(
         payload: GPUDrawSemanticPayload,

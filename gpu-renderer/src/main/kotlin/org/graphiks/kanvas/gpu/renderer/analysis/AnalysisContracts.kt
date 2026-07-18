@@ -1509,7 +1509,7 @@ class GPUFirstRoutePlanner(
                     width = strokeWidth,
                     cap = strokeCap.replaceFirstChar { it.uppercaseChar() },
                     join = strokeJoin.replaceFirstChar { it.uppercaseChar() },
-                    miter = 4f,
+                    miter = strokeMiterLimit,
                     dashOrPathEffectRef = dashIntervals?.let { "dash:${it.joinToString(",")}" },
                     transformClass = transform.type.name.lowercase(),
                     finiteWidth = strokeWidth > 0f && strokeWidth.isFinite(),
