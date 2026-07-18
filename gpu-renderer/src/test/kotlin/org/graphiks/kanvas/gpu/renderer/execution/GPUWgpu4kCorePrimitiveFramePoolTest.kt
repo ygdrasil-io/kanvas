@@ -131,6 +131,77 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     }
 
     @Test
+    fun `all uniform32 uniform64 uniform160 transitions replace only the incompatible bind group`() {
+        val identities = listOf(
+            PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY,
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY,
+        )
+        val transitions = identities.flatMap { from ->
+            identities.filter { it != from }.map { to -> from to to }
+        }
+
+        transitions.forEach { (from, to) ->
+            val factory = FakeFactory()
+            val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+            val initial = pool.acquire(requirements(componentIdentity = from)).acquiredLease()
+            initial.rollbackBeforeSubmit()
+
+            val transitioned = pool.acquire(requirements(componentIdentity = to)).acquiredLease()
+
+            assertEquals(initial.slotId, transitioned.slotId, "$from -> $to")
+            assertSame(initial.handles.vertexBuffer, transitioned.handles.vertexBuffer, "$from -> $to")
+            assertSame(initial.handles.indexBuffer, transitioned.handles.indexBuffer, "$from -> $to")
+            assertSame(initial.handles.uniformBuffer, transitioned.handles.uniformBuffer, "$from -> $to")
+            assertNotSame(initial.handles.bindGroup, transitioned.handles.bindGroup, "$from -> $to")
+            assertEquals(to, transitioned.handles.componentIdentity, "$from -> $to")
+            assertEquals(1, factory.closeAttempts(initial.handles.bindGroup), "$from -> $to")
+            assertEquals(0, factory.closeAttempts(initial.handles.uniformBuffer), "$from -> $to")
+
+            transitioned.rollbackBeforeSubmit()
+            pool.close()
+        }
+    }
+
+    @Test
+    fun `failed transition to uniform160 rolls back and a retry replaces only the bind group`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val uniform64 = pool.acquire(
+            requirements(componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY),
+        ).acquiredLease()
+        uniform64.rollbackBeforeSubmit()
+        factory.failNext(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup)
+
+        val refused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(
+            pool.acquire(
+                requirements(
+                    componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY,
+                ),
+            ),
+        )
+
+        assertIs<GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed>(refused.reason)
+        assertEquals(0, factory.closeAttempts(uniform64.handles.bindGroup))
+        assertEquals(0, factory.closeAttempts(uniform64.handles.uniformBuffer))
+
+        val retried = pool.acquire(
+            requirements(
+                componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY,
+            ),
+        ).acquiredLease()
+        assertSame(uniform64.handles.vertexBuffer, retried.handles.vertexBuffer)
+        assertSame(uniform64.handles.indexBuffer, retried.handles.indexBuffer)
+        assertSame(uniform64.handles.uniformBuffer, retried.handles.uniformBuffer)
+        assertNotSame(uniform64.handles.bindGroup, retried.handles.bindGroup)
+        assertEquals(1, factory.closeAttempts(uniform64.handles.bindGroup))
+        assertEquals(0, factory.closeAttempts(uniform64.handles.uniformBuffer))
+
+        retried.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
     fun `path attachment keeps its exact non power of two extent and reuses the same texture and view`() {
         val factory = FakeFactory()
         val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)

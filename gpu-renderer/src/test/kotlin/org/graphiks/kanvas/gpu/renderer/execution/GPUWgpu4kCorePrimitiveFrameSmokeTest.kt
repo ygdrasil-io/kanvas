@@ -10,6 +10,7 @@ import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
@@ -47,6 +48,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 
@@ -315,6 +317,171 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
             assertPixel(blendedBatch, 32, 4, 4, 0, 0, 128, 128)
             assertPixel(blendedBatch, 32, 12, 12, 128, 0, 64, 192)
             assertPixel(blendedBatch, 32, 25, 12, 0, 0, 128, 128)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `native analytic intersections prove product coverage depth four y blend scissor and batching`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(
+            backend != null,
+            "wgpu4k native adapter unavailable; skipping analytic-intersection pixel proofs",
+        )
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        fun rect(
+            left: Float,
+            top: Float,
+            right: Float,
+            bottom: Float,
+            antiAlias: Boolean,
+        ) = GPUClipAnalyticElement(
+            GPUClipExecutionGeometry.Rect(GPUClipBounds(left, top, right, bottom)),
+            antiAlias,
+        )
+        fun rrect(
+            left: Float,
+            top: Float,
+            right: Float,
+            bottom: Float,
+            radiusX: Float,
+            radiusY: Float,
+            antiAlias: Boolean,
+        ) = GPUClipAnalyticElement(
+            GPUClipExecutionGeometry.RRect(
+                GPUClipBounds(left, top, right, bottom),
+                List(4) { listOf(radiusX, radiusY) }.flatten(),
+            ),
+            antiAlias,
+        )
+        try {
+            val hardDepthTwo = renderAnalyticScenario(
+                session,
+                capabilities,
+                generation,
+                12_037L,
+                "intersection-hard-depth2-y-scissor",
+                listOf(
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticIntersection(
+                            listOf(
+                                rect(3f, 4f, 24f, 20f, antiAlias = false),
+                                rect(8f, 7f, 20f, 15f, antiAlias = false),
+                            ),
+                        ),
+                        SmokeColor(255, 96, 32),
+                    ),
+                ),
+            )
+            assertPixel(hardDepthTwo, 32, 10, 10, 255, 96, 32, 255)
+            assertPixel(hardDepthTwo, 32, 5, 10, 0, 0, 0, 0)
+            assertPixel(hardDepthTwo, 32, 10, 16, 0, 0, 0, 0)
+            assertPixel(hardDepthTwo, 32, 10, 3, 0, 0, 0, 0)
+
+            val mixedElliptic = renderAnalyticScenario(
+                session,
+                capabilities,
+                generation,
+                12_038L,
+                "intersection-rrect-rect-hard-aa",
+                listOf(
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticIntersection(
+                            listOf(
+                                rrect(4f, 4f, 24f, 20f, 5f, 3f, antiAlias = true),
+                                rect(6f, 3f, 22f, 18f, antiAlias = false),
+                            ),
+                        ),
+                        SmokeColor(0, 255, 0),
+                    ),
+                ),
+            )
+            assertPixel(mixedElliptic, 32, 12, 12, 0, 255, 0, 255)
+            assertPartialPrimaryPixel(mixedElliptic, 32, 6, 4, channel = 1)
+            assertPixel(mixedElliptic, 32, 5, 5, 0, 0, 0, 0)
+
+            val depthFour = renderAnalyticScenario(
+                session,
+                capabilities,
+                generation,
+                12_039L,
+                "intersection-depth4",
+                listOf(
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticIntersection(
+                            listOf(
+                                rect(1f, 1f, 31f, 31f, antiAlias = false),
+                                rect(3f, 2f, 29f, 30f, antiAlias = false),
+                                rrect(5f, 4f, 27f, 28f, 2f, 2f, antiAlias = false),
+                                rect(7f, 6f, 25f, 26f, antiAlias = false),
+                            ),
+                        ),
+                        SmokeColor(32, 96, 255),
+                    ),
+                ),
+            )
+            assertPixel(depthFour, 32, 16, 16, 32, 96, 255, 255)
+            assertPixel(depthFour, 32, 6, 16, 0, 0, 0, 0)
+
+            val batchedDifferentStacks = renderAnalyticScenario(
+                session,
+                capabilities,
+                generation,
+                12_040L,
+                "intersection-two-stacks-premul-src-over",
+                listOf(
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticIntersection(
+                            listOf(
+                                rect(0f, 0f, 32f, 32f, antiAlias = false),
+                                rrect(1f, 1f, 31f, 31f, 1f, 1f, antiAlias = false),
+                            ),
+                        ),
+                        SmokeColor(0, 0, 255, 128),
+                    ),
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticIntersection(
+                            listOf(
+                                rect(7f, 7f, 25f, 25f, antiAlias = false),
+                                rrect(8f, 8f, 24f, 24f, 2f, 2f, antiAlias = true),
+                                rect(8f, 8f, 24f, 24f, antiAlias = false),
+                                rect(9f, 9f, 23f, 23f, antiAlias = false),
+                            ),
+                        ),
+                        SmokeColor(255, 0, 0, 128),
+                    ),
+                ),
+            )
+            assertPixel(batchedDifferentStacks, 32, 4, 4, 0, 0, 128, 128)
+            assertPixel(batchedDifferentStacks, 32, 16, 16, 128, 0, 64, 192)
+            assertPixel(batchedDifferentStacks, 32, 26, 16, 0, 0, 128, 128)
+
+            val productCoverage = renderAnalyticScenario(
+                session,
+                capabilities,
+                generation,
+                12_047L,
+                "intersection-identical-aa-product",
+                listOf(
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticIntersection(
+                            listOf(
+                                rect(4.25f, 4.25f, 20.75f, 20.75f, antiAlias = true),
+                                rect(4.25f, 4.25f, 20.75f, 20.75f, antiAlias = true),
+                            ),
+                        ),
+                        SmokeColor(255, 0, 0),
+                    ),
+                ),
+            )
+            assertPixelChannelIn(productCoverage, 32, 4, 10, channel = 0, expected = 140..146)
+            assertPixel(productCoverage, 32, 5, 10, 255, 0, 0, 255)
+            assertPixel(productCoverage, 32, 3, 10, 0, 0, 0, 0)
         } finally {
             session.close()
             GPUBackendRuntimeNativeFactory.dispose()
@@ -633,6 +800,15 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
                 requireNotNull(packet.corePrimitivePreparedAuthority).structuralPipelineKey
             }.distinct().size,
         )
+        val framePlan = GPUFramePlanner.plan(taskList)
+        val forbiddenAttachmentRoles = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .filter { request -> request.role in setOf(
+                GPUFrameResourceRole.ClipMask,
+                GPUFrameResourceRole.ClipDepthStencil,
+                GPUFrameResourceRole.PathDepthStencil,
+            ) }
+        assertTrue(forbiddenAttachmentRoles.isEmpty())
 
         val nativeBefore = session.nativeCounters()
         val renderBefore = session.renderCounters()
@@ -714,7 +890,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
     }
 
     private data class AnalyticSmokeDraw(
-        val clip: GPUClipExecutionPlan.AnalyticCoverage,
+        val clip: GPUClipExecutionPlan,
         val color: SmokeColor,
     )
 
@@ -821,6 +997,21 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         val offset = (y * width + x) * 4
         val pixel = (0..3).map { bytes[offset + it].toInt() and 0xff }
         assertTrue(pixel[channel] in 1..254, "Expected a partial coverage pixel, observed $pixel")
+        assertEquals(pixel[channel], pixel[3])
+        pixel.indices.filter { it != channel && it != 3 }.forEach { assertEquals(0, pixel[it]) }
+    }
+
+    private fun assertPixelChannelIn(
+        bytes: ByteArray,
+        width: Int,
+        x: Int,
+        y: Int,
+        channel: Int,
+        expected: IntRange,
+    ) {
+        val offset = (y * width + x) * 4
+        val pixel = (0..3).map { bytes[offset + it].toInt() and 0xff }
+        assertTrue(pixel[channel] in expected, "Expected channel $channel in $expected, observed $pixel")
         assertEquals(pixel[channel], pixel[3])
         pixel.indices.filter { it != channel && it != 3 }.forEach { assertEquals(0, pixel[it]) }
     }

@@ -10,16 +10,21 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformBytes
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStepExecutionKind
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveAnalyticIntersectionPacketAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveAnalyticIntersectionUniformBytes
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
@@ -28,6 +33,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 /** Public-wgpu4k materializer for direct and unified indexed path CorePrimitive routes. */
@@ -114,23 +120,48 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 )
             Triple(renderStep, packet, semantic)
         }
+        val uniformLayout = preparedPassSeal.structuralPipelineKey.uniformLayout
         val analyticClipUniformSeals = preparedPassSeal.analyticClipUniformSeals
-        val analyticClipPass = analyticClipUniformSeals.isNotEmpty()
-        if (analyticClipPass && analyticClipUniformSeals.size != semanticPackets.size) {
+        val analyticIntersectionUniformSeals = preparedPassSeal.analyticIntersectionUniformSeals
+        val exactUniformAuthority = when (uniformLayout) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
+                preparedPassSeal.uniformSlabSeal != null && analyticClipUniformSeals.isEmpty() &&
+                    analyticIntersectionUniformSeals.isEmpty()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
+                preparedPassSeal.uniformSlabSeal == null &&
+                    analyticClipUniformSeals.size == semanticPackets.size &&
+                    analyticIntersectionUniformSeals.isEmpty()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
+                preparedPassSeal.uniformSlabSeal == null && analyticClipUniformSeals.isEmpty() &&
+                    analyticIntersectionUniformSeals.size == semanticPackets.size
+        }
+        if (!exactUniformAuthority) {
             return refused(
                 "invalid.native-core-primitive.analytic-uniform-seal",
-                "The analytic uniform64 pass seal must retain exactly one packet-order entry per draw.",
+                "The direct pass seal must retain exactly one complete packet-order uniform32, uniform64, or uniform160 authority.",
             )
         }
-        val expectedBindingLayoutHash = if (analyticClipPass) {
-            CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
-        } else {
-            CORE_PRIMITIVE_BINDING_LAYOUT_HASH
+        val sealedUniformPlan = when (uniformLayout) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
+                requireNotNull(preparedPassSeal.uniformSlabSeal).plan
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
+                analyticClipUniformSeals.first().plan
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
+                analyticIntersectionUniformSeals.first().plan
+        }
+        val expectedBindingLayoutHash = when (uniformLayout) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
+                CORE_PRIMITIVE_BINDING_LAYOUT_HASH
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
+                CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
+                CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
         }
         val targetBounds = semanticPackets.first().third.targetBounds
         val acceptedGeometries = semanticPackets.mapIndexed { packetIndex, (_, packet, semantic) ->
             val packetAuthority = packet.corePrimitivePreparedAuthority
             val expectedAnalyticSeal = analyticClipUniformSeals.getOrNull(packetIndex)
+            val expectedAnalyticIntersectionSeal = analyticIntersectionUniformSeals.getOrNull(packetIndex)
             if (!semantic.hasStructuralIntegrity() || packet.role != GPUDrawPacketRole.Shading ||
                 packet.commandIdValue != semantic.payloadRef.commandIdValue ||
                 packet.uniformSlot != semantic.payloadRef.uniformSlot ||
@@ -142,6 +173,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 packetAuthority.renderPipelineKey != packet.renderPipelineKey ||
                 packetAuthority.uniformSlabSeal !== preparedPassSeal.uniformSlabSeal ||
                 packetAuthority.analyticClipUniformSeal !== expectedAnalyticSeal ||
+                packetAuthority.analyticIntersectionUniformSeal !== expectedAnalyticIntersectionSeal ||
                 semantic.targetBounds != targetBounds || semantic.payloadRef.uniformBlock?.byteSize !=
                 CORE_PRIMITIVE_UNIFORM_BYTES.toLong() || semantic.payloadRef.uniformBlock.bytes !=
                 corePrimitiveUniformBytes(semantic.targetBounds, semantic.premultipliedRgba)
@@ -152,6 +184,75 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 )
             }
             sealedRoutes.routesByPacketId.getValue(packet.packetId)
+        }
+        if (uniformLayout ==
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1
+        ) {
+            val exactPayloads = mutableListOf<GPUUniformSlabPayload>()
+            val exactIntersectionAuthority = run validation@{
+                if (sealedUniformPlan.totalBytes > Int.MAX_VALUE.toLong() ||
+                    sealedUniformPlan.sourceLabel != "core-primitive-analytic-intersection-uniform-pass" ||
+                    sealedUniformPlan.slots.size != semanticPackets.size ||
+                    analyticIntersectionUniformSeals.any { seal -> seal.plan !== sealedUniformPlan }
+                ) return@validation false
+                val expectedPackedBytes = ByteArray(sealedUniformPlan.totalBytes.toInt())
+                semanticPackets.indices.forEach { packetIndex ->
+                    val (_, packet, semantic) = semanticPackets[packetIndex]
+                    val packetAuthority = requireNotNull(packet.corePrimitivePreparedAuthority)
+                    val packetClip = corePrimitiveAnalyticIntersectionPacketAuthority(
+                        packet,
+                        semantic.targetBounds,
+                    ) ?: return@validation false
+                    val expectedClip = packetClip.clip
+                    val seal = analyticIntersectionUniformSeals[packetIndex]
+                    val slot = sealedUniformPlan.slots[packetIndex]
+                    val expectedBytes = corePrimitiveAnalyticIntersectionUniformBytes(semantic, expectedClip)
+                    val exactRange = try {
+                        Math.addExact(slot.alignedOffset, 160L) <= sealedUniformPlan.totalBytes
+                    } catch (_: ArithmeticException) {
+                        false
+                    }
+                    val exactElements = seal.elements.size == expectedClip.elements.size &&
+                        seal.elements.indices.all { elementIndex ->
+                            val actual = seal.elements[elementIndex]
+                            val expected = expectedClip.elements[elementIndex]
+                            actual.clipType == expected.clipType && actual.clipBounds == expected.bounds &&
+                                actual.clipRadii == expected.packedRadii &&
+                                actual.antiAlias == expected.antiAlias
+                        }
+                    if (seal.slotIndex != packetIndex || seal.commandId != packet.commandIdValue ||
+                        seal.packetId != packet.packetId ||
+                        seal.clipCanonicalIdentity != packetClip.canonicalIdentity || !exactElements ||
+                        seal.conservativeScissor != expectedClip.conservativeScissor ||
+                        semantic.scissorBounds != expectedClip.conservativeScissor ||
+                        seal.structuralPipelineKey != packetAuthority.structuralPipelineKey ||
+                        seal.renderPipelineKey != packetAuthority.renderPipelineKey ||
+                        seal.bindingLayoutHash != CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH ||
+                        seal.resourceGeneration != packet.resourceGeneration ||
+                        seal.resourceGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
+                        seal.deviceGeneration != generationSeal.deviceGeneration.value ||
+                        seal.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+                        seal.payloadBytes != 160L || slot.payloadBytes != 160L ||
+                        slot.slotLabel != "analytic-intersection-draw-${packet.commandIdValue}" ||
+                        seal.alignedOffset != slot.alignedOffset || slot.alignedOffset > UInt.MAX_VALUE.toLong() ||
+                        !exactRange || !seal.hasExactPayload(expectedBytes)
+                    ) return@validation false
+                    expectedBytes.copyInto(expectedPackedBytes, slot.alignedOffset.toInt())
+                    exactPayloads += GPUUniformSlabPayload(slot.slotLabel, expectedBytes)
+                }
+                sealedUniformPlan.hasExactPayloads(
+                    "core-primitive-analytic-intersection-uniform-pass",
+                    generationSeal.deviceGeneration.value,
+                    limits.minUniformBufferOffsetAlignment,
+                    exactPayloads,
+                ) && preparedPassSeal.packedUniformBytesForUpload().contentEquals(expectedPackedBytes)
+            }
+            if (!exactIntersectionAuthority) {
+                return refused(
+                    "invalid.native-core-primitive.analytic-intersection-uniform-seal",
+                    "The uniform160 pass seal contradicts its exact packet, clip, layout, offset, payload, or generation authority.",
+                )
+            }
         }
         val arena = try {
             packCorePrimitiveFrameGeometry(acceptedGeometries)
@@ -311,7 +412,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "CorePrimitive uniform slab requires one exact buffer descriptor.",
             )
         val uniformSlabSeal = preparedPassSeal.uniformSlabSeal
-        val uniformSlabPlan = uniformSlabSeal?.plan ?: analyticClipUniformSeals.first().plan
+        val uniformSlabPlan = sealedUniformPlan
         if (uniformSlabPlan.deviceGeneration != generationSeal.deviceGeneration.value ||
             uniformSlabPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment
         ) {
@@ -346,14 +447,24 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             "unsupported.native-core-primitive.pipeline",
             "The direct CorePrimitive structural key has no exact native pipeline.",
         )
-        val expectedComponentIdentity = if (analyticClipPass) {
-            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
-        } else {
-            PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+        val expectedComponentIdentity = when (uniformLayout) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
+                PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
+                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
+                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
         }
-        if (pipelineMapping.componentIdentity != expectedComponentIdentity ||
-            pipelineMapping.identity.program.isAnalyticClip() != analyticClipPass
-        ) {
+        val exactProgram = when (uniformLayout) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
+                !pipelineMapping.identity.program.isAnalyticClip() &&
+                    !pipelineMapping.identity.program.isAnalyticIntersection4()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
+                pipelineMapping.identity.program.isAnalyticClip()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
+                pipelineMapping.identity.program.isAnalyticIntersection4()
+        }
+        if (pipelineMapping.componentIdentity != expectedComponentIdentity || !exactProgram) {
             return refused(
                 "invalid.native-core-primitive.pipeline-layout",
                 "The direct CorePrimitive pipeline and uniform layout authorities disagree.",

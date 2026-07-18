@@ -32,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
@@ -296,6 +297,164 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         assertEquals(null, render.pass.depthStencilTarget)
 
         assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `analytic intersections depth two and four share one uniform160 pipeline bind group and slab`() {
+        val fixture = fixture(analyticIntersection = true, useRealPreflight = true)
+        fixture.native.events.clear()
+
+        val materialized = fixture.materializeCore()
+        val render = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        val bindGroups = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+        val scissors = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetScissor>()
+        val preparedPackets = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single().drawPackets
+        val seals = preparedPackets.map { packet ->
+            requireNotNull(packet.corePrimitivePreparedAuthority?.analyticIntersectionUniformSeal)
+        }
+        val expectedUpload = ByteArray(seals.first().plan.totalBytes.toInt()).also { packed ->
+            seals.forEach { seal ->
+                seal.payloadBytesSnapshot().copyInto(packed, seal.alignedOffset.toInt())
+            }
+        }
+
+        assertEquals(listOf(2, 4), seals.map { it.elements.size })
+        assertEquals(1, render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>().size)
+        assertEquals(listOf(listOf(0L), listOf(256L)), bindGroups.map { it.dynamicOffsets })
+        assertEquals(1, distinctIdentityCount(bindGroups.map { it.bindGroup.bindGroup }))
+        assertEquals(seals.map { it.conservativeScissor }, scissors.map {
+            GPUPixelBounds(it.x, it.y, it.x + it.width, it.y + it.height)
+        })
+        assertEquals(3, fixture.native.writeBufferCalls.size)
+        assertContentEquals(expectedUpload, fixture.native.writeBufferCalls.last().snapshot)
+        val uniformLayout = fixture.native.bindGroupLayoutDescriptors.single().entries.single().buffer
+        assertEquals(160uL, requireNotNull(uniformLayout).minBindingSize)
+        assertEquals(null, render.pass.depthStencilTarget)
+        assertTrue(fixture.native.textureDescriptors.none {
+            it.format == GPUTextureFormat.Depth24PlusStencil8
+        })
+
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `typed uniform160 packet seal substitution refuses before every native action`() {
+        val fixture = fixture(analyticIntersection = true, useRealPreflight = true)
+        val render = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val first = render.drawPackets.first()
+        val secondSeal = requireNotNull(
+            render.drawPackets.last().corePrimitivePreparedAuthority?.analyticIntersectionUniformSeal,
+        )
+        val originalAuthority = requireNotNull(first.corePrimitivePreparedAuthority)
+        val substituted = first.withPreparedAuthority(
+            originalAuthority.copy(analyticIntersectionUniformSeal = secondSeal),
+        )
+        val plan = fixture.plan.replacingPacket(first, substituted)
+        fixture.native.events.clear()
+
+        val result = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target,
+            fixture.cache,
+            fixture.limits,
+        ).materializeReusable(plan, fixture.encoderPlan, fixture.resources, fixture.generationSeal)
+
+        assertEquals(
+            "invalid.native-core-primitive.packet-authority",
+            assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result).code,
+        )
+        assertEquals(emptyList(), fixture.native.events)
+        fixture.close()
+    }
+
+    @Test
+    fun `typed uniform160 payload corruption refuses before every native action`() {
+        val fixture = fixture(analyticIntersection = true, useRealPreflight = true)
+        val render = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val first = render.drawPackets.first()
+        val originalAuthority = requireNotNull(first.corePrimitivePreparedAuthority)
+        val originalSeal = requireNotNull(originalAuthority.analyticIntersectionUniformSeal)
+        val corruptedPayload = originalSeal.payloadBytesSnapshot().also { bytes ->
+            bytes[bytes.lastIndex] = (bytes.last().toInt() xor 0xff).toByte()
+        }
+        val corruptedSeal = org.graphiks.kanvas.gpu.renderer.passes
+            .GPUCorePrimitiveAnalyticIntersectionUniformSeal(
+                originalSeal.plan,
+                originalSeal.slotIndex,
+                originalSeal.commandId,
+                originalSeal.packetId,
+                originalSeal.clipCanonicalIdentity,
+                originalSeal.elements,
+                originalSeal.conservativeScissor,
+                originalSeal.structuralPipelineKey,
+                originalSeal.renderPipelineKey,
+                originalSeal.bindingLayoutHash,
+                originalSeal.resourceGeneration,
+                corruptedPayload,
+            )
+        val corruptedPacket = first.withPreparedAuthority(
+            originalAuthority.copy(analyticIntersectionUniformSeal = corruptedSeal),
+        )
+        val plan = fixture.plan.replacingPacket(first, corruptedPacket)
+        val originalScope = fixture.encoderPlan.scopes.single()
+        val originalRoutes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            originalScope.corePrimitiveDirectNativeRouteSeal,
+        )
+        val originalPass = requireNotNull(originalRoutes.preparedPassSeal)
+        val corruptedSeals = originalPass.analyticIntersectionUniformSeals.map { seal ->
+            if (seal === originalSeal) corruptedSeal else seal
+        }
+        val corruptedPass = GPUCorePrimitiveDirectPreparedPassSeal(
+            originalPass.structuralPipelineKey,
+            uniformSlabSeal = null,
+            analyticIntersectionUniformSeals = corruptedSeals,
+            analyticIntersectionPackedBytes = originalPass.packedUniformBytesForUpload(),
+        )
+        val corruptedScope = GPUCommandEncoderScopePlan(
+            sourceStepIndex = originalScope.sourceStepIndex,
+            operationKind = originalScope.operationKind,
+            scopeLabel = originalScope.scopeLabel,
+            sourceTaskIds = originalScope.sourceTaskIds,
+            sourcePacketIds = originalScope.sourcePacketIds,
+            facadeOperationClasses = originalScope.facadeOperationClasses,
+            targetGeneration = originalScope.targetGeneration,
+            resourceGenerationLabels = originalScope.resourceGenerationLabels,
+            passCommandStream = originalScope.passCommandStream,
+            corePrimitiveDirectNativeRouteSeal = GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(
+                originalRoutes.routesByPacketId,
+                corruptedPass,
+            ),
+            corePrimitivePathStencilNativeRouteSeal = originalScope.corePrimitivePathStencilNativeRouteSeal,
+            corePrimitiveNativeScopeRouteSeal = originalScope.corePrimitiveNativeScopeRouteSeal,
+        ).attachNativeOperandKeys(originalScope.nativeOperandKeys)
+        val encoderPlan = GPUCommandEncoderPlan.ordered(
+            fixture.encoderPlan.planId,
+            fixture.encoderPlan.contextIdentity,
+            fixture.encoderPlan.deviceGeneration,
+            fixture.encoderPlan.targetGeneration,
+            listOf(corruptedScope),
+        )
+        fixture.native.events.clear()
+
+        val result = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target,
+            fixture.cache,
+            fixture.limits,
+        ).materializeReusable(plan, encoderPlan, fixture.resources, fixture.generationSeal)
+
+        assertEquals(
+            "invalid.native-core-primitive.analytic-intersection-uniform-seal",
+            assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result).code,
+        )
+        assertEquals(emptyList(), fixture.native.events)
         fixture.close()
     }
 
@@ -1076,7 +1235,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         routeShape: RouteShape = RouteShape.Direct,
         useRealPreflight: Boolean = false,
         analyticClip: Boolean = false,
+        analyticIntersection: Boolean = false,
     ): Fixture {
+        require(!analyticClip || !analyticIntersection)
         val generation = GPUDeviceGenerationID(23L)
         val capabilities = capabilities()
         val frameId = GPUFrameID(231L)
@@ -1092,7 +1253,52 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             }
         }.close().taskList
         val clipPlans = commandIds.associateWith { commandId ->
-            if (analyticClip) {
+            if (analyticIntersection) {
+                if (commandId == commandIds.first()) {
+                    GPUClipExecutionPlan.AnalyticIntersection(
+                        listOf(
+                            GPUClipAnalyticElement(
+                                GPUClipExecutionGeometry.Rect(GPUClipBounds(0.5f, 0.75f, 9.5f, 9.25f)),
+                                antiAlias = false,
+                            ),
+                            GPUClipAnalyticElement(
+                                GPUClipExecutionGeometry.RRect(
+                                    GPUClipBounds(1.25f, 1.5f, 8.75f, 8.5f),
+                                    List(4) { listOf(0.75f, 1.25f) }.flatten(),
+                                ),
+                                antiAlias = true,
+                            ),
+                        ),
+                    )
+                } else {
+                    GPUClipExecutionPlan.AnalyticIntersection(
+                        listOf(
+                            GPUClipAnalyticElement(
+                                GPUClipExecutionGeometry.RRect(
+                                    GPUClipBounds(1.5f, 0.5f, 11.5f, 10.5f),
+                                    List(4) { listOf(1.5f, 0.5f) }.flatten(),
+                                ),
+                                antiAlias = false,
+                            ),
+                            GPUClipAnalyticElement(
+                                GPUClipExecutionGeometry.Rect(GPUClipBounds(2f, 1f, 11f, 10f)),
+                                antiAlias = true,
+                            ),
+                            GPUClipAnalyticElement(
+                                GPUClipExecutionGeometry.Rect(GPUClipBounds(2.5f, 1.5f, 10.5f, 9.5f)),
+                                antiAlias = false,
+                            ),
+                            GPUClipAnalyticElement(
+                                GPUClipExecutionGeometry.RRect(
+                                    GPUClipBounds(3f, 2f, 10f, 9f),
+                                    List(4) { listOf(0.5f, 1f) }.flatten(),
+                                ),
+                                antiAlias = true,
+                            ),
+                        ),
+                    )
+                }
+            } else if (analyticClip) {
                 GPUClipExecutionPlan.AnalyticCoverage(
                     GPUClipExecutionGeometry.Rect(
                         if (commandId == commandIds.first()) {
@@ -1652,6 +1858,16 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         semantic, vertexSourceLabel, scissorBoundsHash, targetStateHash, originalPaintOrder,
         resourceGeneration, frameProvenance, clipCoveragePlan, clipExecutionPlan, diagnostics,
     )
+
+    private fun GPUDrawPacket.withPreparedAuthority(
+        authority: org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority,
+    ) = GPUDrawPacket(
+        packetId, commandIdValue, analysisRecordId, passId, layerId, bindingListId,
+        insertionReasonCode, sortKey, sortKeyPreimage, renderStepId, renderStepVersion, role,
+        blendPlan, renderPipelineKey, computePipelineKey, bindingLayoutHash, uniformSlot, resourceSlot,
+        semanticPayload, vertexSourceLabel, scissorBoundsHash, targetStateHash, originalPaintOrder,
+        resourceGeneration, frameProvenance, clipCoveragePlan, clipExecutionPlan, diagnostics,
+    ).attachCorePrimitivePreparedAuthority(authority)
 
     private fun GPUFramePlan.replacingPacket(
         original: GPUDrawPacket,
