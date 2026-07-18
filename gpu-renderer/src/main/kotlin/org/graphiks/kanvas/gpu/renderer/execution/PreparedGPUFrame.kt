@@ -25,6 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPhysicalPoolMaintenanceDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingLease
@@ -79,6 +80,18 @@ class GPUCommandEncoderScopePlan internal constructor(
     resourceGenerationLabels: List<String>,
     val passCommandStream: GPUPassCommandStream?,
     internal val corePrimitiveDirectNativeRouteSeal: GPUCorePrimitiveDirectNativeRouteSeal,
+    internal val corePrimitivePathStencilNativeRouteSeal: GPUCorePrimitivePathStencilNativeRouteSeal =
+        if (operationKind == GPUEncoderOperationKind.Render) {
+            GPUCorePrimitivePathStencilNativeRouteSeal.Empty
+        } else {
+            GPUCorePrimitivePathStencilNativeRouteSeal.Missing
+        },
+    internal val corePrimitiveNativeScopeRouteSeal: GPUCorePrimitiveNativeScopeRouteSeal =
+        if (operationKind == GPUEncoderOperationKind.Render) {
+            GPUCorePrimitiveNativeScopeRouteSeal.Empty
+        } else {
+            GPUCorePrimitiveNativeScopeRouteSeal.Missing
+        },
 ) {
     constructor(
         sourceStepIndex: Int,
@@ -117,6 +130,22 @@ class GPUCommandEncoderScopePlan internal constructor(
     internal fun attachNativeOperandKeys(keys: List<GPUPreparedNativeOperandKey>): GPUCommandEncoderScopePlan {
         check(nativeOperandKeys.isEmpty()) { "Native operand keys are already attached" }
         require(keys.isNotEmpty()) { "Native operand keys must not be empty" }
+        val pathSealed = corePrimitivePathStencilNativeRouteSeal is
+            GPUCorePrimitivePathStencilNativeRouteSeal.Pairs
+        val depthStencilKeys = keys.filter {
+            it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
+        }
+        require(
+            if (pathSealed) {
+                depthStencilKeys.size == 1 &&
+                    depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
+                    depthStencilKeys.single().ownership == GPUPreparedNativeOperandOwnership.Borrowed
+            } else {
+                depthStencilKeys.isEmpty()
+            },
+        ) {
+            "A path route requires exactly one borrowed depth/stencil texture-view operand, and other scopes forbid it"
+        }
         nativeOperandKeys = immutableList(keys)
         return this
     }
@@ -136,12 +165,67 @@ class GPUCommandEncoderScopePlan internal constructor(
             (operationKind == GPUEncoderOperationKind.Render) ==
                 (corePrimitiveDirectNativeRouteSeal !== GPUCorePrimitiveDirectNativeRouteSeal.Missing),
         ) { "Only Render encoder scopes retain a CorePrimitive direct native route seal" }
+        require(
+            (operationKind == GPUEncoderOperationKind.Render) ==
+                (corePrimitivePathStencilNativeRouteSeal !==
+                    GPUCorePrimitivePathStencilNativeRouteSeal.Missing),
+        ) { "Only Render encoder scopes retain a CorePrimitive path native route seal" }
+        require(
+            (operationKind == GPUEncoderOperationKind.Render) ==
+                (corePrimitiveNativeScopeRouteSeal !== GPUCorePrimitiveNativeScopeRouteSeal.Missing),
+        ) { "Only Render encoder scopes retain a unified CorePrimitive native route seal" }
         if (corePrimitiveDirectNativeRouteSeal is GPUCorePrimitiveDirectNativeRouteSeal.Routes) {
-            require(corePrimitiveDirectNativeRouteSeal.routesByPacketId.keys.toList() == this.sourcePacketIds) {
-                "Direct CorePrimitive route identities must exactly match render packet identities"
+            require(this.sourcePacketIds.containsOrderedSubsequence(
+                corePrimitiveDirectNativeRouteSeal.routesByPacketId.keys.toList(),
+            )) {
+                "Direct CorePrimitive route identities must be an ordered render-packet subset"
             }
         }
+        val pathPacketIds = when (corePrimitivePathStencilNativeRouteSeal) {
+            is GPUCorePrimitivePathStencilNativeRouteSeal.Pairs ->
+                corePrimitivePathStencilNativeRouteSeal.flattenedPacketIds
+            GPUCorePrimitivePathStencilNativeRouteSeal.Empty,
+            GPUCorePrimitivePathStencilNativeRouteSeal.Missing,
+            -> emptyList()
+        }
+        require(this.sourcePacketIds.containsOrderedSubsequence(pathPacketIds)) {
+            "Path CorePrimitive route identities must be an ordered render-packet subset"
+        }
+        val pathSealed = corePrimitivePathStencilNativeRouteSeal is
+            GPUCorePrimitivePathStencilNativeRouteSeal.Pairs
+        val unifiedContainsPath = (
+            corePrimitiveNativeScopeRouteSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
+            )?.orderedUnits?.any { unit ->
+            unit is GPUCorePrimitiveNativeScopeRouteUnit.PathPair
+        } == true
+        require(pathSealed == unifiedContainsPath) {
+            "Path and unified CorePrimitive seals must agree on path-pair ownership"
+        }
+        if (corePrimitiveNativeScopeRouteSeal is GPUCorePrimitiveNativeScopeRouteSeal.Routes) {
+            require(corePrimitiveNativeScopeRouteSeal.flattenedPacketIds == this.sourcePacketIds) {
+                "Unified CorePrimitive route identities must exactly match render packet identities"
+            }
+            val directPacketIds = when (corePrimitiveDirectNativeRouteSeal) {
+                is GPUCorePrimitiveDirectNativeRouteSeal.Routes ->
+                    corePrimitiveDirectNativeRouteSeal.routesByPacketId.keys.toList()
+                GPUCorePrimitiveDirectNativeRouteSeal.Empty,
+                GPUCorePrimitiveDirectNativeRouteSeal.Missing,
+                -> emptyList()
+            }
+            require(
+                (directPacketIds + pathPacketIds).toSet() == this.sourcePacketIds.toSet() &&
+                    directPacketIds.toSet().intersect(pathPacketIds.toSet()).isEmpty(),
+            ) { "Derived CorePrimitive route seals must exactly partition the unified seal" }
+        }
     }
+}
+
+private fun <T> List<T>.containsOrderedSubsequence(subsequence: List<T>): Boolean {
+    var next = 0
+    forEach { value ->
+        if (next < subsequence.size && value == subsequence[next]) next += 1
+    }
+    return next == subsequence.size
 }
 
 enum class GPUPreparedStepLane {
@@ -659,6 +743,46 @@ internal class PreparedGPUFrame(
             if (step is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep) {
                 require(scope.corePrimitiveDirectNativeRouteSeal !== GPUCorePrimitiveDirectNativeRouteSeal.Missing) {
                     "PreparedGPUFrame render scopes require a pure-preflight CorePrimitive route seal"
+                }
+                require(
+                    scope.corePrimitivePathStencilNativeRouteSeal !==
+                        GPUCorePrimitivePathStencilNativeRouteSeal.Missing,
+                ) {
+                    "PreparedGPUFrame render scopes require a pure-preflight CorePrimitive path route seal"
+                }
+                require(scope.corePrimitiveNativeScopeRouteSeal !== GPUCorePrimitiveNativeScopeRouteSeal.Missing) {
+                    "PreparedGPUFrame render scopes require a pure-preflight unified CorePrimitive route seal"
+                }
+                val pathSealed = scope.corePrimitivePathStencilNativeRouteSeal is
+                    GPUCorePrimitivePathStencilNativeRouteSeal.Pairs
+                val unifiedContainsPath = (
+                    scope.corePrimitiveNativeScopeRouteSeal as? GPUCorePrimitiveNativeScopeRouteSeal.Routes
+                    )?.orderedUnits?.any { unit ->
+                    unit is GPUCorePrimitiveNativeScopeRouteUnit.PathPair
+                } == true
+                val pathUses = step.resourceUses.filter {
+                    it.role == GPUFrameResourceRole.PathDepthStencil
+                }
+                val writablePathStencil = pathUses.size == 1 &&
+                    step.depthStencilLoadStore is
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil
+                val depthStencilKeys = scope.nativeOperandKeys.filter {
+                    it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
+                }
+                require(
+                    pathSealed == unifiedContainsPath &&
+                        pathSealed == (pathUses.size == 1) &&
+                        pathSealed == writablePathStencil &&
+                        pathSealed == (depthStencilKeys.size == 1) &&
+                        (!pathSealed || (
+                            pathUses.single().write &&
+                                pathUses.single().usage == GPUFrameResourceUsage.RenderAttachment &&
+                                depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
+                                depthStencilKeys.single().ownership ==
+                                GPUPreparedNativeOperandOwnership.Borrowed
+                            )),
+                ) {
+                    "Prepared path seal, unified pair, writable attachment use, load/store, and native operand must agree exactly"
                 }
                 val expectedPackets = step.drawPackets.map { it.packetId }
                 val stream = requireNotNull(scope.passCommandStream) {

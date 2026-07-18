@@ -104,6 +104,7 @@ internal enum class GPUPreparedNativeOperandKind {
 
 internal enum class GPUPreparedNativeOperandRole {
     RenderColorTarget,
+    RenderDepthStencilTarget,
     RenderMsaaColorTarget,
     RenderResolveTarget,
     RenderPipeline,

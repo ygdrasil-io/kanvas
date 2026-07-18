@@ -31,13 +31,22 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds as GPUCommandBounds
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
@@ -61,6 +70,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
@@ -88,6 +98,10 @@ import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotConsumerRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
+import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameTaskListBuilder
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameRenderBatch
@@ -96,9 +110,12 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingSeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
+import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputDescriptor
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskDependency
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskAtomicGroupID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskUseToken
@@ -419,6 +436,29 @@ class GPUFramePreflighterTest {
             ),
             scope.nativeOperandKeys.map { it.role to it.ownership },
         )
+        val forgedDepthStencilKeyScope = GPUCommandEncoderScopePlan(
+            scope.sourceStepIndex,
+            scope.operationKind,
+            scope.scopeLabel,
+            scope.sourceTaskIds,
+            scope.sourcePacketIds,
+            scope.facadeOperationClasses,
+            scope.targetGeneration,
+            scope.resourceGenerationLabels,
+            scope.passCommandStream,
+            scope.corePrimitiveDirectNativeRouteSeal,
+            scope.corePrimitivePathStencilNativeRouteSeal,
+            scope.corePrimitiveNativeScopeRouteSeal,
+        )
+        assertFailsWith<IllegalArgumentException> {
+            forgedDepthStencilKeyScope.attachNativeOperandKeys(
+                scope.nativeOperandKeys + GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                    GPUPreparedNativeOperandKind.TextureView,
+                    gpuPreparedNativeBindingKey("texture.direct.forged-depth"),
+                ),
+            )
+        }
     }
 
     @Test
@@ -466,6 +506,438 @@ class GPUFramePreflighterTest {
         assertEquals(1, scope.nativeOperandKeys.count {
             it.role == GPUPreparedNativeOperandRole.RenderPipeline
         })
+    }
+
+    @Test
+    fun `path stencil preflight retains one exact ordered pair seal without native materialization`() {
+        val plan = preparedPathFramePlan(mixed = false)
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+                RecordingResourceProvider(events),
+                RecordingCompletionProvider(events),
+                RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                capabilities = pathCapabilities(),
+            ).preflight(plan)
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            result,
+            (result as? GPUFramePreflightResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).frame
+
+        val render = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val scope = prepared.encoderPlan.scopes.single()
+        assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Empty>(scope.corePrimitiveDirectNativeRouteSeal)
+        val pathSeal = assertIs<GPUCorePrimitivePathStencilNativeRouteSeal.Pairs>(
+            scope.corePrimitivePathStencilNativeRouteSeal,
+        )
+        assertEquals(render.drawPackets.map(GPUDrawPacket::packetId), pathSeal.flattenedPacketIds)
+        assertEquals(1, pathSeal.orderedPairs.size)
+        val pair = pathSeal.orderedPairs.single()
+        assertEquals(GPUDrawPacketRole.PathStencilProducer, render.drawPackets[0].role)
+        assertEquals(GPUDrawPacketRole.PathStencilCover, render.drawPackets[1].role)
+        assertEquals(render.drawPackets[0].packetId, pair.producerPacketId)
+        assertEquals(render.drawPackets[1].packetId, pair.coverPacketId)
+        val preparedPass = requireNotNull(pathSeal.preparedPassSeal)
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey.Role
+                .PathStencilProducer,
+            preparedPass.orderedPairs.single().producerStructuralPipelineKey.role,
+        )
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey.Role
+                .PathStencilCover,
+            preparedPass.orderedPairs.single().coverStructuralPipelineKey.role,
+        )
+        assertSame(
+            requireNotNull(render.drawPackets[0].corePrimitivePreparedAuthority).uniformSlabSeal,
+            preparedPass.uniformSlabSeal,
+        )
+        val unified = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
+            scope.corePrimitiveNativeScopeRouteSeal,
+        )
+        assertEquals(render.drawPackets.map(GPUDrawPacket::packetId), unified.flattenedPacketIds)
+        assertEquals(
+            listOf(GPUCorePrimitiveNativeScopeRouteUnit.PathPair::class),
+            unified.orderedUnits.map { it::class },
+        )
+        assertEquals(
+            listOf(
+                GPUPreparedNativeOperandRole.RenderColorTarget,
+                GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+            ),
+            scope.nativeOperandKeys.map(GPUPreparedNativeOperandKey::role),
+        )
+        assertTrue(scope.nativeOperandKeys.all {
+            it.ownership == GPUPreparedNativeOperandOwnership.Borrowed
+        })
+        val missingDepthStencilKeyScope = GPUCommandEncoderScopePlan(
+            scope.sourceStepIndex,
+            scope.operationKind,
+            scope.scopeLabel,
+            scope.sourceTaskIds,
+            scope.sourcePacketIds,
+            scope.facadeOperationClasses,
+            scope.targetGeneration,
+            scope.resourceGenerationLabels,
+            scope.passCommandStream,
+            scope.corePrimitiveDirectNativeRouteSeal,
+            scope.corePrimitivePathStencilNativeRouteSeal,
+            scope.corePrimitiveNativeScopeRouteSeal,
+        )
+        assertFailsWith<IllegalArgumentException> {
+            missingDepthStencilKeyScope.attachNativeOperandKeys(
+                scope.nativeOperandKeys.filter {
+                    it.role != GPUPreparedNativeOperandRole.RenderDepthStencilTarget
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `mixed direct path direct preflight partitions derived seals and retains one ordered scope seal`() {
+        val plan = preparedPathFramePlan(mixed = true)
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+                RecordingResourceProvider(events),
+                RecordingCompletionProvider(events),
+                RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                capabilities = pathCapabilities(),
+            ).preflight(plan)
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            result,
+            (result as? GPUFramePreflightResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).frame
+
+        val render = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val scope = prepared.encoderPlan.scopes.single()
+        val direct = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            scope.corePrimitiveDirectNativeRouteSeal,
+        )
+        val path = assertIs<GPUCorePrimitivePathStencilNativeRouteSeal.Pairs>(
+            scope.corePrimitivePathStencilNativeRouteSeal,
+        )
+        val unified = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
+            scope.corePrimitiveNativeScopeRouteSeal,
+        )
+
+        assertEquals(listOf(render.drawPackets[0].packetId, render.drawPackets[3].packetId),
+            direct.routesByPacketId.keys.toList())
+        assertEquals(listOf(render.drawPackets[1].packetId, render.drawPackets[2].packetId),
+            path.flattenedPacketIds)
+        assertEquals(render.drawPackets.map(GPUDrawPacket::packetId), unified.flattenedPacketIds)
+        assertEquals(
+            listOf(
+                GPUCorePrimitiveNativeScopeRouteUnit.Direct::class,
+                GPUCorePrimitiveNativeScopeRouteUnit.PathPair::class,
+                GPUCorePrimitiveNativeScopeRouteUnit.Direct::class,
+            ),
+            unified.orderedUnits.map { it::class },
+        )
+        assertEquals(listOf(71, 72, 73), unified.commandIds)
+        val arena = packCorePrimitiveNativeScopeGeometry(unified)
+        assertEquals(
+            listOf(
+                GPUCorePrimitiveNativeScopeArenaRole.Direct,
+                GPUCorePrimitiveNativeScopeArenaRole.PathProducer,
+                GPUCorePrimitiveNativeScopeArenaRole.PathCover,
+                GPUCorePrimitiveNativeScopeArenaRole.Direct,
+            ),
+            arena.slices.map { it.role },
+        )
+        assertEquals(
+            listOf(
+                GPUPreparedNativeOperandRole.RenderColorTarget,
+                GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+            ),
+            scope.nativeOperandKeys.map(GPUPreparedNativeOperandKey::role),
+        )
+    }
+
+    @Test
+    fun `path stencil corruption matrix refuses before every provider side effect`() {
+        val valid = preparedPathFramePlan(mixed = false)
+        val render = valid.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val producer = render.drawPackets[0]
+        val cover = render.drawPackets[1]
+        val pathUse = render.resourceUses.single { it.role == GPUFrameResourceRole.PathDepthStencil }
+        val corruptions = listOf(
+            "order" to renderWith(render, drawPackets = listOf(cover, producer)),
+            "role" to renderWith(
+                render,
+                drawPackets = listOf(
+                    cloneCorePacket(producer, role = GPUDrawPacketRole.PathStencilCover),
+                    cover,
+                ),
+            ),
+            "command" to renderWith(
+                render,
+                drawPackets = listOf(cloneCorePacket(producer, commandIdValue = 999), cover),
+            ),
+            "key" to renderWith(
+                render,
+                drawPackets = listOf(
+                    cloneCorePacket(
+                        producer,
+                        renderPipelineKey = GPURenderPipelineKey("pipeline.corrupt.path"),
+                    ),
+                    cover,
+                ),
+            ),
+            "scissor" to renderWith(
+                render,
+                drawPackets = listOf(cloneCorePacket(producer, scissorBoundsHash = "scissor.corrupt"), cover),
+            ),
+            "depth-stencil" to renderWith(render, depthStencilLoadStore = null),
+            "resource-use" to renderWith(render, resourceUses = render.resourceUses - pathUse),
+            "slab" to renderWith(
+                render,
+                drawPackets = listOf(cloneCorePacket(producer, dropUniformSlabSeal = true), cover),
+            ),
+        )
+
+        corruptions.forEach { (label, corruptedRender) ->
+            val plan = replaceRender(valid, corruptedRender)
+            val events = mutableListOf<String>()
+            val result = preflighter(
+                RecordingResourceProvider(events),
+                RecordingCompletionProvider(events),
+                RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                capabilities = pathCapabilities(),
+            ).preflight(plan)
+
+            assertIs<GPUFramePreflightResult.Refused>(result, label)
+            assertTrue(events.isEmpty(), "$label escaped pure validation: $events")
+        }
+    }
+
+    @Test
+    fun `unsupported path clip refuses before every provider side effect`() {
+        val valid = preparedPathFramePlan(mixed = false)
+        val render = valid.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val producer = render.drawPackets[0]
+        val cover = render.drawPackets[1]
+        val unsupportedClip = GPUClipExecutionPlan.AnalyticCoverage(
+            geometry = GPUClipExecutionGeometry.Rect(GPUBounds(0f, 0f, 4f, 4f)),
+            scissor = null,
+            antiAlias = true,
+        )
+        val forgedSemantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(producer.semanticPayload)
+            .withClipExecutionPlanIdentity(unsupportedClip.canonicalIdentity())
+        val forgedRender = renderWith(
+            render,
+            drawPackets = listOf(
+                cloneCorePacket(
+                    producer,
+                    clipExecutionPlan = unsupportedClip,
+                    semanticPayload = forgedSemantic,
+                ),
+                cloneCorePacket(
+                    cover,
+                    clipExecutionPlan = unsupportedClip,
+                    semanticPayload = forgedSemantic,
+                ),
+            ),
+        )
+        val plan = replaceRender(valid, forgedRender)
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+            RecordingResourceProvider(events),
+            RecordingCompletionProvider(events),
+            RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+            capabilities = pathCapabilities(),
+        ).preflight(plan)
+
+        assertEquals(
+            "invalid.preflight.core_primitive_path_stencil",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertTrue(events.isEmpty(), "unsupported path clip escaped pure validation: $events")
+    }
+
+    @Test
+    fun `direct only depth stencil forgery refuses before every provider side effect`() {
+        val valid = framePlan(listOf(coreDirectPrepare(), coreRenderStep(coreSemantic())))
+        val prepare = valid.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().single()
+        val render = valid.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val packet = render.drawPackets.single()
+        val neutralStructural = requireNotNull(packet.corePrimitivePreparedAuthority)
+            .structuralPipelineKey.copy(depthStencil = corePrimitiveDirectPathDepthStencilState())
+        val neutralPipeline = neutralStructural.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
+        val forgedPacket = cloneCorePacket(
+            packet,
+            renderPipelineKey = neutralPipeline,
+            structuralPipelineKey = neutralStructural,
+        )
+        val depthStencil = GPUFrameTextureRef("texture.core.direct-forged-depth-stencil")
+        val forgedPrepare = GPUFrameStep.PrepareResourcesStep(
+            prepare.requests + GPUResourcePreparationRequest(
+                depthStencil,
+                GPUFrameTextureDescriptor(
+                    GPUPixelBounds(0, 0, 4, 4),
+                    GPUColorFormat("depth24plus-stencil8"),
+                    1,
+                ),
+                GPUFrameResourceRole.PathDepthStencil,
+                setOf(GPUFrameResourceUsage.RenderAttachment),
+                GPUFrameResourceLifetime.FrameLocal,
+                64L,
+                "core.direct-forged-depth-stencil",
+            ),
+            prepare.sourceTaskIds,
+        )
+        val forgedRender = renderWith(
+            render,
+            drawPackets = listOf(forgedPacket),
+            resourceUses = render.resourceUses + GPUFrameResourceUse(
+                depthStencil,
+                GPUFrameResourceRole.PathDepthStencil,
+                GPUFrameResourceUsage.RenderAttachment,
+                GPUFrameResourceLifetime.FrameLocal,
+                true,
+            ),
+            depthStencilLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
+                GPUStencilLoadOperation.Clear,
+                GPUStorePlan.Discard,
+                0u,
+            ),
+        )
+        val plan = valid.withSteps(listOf(forgedPrepare, forgedRender))
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+            RecordingResourceProvider(events),
+            RecordingCompletionProvider(events),
+            RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+        ).preflight(plan)
+
+        assertIs<GPUFramePreflightResult.Refused>(result)
+        assertTrue(events.isEmpty(), "direct PathDepthStencil forgery escaped pure validation: $events")
+    }
+
+    @Test
+    fun `path shared geometry roles and refs are exclusive to its unique render scope`() {
+        val valid = preparedPathFramePlan(mixed = false)
+        val render = valid.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val vertexUse = render.resourceUses.single { it.role == GPUFrameResourceRole.VertexData }
+        val foreignPacket = packet("packet.foreign.path-resource", 990)
+        val foreignRender = GPUFrameStep.RenderPassStep(
+            target = render.target,
+            loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+            resourceUses = listOf(vertexUse),
+            drawPackets = listOf(foreignPacket),
+            sourceTaskIds = listOf(GPUTaskID("task.foreign.path-resource")),
+            batches = listOf(batch("batch.foreign.path-resource", foreignPacket, "task.foreign.path-resource")),
+        )
+        val aliasedPathRender = renderWith(
+            render,
+            resourceUses = render.resourceUses + vertexUse.copy(role = GPUFrameResourceRole.StorageData),
+        )
+        val foreignCompute = GPUFrameStep.ComputePassStep(
+            target = render.target,
+            resourceUses = listOf(vertexUse),
+            dispatches = listOf(GPUComputeDispatch(GPUComputePipelineKey("compute.foreign.path-resource"), 1, 1, 1)),
+            sourceTaskIds = listOf(GPUTaskID("task.compute.foreign.path-resource")),
+        )
+        val foreignUpload = GPUFrameStep.UploadResourceStep(
+            staging = vertexUse.resource as GPUFrameBufferRef,
+            destination = render.target,
+            layout = GPUUploadLayout(0, 4, 1, 4),
+            sourceTaskIds = listOf(GPUTaskID("task.upload.foreign.path-resource")),
+        )
+        val foreignCopy = GPUFrameStep.CopyResourceStep(
+            source = vertexUse.resource,
+            destination = render.target,
+            regions = listOf(GPUResourceCopyRegion(0, 0, null, 4)),
+            sourceTaskIds = listOf(GPUTaskID("task.copy.foreign.path-resource")),
+        )
+        val scenarios = listOf(
+            "render" to valid.withSteps(valid.steps + foreignRender),
+            "aliased-path-render" to replaceRender(valid, aliasedPathRender),
+            "compute" to valid.withSteps(valid.steps + foreignCompute),
+            "upload" to valid.withSteps(valid.steps + foreignUpload),
+            "copy" to valid.withSteps(valid.steps + foreignCopy),
+        )
+
+        scenarios.forEach { (label, plan) ->
+            val events = mutableListOf<String>()
+            val result = preflighter(
+                RecordingResourceProvider(events),
+                RecordingCompletionProvider(events),
+                RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                capabilities = pathCapabilities(),
+            ).preflight(plan)
+
+            assertIs<GPUFramePreflightResult.Refused>(result, label)
+            assertTrue(events.isEmpty(), "$label escaped pure validation: $events")
+        }
+    }
+
+    @Test
+    fun `forged direct structural role refuses before provider and native side effects`() {
+        val valid = framePlan(listOf(coreDirectPrepare(), coreRenderStep(coreSemantic())))
+        val render = valid.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val directPacket = render.drawPackets.single()
+        val pathPlan = preparedPathFramePlan(mixed = false)
+        val pathProducerAuthority = requireNotNull(
+            pathPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+                .drawPackets.first().corePrimitivePreparedAuthority,
+        )
+        val forgedPacket = cloneCorePacket(
+            directPacket,
+            renderPipelineKey = pathProducerAuthority.renderPipelineKey,
+            structuralPipelineKey = pathProducerAuthority.structuralPipelineKey,
+        )
+        val plan = replaceRender(valid, renderWith(render, drawPackets = listOf(forgedPacket)))
+        val events = mutableListOf<String>()
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        try {
+            val result = preflighter(
+                resources,
+                RecordingCompletionProvider(events),
+                RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                nativeBoundary = adapter.bindNativeFrameBoundary(
+                    resources,
+                    RenderOnlyNativePayloadMaterializer(events),
+                ),
+            ).preflight(plan)
+
+            assertIs<GPUFramePreflightResult.Refused>(result)
+            assertTrue(events.isEmpty(), "forged role escaped pure validation: $events")
+            assertEquals(0, resources.pendingPhysicalReservationCount)
+            assertTrue(resources.telemetry.dumpEvents.isEmpty())
+        } finally {
+            adapter.close()
+        }
     }
 
     @Test
@@ -2277,9 +2749,10 @@ class GPUFramePreflighterTest {
         surface: GPUSurfaceOutputProvider,
         context: GPUFramePreflightContext = preflightContext(),
         nativeBoundary: GPUPreparedNativeFrameBoundary? = null,
+        capabilities: GPUCapabilities = capabilities(),
     ): GPUFramePreflighter = GPUFramePreflighter(
         context = context,
-        capabilities = capabilities(),
+        capabilities = capabilities,
         resourceProvider = resources,
         completionProvider = completion,
         surfaceProvider = surface,
@@ -2818,6 +3291,219 @@ class GPUFramePreflighterTest {
         ),
         sourceTaskIds = listOf(GPUTaskID("task.prepare")),
     )
+
+    private fun preparedPathFramePlan(mixed: Boolean): GPUFramePlan {
+        val commandIds = if (mixed) listOf(71, 72, 73) else listOf(72)
+        val pathCapabilities = pathCapabilities()
+        val base = GPURecorder(
+            GPURecordingID("recording.preflight.path"),
+            GPUFrameID(107),
+            pathCapabilities,
+        ).apply {
+            commandIds.forEachIndexed { paintOrder, commandId ->
+                record(pathBuilderCommand(commandId, paintOrder))
+            }
+        }.close().taskList.withCoreClipPlans(commandIds.associateWith { GPUClipExecutionPlan.NoClip })
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+        val semantics = commandIds.associateWith { commandId ->
+            if (commandId == 72) {
+                pathCoreSemantic()
+            } else {
+                coreSemantic(commandIdValue = commandId)
+            }
+        }
+        check(packets.map(GPUDrawPacket::commandIdValue).toSet() == semantics.keys) {
+            "base packet commands=${packets.map(GPUDrawPacket::commandIdValue)} semantics=${semantics.keys}"
+        }
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                GPUCorePrimitivePreparedFrameRequest(
+                    baseTaskList = base,
+                    capabilities = pathCapabilities,
+                    target = GPUFrameTargetRef("target.scene"),
+                    targetBounds = GPUPixelBounds(0, 0, 4, 4),
+                    semanticsByCommandId = semantics,
+                ),
+            ),
+        ).taskList
+        return GPUFramePlanner.plan(taskList).also { plan -> check(!plan.atomicallyRefused) }
+    }
+
+    private fun pathBuilderCommand(commandId: Int, paintOrder: Int) = GPUFillRectCommandBuilder.build(
+        commandId = GPUDrawCommandID(commandId),
+        rect = GPURect(1f, 1f, 3f, 3f),
+        target = GPUTargetFacts(4, 4, "rgba8unorm"),
+        material = GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f),
+        clip = GPUClipFacts(
+            kind = GPUClipKind.WideOpen,
+            bounds = GPUCommandBounds(0f, 0f, 4f, 4f),
+            coveragePlan = GPUClipCoveragePlan.NoClip,
+        ),
+        paintOrder = paintOrder,
+        source = GPUCommandSource("unit-test", "fillRect", GPUFrameProvenance.GmContent),
+    )
+
+    private fun pathCapabilities(): GPUCapabilities = GPUCapabilities(
+        implementation = GPUImplementationIdentity("GPU", "unit", "adapter", "device"),
+        facts = listOf(
+            GPUCapabilityFact("first_slice.fill_rect.native", "unit-test", "supported", true, "preflight"),
+            GPUCapabilityFact("first_slice.scissor.native", "unit-test", "supported", true, "preflight"),
+        ),
+        snapshotId = "preflight-path",
+        limits = GPULimits(
+            8192,
+            256,
+            256,
+            maxBufferSize = 1L shl 30,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+        ),
+        supportedTextureFormats = setOf(
+            io.ygdrasil.webgpu.GPUTextureFormat.RGBA8Unorm,
+        ),
+        rendererFeatures = setOf(
+            GPURendererFeature.RenderPass,
+            GPURendererFeature.CopyUpload,
+            GPURendererFeature.Readback,
+        ),
+    )
+
+    private fun GPUTaskList.withCoreClipPlans(
+        plans: Map<Int, GPUClipExecutionPlan>,
+    ): GPUTaskList = GPUTaskList(
+        frameId = frameId,
+        capabilitySeal = capabilitySeal,
+        recordingSeals = recordingSeals,
+        expectedReplayKeyHash = expectedReplayKeyHash,
+        tasks = tasks.map { task ->
+            if (task !is GPUTask.Render) return@map task
+            val packets = task.drawPackets.map { packet ->
+                cloneCorePacket(packet, clipExecutionPlan = plans.getValue(packet.commandIdValue))
+            }
+            GPUTask.Render(
+                task.taskId,
+                task.recordingId,
+                task.phase,
+                task.target,
+                task.loadStore,
+                task.samplePlan,
+                task.resourceUses,
+                task.provisionalSegmentKey,
+                packets,
+                packets.associate { packet ->
+                    packet.packetId to requireNotNull(task.batchEligibilityByPacketId[packet.packetId])
+                },
+                task.sampleContinuationKey,
+                task.compositeMembership,
+                task.depthStencilLoadStore,
+            )
+        },
+        dependencies = dependencies,
+        phaseOrder = phaseOrder,
+        memoryBudget = memoryBudget,
+        diagnostics = diagnostics,
+    )
+
+    private fun renderWith(
+        source: GPUFrameStep.RenderPassStep,
+        drawPackets: List<GPUDrawPacket> = source.drawPackets,
+        resourceUses: List<GPUFrameResourceUse> = source.resourceUses,
+        depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = source.depthStencilLoadStore,
+    ) = GPUFrameStep.RenderPassStep(
+        target = source.target,
+        loadStore = source.loadStore,
+        samplePlan = source.samplePlan,
+        resourceUses = resourceUses,
+        drawPackets = drawPackets,
+        sourceTaskIds = source.sourceTaskIds,
+        batches = listOf(
+            GPUFrameRenderBatch(
+                batchId = source.batches.first().batchId,
+                kind = source.batches.first().kind,
+                packets = drawPackets,
+                sourceTaskIds = source.sourceTaskIds,
+            ),
+        ),
+        depthStencilLoadStore = depthStencilLoadStore,
+    )
+
+    private fun replaceRender(
+        plan: GPUFramePlan,
+        replacement: GPUFrameStep.RenderPassStep,
+    ): GPUFramePlan {
+        val original = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        return GPUFramePlan(
+            frameId = plan.frameId,
+            capabilitySeal = plan.capabilitySeal,
+            recordingSeals = plan.recordingSeals,
+            steps = plan.steps.map { step -> if (step === original) replacement else step },
+            memoryBudget = plan.memoryBudget,
+            diagnostics = plan.diagnostics,
+            dependencies = plan.dependencies,
+        )
+    }
+
+    private fun GPUFramePlan.withSteps(replacement: List<GPUFrameStep>): GPUFramePlan = GPUFramePlan(
+        frameId,
+        capabilitySeal,
+        recordingSeals,
+        replacement,
+        memoryBudget,
+        diagnostics,
+        dependencies,
+    )
+
+    private fun cloneCorePacket(
+        packet: GPUDrawPacket,
+        role: GPUDrawPacketRole = packet.role,
+        commandIdValue: Int = packet.commandIdValue,
+        renderPipelineKey: GPURenderPipelineKey = requireNotNull(packet.renderPipelineKey),
+        scissorBoundsHash: String? = packet.scissorBoundsHash,
+        clipExecutionPlan: GPUClipExecutionPlan? = packet.clipExecutionPlan,
+        semanticPayload: GPUDrawSemanticPayload? = packet.semanticPayload,
+        dropUniformSlabSeal: Boolean = false,
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey? =
+            packet.corePrimitivePreparedAuthority?.structuralPipelineKey,
+    ): GPUDrawPacket {
+        val cloned = GPUDrawPacket(
+            packetId = packet.packetId,
+            commandIdValue = commandIdValue,
+            analysisRecordId = packet.analysisRecordId,
+            passId = packet.passId,
+            layerId = packet.layerId,
+            bindingListId = packet.bindingListId,
+            insertionReasonCode = packet.insertionReasonCode,
+            sortKey = packet.sortKey,
+            sortKeyPreimage = packet.sortKeyPreimage,
+            renderStepId = packet.renderStepId,
+            renderStepVersion = packet.renderStepVersion,
+            role = role,
+            blendPlan = packet.blendPlan,
+            renderPipelineKey = renderPipelineKey,
+            computePipelineKey = packet.computePipelineKey,
+            bindingLayoutHash = packet.bindingLayoutHash,
+            uniformSlot = packet.uniformSlot,
+            resourceSlot = packet.resourceSlot,
+            semanticPayload = semanticPayload,
+            vertexSourceLabel = packet.vertexSourceLabel,
+            scissorBoundsHash = scissorBoundsHash,
+            targetStateHash = packet.targetStateHash,
+            originalPaintOrder = packet.originalPaintOrder,
+            resourceGeneration = packet.resourceGeneration,
+            frameProvenance = packet.frameProvenance,
+            clipCoveragePlan = packet.clipCoveragePlan,
+            clipExecutionPlan = clipExecutionPlan,
+            diagnostics = packet.diagnostics,
+            clipProducerAuthority = packet.clipProducerAuthority,
+        )
+        val authority = packet.corePrimitivePreparedAuthority ?: return cloned
+        return cloned.attachCorePrimitivePreparedAuthority(
+            authority.copy(
+                structuralPipelineKey = structuralPipelineKey ?: authority.structuralPipelineKey,
+                renderPipelineKey = renderPipelineKey,
+                uniformSlabSeal = authority.uniformSlabSeal.takeUnless { dropUniformSlabSeal },
+            ),
+        )
+    }
 
     private fun coreDirectPrepare(
         vertexBytes: Long = 32L,
@@ -3388,6 +4074,28 @@ class GPUFramePreflighterTest {
         )
     }
 
+    private fun pathCoreSemantic(
+        clipExecutionPlan: GPUClipExecutionPlan = GPUClipExecutionPlan.NoClip,
+    ): GPUDrawSemanticPayload.CorePrimitive = coreSemantic(
+        clipExecutionPlan = clipExecutionPlan,
+        commandIdValue = 72,
+        sourceFamily = GPUCorePrimitiveSourceFamily.Path,
+        geometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+            vertices = listOf(
+                -1f, -1f, 1f, 1f, 3f, 1f,
+                -1f, -1f, 3f, 1f, 2f, 3f,
+                -1f, -1f, 2f, 3f, 1f, 1f,
+            ),
+            indices = (0..8).toList(),
+            sourceContourStarts = listOf(0),
+            sourceVertexCount = 3,
+            coverBounds = GPUPixelBounds(0, 0, 4, 4),
+            geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+            fillRule = GPUCorePrimitiveFillRule.Winding,
+        ),
+        coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
+    )
+
     private fun rectGeometryAuthorityFixture(
         geometry: GPUCorePrimitiveGeometryInput.Rect,
     ) = corePrimitiveRectGeometryAuthority(
@@ -3747,7 +4455,7 @@ class GPUFramePreflighterTest {
     private fun clipPreflightContext(plan: GPUFramePlan): GPUFramePreflightContext =
         GPUFramePreflightContext(
             targetId = "target.scene",
-            deviceGeneration = GPUDeviceGenerationID(7),
+            deviceGeneration = plan.capabilitySeal.deviceGeneration,
             targetGeneration = 1,
             resourceGenerations = plan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
                 .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
