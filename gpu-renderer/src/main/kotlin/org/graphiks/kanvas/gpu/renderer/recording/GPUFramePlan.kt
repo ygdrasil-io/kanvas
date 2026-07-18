@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupK
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
@@ -947,6 +948,8 @@ private fun CanonicalHashSink.packet(value: GPUDrawPacket) {
     }
     string("vertexSourceLabel", value.vertexSourceLabel)
     nullableString("scissorBoundsHash", value.scissorBoundsHash)
+    nullableString("clipExecutionPlan", value.clipExecutionPlan?.canonicalIdentity())
+    nullableString("clipProducerAuthority", value.clipProducerAuthority?.selectorIdentity)
     string("targetStateHash", value.targetStateHash)
     int("originalPaintOrder", value.originalPaintOrder)
     long("resourceGeneration", value.resourceGeneration)
@@ -1387,7 +1390,9 @@ private fun GPUDrawPacket.stableDump(): String =
         "uniform=${uniformSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.byteOffset}" } ?: "none"}|" +
         "resource=${resourceSlot?.let { "${it.slotId.value},${it.fingerprint.value},${it.bindingIndex}" } ?: "none"}|" +
         "semantic=${semanticPayload?.stableDump() ?: "none"}|" +
-        "vertex=$vertexSourceLabel|scissor=${scissorBoundsHash ?: "none"}|target=$targetStateHash|" +
+        "vertex=$vertexSourceLabel|scissor=${scissorBoundsHash ?: "none"}|" +
+        "clipExecution=${clipExecutionPlan?.canonicalIdentity() ?: "none"}|" +
+        "clipProducer=${clipProducerAuthority?.selectorIdentity ?: "none"}|target=$targetStateHash|" +
         "order=$originalPaintOrder|generation=$resourceGeneration|" +
         "diagnostics=${diagnostics.joinToString(";") { diagnostic ->
             "${diagnostic.code}|${diagnostic.passId}|${diagnostic.invocationId}|${diagnostic.terminal}"

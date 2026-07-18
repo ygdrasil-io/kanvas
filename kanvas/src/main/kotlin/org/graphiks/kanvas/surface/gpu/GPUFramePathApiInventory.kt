@@ -5,6 +5,7 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
@@ -77,6 +78,7 @@ data class GPUFramePathVisualCommand(
     val targetSpaceBounds: GPUBounds,
     val geometryCoverage: GPUCoverageConsumption,
     val clipCoverage: GPUClipCoveragePlan,
+    val clipExecutionPlan: GPUClipExecutionPlan,
     val blendPlan: GPUBlendPlan,
     val provenance: GPUFrameProvenance,
     val geometryRefusal: GPUCorePrimitiveGeometryRefusal? = null,
@@ -127,7 +129,7 @@ object GPUFramePathApiInventory {
         capabilities: GPUCapabilities = GPUProductFlagConfig.fromSystemProperties().buildCapabilities(),
         deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(0),
     ): GPUFramePathInventoryPlan {
-        val mapping = GPUOpMapper.mapOperations(operations, target, config)
+        val mapping = GPUOpMapper.mapOperations(operations, target, config, capabilities)
         val visual = mapping.visualCommands
 
         val recorder = GPURecorder(

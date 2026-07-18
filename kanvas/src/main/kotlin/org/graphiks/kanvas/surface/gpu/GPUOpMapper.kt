@@ -42,7 +42,26 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipOrderingToken
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
@@ -77,6 +96,7 @@ internal object GPUOpMapper {
         operations: List<DisplayOp>,
         target: GPUTargetFacts,
         config: RenderConfig,
+        capabilities: GPUCapabilities,
     ): GPUOpMapping {
         val visual = mutableListOf<GPUFramePathVisualCommand>()
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
@@ -117,12 +137,14 @@ internal object GPUOpMapper {
                         val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
                             GPUClipCoveragePlanner.plan(request, config, maxOf(target.width, target.height))
                         } ?: GPUClipCoveragePlan.NoClip
-                        val normalized = rawNormalized.withClipCoveragePlan(clipPlan)
+                        val clipExecutionPlan = clipPlan.toExecutionPlan(capabilities, target)
+                        val normalized = rawNormalized.withClipPlans(clipPlan, clipExecutionPlan)
                         visual += GPUFramePathVisualCommand(
                             normalized = normalized,
                             targetSpaceBounds = normalized.bounds,
                             geometryCoverage = coverage,
                             clipCoverage = clipPlan,
+                            clipExecutionPlan = clipExecutionPlan,
                             blendPlan = normalized.blend.canonicalBlendPlan(coverage),
                             provenance = provenance,
                             geometryRefusal = geometryRefusal,
@@ -396,14 +418,223 @@ private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = w
     else -> error("Geometry coverage requested for a non-Slice-12A command")
 }
 
-private fun NormalizedDrawCommand.withClipCoveragePlan(
-    plan: GPUClipCoveragePlan,
+private fun NormalizedDrawCommand.withClipPlans(
+    coveragePlan: GPUClipCoveragePlan,
+    executionPlan: GPUClipExecutionPlan,
 ): NormalizedDrawCommand = when (this) {
-    is NormalizedDrawCommand.FillRect -> copy(clip = clip.copy(coveragePlan = plan))
-    is NormalizedDrawCommand.FillRRect -> copy(clip = clip.copy(coveragePlan = plan))
-    is NormalizedDrawCommand.FillPath -> copy(clip = clip.copy(coveragePlan = plan))
+    is NormalizedDrawCommand.FillRect -> copy(
+        clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
+    )
+    is NormalizedDrawCommand.FillRRect -> copy(
+        clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
+    )
+    is NormalizedDrawCommand.FillPath -> copy(
+        clip = clip.copy(coveragePlan = coveragePlan, executionPlan = executionPlan),
+    )
     else -> error("Clip coverage attached to a non-Slice-12A command")
 }
+
+private fun GPUClipCoveragePlan.toExecutionPlan(
+    capabilities: GPUCapabilities,
+    target: GPUTargetFacts,
+): GPUClipExecutionPlan = when (this) {
+    GPUClipCoveragePlan.NoClip -> GPUClipExecutionPlan.NoClip
+    is GPUClipCoveragePlan.Scissor -> toScissorExecutionPlan(capabilities, target)
+    is GPUClipCoveragePlan.Refused -> GPUClipExecutionPlan.Refused(
+        code = code,
+        message = "Clip coverage planning refused before execution classification.",
+    )
+    is GPUClipCoveragePlan.Mask -> toMaskExecutionPlan(capabilities, target)
+}
+
+private fun GPUClipCoveragePlan.Scissor.toScissorExecutionPlan(
+    capabilities: GPUCapabilities,
+    target: GPUTargetFacts,
+): GPUClipExecutionPlan {
+    if (!capabilities.supportsClipCapability(SCISSOR_CLIP_CAPABILITY)) {
+        return clipExecutionRefusal(
+            code = "unsupported.clip.scissor_unavailable",
+            message = "Integral device clip execution requires native scissor support.",
+        )
+    }
+    val scalars = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
+    if (scalars.any { value -> !value.isFinite() || value != value.toInt().toFloat() }) {
+        return clipExecutionRefusal(
+            code = "unsupported.clip.scissor_invalid",
+            message = "Native scissor bounds must be finite integral device pixels.",
+        )
+    }
+    val left = bounds.left.toInt().coerceIn(0, target.width)
+    val top = bounds.top.toInt().coerceIn(0, target.height)
+    val right = bounds.right.toInt().coerceIn(0, target.width)
+    val bottom = bounds.bottom.toInt().coerceIn(0, target.height)
+    return if (right <= left || bottom <= top) {
+        clipExecutionRefusal(
+            code = "unsupported.clip.scissor_empty",
+            message = "Native scissor classification produced empty target bounds.",
+        )
+    } else {
+        GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(left, top, right, bottom))
+    }
+}
+
+private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
+    capabilities: GPUCapabilities,
+    target: GPUTargetFacts,
+): GPUClipExecutionPlan {
+    val single = elements.singleOrNull()
+    if (
+        single != null &&
+        single.operation == GPUClipCoverageOperation.Intersect &&
+        !single.inverseFill &&
+        single.kind != GPUClipCoverageElementKind.Path
+    ) {
+        if (!capabilities.supportsClipCapability(BOUNDED_CLIP_CAPABILITY)) {
+            return clipExecutionRefusal(
+                code = "unsupported.clip.analytic_unavailable",
+                message = "Analytic rect/rrect clip execution requires bounded clip support.",
+            )
+        }
+        return single.executionGeometryOrRefusal()?.let { geometry ->
+            GPUClipExecutionPlan.AnalyticCoverage(
+                geometry = geometry,
+                scissor = null,
+                antiAlias = single.antiAlias,
+            )
+        } ?: invalidClipGeometryRefusal(single)
+    }
+
+    if (
+        single != null &&
+        single.operation == GPUClipCoverageOperation.Intersect &&
+        single.kind == GPUClipCoverageElementKind.Path &&
+        !single.antiAlias
+    ) {
+        if (!capabilities.supportsClipCapability(STENCIL_CLIP_CAPABILITY)) {
+            return clipExecutionRefusal(
+                code = "unsupported.clip.stencil_unavailable",
+                message = "Path clip execution requires stencil-cover support.",
+            )
+        }
+        if (!capabilities.supportsClipCapability(BOUNDED_CLIP_CAPABILITY)) {
+            return clipExecutionRefusal(
+                code = "unsupported.clip.mask_unavailable",
+                message = "Path clip execution requires bounded clip support.",
+            )
+        }
+        val geometry = single.executionGeometryOrRefusal() as? GPUClipExecutionGeometry.Path
+            ?: return invalidClipGeometryRefusal(single)
+        val targetBounds = GPUPixelBounds(0, 0, target.width, target.height)
+        val (frontPassOperation, backPassOperation) = when (geometry.fillRule) {
+            org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule.Winding ->
+                GPUClipStencilOperation.IncrementWrap to GPUClipStencilOperation.DecrementWrap
+            org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule.EvenOdd ->
+                GPUClipStencilOperation.Invert to GPUClipStencilOperation.Invert
+        }
+        return GPUClipExecutionPlan.StencilCoverage(
+            contentKey = contentKey,
+            bounds = targetBounds,
+            sampleCount = sampleCount,
+            atomicGroup = GPUClipAtomicGroupID("clip-atomic:$contentKey"),
+            orderingToken = GPUClipOrderingToken("clip-order:$contentKey"),
+            producer = GPUClipStencilProducerPlan(
+                geometry = geometry,
+                scissor = null,
+                fillRule = geometry.fillRule,
+                reference = 0u,
+                compare = GPUClipStencilCompare.Always,
+                frontPassOperation = frontPassOperation,
+                backPassOperation = backPassOperation,
+                loadOperation = GPUClipStencilLoadOperation.Clear,
+                storeOperation = GPUClipStencilStoreOperation.Store,
+                clearValue = 0u,
+            ),
+            consumer = GPUClipStencilConsumerPlan(
+                scissor = null,
+                reference = 0u,
+                compare = if (geometry.inverseFill) {
+                    GPUClipStencilCompare.Equal
+                } else {
+                    GPUClipStencilCompare.NotEqual
+                },
+            ),
+        )
+    }
+
+    if (!capabilities.supportsClipCapability(BOUNDED_CLIP_CAPABILITY)) {
+        return clipExecutionRefusal(
+            code = "unsupported.clip.mask_unavailable",
+            message = "Ordered clip-mask execution requires bounded clip support.",
+        )
+    }
+    val producers = elements.mapIndexed { index, element ->
+        val geometry = element.executionGeometryOrRefusal()
+            ?: return invalidClipGeometryRefusal(element)
+        GPUClipMaskProducerPlan(
+            sourceOrder = index,
+            geometry = geometry,
+            combine = when (element.operation) {
+                GPUClipCoverageOperation.Intersect -> GPUClipMaskCombine.Intersect
+                GPUClipCoverageOperation.Difference -> GPUClipMaskCombine.Difference
+            },
+            antiAlias = element.antiAlias,
+        )
+    }
+    return GPUClipExecutionPlan.CoverageMask(
+        contentKey = contentKey,
+        bounds = GPUPixelBounds(0, 0, target.width, target.height),
+        sampleCount = sampleCount,
+        depthStencilRequired = elements.any { it.kind == GPUClipCoverageElementKind.Path },
+        orderingToken = GPUClipOrderingToken("clip-order:$contentKey"),
+        producers = producers,
+        consumer = GPUClipMaskConsumerPlan(),
+    )
+}
+
+private fun GPUClipCoverageElement.executionGeometryOrRefusal(): GPUClipExecutionGeometry? = try {
+    when (kind) {
+        GPUClipCoverageElementKind.Rect -> GPUClipExecutionGeometry.Rect(
+            GPUClipBounds(values[0], values[1], values[2], values[3]),
+        )
+        GPUClipCoverageElementKind.RRect -> GPUClipExecutionGeometry.RRect(
+            bounds = GPUClipBounds(values[0], values[1], values[2], values[3]),
+            radii = values.subList(4, 12),
+        )
+        GPUClipCoverageElementKind.Path -> {
+            val contourCount = values.first().toInt()
+            GPUClipExecutionGeometry.Path(
+                vertices = values.subList(1 + contourCount, values.size),
+                contourStarts = values.subList(1, 1 + contourCount).map(Float::toInt),
+                fillRule = fillRule,
+                inverseFill = inverseFill,
+            )
+        }
+    }
+} catch (_: IllegalArgumentException) {
+    null
+} catch (_: IndexOutOfBoundsException) {
+    null
+}
+
+private fun invalidClipGeometryRefusal(
+    element: GPUClipCoverageElement,
+): GPUClipExecutionPlan.Refused = clipExecutionRefusal(
+    code = "unsupported.clip.execution_geometry_invalid",
+    message = "${element.kind.name} clip geometry cannot be represented by the execution contract.",
+)
+
+private fun clipExecutionRefusal(code: String, message: String): GPUClipExecutionPlan.Refused =
+    GPUClipExecutionPlan.Refused(code = code, message = message)
+
+private fun GPUCapabilities.supportsClipCapability(name: String): Boolean =
+    knownUnsupportedFacts.none { fact -> fact.name == name } &&
+        facts.any { fact ->
+            fact.name == name && fact.value == "supported" && fact.affectsValidity
+        }
+
+private const val BOUNDED_CLIP_CAPABILITY = "first_slice.bounded_clip.native"
+private const val SCISSOR_CLIP_CAPABILITY = "first_slice.scissor.native"
+private const val STENCIL_CLIP_CAPABILITY = "first_slice.path_fill.stencil_cover"
 
 private fun NormalizedDrawCommand.localBounds(): GPUBounds = when (this) {
     is NormalizedDrawCommand.FillRect -> GPUBounds(rect.left, rect.top, rect.right, rect.bottom)

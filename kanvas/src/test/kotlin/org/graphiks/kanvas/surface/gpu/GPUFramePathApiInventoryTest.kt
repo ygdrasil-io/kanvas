@@ -6,12 +6,19 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotEquals
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -869,6 +876,309 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `mapper selects no clip once and propagates it unchanged to the draw packet`() {
+        val plan = GPUFramePathApiInventory.plan(
+            operations = listOf(DisplayOp.DrawRect(
+                Rect.fromLTRB(2f, 3f, 12f, 14f),
+                Paint.fill(Color.RED),
+                Matrix33.identity(),
+                org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+            )),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+
+        assertClipExecutionPropagation(plan, GPUClipExecutionPlan.NoClip)
+    }
+
+    @Test
+    fun `mapper selects exact integral scissor once and propagates it unchanged`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipRect(Rect.fromLTRB(3f, 4f, 24f, 27f), ClipOp.INTERSECT, antiAlias = false)
+            drawRect(Rect.fromLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+        val expected = GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(3, 4, 24, 27))
+
+        assertClipExecutionPropagation(plan, expected)
+    }
+
+    @Test
+    fun `mapper selects a single intersect rrect as analytic coverage`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipRRect(
+                RRect(Rect.fromLTRB(3f, 4f, 24f, 27f), radius = 3f),
+                ClipOp.INTERSECT,
+                antiAlias = true,
+            )
+            drawRect(Rect.fromLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+        val execution = assertIs<GPUClipExecutionPlan.AnalyticCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertIs<GPUClipExecutionGeometry.RRect>(execution.geometry)
+        assertTrue(execution.antiAlias)
+        assertClipExecutionPropagation(plan, execution)
+    }
+
+    @Test
+    fun `mapper selects one path clip as stencil only when stencil capability exists`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(
+                Path().apply {
+                    moveTo(3f, 3f)
+                    lineTo(26f, 4f)
+                    lineTo(14f, 27f)
+                    close()
+                },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawRect(Rect.fromLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+        }
+        val capabilities = capabilitiesWith(
+            FILL_RECT_CAPABILITY,
+            "first_slice.path_fill.stencil_cover",
+        )
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilities,
+        )
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+        assertEquals(execution.atomicGroup.value, "clip-atomic:${execution.contentKey}")
+        assertClipExecutionPropagation(plan, execution)
+    }
+
+    @Test
+    fun `mapper routes an antialiased path clip through a coverage mask even when stencil is available`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(
+                Path().apply {
+                    moveTo(3f, 3f)
+                    lineTo(26f, 4f)
+                    lineTo(14f, 27f)
+                    close()
+                },
+                ClipOp.INTERSECT,
+                antiAlias = true,
+            )
+            drawRect(Rect.fromLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(
+                FILL_RECT_CAPABILITY,
+                "first_slice.path_fill.stencil_cover",
+            ),
+        )
+        val execution = assertIs<GPUClipExecutionPlan.CoverageMask>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertEquals(1, execution.producers.size)
+        assertTrue(execution.producers.single().antiAlias)
+        assertIs<GPUClipExecutionGeometry.Path>(execution.producers.single().geometry)
+        assertClipExecutionPropagation(plan, execution)
+    }
+
+    @Test
+    fun `mapper refuses an antialiased path clip with a stable code when mask support is absent`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(
+                Path().apply {
+                    moveTo(3f, 3f)
+                    lineTo(26f, 4f)
+                    lineTo(14f, 27f)
+                    close()
+                },
+                ClipOp.INTERSECT,
+                antiAlias = true,
+            )
+            drawRect(Rect.fromLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+        }
+        val capabilities = org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig(
+            boundedClipEnabled = false,
+        ).buildCapabilities().withCapabilities(
+            FILL_RECT_CAPABILITY,
+            "first_slice.path_fill.stencil_cover",
+        )
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilities,
+        )
+        val refusal = assertIs<GPUClipExecutionPlan.Refused>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertEquals("unsupported.clip.mask_unavailable", refusal.code)
+        assertClipExecutionPropagation(plan, refusal)
+    }
+
+    @Test
+    fun `mapper preserves multi contour winding orientation in explicit front and back stencil operations`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(
+                Path().apply {
+                    addRect(Rect.fromLTRB(2f, 2f, 30f, 30f))
+                    reverseAddPath(Path().apply { addRect(Rect.fromLTRB(9f, 9f, 23f, 23f)) })
+                    fillType = FillType.WINDING
+                },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawRect(Rect.fromLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(
+                FILL_RECT_CAPABILITY,
+                "first_slice.path_fill.stencil_cover",
+            ),
+        )
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+        val path = assertIs<GPUClipExecutionGeometry.Path>(execution.producer.geometry)
+
+        assertEquals(2, path.contourStarts.size)
+        assertEquals(GPUClipStencilOperation.IncrementWrap, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.DecrementWrap, execution.producer.backPassOperation)
+    }
+
+    @Test
+    fun `mapper uses invert on both stencil faces for even odd multi contour paths`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipPath(
+                Path().apply {
+                    addRect(Rect.fromLTRB(2f, 2f, 30f, 30f))
+                    addRect(Rect.fromLTRB(9f, 9f, 23f, 23f))
+                    fillType = FillType.EVEN_ODD
+                },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+            drawRect(Rect.fromLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(
+                FILL_RECT_CAPABILITY,
+                "first_slice.path_fill.stencil_cover",
+            ),
+        )
+        val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.frontPassOperation)
+        assertEquals(GPUClipStencilOperation.Invert, execution.producer.backPassOperation)
+    }
+
+    @Test
+    fun `mapper retains exact source order for mixed intersect difference mask producers`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipRRect(
+                RRect(Rect.fromLTRB(2f, 2f, 29f, 29f), radius = 3f),
+                ClipOp.INTERSECT,
+                antiAlias = true,
+            )
+            clipRect(Rect.fromLTRB(12f, 10f, 20f, 22f), ClipOp.DIFFERENCE, antiAlias = false)
+            drawRect(Rect.fromLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+        val execution = assertIs<GPUClipExecutionPlan.CoverageMask>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertEquals(listOf(0, 1), execution.producers.map { it.sourceOrder })
+        assertEquals(
+            listOf(GPUClipMaskCombine.Intersect, GPUClipMaskCombine.Difference),
+            execution.producers.map { it.combine },
+        )
+        assertIs<GPUClipExecutionGeometry.RRect>(execution.producers[0].geometry)
+        assertIs<GPUClipExecutionGeometry.Rect>(execution.producers[1].geometry)
+        assertClipExecutionPropagation(plan, execution)
+    }
+
+    @Test
+    fun `mapper refuses mask execution when bounded clip capability is absent`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipRRect(
+                RRect(Rect.fromLTRB(2f, 2f, 29f, 29f), radius = 3f),
+                ClipOp.INTERSECT,
+                antiAlias = true,
+            )
+            clipRect(Rect.fromLTRB(12f, 10f, 20f, 22f), ClipOp.DIFFERENCE, antiAlias = false)
+            drawRect(Rect.fromLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+        }
+        val capabilities = org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig(
+            boundedClipEnabled = false,
+        ).buildCapabilities().withCapabilities(FILL_RECT_CAPABILITY)
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilities,
+        )
+        val refusal = assertIs<GPUClipExecutionPlan.Refused>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+
+        assertEquals("unsupported.clip.mask_unavailable", refusal.code)
+        assertClipExecutionPropagation(plan, refusal)
+    }
+
+    @Test
     fun `all 29 blend identities use the canonical shared plan on every core family`() {
         val families = listOf<(BlendMode) -> DisplayOp>(
             { mode -> DisplayOp.DrawColor(Color.RED, mode, Matrix33.identity(), org.graphiks.kanvas.canvas.ClipStack.WideOpen) },
@@ -951,6 +1261,57 @@ class GPUFramePathApiInventoryTest {
             GPUPixelBounds(0, 0, 32, 32),
         ),
     )
+
+    private fun assertClipExecutionPropagation(
+        plan: GPUFramePathInventoryPlan,
+        expected: GPUClipExecutionPlan,
+    ) {
+        val visual = plan.visualCommands.single()
+        assertEquals(expected.canonicalIdentity(), visual.clipExecutionPlan.canonicalIdentity())
+        assertEquals(
+            expected.canonicalIdentity(),
+            visual.normalized.clip.executionPlan?.canonicalIdentity(),
+        )
+        assertSame(visual.clipExecutionPlan, visual.normalized.clip.executionPlan)
+        val packets = plan.recording.taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .flatMap { it.drawPackets }
+        assertEquals(
+            1,
+            packets.size,
+            "tasks=${plan.recording.taskList.tasks.map { it::class.simpleName }} " +
+                "diagnostics=${plan.recording.routeDiagnostics}",
+        )
+        val packet = packets.single()
+        assertEquals(expected.canonicalIdentity(), packet.clipExecutionPlan?.canonicalIdentity())
+        assertSame(visual.clipExecutionPlan, packet.clipExecutionPlan)
+    }
+
+    private fun capabilitiesWith(vararg names: String): GPUCapabilities =
+        org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig()
+            .buildCapabilities()
+            .withCapabilities(*names)
+
+    private fun GPUCapabilities.withCapabilities(vararg names: String): GPUCapabilities {
+        return GPUCapabilities(
+            implementation = implementation,
+            facts = facts + names.map { name ->
+                GPUCapabilityFact(
+                    name = name,
+                    source = "test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "test:$name",
+                )
+            },
+            knownUnsupportedFacts = knownUnsupportedFacts,
+            snapshotId = "$snapshotId:${names.joinToString(":")}",
+        )
+    }
+
+    private companion object {
+        const val FILL_RECT_CAPABILITY = "first_slice.fill_rect.native"
+    }
 
     private fun paint(mode: BlendMode) = Paint.fill(Color.RED).copy(blendMode = mode)
 

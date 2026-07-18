@@ -3,6 +3,9 @@ package org.graphiks.kanvas.gpu.renderer.passes
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
@@ -256,6 +259,20 @@ enum class GPUDrawPacketRole {
     Readback,
 }
 
+/** Typed producer authority selected by the clip mapper and carried unchanged to encoding. */
+sealed interface GPUClipProducerAuthority {
+    /** Stable selector paired with the packet's full [GPUClipExecutionPlan.canonicalIdentity]. */
+    val selectorIdentity: String
+
+    data class Stencil(val producer: GPUClipStencilProducerPlan) : GPUClipProducerAuthority {
+        override val selectorIdentity: String = "stencil"
+    }
+
+    data class Mask(val producer: GPUClipMaskProducerPlan) : GPUClipProducerAuthority {
+        override val selectorIdentity: String = "mask:${producer.sourceOrder}"
+    }
+}
+
 /**
  * Pass-local packet of executable planning evidence before backend command encoding.
  *
@@ -290,7 +307,9 @@ class GPUDrawPacket(
     val resourceGeneration: Long,
     val frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
     val clipCoveragePlan: GPUClipCoveragePlan? = null,
+    val clipExecutionPlan: GPUClipExecutionPlan? = null,
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
+    val clipProducerAuthority: GPUClipProducerAuthority? = null,
 ) {
     /** Diagnostics copied from packet production so caller mutation cannot rewrite evidence. */
     val diagnostics: List<GPUPassDiagnostic> = immutableList(diagnostics)
@@ -323,6 +342,7 @@ class GPUDrawPacket(
         require(originalPaintOrder >= 0) { "GPUDrawPacket.originalPaintOrder must be non-negative" }
         require(resourceGeneration >= 0L) { "GPUDrawPacket.resourceGeneration must be non-negative" }
         requireRoleHasPipelineKey()
+        requireClipProducerAuthority()
     }
 
     private fun requireRoleHasPipelineKey() {
@@ -339,6 +359,32 @@ class GPUDrawPacket(
 
             else -> require(renderPipelineKey != null) {
                 "$role GPUDrawPacket requires renderPipelineKey"
+            }
+        }
+    }
+
+    private fun requireClipProducerAuthority() {
+        when (role) {
+            GPUDrawPacketRole.StencilProducer -> {
+                val authority = clipProducerAuthority as? GPUClipProducerAuthority.Stencil
+                    ?: throw IllegalArgumentException("StencilProducer GPUDrawPacket requires typed stencil authority")
+                val plan = clipExecutionPlan as? GPUClipExecutionPlan.StencilCoverage
+                    ?: throw IllegalArgumentException("StencilProducer GPUDrawPacket requires StencilCoverage plan")
+                require(authority.producer == plan.producer) {
+                    "StencilProducer GPUDrawPacket authority must match its execution plan"
+                }
+            }
+            GPUDrawPacketRole.ClipProducer -> {
+                val authority = clipProducerAuthority as? GPUClipProducerAuthority.Mask
+                    ?: throw IllegalArgumentException("ClipProducer GPUDrawPacket requires typed mask authority")
+                val plan = clipExecutionPlan as? GPUClipExecutionPlan.CoverageMask
+                    ?: throw IllegalArgumentException("ClipProducer GPUDrawPacket requires CoverageMask plan")
+                require(authority.producer in plan.producers) {
+                    "ClipProducer GPUDrawPacket authority must select one producer from its execution plan"
+                }
+            }
+            else -> require(clipProducerAuthority == null) {
+                "$role GPUDrawPacket must not carry clip producer authority"
             }
         }
     }
@@ -1295,6 +1341,7 @@ object GPUFirstRoutePassBuilder {
         semanticPayload: GPUDrawSemanticPayload? = null,
         frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
         clipCoveragePlan: GPUClipCoveragePlan? = null,
+        clipExecutionPlan: GPUClipExecutionPlan? = null,
     ): GPUDrawPass {
         val invocation = GPUDrawInvocation(
             commandIdValue = commandIdValue,
@@ -1336,6 +1383,7 @@ object GPUFirstRoutePassBuilder {
             resourceGeneration = 0L,
             frameProvenance = frameProvenance,
             clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlan = clipExecutionPlan,
         )
         return GPUDrawPass(
             passId = "pass.root.$commandIdValue",
@@ -1396,6 +1444,7 @@ object GPUFirstRoutePassBuilder {
         batchAdjacency: GPUPassBatchAdjacency = GPUPassBatchAdjacency.Compatible,
         frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
         clipCoveragePlan: GPUClipCoveragePlan? = null,
+        clipExecutionPlan: GPUClipExecutionPlan? = null,
     ): GPUDrawPass =
         acceptedFillRect(
             commandIdValue = commandIdValue,
@@ -1412,6 +1461,7 @@ object GPUFirstRoutePassBuilder {
             batchAdjacency = batchAdjacency,
             frameProvenance = frameProvenance,
             clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlan = clipExecutionPlan,
         )
 
     /** Builds an empty refused FillRRect pass so unsupported rrects cannot produce draw work. */
@@ -1443,6 +1493,7 @@ object GPUFirstRoutePassBuilder {
         targetStateHash: String,
         frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
         clipCoveragePlan: GPUClipCoveragePlan? = null,
+        clipExecutionPlan: GPUClipExecutionPlan? = null,
     ): GPUDrawPass =
         acceptedTypedPass(
             passId = "pass.text.$commandIdValue",
@@ -1460,6 +1511,7 @@ object GPUFirstRoutePassBuilder {
             layerScopeId = "root",
             frameProvenance = frameProvenance,
             clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlan = clipExecutionPlan,
         )
 
     /** Builds an accepted FillPath pass with path-fill render-step identity. */
@@ -1476,6 +1528,7 @@ object GPUFirstRoutePassBuilder {
         targetStateHash: String,
         frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
         clipCoveragePlan: GPUClipCoveragePlan? = null,
+        clipExecutionPlan: GPUClipExecutionPlan? = null,
     ): GPUDrawPass =
         acceptedTypedPass(
             passId = "pass.path_fill.$commandIdValue",
@@ -1493,6 +1546,7 @@ object GPUFirstRoutePassBuilder {
             layerScopeId = "root",
             frameProvenance = frameProvenance,
             clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlan = clipExecutionPlan,
         )
 
     /** Builds an empty refused FillPath pass. */
@@ -1700,6 +1754,7 @@ object GPUFirstRoutePassBuilder {
         layerScopeId: String,
         frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
         clipCoveragePlan: GPUClipCoveragePlan? = null,
+        clipExecutionPlan: GPUClipExecutionPlan? = null,
     ): GPUDrawPass {
         val invocation = GPUDrawInvocation(
             commandIdValue = commandIdValue,
@@ -1739,6 +1794,7 @@ object GPUFirstRoutePassBuilder {
             resourceGeneration = 0L,
             frameProvenance = frameProvenance,
             clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlan = clipExecutionPlan,
         )
         return GPUDrawPass(
             passId = passId,

@@ -300,6 +300,7 @@ class GPUFirstRoutePlanner(
             semanticPayload = semanticPayload,
             frameProvenance = command.source.frameProvenance,
             clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -408,6 +409,7 @@ class GPUFirstRoutePlanner(
             batchAdjacency = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency.Isolated,
             frameProvenance = command.source.frameProvenance,
             clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -514,6 +516,7 @@ class GPUFirstRoutePlanner(
             },
             frameProvenance = command.source.frameProvenance,
             clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -585,6 +588,7 @@ class GPUFirstRoutePlanner(
             batchAdjacency = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency.Isolated,
             frameProvenance = command.source.frameProvenance,
             clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -678,6 +682,7 @@ class GPUFirstRoutePlanner(
             targetStateHash = command.targetStateHash(),
             frameProvenance = command.source.frameProvenance,
             clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
         return GPUFirstRoutePlan(
             analysisRecord = analysisRecord,
@@ -732,6 +737,7 @@ class GPUFirstRoutePlanner(
             targetStateHash = command.targetStateHash(),
             frameProvenance = command.source.frameProvenance,
             clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -803,6 +809,7 @@ class GPUFirstRoutePlanner(
             targetStateHash = command.targetStateHash(),
             frameProvenance = command.source.frameProvenance,
             clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -855,6 +862,7 @@ class GPUFirstRoutePlanner(
             targetStateHash = command.targetStateHash(),
             frameProvenance = command.source.frameProvenance,
             clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(

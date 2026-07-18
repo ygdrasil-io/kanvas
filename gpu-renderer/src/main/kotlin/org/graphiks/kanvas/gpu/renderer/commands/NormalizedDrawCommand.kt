@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageRequest
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -255,6 +256,7 @@ data class GPUClipFacts(
     val bounds: GPUBounds,
     val coverageRequest: GPUClipCoverageRequest? = null,
     val coveragePlan: GPUClipCoveragePlan? = null,
+    val executionPlan: GPUClipExecutionPlan? = null,
     /** A Canvas clip captured under perspective, which the affine GPU route must refuse. */
     val perspectiveCaptureRefusal: Boolean = false,
 ) {
