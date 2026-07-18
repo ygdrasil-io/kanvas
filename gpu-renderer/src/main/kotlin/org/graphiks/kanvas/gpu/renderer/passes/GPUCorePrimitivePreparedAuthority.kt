@@ -597,10 +597,90 @@ internal class GPUCorePrimitiveAnalyticClipUniformSeal(
         expected.size == 64 && payloadBytesSnapshot.contentEquals(expected)
 }
 
+/** One immutable, packet-local element retained by the uniform160 seal. */
+internal class GPUCorePrimitiveAnalyticIntersectionElementSeal(
+    val clipType: GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry,
+    clipBounds: List<Float>,
+    clipRadii: List<Float>,
+    val antiAlias: Boolean,
+) {
+    val clipBounds: List<Float> = immutableList(clipBounds)
+    val clipRadii: List<Float> = immutableList(clipRadii)
+
+    init {
+        require(clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect ||
+            clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect
+        ) { "Analytic intersection elements accept only rect or rrect" }
+        require(this.clipBounds.size == 4 && this.clipBounds.all(Float::isFinite)) {
+            "Analytic intersection element bounds require four finite scalars"
+        }
+        require(this.clipRadii.size == 2 && this.clipRadii.all { it.isFinite() && it >= 0f }) {
+            "Analytic intersection element radii require one finite non-negative pair"
+        }
+        require(clipType != GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect ||
+            this.clipRadii.all { it == 0f }
+        ) { "Analytic intersection rect elements must retain zero radii" }
+    }
+
+    override fun equals(other: Any?): Boolean = this === other ||
+        other is GPUCorePrimitiveAnalyticIntersectionElementSeal &&
+        clipType == other.clipType && clipBounds == other.clipBounds &&
+        clipRadii == other.clipRadii && antiAlias == other.antiAlias
+
+    override fun hashCode(): Int = listOf(clipType, clipBounds, clipRadii, antiAlias).hashCode()
+}
+
+/** Immutable per-packet authority for the fixed-capacity analytic-intersection uniform160 slab. */
+internal class GPUCorePrimitiveAnalyticIntersectionUniformSeal(
+    val plan: GPUUniformSlabPlan,
+    val slotIndex: Int,
+    val commandId: Int,
+    val packetId: GPUDrawPacketID,
+    val clipCanonicalIdentity: String,
+    elements: List<GPUCorePrimitiveAnalyticIntersectionElementSeal>,
+    val conservativeScissor: GPUPixelBounds,
+    val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+    val renderPipelineKey: GPURenderPipelineKey,
+    val bindingLayoutHash: String,
+    val resourceGeneration: Long,
+    payloadBytes: ByteArray,
+) {
+    val elements: List<GPUCorePrimitiveAnalyticIntersectionElementSeal> = immutableList(elements)
+    private val payloadBytesSnapshot = payloadBytes.copyOf()
+    private val slot = plan.slots.getOrNull(slotIndex)
+        ?: error("Analytic intersection uniform seal slot index is outside its slab plan")
+
+    val payloadBytes: Long get() = slot.payloadBytes
+    val alignedOffset: Long get() = slot.alignedOffset
+    val alignmentBytes: Long get() = plan.alignmentBytes
+    val deviceGeneration: Long get() = plan.deviceGeneration
+
+    init {
+        require(commandId >= 0) { "Analytic intersection uniform seal command id must be non-negative" }
+        require(clipCanonicalIdentity.isNotBlank()) { "Analytic intersection canonical identity must not be blank" }
+        require(this.elements.size in 2..4) { "Analytic intersection uniform seal requires two to four elements" }
+        require(!conservativeScissor.isEmpty) { "Analytic intersection conservative scissor must not be empty" }
+        require(structuralPipelineKey.uniformLayout ==
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1
+        ) { "Analytic intersection uniform seal requires the uniform160 structural ABI" }
+        require(bindingLayoutHash.isNotBlank()) { "Analytic intersection binding layout hash must not be blank" }
+        require(resourceGeneration >= 0L) { "Analytic intersection resource generation must be non-negative" }
+        require(slot.payloadBytes == 160L && payloadBytesSnapshot.size == 160) {
+            "Analytic intersection uniform seal requires exactly 160 payload bytes"
+        }
+    }
+
+    fun payloadBytesSnapshot(): ByteArray = payloadBytesSnapshot.copyOf()
+
+    internal fun hasExactPayload(expected: ByteArray): Boolean =
+        expected.size == 160 && payloadBytesSnapshot.contentEquals(expected)
+}
+
 /** One-shot authority attached by the prepared-frame builder before the packet escapes. */
 internal data class GPUCorePrimitivePreparedPacketAuthority(
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
     val renderPipelineKey: GPURenderPipelineKey,
     val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
     val analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = null,
+    val analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = null,
 )

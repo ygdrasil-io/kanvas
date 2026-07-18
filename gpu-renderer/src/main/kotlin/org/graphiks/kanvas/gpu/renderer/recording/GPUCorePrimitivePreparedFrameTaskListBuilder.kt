@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
@@ -26,6 +27,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionElementSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
@@ -76,6 +79,8 @@ const val CORE_PRIMITIVE_RENDER_PIPELINE_KEY = "pipeline.core-primitive.structur
 const val CORE_PRIMITIVE_BINDING_LAYOUT_HASH = "layout.core-primitive.dynamic-uniform32-v2"
 const val CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH =
     "layout.core-primitive.dynamic-uniform64-analytic-clip-v1"
+const val CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH =
+    "layout.core-primitive.dynamic-uniform160-analytic-clip-intersection4-v1"
 const val CORE_PRIMITIVE_TARGET_STATE_HASH = "target.rgba8unorm.single-sample"
 const val CORE_PRIMITIVE_VERTEX_SOURCE_LABEL = "core-primitive-device-geometry"
 const val CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL = "opaque-white"
@@ -97,6 +102,13 @@ internal fun corePrimitiveDirectClipAuthority(
         is GPUCorePrimitiveAnalyticClipAuthority.Accepted ->
             GPUCorePrimitiveDirectClipAuthority.Accepted(authority.conservativeScissor)
         is GPUCorePrimitiveAnalyticClipAuthority.Refused -> GPUCorePrimitiveDirectClipAuthority.Refused
+    }
+    is GPUClipExecutionPlan.AnalyticIntersection -> when (
+        val authority = corePrimitiveAnalyticIntersectionAuthority(plan, targetBounds)
+    ) {
+        is GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted ->
+            GPUCorePrimitiveDirectClipAuthority.Accepted(authority.conservativeScissor)
+        is GPUCorePrimitiveAnalyticIntersectionAuthority.Refused -> GPUCorePrimitiveDirectClipAuthority.Refused
     }
     else -> GPUCorePrimitiveDirectClipAuthority.Refused
 }
@@ -219,6 +231,146 @@ internal fun corePrimitiveAnalyticClipUniformBytes(
     semantic.premultipliedRgba.forEach(::putFloat)
     authority.bounds.forEach(::putFloat)
     authority.packedRadii.forEach(::putFloat)
+}.array()
+
+internal class GPUCorePrimitiveAnalyticIntersectionElementAuthority(
+    val clipType: GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry,
+    bounds: List<Float>,
+    packedRadii: List<Float>,
+    val antiAlias: Boolean,
+) {
+    val bounds: List<Float> = immutableList(bounds)
+    val packedRadii: List<Float> = immutableList(packedRadii)
+
+    init {
+        require(clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect ||
+            clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect
+        ) { "Analytic intersection authority accepts only rect or rrect" }
+        require(this.bounds.size == 4 && this.bounds.all(Float::isFinite)) {
+            "Analytic intersection authority bounds require four finite scalars"
+        }
+        require(this.packedRadii.size == 2 && this.packedRadii.all { it.isFinite() && it >= 0f }) {
+            "Analytic intersection authority radii require one finite non-negative pair"
+        }
+    }
+}
+
+internal sealed interface GPUCorePrimitiveAnalyticIntersectionAuthority {
+    class Accepted(
+        elements: List<GPUCorePrimitiveAnalyticIntersectionElementAuthority>,
+        val conservativeScissor: GPUPixelBounds,
+    ) : GPUCorePrimitiveAnalyticIntersectionAuthority {
+        val elements: List<GPUCorePrimitiveAnalyticIntersectionElementAuthority> = immutableList(elements)
+
+        init {
+            require(this.elements.size in 2..4) { "Analytic intersection authority requires depth two to four" }
+            require(!conservativeScissor.isEmpty) { "Analytic intersection authority scissor must not be empty" }
+        }
+    }
+
+    data class Refused(val code: String, val message: String) : GPUCorePrimitiveAnalyticIntersectionAuthority
+}
+
+internal data class GPUCorePrimitiveAnalyticIntersectionPacketAuthority(
+    val clip: GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted,
+    val canonicalIdentity: String,
+)
+
+internal fun corePrimitiveAnalyticIntersectionPacketAuthority(
+    packet: GPUDrawPacket,
+    targetBounds: GPUPixelBounds,
+): GPUCorePrimitiveAnalyticIntersectionPacketAuthority? {
+    val plan = packet.clipExecutionPlan as? GPUClipExecutionPlan.AnalyticIntersection ?: return null
+    val clip = corePrimitiveAnalyticIntersectionAuthority(plan, targetBounds) as?
+        GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted ?: return null
+    return GPUCorePrimitiveAnalyticIntersectionPacketAuthority(clip, plan.canonicalIdentity())
+}
+
+internal fun corePrimitiveAnalyticIntersectionAuthority(
+    plan: GPUClipExecutionPlan.AnalyticIntersection,
+    targetBounds: GPUPixelBounds,
+): GPUCorePrimitiveAnalyticIntersectionAuthority {
+    var left = targetBounds.left
+    var top = targetBounds.top
+    var right = targetBounds.right
+    var bottom = targetBounds.bottom
+    val elements = mutableListOf<GPUCorePrimitiveAnalyticIntersectionElementAuthority>()
+    plan.elements.forEach { element ->
+        val geometry = element.geometry
+        val geometryBounds = when (geometry) {
+            is GPUClipExecutionGeometry.Rect -> geometry.bounds
+            is GPUClipExecutionGeometry.RRect -> geometry.bounds
+            is GPUClipExecutionGeometry.Path -> error("GPUClipAnalyticElement constructor rejects path geometry")
+        }
+        val bounds = listOf(geometryBounds.left, geometryBounds.top, geometryBounds.right, geometryBounds.bottom)
+        val sourceRadii = (geometry as? GPUClipExecutionGeometry.RRect)?.radii ?: List(8) { 0f }
+        val firstPair = sourceRadii.take(2)
+        if (sourceRadii.chunked(2).any { pair -> pair != firstPair }) {
+            return GPUCorePrimitiveAnalyticIntersectionAuthority.Refused(
+                "unsupported.recording.core_primitive_analytic_intersection_complex_rrect",
+                "Prepared analytic intersections require four identical rrect radius pairs.",
+            )
+        }
+        val zeroAxis = firstPair.any { radius -> radius == 0f }
+        if (!zeroAxis && (firstPair[0] * 2f > geometryBounds.right - geometryBounds.left ||
+                firstPair[1] * 2f > geometryBounds.bottom - geometryBounds.top)
+        ) {
+            return GPUCorePrimitiveAnalyticIntersectionAuthority.Refused(
+                "unsupported.recording.core_primitive_analytic_intersection_incompatible_radii",
+                "Prepared analytic intersections require radii to fit each rrect half extent.",
+            )
+        }
+        val clipType = if (geometry is GPUClipExecutionGeometry.Rect || zeroAxis) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect
+        } else {
+            GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect
+        }
+        val packedRadii = if (clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect) {
+            listOf(0f, 0f)
+        } else {
+            firstPair
+        }
+        elements += GPUCorePrimitiveAnalyticIntersectionElementAuthority(
+            clipType,
+            immutableList(bounds),
+            immutableList(packedRadii),
+            element.antiAlias,
+        )
+        val expansion = if (element.antiAlias) 0.5f else 0f
+        left = maxOf(left, floor(geometryBounds.left - expansion).toInt())
+        top = maxOf(top, floor(geometryBounds.top - expansion).toInt())
+        right = minOf(right, ceil(geometryBounds.right + expansion).toInt())
+        bottom = minOf(bottom, ceil(geometryBounds.bottom + expansion).toInt())
+    }
+    if (right <= left || bottom <= top) {
+        return GPUCorePrimitiveAnalyticIntersectionAuthority.Refused(
+            "unsupported.recording.core_primitive_analytic_intersection_scissor",
+            "Prepared analytic intersection and its conservative scissor must overlap the target.",
+        )
+    }
+    return GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted(
+        elements,
+        GPUPixelBounds(left, top, right, bottom),
+    )
+}
+
+internal fun corePrimitiveAnalyticIntersectionUniformBytes(
+    semantic: GPUDrawSemanticPayload.CorePrimitive,
+    authority: GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted,
+): ByteArray = ByteBuffer.allocate(160).order(ByteOrder.LITTLE_ENDIAN).apply {
+    putFloat(semantic.targetBounds.width.toFloat())
+    putFloat(semantic.targetBounds.height.toFloat())
+    putInt(authority.elements.size)
+    putInt(0)
+    semantic.premultipliedRgba.forEach(::putFloat)
+    repeat(4) { index ->
+        authority.elements.getOrNull(index)?.let { element ->
+            element.bounds.forEach(::putFloat)
+            element.packedRadii.forEach(::putFloat)
+            putInt(if (element.clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect) 0 else 1)
+            putInt(if (element.antiAlias) 1 else 0)
+        } ?: repeat(32) { put(0.toByte()) }
+    }
 }.array()
 
 internal fun corePrimitiveRenderPipelineKey(
@@ -420,6 +572,7 @@ private fun directCorePrimitiveGeometryBytes(
         GPUClipExecutionPlan.NoClip,
         is GPUClipExecutionPlan.ScissorOnly,
         is GPUClipExecutionPlan.AnalyticCoverage,
+        is GPUClipExecutionPlan.AnalyticIntersection,
         -> Unit
         else -> return null
     }
@@ -959,6 +1112,20 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                     return refused(authority.code, authority.message)
             }
         }
+        val analyticIntersectionAuthoritiesByCommandId = linkedMapOf<
+            Int,
+            GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted,
+        >()
+        basePackets.forEach { packet ->
+            val plan = packet.clipExecutionPlan as? GPUClipExecutionPlan.AnalyticIntersection
+                ?: return@forEach
+            when (val authority = corePrimitiveAnalyticIntersectionAuthority(plan, request.targetBounds)) {
+                is GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted ->
+                    analyticIntersectionAuthoritiesByCommandId[packet.commandIdValue] = authority
+                is GPUCorePrimitiveAnalyticIntersectionAuthority.Refused ->
+                    return refused(authority.code, authority.message)
+            }
+        }
         basePackets.mapNotNull(GPUDrawPacket::clipExecutionPlan)
             .filterIsInstance<GPUClipExecutionPlan.StencilCoverage>()
             .firstOrNull { plan ->
@@ -1029,7 +1196,10 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 }
             }
         }
-        if (analyticClipAuthoritiesByCommandId.isNotEmpty() && pathStencilPlansByCommandId.isNotEmpty()) {
+        if ((analyticClipAuthoritiesByCommandId.isNotEmpty() ||
+                analyticIntersectionAuthoritiesByCommandId.isNotEmpty()) &&
+            pathStencilPlansByCommandId.isNotEmpty()
+        ) {
             return refused(
                 "unsupported.recording.core_primitive_analytic_clip_path_mix",
                 "Prepared analytic direct clips cannot share the current path-stencil attachment topology.",
@@ -1110,6 +1280,13 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                     "Prepared analytic clips require one direct CorePrimitive shading geometry.",
                 )
             }
+        analyticIntersectionAuthoritiesByCommandId.keys.firstOrNull { it !in directGeometryBytesByCommandId }
+            ?.let {
+                return refused(
+                    "unsupported.recording.core_primitive_analytic_intersection_non_direct_geometry",
+                    "Prepared analytic intersections require one direct CorePrimitive shading geometry.",
+                )
+            }
         val geometryBytesByCommandId = try {
             directGeometryBytesByCommandId + pathStencilPlansByCommandId.mapValues { (_, plan) ->
                 requireNotNull(pathStencilGeometryBytes(plan.semantic))
@@ -1144,8 +1321,25 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         val analyticUniformPackets = geometryPackets.filter {
             it.commandIdValue in analyticClipAuthoritiesByCommandId
         }
+        val analyticIntersectionUniformPackets = geometryPackets.filter {
+            it.commandIdValue in analyticIntersectionAuthoritiesByCommandId
+        }
         val legacyUniformPackets = geometryPackets.filterNot {
-            it.commandIdValue in analyticClipAuthoritiesByCommandId
+            it.commandIdValue in analyticClipAuthoritiesByCommandId ||
+                it.commandIdValue in analyticIntersectionAuthoritiesByCommandId
+        }
+        val legacyDirectUniformPackets = legacyUniformPackets.filterNot { packet ->
+            packet.commandIdValue in pathStencilPlansByCommandId
+        }
+        if ((analyticUniformPackets.isNotEmpty() && legacyDirectUniformPackets.isNotEmpty()) ||
+            (analyticIntersectionUniformPackets.isNotEmpty() &&
+                (legacyDirectUniformPackets.isNotEmpty() || analyticUniformPackets.isNotEmpty() ||
+                    pathStencilPlansByCommandId.isNotEmpty()))
+        ) {
+            return refused(
+                "unsupported.recording.core_primitive_mixed_uniform_layouts",
+                "One direct CorePrimitive pass cannot mix uniform32, uniform64, uniform160, or path layouts.",
+            )
         }
         val maxBufferSize = if (geometryPackets.isEmpty()) null else limits.maxBufferSize ?: return refused(
             "unsupported.recording.core_primitive_max_buffer_size_unavailable",
@@ -1239,6 +1433,46 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 )
             }
         }
+        val analyticIntersectionUniformBytesByCommandId =
+            analyticIntersectionUniformPackets.associate { packet ->
+                val commandId = packet.commandIdValue
+                commandId to corePrimitiveAnalyticIntersectionUniformBytes(
+                    request.semanticsByCommandId.getValue(commandId),
+                    analyticIntersectionAuthoritiesByCommandId.getValue(commandId),
+                )
+            }
+        val analyticIntersectionUniformSlabPlan = if (analyticIntersectionUniformPackets.isEmpty()) {
+            null
+        } else {
+            when (val planned = GPUUniformSlabPlanner.plan(
+                sourceLabel = "core-primitive-analytic-intersection-uniform-pass",
+                deviceGeneration = request.baseTaskList.capabilitySeal.deviceGeneration.value,
+                alignmentBytes = limits.minUniformBufferOffsetAlignment,
+                uploadBudgetBytes = minOf(request.configuredAggregateBudgetBytes, requireNotNull(maxBufferSize)),
+                maxBufferSize = requireNotNull(maxBufferSize),
+                maxDynamicUniformBuffersPerPipelineLayout = requireNotNull(maxDynamicUniformBuffers),
+                payloads = analyticIntersectionUniformPackets.map { packet ->
+                    GPUUniformSlabPayload(
+                        slotLabel = "analytic-intersection-draw-${packet.commandIdValue}",
+                        bytes = analyticIntersectionUniformBytesByCommandId.getValue(packet.commandIdValue),
+                    )
+                },
+            )) {
+                is GPUUniformSlabPlanningResult.Accepted -> planned.plan
+                is GPUUniformSlabPlanningResult.Refused -> return refused(
+                    planned.diagnostic.code,
+                    "Analytic-intersection CorePrimitive uniform160 slab planning was refused.",
+                )
+            }
+        }
+        if (analyticIntersectionUniformSlabPlan != null &&
+            analyticIntersectionUniformSlabPlan.totalBytes > Int.MAX_VALUE.toLong()
+        ) {
+            return refused(
+                "unsupported.recording.core_primitive_analytic_intersection_uniform_slab_host_size",
+                "Analytic-intersection CorePrimitive uniform160 slab exceeds the host-addressable packed byte size.",
+            )
+        }
         if (analyticUniformSlabPlan != null && analyticUniformSlabPlan.totalBytes > Int.MAX_VALUE.toLong()) {
             return refused(
                 "unsupported.recording.core_primitive_analytic_clip_uniform_slab_host_size",
@@ -1256,6 +1490,9 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         }
         val analyticUniformSlab = analyticUniformSlabPlan?.let {
             GPUFrameBufferRef("buffer.core-primitive.analytic-clip-uniforms.${request.baseTaskList.frameId.value}")
+        }
+        val analyticIntersectionUniformSlab = analyticIntersectionUniformSlabPlan?.let {
+            GPUFrameBufferRef("buffer.core-primitive.analytic-intersection-uniforms.${request.baseTaskList.frameId.value}")
         }
         val pathDepthStencilBytes = if (pathStencilPlansByCommandId.isEmpty()) {
             null
@@ -1333,6 +1570,20 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 diagnosticLabel = "core-primitive.analytic-clip-uniforms",
             )
         }
+        if (analyticIntersectionUniformSlabPlan != null && analyticIntersectionUniformSlab != null) {
+            preparations += GPUResourcePreparationRequest(
+                resource = analyticIntersectionUniformSlab,
+                descriptor = GPUFrameBufferDescriptor(
+                    analyticIntersectionUniformSlabPlan.totalBytes,
+                    analyticIntersectionUniformSlabPlan.alignmentBytes,
+                ),
+                role = GPUFrameResourceRole.UniformData,
+                usages = setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.Uniform),
+                lifetime = GPUFrameResourceLifetime.FrameLocal,
+                byteSize = analyticIntersectionUniformSlabPlan.totalBytes,
+                diagnosticLabel = "core-primitive.analytic-intersection-uniforms",
+            )
+        }
         if (pathDepthStencilBytes != null) {
             preparations += GPUResourcePreparationRequest(
                 resource = requireNotNull(pathDepthStencil),
@@ -1403,6 +1654,15 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 null,
             )
         }
+        if (analyticIntersectionUniformSlabPlan != null) {
+            allocations += GPUFrameMemoryAllocation(
+                "core-primitive.analytic-intersection-uniforms",
+                GPUFrameMemoryCategory.ReusableScratch,
+                analyticIntersectionUniformSlabPlan.totalBytes,
+                GPUFrameMemoryResourceKind.Buffer,
+                null,
+            )
+        }
         if (pathDepthStencilBytes != null) {
             allocations += GPUFrameMemoryAllocation(
                 "core-primitive.path-depth-stencil",
@@ -1464,10 +1724,10 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             } else {
                 emptyList()
             }
-            val packetUniformSlab = if (basePacket.commandIdValue in analyticClipAuthoritiesByCommandId) {
-                analyticUniformSlab
-            } else {
-                uniformSlab
+            val packetUniformSlab = when (basePacket.commandIdValue) {
+                in analyticClipAuthoritiesByCommandId -> analyticUniformSlab
+                in analyticIntersectionAuthoritiesByCommandId -> analyticIntersectionUniformSlab
+                else -> uniformSlab
             }
             val uniformUses = if (
                 basePacket.commandIdValue in geometryBytesByCommandId && packetUniformSlab != null
@@ -1554,6 +1814,11 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                             analyticClipAuthority = analyticClipAuthoritiesByCommandId[basePacket.commandIdValue],
                             analyticUniformSlabPlan = analyticUniformSlabPlan,
                             analyticUniformBytes = analyticUniformBytesByCommandId[basePacket.commandIdValue],
+                            analyticIntersectionAuthority =
+                                analyticIntersectionAuthoritiesByCommandId[basePacket.commandIdValue],
+                            analyticIntersectionUniformSlabPlan = analyticIntersectionUniformSlabPlan,
+                            analyticIntersectionUniformBytes =
+                                analyticIntersectionUniformBytesByCommandId[basePacket.commandIdValue],
                             publicPipelineKeys = publicPipelineKeys,
                         ),
                     )
@@ -2174,14 +2439,16 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         analyticClipAuthority: GPUCorePrimitiveAnalyticClipAuthority.Accepted?,
         analyticUniformSlabPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan?,
         analyticUniformBytes: ByteArray?,
+        analyticIntersectionAuthority: GPUCorePrimitiveAnalyticIntersectionAuthority.Accepted?,
+        analyticIntersectionUniformSlabPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan?,
+        analyticIntersectionUniformBytes: ByteArray?,
         publicPipelineKeys: MutableMap<GPUCorePrimitiveRenderPipelineStructuralKey, GPURenderPipelineKey>,
     ): GPUDrawPacket {
         val clipExecutionPlan = requireNotNull(basePacket.clipExecutionPlan)
-        val preparedSemantic = analyticClipAuthority?.let { authority ->
-            semantic.withAnalyticClipState(
-                authority.conservativeScissor,
-                clipExecutionPlan.canonicalIdentity(),
-            )
+        val analyticScissor = analyticClipAuthority?.conservativeScissor
+            ?: analyticIntersectionAuthority?.conservativeScissor
+        val preparedSemantic = analyticScissor?.let { scissor ->
+            semantic.withAnalyticClipState(scissor, clipExecutionPlan.canonicalIdentity())
         } ?: semantic.withClipExecutionPlanIdentity(clipExecutionPlan.canonicalIdentity())
         val baseStructuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
             preparedSemantic,
@@ -2196,10 +2463,10 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         val renderPipelineKey = publicPipelineKeys.getOrPut(structuralPipelineKey) {
             structuralPipelineKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
         }
-        val bindingLayoutHash = if (analyticClipAuthority != null) {
-            CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
-        } else {
-            CORE_PRIMITIVE_BINDING_LAYOUT_HASH
+        val bindingLayoutHash = when {
+            analyticClipAuthority != null -> CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
+            analyticIntersectionAuthority != null -> CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
+            else -> CORE_PRIMITIVE_BINDING_LAYOUT_HASH
         }
         val analyticClipUniformSeal = analyticClipAuthority?.let { authority ->
             val plan = requireNotNull(analyticUniformSlabPlan)
@@ -2217,6 +2484,34 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 clipBounds = authority.bounds,
                 clipRadii = authority.radii,
                 antiAlias = authority.antiAlias,
+                conservativeScissor = authority.conservativeScissor,
+                structuralPipelineKey = structuralPipelineKey,
+                renderPipelineKey = renderPipelineKey,
+                bindingLayoutHash = bindingLayoutHash,
+                resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+                payloadBytes = bytes,
+            )
+        }
+        val analyticIntersectionUniformSeal = analyticIntersectionAuthority?.let { authority ->
+            val plan = requireNotNull(analyticIntersectionUniformSlabPlan)
+            val bytes = requireNotNull(analyticIntersectionUniformBytes)
+            val slotIndex = plan.slots.indexOfFirst {
+                it.slotLabel == "analytic-intersection-draw-${basePacket.commandIdValue}"
+            }
+            GPUCorePrimitiveAnalyticIntersectionUniformSeal(
+                plan = plan,
+                slotIndex = slotIndex,
+                commandId = basePacket.commandIdValue,
+                packetId = basePacket.packetId,
+                clipCanonicalIdentity = clipExecutionPlan.canonicalIdentity(),
+                elements = authority.elements.map { element ->
+                    GPUCorePrimitiveAnalyticIntersectionElementSeal(
+                        element.clipType,
+                        element.bounds,
+                        element.packedRadii,
+                        element.antiAlias,
+                    )
+                },
                 conservativeScissor = authority.conservativeScissor,
                 structuralPipelineKey = structuralPipelineKey,
                 renderPipelineKey = renderPipelineKey,
@@ -2261,8 +2556,11 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         GPUCorePrimitivePreparedPacketAuthority(
             structuralPipelineKey = structuralPipelineKey,
             renderPipelineKey = renderPipelineKey,
-            uniformSlabSeal = uniformSlabSeal.takeIf { direct && analyticClipAuthority == null },
+            uniformSlabSeal = uniformSlabSeal.takeIf {
+                direct && analyticClipAuthority == null && analyticIntersectionAuthority == null
+            },
             analyticClipUniformSeal = analyticClipUniformSeal,
+            analyticIntersectionUniformSeal = analyticIntersectionUniformSeal,
         ),
     )
     }

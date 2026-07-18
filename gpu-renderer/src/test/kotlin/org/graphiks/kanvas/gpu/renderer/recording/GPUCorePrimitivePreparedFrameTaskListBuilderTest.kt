@@ -6,6 +6,7 @@ import java.nio.ByteOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
@@ -22,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
@@ -612,6 +614,224 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         assertSame(seals[0].plan, seals[1].plan)
         assertEquals(listOf(0L, 256L), seals.map { it.alignedOffset })
         assertNotEquals(seals[0].clipBounds, seals[1].clipBounds)
+    }
+
+    @Test
+    fun `analytic intersections depth two and four seal exact immutable uniform160 payloads`() {
+        val plans = mapOf(
+            228 to analyticIntersection(
+                GPUClipAnalyticElement(
+                    GPUClipExecutionGeometry.Rect(GPUClipBounds(0.25f, 0.75f, 14.25f, 14.5f)),
+                    antiAlias = true,
+                ),
+                GPUClipAnalyticElement(
+                    GPUClipExecutionGeometry.RRect(
+                        GPUClipBounds(2.25f, 1.25f, 10.75f, 12.25f),
+                        listOf(2f, 3f, 2f, 3f, 2f, 3f, 2f, 3f),
+                    ),
+                    antiAlias = false,
+                ),
+            ),
+            229 to analyticIntersection(
+                GPUClipAnalyticElement(
+                    GPUClipExecutionGeometry.RRect(
+                        GPUClipBounds(1f, 1f, 15f, 15f),
+                        listOf(0f, 2f, 0f, 2f, 0f, 2f, 0f, 2f),
+                    ),
+                    antiAlias = true,
+                ),
+                GPUClipAnalyticElement(
+                    GPUClipExecutionGeometry.Rect(GPUClipBounds(2f, 2f, 14f, 14f)),
+                    antiAlias = false,
+                ),
+                GPUClipAnalyticElement(
+                    GPUClipExecutionGeometry.Rect(GPUClipBounds(3f, 3f, 13f, 13f)),
+                    antiAlias = true,
+                ),
+                GPUClipAnalyticElement(
+                    GPUClipExecutionGeometry.RRect(
+                        GPUClipBounds(4f, 4f, 12f, 12f),
+                        List(4) { listOf(1f, 1.5f) }.flatten(),
+                    ),
+                    antiAlias = false,
+                ),
+            ),
+        )
+        val base = recording(command(228, 0), command(229, 1)).taskList.withClipPlans(plans)
+        val basePackets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, basePackets.associate { it.commandIdValue to semantic(it) }),
+            ),
+        ).taskList
+        val prepared = taskList.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets
+        val seals = prepared.map {
+            requireNotNull(it.corePrimitivePreparedAuthority?.analyticIntersectionUniformSeal)
+        }
+
+        assertEquals(1, prepared.map(GPUDrawPacket::renderPipelineKey).distinct().size)
+        assertSame(seals[0].plan, seals[1].plan)
+        assertEquals(listOf(0L, 256L), seals.map { it.alignedOffset })
+        assertEquals(listOf(2, 4), seals.map { it.elements.size })
+        assertEquals(GPUPixelBounds(2, 1, 11, 13), seals[0].conservativeScissor)
+        assertEquals(GPUPixelBounds(4, 4, 12, 12), seals[1].conservativeScissor)
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
+            seals[0].structuralPipelineKey.uniformLayout,
+        )
+        assertTrue(prepared.all { it.bindingLayoutHash == CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH })
+        assertTrue(prepared.all { it.corePrimitivePreparedAuthority?.uniformSlabSeal == null })
+        assertTrue(prepared.all { it.corePrimitivePreparedAuthority?.analyticClipUniformSeal == null })
+
+        val depthTwo = seals[0].payloadBytesSnapshot()
+        assertEquals(160, depthTwo.size)
+        assertEquals(16f, depthTwo.float32(0))
+        assertEquals(16f, depthTwo.float32(4))
+        assertEquals(2, depthTwo.uint32(8))
+        assertEquals(0, depthTwo.uint32(12))
+        assertEquals(listOf(0.25f, 0.5f, 0.75f, 1f), (16 until 32 step 4).map { depthTwo.float32(it) })
+        assertEquals(listOf(0.25f, 0.75f, 14.25f, 14.5f), (32 until 48 step 4).map { depthTwo.float32(it) })
+        assertEquals(listOf(0f, 0f), (48 until 56 step 4).map { depthTwo.float32(it) })
+        assertEquals(0, depthTwo.uint32(56))
+        assertEquals(1, depthTwo.uint32(60))
+        assertEquals(listOf(2.25f, 1.25f, 10.75f, 12.25f), (64 until 80 step 4).map { depthTwo.float32(it) })
+        assertEquals(listOf(2f, 3f), (80 until 88 step 4).map { depthTwo.float32(it) })
+        assertEquals(1, depthTwo.uint32(88))
+        assertEquals(0, depthTwo.uint32(92))
+        assertTrue(depthTwo.sliceArray(96 until 160).all { it == 0.toByte() })
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
+            (seals[0].elements as MutableList<Any>).clear()
+        }
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+            seals[1].elements.first().clipType,
+            "an rrect with one zero radius axis canonicalizes to rect",
+        )
+    }
+
+    @Test
+    fun `uniform160 refuses a mixed layout frame before slab budget planning`() {
+        val plans = mapOf(
+            230 to analyticIntersection(
+                GPUClipAnalyticElement(
+                    GPUClipExecutionGeometry.Rect(GPUClipBounds(1f, 1f, 12f, 12f)),
+                    antiAlias = true,
+                ),
+                GPUClipAnalyticElement(
+                    GPUClipExecutionGeometry.Rect(GPUClipBounds(2f, 2f, 11f, 11f)),
+                    antiAlias = false,
+                ),
+            ),
+            231 to GPUClipExecutionPlan.NoClip,
+        )
+        val base = recording(command(230, 0), command(231, 1)).taskList.withClipPlans(plans)
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, packets.associate { it.commandIdValue to semantic(it) })
+                .copy(configuredAggregateBudgetBytes = 1L),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_mixed_uniform_layouts",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `uniform32 and uniform64 refuse their mixed frame before slab budget planning`() {
+        val plans = mapOf(
+            232 to GPUClipExecutionPlan.NoClip,
+            233 to GPUClipExecutionPlan.AnalyticCoverage(
+                GPUClipExecutionGeometry.Rect(GPUClipBounds(1f, 1f, 12f, 12f)),
+                scissor = null,
+                antiAlias = true,
+            ),
+        )
+        val base = recording(command(232, 0), command(233, 1)).taskList.withClipPlans(plans)
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, packets.associate { it.commandIdValue to semantic(it) })
+                .copy(configuredAggregateBudgetBytes = 1L),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_mixed_uniform_layouts",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `uniform64 and uniform160 refuse their mixed frame before slab budget planning`() {
+        val plans = mapOf(
+            234 to GPUClipExecutionPlan.AnalyticCoverage(
+                GPUClipExecutionGeometry.Rect(GPUClipBounds(1f, 1f, 12f, 12f)),
+                scissor = null,
+                antiAlias = true,
+            ),
+            235 to analyticIntersection(
+                GPUClipAnalyticElement(
+                    GPUClipExecutionGeometry.Rect(GPUClipBounds(2f, 2f, 11f, 11f)),
+                    antiAlias = false,
+                ),
+                GPUClipAnalyticElement(
+                    GPUClipExecutionGeometry.Rect(GPUClipBounds(3f, 3f, 10f, 10f)),
+                    antiAlias = true,
+                ),
+            ),
+        )
+        val base = recording(command(234, 0), command(235, 1)).taskList.withClipPlans(plans)
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, packets.associate { it.commandIdValue to semantic(it) })
+                .copy(configuredAggregateBudgetBytes = 1L),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_mixed_uniform_layouts",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `uniform160 and path refuse before slab budget planning`() {
+        val intersection = analyticIntersection(
+            GPUClipAnalyticElement(
+                GPUClipExecutionGeometry.Rect(GPUClipBounds(1f, 1f, 12f, 12f)),
+                antiAlias = true,
+            ),
+            GPUClipAnalyticElement(
+                GPUClipExecutionGeometry.Rect(GPUClipBounds(2f, 2f, 11f, 11f)),
+                antiAlias = false,
+            ),
+        )
+        val base = recording(command(236, 0), command(237, 1)).taskList.withClipPlans(
+            mapOf(236 to intersection, 237 to GPUClipExecutionPlan.NoClip),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                base,
+                mapOf(
+                    236 to semantic(packets.single { it.commandIdValue == 236 }),
+                    237 to semantic(
+                        packets.single { it.commandIdValue == 237 },
+                        stencilGeometry(GPUPixelBounds(1, 1, 8, 8)),
+                        GPUCorePrimitiveCoverageMode.Stencil1x,
+                    ),
+                ),
+            ).copy(configuredAggregateBudgetBytes = 1L),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_analytic_clip_path_mix",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
     }
 
     @Test
@@ -1772,6 +1992,10 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     )
 
     private fun scissor() = GPUClipCoveragePlan.Scissor(GPUClipBounds(0f, 0f, 16f, 16f))
+
+    private fun analyticIntersection(
+        vararg elements: GPUClipAnalyticElement,
+    ) = GPUClipExecutionPlan.AnalyticIntersection(elements.toList())
 
     private fun capabilities() = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "unit", "adapter", "device"),

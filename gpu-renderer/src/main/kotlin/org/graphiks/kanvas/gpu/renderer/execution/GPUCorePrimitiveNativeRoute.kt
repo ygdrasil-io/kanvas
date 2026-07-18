@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionUniformSeal
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
@@ -127,16 +128,26 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal(
     val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
     analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal> = emptyList(),
     analyticClipPackedBytes: ByteArray? = null,
+    analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal> = emptyList(),
+    analyticIntersectionPackedBytes: ByteArray? = null,
 ) {
     private val analyticClipUniformSealsSnapshot = immutableList(analyticClipUniformSeals)
     private val analyticClipPackedBytesSnapshot = analyticClipPackedBytes?.copyOf()
+    private val analyticIntersectionUniformSealsSnapshot = immutableList(analyticIntersectionUniformSeals)
+    private val analyticIntersectionPackedBytesSnapshot = analyticIntersectionPackedBytes?.copyOf()
 
     val analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal>
         get() = analyticClipUniformSealsSnapshot
+    val analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>
+        get() = analyticIntersectionUniformSealsSnapshot
 
     init {
-        require((uniformSlabSeal != null) xor analyticClipUniformSealsSnapshot.isNotEmpty()) {
-            "A direct CorePrimitive pass must retain exactly one uniform32 or analytic uniform64 authority"
+        require(listOf(
+            uniformSlabSeal != null,
+            analyticClipUniformSealsSnapshot.isNotEmpty(),
+            analyticIntersectionUniformSealsSnapshot.isNotEmpty(),
+        ).count { it } == 1) {
+            "A direct CorePrimitive pass must retain exactly one uniform32, uniform64, or uniform160 authority"
         }
         require((analyticClipPackedBytesSnapshot != null) == analyticClipUniformSealsSnapshot.isNotEmpty()) {
             "An analytic direct CorePrimitive pass must retain its exact packed uniform64 slab"
@@ -146,11 +157,21 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal(
                 "The analytic uniform64 packed slab must match its exact plan size"
             }
         }
+        require((analyticIntersectionPackedBytesSnapshot != null) ==
+            analyticIntersectionUniformSealsSnapshot.isNotEmpty()
+        ) { "An analytic-intersection direct pass must retain its exact packed uniform160 slab" }
+        analyticIntersectionPackedBytesSnapshot?.let { packed ->
+            require(packed.size.toLong() == analyticIntersectionUniformSealsSnapshot.first().plan.totalBytes) {
+                "The analytic-intersection uniform160 packed slab must match its exact plan size"
+            }
+        }
     }
 
     /** Internal zero-copy borrow valid only for the immediate queue upload. */
     fun packedUniformBytesForUpload(): ByteArray =
-        uniformSlabSeal?.packedBytesForUpload() ?: requireNotNull(analyticClipPackedBytesSnapshot)
+        uniformSlabSeal?.packedBytesForUpload()
+            ?: analyticClipPackedBytesSnapshot
+            ?: requireNotNull(analyticIntersectionPackedBytesSnapshot)
 }
 
 internal data class GPUCorePrimitiveDirectNativeFrameRouteKey(

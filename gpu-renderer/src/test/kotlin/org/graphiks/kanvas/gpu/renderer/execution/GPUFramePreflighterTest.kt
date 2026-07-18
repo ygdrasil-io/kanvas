@@ -5,6 +5,8 @@ import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUTextureView
 import java.io.File
 import java.lang.reflect.Proxy
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
@@ -15,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
@@ -53,6 +56,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionElementSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency
@@ -88,6 +93,7 @@ import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.recording.GPUComputeDispatch
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCompositeProvenanceToken
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE_KEY
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
@@ -639,6 +645,153 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `analytic intersection depth three preflight retains one exact uniform160 pass seal`() {
+        val plan = preparedAnalyticFramePlan(
+            mapOf(
+                84 to analyticIntersectionPlan(
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(0.25f, 0.25f, 3.75f, 3.75f)),
+                        true,
+                    ),
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.RRect(
+                            GPUBounds(0.5f, 0.5f, 3.5f, 3.5f),
+                            List(4) { listOf(0.5f, 0.75f) }.flatten(),
+                        ),
+                        false,
+                    ),
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(1f, 0.75f, 3.25f, 3f)),
+                        true,
+                    ),
+                ),
+            ),
+        )
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+            RecordingResourceProvider(events),
+            RecordingCompletionProvider(events),
+            RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+            capabilities = pathCapabilities(),
+        ).preflight(plan)
+
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            result,
+            (result as? GPUFramePreflightResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).frame
+        val scope = prepared.encoderPlan.scopes.single()
+        val routes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            scope.corePrimitiveDirectNativeRouteSeal,
+        )
+        val passSeal = requireNotNull(routes.preparedPassSeal)
+        assertTrue(passSeal.analyticClipUniformSeals.isEmpty())
+        assertEquals(1, passSeal.analyticIntersectionUniformSeals.size)
+        assertEquals(3, passSeal.analyticIntersectionUniformSeals.single().elements.size)
+        assertTrue(events.isNotEmpty())
+    }
+
+    @Test
+    fun `analytic uniform160 corruption matrix refuses before every preflight side effect`() {
+        val validPlan = preparedAnalyticFramePlan(
+            mapOf(
+                85 to analyticIntersectionPlan(
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.Rect(GPUBounds(0.25f, 0.25f, 3.75f, 3.75f)),
+                        true,
+                    ),
+                    GPUClipAnalyticElement(
+                        GPUClipExecutionGeometry.RRect(
+                            GPUBounds(0.5f, 0.75f, 3.5f, 3.25f),
+                            List(4) { listOf(0.5f, 0.75f) }.flatten(),
+                        ),
+                        false,
+                    ),
+                ),
+            ),
+        )
+        val render = validPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val packet = render.drawPackets.single()
+        val validSeal = requireNotNull(
+            packet.corePrimitivePreparedAuthority?.analyticIntersectionUniformSeal,
+        )
+        fun corruptedInt(offset: Int, value: Int): ByteArray =
+            validSeal.payloadBytesSnapshot().also { bytes ->
+                ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putInt(offset, value)
+            }
+        fun corruptedFloat(offset: Int, value: Float): ByteArray =
+            validSeal.payloadBytesSnapshot().also { bytes ->
+                ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putFloat(offset, value)
+            }
+        val reversed = validSeal.elements.reversed()
+        val first = validSeal.elements.first()
+        val forgedOffsetPlan = validSeal.plan.copyForTest(
+            totalBytes = validSeal.plan.totalBytes + validSeal.plan.alignmentBytes,
+            slots = listOf(validSeal.plan.slots.single().copy(alignedOffset = validSeal.plan.alignmentBytes)),
+        )
+        val cases = listOf(
+            "count one" to validSeal.copyForTest(payloadBytes = corruptedInt(8, 1)),
+            "count five" to validSeal.copyForTest(payloadBytes = corruptedInt(8, 5)),
+            "order" to validSeal.copyForTest(elements = reversed),
+            "pad" to validSeal.copyForTest(payloadBytes = corruptedInt(12, 1)),
+            "inactive" to validSeal.copyForTest(payloadBytes = corruptedInt(96, 1)),
+            "kind" to validSeal.copyForTest(payloadBytes = corruptedInt(56, 2)),
+            "aa" to validSeal.copyForTest(payloadBytes = corruptedInt(60, 2)),
+            "bounds payload" to validSeal.copyForTest(payloadBytes = corruptedFloat(32, 0.5f)),
+            "radii payload" to validSeal.copyForTest(payloadBytes = corruptedFloat(80, 0.25f)),
+            "bounds authority" to validSeal.copyForTest(
+                elements = listOf(
+                    GPUCorePrimitiveAnalyticIntersectionElementSeal(
+                        first.clipType,
+                        listOf(0.5f, 0.25f, 3.75f, 3.75f),
+                        first.clipRadii,
+                        first.antiAlias,
+                    ),
+                    validSeal.elements[1],
+                ),
+            ),
+            "identity" to validSeal.copyForTest(clipCanonicalIdentity = "analytic-intersection-forged"),
+            "scissor" to validSeal.copyForTest(conservativeScissor = GPUPixelBounds(1, 1, 3, 3)),
+            "command" to validSeal.copyForTest(commandId = validSeal.commandId + 1),
+            "packet" to validSeal.copyForTest(packetId = GPUDrawPacketID("packet.analytic-intersection.forged")),
+            "slot offset" to validSeal.copyForTest(plan = forgedOffsetPlan),
+            "plan hash" to validSeal.copyForTest(
+                plan = validSeal.plan.copyForTest(planHash = "forged-plan-hash"),
+            ),
+            "payload hash" to validSeal.copyForTest(
+                plan = validSeal.plan.copyForTest(
+                    slots = listOf(validSeal.plan.slots.single().copy(payloadHash = "forged-payload-hash")),
+                ),
+            ),
+            "generation" to validSeal.copyForTest(resourceGeneration = 1L),
+            "layout" to validSeal.copyForTest(bindingLayoutHash = "layout.core.uniform160.forged"),
+        )
+
+        cases.forEach { (label, forgedSeal) ->
+            val forgedPacket = cloneCorePacket(packet, analyticIntersectionUniformSeal = forgedSeal)
+            val plan = validPlan.replacingCorePacket(packet, forgedPacket)
+            val events = mutableListOf<String>()
+            val result = preflighter(
+                RecordingResourceProvider(events),
+                RecordingCompletionProvider(events),
+                RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                capabilities = pathCapabilities(),
+            ).preflight(plan)
+
+            assertEquals(
+                "invalid.preflight.core_primitive_analytic_intersection_uniform_seal",
+                assertIs<GPUFramePreflightResult.Refused>(result, label).diagnostic.code.value,
+                label,
+            )
+            assertTrue(events.isEmpty(), "$label produced preflight side effects: $events")
+        }
+    }
+
+    @Test
     fun `path stencil preflight retains one exact ordered pair seal without native materialization`() {
         val plan = preparedPathFramePlan(mixed = false)
         val events = mutableListOf<String>()
@@ -1137,9 +1290,9 @@ class GPUFramePreflighterTest {
         ).readText()
 
         assertEquals(
-            2,
+            3,
             Regex("""GPUUniformSlabPlanner\.plan\(""").findAll(builder).count(),
-            "recording owns one planner site for legacy uniform32 and one for analytic uniform64",
+            "recording owns one planner site each for uniform32, uniform64, and uniform160",
         )
         assertEquals(
             0,
@@ -3465,7 +3618,7 @@ class GPUFramePreflighterTest {
     }
 
     private fun preparedAnalyticFramePlan(
-        plans: Map<Int, GPUClipExecutionPlan.AnalyticCoverage>,
+        plans: Map<Int, GPUClipExecutionPlan>,
     ): GPUFramePlan {
         val analyticCapabilities = pathCapabilities()
         val commandIds = plans.keys.toList()
@@ -3632,6 +3785,8 @@ class GPUFramePreflighterTest {
             packet.corePrimitivePreparedAuthority?.structuralPipelineKey,
         analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? =
             packet.corePrimitivePreparedAuthority?.analyticClipUniformSeal,
+        analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? =
+            packet.corePrimitivePreparedAuthority?.analyticIntersectionUniformSeal,
     ): GPUDrawPacket {
         val cloned = GPUDrawPacket(
             packetId = packet.packetId,
@@ -3671,6 +3826,7 @@ class GPUFramePreflighterTest {
                 renderPipelineKey = renderPipelineKey,
                 uniformSlabSeal = authority.uniformSlabSeal.takeUnless { dropUniformSlabSeal },
                 analyticClipUniformSeal = analyticClipUniformSeal,
+                analyticIntersectionUniformSeal = analyticIntersectionUniformSeal,
             ),
         )
     }
@@ -3708,6 +3864,38 @@ class GPUFramePreflighterTest {
         resourceGeneration,
         payloadBytes,
     )
+
+    private fun GPUCorePrimitiveAnalyticIntersectionUniformSeal.copyForTest(
+        plan: GPUUniformSlabPlan = this.plan,
+        slotIndex: Int = this.slotIndex,
+        commandId: Int = this.commandId,
+        packetId: GPUDrawPacketID = this.packetId,
+        clipCanonicalIdentity: String = this.clipCanonicalIdentity,
+        elements: List<GPUCorePrimitiveAnalyticIntersectionElementSeal> = this.elements,
+        conservativeScissor: GPUPixelBounds = this.conservativeScissor,
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey = this.structuralPipelineKey,
+        renderPipelineKey: GPURenderPipelineKey = this.renderPipelineKey,
+        bindingLayoutHash: String = this.bindingLayoutHash,
+        resourceGeneration: Long = this.resourceGeneration,
+        payloadBytes: ByteArray = this.payloadBytesSnapshot(),
+    ) = GPUCorePrimitiveAnalyticIntersectionUniformSeal(
+        plan,
+        slotIndex,
+        commandId,
+        packetId,
+        clipCanonicalIdentity,
+        elements,
+        conservativeScissor,
+        structuralPipelineKey,
+        renderPipelineKey,
+        bindingLayoutHash,
+        resourceGeneration,
+        payloadBytes,
+    )
+
+    private fun analyticIntersectionPlan(
+        vararg elements: GPUClipAnalyticElement,
+    ): GPUClipExecutionPlan = GPUClipExecutionPlan.AnalyticIntersection(elements.toList())
 
     private fun GPUUniformSlabPlan.copyForTest(
         planHash: String = this.planHash,
