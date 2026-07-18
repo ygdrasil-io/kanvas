@@ -573,6 +573,11 @@ internal sealed interface GPUPreparedNativeRenderCommand {
 
 internal enum class GPUPreparedNativeIndexFormat { Uint16, Uint32 }
 
+internal enum class GPUPreparedNativeRenderOperandLayout {
+    CommandOrder,
+    IndexedCorePrimitive,
+}
+
 /** Closed per-scope operand algebra. No arbitrary encode callback can enter the payload. */
 internal sealed interface GPUPreparedNativeScopeOperand {
     val sourceStepIndex: Int
@@ -584,15 +589,55 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         val pass: GPUPreparedNativeRenderPassConfig,
         commands: List<GPUPreparedNativeRenderCommand>,
         semanticPayloads: List<GPUDrawSemanticPayload> = emptyList(),
+        val operandLayout: GPUPreparedNativeRenderOperandLayout =
+            GPUPreparedNativeRenderOperandLayout.CommandOrder,
     ) : GPUPreparedNativeScopeOperand {
         val commands = immutableList(commands)
         val semanticPayloads = immutableList(semanticPayloads)
         override val operationKind = GPUEncoderOperationKind.Render
         override val operands: List<GPUPreparedNativeOperand> =
-            immutableList(
-                listOfNotNull(pass.colorTarget, pass.resolveTarget, pass.depthStencilTarget) +
-                    this.commands.flatMap(GPUPreparedNativeRenderCommand::operands),
+            immutableList(renderOperands())
+
+        private fun renderOperands(): List<GPUPreparedNativeOperand> {
+            val attachments = listOfNotNull(
+                pass.colorTarget,
+                pass.resolveTarget,
+                pass.depthStencilTarget,
             )
+            if (operandLayout == GPUPreparedNativeRenderOperandLayout.CommandOrder) {
+                return attachments + commands.flatMap(GPUPreparedNativeRenderCommand::operands)
+            }
+            val pipelinesByNativeIdentity =
+                IdentityHashMap<GPURenderPipeline, GPUPreparedNativeRenderPipelineOperand>()
+            val pipelines = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+                .mapNotNull { command ->
+                    val first = pipelinesByNativeIdentity[command.pipeline.pipeline]
+                    if (first == null) {
+                        pipelinesByNativeIdentity[command.pipeline.pipeline] = command.pipeline
+                        command.pipeline
+                    } else {
+                        require(
+                            first.deviceGeneration == command.pipeline.deviceGeneration &&
+                                first.ownership == command.pipeline.ownership,
+                        ) {
+                            "One indexed CorePrimitive native pipeline identity cannot carry ambiguous metadata"
+                        }
+                        null
+                    }
+                }
+            val vertexCommands = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>()
+            require(vertexCommands.size == 1) {
+                "Indexed CorePrimitive render layout requires exactly one shared SetVertexBuffer command"
+            }
+            val indexCommands = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetIndexBuffer>()
+            require(indexCommands.size == 1) {
+                "Indexed CorePrimitive render layout requires exactly one shared SetIndexBuffer command"
+            }
+            val bindGroups = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                .map(GPUPreparedNativeRenderCommand.SetBindGroup::bindGroup)
+            return attachments + pipelines + vertexCommands.single().buffer +
+                indexCommands.single().buffer + bindGroups
+        }
 
         init {
             require(this.commands.any {
