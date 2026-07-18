@@ -796,6 +796,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                     "copyBytesPerRowAlignment",
                     "minUniformBufferOffsetAlignment",
                     "maxBufferSize",
+                    "maxDynamicUniformBuffersPerPipelineLayout",
                 ),
                 facts.map { it.name },
             )

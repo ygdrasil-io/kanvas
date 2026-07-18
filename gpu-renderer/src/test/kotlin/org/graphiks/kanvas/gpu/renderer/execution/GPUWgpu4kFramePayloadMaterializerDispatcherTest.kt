@@ -20,9 +20,10 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 
 class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
     @Test
-    fun `all five routes retain failed common pre registration ownership`() {
+    fun `all six routes retain failed common pre registration ownership`() {
         listOf(
             "failed.native-solid-rect.materialization",
+            "failed.native-core-primitive.materialization",
             "failed.native-registered-uniform.materialization",
             "failed.native-destination-copy.materialization",
             "failed.native-color-glyph.materialization",
@@ -54,6 +55,10 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
         assertEquals(
             GPUWgpu4kPreparedFramePayloadRoute.ColorGlyph,
             selectWgpu4kPreparedFramePayloadRoute(listOf(GPUDrawSemanticPayload.ColorGlyph::class)),
+        )
+        assertEquals(
+            GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive,
+            selectWgpu4kPreparedFramePayloadRoute(listOf(GPUDrawSemanticPayload.CorePrimitive::class)),
         )
         assertEquals(
             GPUWgpu4kPreparedFramePayloadRoute.RegisteredUniformRect,

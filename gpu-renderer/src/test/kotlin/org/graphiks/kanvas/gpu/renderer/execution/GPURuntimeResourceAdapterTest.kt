@@ -50,15 +50,15 @@ class GPURuntimeResourceAdapterTest {
                     assertEquals(0x7fu, reference)
                     events += "stencil-reference"
                 },
-                setBindGroup = { _, _ -> error("bind group must not be emitted") },
-                setVertexBuffer = { _, _ -> error("vertex buffer must not be emitted") },
-                setIndexBuffer = { _, _ -> error("index buffer must not be emitted") },
+                setBindGroup = { _, _, _ -> error("bind group must not be emitted") },
+                setVertexBuffer = { _, _, _, _ -> error("vertex buffer must not be emitted") },
+                setIndexBuffer = { _, _, _, _ -> error("index buffer must not be emitted") },
                 setScissor = { _, _, _, _ -> error("scissor must not be emitted") },
                 draw = { vertices, instances, firstVertex, firstInstance ->
                     assertEquals(listOf(3u, 1u, 0u, 0u), listOf(vertices, instances, firstVertex, firstInstance))
                     events += "draw"
                 },
-                drawIndexed = { error("indexed draw must not be emitted") },
+                drawIndexed = { _, _, _, _, _ -> error("indexed draw must not be emitted") },
             ),
         )
 
@@ -86,19 +86,24 @@ class GPURuntimeResourceAdapterTest {
             GPUWgpu4kRenderCommandActions(
                 setPipeline = { actual -> assertSame(pipeline.pipeline, actual); events += "pipeline" },
                 setStencilReference = { error("stencil reference must not be emitted") },
-                setBindGroup = { slot, actual ->
+                setBindGroup = { slot, actual, dynamicOffsets ->
                     assertEquals(0u, slot)
                     assertSame(bindGroup.bindGroup, actual)
+                    assertEquals(emptyList(), dynamicOffsets)
                     events += "bind-group"
                 },
-                setVertexBuffer = { slot, actual ->
+                setVertexBuffer = { slot, actual, offset, size ->
                     assertEquals(0u, slot)
                     assertSame(vertex.buffer, actual)
+                    assertEquals(0L, offset)
+                    assertEquals(64L, size)
                     events += "vertex"
                 },
-                setIndexBuffer = { actual, format ->
+                setIndexBuffer = { actual, format, offset, size ->
                     assertSame(index.buffer, actual)
                     assertEquals(GPUIndexFormat.Uint32, format)
+                    assertEquals(0L, offset)
+                    assertEquals(24L, size)
                     events += "index-uint32"
                 },
                 setScissor = { x, y, width, height ->
@@ -106,7 +111,11 @@ class GPURuntimeResourceAdapterTest {
                     events += "scissor"
                 },
                 draw = { _, _, _, _ -> error("non-indexed draw must not be emitted") },
-                drawIndexed = { count -> assertEquals(6u, count); events += "draw-indexed" },
+                drawIndexed = { count, instances, firstIndex, baseVertex, firstInstance ->
+                    assertEquals(listOf(6u, 1u, 0u, 0u), listOf(count, instances, firstIndex, firstInstance))
+                    assertEquals(0, baseVertex)
+                    events += "draw-indexed"
+                },
             ),
         )
 
@@ -495,6 +504,49 @@ class GPURuntimeResourceAdapterTest {
         assertEquals(1, shared.closeCount)
         assertEquals(1, firstUnique.closeCount)
         assertEquals(1, secondUnique.closeCount)
+    }
+
+    @Test
+    fun `reusing the exact registered completion anchor cannot mutate its first payload`() {
+        val adapter = GPURuntimeResourceAdapter()
+        val anchored = CountingGPUBuffer("exact-shared-anchor-handle")
+        val anchor = GPUPreparedNativeCompletionAnchor(listOf(anchored))
+        fun payload(frame: Long) = testPayload(
+            frame = frame,
+            scopes = listOf(
+                GPUPreparedNativeScopeOperand.Upload(
+                    sourceStepIndex = 1,
+                    source = GPUPreparedNativeBufferOperand(anchored, GPUDeviceGenerationID(11)),
+                    destination = GPUPreparedNativeBufferOperand(
+                        CountingGPUBuffer("exact-shared-anchor-destination-$frame"),
+                        GPUDeviceGenerationID(11),
+                    ),
+                ),
+            ),
+            auxiliaryOwnedHandles = listOf(
+                GPUPreparedNativeAuxiliaryHandle(
+                    anchor,
+                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                ),
+            ),
+        )
+        val first = payload(261)
+        val firstToken = adapter.registeredToken(first)
+
+        val second = adapter.registerReadyPayload(payload(262))
+
+        assertIs<GPUPreparedNativeFrameRegistration.Refused>(second)
+        assertSame(anchored, anchor.ownedHandlesSnapshot().single())
+        assertEquals(0, anchored.closeCount)
+        assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+            adapter.consumePreparedNativeFramePayload(firstToken, first.identity),
+        )
+        assertTrue(adapter.markPreparedNativeFrameSubmitted(firstToken))
+        assertTrue(adapter.releasePreparedNativeFramePayload(firstToken))
+        assertEquals(1, anchored.closeCount)
+        assertTrue(anchor.ownedHandlesSnapshot().isEmpty())
+        adapter.close()
+        assertEquals(1, anchored.closeCount)
     }
 
     @Test
@@ -1693,6 +1745,99 @@ class GPURuntimeResourceAdapterTest {
     }
 
     @Test
+    fun `pooled lease follows rollback registration refusal completion and uncertain transitions`() {
+        val rollbackLease = RecordingFrameLeaseLifecycle()
+        val rollbackAdapter = GPURuntimeResourceAdapter()
+        val rollbackPayload = uploadPayload(frame = 801, leaseLifecycle = rollbackLease)
+        val rollbackToken = rollbackAdapter.registeredToken(rollbackPayload)
+        assertTrue(rollbackAdapter.rollbackPreparedNativeFramePayload(rollbackToken))
+        assertEquals(listOf("release-before-submit"), rollbackLease.events)
+
+        val completionLease = RecordingFrameLeaseLifecycle()
+        val completionAdapter = GPURuntimeResourceAdapter()
+        val completionPayload = uploadPayload(frame = 802, leaseLifecycle = completionLease)
+        val completionToken = completionAdapter.registeredToken(completionPayload)
+        assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+            completionAdapter.consumePreparedNativeFramePayload(completionToken, completionPayload.identity),
+        )
+        assertTrue(completionAdapter.markPreparedNativeFrameSubmitted(completionToken))
+        assertTrue(completionAdapter.releasePreparedNativeFramePayload(completionToken))
+        assertEquals(listOf("mark-submitted", "release-after-completion"), completionLease.events)
+
+        val uncertainLease = RecordingFrameLeaseLifecycle()
+        val uncertainAdapter = GPURuntimeResourceAdapter()
+        val uncertainPayload = uploadPayload(frame = 803, leaseLifecycle = uncertainLease)
+        val uncertainToken = uncertainAdapter.registeredToken(uncertainPayload)
+        assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+            uncertainAdapter.consumePreparedNativeFramePayload(uncertainToken, uncertainPayload.identity),
+        )
+        assertTrue(uncertainAdapter.markPreparedNativeFrameSubmitted(uncertainToken))
+        assertTrue(uncertainAdapter.quarantinePreparedNativeFramePayload(uncertainToken))
+        assertEquals(listOf("mark-submitted", "quarantine-uncertain"), uncertainLease.events)
+
+        val refusedLease = RecordingFrameLeaseLifecycle()
+        val refusedAdapter = GPURuntimeResourceAdapter().also(GPURuntimeResourceAdapter::close)
+        assertIs<GPUPreparedNativeFrameRegistration.Refused>(
+            refusedAdapter.registerReadyPayload(uploadPayload(frame = 804, leaseLifecycle = refusedLease)),
+        )
+        assertEquals(listOf("release-before-submit"), refusedLease.events)
+    }
+
+    @Test
+    fun `failed pooled completion release is quarantined and failed rollback release retries`() {
+        val completionLease = RecordingFrameLeaseLifecycle(refuseCompletionAttempts = 1)
+        val completionAdapter = GPURuntimeResourceAdapter()
+        val completionPayload = uploadPayload(frame = 805, leaseLifecycle = completionLease)
+        val completionToken = completionAdapter.registeredToken(completionPayload)
+        assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+            completionAdapter.consumePreparedNativeFramePayload(completionToken, completionPayload.identity),
+        )
+        assertTrue(completionAdapter.markPreparedNativeFrameSubmitted(completionToken))
+
+        assertFalse(completionAdapter.releasePreparedNativeFramePayload(completionToken))
+        assertEquals(
+            listOf("mark-submitted", "release-after-completion", "quarantine-uncertain"),
+            completionLease.events,
+        )
+        assertEquals(1, completionAdapter.quarantinedPreparedNativeFramePayloadCount)
+        completionAdapter.close()
+        assertEquals(1, completionLease.events.count { it == "quarantine-uncertain" })
+
+        val rollbackLease = RecordingFrameLeaseLifecycle(refuseRollbackAttempts = 1)
+        val rollbackAdapter = GPURuntimeResourceAdapter()
+        val rollbackToken = rollbackAdapter.registeredToken(
+            uploadPayload(frame = 806, leaseLifecycle = rollbackLease),
+        )
+        assertFalse(rollbackAdapter.rollbackPreparedNativeFramePayload(rollbackToken))
+        assertEquals(1, rollbackAdapter.quarantinedPreparedNativeFramePayloadCount)
+
+        rollbackAdapter.close()
+        assertEquals(listOf("release-before-submit", "release-before-submit"), rollbackLease.events)
+        assertEquals(0, rollbackAdapter.quarantinedPreparedNativeFramePayloadCount)
+    }
+
+    @Test
+    fun `borrowed only pooled draft retains refused rollback lifecycle for quarantine retry`() {
+        val lifecycle = RecordingFrameLeaseLifecycle(refuseRollbackAttempts = 1)
+        val adapter = GPURuntimeResourceAdapter()
+        val draft = GPUPreparedNativeFrameDraft(
+            uploadPayload(frame = 807, leaseLifecycle = lifecycle),
+        )
+
+        assertTrue(adapter.quarantinePreparedNativeFrameDraft(draft))
+        assertEquals(listOf("release-before-submit"), lifecycle.events)
+        assertEquals(1, adapter.quarantinedPreparedNativeFramePayloadCount)
+
+        adapter.close()
+
+        assertEquals(
+            listOf("release-before-submit", "release-before-submit"),
+            lifecycle.events,
+        )
+        assertEquals(0, adapter.quarantinedPreparedNativeFramePayloadCount)
+    }
+
+    @Test
     fun `create uniform slab registers lease facts and membership`() {
         val adapter = GPURuntimeResourceAdapter()
 
@@ -2005,6 +2150,7 @@ private fun uploadPayload(
         CountingGPUBuffer("upload-destination-$frame"),
         GPUDeviceGenerationID(11),
     ),
+    leaseLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null,
 ): GPUPreparedNativeFramePayload = testPayload(
     frame = frame,
     scopes = listOf(
@@ -2014,6 +2160,7 @@ private fun uploadPayload(
             destination = destination,
         ),
     ),
+    leaseLifecycle = leaseLifecycle,
 )
 
 private fun anchoredBorrowedPayload(
@@ -2174,6 +2321,7 @@ private fun testPayload(
     frame: Long,
     scopes: List<GPUPreparedNativeScopeOperand>,
     auxiliaryOwnedHandles: List<GPUPreparedNativeAuxiliaryHandle> = emptyList(),
+    leaseLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null,
 ): GPUPreparedNativeFramePayload {
     val keys = scopes.mapIndexed { index, scope -> testOperandKeys(scope, "frame.$frame.scope.$index") }
     return GPUPreparedNativeFramePayload(
@@ -2194,7 +2342,41 @@ private fun testPayload(
         scopeOperands = scopes,
         scopeOperandKeys = keys,
         auxiliaryOwnedHandles = auxiliaryOwnedHandles,
+        leaseLifecycle = leaseLifecycle,
     )
+}
+
+private class RecordingFrameLeaseLifecycle(
+    private var refuseRollbackAttempts: Int = 0,
+    private var refuseCompletionAttempts: Int = 0,
+) : GPUPreparedNativeFrameLeaseLifecycle {
+    val events = mutableListOf<String>()
+
+    override fun releaseBeforeSubmit(): GPUPreparedNativeFrameLeaseTransition {
+        events += "release-before-submit"
+        return if (refuseRollbackAttempts-- > 0) refused("rollback") else applied()
+    }
+
+    override fun markSubmitted(): GPUPreparedNativeFrameLeaseTransition {
+        events += "mark-submitted"
+        return applied()
+    }
+
+    override fun releaseAfterCompletion(): GPUPreparedNativeFrameLeaseTransition {
+        events += "release-after-completion"
+        return if (refuseCompletionAttempts-- > 0) refused("completion") else applied()
+    }
+
+    override fun quarantineUncertain(): GPUPreparedNativeFrameLeaseTransition {
+        events += "quarantine-uncertain"
+        return applied()
+    }
+
+    private fun applied(): GPUPreparedNativeFrameLeaseTransition =
+        GPUPreparedNativeFrameLeaseTransition.Applied
+
+    private fun refused(reason: String): GPUPreparedNativeFrameLeaseTransition =
+        GPUPreparedNativeFrameLeaseTransition.Refused(reason)
 }
 
 private inline fun <reified T> fakeNative(label: String): T = Proxy.newProxyInstance(

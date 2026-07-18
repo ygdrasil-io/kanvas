@@ -148,6 +148,25 @@ internal fun gpuPreparedNativeBindingKey(value: String): String {
     }.toString()
 }
 
+/** Typed, non-owning lifecycle hook for session-pooled handles borrowed by one native payload. */
+internal sealed interface GPUPreparedNativeFrameLeaseTransition {
+    data object Applied : GPUPreparedNativeFrameLeaseTransition
+    data class Refused(val reason: String) : GPUPreparedNativeFrameLeaseTransition {
+        init { require(reason.isNotBlank()) }
+    }
+}
+
+/**
+ * A lease is deliberately not [AutoCloseable]: the session owns its native handles, while the
+ * frame registry drives only the exact pre-submit, submitted, completion, or uncertain transition.
+ */
+internal interface GPUPreparedNativeFrameLeaseLifecycle {
+    fun releaseBeforeSubmit(): GPUPreparedNativeFrameLeaseTransition
+    fun markSubmitted(): GPUPreparedNativeFrameLeaseTransition
+    fun releaseAfterCompletion(): GPUPreparedNativeFrameLeaseTransition
+    fun quarantineUncertain(): GPUPreparedNativeFrameLeaseTransition
+}
+
 /**
  * Private typed native operand. It never enters PreparedGPUFrame, dumps, hashes, or telemetry.
  */
@@ -325,7 +344,10 @@ internal class GPUPreparedNativeBufferOperand(
     val buffer: GPUBuffer,
     override val deviceGeneration: GPUDeviceGenerationID,
     override val ownership: GPUPreparedNativeOperandOwnership = GPUPreparedNativeOperandOwnership.Borrowed,
-) : GPUPreparedNativeOperand
+    val byteCapacity: Long? = null,
+) : GPUPreparedNativeOperand {
+    init { require(byteCapacity == null || byteCapacity > 0L) }
+}
 
 internal class GPUPreparedNativeRenderPipelineOperand(
     val pipeline: GPURenderPipeline,
@@ -367,8 +389,21 @@ internal sealed interface GPUPreparedNativeDrawCall {
         val firstIndex: Int = 0,
         val baseVertex: Int = 0,
         val firstInstance: Int = 0,
+        val vertexCount: Int? = null,
+        val maxLocalIndex: Int? = null,
     ) : GPUPreparedNativeDrawCall {
-        init { require(indexCount > 0 && instanceCount > 0) }
+        init {
+            require(indexCount > 0 && instanceCount > 0)
+            require(firstIndex >= 0 && baseVertex >= 0 && firstInstance >= 0)
+            require((vertexCount == null) == (maxLocalIndex == null)) {
+                "Indexed local vertex count and maximum index authority must be carried together"
+            }
+            if (vertexCount != null && maxLocalIndex != null) {
+                require(vertexCount > 0 && maxLocalIndex in 0 until vertexCount) {
+                    "Indexed maximum local index must address its declared local vertices"
+                }
+            }
+        }
     }
 }
 
@@ -471,7 +506,11 @@ internal sealed interface GPUPreparedNativeRenderCommand {
     ) : GPUPreparedNativeRenderCommand {
         val dynamicOffsets = immutableList(dynamicOffsets)
         override val operands = listOf<GPUPreparedNativeOperand>(bindGroup)
-        init { require(index >= 0 && this.dynamicOffsets.all { it >= 0L }) }
+        init {
+            require(index >= 0 && this.dynamicOffsets.all { offset ->
+                offset in 0L..UInt.MAX_VALUE.toLong()
+            })
+        }
     }
 
     data class SetScissor(val x: Int, val y: Int, val width: Int, val height: Int) :
@@ -490,11 +529,16 @@ internal sealed interface GPUPreparedNativeRenderCommand {
         val buffer: GPUPreparedNativeBufferOperand,
         val offset: Long,
         val size: Long,
+        val vertexStrideBytes: Long? = null,
     ) : GPUPreparedNativeRenderCommand {
         override val operands = listOf<GPUPreparedNativeOperand>(buffer)
         init {
-            require(slot >= 0 && offset == 0L && size > 0L) {
-                "The first public-wgpu4k vertex-buffer bridge requires a zero offset and exact positive size"
+            require(slot >= 0 && offset >= 0L && offset % 4L == 0L && size > 0L &&
+                offset <= Long.MAX_VALUE - size &&
+                (buffer.byteCapacity == null || offset + size <= buffer.byteCapacity) &&
+                (vertexStrideBytes == null || vertexStrideBytes > 0L && size % vertexStrideBytes == 0L)
+            ) {
+                "The public-wgpu4k vertex-buffer bridge requires an aligned non-negative offset and positive size"
             }
         }
     }
@@ -507,8 +551,12 @@ internal sealed interface GPUPreparedNativeRenderCommand {
     ) : GPUPreparedNativeRenderCommand {
         override val operands = listOf<GPUPreparedNativeOperand>(buffer)
         init {
-            require(offset == 0L && size > 0L) {
-                "The first public-wgpu4k index-buffer bridge requires a zero offset and exact positive size"
+            val alignment = if (format == GPUPreparedNativeIndexFormat.Uint16) 2L else 4L
+            require(offset >= 0L && offset % alignment == 0L && size > 0L && size % alignment == 0L &&
+                offset <= Long.MAX_VALUE - size &&
+                (buffer.byteCapacity == null || offset + size <= buffer.byteCapacity)
+            ) {
+                "The public-wgpu4k index-buffer bridge requires a format-aligned slice"
             }
         }
     }
@@ -555,13 +603,25 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             var bindGroupBound = false
             var vertexBufferBound = false
             var indexBufferBound = false
+            var vertexSliceBytes: Long? = null
+            var vertexStrideBytes: Long? = null
+            var indexSliceBytes: Long? = null
+            var indexElementBytes: Long? = null
             var scissorBound = false
             this.commands.forEach { command ->
                 when (command) {
                     is GPUPreparedNativeRenderCommand.SetPipeline -> pipelineBound = true
                     is GPUPreparedNativeRenderCommand.SetBindGroup -> bindGroupBound = true
-                    is GPUPreparedNativeRenderCommand.SetVertexBuffer -> vertexBufferBound = true
-                    is GPUPreparedNativeRenderCommand.SetIndexBuffer -> indexBufferBound = true
+                    is GPUPreparedNativeRenderCommand.SetVertexBuffer -> {
+                        vertexBufferBound = true
+                        vertexSliceBytes = command.size
+                        vertexStrideBytes = command.vertexStrideBytes
+                    }
+                    is GPUPreparedNativeRenderCommand.SetIndexBuffer -> {
+                        indexBufferBound = true
+                        indexSliceBytes = command.size
+                        indexElementBytes = if (command.format == GPUPreparedNativeIndexFormat.Uint16) 2L else 4L
+                    }
                     is GPUPreparedNativeRenderCommand.SetScissor -> scissorBound = true
                     is GPUPreparedNativeRenderCommand.SetStencilReference -> Unit
                     is GPUPreparedNativeRenderCommand.Draw -> require(pipelineBound) {
@@ -573,10 +633,48 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                         require(vertexBufferBound) { "Every native indexed draw requires a preceding SetVertexBuffer command" }
                         require(indexBufferBound) { "Every native indexed draw requires a preceding SetIndexBuffer command" }
                         require(scissorBound) { "Every native indexed draw requires a preceding SetScissor command" }
-                        require(
-                            command.drawCall.instanceCount == 1 && command.drawCall.firstIndex == 0 &&
-                                command.drawCall.baseVertex == 0 && command.drawCall.firstInstance == 0,
-                        ) { "The first public-wgpu4k indexed bridge requires default draw offsets and one instance" }
+                        val indexedBytes = try {
+                            Math.multiplyExact(
+                                Math.addExact(
+                                    command.drawCall.firstIndex.toLong(),
+                                    command.drawCall.indexCount.toLong(),
+                                ),
+                                requireNotNull(indexElementBytes),
+                            )
+                        } catch (_: ArithmeticException) {
+                            throw IllegalArgumentException("Indexed draw range overflows its bound index slice")
+                        }
+                        require(indexedBytes <= requireNotNull(indexSliceBytes)) {
+                            "Indexed draw range exceeds its bound index slice"
+                        }
+                        val localMaximumIndex = command.drawCall.maxLocalIndex
+                        if (localMaximumIndex == null) {
+                            require(command.drawCall.baseVertex == 0) {
+                                "Indexed baseVertex requires an exact maximum-index authority"
+                            }
+                        } else {
+                            val stride = requireNotNull(vertexStrideBytes) {
+                                "Indexed maximum-index authority requires an exact vertex stride"
+                            }
+                            val maximumAddressedVertex = try {
+                                Math.addExact(command.drawCall.baseVertex, localMaximumIndex)
+                            } catch (_: ArithmeticException) {
+                                throw IllegalArgumentException("Indexed base vertex plus maximum index overflows")
+                            }
+                            val minimumVertexBytes = try {
+                                Math.multiplyExact(
+                                    Math.addExact(maximumAddressedVertex.toLong(), 1L),
+                                    stride,
+                                )
+                            } catch (_: ArithmeticException) {
+                                throw IllegalArgumentException(
+                                    "Indexed base vertex plus maximum index overflows its bound vertex slice",
+                                )
+                            }
+                            require(minimumVertexBytes <= requireNotNull(vertexSliceBytes)) {
+                                "Indexed base vertex plus maximum index exceeds its bound vertex slice"
+                            }
+                        }
                     }
                 }
             }
@@ -729,6 +827,7 @@ internal class GPUPreparedNativeFramePayload(
     scopeOperands: List<GPUPreparedNativeScopeOperand>,
     scopeOperandKeys: List<List<GPUPreparedNativeOperandKey>>,
     auxiliaryOwnedHandles: List<GPUPreparedNativeAuxiliaryHandle> = emptyList(),
+    internal val leaseLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null,
 ) {
     val scopeOperands: List<GPUPreparedNativeScopeOperand> = immutableList(scopeOperands)
     val scopeOperandKeys: List<List<GPUPreparedNativeOperandKey>> = immutableList(
@@ -889,6 +988,7 @@ internal class GPUPreparedNativeFrameDraft internal constructor(
     }
 
     private var ownershipState = OwnershipState.Draft
+    private var leaseReleasedBeforeSubmit = payload.leaseLifecycle == null
     private val pendingOwnedHandles = run {
         val identities = java.util.Collections.newSetFromMap(
             IdentityHashMap<AutoCloseable, Boolean>(),
@@ -907,6 +1007,13 @@ internal class GPUPreparedNativeFrameDraft internal constructor(
     @Synchronized
     internal fun disposeBeforeRegistration(): Boolean {
         if (ownershipState != OwnershipState.Draft) return true
+        if (!leaseReleasedBeforeSubmit) {
+            leaseReleasedBeforeSubmit = try {
+                payload.leaseLifecycle?.releaseBeforeSubmit() == GPUPreparedNativeFrameLeaseTransition.Applied
+            } catch (_: Throwable) {
+                false
+            }
+        }
         val iterator = pendingOwnedHandles.iterator()
         while (iterator.hasNext()) {
             try {
@@ -916,7 +1023,7 @@ internal class GPUPreparedNativeFrameDraft internal constructor(
                 // Retain only the failed handle so an explicit retry cannot double-close successes.
             }
         }
-        return pendingOwnedHandles.isEmpty().also { released ->
+        return (pendingOwnedHandles.isEmpty() && leaseReleasedBeforeSubmit).also { released ->
             if (released) ownershipState = OwnershipState.Released
         }
     }
@@ -935,7 +1042,8 @@ internal class GPUPreparedNativeFrameDraft internal constructor(
         synchronized(this) {
             synchronized(replacement) {
                 if (ownershipState != OwnershipState.Draft ||
-                    replacement.ownershipState != OwnershipState.Draft
+                    replacement.ownershipState != OwnershipState.Draft ||
+                    payload.leaseLifecycle !== replacement.payload.leaseLifecycle
                 ) {
                     return@synchronized false
                 }

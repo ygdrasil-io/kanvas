@@ -68,17 +68,45 @@ enum class GPUEncoderOperationKind {
 }
 
 /** One handle-free encoder scope mapped to exactly one encodable semantic step. */
-class GPUCommandEncoderScopePlan(
+class GPUCommandEncoderScopePlan internal constructor(
     val sourceStepIndex: Int,
     val operationKind: GPUEncoderOperationKind,
-    val scopeLabel: String = "step.$sourceStepIndex",
+    val scopeLabel: String,
     sourceTaskIds: List<GPUTaskID>,
-    sourcePacketIds: List<GPUDrawPacketID> = emptyList(),
+    sourcePacketIds: List<GPUDrawPacketID>,
     facadeOperationClasses: List<String>,
     val targetGeneration: Long,
     resourceGenerationLabels: List<String>,
-    val passCommandStream: GPUPassCommandStream? = null,
+    val passCommandStream: GPUPassCommandStream?,
+    internal val corePrimitiveDirectNativeRouteSeal: GPUCorePrimitiveDirectNativeRouteSeal,
 ) {
+    constructor(
+        sourceStepIndex: Int,
+        operationKind: GPUEncoderOperationKind,
+        scopeLabel: String = "step.$sourceStepIndex",
+        sourceTaskIds: List<GPUTaskID>,
+        sourcePacketIds: List<GPUDrawPacketID> = emptyList(),
+        facadeOperationClasses: List<String>,
+        targetGeneration: Long,
+        resourceGenerationLabels: List<String>,
+        passCommandStream: GPUPassCommandStream? = null,
+    ) : this(
+        sourceStepIndex = sourceStepIndex,
+        operationKind = operationKind,
+        scopeLabel = scopeLabel,
+        sourceTaskIds = sourceTaskIds,
+        sourcePacketIds = sourcePacketIds,
+        facadeOperationClasses = facadeOperationClasses,
+        targetGeneration = targetGeneration,
+        resourceGenerationLabels = resourceGenerationLabels,
+        passCommandStream = passCommandStream,
+        corePrimitiveDirectNativeRouteSeal = if (operationKind == GPUEncoderOperationKind.Render) {
+            GPUCorePrimitiveDirectNativeRouteSeal.Empty
+        } else {
+            GPUCorePrimitiveDirectNativeRouteSeal.Missing
+        },
+    )
+
     val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
     val sourcePacketIds: List<GPUDrawPacketID> = immutableList(sourcePacketIds)
     val facadeOperationClasses: List<String> = immutableList(facadeOperationClasses)
@@ -103,6 +131,15 @@ class GPUCommandEncoderScopePlan(
         require(targetGeneration >= 0L) { "GPUCommandEncoderScopePlan.targetGeneration must be non-negative" }
         require((operationKind == GPUEncoderOperationKind.Render) == (passCommandStream != null)) {
             "Only a Render encoder scope must retain a materialized GPUPassCommandStream"
+        }
+        require(
+            (operationKind == GPUEncoderOperationKind.Render) ==
+                (corePrimitiveDirectNativeRouteSeal !== GPUCorePrimitiveDirectNativeRouteSeal.Missing),
+        ) { "Only Render encoder scopes retain a CorePrimitive direct native route seal" }
+        if (corePrimitiveDirectNativeRouteSeal is GPUCorePrimitiveDirectNativeRouteSeal.Routes) {
+            require(corePrimitiveDirectNativeRouteSeal.routesByPacketId.keys.toList() == this.sourcePacketIds) {
+                "Direct CorePrimitive route identities must exactly match render packet identities"
+            }
         }
     }
 }
@@ -607,7 +644,7 @@ internal class PreparedGPUFrame(
             require(scope.targetGeneration == generationSeal.targetGeneration) {
                 "PreparedGPUFrame encoder scope target generation must match the generation seal"
             }
-            require(scope.facadeOperationClasses == step.expectedFacadeOperations()) {
+            require(scope.facadeOperationClasses == step.expectedFacadeOperations(scope)) {
                 "PreparedGPUFrame encoder facade operations must exactly match the semantic step"
             }
             val expectedResources = step.preparedResourceRefs().map { resource ->
@@ -620,6 +657,9 @@ internal class PreparedGPUFrame(
                 "PreparedGPUFrame encoder resource generations must exactly match the semantic step"
             }
             if (step is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep) {
+                require(scope.corePrimitiveDirectNativeRouteSeal !== GPUCorePrimitiveDirectNativeRouteSeal.Missing) {
+                    "PreparedGPUFrame render scopes require a pure-preflight CorePrimitive route seal"
+                }
                 val expectedPackets = step.drawPackets.map { it.packetId }
                 val stream = requireNotNull(scope.passCommandStream) {
                     "PreparedGPUFrame render scope must retain its command stream"
@@ -627,7 +667,7 @@ internal class PreparedGPUFrame(
                 require(scope.sourcePacketIds == expectedPackets) {
                     "PreparedGPUFrame render packet identities must exactly match the semantic step"
                 }
-                require(stream.sourcePacketIds == step.expectedRenderCommandPacketIds()) {
+                require(stream.sourcePacketIds == step.expectedRenderCommandPacketIds(scope)) {
                     "PreparedGPUFrame render command stream must have exact per-packet command structure"
                 }
                 require(stream.sourcePassIds == step.drawPackets.map { it.passId }.distinct()) {
@@ -1050,14 +1090,19 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEnco
     else -> error("Non-encodable semantic step has no encoder operation kind")
 }
 
-private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFacadeOperations(): List<String> =
+private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFacadeOperations(
+    scope: GPUCommandEncoderScopePlan,
+): List<String> =
     when (this) {
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> buildList {
             add("beginRenderPass")
             drawPackets.forEach { packet ->
                 add("setRenderPipeline")
                 add("setBindGroup")
-                if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph) {
+                val directRoutes = scope.corePrimitiveDirectNativeRouteSeal as?
+                    GPUCorePrimitiveDirectNativeRouteSeal.Routes
+                if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+                    directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true) {
                     add("setVertexBuffer")
                     add("setIndexBuffer")
                 }
@@ -1081,11 +1126,14 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFaca
     }
 
 private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep
-    .expectedRenderCommandPacketIds(): List<GPUDrawPacketID> = buildList {
+    .expectedRenderCommandPacketIds(scope: GPUCommandEncoderScopePlan): List<GPUDrawPacketID> = buildList {
+    val directRoutes = scope.corePrimitiveDirectNativeRouteSeal as?
+        GPUCorePrimitiveDirectNativeRouteSeal.Routes
     drawPackets.forEach { packet ->
         add(packet.packetId)
         add(packet.packetId)
-        if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph) {
+        if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+            directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true) {
             add(packet.packetId)
             add(packet.packetId)
         }

@@ -43,6 +43,11 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectTransformType
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadGatherPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
@@ -54,6 +59,38 @@ import org.graphiks.kanvas.gpu.renderer.stroke.DashVertexExpansion
 /** Compact stable sort-key value. */
 @JvmInline
 value class SortKey(val value: Long)
+
+/** Captures the exact local FillRect geometry and transform facts analyzed for one route. */
+internal fun corePrimitiveRectGeometryAuthority(
+    rect: GPURect,
+    transform: GPUTransformFacts,
+): GPUCorePrimitiveRectGeometryAuthority = GPUCorePrimitiveRectGeometryAuthority.issue(
+    version = 1,
+    rectLeftBits = rect.left.toRawBits(),
+    rectTopBits = rect.top.toRawBits(),
+    rectRightBits = rect.right.toRawBits(),
+    rectBottomBits = rect.bottom.toRawBits(),
+    transformType = when (transform.type) {
+        GPUTransformType.Identity -> GPUCorePrimitiveRectTransformType.Identity
+        GPUTransformType.Translate -> GPUCorePrimitiveRectTransformType.Translate
+        GPUTransformType.Scale -> GPUCorePrimitiveRectTransformType.Scale
+        GPUTransformType.Affine -> GPUCorePrimitiveRectTransformType.Affine
+        GPUTransformType.Perspective -> GPUCorePrimitiveRectTransformType.Perspective
+        GPUTransformType.Singular -> GPUCorePrimitiveRectTransformType.Singular
+    },
+    transformTranslateXBits = transform.translateX.toRawBits(),
+    transformTranslateYBits = transform.translateY.toRawBits(),
+    transformScaleXBits = transform.scaleX.toRawBits(),
+    transformScaleYBits = transform.scaleY.toRawBits(),
+    transformSkewXBits = transform.skewX.toRawBits(),
+    transformSkewYBits = transform.skewY.toRawBits(),
+)
+
+/** Lets downstream adapters verify analysis authority without exposing a signing factory. */
+fun GPUCorePrimitiveRectGeometryAuthority.matchesCorePrimitiveRectGeometry(
+    rect: GPURect,
+    transform: GPUTransformFacts,
+): Boolean = this == corePrimitiveRectGeometryAuthority(rect, transform)
 
 /** Immutable draw analysis for one recording scope. */
 data class GPUDrawAnalysis(
@@ -75,6 +112,8 @@ data class GPUDrawAnalysisRecord(
     val renderStepCandidates: List<String>,
     val sortKey: SortKey,
     val diagnostics: List<GPUAnalysisDiagnostic> = emptyList(),
+    val corePrimitiveRectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
+    val corePrimitiveRectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
 )
 
 /** Analysis-time decision for a draw record. */
@@ -225,6 +264,13 @@ class GPUFirstRoutePlanner(
         }
 
         val isLinearGradient = command.material is GPUMaterialDescriptor.LinearGradient
+        val rectGeometryAuthority =
+            corePrimitiveRectGeometryAuthority(command.rect, command.transform)
+        val rectRouteAuthority = (command.material as? GPUMaterialDescriptor.SolidColor)?.let {
+            command.rectRouteAuthority()
+        }
+        val isAffineSolid =
+            rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1
         val recordId = "analysis.fill_rect.${command.commandId.value}"
         val pipelineKey: String
         val renderStep: String
@@ -232,7 +278,13 @@ class GPUFirstRoutePlanner(
         val materialKeyHash: String
         val capabilityName: String
 
-        if (isLinearGradient) {
+        if (isAffineSolid) {
+            pipelineKey = "pending.pipeline.fill_rect.affine.solid.rgba8unorm.src_over"
+            renderStep = CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
+            routeLabel = "native.fill_rect.affine.solid"
+            materialKeyHash = "pending.material.solid"
+            capabilityName = CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
+        } else if (isLinearGradient) {
             pipelineKey = "pending.pipeline.fill_rect.linear_gradient.rgba8unorm.src_over"
             renderStep = linearGradientRenderStep
             routeLabel = "native.fill_rect.linear_gradient"
@@ -256,6 +308,8 @@ class GPUFirstRoutePlanner(
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId),
+            corePrimitiveRectRouteAuthority = rectRouteAuthority,
+            corePrimitiveRectGeometryAuthority = rectGeometryAuthority,
         )
         val routeDecision: GPURouteDecision.Native = if (isLinearGradient) {
             GPUFirstRouteDecisionBuilder.nativeLinearGradientRect(
@@ -1325,6 +1379,12 @@ class GPUFirstRoutePlanner(
             renderStepCandidates = emptyList(),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = listOf(diagnostic),
+            corePrimitiveRectRouteAuthority =
+                (command.material as? GPUMaterialDescriptor.SolidColor)?.let {
+                    command.rectRouteAuthority()
+                },
+            corePrimitiveRectGeometryAuthority =
+                corePrimitiveRectGeometryAuthority(command.rect, command.transform),
         )
         return GPUFirstRoutePlan(
             analysisRecord = analysisRecord,
@@ -1419,6 +1479,16 @@ class GPUFirstRoutePlanner(
         } ?: when {
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
+            transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"
+            transform.isAffineDeterminantSingular() -> "unsupported.transform.affine_singular"
+            transform.type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) &&
+                material !is GPUMaterialDescriptor.SolidColor ->
+                "unsupported.transform.affine_material"
+            transform.isNonAxisAlignedAffine() && antiAlias ->
+                "unsupported.transform.affine_antialias"
+            transform.isNonAxisAlignedAffine() &&
+                !capabilities.hasFact(CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY) ->
+                "unsupported.transform.affine_capability_missing"
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack &&
                 (clip.coveragePlan == null || clip.coveragePlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused) ->
@@ -1822,7 +1892,12 @@ class GPUFirstRoutePlanner(
         const val firstStencilCoverCapabilityName = "first_slice.path_fill.stencil_cover"
 
         /** Transform classes supported by the first native FillRect route. */
-        val acceptedTransformTypes = setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+        val acceptedTransformTypes = setOf(
+            GPUTransformType.Identity,
+            GPUTransformType.Translate,
+            GPUTransformType.Scale,
+            GPUTransformType.Affine,
+        )
 
         /** Clip classes supported by the first native FillRect route. */
         val acceptedClipKinds = setOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect, GPUClipKind.ComplexStack)
@@ -1954,6 +2029,24 @@ private fun GPUTransformFacts.hasNonFiniteFacts(): Boolean =
     !translateX.isFinite() || !translateY.isFinite() ||
         !scaleX.isFinite() || !scaleY.isFinite() ||
         !skewX.isFinite() || !skewY.isFinite()
+
+private fun GPUTransformFacts.affineDeterminant(): Float = scaleX * scaleY - skewX * skewY
+
+private fun GPUTransformFacts.isAffineDeterminantNonFinite(): Boolean =
+    type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) && !affineDeterminant().isFinite()
+
+private fun GPUTransformFacts.isAffineDeterminantSingular(): Boolean =
+    type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) && affineDeterminant() == 0f
+
+private fun GPUTransformFacts.isNonAxisAlignedAffine(): Boolean =
+    type == GPUTransformType.Affine && (skewX != 0f || skewY != 0f)
+
+private fun NormalizedDrawCommand.FillRect.rectRouteAuthority(): GPUCorePrimitiveRectRouteAuthority =
+    if (transform.isNonAxisAlignedAffine()) {
+        GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1
+    } else {
+        GPUCorePrimitiveRectRouteAuthority.RectAxisAligned
+    }
 
 /** Emits stable analysis facts for accepted transform classifications. */
 private fun GPUTransformFacts.analysisDiagnostics(

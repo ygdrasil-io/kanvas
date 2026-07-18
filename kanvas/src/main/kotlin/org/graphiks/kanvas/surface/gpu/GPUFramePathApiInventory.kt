@@ -6,6 +6,8 @@ import kotlin.math.floor
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
+import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRectGeometry
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
@@ -33,6 +35,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
@@ -196,12 +199,46 @@ object GPUFramePathApiInventory {
     ): GPUCorePrimitiveSemanticGatherResult {
         val gatherer = GPUCorePrimitivePayloadGatherer()
         val semantics = linkedMapOf<Int, GPUDrawSemanticPayload.CorePrimitive>()
+        val analysisRecordsByCommandId = inventory.recording.analysis.records
+            .groupBy(GPUDrawAnalysisRecord::commandIdValue)
         inventory.visualCommands.forEach { visual ->
             visual.geometryRefusal?.let { refusal ->
                 return refusal.toGatherRefusal(visual)
             }
+            val commandIdValue = visual.normalized.commandId.value
+            val matchingAnalysisRecords = analysisRecordsByCommandId[commandIdValue].orEmpty()
+            if (matchingAnalysisRecords.size != 1) {
+                return GPUCorePrimitiveGeometryRefusal(
+                    code = "unsupported.core_primitive.analysis_record_bijection",
+                    refusalFacts = mapOf(
+                        "matchingRecordCount" to matchingAnalysisRecords.size.toString(),
+                    ),
+                ).toGatherRefusal(visual)
+            }
+            val analysisRecord = matchingAnalysisRecords.single()
+            val expectedAnalysisFamily = visual.normalized.analysisCommandFamily()
+            if (analysisRecord.commandFamily != expectedAnalysisFamily) {
+                return GPUCorePrimitiveGeometryRefusal(
+                    code = "unsupported.core_primitive.analysis_command_family_mismatch",
+                    refusalFacts = mapOf(
+                        "analysisRecordId" to analysisRecord.recordId,
+                        "analysisCommandFamily" to analysisRecord.commandFamily,
+                        "normalizedCommandFamily" to expectedAnalysisFamily,
+                    ),
+                ).toGatherRefusal(visual)
+            }
+            val expectedAnalysisRecordId = visual.normalized.analysisRecordId()
+            if (analysisRecord.recordId != expectedAnalysisRecordId) {
+                return GPUCorePrimitiveGeometryRefusal(
+                    code = "unsupported.core_primitive.analysis_record_id_mismatch",
+                    refusalFacts = mapOf(
+                        "analysisRecordId" to analysisRecord.recordId,
+                        "expectedAnalysisRecordId" to expectedAnalysisRecordId,
+                    ),
+                ).toGatherRefusal(visual)
+            }
             val semantic = try {
-                gatherer.gatherSemantic(visual.toCorePrimitiveInput(targetBounds))
+                gatherer.gatherSemantic(visual.toCorePrimitiveInput(targetBounds, analysisRecord))
             } catch (failure: GPUCorePrimitiveGeometryRefusalException) {
                 return failure.refusal.toGatherRefusal(visual)
             } catch (failure: IllegalArgumentException) {
@@ -232,6 +269,7 @@ private fun GPUCorePrimitiveGeometryRefusal.toGatherRefusal(
 
 private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     targetBounds: GPUPixelBounds,
+    analysisRecord: GPUDrawAnalysisRecord,
 ): GPUCorePrimitivePayloadInput {
     val material = normalized.material as? GPUMaterialDescriptor.SolidColor
         ?: refuseGeometry(
@@ -239,6 +277,47 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
             mapOf("materialKind" to normalized.material::class.simpleName.orEmpty()),
         )
     val alpha = material.a
+    val sourceFamily = normalized.toCoreSourceFamily()
+    val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?
+    val rectGeometryAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
+        val fillRect = normalized as NormalizedDrawCommand.FillRect
+        rectRouteAuthority = analysisRecord.corePrimitiveRectRouteAuthority
+            ?: refuseGeometry(
+                "unsupported.core_primitive.rect.analysis_authority_missing",
+                mapOf("analysisRecordId" to analysisRecord.recordId),
+            )
+        analysisRecord.corePrimitiveRectGeometryAuthority?.also { authority ->
+            if (!authority.matchesCorePrimitiveRectGeometry(fillRect.rect, fillRect.transform)) {
+                refuseGeometry(
+                    "unsupported.core_primitive.rect.geometry_authority_mismatch",
+                    mapOf(
+                        "analysisRecordId" to analysisRecord.recordId,
+                        "analysisGeometryAuthority" to authority.toString(),
+                    ),
+                )
+            }
+        } ?: refuseGeometry(
+            "unsupported.core_primitive.rect.geometry_authority_mismatch",
+            mapOf(
+                "analysisRecordId" to analysisRecord.recordId,
+                "analysisGeometryAuthority" to "missing",
+            ),
+        )
+    } else {
+        if (analysisRecord.corePrimitiveRectRouteAuthority != null ||
+            analysisRecord.corePrimitiveRectGeometryAuthority != null
+        ) {
+            refuseGeometry(
+                "unsupported.core_primitive.rect.analysis_authority_forbidden",
+                mapOf(
+                    "analysisRecordId" to analysisRecord.recordId,
+                    "sourceFamily" to sourceFamily.name,
+                ),
+            )
+        }
+        rectRouteAuthority = null
+        null
+    }
     val geometry = normalized.toDeviceGeometry(targetBounds)
     val scissor = when (val clip = clipCoverage) {
         is GPUClipCoveragePlan.Scissor -> GPUPixelBounds(
@@ -251,7 +330,7 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     }
     return GPUCorePrimitivePayloadInput(
         commandIdValue = normalized.commandId.value,
-        sourceFamily = normalized.source.operation.toCoreSourceFamily(),
+        sourceFamily = sourceFamily,
         geometry = geometry,
         premultipliedRgba = listOf(material.r * alpha, material.g * alpha, material.b * alpha, alpha),
         targetBounds = targetBounds,
@@ -260,6 +339,14 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         blendPlanIdentity = blendPlan.canonicalIdentity(),
         frameProvenance = provenance,
         coverageMode = coverageMode(),
+        analysisRecordId = analysisRecord.recordId.takeIf {
+            sourceFamily == GPUCorePrimitiveSourceFamily.Rect
+        },
+        analysisCommandFamily = analysisRecord.commandFamily.takeIf {
+            sourceFamily == GPUCorePrimitiveSourceFamily.Rect
+        },
+        rectRouteAuthority = rectRouteAuthority,
+        rectGeometryAuthority = rectGeometryAuthority,
     )
 }
 
@@ -306,7 +393,7 @@ private fun NormalizedDrawCommand.toDeviceGeometry(
                 indices = listOf(0, 1, 2, 0, 2, 3),
                 sourceContourStarts = listOf(0),
                 sourceVertexCount = 4,
-                coverBounds = bounds.toPixelCoverBounds(targetBounds),
+                coverBounds = corners.toPixelCoverBounds(targetBounds),
                 geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
                 fillRule = GPUCorePrimitiveFillRule.Winding,
                 inverseFill = false,
@@ -499,6 +586,14 @@ private fun org.graphiks.kanvas.gpu.renderer.commands.GPUBounds.toPixelCoverBoun
     ceil(bottom).toInt().coerceIn(target.top, target.bottom),
 )
 
+private fun List<Pair<Float, Float>>.toPixelCoverBounds(target: GPUPixelBounds): GPUPixelBounds =
+    GPUPixelBounds(
+        floor(minOf { it.first }).toInt().coerceIn(target.left, target.right),
+        floor(minOf { it.second }).toInt().coerceIn(target.top, target.bottom),
+        ceil(maxOf { it.first }).toInt().coerceIn(target.left, target.right),
+        ceil(maxOf { it.second }).toInt().coerceIn(target.top, target.bottom),
+    )
+
 private fun String.toCoreFillRule(): GPUCorePrimitiveFillRule = when (this) {
     "NonZero", "winding" -> GPUCorePrimitiveFillRule.Winding
     "EvenOdd", "even_odd" -> GPUCorePrimitiveFillRule.EvenOdd
@@ -528,12 +623,28 @@ private fun GPUTransformFacts.map(x: Float, y: Float): Pair<Float, Float> {
 private fun refuseGeometry(code: String, facts: Map<String, String>): Nothing =
     throw GPUCorePrimitiveGeometryRefusalException(GPUCorePrimitiveGeometryRefusal(code, facts))
 
-private fun String.toCoreSourceFamily(): GPUCorePrimitiveSourceFamily = when {
-    startsWith("drawColor") || startsWith("clear") -> GPUCorePrimitiveSourceFamily.Color
-    startsWith("drawPoint") || startsWith("drawPoints") -> GPUCorePrimitiveSourceFamily.PointLine
-    startsWith("drawRect") -> GPUCorePrimitiveSourceFamily.Rect
-    startsWith("drawRRect") -> GPUCorePrimitiveSourceFamily.RRect
-    startsWith("drawDRRect") -> GPUCorePrimitiveSourceFamily.DRRect
-    startsWith("drawPath") -> GPUCorePrimitiveSourceFamily.Path
-    else -> error("Unknown Slice 12A source operation $this")
+private fun NormalizedDrawCommand.analysisCommandFamily(): String = when (this) {
+    is NormalizedDrawCommand.FillRect -> "FillRect"
+    is NormalizedDrawCommand.FillRRect -> "FillRRect"
+    is NormalizedDrawCommand.FillPath -> "FillPath"
+    else -> error("Non-core command reached Slice 12A semantic gathering")
+}
+
+private fun NormalizedDrawCommand.analysisRecordId(): String = when (this) {
+    is NormalizedDrawCommand.FillRect -> "analysis.fill_rect.${commandId.value}"
+    is NormalizedDrawCommand.FillRRect -> "analysis.fill_rrect.${commandId.value}"
+    is NormalizedDrawCommand.FillPath -> "analysis.fill_path.${commandId.value}"
+    else -> error("Non-core command reached Slice 12A semantic gathering")
+}
+
+private fun NormalizedDrawCommand.toCoreSourceFamily(): GPUCorePrimitiveSourceFamily = when (this) {
+    is NormalizedDrawCommand.FillRect -> GPUCorePrimitiveSourceFamily.Rect
+    is NormalizedDrawCommand.FillRRect -> GPUCorePrimitiveSourceFamily.RRect
+    is NormalizedDrawCommand.FillPath -> when {
+        source.operation.startsWith("drawPoint") || source.operation.startsWith("drawPoints") ->
+            GPUCorePrimitiveSourceFamily.PointLine
+        source.operation.startsWith("drawDRRect") -> GPUCorePrimitiveSourceFamily.DRRect
+        else -> GPUCorePrimitiveSourceFamily.Path
+    }
+    else -> error("Non-core command reached Slice 12A semantic gathering")
 }

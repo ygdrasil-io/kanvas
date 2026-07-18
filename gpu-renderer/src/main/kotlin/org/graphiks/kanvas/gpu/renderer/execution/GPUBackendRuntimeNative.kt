@@ -85,6 +85,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
@@ -919,6 +920,8 @@ private class WgpuBackendSession(
     private val preparedSceneSetupRollbackQuarantine = GPUPreparedSceneSetupRollbackQuarantine()
     private val quarantinedPreparedSceneTargets = linkedSetOf<GPUWgpu4kPreparedSceneTarget>()
     private val quarantinedSolidRectCaches = linkedSetOf<GPUWgpu4kSolidRectSessionCache>()
+    private val quarantinedCorePrimitiveCaches =
+        linkedSetOf<GPUWgpu4kCorePrimitiveSessionCache>()
     private val quarantinedRegisteredUniformCaches =
         linkedSetOf<GPUWgpu4kRegisteredUniformRectSessionCache>()
     private val quarantinedColorGlyphCaches = linkedSetOf<GPUWgpu4kColorGlyphSessionCache>()
@@ -948,6 +951,7 @@ private class WgpuBackendSession(
                         synchronized(this) {
                             buildList {
                                 addAll(quarantinedSolidRectCaches)
+                                addAll(quarantinedCorePrimitiveCaches)
                                 addAll(quarantinedRegisteredUniformCaches)
                                 addAll(quarantinedColorGlyphCaches)
                                 addAll(quarantinedSeparableBlurCaches)
@@ -960,6 +964,8 @@ private class WgpuBackendSession(
                         synchronized(this) {
                             when (owner) {
                                 is GPUWgpu4kSolidRectSessionCache -> quarantinedSolidRectCaches.remove(owner)
+                                is GPUWgpu4kCorePrimitiveSessionCache ->
+                                    quarantinedCorePrimitiveCaches.remove(owner)
                                 is GPUWgpu4kRegisteredUniformRectSessionCache ->
                                     quarantinedRegisteredUniformCaches.remove(owner)
                                 is GPUWgpu4kColorGlyphSessionCache -> quarantinedColorGlyphCaches.remove(owner)
@@ -1002,6 +1008,9 @@ private class WgpuBackendSession(
             .minUniformBufferOffsetAlignment
             .toLong(),
         maxBufferSize = observedMaxBufferSize(glfw.wgpuContext.adapter.limits.maxBufferSize),
+        maxDynamicUniformBuffersPerPipelineLayout = glfw.wgpuContext.adapter.limits
+            .maxDynamicUniformBuffersPerPipelineLayout
+            .toLong(),
         source = "adapter.limits",
     )
     private var offscreenTargetOrdinalCounter = 0L
@@ -1017,7 +1026,29 @@ private class WgpuBackendSession(
                 adapterName = adapterSummary,
                 deviceName = "gpu-device",
             ),
-            facts = backendLimits.capabilityFacts(evidenceLabel = "runtime"),
+            facts = backendLimits.capabilityFacts(evidenceLabel = "runtime") + listOf(
+                GPUCapabilityFact(
+                    name = "first_slice.fill_rect.native",
+                    source = "runtime",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "core-primitive-direct-native",
+                ),
+                GPUCapabilityFact(
+                    name = "first_slice.scissor.native",
+                    source = "runtime",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "core-primitive-direct-native",
+                ),
+                GPUCapabilityFact(
+                    name = "first_slice.fill_rect.affine.native",
+                    source = "runtime",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "core-primitive-direct-native",
+                ),
+            ),
             snapshotId = "gpu-runtime-${deviceGeneration.value}",
             limits = backendLimits,
             supportedTextureFormats = setOf(
@@ -1098,6 +1129,9 @@ private class WgpuBackendSession(
         val solidRectCache = setupTransaction.own(
             GPUWgpu4kSolidRectSessionCache(glfw.wgpuContext.device),
         )
+        val corePrimitiveCache = setupTransaction.own(
+            GPUWgpu4kCorePrimitiveSessionCache(glfw.wgpuContext.device, deviceGeneration),
+        )
         val colorGlyphCache = setupTransaction.own(
             GPUWgpu4kColorGlyphSessionCache(
                 device = glfw.wgpuContext.device,
@@ -1147,6 +1181,7 @@ private class WgpuBackendSession(
                     owners = listOf(
                         surfaceBlitCache,
                         solidRectCache,
+                        corePrimitiveCache,
                         colorGlyphCache,
                         registeredUniformRectCache,
                         separableBlurRectCache,
@@ -1247,6 +1282,7 @@ private class WgpuBackendSession(
                     glfw.wgpuContext.device.queue,
                     preparedTarget,
                     solidRectCache,
+                    corePrimitiveCache,
                     colorGlyphCache,
                     registeredUniformRectCache,
                     separableBlurRectCache,
@@ -1254,6 +1290,7 @@ private class WgpuBackendSession(
                     surfaceBlitCache,
                     windowOutput?.nativeTargetResolver
                         ?: GPUAcquiredSurfaceNativeTargetResolver.Unavailable,
+                    backendLimits,
                 )
                 val preflighter = GPUFramePreflighter(
                     context = GPUFramePreflightContext(
@@ -1312,6 +1349,7 @@ private class WgpuBackendSession(
                 val encoding = encodingBackend.counters()
                 val retention = retentionObserver.snapshot()
                 val solidRect = solidRectCache.counters()
+                val corePrimitive = corePrimitiveCache.counters()
                 val colorGlyph = colorGlyphCache.counters()
                 val registeredUniform = registeredUniformRectCache.counters()
                 val separableBlur = separableBlurRectCache.counters()
@@ -1337,6 +1375,9 @@ private class WgpuBackendSession(
                     solidRectInvariantCreations = solidRect.invariantCreations,
                     solidRectInvariantReuses = solidRect.invariantReuses,
                     solidRectInvariantInvalidations = solidRect.invariantInvalidations,
+                    corePrimitiveInvariantCreations = corePrimitive.invariantCreations,
+                    corePrimitiveInvariantReuses = corePrimitive.invariantReuses,
+                    corePrimitiveInvariantInvalidations = corePrimitive.invariantInvalidations,
                     registeredUniformInvariantCreations = registeredUniform.invariantCreations,
                     registeredUniformInvariantReuses = registeredUniform.invariantReuses,
                     separableBlurInvariantCreations = separableBlur.invariantCreations,

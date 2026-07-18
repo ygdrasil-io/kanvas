@@ -217,6 +217,8 @@ object GPUUniformSlabPlanner {
         alignmentBytes: Long,
         uploadBudgetBytes: Long,
         payloads: List<GPUUniformSlabPayload>,
+        maxBufferSize: Long = Long.MAX_VALUE,
+        maxDynamicUniformBuffersPerPipelineLayout: Long = Long.MAX_VALUE,
     ): GPUUniformSlabPlanningResult {
         if (!isDumpSafeUniformSlabValue(sourceLabel)) {
             return refused(
@@ -234,6 +236,21 @@ object GPUUniformSlabPlanner {
             return refused(
                 code = "unsupported.uniform_slab_stale_generation",
                 facts = mapOf("deviceGeneration" to deviceGeneration.toString()),
+            )
+        }
+        if (maxDynamicUniformBuffersPerPipelineLayout < 1L) {
+            return refused(
+                code = "unsupported.uniform_slab_dynamic_uniform_unavailable",
+                facts = mapOf(
+                    "maxDynamicUniformBuffersPerPipelineLayout" to
+                        maxDynamicUniformBuffersPerPipelineLayout.toString(),
+                ),
+            )
+        }
+        if (maxBufferSize <= 0L) {
+            return refused(
+                code = "unsupported.uniform_slab_max_buffer_size_exceeded",
+                facts = mapOf("maxBufferSize" to maxBufferSize.toString()),
             )
         }
 
@@ -263,27 +280,49 @@ object GPUUniformSlabPlanner {
             )
         }
 
-        val slots = buildList {
+        val slots = mutableListOf<GPUUniformSlabSlot>()
+        try {
             var nextOffset = 0L
             payloads.forEach { payload ->
                 val payloadBytesSnapshot = payload.bytes
                 val payloadBytes = payloadBytesSnapshot.size.toLong()
                 val payloadHash = sha256Hex(payloadBytesSnapshot)
-                val alignedOffset = alignUp(nextOffset, alignmentBytes)
-                val allocatedBytes = alignUp(payloadBytes, alignmentBytes)
-                add(
+                val alignedOffset = alignUpChecked(nextOffset, alignmentBytes)
+                val allocatedBytes = alignUpChecked(payloadBytes, alignmentBytes)
+                if (alignedOffset > UInt.MAX_VALUE.toLong()) {
+                    return refused(
+                        code = "unsupported.uniform_slab_dynamic_offset_uint_overflow",
+                        facts = mapOf("alignedOffset" to alignedOffset.toString()),
+                    )
+                }
+                Math.addExact(alignedOffset, payloadBytes)
+                slots +=
                     GPUUniformSlabSlot(
                         slotLabel = payload.slotLabel,
                         payloadHash = payloadHash,
                         payloadBytes = payloadBytes,
                         alignedOffset = alignedOffset,
                         allocatedBytes = allocatedBytes,
-                    ),
-                )
-                nextOffset = alignedOffset + allocatedBytes
+                    )
+                nextOffset = Math.addExact(alignedOffset, allocatedBytes)
             }
+        } catch (_: ArithmeticException) {
+            return refused(
+                code = "unsupported.uniform_slab_size_overflow",
+                facts = mapOf(
+                    "alignmentBytes" to alignmentBytes.toString(),
+                    "payloadCount" to payloads.size.toString(),
+                ),
+            )
         }
-        val totalBytes = slots.last().alignedOffset + slots.last().allocatedBytes
+        val totalBytes = try {
+            Math.addExact(slots.last().alignedOffset, slots.last().allocatedBytes)
+        } catch (_: ArithmeticException) {
+            return refused(
+                code = "unsupported.uniform_slab_size_overflow",
+                facts = mapOf("payloadCount" to payloads.size.toString()),
+            )
+        }
         if (totalBytes > uploadBudgetBytes) {
             return refused(
                 code = "unsupported.uniform_slab_budget_exceeded",
@@ -291,6 +330,28 @@ object GPUUniformSlabPlanner {
                     "budgetBytes" to uploadBudgetBytes.toString(),
                     "requestedBytes" to totalBytes.toString(),
                 ),
+            )
+        }
+        if (totalBytes > maxBufferSize) {
+            return refused(
+                code = "unsupported.uniform_slab_max_buffer_size_exceeded",
+                facts = mapOf(
+                    "maxBufferSize" to maxBufferSize.toString(),
+                    "requestedBytes" to totalBytes.toString(),
+                ),
+            )
+        }
+        if (slots.any { slot ->
+                try {
+                    Math.addExact(slot.alignedOffset, slot.payloadBytes) > totalBytes
+                } catch (_: ArithmeticException) {
+                    true
+                }
+            }
+        ) {
+            return refused(
+                code = "unsupported.uniform_slab_slot_range_invalid",
+                facts = mapOf("totalBytes" to totalBytes.toString()),
             )
         }
 
@@ -334,13 +395,13 @@ object GPUUniformSlabPlanner {
         )
 }
 
-private fun alignUp(value: Long, alignmentBytes: Long): Long {
+private fun alignUpChecked(value: Long, alignmentBytes: Long): Long {
     require(alignmentBytes > 0L) { "alignmentBytes must be positive" }
     if (value <= 0L) {
         return 0L
     }
     val remainder = value % alignmentBytes
-    return if (remainder == 0L) value else value + (alignmentBytes - remainder)
+    return if (remainder == 0L) value else Math.addExact(value, alignmentBytes - remainder)
 }
 
 private fun sha256Hex(input: String): String =

@@ -56,6 +56,51 @@ internal class GPURuntimeResourceAdapter(
                 .filterNotTo(mutableListOf()) { candidate -> anchored.any { it === candidate } },
         var outputMappingClaimed: Boolean = false,
     ) {
+        private val leaseLifecycle = payload.leaseLifecycle
+        private var leaseReleasedBeforeSubmit = leaseLifecycle == null
+        private var leaseSubmitted = false
+        private var leaseReleasedAfterCompletion = leaseLifecycle == null
+        private var leaseQuarantined = leaseLifecycle == null
+
+        fun releaseLeaseBeforeSubmit(): Boolean {
+            if (leaseReleasedBeforeSubmit) return true
+            return applyLeaseTransition { requireNotNull(leaseLifecycle).releaseBeforeSubmit() }
+                .also { applied -> if (applied) leaseReleasedBeforeSubmit = true }
+        }
+
+        fun markLeaseSubmitted(): Boolean {
+            if (leaseLifecycle == null) return true
+            if (leaseSubmitted) return false
+            return applyLeaseTransition(leaseLifecycle::markSubmitted)
+                .also { applied -> if (applied) leaseSubmitted = true }
+        }
+
+        fun releaseLeaseAfterCompletion(): Boolean {
+            if (leaseReleasedAfterCompletion) return true
+            return applyLeaseTransition { requireNotNull(leaseLifecycle).releaseAfterCompletion() }
+                .also { applied -> if (applied) leaseReleasedAfterCompletion = true }
+        }
+
+        fun quarantineLeaseUncertain(): Boolean {
+            if (leaseQuarantined || leaseReleasedBeforeSubmit || leaseReleasedAfterCompletion) return true
+            return applyLeaseTransition { requireNotNull(leaseLifecycle).quarantineUncertain() }
+                .also { applied -> if (applied) leaseQuarantined = true }
+        }
+
+        fun terminalizeLeaseForTeardown(): Boolean = when {
+            leaseReleasedBeforeSubmit || leaseReleasedAfterCompletion || leaseQuarantined -> true
+            state == PreparedNativePayloadState.Submitted || leaseSubmitted -> quarantineLeaseUncertain()
+            else -> releaseLeaseBeforeSubmit()
+        }
+
+        private fun applyLeaseTransition(
+            transition: () -> GPUPreparedNativeFrameLeaseTransition,
+        ): Boolean = try {
+            transition() == GPUPreparedNativeFrameLeaseTransition.Applied
+        } catch (_: Throwable) {
+            false
+        }
+
         fun closeCompletionOwned(onClosed: (AutoCloseable) -> Unit = {}): Boolean =
             completionOwned.closeRetainingFailures(
                 onClosed = onClosed,
@@ -73,8 +118,11 @@ internal class GPURuntimeResourceAdapter(
             val detached = Collections.newSetFromMap(IdentityHashMap<AutoCloseable, Boolean>())
             detached += handles
             completionOwned.filterIsInstance<GPUPreparedNativeCompletionAnchor>().forEach { anchor ->
-                if (handles.any { it === anchor }) detached += anchor.ownedHandlesSnapshot()
-                anchor.detachOwnedHandles(detached)
+                if (handles.any { it === anchor }) {
+                    detached += anchor.ownedHandlesSnapshot()
+                } else {
+                    anchor.detachOwnedHandles(detached)
+                }
             }
             completionOwned.removeAllByIdentity(handles)
             outputOwned.removeAllByIdentity(handles)
@@ -239,8 +287,7 @@ internal class GPURuntimeResourceAdapter(
         val borrowed = draft.payload.borrowedHandlesExcludingAnchors()
             .filterNot { ownedHandleOwners.containsKey(it) }
         if (pendingOwned.isEmpty()) {
-            draft.disposeBeforeRegistration()
-            return true
+            if (draft.disposeBeforeRegistration()) return true
         }
         val ordinal = nativePayloadOrdinal.incrementAndGet()
         val token = GPUPreparedNativeFrameToken(
@@ -348,7 +395,9 @@ internal class GPURuntimeResourceAdapter(
     private fun terminalizeAdapterOwnedRegistration(entry: PreparedNativePayloadEntry) {
         preparedNativePayloads.remove(entry.token)
         outputOwnedNativePayloads.remove(entry.token)
-        if (entry.closeAllOwned { releasePayloadHandle(entry.token, it) }) {
+        val leaseReleased = entry.releaseLeaseBeforeSubmit()
+        val handlesReleased = entry.closeAllOwned { releasePayloadHandle(entry.token, it) }
+        if (leaseReleased && handlesReleased) {
             releaseBorrowedHandles(entry)
             return
         }
@@ -386,6 +435,15 @@ internal class GPURuntimeResourceAdapter(
 
     private fun releasePayloadHandle(token: GPUPreparedNativeFrameToken, handle: AutoCloseable) {
         if (ownedHandleOwners[handle] == OwnedHandleOwner.Payload(token)) ownedHandleOwners.remove(handle)
+    }
+
+    private fun closePayloadForTeardown(
+        token: GPUPreparedNativeFrameToken,
+        entry: PreparedNativePayloadEntry,
+    ): Boolean {
+        val leaseTerminal = entry.terminalizeLeaseForTeardown()
+        val handlesClosed = entry.closeAllOwned { releasePayloadHandle(token, it) }
+        return leaseTerminal && handlesClosed
     }
 
     @Synchronized
@@ -477,7 +535,9 @@ internal class GPURuntimeResourceAdapter(
         if (closed) return false
         val entry = preparedNativePayloads[token] ?: return false
         if (entry.state == PreparedNativePayloadState.Submitted) return false
-        if (entry.closeAllOwned { releasePayloadHandle(token, it) }) {
+        val leaseReleased = entry.releaseLeaseBeforeSubmit()
+        val handlesReleased = entry.closeAllOwned { releasePayloadHandle(token, it) }
+        if (leaseReleased && handlesReleased) {
             preparedNativePayloads.remove(token)
             releaseBorrowedHandles(entry)
             return true
@@ -492,6 +552,7 @@ internal class GPURuntimeResourceAdapter(
         if (closed) return false
         val entry = preparedNativePayloads[token] ?: return false
         if (entry.state != PreparedNativePayloadState.Consumed) return false
+        if (!entry.markLeaseSubmitted()) return false
         entry.state = PreparedNativePayloadState.Submitted
         return true
     }
@@ -501,8 +562,11 @@ internal class GPURuntimeResourceAdapter(
         if (closed) return false
         val entry = preparedNativePayloads[token] ?: return false
         if (entry.state != PreparedNativePayloadState.Submitted) return false
-        if (!entry.closeCompletionOwned { releasePayloadHandle(token, it) }) {
+        val leaseReleased = entry.releaseLeaseAfterCompletion()
+        val handlesReleased = entry.closeCompletionOwned { releasePayloadHandle(token, it) }
+        if (!leaseReleased || !handlesReleased) {
             preparedNativePayloads.remove(token)
+            if (!leaseReleased) entry.quarantineLeaseUncertain()
             quarantinedNativePayloads[token] = entry
             return false
         }
@@ -553,8 +617,9 @@ internal class GPURuntimeResourceAdapter(
     override fun quarantinePreparedNativeFramePayload(token: GPUPreparedNativeFrameToken): Boolean {
         if (closed) return false
         val entry = preparedNativePayloads.remove(token) ?: return false
+        val quarantined = entry.quarantineLeaseUncertain()
         quarantinedNativePayloads[token] = entry
-        return true
+        return quarantined
     }
 
     fun prepareUniformSlab(leaseId: String, createBuffer: () -> GPUBuffer) {
@@ -727,7 +792,7 @@ internal class GPURuntimeResourceAdapter(
         liveLeaseIds.clear()
 
         preparedNativePayloads.toMap().forEach { (token, entry) ->
-            if (entry.closeAllOwned { releasePayloadHandle(token, it) }) {
+            if (closePayloadForTeardown(token, entry)) {
                 preparedNativePayloads.remove(token)
                 releaseBorrowedHandles(entry)
             } else {
@@ -747,7 +812,7 @@ internal class GPURuntimeResourceAdapter(
         }
         outputOwnedNativePayloads.toMap().forEach { (token, entry) ->
             if (entry.outputMappingClaimed) return@forEach
-            if (entry.closeAllOwned { releasePayloadHandle(token, it) }) {
+            if (closePayloadForTeardown(token, entry)) {
                 outputOwnedNativePayloads.remove(token)
                 releaseBorrowedHandles(entry)
             } else {
@@ -761,7 +826,7 @@ internal class GPURuntimeResourceAdapter(
         val terminalCloseRetry = quarantinedNativePayloads.keys.toSet()
         terminalCloseRetry.forEach { token ->
             val entry = quarantinedNativePayloads[token] ?: return@forEach
-            if (entry.closeAllOwned { releasePayloadHandle(token, it) }) {
+            if (closePayloadForTeardown(token, entry)) {
                 quarantinedNativePayloads.remove(token)
                 releaseBorrowedHandles(entry)
             }

@@ -585,6 +585,12 @@ private fun GPUCapabilities.canonicalSnapshotHash(): String =
             nullable("maxBufferSize", limits.maxBufferSize) { maxBufferSize ->
                 long("value", maxBufferSize)
             }
+            nullable(
+                "maxDynamicUniformBuffersPerPipelineLayout",
+                limits.maxDynamicUniformBuffersPerPipelineLayout,
+            ) { maxDynamicUniformBuffersPerPipelineLayout ->
+                long("value", maxDynamicUniformBuffersPerPipelineLayout)
+            }
             string("source", limits.source)
         }
         list("supportedTextureFormats", supportedTextureFormats.map { it.dumpLabel() }.sorted()) {

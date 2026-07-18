@@ -225,6 +225,8 @@ data class GPULimits(
     val source: String = "device.limits",
     /** Facade-observed buffer allocation limit; absent until the selected backend reports it. */
     val maxBufferSize: Long? = null,
+    /** Facade-observed dynamic uniform binding limit; absent until the selected backend reports it. */
+    val maxDynamicUniformBuffersPerPipelineLayout: Long? = null,
 ) {
     init {
         require(maxTextureDimension2D > 0L) { "GPULimits.maxTextureDimension2D must be positive" }
@@ -234,6 +236,11 @@ data class GPULimits(
         }
         require(maxBufferSize == null || maxBufferSize > 0L) {
             "GPULimits.maxBufferSize must be positive when observed"
+        }
+        require(maxDynamicUniformBuffersPerPipelineLayout == null ||
+            maxDynamicUniformBuffersPerPipelineLayout >= 0L
+        ) {
+            "GPULimits.maxDynamicUniformBuffersPerPipelineLayout must be non-negative when observed"
         }
         require(source.isNotBlank()) { "GPULimits.source must not be blank" }
     }
@@ -269,6 +276,15 @@ data class GPULimits(
                     name = "maxBufferSize",
                     source = source,
                     value = observedMaxBufferSize.toString(),
+                    affectsValidity = true,
+                    evidenceLabel = evidenceLabel,
+                )
+            },
+            maxDynamicUniformBuffersPerPipelineLayout?.let { observedLimit ->
+                GPUCapabilityFact(
+                    name = "maxDynamicUniformBuffersPerPipelineLayout",
+                    source = source,
+                    value = observedLimit.toString(),
                     affectsValidity = true,
                     evidenceLabel = evidenceLabel,
                 )

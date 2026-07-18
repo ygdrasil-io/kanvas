@@ -19,7 +19,9 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -28,12 +30,15 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.GradientStop
@@ -54,6 +59,267 @@ import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
 class GPUFramePathApiInventoryTest {
+    @Test
+    fun `affine fill rect is publicly analyzed as rect family direct triangles`() {
+        val baseCapabilities = capabilitiesWith(
+            FILL_RECT_CAPABILITY,
+            CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY,
+        )
+        val capabilities = GPUCapabilities(
+            implementation = baseCapabilities.implementation,
+            facts = baseCapabilities.facts,
+            knownUnsupportedFacts = baseCapabilities.knownUnsupportedFacts,
+            snapshotId = "${baseCapabilities.snapshotId}:observed-limits",
+            limits = GPULimits(
+                8192,
+                256,
+                256,
+                maxBufferSize = 1L shl 30,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+            ),
+        )
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(2f, 3f, 12f, 11f),
+                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Matrix33.skew(0.25f, 0.125f),
+                    org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilities,
+        )
+
+        val packet = inventory.recording.taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .single()
+            .drawPackets
+            .single()
+        val semantic = gatheredSemantic(inventory)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        val analysisRecord = inventory.recording.analysis.records.single()
+
+        assertEquals(CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY, packet.renderStepId.value)
+        assertEquals(analysisRecord.recordId, packet.analysisRecordId)
+        assertEquals(analysisRecord.recordId, semantic.analysisRecordId)
+        assertEquals(analysisRecord.commandFamily, semantic.analysisCommandFamily)
+        assertEquals(
+            analysisRecord.corePrimitiveRectRouteAuthority,
+            semantic.rectRouteAuthority,
+        )
+        assertEquals(
+            analysisRecord.corePrimitiveRectGeometryAuthority,
+            semantic.rectGeometryAuthority,
+        )
+        assertSame(analysisRecord.corePrimitiveRectGeometryAuthority, semantic.rectGeometryAuthority)
+        assertEquals(
+            GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1,
+            semantic.rectRouteAuthority,
+        )
+        assertEquals(GPUCorePrimitiveSourceFamily.Rect, semantic.sourceFamily)
+        assertEquals(GPUCorePrimitiveGeometryMode.DirectTriangles, geometry.geometryMode)
+        assertEquals(4, geometry.sourceVertexCount)
+        assertEquals(GPUPixelBounds(2, 3, 15, 13), geometry.coverBounds)
+        assertTrue(inventory.recording.routeDiagnostics.none { it.contains("path_fill") })
+        val prepared = GPUFramePathApiInventory.prepareNativeTaskList(
+            inventory,
+            capabilities,
+            GPUPixelBounds(0, 0, 32, 32),
+        )
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            prepared,
+            (prepared as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        )
+    }
+
+    @Test
+    fun `affine fill rect derives cover bounds from its four device corners`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(2f, 3f, 12f, 11f),
+                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Matrix33.skew(0.25f, 0.125f),
+                    org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(
+                FILL_RECT_CAPABILITY,
+                CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY,
+            ),
+        )
+        val visual = inventory.visualCommands.single()
+        val command = assertIs<NormalizedDrawCommand.FillRect>(visual.normalized)
+        val localBoundsCommand = command.copy(
+            bounds = org.graphiks.kanvas.gpu.renderer.commands.GPUBounds(2f, 3f, 12f, 11f),
+        )
+        val localBoundsInventory = inventory.copy(
+            visualCommands = listOf(visual.copy(normalized = localBoundsCommand)),
+            normalizedCommands = listOf(localBoundsCommand),
+        )
+
+        val semantic = gatheredSemantic(localBoundsInventory)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+
+        assertEquals(GPUPixelBounds(2, 3, 15, 13), geometry.coverBounds)
+    }
+
+    @Test
+    fun `rotation mirror and skew derive geometry only from the real fill rect command`() {
+        val capabilities = capabilitiesWith(
+            FILL_RECT_CAPABILITY,
+            CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY,
+        )
+        val cases = listOf(
+            Matrix33.rotate(45f) to GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1,
+            Matrix33.scale(-1f, 1f) to GPUCorePrimitiveRectRouteAuthority.RectAxisAligned,
+            Matrix33.skew(0.25f, 0.125f) to
+                GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1,
+        )
+
+        cases.forEach { (transform, expectedAuthority) ->
+            val inventory = GPUFramePathApiInventory.plan(
+                operations = listOf(
+                    DisplayOp.DrawRect(
+                        Rect.fromLTRB(2f, 3f, 12f, 11f),
+                        Paint.fill(Color.RED).copy(antiAlias = false),
+                        transform,
+                        org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+                    ),
+                ),
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities,
+            )
+            val semantic = gatheredSemantic(inventory)
+            assertEquals(expectedAuthority, semantic.rectRouteAuthority)
+            when (expectedAuthority) {
+                GPUCorePrimitiveRectRouteAuthority.RectAxisAligned ->
+                    assertIs<GPUCorePrimitiveGeometry.Rect>(semantic.geometry)
+                GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1 ->
+                    assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+            }
+        }
+    }
+
+    @Test
+    fun `forged source operation cannot change a fill rect semantic family`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(2f, 3f, 12f, 11f),
+                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Matrix33.skew(0.25f, 0.125f),
+                    org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(
+                FILL_RECT_CAPABILITY,
+                CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY,
+            ),
+        )
+        val visual = inventory.visualCommands.single()
+        val command = assertIs<NormalizedDrawCommand.FillRect>(visual.normalized)
+        val forgedCommand = command.copy(
+            source = GPUCommandSource("forged-adapter", "drawPath"),
+        )
+        val forged = inventory.copy(
+            visualCommands = listOf(visual.copy(normalized = forgedCommand)),
+            normalizedCommands = listOf(forgedCommand),
+        )
+
+        val semantic = gatheredSemantic(forged)
+
+        assertEquals(GPUCorePrimitiveSourceFamily.Rect, semantic.sourceFamily)
+        assertEquals("FillRect", semantic.analysisCommandFamily)
+        assertEquals(
+            GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1,
+            semantic.rectRouteAuthority,
+        )
+    }
+
+    @Test
+    fun `semantic gathering refuses missing duplicated or forged analysis authority`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(2f, 3f, 12f, 11f),
+                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Matrix33.identity(),
+                    org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+        val record = inventory.recording.analysis.records.single()
+        fun withRecords(records: List<org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord>) =
+            inventory.copy(
+                recording = inventory.recording.copy(
+                    analysis = inventory.recording.analysis.copy(records = records),
+                ),
+            )
+        val cases = listOf(
+            withRecords(listOf(record.copy(corePrimitiveRectRouteAuthority = null))) to
+                "unsupported.core_primitive.rect.analysis_authority_missing",
+            withRecords(listOf(record.copy(corePrimitiveRectGeometryAuthority = null))) to
+                "unsupported.core_primitive.rect.geometry_authority_mismatch",
+            withRecords(listOf(record, record)) to
+                "unsupported.core_primitive.analysis_record_bijection",
+            withRecords(listOf(record.copy(commandFamily = "FillPath"))) to
+                "unsupported.core_primitive.analysis_command_family_mismatch",
+            withRecords(listOf(record.copy(recordId = "analysis.fill_rect.forged"))) to
+                "unsupported.core_primitive.analysis_record_id_mismatch",
+        )
+
+        cases.forEach { (forged, expectedCode) ->
+            assertEquals(expectedCode, gatherRefusal(forged).code)
+        }
+    }
+
+    @Test
+    fun `semantic gathering refuses rect or transform mutation after analysis`() {
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(2f, 3f, 12f, 11f),
+                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Matrix33.identity(),
+                    org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+                ),
+            ),
+            target = target(),
+            config = RenderConfig.DEFAULT,
+            capabilities = capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+        val visual = inventory.visualCommands.single()
+        val command = assertIs<NormalizedDrawCommand.FillRect>(visual.normalized)
+        fun withCommand(mutated: NormalizedDrawCommand.FillRect) = inventory.copy(
+            visualCommands = listOf(visual.copy(normalized = mutated)),
+            normalizedCommands = listOf(mutated),
+        )
+        val mutations = listOf(
+            withCommand(command.copy(rect = command.rect.copy(right = command.rect.right + 1f))),
+            withCommand(command.copy(transform = command.transform.copy(scaleX = 2f))),
+        )
+
+        mutations.forEach { mutated ->
+            assertEquals(
+                "unsupported.core_primitive.rect.geometry_authority_mismatch",
+                gatherRefusal(mutated).code,
+            )
+        }
+    }
+
     @Test
     fun `drawColor and clear cover the exact target independently of the current transform`() {
         val surface = Surface(40, 30)
@@ -1241,11 +1507,15 @@ class GPUFramePathApiInventoryTest {
         inventory: GPUFramePathInventoryPlan,
     ): GPUDrawSemanticPayload.CorePrimitive {
         val target = target()
+        val result = GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
+            inventory,
+            GPUPixelBounds(0, 0, target.width, target.height),
+        )
         val gathered = assertIs<GPUCorePrimitiveSemanticGatherResult.Gathered>(
-            GPUFramePathApiInventory.gatherCorePrimitiveSemantics(
-                inventory,
-                GPUPixelBounds(0, 0, target.width, target.height),
-            ),
+            result,
+            (result as? GPUCorePrimitiveSemanticGatherResult.Refused)?.let { refused ->
+                "${refused.code}: ${refused.facts}"
+            },
         )
         return gathered.semantics.values.single()
     }

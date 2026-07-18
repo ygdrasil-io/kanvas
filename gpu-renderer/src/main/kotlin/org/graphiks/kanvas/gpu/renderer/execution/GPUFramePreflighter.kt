@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatch
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchPlan
@@ -39,7 +40,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.colorGlyphScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
-import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveRenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDirectClipAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.validateCorePrimitiveClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalCorePrimitiveTargetPreparation
@@ -94,7 +95,9 @@ internal class GPUFramePreflighter(
     private val capabilities: GPUCapabilities = capabilities.preflightSnapshot()
 
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
-        pureValidation(framePlan)?.let { return GPUFramePreflightResult.Refused(it) }
+        val pureValidation = pureValidation(framePlan)
+        pureValidation.diagnostic?.let { return GPUFramePreflightResult.Refused(it) }
+        val corePrimitiveDirectRoutes = pureValidation.corePrimitiveDirectRoutes
         if (nativeBoundary != null && nativeBoundary.resourceProvider !== resourceProvider) {
             return GPUFramePreflightResult.Refused(
                 diagnostic(
@@ -316,7 +319,7 @@ internal class GPUFramePreflighter(
         }
 
         acquiredAnyResource = true
-        val renderMaterialization = materializeRenderOperands(framePlan, ownerScope)
+        val renderMaterialization = materializeRenderOperands(framePlan, ownerScope, corePrimitiveDirectRoutes)
         val materialized = when (renderMaterialization) {
             is GPUResourceMaterializationDecision.Materialized -> renderMaterialization
             is GPUResourceMaterializationDecision.Refused -> return refuseWithRollback(
@@ -345,12 +348,12 @@ internal class GPUFramePreflighter(
                 ),
             )
         }
-        validateRenderOperands(framePlan, materialized, ownerScope)?.let { invalid ->
+        validateRenderOperands(framePlan, materialized, ownerScope, corePrimitiveDirectRoutes)?.let { invalid ->
             return refuseWithRollback(rollback, acquiredAnyResource, invalid)
         }
 
         val encoderScopes = try {
-            lowerEncoderScopes(framePlan, materialized, preparedGenerationMap)
+            lowerEncoderScopes(framePlan, materialized, preparedGenerationMap, corePrimitiveDirectRoutes)
         } catch (failure: Throwable) {
             return refuseWithRollback(
                 rollback,
@@ -671,7 +674,23 @@ internal class GPUFramePreflighter(
         }
     }
 
-    private fun pureValidation(framePlan: GPUFramePlan): GPUDiagnostic? {
+    private data class PureValidationResult(
+        val diagnostic: GPUDiagnostic?,
+        val corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
+    )
+
+    private fun pureValidation(framePlan: GPUFramePlan): PureValidationResult {
+        var corePrimitiveDirectRoutes = GPUCorePrimitiveDirectNativeFrameRouteSeal.Empty
+        val diagnostic = pureValidationDiagnostic(framePlan) { seal ->
+            corePrimitiveDirectRoutes = seal
+        }
+        return PureValidationResult(diagnostic, corePrimitiveDirectRoutes)
+    }
+
+    private fun pureValidationDiagnostic(
+        framePlan: GPUFramePlan,
+        retainCorePrimitiveDirectRoutes: (GPUCorePrimitiveDirectNativeFrameRouteSeal) -> Unit,
+    ): GPUDiagnostic? {
         firstUnsafePreparedIdentity(framePlan)?.let { field ->
             return diagnostic(
                 "invalid.preflight.dump_unsafe_identity",
@@ -690,6 +709,14 @@ internal class GPUFramePreflighter(
             return diagnostic("stale.preflight.capability_seal", "The current capability snapshot differs from the frame seal.")
         }
         framePlan.memoryBudget.diagnostic?.let { return it }
+        if (nativeBoundary != null) {
+            val validation = validateCorePrimitiveDirectGeometryResources(
+                framePlan,
+                strictNativeRoute = true,
+            )
+            validation.diagnostic?.let { return it }
+            retainCorePrimitiveDirectRoutes(validation.routeSeal)
+        }
         validateCorePrimitiveRenderAuthority(framePlan)?.let { return it }
         val clipProducerValidation = validateCorePrimitiveClipProducerAuthority(framePlan)
         clipProducerValidation.diagnostic?.let { return it }
@@ -791,6 +818,303 @@ internal class GPUFramePreflighter(
                 "Readback request identities must be unique within one frame.",
             )
         }
+        if (nativeBoundary == null) {
+            val validation = validateCorePrimitiveDirectGeometryResources(
+                framePlan,
+                strictNativeRoute = false,
+            )
+            validation.diagnostic?.let { return it }
+            retainCorePrimitiveDirectRoutes(validation.routeSeal)
+        }
+        return null
+    }
+
+    private data class CorePrimitiveDirectGeometryValidation(
+        val diagnostic: GPUDiagnostic?,
+        val routeSeal: GPUCorePrimitiveDirectNativeFrameRouteSeal,
+    )
+
+    private fun validateCorePrimitiveDirectGeometryResources(
+        framePlan: GPUFramePlan,
+        strictNativeRoute: Boolean,
+    ): CorePrimitiveDirectGeometryValidation {
+        var routeSeal = GPUCorePrimitiveDirectNativeFrameRouteSeal.Empty
+        val diagnostic = validateCorePrimitiveDirectGeometryResourcesDiagnostic(
+            framePlan,
+            strictNativeRoute,
+        ) { routes, preparedPasses ->
+            routeSeal = GPUCorePrimitiveDirectNativeFrameRouteSeal(routes, preparedPasses)
+        }
+        return CorePrimitiveDirectGeometryValidation(diagnostic, routeSeal)
+    }
+
+    private fun validateCorePrimitiveDirectGeometryResourcesDiagnostic(
+        framePlan: GPUFramePlan,
+        strictNativeRoute: Boolean,
+        retainAcceptedRoutes: (
+            Map<GPUCorePrimitiveDirectNativeFrameRouteKey, GPUCorePrimitiveDirectNativeRoute.Accepted>,
+            Map<Int, GPUCorePrimitiveDirectPreparedPassSeal>,
+        ) -> Unit,
+    ): GPUDiagnostic? {
+        val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val coreRenders = renders.filter { render ->
+            render.drawPackets.any { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive }
+        }
+        if (coreRenders.isEmpty()) return null
+        data class Direct(
+            val sourceStepIndex: Int,
+            val render: GPUFrameStep.RenderPassStep,
+            val packet: GPUDrawPacket,
+            val semantic: GPUDrawSemanticPayload.CorePrimitive,
+            val route: GPUCorePrimitiveDirectNativeRoute.Accepted,
+        )
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val directRoles = setOf(
+            GPUFrameResourceRole.VertexData,
+            GPUFrameResourceRole.IndexData,
+            GPUFrameResourceRole.UniformData,
+        )
+        val directPreparations = preparations.filter { it.role in directRoles }
+        val directUsesByRender = renders.associateWith { render ->
+            render.resourceUses.filter { it.role in directRoles }
+        }
+        fun refuse(message: String) = diagnostic(
+            "invalid.preflight.core_primitive_direct_geometry_resources",
+            message,
+        )
+        val targetPreparations = preparations.filter { it.role == GPUFrameResourceRole.SceneTarget }
+            .associateBy(GPUResourcePreparationRequest::resource)
+        val routeResults = coreRenders.flatMap { render ->
+            render.drawPackets.mapNotNull { packet ->
+                val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                    ?: return@mapNotNull null
+                val targetFormat = (
+                    targetPreparations[render.target]?.descriptor as? GPUFrameTextureDescriptor
+                    )?.format?.value ?: if (strictNativeRoute) {
+                    return diagnostic(
+                        "unsupported.native-core-primitive.target-format",
+                        "Direct CorePrimitive native geometry requires an exact prepared target format.",
+                    )
+                } else {
+                    return@mapNotNull null
+                }
+                val clipExecutionPlan = packet.clipExecutionPlan ?: if (strictNativeRoute) {
+                    return diagnostic(
+                        "unsupported.native-core-primitive.clip",
+                        "Direct CorePrimitive native geometry requires classified clip authority.",
+                    )
+                } else {
+                    return@mapNotNull null
+                }
+                Triple(
+                    render,
+                    packet to semantic,
+                    validateCorePrimitiveDirectNativeRoute(
+                        semantic,
+                        corePrimitiveDirectClipAuthority(
+                            clipExecutionPlan,
+                            semantic.targetBounds,
+                        ),
+                        packet.blendPlan,
+                        render.samplePlan,
+                        targetFormat,
+                    ),
+                )
+            }
+        }
+        val accepted = routeResults.mapNotNull { (render, packetAndSemantic, route) ->
+            (route as? GPUCorePrimitiveDirectNativeRoute.Accepted)?.let {
+                Direct(
+                    framePlan.steps.indexOfFirst { step -> step === render },
+                    render,
+                    packetAndSemantic.first,
+                    packetAndSemantic.second,
+                    it,
+                )
+            }
+        }
+        if (accepted.any { entry ->
+                val block = entry.semantic.payloadRef.uniformBlock
+                block == null || entry.semantic.payloadRef.uniformSlot?.fingerprint != block.fingerprint ||
+                    block.byteSize != 32L || block.bytes.size != 32
+            }
+        ) {
+            return diagnostic(
+                "invalid.preflight.core_primitive_semantic_integrity",
+                "Core primitive packet authority contradicts its immutable semantic input.",
+            )
+        }
+        val declaresDirectBoundary = directPreparations.isNotEmpty() ||
+            directUsesByRender.values.any(List<GPUFrameResourceUse>::isNotEmpty) || accepted.isNotEmpty()
+        if (!declaresDirectBoundary && !strictNativeRoute) return null
+        routeResults.firstOrNull { it.third is GPUCorePrimitiveDirectNativeRoute.Refused }?.let { (_, _, route) ->
+            route as GPUCorePrimitiveDirectNativeRoute.Refused
+            return diagnostic(route.code, route.message)
+        }
+        if (!declaresDirectBoundary) return null
+        if (coreRenders.size != 1 || coreRenders.single().drawPackets.size != accepted.size ||
+            renders.any { it !in coreRenders && directUsesByRender.getValue(it).isNotEmpty() }
+        ) {
+            return refuse("Direct CorePrimitive requires one all-direct multi-packet render pass.")
+        }
+        val directRender = coreRenders.single()
+        if (directRender.loadStore.loadOp != "clear" ||
+            directRender.loadStore.storePlan != GPUStorePlan.Store ||
+            directRender.loadStore.clearColorLabel != null
+        ) {
+            return diagnostic(
+                "invalid.preflight.core_primitive_direct_load_store",
+                "Direct CorePrimitive requires exactly one clear/store pass.",
+            )
+        }
+        val vertex = directPreparations.filter { it.role == GPUFrameResourceRole.VertexData }.singleOrNull()
+            ?: return refuse("Direct CorePrimitive requires exactly one shared vertex slab.")
+        val index = directPreparations.filter { it.role == GPUFrameResourceRole.IndexData }.singleOrNull()
+            ?: return refuse("Direct CorePrimitive requires exactly one shared index slab.")
+        val uniform = directPreparations.filter { it.role == GPUFrameResourceRole.UniformData }.singleOrNull()
+            ?: return refuse("Direct CorePrimitive requires exactly one shared uniform slab.")
+        if (directPreparations.size != 3 ||
+            setOf(vertex.resource, index.resource, uniform.resource).size != 3
+        ) {
+            return refuse("Direct CorePrimitive vertex, index, and uniform slabs must be unique and distinct.")
+        }
+        val vertexBytes = try {
+            accepted.fold(0L) { total, entry ->
+                Math.addExact(
+                    total,
+                    Math.multiplyExact(entry.route.vertexCount.toLong(), 2L * Float.SIZE_BYTES),
+                )
+            }
+        } catch (_: ArithmeticException) {
+            return refuse("Direct CorePrimitive vertex slab size overflows signed 64-bit arithmetic.")
+        }
+        val indexBytes = try {
+            accepted.fold(0L) { total, entry ->
+                Math.addExact(
+                    total,
+                    Math.multiplyExact(entry.route.indexCount.toLong(), Int.SIZE_BYTES.toLong()),
+                )
+            }
+        } catch (_: ArithmeticException) {
+            return refuse("Direct CorePrimitive index slab size overflows signed 64-bit arithmetic.")
+        }
+        fun exactBuffer(
+            request: GPUResourcePreparationRequest,
+            bytes: Long,
+            usage: GPUFrameResourceUsage,
+        ): Boolean {
+            val descriptor = request.descriptor as? GPUFrameBufferDescriptor ?: return false
+            return bytes > 0L && bytes % 4L == 0L && descriptor.byteSize == bytes &&
+                descriptor.alignmentBytes == 4L && request.byteSize == bytes &&
+                request.usages == setOf(GPUFrameResourceUsage.CopyDestination, usage) &&
+                request.lifetime == GPUFrameResourceLifetime.FrameLocal
+        }
+        if (!exactBuffer(vertex, vertexBytes, GPUFrameResourceUsage.Vertex) ||
+            vertexBytes % 8L != 0L || !exactBuffer(index, indexBytes, GPUFrameResourceUsage.Index)
+        ) {
+            return refuse("Direct CorePrimitive shared slab descriptors, sizes, alignment, usages, or lifetime are not exact.")
+        }
+        val limits = capabilities.limits
+            ?: return diagnostic(
+                "unsupported.native-core-primitive.limits-unavailable",
+                "Direct CorePrimitive requires observed backend limits.",
+            )
+        val uniformDescriptor = uniform.descriptor as? GPUFrameBufferDescriptor
+            ?: return refuse("Direct CorePrimitive uniform slab descriptor is missing.")
+        val packetAuthorities = accepted.map { entry ->
+            entry.packet.corePrimitivePreparedAuthority
+                ?: return refuse("Direct CorePrimitive packet is missing its builder authority seal.")
+        }
+        val structuralPipelineKey = packetAuthorities.first().structuralPipelineKey
+        if (packetAuthorities.any { authority -> authority.structuralPipelineKey != structuralPipelineKey }) {
+            return refuse("Direct CorePrimitive packets must share one structural pipeline authority.")
+        }
+        val uniformSeal = packetAuthorities.first().uniformSlabSeal
+            ?: return refuse("Direct CorePrimitive packet is missing its builder uniform slab seal.")
+        if (packetAuthorities.any { authority -> authority.uniformSlabSeal !== uniformSeal }) {
+            return refuse("Direct CorePrimitive packets must share one exact builder uniform slab seal.")
+        }
+        val uniformPlan = uniformSeal.plan
+        val maxBufferSize = limits.maxBufferSize ?: return diagnostic(
+            "unsupported.native-core-primitive.max-buffer-size-unavailable",
+            "Direct CorePrimitive requires observed maxBufferSize.",
+        )
+        val maxDynamicUniformBuffers = limits.maxDynamicUniformBuffersPerPipelineLayout ?: return diagnostic(
+            "unsupported.native-core-primitive.dynamic-uniform-limit-unavailable",
+            "Direct CorePrimitive requires the observed dynamic-uniform limit.",
+        )
+        if (uniformPlan.deviceGeneration != context.deviceGeneration.value ||
+            uniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+            uniformPlan.totalBytes > maxBufferSize || maxDynamicUniformBuffers < 1L ||
+            uniformSeal.drawCount != accepted.size ||
+            accepted.indices.any { indexAt ->
+                val entry = accepted[indexAt]
+                val bytes = entry.semantic.payloadRef.uniformBlock?.bytes
+                    ?: return diagnostic(
+                        "invalid.preflight.core_primitive_semantic_integrity",
+                        "Core primitive packet authority contradicts its immutable semantic input.",
+                    )
+                !uniformSeal.hasExactPayload(indexAt, entry.packet.commandIdValue, bytes)
+            }
+        ) {
+            return refuse("Direct CorePrimitive builder uniform slab seal contradicts current packet or limit authority.")
+        }
+        if (uniformDescriptor.byteSize != uniformPlan.totalBytes ||
+            uniformDescriptor.alignmentBytes != uniformPlan.alignmentBytes ||
+            uniform.byteSize != uniformPlan.totalBytes ||
+            uniform.usages != setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.Uniform) ||
+            uniform.lifetime != GPUFrameResourceLifetime.FrameLocal
+        ) {
+            return refuse("Direct CorePrimitive uniform slab descriptor, size, alignment, usages, or lifetime is not exact.")
+        }
+        if (context.resourceGenerations[vertex.resource] == null ||
+            context.resourceGenerations[index.resource] == null ||
+            context.resourceGenerations[uniform.resource] == null
+        ) {
+            return refuse("Direct CorePrimitive shared slabs require current resource-generation evidence.")
+        }
+        val exactUses = setOf(
+            GPUFrameResourceUse(
+                vertex.resource,
+                GPUFrameResourceRole.VertexData,
+                GPUFrameResourceUsage.Vertex,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = false,
+            ),
+            GPUFrameResourceUse(
+                index.resource,
+                GPUFrameResourceRole.IndexData,
+                GPUFrameResourceUsage.Index,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = false,
+            ),
+            GPUFrameResourceUse(
+                uniform.resource,
+                GPUFrameResourceRole.UniformData,
+                GPUFrameResourceUsage.Uniform,
+                GPUFrameResourceLifetime.FrameLocal,
+                write = false,
+            ),
+        )
+        if (directUsesByRender.any { (render, uses) ->
+                if (render == directRender) uses.size != 3 || uses.toSet() != exactUses else uses.isNotEmpty()
+            }
+        ) {
+            return refuse("The direct pass must read exactly all three shared slabs; non-direct draws may read none.")
+        }
+        retainAcceptedRoutes(
+            accepted.associate { entry ->
+                GPUCorePrimitiveDirectNativeFrameRouteKey(entry.sourceStepIndex, entry.packet.packetId) to
+                    entry.route
+            },
+            mapOf(
+                accepted.first().sourceStepIndex to GPUCorePrimitiveDirectPreparedPassSeal(
+                    structuralPipelineKey = structuralPipelineKey,
+                    uniformSlabSeal = uniformSeal,
+                ),
+            ),
+        )
         return null
     }
 
@@ -1019,15 +1343,23 @@ internal class GPUFramePreflighter(
             packet.frameProvenance != semantic.frameProvenance ||
             clipExecutionPlan == null ||
             semantic.clipExecutionPlanIdentity != clipExecutionPlan.canonicalIdentity() ||
-            !semantic.hasCanonicalHashIntegrity()
+            !semantic.hasStructuralIntegrity()
         ) {
             return diagnostic(
                 "invalid.preflight.core_primitive_semantic_integrity",
                 "Core primitive packet authority contradicts its immutable semantic input.",
             )
         }
-        val blendPlan = packet.blendPlan
-        if (packet.renderPipelineKey != corePrimitiveRenderPipelineKey(semantic, clipExecutionPlan, blendPlan) ||
+        val blendPlan = requireNotNull(packet.blendPlan)
+        val preparedAuthority = packet.corePrimitivePreparedAuthority
+        val expectedStructuralPipelineKey = corePrimitiveRenderPipelineStructuralKey(
+            semantic,
+            clipExecutionPlan,
+            blendPlan,
+        )
+        if (preparedAuthority == null ||
+            preparedAuthority.structuralPipelineKey != expectedStructuralPipelineKey ||
+            packet.renderPipelineKey != preparedAuthority.renderPipelineKey ||
             packet.renderStepVersion != 1 ||
             packet.role != GPUDrawPacketRole.Shading ||
             packet.bindingLayoutHash != CORE_PRIMITIVE_BINDING_LAYOUT_HASH ||
@@ -1370,13 +1702,20 @@ internal class GPUFramePreflighter(
     private fun materializeRenderOperands(
         framePlan: GPUFramePlan,
         ownerScope: String,
+        corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
     ): GPUResourceMaterializationDecision {
-        val packets = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+        val packets = framePlan.steps.mapIndexedNotNull { sourceStepIndex, step ->
+            (step as? GPUFrameStep.RenderPassStep)?.let { render ->
+                render.drawPackets.map { packet -> sourceStepIndex to packet }
+            }
+        }.flatten()
         if (packets.isEmpty()) {
             return GPUResourceMaterializationDecision.Materialized(resources = emptyList(), targetId = context.targetId)
         }
         return try {
-            val operands = packets.flatMap { packet -> plannedRenderOperands(packet, ownerScope) }
+            val operands = packets.flatMap { (sourceStepIndex, packet) ->
+                plannedRenderOperands(sourceStepIndex, packet, ownerScope, corePrimitiveDirectRoutes)
+            }
             resourceProvider.materializeCommandOperands(
                 GPUCommandOperandMaterializationRequest(
                     targetId = context.targetId,
@@ -1425,8 +1764,10 @@ internal class GPUFramePreflighter(
     )
 
     private fun plannedRenderOperands(
+        sourceStepIndex: Int,
         packet: GPUDrawPacket,
         ownerScope: String,
+        corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
     ): List<GPUCommandOperandMaterializationPlan> = buildList {
         add(
             operand(
@@ -1447,13 +1788,19 @@ internal class GPUFramePreflighter(
             ),
         )
         val colorGlyph = packet.semanticPayload as? GPUDrawSemanticPayload.ColorGlyph
-        if (colorGlyph != null) {
+        val directCore = corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId)
+        if (colorGlyph != null || directCore != null) {
             add(
                 operand(
                     packet,
                     "setVertexBuffer",
                     GPUMaterializedCommandOperandKind.VertexBuffer,
-                    "${colorGlyph.canonicalHash}.vertices.${colorGlyph.vertexData.size}",
+                    if (colorGlyph != null) {
+                        "${colorGlyph.canonicalHash}.vertices.${colorGlyph.vertexData.size}"
+                    } else {
+                        "core-direct.$sourceStepIndex.${packet.packetId.value}.vertices." +
+                            requireNotNull(directCore).vertexCount * 2
+                    },
                     ownerScope,
                 ),
             )
@@ -1462,7 +1809,12 @@ internal class GPUFramePreflighter(
                     packet,
                     "setIndexBuffer",
                     GPUMaterializedCommandOperandKind.IndexBuffer,
-                    "${colorGlyph.canonicalHash}.indices.${colorGlyph.indexData.size}",
+                    if (colorGlyph != null) {
+                        "${colorGlyph.canonicalHash}.indices.${colorGlyph.indexData.size}"
+                    } else {
+                        "core-direct.$sourceStepIndex.${packet.packetId.value}.indices." +
+                            requireNotNull(directCore).indexCount
+                    },
                     ownerScope,
                 ),
             )
@@ -1473,12 +1825,19 @@ internal class GPUFramePreflighter(
         framePlan: GPUFramePlan,
         materialized: GPUResourceMaterializationDecision.Materialized,
         ownerScope: String,
+        corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
     ): GPUDiagnostic? {
-        val packets = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().flatMap { it.drawPackets }
+        val packets = framePlan.steps.mapIndexedNotNull { sourceStepIndex, step ->
+            (step as? GPUFrameStep.RenderPassStep)?.let { render ->
+                render.drawPackets.map { packet -> sourceStepIndex to packet }
+            }
+        }.flatten()
         val bridge = materialized.operandBridge
         val expectedTasks = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { it.sourceTaskIds }.map { it.value }.distinct()
-        val expectedPlans = packets.flatMap { packet -> plannedRenderOperands(packet, ownerScope) }
+        val expectedPlans = packets.flatMap { (sourceStepIndex, packet) ->
+            plannedRenderOperands(sourceStepIndex, packet, ownerScope, corePrimitiveDirectRoutes)
+        }
         val expectedLabels = expectedPlans.map { it.label }
         if (materialized.targetId != context.targetId || materialized.taskIds != expectedTasks ||
             materialized.resourcePlanLabels != expectedLabels || bridge.size != expectedPlans.size
@@ -1510,16 +1869,25 @@ internal class GPUFramePreflighter(
                 "Every provider-owned command operand reference must be retained by an encoder bridge.",
             )
         }
-        for (packet in packets) {
-            val packetBridge = bridge.filter { it.packetId == packet.packetId.value }
+        var bridgeOffset = 0
+        for ((sourceStepIndex, packet) in packets) {
+            val expected = plannedRenderOperands(
+                sourceStepIndex,
+                packet,
+                ownerScope,
+                corePrimitiveDirectRoutes,
+            )
+            val packetBridge = bridge.subList(bridgeOffset, bridgeOffset + expected.size)
+            bridgeOffset += expected.size
             val pipelines = packetBridge.filter { it.commandLabel == "setRenderPipeline" && it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline }
             val bindGroups = packetBridge.filter { it.commandLabel == "setBindGroup" && it.operand.kind == GPUMaterializedCommandOperandKind.BindGroup }
             val vertices = packetBridge.filter { it.commandLabel == "setVertexBuffer" && it.operand.kind == GPUMaterializedCommandOperandKind.VertexBuffer }
             val indices = packetBridge.filter { it.commandLabel == "setIndexBuffer" && it.operand.kind == GPUMaterializedCommandOperandKind.IndexBuffer }
-            val colorGlyph = packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+            val indexedPayload = packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+                corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId) != null
             if (pipelines.size != 1 || bindGroups.size != 1 ||
-                (colorGlyph && (vertices.size != 1 || indices.size != 1)) ||
-                (!colorGlyph && (vertices.isNotEmpty() || indices.isNotEmpty()))
+                (indexedPayload && (vertices.size != 1 || indices.size != 1)) ||
+                (!indexedPayload && (vertices.isNotEmpty() || indices.isNotEmpty()))
             ) {
                 return diagnostic(
                     "invalid.preflight.render_operand_bijection",
@@ -1530,7 +1898,6 @@ internal class GPUFramePreflighter(
             if ((pipelines + bindGroups + vertices + indices).any { it.operand.deviceGeneration != context.deviceGeneration.value }) {
                 return diagnostic("stale.preflight.render_operand_generation", "A render operand device generation is stale.")
             }
-            val expected = plannedRenderOperands(packet, ownerScope)
             val actual = pipelines + bindGroups + vertices + indices
             if (actual.zip(expected).any { (binding, plan) ->
                     binding.commandLabel != plan.commandLabel || binding.operand.label != plan.label ||
@@ -1576,12 +1943,41 @@ internal class GPUFramePreflighter(
         framePlan: GPUFramePlan,
         materialized: GPUResourceMaterializationDecision.Materialized,
         generations: Map<GPUFrameResourceRef, Long>,
-    ): List<GPUCommandEncoderScopePlan> = framePlan.steps.mapIndexedNotNull { index, step ->
+        corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
+    ): List<GPUCommandEncoderScopePlan> {
+        val renderBridgesByStepIndex = buildMap {
+            var bridgeOffset = 0
+            framePlan.steps.forEachIndexed { sourceStepIndex, step ->
+                val render = step as? GPUFrameStep.RenderPassStep ?: return@forEachIndexed
+                val operandCount = render.drawPackets.sumOf { packet ->
+                    2 + if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+                        corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId) != null
+                    ) {
+                        2
+                    } else {
+                        0
+                    }
+                }
+                put(
+                    sourceStepIndex,
+                    materialized.operandBridge.subList(bridgeOffset, bridgeOffset + operandCount),
+                )
+                bridgeOffset += operandCount
+            }
+            check(bridgeOffset == materialized.operandBridge.size) {
+                "Render operand bridge partition does not cover the exact frame"
+            }
+        }
+        return framePlan.steps.mapIndexedNotNull { index, step ->
         val labels = referencedResources(step).map { ref ->
             "${ref::class.simpleName}:${ref.value}@${requireNotNull(generations[ref]) { "generation missing for ${ref.value}" }}"
         }
         when (step) {
             is GPUFrameStep.RenderPassStep -> {
+                val stepCorePrimitiveDirectRoutes = corePrimitiveDirectRoutes.retainedFor(
+                    index,
+                    step.drawPackets.map { it.packetId },
+                )
                 val submissionCompleteLeaseIds = materialized.resourceLeases
                     .filter { it.releasePolicy == "submission-complete" }
                     .map { it.leaseId }
@@ -1604,8 +2000,7 @@ internal class GPUFramePreflighter(
                     diagnostics = emptyList(),
                     inputPacketCount = step.drawPackets.size,
                 )
-                val packetIds = step.drawPackets.map { it.packetId.value }.toSet()
-                val stepBridge = materialized.operandBridge.filter { it.packetId in packetIds }
+                val stepBridge = renderBridgesByStepIndex.getValue(index)
                 val stepMaterialized = GPUResourceMaterializationDecision.Materialized(
                     resources = emptyList(),
                     targetId = context.targetId,
@@ -1622,13 +2017,17 @@ internal class GPUFramePreflighter(
                 GPUCommandEncoderScopePlan(
                     sourceStepIndex = index,
                     operationKind = GPUEncoderOperationKind.Render,
+                    scopeLabel = "step.$index",
                     sourceTaskIds = step.sourceTaskIds,
                     sourcePacketIds = step.drawPackets.map { it.packetId },
                     facadeOperationClasses = stream.commandLabels,
                     targetGeneration = context.targetGeneration,
                     resourceGenerationLabels = labels,
                     passCommandStream = stream,
-                ).attachNativeOperandKeys(nativeOperandKeys(step, labels, stream))
+                    corePrimitiveDirectNativeRouteSeal = stepCorePrimitiveDirectRoutes,
+                ).attachNativeOperandKeys(
+                    nativeOperandKeys(step, labels, stream, stepCorePrimitiveDirectRoutes),
+                )
             }
             is GPUFrameStep.ComputePassStep -> scope(index, GPUEncoderOperationKind.Compute, step.sourceTaskIds, listOf("beginComputePass") + List(step.dispatches.size) { "dispatchWorkgroups" } + "endComputePass", labels, nativeOperandKeys(step, labels))
             is GPUFrameStep.UploadResourceStep -> scope(index, GPUEncoderOperationKind.Upload, step.sourceTaskIds, listOf("writeBufferOrCopyBuffer"), labels, nativeOperandKeys(step, labels))
@@ -1638,6 +2037,7 @@ internal class GPUFramePreflighter(
             is GPUFrameStep.ReadbackCopyStep -> scope(index, GPUEncoderOperationKind.Readback, step.sourceTaskIds, listOf("copyTextureToBuffer"), labels, nativeOperandKeys(step, labels))
             is GPUFrameStep.SurfaceBlitRenderPassStep -> scope(index, GPUEncoderOperationKind.SurfaceBlit, step.sourceTaskIds, listOf("beginRenderPass", "surfaceBlit", "endRenderPass"), labels, nativeOperandKeys(step, labels))
             else -> null
+        }
         }
     }
 
@@ -1655,6 +2055,8 @@ internal class GPUFramePreflighter(
         step: GPUFrameStep,
         resources: List<String>,
         stream: GPUPassCommandStream? = null,
+        corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeRouteSeal =
+            GPUCorePrimitiveDirectNativeRouteSeal.Empty,
     ): List<GPUPreparedNativeOperandKey> {
         fun key(
             role: GPUPreparedNativeOperandRole,
@@ -1671,10 +2073,29 @@ internal class GPUFramePreflighter(
             is GPUFrameStep.RenderPassStep -> {
                 val targetResourceLabel = resources.first()
                 val colorGlyph = step.drawPackets.all { it.semanticPayload is GPUDrawSemanticPayload.ColorGlyph }
+                val directCore = corePrimitiveDirectRoutes is GPUCorePrimitiveDirectNativeRouteSeal.Routes
                 val drawOperandOwnership = if (colorGlyph) {
                     GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion
                 } else {
                     GPUPreparedNativeOperandOwnership.Borrowed
+                }
+                val streamBridges = requireNotNull(stream).operandBridge
+                val nativeBridges = if (directCore) {
+                    listOfNotNull(
+                        streamBridges.firstOrNull {
+                            it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
+                        },
+                        streamBridges.firstOrNull {
+                            it.operand.kind == GPUMaterializedCommandOperandKind.VertexBuffer
+                        },
+                        streamBridges.firstOrNull {
+                            it.operand.kind == GPUMaterializedCommandOperandKind.IndexBuffer
+                        },
+                    ) + streamBridges.filter {
+                        it.operand.kind == GPUMaterializedCommandOperandKind.BindGroup
+                    }
+                } else {
+                    streamBridges
                 }
                 (step.sampleContinuation?.let { continuation ->
                 listOf(
@@ -1691,14 +2112,14 @@ internal class GPUFramePreflighter(
                 )
             } ?: listOf(
                 key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel),
-            )) + requireNotNull(stream).operandBridge.map { bridge ->
+            )) + nativeBridges.map { bridge ->
                 when (bridge.operand.kind) {
                     org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.RenderPipeline ->
                         key(
                             GPUPreparedNativeOperandRole.RenderPipeline,
                             GPUPreparedNativeOperandKind.RenderPipeline,
                             "${bridge.commandLabel}:${bridge.operand.label}",
-                            if (colorGlyph) GPUPreparedNativeOperandOwnership.Borrowed else drawOperandOwnership,
+                            GPUPreparedNativeOperandOwnership.Borrowed,
                         )
                     org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.BindGroup ->
                         key(

@@ -4,6 +4,7 @@ import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.reflect.KClass
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
@@ -11,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 internal sealed interface GPUWgpu4kPreparedFramePayloadRoute {
     data object DestinationCopySolidRect : GPUWgpu4kPreparedFramePayloadRoute
     data object SolidRect : GPUWgpu4kPreparedFramePayloadRoute
+    data object CorePrimitive : GPUWgpu4kPreparedFramePayloadRoute
     data object ColorGlyph : GPUWgpu4kPreparedFramePayloadRoute
     data object RegisteredUniformRect : GPUWgpu4kPreparedFramePayloadRoute
     data object SeparableBlurRect : GPUWgpu4kPreparedFramePayloadRoute
@@ -78,6 +80,7 @@ internal fun decorateWgpu4kSurfaceBlitDraft(
             scopeOperands = fullOperands,
             scopeOperandKeys = fullEncoderPlan.scopes.map { it.nativeOperandKeys },
             auxiliaryOwnedHandles = reusable.auxiliaryOwnedHandles,
+            leaseLifecycle = reusable.leaseLifecycle,
         ),
     )
     check(reusableDraft.transferOwnershipToDraft(decorated)) {
@@ -173,6 +176,8 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
         )
         distinct == listOf(GPUDrawSemanticPayload.SolidRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.SolidRect
+        distinct == listOf(GPUDrawSemanticPayload.CorePrimitive::class) ->
+            GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
         distinct == listOf(GPUDrawSemanticPayload.ColorGlyph::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.ColorGlyph
         distinct == listOf(GPUDrawSemanticPayload.RegisteredUniformRect::class) ->
@@ -196,6 +201,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val queue: GPUQueue,
     private val preparedSceneTarget: GPUWgpu4kPreparedSceneTarget,
     private val solidRectCache: GPUWgpu4kSolidRectSessionCache,
+    private val corePrimitiveCache: GPUWgpu4kCorePrimitiveSessionCache,
     private val colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
     private val registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
     private val separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
@@ -203,6 +209,7 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val surfaceBlitCache: GPUWgpu4kSurfaceBlitSessionCache,
     private val surfaceTargetResolver: GPUAcquiredSurfaceNativeTargetResolver =
         GPUAcquiredSurfaceNativeTargetResolver.Unavailable,
+    private val corePrimitiveLimits: GPULimits? = null,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
     private var delegate: GPUPreparedNativeFramePayloadMaterializer? = null
     private var closed = false
@@ -259,6 +266,24 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                     queue,
                     preparedSceneTarget,
                     solidRectCache,
+                ),
+                reusableFramePlan,
+                reusableEncoderPlan,
+                encoderPlan,
+                surfaceRoute,
+                resources,
+                generationSeal,
+            )
+            GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive -> dispatch(
+                GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+                    device,
+                    queue,
+                    preparedSceneTarget,
+                    corePrimitiveCache,
+                    corePrimitiveLimits ?: return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                        "unsupported.native-core-primitive.limits-unavailable",
+                        "The direct CorePrimitive route requires observed backend limits.",
+                    ),
                 ),
                 reusableFramePlan,
                 reusableEncoderPlan,
@@ -404,6 +429,21 @@ private sealed interface Wgpu4kSurfaceRouteSplit {
     data class Refused(val code: String, val message: String) : Wgpu4kSurfaceRouteSplit
 }
 
+internal fun wgpu4kReusableEncoderPlanWithoutSurface(
+    encoderPlan: GPUCommandEncoderPlan,
+): GPUCommandEncoderPlan {
+    require(encoderPlan.scopes.lastOrNull()?.operationKind == GPUEncoderOperationKind.SurfaceBlit) {
+        "A reusable window encoder plan requires one final SurfaceBlit scope"
+    }
+    return GPUCommandEncoderPlan.ordered(
+        planId = encoderPlan.planId,
+        contextIdentity = encoderPlan.contextIdentity,
+        deviceGeneration = encoderPlan.deviceGeneration,
+        targetGeneration = encoderPlan.targetGeneration,
+        scopes = encoderPlan.scopes.dropLast(1),
+    )
+}
+
 private fun splitWgpu4kSurfaceRoute(
     framePlan: GPUFramePlan,
     encoderPlan: GPUCommandEncoderPlan,
@@ -448,13 +488,7 @@ private fun splitWgpu4kSurfaceRoute(
             elidedNoOpDraws = framePlan.elidedNoOpDraws,
             atomicallyRefused = framePlan.atomicallyRefused,
         ),
-        reusableEncoderPlan = GPUCommandEncoderPlan.ordered(
-            planId = encoderPlan.planId,
-            contextIdentity = encoderPlan.contextIdentity,
-            deviceGeneration = encoderPlan.deviceGeneration,
-            targetGeneration = encoderPlan.targetGeneration,
-            scopes = encoderPlan.scopes.dropLast(1),
-        ),
+        reusableEncoderPlan = wgpu4kReusableEncoderPlanWithoutSurface(encoderPlan),
         surfaceScope = scope,
         output = blit.output,
         format = format,

@@ -35,12 +35,12 @@ internal data class GPUWgpu4kFrameEncodingCounters(
 internal class GPUWgpu4kRenderCommandActions(
     val setPipeline: (io.ygdrasil.webgpu.GPURenderPipeline) -> Unit,
     val setStencilReference: (UInt) -> Unit,
-    val setBindGroup: (UInt, io.ygdrasil.webgpu.GPUBindGroup) -> Unit,
-    val setVertexBuffer: (UInt, io.ygdrasil.webgpu.GPUBuffer) -> Unit,
-    val setIndexBuffer: (io.ygdrasil.webgpu.GPUBuffer, io.ygdrasil.webgpu.GPUIndexFormat) -> Unit,
+    val setBindGroup: (UInt, io.ygdrasil.webgpu.GPUBindGroup, List<UInt>) -> Unit,
+    val setVertexBuffer: (UInt, io.ygdrasil.webgpu.GPUBuffer, Long, Long) -> Unit,
+    val setIndexBuffer: (io.ygdrasil.webgpu.GPUBuffer, io.ygdrasil.webgpu.GPUIndexFormat, Long, Long) -> Unit,
     val setScissor: (UInt, UInt, UInt, UInt) -> Unit,
     val draw: (UInt, UInt, UInt, UInt) -> Unit,
-    val drawIndexed: (UInt) -> Unit,
+    val drawIndexed: (UInt, UInt, UInt, Int, UInt) -> Unit,
 )
 
 internal fun encodeWgpu4kRenderCommands(
@@ -53,22 +53,31 @@ internal fun encodeWgpu4kRenderCommands(
             is GPUPreparedNativeRenderCommand.SetPipeline -> actions.setPipeline(command.pipeline.pipeline)
             is GPUPreparedNativeRenderCommand.SetStencilReference -> actions.setStencilReference(command.reference)
             is GPUPreparedNativeRenderCommand.SetBindGroup ->
-                actions.setBindGroup(command.index.toUInt(), command.bindGroup.bindGroup)
+                actions.setBindGroup(
+                    command.index.toUInt(),
+                    command.bindGroup.bindGroup,
+                    command.dynamicOffsets.map { offset ->
+                        require(offset <= UInt.MAX_VALUE.toLong()) {
+                            "Dynamic uniform offset must fit the wgpu4k UInt API"
+                        }
+                        offset.toUInt()
+                    },
+                )
             is GPUPreparedNativeRenderCommand.SetScissor -> actions.setScissor(
                 command.x.toUInt(), command.y.toUInt(), command.width.toUInt(), command.height.toUInt(),
             )
-            is GPUPreparedNativeRenderCommand.SetVertexBuffer -> {
-                require(command.offset == 0L) { "wgpu4k first indexed slice requires zero vertex offset" }
-                actions.setVertexBuffer(command.slot.toUInt(), command.buffer.buffer)
-            }
+            is GPUPreparedNativeRenderCommand.SetVertexBuffer -> actions.setVertexBuffer(
+                command.slot.toUInt(), command.buffer.buffer, command.offset, command.size,
+            )
             is GPUPreparedNativeRenderCommand.SetIndexBuffer -> {
-                require(command.offset == 0L) { "wgpu4k first indexed slice requires zero index offset" }
                 actions.setIndexBuffer(
                     command.buffer.buffer,
                     when (command.format) {
                         GPUPreparedNativeIndexFormat.Uint16 -> io.ygdrasil.webgpu.GPUIndexFormat.Uint16
                         GPUPreparedNativeIndexFormat.Uint32 -> io.ygdrasil.webgpu.GPUIndexFormat.Uint32
                     },
+                    command.offset,
+                    command.size,
                 )
             }
             is GPUPreparedNativeRenderCommand.Draw -> {
@@ -79,11 +88,13 @@ internal fun encodeWgpu4kRenderCommands(
                 draws += 1
             }
             is GPUPreparedNativeRenderCommand.DrawIndexed -> {
-                require(
-                    command.drawCall.instanceCount == 1 && command.drawCall.firstIndex == 0 &&
-                        command.drawCall.baseVertex == 0 && command.drawCall.firstInstance == 0
-                ) { "wgpu4k first indexed slice requires default DrawIndexed offsets" }
-                actions.drawIndexed(command.drawCall.indexCount.toUInt())
+                actions.drawIndexed(
+                    command.drawCall.indexCount.toUInt(),
+                    command.drawCall.instanceCount.toUInt(),
+                    command.drawCall.firstIndex.toUInt(),
+                    command.drawCall.baseVertex,
+                    command.drawCall.firstInstance.toUInt(),
+                )
                 draws += 1
             }
         }
@@ -147,14 +158,22 @@ internal fun encodeWgpu4kRenderPass(
             GPUWgpu4kRenderCommandActions(
                 setPipeline = { pipeline -> setPipeline(pipeline) },
                 setStencilReference = { reference -> setStencilReference(reference) },
-                setBindGroup = { index, bindGroup -> setBindGroup(index, bindGroup) },
-                setVertexBuffer = { slot, buffer -> setVertexBuffer(slot, buffer) },
-                setIndexBuffer = { buffer, format -> setIndexBuffer(buffer, format) },
+                setBindGroup = { index, bindGroup, dynamicOffsets ->
+                    setBindGroup(index, bindGroup, dynamicOffsets)
+                },
+                setVertexBuffer = { slot, buffer, offset, size ->
+                    setVertexBuffer(slot, buffer, offset.toULong(), size.toULong())
+                },
+                setIndexBuffer = { buffer, format, offset, size ->
+                    setIndexBuffer(buffer, format, offset.toULong(), size.toULong())
+                },
                 setScissor = { x, y, width, height -> setScissorRect(x, y, width, height) },
                 draw = { vertices, instances, firstVertex, firstInstance ->
                     draw(vertices, instances, firstVertex, firstInstance)
                 },
-                drawIndexed = { count -> drawIndexed(count) },
+                drawIndexed = { count, instances, firstIndex, baseVertex, firstInstance ->
+                    drawIndexed(count, instances, firstIndex, baseVertex, firstInstance)
+                },
             ),
         )
         end()

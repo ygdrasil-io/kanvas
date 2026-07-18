@@ -318,6 +318,25 @@ class GPUDrawPacket(
     val diagnosticCodes: List<String>
         get() = diagnostics.map { diagnostic -> diagnostic.code }
 
+    internal var corePrimitivePreparedAuthority: GPUCorePrimitivePreparedPacketAuthority? = null
+        private set
+
+    internal fun attachCorePrimitivePreparedAuthority(
+        authority: GPUCorePrimitivePreparedPacketAuthority,
+    ): GPUDrawPacket {
+        check(corePrimitivePreparedAuthority == null) {
+            "CorePrimitive prepared packet authority is already attached"
+        }
+        require(semanticPayload is GPUDrawSemanticPayload.CorePrimitive) {
+            "Only a CorePrimitive packet may retain prepared CorePrimitive authority"
+        }
+        require(renderPipelineKey == authority.renderPipelineKey) {
+            "CorePrimitive prepared authority must match the packet render pipeline key"
+        }
+        corePrimitivePreparedAuthority = authority
+        return this
+    }
+
     /** Stable human-readable source label used by command-stream and PM evidence dumps. */
     val provenanceLabel: String
         get() = buildString {
