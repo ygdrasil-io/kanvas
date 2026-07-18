@@ -2550,6 +2550,41 @@ private class WgpuOffscreenTarget(
     }
 }
 
+internal class WgpuWindowSurfaceTeardown(
+    queueCompletion: AutoCloseable,
+    adapter: AutoCloseable,
+    executionCaches: AutoCloseable,
+    queueManager: AutoCloseable,
+    runtime: AutoCloseable,
+) : AutoCloseable {
+    private data class PendingOwner(val label: String, val owner: AutoCloseable)
+
+    private val pending = mutableListOf(
+        PendingOwner("queue-completion", queueCompletion),
+        PendingOwner("adapter", adapter),
+        PendingOwner("execution-caches", executionCaches),
+        PendingOwner("queue-manager", queueManager),
+        PendingOwner("runtime", runtime),
+    )
+
+    @Synchronized
+    override fun close() {
+        while (pending.isNotEmpty()) {
+            val next = pending.first()
+            try {
+                next.owner.close()
+                pending.removeAt(0)
+            } catch (failure: Throwable) {
+                throw GPUOwnedNativeCloseIncompleteException(
+                    ownerLabel = "window-surface-${next.label}",
+                    remainingOwnerCount = pending.size,
+                    failures = listOf(failure),
+                )
+            }
+        }
+    }
+}
+
 private class WgpuWindowSurface(
     binding: GPUNativeSurfaceBinding,
     private val capabilities: GPUCapabilities,
@@ -2570,6 +2605,13 @@ private class WgpuWindowSurface(
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
     private val runtimeResourceAdapter = GPURuntimeResourceAdapter(requirePreparedResources = true)
     private val resourceProvider = GPUConcreteResourceProvider(leaseFactory = runtimeResourceAdapter)
+    private val teardown = WgpuWindowSurfaceTeardown(
+        queueCompletion = AutoCloseable { queueCompletionRuntime.close() },
+        adapter = runtimeResourceAdapter,
+        executionCaches = executionCaches,
+        queueManager = queueManager,
+        runtime = runtime,
+    )
     private var lastFrameResourceLeases: List<GPUResourceLease> = emptyList()
     private var width = binding.width
     private var height = binding.height
@@ -2706,22 +2748,7 @@ private class WgpuWindowSurface(
         return true
     }
 
-    override fun close() {
-        queueCompletionRuntime.close()
-        try {
-            runtimeResourceAdapter.close()
-        } finally {
-            try {
-                executionCaches.close()
-            } finally {
-                try {
-                    queueManager.close()
-                } finally {
-                    runtime.close()
-                }
-            }
-        }
-    }
+    override fun close() = teardown.close()
 }
 
 /**
@@ -5398,28 +5425,34 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 }
 
-private class WgpuExecutionCaches(
+internal class WgpuExecutionCaches(
     private val deviceGeneration: GPUDeviceGeneration,
-) : AutoCloseable {
-    private val moduleCache = GPUExecutionObjectCache(
+    private val moduleCache: GPUExecutionObjectCache<GPUShaderModule> = GPUExecutionObjectCache(
         domain = GPUExecutionCacheDomain.Module,
         dispose = GPUShaderModule::close,
-    )
-    private val bindGroupLayoutCache =
+    ),
+    private val bindGroupLayoutCache: GPUExecutionObjectCache<GPUBindGroupLayout> =
         GPUExecutionObjectCache(
             domain = GPUExecutionCacheDomain.BindGroupLayout,
             dispose = GPUBindGroupLayout::close,
-        )
-    private val pipelineLayoutCache =
+        ),
+    private val pipelineLayoutCache: GPUExecutionObjectCache<GPUPipelineLayout> =
         GPUExecutionObjectCache(
             domain = GPUExecutionCacheDomain.PipelineLayout,
             dispose = GPUPipelineLayout::close,
-        )
-    private val renderPipelineCache =
+        ),
+    private val renderPipelineCache: GPUExecutionObjectCache<GPURenderPipeline> =
         GPUExecutionObjectCache(
             domain = GPUExecutionCacheDomain.RenderPipeline,
             dispose = GPURenderPipeline::close,
-        )
+        ),
+) : AutoCloseable {
+    private val pendingCloseTiers = mutableListOf<AutoCloseable>(
+        renderPipelineCache,
+        pipelineLayoutCache,
+        bindGroupLayoutCache,
+        moduleCache,
+    )
     private var ledger = GPUTelemetryLedger.empty()
     private val recordedDumpLines = mutableListOf<String>()
     private val recordedPreimageKeys = linkedSetOf<String>()
@@ -6058,29 +6091,16 @@ private class WgpuExecutionCaches(
         recordedDumpLines += decision.dumpLines()
     }
 
+    @Synchronized
     override fun close() {
-        var firstFailure: Throwable? = null
-        listOf(
-            renderPipelineCache,
-            pipelineLayoutCache,
-            bindGroupLayoutCache,
-            moduleCache,
-        ).forEach { cache ->
-            try {
-                cache.close()
-            } catch (failure: Throwable) {
-                if (firstFailure == null) {
-                    firstFailure = failure
-                } else {
-                    firstFailure.addSuppressed(failure)
-                }
-            }
+        while (pendingCloseTiers.isNotEmpty()) {
+            pendingCloseTiers.first().close()
+            pendingCloseTiers.removeAt(0)
         }
-        firstFailure?.let { throw it }
     }
 }
 
-private data class FullscreenExecutionCacheKeys(
+internal data class FullscreenExecutionCacheKeys(
     val moduleKeyHash: String,
     val moduleSubjectHash: String,
     val modulePreimage: String,
