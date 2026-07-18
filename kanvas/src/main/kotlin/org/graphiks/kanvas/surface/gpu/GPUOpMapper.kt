@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import kotlin.math.ceil
+import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -24,6 +26,7 @@ import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
@@ -38,6 +41,10 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.TileMode
@@ -55,6 +62,266 @@ import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.r
+import org.graphiks.kanvas.surface.RenderConfig
+
+internal data class GPUOpMapping(
+    val visualCommands: List<GPUFramePathVisualCommand>,
+    val stateEvents: List<GPUFramePathStateEvent>,
+    val legacyDump: GPULegacyImmediatePathDump,
+)
+
+/** Sole Canvas-state translator for the Slice 12A frame route. */
+internal object GPUOpMapper {
+    fun mapOperations(
+        operations: List<DisplayOp>,
+        target: GPUTargetFacts,
+        config: RenderConfig,
+    ): GPUOpMapping {
+        val visual = mutableListOf<GPUFramePathVisualCommand>()
+        val stateEvents = mutableListOf<GPUFramePathStateEvent>()
+        val legacy = GPULegacyImmediatePathAdapter()
+        var provenance = GPUFrameProvenance.None
+
+        operations.forEachIndexed { operationIndex, operation ->
+            when (operation) {
+                is DisplayOp.Annotation -> {
+                    stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.Annotation)
+                    if (operation.key == GPU_FRAME_PROVENANCE_ANNOTATION_KEY) {
+                        GPUFrameProvenance.fromAnnotationValue(operation.value)?.let { provenance = it }
+                    }
+                }
+                is DisplayOp.SetTransform ->
+                    stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.Transform)
+                is DisplayOp.SetClip ->
+                    stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.Clip)
+                is DisplayOp.FlushAndSnapshot ->
+                    stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.FlushSnapshot)
+                else -> {
+                    val paintOrder = visual.size
+                    val rawNormalized = mapCoreOperation(
+                        operation = operation,
+                        commandId = GPUDrawCommandID(paintOrder),
+                        paintOrder = paintOrder,
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                    )
+                    if (rawNormalized == null) {
+                        if (legacy.accepts(operation)) legacy.recordInvocation(operation)
+                    } else {
+                        val coverage = rawNormalized.geometryCoverage()
+                        val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
+                            GPUClipCoveragePlanner.plan(request, config, maxOf(target.width, target.height))
+                        } ?: GPUClipCoveragePlan.NoClip
+                        val normalized = rawNormalized.withClipCoveragePlan(clipPlan)
+                        visual += GPUFramePathVisualCommand(
+                            normalized = normalized,
+                            targetSpaceBounds = normalized.bounds,
+                            geometryCoverage = coverage,
+                            clipCoverage = clipPlan,
+                            clipExecution = clipPlan.executionKinds(),
+                            blendPlan = normalized.blend.canonicalBlendPlan(coverage),
+                            provenance = provenance,
+                        )
+                    }
+                }
+            }
+        }
+        return GPUOpMapping(
+            visualCommands = visual.toList(),
+            stateEvents = stateEvents.toList(),
+            legacyDump = legacy.dump(),
+        )
+    }
+
+    private fun mapCoreOperation(
+        operation: DisplayOp,
+        commandId: GPUDrawCommandID,
+        paintOrder: Int,
+        provenance: GPUFrameProvenance,
+        target: GPUTargetFacts,
+        config: RenderConfig,
+    ): NormalizedDrawCommand? {
+        val command = when (operation) {
+            is DisplayOp.DrawColor -> operation.toNormalizedCommand(commandId, target)
+            is DisplayOp.Clear -> operation.toNormalizedCommand(commandId, target)
+            is DisplayOp.DrawPoint -> operation.toNormalizedCommand(commandId, target)
+            is DisplayOp.DrawRect -> if (operation.paint.isStroke()) {
+                operation.toStrokePathCommand(commandId, target)
+            } else {
+                operation.toNormalizedCommand(commandId, target)
+            }
+            is DisplayOp.DrawRRect -> operation.toNormalizedCommand(commandId, target)
+            is DisplayOp.DrawPath -> operation.toPathCommand(commandId, target, config)
+            is DisplayOp.DrawPoints -> DisplayOp.DrawPath(
+                operation.toPath(),
+                operation.paint,
+                operation.transform,
+                operation.clip,
+            ).toPathCommand(commandId, target, config).copy(
+                stroke = operation.mode != PointMode.POINTS,
+            )
+            is DisplayOp.DrawDRRect -> DisplayOp.DrawPath(
+                operation.toPath(),
+                operation.paint,
+                operation.transform,
+                operation.clip,
+            ).toPathCommand(commandId, target, config)
+            else -> null
+        } ?: return null
+
+        val targetBounds = command.localBounds().mappedBy(operation.transformOrIdentity()).clampedTo(target)
+        val coverage = command.geometryCoverage()
+        val blendPlan = command.blend.canonicalBlendPlan(coverage)
+        val ordering = GPUOrderingFacts(
+            paintOrder = paintOrder,
+            dependsOnDestination = blendPlan.destinationReadRequirement ==
+                GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+            requiresBarrier = false,
+        )
+        val source = GPUCommandSource(
+            adapter = "kanvas-surface",
+            operation = operation.coreSourceOperation(),
+            frameProvenance = provenance,
+        )
+        return when (command) {
+            is NormalizedDrawCommand.FillRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
+            is NormalizedDrawCommand.FillRRect -> command.copy(bounds = targetBounds, ordering = ordering, source = source)
+            is NormalizedDrawCommand.FillPath -> command.copy(
+                bounds = targetBounds,
+                ordering = ordering,
+                source = source,
+                pathDescriptor = command.pathDescriptor.copy(
+                    verbCount = operation.pathVerbCount(),
+                    transformClass = command.transform.type.name.lowercase(),
+                ),
+            )
+            else -> error("Slice 12A mapper produced a non-core command")
+        }
+    }
+}
+
+private fun DisplayOp.coreSourceOperation(): String = when (this) {
+    is DisplayOp.DrawColor -> "drawColor"
+    is DisplayOp.Clear -> "clear"
+    is DisplayOp.DrawPoint -> "drawPoint"
+    is DisplayOp.DrawPoints -> "drawPoints.${mode.name.lowercase()}"
+    is DisplayOp.DrawRect -> if (paint.isStroke()) "drawRect.stroke" else "drawRect"
+    is DisplayOp.DrawRRect -> "drawRRect"
+    is DisplayOp.DrawDRRect -> "drawDRRect"
+    is DisplayOp.DrawPath -> "drawPath"
+    else -> error("Non-core operation has no Slice 12A source identity")
+}
+
+private fun DisplayOp.DrawPath.toPathCommand(
+    commandId: GPUDrawCommandID,
+    target: GPUTargetFacts,
+    config: RenderConfig,
+): NormalizedDrawCommand.FillPath {
+    val flattened = PathTessellator(
+        tolerance = config.curveTolerance,
+        maxVertices = config.maxPathVertices.toInt(),
+    ).flattenWithContours(path.toPathTessellatorData())
+    return toNormalizedCommand(
+        commandId,
+        target,
+        flattened.points.flatMap { point -> listOf(point.x, point.y) },
+        flattened.contourStarts.ifEmpty { listOf(0) },
+        flattened.points.size,
+    )
+}
+
+private fun NormalizedDrawCommand.geometryCoverage(): GPUCoverageConsumption = when (this) {
+    is NormalizedDrawCommand.FillPath -> GPUCoverageConsumption.StencilCoverage1x
+    is NormalizedDrawCommand.FillRRect -> if (antiAlias) {
+        GPUCoverageConsumption.ScalarCoverage
+    } else {
+        GPUCoverageConsumption.FullOrScissor
+    }
+    is NormalizedDrawCommand.FillRect -> if (antiAlias) {
+        GPUCoverageConsumption.ScalarCoverage
+    } else {
+        GPUCoverageConsumption.FullOrScissor
+    }
+    else -> error("Geometry coverage requested for a non-Slice-12A command")
+}
+
+private fun NormalizedDrawCommand.withClipCoveragePlan(
+    plan: GPUClipCoveragePlan,
+): NormalizedDrawCommand = when (this) {
+    is NormalizedDrawCommand.FillRect -> copy(clip = clip.copy(coveragePlan = plan))
+    is NormalizedDrawCommand.FillRRect -> copy(clip = clip.copy(coveragePlan = plan))
+    is NormalizedDrawCommand.FillPath -> copy(clip = clip.copy(coveragePlan = plan))
+    else -> error("Clip coverage attached to a non-Slice-12A command")
+}
+
+private fun GPUClipCoveragePlan.executionKinds(): List<GPUFrameClipExecution> = when (this) {
+    GPUClipCoveragePlan.NoClip,
+    is GPUClipCoveragePlan.Scissor,
+    is GPUClipCoveragePlan.Refused,
+    -> emptyList()
+    is GPUClipCoveragePlan.Mask -> elements.map { element ->
+        when {
+            element.kind == GPUClipCoverageElementKind.Path -> GPUFrameClipExecution.Stencil
+            element.operation == GPUClipCoverageOperation.Difference -> GPUFrameClipExecution.Mask
+            else -> GPUFrameClipExecution.Analytic
+        }
+    }
+}
+
+private fun NormalizedDrawCommand.localBounds(): GPUBounds = when (this) {
+    is NormalizedDrawCommand.FillRect -> GPUBounds(rect.left, rect.top, rect.right, rect.bottom)
+    is NormalizedDrawCommand.FillRRect -> GPUBounds(
+        rrect.rect.left,
+        rrect.rect.top,
+        rrect.rect.right,
+        rrect.rect.bottom,
+    )
+    is NormalizedDrawCommand.FillPath -> computeBounds(tessellatedVertices)
+    else -> bounds
+}
+
+private fun GPUBounds.mappedBy(matrix: Matrix33): GPUBounds {
+    val corners = listOf(
+        matrix * Point(left, top),
+        matrix * Point(right, top),
+        matrix * Point(right, bottom),
+        matrix * Point(left, bottom),
+    )
+    return GPUBounds(
+        left = corners.minOf(Point::x),
+        top = corners.minOf(Point::y),
+        right = corners.maxOf(Point::x),
+        bottom = corners.maxOf(Point::y),
+    )
+}
+
+private fun GPUBounds.clampedTo(target: GPUTargetFacts): GPUBounds = GPUBounds(
+    left = floor(left).coerceIn(0f, target.width.toFloat()),
+    top = floor(top).coerceIn(0f, target.height.toFloat()),
+    right = ceil(right).coerceIn(0f, target.width.toFloat()),
+    bottom = ceil(bottom).coerceIn(0f, target.height.toFloat()),
+)
+
+private fun DisplayOp.transformOrIdentity(): Matrix33 = when (this) {
+    is DisplayOp.DrawColor -> transform
+    is DisplayOp.DrawPoint -> transform
+    is DisplayOp.DrawPoints -> transform
+    is DisplayOp.DrawRect -> transform
+    is DisplayOp.DrawRRect -> transform
+    is DisplayOp.DrawDRRect -> transform
+    is DisplayOp.DrawPath -> transform
+    is DisplayOp.Clear -> Matrix33.identity()
+    else -> Matrix33.identity()
+}
+
+private fun DisplayOp.pathVerbCount(): Int = when (this) {
+    is DisplayOp.DrawPath -> path.verbs().size
+    is DisplayOp.DrawPoints -> toPath().verbs().size
+    is DisplayOp.DrawDRRect -> toPath().verbs().size
+    is DisplayOp.DrawRect -> 5
+    else -> 0
+}
 
 internal fun DisplayOp.DrawRect.toNormalizedCommand(
     cmdId: GPUDrawCommandID,

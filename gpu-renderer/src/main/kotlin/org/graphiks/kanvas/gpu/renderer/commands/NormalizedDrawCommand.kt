@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterCropPlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageRequest
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -253,6 +254,7 @@ data class GPUClipFacts(
     val kind: GPUClipKind,
     val bounds: GPUBounds,
     val coverageRequest: GPUClipCoverageRequest? = null,
+    val coveragePlan: GPUClipCoveragePlan? = null,
     /** A Canvas clip captured under perspective, which the affine GPU route must refuse. */
     val perspectiveCaptureRefusal: Boolean = false,
 ) {
@@ -478,10 +480,14 @@ data class GPUOrderingFacts(
     }
 }
 
+/** Compatibility alias for frame provenance owned by the foundation state package. */
+typealias GPUFrameProvenance = org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
+
 /** Source adapter information used by diagnostics and dumps. */
 data class GPUCommandSource(
     val adapter: String,
     val operation: String,
+    val frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
 ) {
     init {
         require(adapter.isNotBlank()) { "GPUCommandSource.adapter must not be blank" }

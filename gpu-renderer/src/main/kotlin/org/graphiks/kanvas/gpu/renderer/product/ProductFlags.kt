@@ -32,7 +32,15 @@ data class GPUProductFlagConfig(
     fun buildCapabilities(
         implementation: GPUImplementationIdentity = GPUProductFlagConfig.defaultImplementation(),
     ): GPUCapabilities {
-        val facts = mutableListOf<GPUCapabilityFact>()
+        val facts = mutableListOf(
+            GPUCapabilityFact(
+                name = "first_slice.fill_rect.native",
+                source = "product-baseline",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "product-baseline:fillRect",
+            ),
+        )
         if (fillRRectEnabled) {
             facts += GPUCapabilityFact(
                 name = "first_slice.fill_rrect.native",

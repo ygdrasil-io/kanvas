@@ -6,6 +6,7 @@ import java.security.MessageDigest
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 
 /** Opaque payload slot identifier. */
@@ -249,6 +250,84 @@ enum class GPURegisteredUniformProgram(
 
 const val REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY = "rect.registered-uniform"
 const val SEPARABLE_BLUR_RECT_RENDER_STEP_IDENTITY = "filter.blur.separable-rect"
+const val CORE_PRIMITIVE_RENDER_STEP_IDENTITY = "core-primitive.device-geometry"
+
+/** Closed Slice 12A source identities retained after one Canvas-state translation. */
+enum class GPUCorePrimitiveSourceFamily {
+    Color,
+    PointLine,
+    Rect,
+    RRect,
+    DRRect,
+    Path,
+}
+
+/** Handle-free device-space geometry consumed by the sole native core materializer. */
+sealed interface GPUCorePrimitiveGeometry {
+    val canonicalType: String
+
+    class Rect internal constructor(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+    ) : GPUCorePrimitiveGeometry {
+        override val canonicalType: String = "Rect"
+    }
+
+    class RRect internal constructor(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+        radii: List<Float>,
+    ) : GPUCorePrimitiveGeometry {
+        override val canonicalType: String = "RRect"
+        val radii: List<Float> = immutableList(radii)
+    }
+
+    class TriangulatedPath internal constructor(
+        vertices: List<Float>,
+        indices: List<Int>,
+        contourStarts: List<Int>,
+    ) : GPUCorePrimitiveGeometry {
+        override val canonicalType: String = "TriangulatedPath"
+        val vertices: List<Float> = immutableList(vertices)
+        val indices: List<Int> = immutableList(indices)
+        val contourStarts: List<Int> = immutableList(contourStarts)
+    }
+}
+
+/** Construction input whose mutable collections are snapshotted by the gatherer. */
+data class GPUCorePrimitivePayloadInput(
+    val commandIdValue: Int,
+    val sourceFamily: GPUCorePrimitiveSourceFamily,
+    val geometry: GPUCorePrimitiveGeometryInput,
+    val premultipliedRgba: List<Float>,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipCoveragePlan: GPUClipCoveragePlan,
+)
+
+/** Closed geometry input; callers cannot smuggle backend handles into frame planning. */
+sealed interface GPUCorePrimitiveGeometryInput {
+    data class Rect(val left: Float, val top: Float, val right: Float, val bottom: Float) :
+        GPUCorePrimitiveGeometryInput
+
+    data class RRect(
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+        val radii: List<Float>,
+    ) : GPUCorePrimitiveGeometryInput
+
+    data class TriangulatedPath(
+        val vertices: List<Float>,
+        val indices: List<Int>,
+        val contourStarts: List<Int>,
+    ) : GPUCorePrimitiveGeometryInput
+}
 
 /** Typed proof tying one layer to one exact packed atlas placement and strike. */
 data class GPUColorGlyphAtlasPlacementProofInput(
@@ -305,6 +384,44 @@ sealed interface GPUDrawSemanticPayload {
     class SolidRect internal constructor(payloadRef: GPUDrawPayloadRef) : GPUDrawSemanticPayload {
         override val canonicalType: String = "SolidRect"
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+    }
+
+    /** Exact core geometry, material, target, and typed clip plan for Slice 12A. */
+    class CorePrimitive internal constructor(
+        payloadRef: GPUDrawPayloadRef,
+        val sourceFamily: GPUCorePrimitiveSourceFamily,
+        val geometry: GPUCorePrimitiveGeometry,
+        premultipliedRgba: List<Float>,
+        val targetBounds: GPUPixelBounds,
+        val scissorBounds: GPUPixelBounds,
+        val clipCoveragePlan: GPUClipCoveragePlan,
+        val canonicalHash: String,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "CorePrimitive"
+        override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
+        val premultipliedRgba: List<Float> = immutableList(premultipliedRgba)
+
+        internal fun hasCanonicalHashIntegrity(): Boolean =
+            payloadRef.renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
+                payloadRef.uniformSlot?.fingerprint == payloadRef.uniformBlock?.fingerprint &&
+                payloadRef.uniformBlock?.byteSize == CORE_PRIMITIVE_UNIFORM_BYTES.toLong() &&
+                payloadRef.uniformBlock?.bytes?.size == CORE_PRIMITIVE_UNIFORM_BYTES &&
+                premultipliedRgba.isPremultipliedRgba() &&
+                targetBounds.containsRegisteredUniformRect(scissorBounds) &&
+                clipCoveragePlan !is GPUClipCoveragePlan.Refused &&
+                canonicalHash == sha256Hex(
+                    listOf(
+                        "type=CorePrimitive",
+                        "command=${payloadRef.commandIdValue}",
+                        "family=${sourceFamily.name}",
+                        "fingerprint=${payloadRef.uniformBlock?.fingerprint?.value.orEmpty()}",
+                        "geometry=${geometry.canonicalPreimage()}",
+                        "color=${premultipliedRgba.joinToString(",")}",
+                        "target=${targetBounds.canonicalBounds()}",
+                        "scissor=${scissorBounds.canonicalBounds()}",
+                        "clip=${clipCoveragePlan.canonicalPreimage()}",
+                    ).joinToString("\n"),
+                )
     }
 
     /** Exact immutable uniform bytes for one shader from the closed prepared program registry. */
@@ -467,6 +584,163 @@ sealed interface GPUDrawSemanticPayload {
                 )
     }
 }
+
+/** Gathers one immutable Slice 12A semantic without allocating native resources. */
+class GPUCorePrimitivePayloadGatherer {
+    fun gatherSemantic(input: GPUCorePrimitivePayloadInput): GPUDrawSemanticPayload.CorePrimitive {
+        require(input.commandIdValue >= 0) { "Core primitive command id must be non-negative" }
+        require(input.premultipliedRgba.isPremultipliedRgba()) {
+            "Core primitive color must be finite premultiplied RGBA"
+        }
+        require(input.targetBounds.left == 0 && input.targetBounds.top == 0 &&
+            input.targetBounds.right > 0 && input.targetBounds.bottom > 0) {
+            "Core primitive target must be a non-empty zero-origin target"
+        }
+        require(input.targetBounds.containsRegisteredUniformRect(input.scissorBounds)) {
+            "Core primitive scissor must be non-empty and contained by its target"
+        }
+        require(input.clipCoveragePlan !is GPUClipCoveragePlan.Refused) {
+            "Refused clip coverage cannot enter a core semantic payload"
+        }
+
+        val geometry = input.geometry.snapshotAndValidate(input.targetBounds)
+        val color = input.premultipliedRgba.toList()
+        val uniformBytes = ByteBuffer.allocate(CORE_PRIMITIVE_UNIFORM_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putFloat(input.targetBounds.width.toFloat())
+            putFloat(input.targetBounds.height.toFloat())
+            putFloat(0f)
+            putFloat(0f)
+            color.forEach(::putFloat)
+        }.array().map { it.toInt() and 0xff }
+        val fingerprint = GPUPayloadFingerprint(
+            sha256Hex(
+                listOf(
+                    "kind=core-primitive",
+                    "command=${input.commandIdValue}",
+                    "family=${input.sourceFamily.name}",
+                    "geometry=${geometry.canonicalPreimage()}",
+                    "color=${color.joinToString(",")}",
+                ).joinToString("\n"),
+            ),
+        )
+        val block = GPUUniformPayloadBlock(
+            fingerprint = fingerprint,
+            packingPlanHash = "core-primitive.uniform32-v1",
+            byteSize = CORE_PRIMITIVE_UNIFORM_BYTES.toLong(),
+            zeroedPadding = true,
+            scope = "pass.core-primitive.prepared",
+            bytes = uniformBytes,
+            fields = listOf(
+                GPUUniformPayloadField("target.size", 0L, 8L, "float32x2"),
+                GPUUniformPayloadField("target.padding", 8L, 8L, "padding", zeroFilled = true),
+                GPUUniformPayloadField("material.premul-rgba", 16L, 16L, "float32x4"),
+            ),
+        )
+        val ref = GPUDrawPayloadRef(
+            commandIdValue = input.commandIdValue,
+            renderStepIdentity = CORE_PRIMITIVE_RENDER_STEP_IDENTITY,
+            uniformSlot = GPUUniformPayloadSlot(
+                slotId = GPUPayloadSlotID("core-primitive:${input.commandIdValue}"),
+                fingerprint = fingerprint,
+                byteOffset = 0L,
+            ),
+            uniformBlock = block,
+        )
+        return GPUDrawSemanticPayload.CorePrimitive(
+            payloadRef = ref,
+            sourceFamily = input.sourceFamily,
+            geometry = geometry,
+            premultipliedRgba = color,
+            targetBounds = input.targetBounds,
+            scissorBounds = input.scissorBounds,
+            clipCoveragePlan = input.clipCoveragePlan.snapshot(),
+            canonicalHash = sha256Hex(
+                listOf(
+                    "type=CorePrimitive",
+                    "command=${input.commandIdValue}",
+                    "family=${input.sourceFamily.name}",
+                    "fingerprint=${fingerprint.value}",
+                    "geometry=${geometry.canonicalPreimage()}",
+                    "color=${color.joinToString(",")}",
+                    "target=${input.targetBounds.canonicalBounds()}",
+                    "scissor=${input.scissorBounds.canonicalBounds()}",
+                    "clip=${input.clipCoveragePlan.canonicalPreimage()}",
+                ).joinToString("\n"),
+            ),
+        )
+    }
+}
+
+private fun GPUCorePrimitiveGeometryInput.snapshotAndValidate(
+    target: GPUPixelBounds,
+): GPUCorePrimitiveGeometry = when (this) {
+    is GPUCorePrimitiveGeometryInput.Rect -> {
+        require(listOf(left, top, right, bottom).all(Float::isFinite) && left < right && top < bottom) {
+            "Core Rect geometry must have finite non-empty bounds"
+        }
+        require(left >= target.left && top >= target.top && right <= target.right && bottom <= target.bottom) {
+            "Core Rect geometry must be contained by its target"
+        }
+        GPUCorePrimitiveGeometry.Rect(left, top, right, bottom)
+    }
+    is GPUCorePrimitiveGeometryInput.RRect -> {
+        require(listOf(left, top, right, bottom).all(Float::isFinite) && left < right && top < bottom) {
+            "Core RRect geometry must have finite non-empty bounds"
+        }
+        require(radii.size == 8 && radii.all { it.isFinite() && it >= 0f }) {
+            "Core RRect geometry requires four finite non-negative xy radii pairs"
+        }
+        require(left >= target.left && top >= target.top && right <= target.right && bottom <= target.bottom) {
+            "Core RRect geometry must be contained by its target"
+        }
+        GPUCorePrimitiveGeometry.RRect(left, top, right, bottom, radii.toList())
+    }
+    is GPUCorePrimitiveGeometryInput.TriangulatedPath -> {
+        require(vertices.size >= 6 && vertices.size % 2 == 0 && vertices.all(Float::isFinite)) {
+            "Core path geometry requires at least three finite xy vertices"
+        }
+        val vertexCount = vertices.size / 2
+        require(indices.size >= 3 && indices.size % 3 == 0 && indices.all { it in 0 until vertexCount }) {
+            "Core path geometry requires complete in-range triangles"
+        }
+        require(contourStarts.isNotEmpty() && contourStarts.first() == 0 &&
+            contourStarts.zipWithNext().all { (left, right) -> left < right } &&
+            contourStarts.last() < vertexCount) {
+            "Core path contour starts must be strictly ordered from zero"
+        }
+        GPUCorePrimitiveGeometry.TriangulatedPath(vertices.toList(), indices.toList(), contourStarts.toList())
+    }
+}
+
+private fun GPUCorePrimitiveGeometry.canonicalPreimage(): String = when (this) {
+    is GPUCorePrimitiveGeometry.Rect -> "$canonicalType:$left,$top,$right,$bottom"
+    is GPUCorePrimitiveGeometry.RRect -> "$canonicalType:$left,$top,$right,$bottom:${radii.joinToString(",")}" 
+    is GPUCorePrimitiveGeometry.TriangulatedPath ->
+        "$canonicalType:${vertices.joinToString(",")}:${indices.joinToString(",")}:${contourStarts.joinToString(",")}" 
+}
+
+private fun GPUClipCoveragePlan.snapshot(): GPUClipCoveragePlan = when (this) {
+    GPUClipCoveragePlan.NoClip -> this
+    is GPUClipCoveragePlan.Scissor -> copy(bounds = bounds.copy())
+    is GPUClipCoveragePlan.Mask -> copy(elements = elements.toList())
+    is GPUClipCoveragePlan.Refused -> copy()
+}
+
+private fun GPUClipCoveragePlan.canonicalPreimage(): String = when (this) {
+    GPUClipCoveragePlan.NoClip -> "none"
+    is GPUClipCoveragePlan.Scissor -> "scissor:${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}"
+    is GPUClipCoveragePlan.Mask -> buildString {
+        append("mask:").append(contentKey).append(':').append(width).append('x').append(height)
+        elements.forEach { element ->
+            append(':').append(element.operation.name).append('/').append(element.kind.name)
+            append('/').append(element.antiAlias).append('/').append(element.fillRule.name)
+            append('/').append(element.inverseFill).append('/').append(element.values.joinToString(","))
+        }
+    }
+    is GPUClipCoveragePlan.Refused -> "refused:$code"
+}
+
+private const val CORE_PRIMITIVE_UNIFORM_BYTES = 32
 
 /** Packs one closed registered shader payload without carrying source code or native handles. */
 class GPURegisteredUniformRectPayloadGatherer {

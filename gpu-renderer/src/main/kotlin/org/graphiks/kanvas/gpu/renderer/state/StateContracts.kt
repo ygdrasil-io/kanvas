@@ -1,5 +1,18 @@
 package org.graphiks.kanvas.gpu.renderer.state
 
+/** Ordered, non-visual Canvas frame provenance retained through submission planning. */
+enum class GPUFrameProvenance(val annotationValue: String) {
+    HarnessBackground("harness-background"),
+    GmContent("gm-content"),
+    None("none"),
+    ;
+
+    companion object {
+        fun fromAnnotationValue(value: String): GPUFrameProvenance? =
+            entries.firstOrNull { it.annotationValue == value }
+    }
+}
+
 /** Stable logical target identity; generation remains an explicit key axis. */
 @JvmInline
 value class GPUTargetIdentity(val value: String) {

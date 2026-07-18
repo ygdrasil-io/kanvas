@@ -298,6 +298,8 @@ class GPUFirstRoutePlanner(
                 org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SolidFill
             },
             semanticPayload = semanticPayload,
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
         )
 
         return GPUFirstRoutePlan(
@@ -404,6 +406,8 @@ class GPUFirstRoutePlanner(
             targetStateHash = command.targetStateHash(),
             batchKind = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.Isolated,
             batchAdjacency = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency.Isolated,
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
         )
 
         return GPUFirstRoutePlan(
@@ -508,6 +512,8 @@ class GPUFirstRoutePlanner(
             } else {
                 org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SolidFill
             },
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
         )
 
         return GPUFirstRoutePlan(
@@ -577,6 +583,8 @@ class GPUFirstRoutePlanner(
             targetStateHash = command.targetStateHash(),
             batchKind = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.Isolated,
             batchAdjacency = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency.Isolated,
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
         )
 
         return GPUFirstRoutePlan(
@@ -668,6 +676,8 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
         )
         return GPUFirstRoutePlan(
             analysisRecord = analysisRecord,
@@ -720,6 +730,8 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
         )
 
         return GPUFirstRoutePlan(
@@ -789,6 +801,8 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
         )
 
         return GPUFirstRoutePlan(
@@ -839,6 +853,8 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
         )
 
         return GPUFirstRoutePlan(
@@ -1043,7 +1059,9 @@ class GPUFirstRoutePlanner(
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type !in acceptedDrawImageRectTransformTypes -> "unsupported.transform.class_downgrade"
-            clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
+            clip.kind == GPUClipKind.ComplexStack &&
+                (clip.coveragePlan == null || clip.coveragePlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused) ->
+                "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
@@ -1237,7 +1255,9 @@ class GPUFirstRoutePlanner(
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type !in acceptedDrawLayerTransformTypes -> "unsupported.transform.class_downgrade"
-            clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
+            clip.kind == GPUClipKind.ComplexStack &&
+                (clip.coveragePlan == null || clip.coveragePlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused) ->
+                "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
@@ -1392,7 +1412,9 @@ class GPUFirstRoutePlanner(
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
-            clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
+            clip.kind == GPUClipKind.ComplexStack &&
+                (clip.coveragePlan == null || clip.coveragePlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused) ->
+                "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             material.kind !in acceptedMaterialKinds -> "unsupported.material.source_unimplemented"
             material is GPUMaterialDescriptor.LinearGradient && material.refusalCode() != null ->
@@ -1795,7 +1817,7 @@ class GPUFirstRoutePlanner(
         val acceptedTransformTypes = setOf(GPUTransformType.Identity, GPUTransformType.Translate)
 
         /** Clip classes supported by the first native FillRect route. */
-        val acceptedClipKinds = setOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)
+        val acceptedClipKinds = setOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect, GPUClipKind.ComplexStack)
 
         /** Material kinds supported by the first native FillRect expansion route. */
         val acceptedMaterialKinds = setOf(

@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupingResult
 import org.graphiks.kanvas.gpu.renderer.destination.CopyAsDrawMaterialization
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotMaterialization
@@ -162,6 +163,7 @@ data class GPURecording(
     val taskList: GPUTaskList,
     val routeDiagnostics: List<String>,
     val featureAssumptions: List<String>,
+    val recordedCommands: List<NormalizedDrawCommand> = emptyList(),
 )
 
 /**
@@ -301,6 +303,7 @@ class GPURecorder(
             taskList = taskList,
             routeDiagnostics = plans.map { plan -> plan.routeDiagnostic() },
             featureAssumptions = capabilities.featureAssumptions(),
+            recordedCommands = commands.toList(),
         )
 
         closedRecording = recording
@@ -712,6 +715,8 @@ sealed interface GPUTask {
         })
         val batchEligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility> =
             immutableMap(batchEligibilityByPacketId)
+        val frameProvenanceByPacketId: Map<GPUDrawPacketID, GPUFrameProvenance> =
+            immutableMap(drawPackets.associate { packet -> packet.packetId to packet.frameProvenance })
 
         init {
             require(phase == GPUTaskPhase.Render) { "GPUTask.Render requires Render phase" }

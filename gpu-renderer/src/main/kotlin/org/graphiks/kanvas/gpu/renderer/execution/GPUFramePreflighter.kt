@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.passes.fromBatchPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
@@ -717,6 +718,7 @@ internal class GPUFramePreflighter(
                             val colorGlyph = packet.semanticPayload as? GPUDrawSemanticPayload.ColorGlyph
                             val preparedLateBound =
                                 packet.semanticPayload is GPUDrawSemanticPayload.SolidRect ||
+                                    packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.RegisteredUniformRect ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.SeparableBlurRect
                             val acceptedGeneration = when {
@@ -957,6 +959,7 @@ internal class GPUFramePreflighter(
         }
         return when (semantic) {
             is GPUDrawSemanticPayload.SolidRect -> validateSolidRectSemanticPayload(packet, semantic)
+            is GPUDrawSemanticPayload.CorePrimitive -> validateCorePrimitiveSemanticPayload(packet, semantic)
             is GPUDrawSemanticPayload.RegisteredUniformRect ->
                 validateRegisteredUniformRectSemanticPayload(render, packet, semantic)
             is GPUDrawSemanticPayload.SeparableBlurRect ->
@@ -964,6 +967,25 @@ internal class GPUFramePreflighter(
             is GPUDrawSemanticPayload.ColorGlyph ->
                 validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
         }
+    }
+
+    private fun validateCorePrimitiveSemanticPayload(
+        packet: GPUDrawPacket,
+        semantic: GPUDrawSemanticPayload.CorePrimitive,
+    ): GPUDiagnostic? {
+        if (packet.renderStepId.value != CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
+            semantic.payloadRef.renderStepIdentity != CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
+            packet.commandIdValue != semantic.payloadRef.commandIdValue ||
+            packet.uniformSlot != semantic.payloadRef.uniformSlot ||
+            packet.clipCoveragePlan != semantic.clipCoveragePlan ||
+            !semantic.hasCanonicalHashIntegrity()
+        ) {
+            return diagnostic(
+                "invalid.preflight.core_primitive_semantic_integrity",
+                "Core primitive packet authority contradicts its immutable semantic input.",
+            )
+        }
+        return null
     }
 
     private fun validateSeparableBlurRectSemanticPayload(

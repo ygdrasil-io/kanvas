@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.passes
 
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
@@ -12,6 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandK
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.dumpCommandOperandFields
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 /** Stable render-step identifier. */
 @JvmInline
@@ -286,6 +288,8 @@ class GPUDrawPacket(
     val targetStateHash: String,
     val originalPaintOrder: Int,
     val resourceGeneration: Long,
+    val frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
+    val clipCoveragePlan: GPUClipCoveragePlan? = null,
     diagnostics: List<GPUPassDiagnostic> = emptyList(),
 ) {
     /** Diagnostics copied from packet production so caller mutation cannot rewrite evidence. */
@@ -297,7 +301,12 @@ class GPUDrawPacket(
 
     /** Stable human-readable source label used by command-stream and PM evidence dumps. */
     val provenanceLabel: String
-        get() = "draw-command:$commandIdValue:${renderStepId.value}"
+        get() = buildString {
+            append("draw-command:$commandIdValue:${renderStepId.value}")
+            if (frameProvenance != GPUFrameProvenance.None) {
+                append(":${frameProvenance.annotationValue}")
+            }
+        }
 
     init {
         require(commandIdValue >= 0) { "GPUDrawPacket.commandIdValue must be non-negative" }
@@ -1284,6 +1293,8 @@ object GPUFirstRoutePassBuilder {
         batchKind: GPUPassBatchKind,
         batchAdjacency: GPUPassBatchAdjacency = GPUPassBatchAdjacency.Compatible,
         semanticPayload: GPUDrawSemanticPayload? = null,
+        frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
+        clipCoveragePlan: GPUClipCoveragePlan? = null,
     ): GPUDrawPass {
         val invocation = GPUDrawInvocation(
             commandIdValue = commandIdValue,
@@ -1323,6 +1334,8 @@ object GPUFirstRoutePassBuilder {
             targetStateHash = targetStateHash,
             originalPaintOrder = originalPaintOrder,
             resourceGeneration = 0L,
+            frameProvenance = frameProvenance,
+            clipCoveragePlan = clipCoveragePlan,
         )
         return GPUDrawPass(
             passId = "pass.root.$commandIdValue",
@@ -1381,6 +1394,8 @@ object GPUFirstRoutePassBuilder {
         targetStateHash: String,
         batchKind: GPUPassBatchKind,
         batchAdjacency: GPUPassBatchAdjacency = GPUPassBatchAdjacency.Compatible,
+        frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
+        clipCoveragePlan: GPUClipCoveragePlan? = null,
     ): GPUDrawPass =
         acceptedFillRect(
             commandIdValue = commandIdValue,
@@ -1395,6 +1410,8 @@ object GPUFirstRoutePassBuilder {
             targetStateHash = targetStateHash,
             batchKind = batchKind,
             batchAdjacency = batchAdjacency,
+            frameProvenance = frameProvenance,
+            clipCoveragePlan = clipCoveragePlan,
         )
 
     /** Builds an empty refused FillRRect pass so unsupported rrects cannot produce draw work. */
@@ -1424,6 +1441,8 @@ object GPUFirstRoutePassBuilder {
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
         targetStateHash: String,
+        frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
+        clipCoveragePlan: GPUClipCoveragePlan? = null,
     ): GPUDrawPass =
         acceptedTypedPass(
             passId = "pass.text.$commandIdValue",
@@ -1439,6 +1458,8 @@ object GPUFirstRoutePassBuilder {
             originalPaintOrder = originalPaintOrder,
             targetStateHash = targetStateHash,
             layerScopeId = "root",
+            frameProvenance = frameProvenance,
+            clipCoveragePlan = clipCoveragePlan,
         )
 
     /** Builds an accepted FillPath pass with path-fill render-step identity. */
@@ -1453,6 +1474,8 @@ object GPUFirstRoutePassBuilder {
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
         targetStateHash: String,
+        frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
+        clipCoveragePlan: GPUClipCoveragePlan? = null,
     ): GPUDrawPass =
         acceptedTypedPass(
             passId = "pass.path_fill.$commandIdValue",
@@ -1468,6 +1491,8 @@ object GPUFirstRoutePassBuilder {
             originalPaintOrder = originalPaintOrder,
             targetStateHash = targetStateHash,
             layerScopeId = "root",
+            frameProvenance = frameProvenance,
+            clipCoveragePlan = clipCoveragePlan,
         )
 
     /** Builds an empty refused FillPath pass. */
@@ -1673,6 +1698,8 @@ object GPUFirstRoutePassBuilder {
         originalPaintOrder: Int,
         targetStateHash: String,
         layerScopeId: String,
+        frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
+        clipCoveragePlan: GPUClipCoveragePlan? = null,
     ): GPUDrawPass {
         val invocation = GPUDrawInvocation(
             commandIdValue = commandIdValue,
@@ -1710,6 +1737,8 @@ object GPUFirstRoutePassBuilder {
             targetStateHash = targetStateHash,
             originalPaintOrder = originalPaintOrder,
             resourceGeneration = 0L,
+            frameProvenance = frameProvenance,
+            clipCoveragePlan = clipCoveragePlan,
         )
         return GPUDrawPass(
             passId = passId,

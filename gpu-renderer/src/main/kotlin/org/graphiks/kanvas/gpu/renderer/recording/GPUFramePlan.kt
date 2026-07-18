@@ -12,9 +12,11 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.dumpLabel
 import org.graphiks.kanvas.gpu.renderer.capabilities.dumpLabels
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey
@@ -27,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -256,6 +259,9 @@ sealed interface GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
         val batches: List<GPUFrameRenderBatch> = immutableList(batches)
+        val frameProvenanceByPacketId: Map<GPUDrawPacketID, GPUFrameProvenance> = immutableMap(
+            drawPackets.associate { packet -> packet.packetId to packet.frameProvenance },
+        )
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
 
@@ -986,6 +992,68 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
     nullable("resourceBlock", ref.resourceBlock) { block -> string("fingerprint", block.fingerprint.value) }
     when (value) {
         is GPUDrawSemanticPayload.SolidRect -> Unit
+        is GPUDrawSemanticPayload.CorePrimitive -> {
+            string("sourceFamily", value.sourceFamily.name)
+            string("canonicalHash", value.canonicalHash)
+            bounds("targetBounds", value.targetBounds)
+            bounds("scissorBounds", value.scissorBounds)
+            list("premultipliedRgba", value.premultipliedRgba) { channel ->
+                int("channelBits", channel.toRawBits())
+            }
+            tag(value.geometry.canonicalType)
+            when (val geometry = value.geometry) {
+                is GPUCorePrimitiveGeometry.Rect -> {
+                    int("leftBits", geometry.left.toRawBits())
+                    int("topBits", geometry.top.toRawBits())
+                    int("rightBits", geometry.right.toRawBits())
+                    int("bottomBits", geometry.bottom.toRawBits())
+                }
+                is GPUCorePrimitiveGeometry.RRect -> {
+                    int("leftBits", geometry.left.toRawBits())
+                    int("topBits", geometry.top.toRawBits())
+                    int("rightBits", geometry.right.toRawBits())
+                    int("bottomBits", geometry.bottom.toRawBits())
+                    list("radii", geometry.radii) { radius -> int("radiusBits", radius.toRawBits()) }
+                }
+                is GPUCorePrimitiveGeometry.TriangulatedPath -> {
+                    list("vertices", geometry.vertices) { coordinate -> int("coordinateBits", coordinate.toRawBits()) }
+                    list("indices", geometry.indices) { index -> int("index", index) }
+                    list("contourStarts", geometry.contourStarts) { index -> int("index", index) }
+                }
+            }
+            when (val clip = value.clipCoveragePlan) {
+                GPUClipCoveragePlan.NoClip -> tag("NoClip")
+                is GPUClipCoveragePlan.Scissor -> {
+                    tag("Scissor")
+                    int("leftBits", clip.bounds.left.toRawBits())
+                    int("topBits", clip.bounds.top.toRawBits())
+                    int("rightBits", clip.bounds.right.toRawBits())
+                    int("bottomBits", clip.bounds.bottom.toRawBits())
+                }
+                is GPUClipCoveragePlan.Mask -> {
+                    tag("Mask")
+                    string("contentKey", clip.contentKey)
+                    int("width", clip.width)
+                    int("height", clip.height)
+                    int("sampleCount", clip.sampleCount)
+                    long("resolvedBytes", clip.resolvedBytes)
+                    long("requiredBytes", clip.requiredBytes)
+                    list("elements", clip.elements) { element ->
+                        string("operation", element.operation.name)
+                        string("kind", element.kind.name)
+                        bool("antiAlias", element.antiAlias)
+                        string("fillRule", element.fillRule.name)
+                        bool("inverseFill", element.inverseFill)
+                        int("vertexCount", element.vertexCount)
+                        list("values", element.values) { scalar -> int("scalarBits", scalar.toRawBits()) }
+                    }
+                }
+                is GPUClipCoveragePlan.Refused -> {
+                    tag("Refused")
+                    string("code", clip.code)
+                }
+            }
+        }
         is GPUDrawSemanticPayload.RegisteredUniformRect -> {
             string("program", value.program.wireId)
             string("canonicalHash", value.canonicalHash)
@@ -1319,6 +1387,10 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
         } ?: "none"}"
     return when (this) {
         is GPUDrawSemanticPayload.SolidRect -> "$common)"
+        is GPUDrawSemanticPayload.CorePrimitive ->
+            "$common,corePrimitiveHash=$canonicalHash,family=${sourceFamily.name}," +
+                "geometry=${geometry.canonicalType},color=${premultipliedRgba.joinToString(",")}," +
+                "target=$targetBounds,scissor=$scissorBounds,clip=${clipCoveragePlan.stableCoreDump()})"
         is GPUDrawSemanticPayload.RegisteredUniformRect ->
             "$common,program=${program.wireId},registeredUniformHash=$canonicalHash," +
                 "uniformBytes=${uniformBytes.size},target=$targetBounds,scissor=$scissorBounds)"
@@ -1339,6 +1411,16 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
                 "vertexFloats=${vertexData.size},indices=${indexData.size},uniformBytes=${uniformBytes.size}," +
                 "target=$targetBounds,scissor=$scissorBounds)"
     }
+}
+
+private fun GPUClipCoveragePlan.stableCoreDump(): String = when (this) {
+    GPUClipCoveragePlan.NoClip -> "none"
+    is GPUClipCoveragePlan.Scissor -> "scissor:${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}"
+    is GPUClipCoveragePlan.Mask -> "mask:$contentKey:${width}x$height:${elements.joinToString(";") { element ->
+        "${element.operation.name}/${element.kind.name}/${element.antiAlias}/${element.fillRule.name}/" +
+            "${element.inverseFill}/${element.values.joinToString(",")}"
+    }}"
+    is GPUClipCoveragePlan.Refused -> "refused:$code"
 }
 
 private fun GPUFrameResourceUse.stableDump(): String =
