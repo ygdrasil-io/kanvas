@@ -1344,6 +1344,13 @@ private class WgpuBackendSession(
                 )
             },
             closeAction = childTeardown::close,
+            renderCountersFactory = {
+                val encoding = encodingBackend.counters()
+                GPUPreparedSceneRenderCounters(
+                    renderPasses = encoding.renderPasses,
+                    drawIndexed = encoding.drawIndexed,
+                )
+            },
             nativeCountersFactory = {
                 val targetCounts = targetLifecycle.snapshot()
                 val encoding = encodingBackend.counters()

@@ -30,6 +30,7 @@ internal data class GPUWgpu4kFrameEncodingCounters(
     val destinationCopies: Long = 0L,
     val resourceCopies: Long = 0L,
     val msaaResolves: Long = 0L,
+    val drawIndexed: Long = 0L,
 )
 
 internal class GPUWgpu4kRenderCommandActions(
@@ -150,9 +151,13 @@ private fun GPUPreparedNativeStoreOperation.toWgpu4kStoreOperation(): GPUStoreOp
 internal fun encodeWgpu4kRenderPass(
     encoder: GPUCommandEncoder,
     render: GPUPreparedNativeScopeOperand.Render,
+    onRenderPassBegan: () -> Unit = {},
+    onDrawEncoded: () -> Unit = {},
+    onDrawIndexedEncoded: () -> Unit = {},
 ): Int {
     var encodedDraws = 0
     encoder.beginRenderPass(buildWgpu4kRenderPassDescriptor(render.pass)) {
+        onRenderPassBegan()
         encodedDraws = encodeWgpu4kRenderCommands(
             render.commands,
             GPUWgpu4kRenderCommandActions(
@@ -170,9 +175,12 @@ internal fun encodeWgpu4kRenderPass(
                 setScissor = { x, y, width, height -> setScissorRect(x, y, width, height) },
                 draw = { vertices, instances, firstVertex, firstInstance ->
                     draw(vertices, instances, firstVertex, firstInstance)
+                    onDrawEncoded()
                 },
                 drawIndexed = { count, instances, firstIndex, baseVertex, firstInstance ->
                     drawIndexed(count, instances, firstIndex, baseVertex, firstInstance)
+                    onDrawEncoded()
+                    onDrawIndexedEncoded()
                 },
             ),
         )
@@ -198,6 +206,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
     private var encoderCount = 0L
     private var renderPassCount = 0L
     private var drawCount = 0L
+    private var drawIndexedCount = 0L
     private var readbackCopyCount = 0L
     private var finishCount = 0L
     private var submitCount = 0L
@@ -249,6 +258,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
         encoders = encoderCount,
         renderPasses = renderPassCount,
         draws = drawCount,
+        drawIndexed = drawIndexedCount,
         readbackCopies = readbackCopyCount,
         finishes = finishCount,
         submits = submitCount,
@@ -373,9 +383,19 @@ internal class GPUWgpu4kFrameEncodingBackend(
 
         private fun encodeRender(render: GPUPreparedNativeScopeOperand.Render) {
             val pass = render.pass
-            val encodedDraws = encodeWgpu4kRenderPass(native, render)
-            synchronized(this@GPUWgpu4kFrameEncodingBackend) { drawCount += encodedDraws }
-            synchronized(this@GPUWgpu4kFrameEncodingBackend) { renderPassCount += 1 }
+            encodeWgpu4kRenderPass(
+                native,
+                render,
+                onRenderPassBegan = {
+                    synchronized(this@GPUWgpu4kFrameEncodingBackend) { renderPassCount += 1 }
+                },
+                onDrawEncoded = {
+                    synchronized(this@GPUWgpu4kFrameEncodingBackend) { drawCount += 1 }
+                },
+                onDrawIndexedEncoded = {
+                    synchronized(this@GPUWgpu4kFrameEncodingBackend) { drawIndexedCount += 1 }
+                },
+            )
             if (pass.resolveTarget != null) {
                 synchronized(this@GPUWgpu4kFrameEncodingBackend) { msaaResolveCount += 1 }
             }

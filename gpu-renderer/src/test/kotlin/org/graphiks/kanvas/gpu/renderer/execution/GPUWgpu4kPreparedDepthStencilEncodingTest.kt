@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.GPUBindGroup
+import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPULoadOp
 import io.ygdrasil.webgpu.GPUCommandEncoder
 import io.ygdrasil.webgpu.GPURenderPassDescriptor
@@ -97,6 +99,54 @@ class GPUWgpu4kPreparedDepthStencilEncodingTest {
     }
 
     @Test
+    fun `render callbacks retain successful native calls when a later draw or end fails`() {
+        PartialFailure.entries.forEach { failurePoint ->
+            var renderPasses = 0
+            var draws = 0
+            var drawIndexed = 0
+            var nativeDrawIndexed = 0
+            val renderPass = proxiedNative(GPURenderPassEncoder::class.java, "partial-${failurePoint.name}") {
+                    method, _ ->
+                when {
+                    method == "setPipeline" || method.startsWith("setBindGroup") ||
+                        method.startsWith("setVertexBuffer") || method.startsWith("setIndexBuffer") ||
+                        method.startsWith("setScissorRect") -> Unit
+                    method.startsWith("drawIndexed") -> {
+                        nativeDrawIndexed += 1
+                        if (failurePoint == PartialFailure.SecondDraw && nativeDrawIndexed == 2) {
+                            error("second drawIndexed failed")
+                        }
+                    }
+                    method == "end" -> {
+                        if (failurePoint == PartialFailure.End) error("render pass end failed")
+                    }
+                    else -> error("Unexpected render-pass call: $method")
+                }
+            }
+            val commandEncoder = proxiedNative(GPUCommandEncoder::class.java, "partial-encoder") { method, _ ->
+                when (method) {
+                    "beginRenderPass" -> renderPass
+                    else -> error("Unexpected command-encoder call: $method")
+                }
+            }
+
+            assertFailsWith<IllegalStateException> {
+                encodeWgpu4kRenderPass(
+                    commandEncoder,
+                    indexedRender(if (failurePoint == PartialFailure.SecondDraw) 2 else 1),
+                    onRenderPassBegan = { renderPasses += 1 },
+                    onDrawEncoded = { draws += 1 },
+                    onDrawIndexedEncoded = { drawIndexed += 1 },
+                )
+            }
+
+            assertEquals(1, renderPasses, failurePoint.name)
+            assertEquals(1, draws, failurePoint.name)
+            assertEquals(1, drawIndexed, failurePoint.name)
+        }
+    }
+
+    @Test
     fun `prepared depth stencil validation rejects impossible native states`() {
         val generation = GPUDeviceGenerationID(93)
         val color = GPUPreparedNativeTextureViewOperand(proxiedTextureView("validation-color"), generation)
@@ -167,6 +217,67 @@ class GPUWgpu4kPreparedDepthStencilEncodingTest {
         invalidConfigurations.forEach { invalid ->
             assertFailsWith<IllegalArgumentException> { invalid() }
         }
+    }
+
+    private enum class PartialFailure {
+        SecondDraw,
+        End,
+    }
+
+    private fun indexedRender(drawCount: Int): GPUPreparedNativeScopeOperand.Render {
+        val generation = GPUDeviceGenerationID(94)
+        val pipeline = GPUPreparedNativeRenderPipelineOperand(
+            proxiedNative(GPURenderPipeline::class.java, "indexed-pipeline"),
+            generation,
+        )
+        val bindGroup = GPUPreparedNativeBindGroupOperand(
+            proxiedNative(GPUBindGroup::class.java, "indexed-bind-group"),
+            generation,
+        )
+        val vertex = GPUPreparedNativeBufferOperand(
+            proxiedNative(GPUBuffer::class.java, "indexed-vertex"),
+            generation,
+            byteCapacity = 8L,
+        )
+        val index = GPUPreparedNativeBufferOperand(
+            proxiedNative(GPUBuffer::class.java, "indexed-index"),
+            generation,
+            byteCapacity = 4L,
+        )
+        return GPUPreparedNativeScopeOperand.Render(
+            sourceStepIndex = 0,
+            pass = GPUPreparedNativeRenderPassConfig(
+                colorTarget = GPUPreparedNativeTextureViewOperand(
+                    proxiedTextureView("indexed-color"),
+                    generation,
+                ),
+            ),
+            commands = buildList {
+                add(GPUPreparedNativeRenderCommand.SetPipeline(pipeline))
+                add(GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroup, emptyList()))
+                add(GPUPreparedNativeRenderCommand.SetVertexBuffer(0, vertex, 0L, 8L, 8L))
+                add(
+                    GPUPreparedNativeRenderCommand.SetIndexBuffer(
+                        index,
+                        GPUPreparedNativeIndexFormat.Uint32,
+                        0L,
+                        4L,
+                    ),
+                )
+                add(GPUPreparedNativeRenderCommand.SetScissor(0, 0, 1, 1))
+                repeat(drawCount) {
+                    add(
+                        GPUPreparedNativeRenderCommand.DrawIndexed(
+                            GPUPreparedNativeDrawCall.DrawIndexed(
+                                indexCount = 1,
+                                vertexCount = 1,
+                                maxLocalIndex = 0,
+                            ),
+                        ),
+                    )
+                }
+            },
+        )
     }
 
     private fun proxiedTextureView(label: String): GPUTextureView = GPUTextureView::class.java.cast(

@@ -344,6 +344,11 @@ data class GPUPreparedSceneNativeCounters(
     val colorGlyphPeakAtlasBytes: Long = 0L,
 )
 
+internal data class GPUPreparedSceneRenderCounters(
+    val renderPasses: Long = 0L,
+    val drawIndexed: Long = 0L,
+)
+
 /** Reusable prepared session that owns target lifetime and serializes the sole coordinator route. */
 class GPUPreparedSceneFrameSession internal constructor(
     private val coordinatorFactory: GPUFrameCoordinatorFactory,
@@ -352,6 +357,9 @@ class GPUPreparedSceneFrameSession internal constructor(
     private val closeAction: () -> Unit = {},
     private val attemptIdFactory: () -> GPUFrameAttemptID = ::nextGPUFrameAttemptID,
     private val nativeCountersFactory: () -> GPUPreparedSceneNativeCounters = { GPUPreparedSceneNativeCounters() },
+    private val renderCountersFactory: () -> GPUPreparedSceneRenderCounters = {
+        GPUPreparedSceneRenderCounters()
+    },
     private val sceneTargetResolver: (GPUTaskList) -> GPUFrameTargetRef? = ::resolvePreparedSceneTarget,
 ) : AutoCloseable {
     private var state = State.Idle
@@ -423,6 +431,8 @@ class GPUPreparedSceneFrameSession internal constructor(
 
     /** Handle-free structural evidence for the reusable prepared-session route. */
     fun nativeCounters(): GPUPreparedSceneNativeCounters = nativeCountersFactory()
+
+    internal fun renderCounters(): GPUPreparedSceneRenderCounters = renderCountersFactory()
 
     override fun close() {
         val closeNow = synchronized(this) {

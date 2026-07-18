@@ -697,12 +697,34 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "Indexed CorePrimitive unified and path seals must match the exact packet order.",
             )
         }
-        if (framePlan.steps.count { it.executionKind == GPUFrameStepExecutionKind.Encoder } != 1 ||
-            encoderPlan.scopes != listOf(renderScope)
-        ) {
+        val readbackSteps = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
+        val readbackStep = readbackSteps.singleOrNull()
+        if (readbackSteps.size > 1 || framePlan.steps.any { it is GPUFrameStep.CopyResourceStep }) {
             return refused(
                 "unsupported.native-core-primitive.indexed-scope-shape",
-                "Indexed CorePrimitive currently requires one exact render encoder scope.",
+                "Indexed CorePrimitive accepts one render scope and one optional readback scope.",
+            )
+        }
+        val expectedEncoderSteps = 1 + if (readbackStep == null) 0 else 1
+        if (framePlan.steps.count { it.executionKind == GPUFrameStepExecutionKind.Encoder } != expectedEncoderSteps) {
+            return refused(
+                "unsupported.native-core-primitive.indexed-encoder-shape",
+                "Indexed CorePrimitive contains an unsupported encoder operation.",
+            )
+        }
+        val readbackScope = readbackStep?.let { step ->
+            encoderPlan.scopes.singleOrNull {
+                it.sourceStepIndex == framePlan.steps.indexOf(step) &&
+                    it.operationKind == GPUEncoderOperationKind.Readback
+            } ?: return refused(
+                "unsupported.native-core-primitive.indexed-readback-plan",
+                "The indexed CorePrimitive readback scope is absent from the encoder plan.",
+            )
+        }
+        if (encoderPlan.scopes != listOfNotNull(renderScope, readbackScope)) {
+            return refused(
+                "unsupported.native-core-primitive.indexed-scope-order",
+                "Indexed CorePrimitive encoder scopes must preserve render order then optional readback.",
             )
         }
         val indexedPathUnits = unifiedRoute.orderedUnits.withIndex()
@@ -852,6 +874,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         val targetBounds = packetPlans.first().semantic.targetBounds
+        if (readbackStep != null && readbackStep.request.sourceBounds != targetBounds) {
+            return refused(
+                "unsupported.native-core-primitive.indexed-readback-layout",
+                "Indexed CorePrimitive readback must cover the exact canonical target bounds.",
+            )
+        }
         if (packetPlans.any { plan ->
                 val authority = plan.packet.corePrimitivePreparedAuthority
                 !plan.semantic.hasStructuralIntegrity() ||
@@ -943,12 +971,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         val indexPreparation = preparation(GPUFrameResourceRole.IndexData)
         val uniformPreparation = preparation(GPUFrameResourceRole.UniformData)
         val depthStencilPreparation = preparation(GPUFrameResourceRole.PathDepthStencil)
-        if (preparations.size != 5 || targetPreparation == null || vertexPreparation == null ||
-            indexPreparation == null || uniformPreparation == null || depthStencilPreparation == null
+        val stagingPreparation = preparation(GPUFrameResourceRole.ReadbackStaging)
+        if (preparations.size != 5 + (if (readbackStep == null) 0 else 1) ||
+            targetPreparation == null || vertexPreparation == null || indexPreparation == null ||
+            uniformPreparation == null || depthStencilPreparation == null ||
+            (readbackStep == null) != (stagingPreparation == null)
         ) {
             return refused(
                 "unsupported.native-core-primitive.indexed-resource-shape",
-                "Indexed CorePrimitive requires exactly target, V/I/U slabs, and one path depth/stencil attachment.",
+                "Indexed CorePrimitive requires exactly target, V/I/U slabs, path depth/stencil, " +
+                    "and optional readback staging.",
             )
         }
         val targetDescriptor = targetPreparation.descriptor as? GPUFrameTextureDescriptor
@@ -1071,7 +1103,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         val preparedByLogical = resources.ordinaryResources.associateBy { it.logicalResource }
-        if (resources.ordinaryResources.size != 5 || resources.outputOwnedReadbacks.isNotEmpty() ||
+        if (resources.ordinaryResources.size != 5 ||
             listOf(
                 targetPreparation,
                 vertexPreparation,
@@ -1106,6 +1138,37 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "invalid.native-core-primitive.indexed-prepared-target",
                 "Indexed CorePrimitive prepared scene target differs from its sealed target.",
             )
+        }
+        val output = resources.outputOwnedReadbacks.singleOrNull()
+        if ((readbackStep == null) != (output == null) || resources.outputOwnedReadbacks.size > 1) {
+            return refused(
+                "unsupported.native-core-primitive.indexed-readback-output",
+                "The optional indexed CorePrimitive readback must match one output-owned staging lease.",
+            )
+        }
+        if (readbackStep != null && stagingPreparation != null && output != null) {
+            val stagingDescriptor = stagingPreparation.descriptor as? GPUFrameBufferDescriptor
+            if (readbackStep.source != targetPreparation.resource ||
+                readbackStep.staging != stagingPreparation.resource ||
+                output.request != readbackStep.request || output.stagingResource != stagingPreparation.resource ||
+                output.request.sourceBounds != targetBounds ||
+                stagingDescriptor?.byteSize != output.layout.totalBufferBytes ||
+                stagingPreparation.byteSize != output.layout.totalBufferBytes ||
+                stagingPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.MapRead,
+                ) || stagingPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                output.resourceGeneration != generationSeal.resourceGenerations[stagingPreparation.resource] ||
+                output.layout.width != targetBounds.width || output.layout.height != targetBounds.height ||
+                output.layout.unpaddedBytesPerRow != targetBounds.width.toLong() * RGBA_BYTES_PER_PIXEL ||
+                output.layout.paddedBytesPerRow % WEBGPU_COPY_ROW_ALIGNMENT != 0L ||
+                output.layout.totalBufferBytes > output.stagingLease.backingBufferBytes
+            ) {
+                return refused(
+                    "unsupported.native-core-primitive.indexed-readback-layout",
+                    "The output-owned indexed CorePrimitive RGBA8 readback layout is not exact.",
+                )
+            }
         }
 
         val structuralKeys = packetPlans.map(PacketPlan::structuralKey).distinct()
@@ -1175,7 +1238,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         var frameLease: GPUWgpu4kCorePrimitiveFramePoolLease? = null
         var frameLeaseTransferred = false
         return try {
-            val (_, targetView) = preparedSceneTarget.borrow()
+            val (targetTexture, targetView) = preparedSceneTarget.borrow()
             val pipelineByStructural = linkedMapOf<
                 org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey,
                 GPUWgpu4kCorePrimitiveInvariantHandles
@@ -1235,6 +1298,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 uniformPlan.totalBytes,
                 pooled.capacities.uniformBytes,
             )
+            val stagingBuffer = output?.let { readback ->
+                device.createBuffer(
+                    BufferDescriptor(
+                        size = readback.stagingLease.backingBufferBytes.toULong(),
+                        usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                        mappedAtCreation = false,
+                        label = "Kanvas.frame.corePrimitive.indexed.readback",
+                    ),
+                ).tracked()
+            }
             val targetOperand = GPUPreparedNativeTextureViewOperand(
                 targetView,
                 generationSeal.deviceGeneration,
@@ -1341,6 +1414,36 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 semanticPayloads = packetPlans.map(PacketPlan::semantic),
                 operandLayout = GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitive,
             )
+            val readbackOperand = if (readbackScope != null && output != null && stagingBuffer != null) {
+                GPUPreparedNativeScopeOperand.Readback(
+                    sourceStepIndex = readbackScope.sourceStepIndex,
+                    source = GPUPreparedNativeTextureOperand(
+                        targetTexture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    destination = GPUPreparedNativeBufferOperand(
+                        stagingBuffer,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
+                    ),
+                    layout = GPUPreparedNativeReadbackLayout(
+                        originX = output.request.sourceBounds.left,
+                        originY = output.request.sourceBounds.top,
+                        width = output.layout.width,
+                        height = output.layout.height,
+                        bytesPerRow = output.layout.paddedBytesPerRow,
+                        rowsPerImage = output.layout.rowsPerImage,
+                        bufferOffset = output.layout.bufferOffset,
+                        mappedSize = output.layout.totalBufferBytes,
+                        format = GPUTextureFormat.RGBA8Unorm,
+                    ),
+                )
+            } else {
+                null
+            }
+            val operandsByStep = (listOf(renderOperand) + listOfNotNull(readbackOperand))
+                .associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
             val payload = GPUPreparedNativeFramePayload(
                 identity = GPUPreparedNativeFrameIdentity(
                     framePlan.frameId,
@@ -1357,8 +1460,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         )
                     },
                 ),
-                scopeOperands = listOf(renderOperand),
-                scopeOperandKeys = listOf(renderScope.nativeOperandKeys),
+                scopeOperands = encoderPlan.scopes.map { scope ->
+                    requireNotNull(operandsByStep[scope.sourceStepIndex])
+                },
+                scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys },
                 leaseLifecycle = GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(pooled),
             )
             val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
