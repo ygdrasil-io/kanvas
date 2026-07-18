@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.ArrayBuffer
 import io.ygdrasil.webgpu.BindGroupDescriptor
 import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
 import io.ygdrasil.webgpu.BufferDescriptor
@@ -8,11 +9,15 @@ import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
+import io.ygdrasil.webgpu.RenderPipelineDescriptor
+import io.ygdrasil.webgpu.TextureDescriptor
 import java.io.File
 import java.lang.reflect.Proxy
 import java.util.IdentityHashMap
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -40,11 +45,16 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketStream
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
@@ -73,6 +83,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUBufferResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
@@ -80,6 +91,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingLease
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
+    private enum class RouteShape { Direct, PathOnly, Mixed, TwoPathPairs }
     @Test
     fun `direct core materializer integrity gate performs no canonical hash work`() {
         val source = File(
@@ -221,7 +233,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             },
         )
         assertEquals(listOf(listOf(0L), listOf(256L)), setBindGroups.map { it.dynamicOffsets })
-        assertEquals(1, bindGroups.distinctBy { System.identityHashCode(it.bindGroup) }.size)
+        assertEquals(1, distinctIdentityCount(bindGroups.map { it.bindGroup }))
         assertTrue(bindGroups.all { it.ownership == GPUPreparedNativeOperandOwnership.Borrowed })
         assertTrue(vertices.all { it.buffer.ownership == GPUPreparedNativeOperandOwnership.Borrowed })
         assertTrue(indices.all { it.buffer.ownership == GPUPreparedNativeOperandOwnership.Borrowed })
@@ -243,6 +255,263 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         fixture.close()
         assertEquals(1, fixture.native.closeCounts.getOrDefault(vertices[0].buffer.buffer, 0))
         assertEquals(1, fixture.native.closeCounts.getOrDefault(indices[0].buffer.buffer, 0))
+    }
+
+    @Test
+    fun `path only materializes one indexed stencil pair with exact operand layout`() {
+        val fixture = fixture(routeShape = RouteShape.PathOnly)
+        fixture.native.events.clear()
+
+        val renderStep = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        assertEquals(
+            (listOf(renderStep.target) + renderStep.resourceUses.map { it.resource }).map { resource ->
+                "${resource::class.simpleName}:${resource.value}@" +
+                    fixture.generationSeal.resourceGenerations.getValue(resource)
+            },
+            fixture.encoderPlan.scopes.single().resourceGenerationLabels,
+        )
+
+        val result = fixture.materializeCoreResult()
+
+        val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+            result,
+            (result as? GPUPreparedNativeFramePayloadMaterialization.Refused)?.let { "${it.code}: ${it.message}" },
+        )
+        assertIndexedPathPayload(
+            fixture,
+            materialized,
+            expectedRoles = listOf("producer", "cover"),
+            expectedUniformOffsets = listOf(0L, 0L),
+            expectedSemanticCommands = listOf(2, 2),
+            expectedUniquePipelines = 2,
+        )
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `mixed materializes direct path pair direct in sealed command order`() {
+        val fixture = fixture(routeShape = RouteShape.Mixed)
+        fixture.native.events.clear()
+
+        val result = fixture.materializeCoreResult()
+
+        val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+            result,
+            (result as? GPUPreparedNativeFramePayloadMaterialization.Refused)?.let { "${it.code}: ${it.message}" },
+        )
+        assertIndexedPathPayload(
+            fixture,
+            materialized,
+            expectedRoles = listOf("direct", "producer", "cover", "direct"),
+            expectedUniformOffsets = listOf(0L, 256L, 256L, 512L),
+            expectedSemanticCommands = listOf(1, 2, 2, 3),
+            expectedUniquePipelines = 3,
+        )
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `real preflight indexed keys feed the path materializer without manual route fixtures`() {
+        val fixture = fixture(routeShape = RouteShape.PathOnly, useRealPreflight = true)
+        fixture.native.events.clear()
+        val scope = fixture.encoderPlan.scopes.single()
+
+        assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(scope.corePrimitiveNativeScopeRouteSeal)
+        assertIs<GPUCorePrimitivePathStencilNativeRouteSeal.Pairs>(
+            scope.corePrimitivePathStencilNativeRouteSeal,
+        )
+        assertEquals(
+            listOf(
+                GPUPreparedNativeOperandRole.RenderColorTarget,
+                GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+            ),
+            scope.nativeOperandKeys.map { it.role },
+        )
+
+        val materialized = fixture.materializeCore()
+        assertIndexedPathPayload(
+            fixture,
+            materialized,
+            expectedRoles = listOf("producer", "cover"),
+            expectedUniformOffsets = listOf(0L, 0L),
+            expectedSemanticCommands = listOf(2, 2),
+            expectedUniquePipelines = 2,
+        )
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `adjacent winding regular and even odd inverse pairs retain reset order and exact programs`() {
+        val fixture = fixture(routeShape = RouteShape.TwoPathPairs)
+        fixture.native.events.clear()
+
+        val materialized = fixture.materializeCore()
+
+        assertIndexedPathPayload(
+            fixture,
+            materialized,
+            expectedRoles = listOf("producer", "cover", "producer", "cover"),
+            expectedUniformOffsets = listOf(0L, 0L, 256L, 256L),
+            expectedSemanticCommands = listOf(2, 2, 3, 3),
+            expectedUniquePipelines = 4,
+        )
+        assertEquals(
+            listOf(
+                "Kanvas.session.corePrimitive.pipeline.PathStencilProducerWinding",
+                "Kanvas.session.corePrimitive.pipeline.PathStencilCoverRegular",
+                "Kanvas.session.corePrimitive.pipeline.PathStencilProducerEvenOdd",
+                "Kanvas.session.corePrimitive.pipeline.PathStencilCoverInverse",
+            ),
+            fixture.native.renderPipelineDescriptors.map { it.label },
+        )
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `path write failure rolls back and lifecycle reuses or quarantines every pooled handle exactly`() {
+        val fixture = fixture(routeShape = RouteShape.PathOnly)
+        val pathTextureLabel = "Kanvas.session.corePrimitive.framePool.pathDepthStencil"
+        val pathViewLabel = "$pathTextureLabel.view"
+        fixture.native.events.clear()
+        fixture.native.fail("writeBuffer", 2)
+
+        val refused = fixture.materializeCoreResult()
+
+        assertEquals(
+            "failed.native-core-primitive.materialization",
+            assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(refused).code,
+        )
+        val pooledLabels = listOf(
+            "Kanvas.session.corePrimitive.framePool.vertices",
+            "Kanvas.session.corePrimitive.framePool.indices",
+            "Kanvas.session.corePrimitive.framePool.uniforms",
+            "Kanvas.session.corePrimitive.framePool.bindGroup0",
+            pathTextureLabel,
+            pathViewLabel,
+        )
+        assertTrue(pooledLabels.all { fixture.native.createdHandles(it).size == 1 })
+
+        val rolledBackReuse = fixture.materializeCore()
+        val firstDepthView = rolledBackReuse.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>().single().pass.depthStencilTarget!!.view
+        assertSame(fixture.native.createdHandles(pathViewLabel).single(), firstDepthView)
+        assertTrue(rolledBackReuse.draft.disposeBeforeRegistration())
+
+        val completionReuse = fixture.materializeCore()
+        assertSame(
+            firstDepthView,
+            completionReuse.draft.payload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .single().pass.depthStencilTarget!!.view,
+        )
+        val adapter = GPURuntimeResourceAdapter()
+        val completedRegistration = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+            adapter.registerPreparedNativeFrameDraft(completionReuse.draft),
+        )
+        assertIs<GPUPreparedNativeFrameBindingResult.Ready>(
+            completedRegistration.ownership.bindLateSurface(
+                null,
+                GPUPreparedNativeFrameLateSurfaceBinding.NotRequired,
+            ),
+        )
+        assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+            completedRegistration.ownership.consume(completionReuse.draft.payload.identity),
+        )
+        assertTrue(completedRegistration.ownership.markSubmitted())
+        assertTrue(completedRegistration.ownership.releaseAfterCompletion())
+
+        val quarantined = fixture.materializeCore()
+        assertSame(
+            firstDepthView,
+            quarantined.draft.payload.scopeOperands.filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .single().pass.depthStencilTarget!!.view,
+        )
+        val quarantinedRegistration = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+            adapter.registerPreparedNativeFrameDraft(quarantined.draft),
+        )
+        assertTrue(quarantinedRegistration.ownership.quarantine())
+
+        val replacement = fixture.materializeCore()
+        val replacementDepthView = replacement.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>().single().pass.depthStencilTarget!!.view
+        assertNotSame(firstDepthView, replacementDepthView)
+        assertEquals(2, fixture.native.createdHandles(pathTextureLabel).size)
+        assertEquals(2, fixture.native.createdHandles(pathViewLabel).size)
+        assertTrue(replacement.draft.disposeBeforeRegistration())
+        adapter.close()
+        fixture.close()
+        val pathCloses = fixture.native.events.filter { event ->
+            event == "close:$pathViewLabel" || event == "close:$pathTextureLabel"
+        }
+        assertEquals(
+            listOf(
+                "close:$pathViewLabel",
+                "close:$pathTextureLabel",
+                "close:$pathViewLabel",
+                "close:$pathTextureLabel",
+            ),
+            pathCloses,
+        )
+    }
+
+    @Test
+    fun `path validation refusal performs no native action`() {
+        val fixture = fixture(routeShape = RouteShape.PathOnly)
+        fixture.native.events.clear()
+
+        val result = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target,
+            fixture.cache,
+            fixture.limits,
+        ).materializeReusable(
+            fixture.plan,
+            fixture.encoderPlan,
+            GPUPreparedResourceSet(emptyList(), emptyList()),
+            fixture.generationSeal,
+        )
+
+        assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result)
+        assertEquals(emptyList(), fixture.native.events)
+        fixture.close()
+    }
+
+    @Test
+    fun `path texture and view allocation failures remain transactional before uploads`() {
+        listOf("createTexture", "createView").forEach { operation ->
+            val fixture = fixture(routeShape = RouteShape.PathOnly)
+            val textureLabel = "Kanvas.session.corePrimitive.framePool.pathDepthStencil"
+            val viewLabel = "$textureLabel.view"
+            fixture.native.events.clear()
+            fixture.native.fail(operation, 1)
+
+            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.materializeCoreResult(),
+                operation,
+            )
+
+            assertEquals("failed.native-core-primitive.frame-pool-allocation", refused.code, operation)
+            assertTrue(fixture.native.writeBufferCalls.isEmpty(), operation)
+            if (operation == "createTexture") {
+                assertTrue(fixture.native.createdHandles(textureLabel).isEmpty())
+                assertTrue(fixture.native.createdHandles(viewLabel).isEmpty())
+            } else {
+                val unpublishedTexture = fixture.native.createdHandles(textureLabel).single()
+                assertTrue(fixture.native.createdHandles(viewLabel).isEmpty())
+                assertEquals(1, fixture.native.closeCounts.getOrDefault(unpublishedTexture, 0))
+            }
+            fixture.close()
+        }
     }
 
     @Test
@@ -285,7 +554,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     uniformUsedBytes,
                 ),
             ),
-            fixture.native.writeBufferCalls,
+            fixture.native.writeBufferCalls.map { it.copy(snapshot = EMPTY_UPLOAD_SNAPSHOT) },
         )
         assertTrue(materialized.draft.disposeBeforeRegistration())
         materializer.close()
@@ -631,16 +900,173 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         fixture.close()
     }
 
-    private fun fixture(readback: Boolean = false): Fixture {
+    private fun assertIndexedPathPayload(
+        fixture: Fixture,
+        materialized: GPUPreparedNativeFramePayloadMaterialization.Materialized,
+        expectedRoles: List<String>,
+        expectedUniformOffsets: List<Long>,
+        expectedSemanticCommands: List<Int>,
+        expectedUniquePipelines: Int,
+    ) {
+        val render = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        assertEquals(GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitive, render.operandLayout)
+        assertEquals(GPUPreparedNativeLoadOperation.Clear, render.pass.loadOperation)
+        assertEquals(GPUPreparedNativeStoreOperation.Store, render.pass.storeOperation)
+        assertEquals(GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0), render.pass.clearColor)
+        assertTrue(render.pass.depthReadOnly)
+        assertEquals(null, render.pass.depthLoadOperation)
+        assertEquals(null, render.pass.depthStoreOperation)
+        assertFalse(render.pass.stencilReadOnly)
+        assertEquals(0u, render.pass.stencilClearValue)
+        assertEquals(GPUPreparedNativeLoadOperation.Clear, render.pass.stencilLoadOperation)
+        assertEquals(GPUPreparedNativeStoreOperation.Discard, render.pass.stencilStoreOperation)
+        assertEquals(1, render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetStencilReference>().size)
+        assertEquals(0u, render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetStencilReference>().single().reference)
+        assertEquals(1, render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>().size)
+        assertEquals(1, render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetIndexBuffer>().size)
+        assertEquals(
+            listOf("vertex", "index", "stencil") + expectedRoles.flatMap {
+                listOf("pipeline", "bind", "scissor", "draw")
+            },
+            render.commands.map { command ->
+                when (command) {
+                    is GPUPreparedNativeRenderCommand.SetVertexBuffer -> "vertex"
+                    is GPUPreparedNativeRenderCommand.SetIndexBuffer -> "index"
+                    is GPUPreparedNativeRenderCommand.SetStencilReference -> "stencil"
+                    is GPUPreparedNativeRenderCommand.SetPipeline -> "pipeline"
+                    is GPUPreparedNativeRenderCommand.SetBindGroup -> "bind"
+                    is GPUPreparedNativeRenderCommand.SetScissor -> "scissor"
+                    is GPUPreparedNativeRenderCommand.DrawIndexed -> "draw"
+                    is GPUPreparedNativeRenderCommand.Draw -> "non-indexed-draw"
+                }
+            },
+        )
+        val pipelines = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+        val bindGroups = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+        val draws = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.DrawIndexed>()
+        assertEquals(expectedRoles.size, pipelines.size)
+        assertEquals(expectedRoles.size, bindGroups.size)
+        assertEquals(expectedRoles.size, draws.size)
+        assertEquals(expectedUniformOffsets.map(::listOf), bindGroups.map { it.dynamicOffsets })
+        assertEquals(expectedSemanticCommands, render.semanticPayloads.map { payload ->
+            (payload as GPUDrawSemanticPayload.CorePrimitive).payloadRef.commandIdValue
+        })
+        assertEquals(expectedUniquePipelines, distinctIdentityCount(pipelines.map { it.pipeline.pipeline }))
+        if (expectedRoles.first() == "direct") {
+            assertSame(pipelines.first().pipeline.pipeline, pipelines.last().pipeline.pipeline)
+        }
+        assertEquals(1, distinctIdentityCount(bindGroups.map { it.bindGroup.bindGroup }))
+        val routes = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
+            fixture.encoderPlan.scopes.single().corePrimitiveNativeScopeRouteSeal,
+        )
+        val arena = packCorePrimitiveNativeScopeGeometry(routes)
+        assertEquals(
+            arena.slices.map { slice ->
+                GPUPreparedNativeDrawCall.DrawIndexed(
+                    indexCount = slice.indexCount,
+                    instanceCount = 1,
+                    firstIndex = slice.firstIndex,
+                    baseVertex = slice.baseVertex,
+                    firstInstance = 0,
+                    vertexCount = slice.vertexCount,
+                    maxLocalIndex = slice.maxLocalIndex,
+                )
+            },
+            draws.map { it.drawCall },
+        )
+        assertEquals(3, fixture.native.writeBufferCalls.size)
+        val preparationBytes = fixture.plan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .filter { request -> request.role in setOf(
+                GPUFrameResourceRole.VertexData,
+                GPUFrameResourceRole.IndexData,
+                GPUFrameResourceRole.UniformData,
+            ) }
+            .map(GPUResourcePreparationRequest::byteSize)
+            .map(Long::toULong)
+        assertEquals(preparationBytes, fixture.native.writeBufferCalls.map { it.size })
+        assertTrue(fixture.native.writeBufferCalls.all { call ->
+            call.bufferOffset == 0uL && call.dataOffset == 0uL && call.dataBytes == call.size
+        })
+        val expectedVertices = FloatArray(arena.vertexFloatCount).also(arena::copyVerticesInto)
+        val expectedIndices = IntArray(arena.indexCount).also(arena::copyIndicesInto)
+        val vertexUpload = fixture.native.writeBufferCalls.single {
+            it.bufferLabel.endsWith("framePool.vertices")
+        }
+        val indexUpload = fixture.native.writeBufferCalls.single {
+            it.bufferLabel.endsWith("framePool.indices")
+        }
+        val uploadedVertices = ArrayBuffer.of(vertexUpload.snapshot).toFloatArray()
+        val uploadedIndices = ArrayBuffer.of(indexUpload.snapshot).toIntArray()
+        assertContentEquals(expectedVertices, uploadedVertices)
+        assertContentEquals(expectedIndices, uploadedIndices)
+        arena.slices.forEach { slice ->
+            val localIndices = uploadedIndices.sliceArray(
+                slice.firstIndex until slice.firstIndex + slice.indexCount,
+            )
+            assertTrue(localIndices.all { it in 0 until slice.vertexCount })
+            assertEquals(slice.maxLocalIndex, localIndices.maxOrNull())
+        }
+        assertEquals(1, fixture.native.events.count {
+            it == "createTexture:Kanvas.session.corePrimitive.framePool.pathDepthStencil"
+        })
+        val depthDescriptor = fixture.native.textureDescriptors.single { descriptor ->
+            descriptor.label == "Kanvas.session.corePrimitive.framePool.pathDepthStencil"
+        }
+        assertEquals(TARGET.width.toUInt(), depthDescriptor.size.width)
+        assertEquals(TARGET.height.toUInt(), depthDescriptor.size.height)
+        assertEquals(GPUTextureFormat.Depth24PlusStencil8, depthDescriptor.format)
+        assertEquals(1u, depthDescriptor.sampleCount)
+        assertEquals(GPUTextureUsage.RenderAttachment, depthDescriptor.usage)
+        assertEquals(expectedUniquePipelines, fixture.native.events.count { it == "createRenderPipeline" })
+        val expectedKeyRoles = fixture.encoderPlan.scopes.single().nativeOperandKeys.map { it.role }
+        assertEquals(expectedKeyRoles.size, render.operands.size)
+        assertEquals(2 + expectedUniquePipelines + 2 + expectedRoles.size, render.operands.size)
+    }
+
+    private fun distinctIdentityCount(values: List<Any>): Int =
+        IdentityHashMap<Any, Unit>().apply { values.forEach { put(it, Unit) } }.size
+
+    private fun fixture(
+        readback: Boolean = false,
+        routeShape: RouteShape = RouteShape.Direct,
+        useRealPreflight: Boolean = false,
+    ): Fixture {
         val generation = GPUDeviceGenerationID(23L)
         val capabilities = capabilities()
         val frameId = GPUFrameID(231L)
+        val commandIds = when (routeShape) {
+            RouteShape.Direct -> listOf(1, 2)
+            RouteShape.PathOnly -> listOf(2)
+            RouteShape.Mixed -> listOf(1, 2, 3)
+            RouteShape.TwoPathPairs -> listOf(2, 3)
+        }
         val base = GPURecorder(GPURecordingID("recording.core.proxy"), frameId, capabilities, generation).apply {
-            record(command(1, 0, GPURect(1f, 1f, 5f, 5f)))
-            record(command(2, 1, GPURect(6f, 2f, 10f, 6f)))
+            commandIds.forEachIndexed { order, commandId ->
+                record(command(commandId, order, GPURect(1f + order, 1f, 5f + order, 5f)))
+            }
         }.close().taskList.withNoClip()
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
-        val semantics = packets.associate { packet -> packet.commandIdValue to semantic(packet) }
+        val semantics = packets.associate { packet ->
+            packet.commandIdValue to if (routeShape == RouteShape.TwoPathPairs ||
+                packet.commandIdValue == 2 && routeShape != RouteShape.Direct
+            ) {
+                pathSemantic(
+                    packet,
+                    fillRule = if (packet.commandIdValue == 3) {
+                        GPUCorePrimitiveFillRule.EvenOdd
+                    } else {
+                        GPUCorePrimitiveFillRule.Winding
+                    },
+                    inverseFill = packet.commandIdValue == 3,
+                    coordinateOffset = if (packet.commandIdValue == 3) 2f else 0f,
+                )
+            } else {
+                semantic(packet)
+            }
+        }
         val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
             GPUCorePrimitivePreparedFrameTaskListBuilder().build(
                 GPUCorePrimitivePreparedFrameRequest(
@@ -659,9 +1085,56 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
             .mapIndexed { index, request -> request.resource to (index + 1L) }
             .toMap()
-        val renderScopes = plan.steps.withIndex().mapNotNull { (index, step) ->
+        val preparedByPreflight = if (useRealPreflight) {
+            val resourceProvider = GPUConcreteResourceProvider()
+            val completionProvider = object : GPUQueueCompletionProvider {
+                override fun reserveTicket(
+                    request: GPUQueueCompletionTicketRequest,
+                ): GPUQueueCompletionTicketReservation = GPUQueueCompletionTicketReservation.Reserved(
+                    GPUQueueCompletionTicket(
+                        GPUQueueCompletionTicketID("ticket.core.materializer"),
+                        request.frameId,
+                        request.deviceGeneration,
+                    ),
+                )
+
+                override fun abandonReservedTicket(
+                    ticket: GPUQueueCompletionTicket,
+                ): GPUQueueCompletionTicketAbandonResult =
+                    GPUQueueCompletionTicketAbandonResult.Abandoned(ticket.ticketId)
+            }
+            val surfaceProvider = object : GPUSurfaceOutputProvider {
+                override fun acquire(request: GPUSurfaceAcquisitionRequest): GPUSurfaceAcquisitionResult =
+                    error("Offscreen CorePrimitive preflight must not acquire a surface")
+
+                override fun release(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult =
+                    GPUSurfaceReleaseResult.Released
+            }
+            val result = GPUFramePreflighter(
+                context = GPUFramePreflightContext(
+                    targetId = "target.core.proxy",
+                    deviceGeneration = generation,
+                    targetGeneration = 1L,
+                    resourceGenerations = generations,
+                ),
+                capabilities = capabilities,
+                resourceProvider = resourceProvider,
+                completionProvider = completionProvider,
+                surfaceProvider = surfaceProvider,
+            ).preflight(plan)
+            assertIs<GPUFramePreflightResult.Prepared>(
+                result,
+                (result as? GPUFramePreflightResult.Refused)?.diagnostic?.let {
+                    "${it.code.value}: ${it.message}"
+                },
+            ).frame
+        } else {
+            null
+        }
+        val renderScopes = if (preparedByPreflight == null) plan.steps.withIndex().mapNotNull { (index, step) ->
             val render = step as? GPUFrameStep.RenderPassStep ?: return@mapNotNull null
             val stream = commandStream(render.drawPackets, generation)
+            val routeSeals = testRouteSeals(render)
             GPUCommandEncoderScopePlan(
                 sourceStepIndex = index,
                 operationKind = GPUEncoderOperationKind.Render,
@@ -670,36 +1143,23 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 sourcePacketIds = render.drawPackets.map(GPUDrawPacket::packetId),
                 facadeOperationClasses = stream.commandLabels,
                 targetGeneration = 1L,
-                resourceGenerationLabels = listOf("target@1", "vertex@2", "index@3", "uniform@4"),
+                resourceGenerationLabels = (listOf(render.target) + render.resourceUses.map { it.resource })
+                    .map { resource ->
+                        "${resource::class.simpleName}:${resource.value}@${generations.getValue(resource)}"
+                    },
                 passCommandStream = stream,
-                corePrimitiveDirectNativeRouteSeal = GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(
-                    render.drawPackets.associate { packet ->
-                        val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
-                        packet.packetId to assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
-                            validateCorePrimitiveDirectNativeRoute(
-                                semantic,
-                                corePrimitiveDirectClipAuthority(
-                                    requireNotNull(packet.clipExecutionPlan),
-                                    semantic.targetBounds,
-                                ),
-                                packet.blendPlan,
-                                render.samplePlan,
-                                "rgba8unorm",
-                            ),
-                        )
-                    },
-                    preparedPassSeal = requireNotNull(
-                        render.drawPackets.first().corePrimitivePreparedAuthority,
-                    ).let { authority ->
-                        GPUCorePrimitiveDirectPreparedPassSeal(
-                            authority.structuralPipelineKey,
-                            requireNotNull(authority.uniformSlabSeal),
-                        )
-                    },
-                ),
-            ).attachNativeOperandKeys(renderOperandKeys(render.drawPackets.first().commandIdValue))
-        }
-        val readbackScopes = plan.steps.withIndex().mapNotNull { (index, step) ->
+                corePrimitiveDirectNativeRouteSeal = routeSeals.direct,
+                corePrimitivePathStencilNativeRouteSeal = routeSeals.path,
+                corePrimitiveNativeScopeRouteSeal = routeSeals.unified,
+            ).attachNativeOperandKeys(
+                if (routeSeals.path is GPUCorePrimitivePathStencilNativeRouteSeal.Pairs) {
+                    indexedRenderOperandKeys(render.drawPackets)
+                } else {
+                    renderOperandKeys(render.drawPackets.first().commandIdValue)
+                },
+            )
+        } else emptyList()
+        val readbackScopes = if (preparedByPreflight == null) plan.steps.withIndex().mapNotNull { (index, step) ->
             val readbackStep = step as? GPUFrameStep.ReadbackCopyStep ?: return@mapNotNull null
             GPUCommandEncoderScopePlan(
                 sourceStepIndex = index,
@@ -712,22 +1172,24 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     "staging@${generations.getValue(readbackStep.staging)}",
                 ),
             ).attachNativeOperandKeys(readbackOperandKeys())
-        }
-        val encoderPlan = GPUCommandEncoderPlan.ordered(
+        } else emptyList()
+        val encoderPlan = preparedByPreflight?.encoderPlan ?: GPUCommandEncoderPlan.ordered(
             planId = "core.proxy.encoder",
             contextIdentity = "core.proxy",
             deviceGeneration = generation,
             targetGeneration = 1L,
             scopes = renderScopes + readbackScopes,
         )
-        val resources = GPUPreparedResourceSet(
+        val resources = preparedByPreflight?.resources ?: GPUPreparedResourceSet(
             ordinaryResources = plan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
                 .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
                 .filter { it.role != GPUFrameResourceRole.ReadbackStaging }
                 .map { request ->
                     GPUPreparedResourceEvidence(
                         logicalResource = request.resource,
-                        concreteResource = if (request.role == GPUFrameResourceRole.SceneTarget) {
+                        concreteResource = if (request.role == GPUFrameResourceRole.SceneTarget ||
+                            request.role == GPUFrameResourceRole.PathDepthStencil
+                        ) {
                             GPUPreparedConcreteResourceRef.Texture(GPUTextureResourceRef("prepared.target"))
                         } else {
                             GPUPreparedConcreteResourceRef.Buffer(GPUBufferResourceRef("prepared.${request.resource.value}"))
@@ -786,11 +1248,13 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             plan,
             encoderPlan,
             resources,
-            GPUPreparedGenerationSeal(generation, 1L, generations, plan.capabilitySeal.sealHash),
+            preparedByPreflight?.generationSeal ?:
+                GPUPreparedGenerationSeal(generation, 1L, generations, plan.capabilitySeal.sealHash),
             native,
             target,
             GPUWgpu4kCorePrimitiveSessionCache(native.device, generation),
             requireNotNull(capabilities.limits),
+            preparedByPreflight,
         )
     }
 
@@ -821,6 +1285,137 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             "store",
             operandBridge = bridges,
         )
+    }
+
+    private data class TestRouteSeals(
+        val direct: GPUCorePrimitiveDirectNativeRouteSeal,
+        val path: GPUCorePrimitivePathStencilNativeRouteSeal,
+        val unified: GPUCorePrimitiveNativeScopeRouteSeal,
+    )
+
+    private fun testRouteSeals(render: GPUFrameStep.RenderPassStep): TestRouteSeals {
+        val slab = requireNotNull(render.drawPackets.first().corePrimitivePreparedAuthority?.uniformSlabSeal)
+        val directRoutes = linkedMapOf<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID, GPUCorePrimitiveDirectNativeRoute.Accepted>()
+        val pathPairs = mutableListOf<GPUCorePrimitivePathStencilNativeRoute.AcceptedPair>()
+        val preparedPairs = mutableListOf<GPUCorePrimitivePathStencilPreparedPairSeal>()
+        val units = mutableListOf<GPUCorePrimitiveNativeScopeRouteUnit>()
+        var packetIndex = 0
+        while (packetIndex < render.drawPackets.size) {
+            val packet = render.drawPackets[packetIndex]
+            val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
+            when (packet.role) {
+                GPUDrawPacketRole.Shading -> {
+                    val route = assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+                        validateCorePrimitiveDirectNativeRoute(
+                            semantic,
+                            corePrimitiveDirectClipAuthority(
+                                requireNotNull(packet.clipExecutionPlan),
+                                semantic.targetBounds,
+                            ),
+                            packet.blendPlan,
+                            render.samplePlan,
+                            "rgba8unorm",
+                        ),
+                    )
+                    val structural = requireNotNull(packet.corePrimitivePreparedAuthority).structuralPipelineKey
+                    directRoutes[packet.packetId] = route
+                    units += GPUCorePrimitiveNativeScopeRouteUnit.Direct(
+                        packet.commandIdValue,
+                        packet.packetId,
+                        route,
+                        structural,
+                    )
+                    packetIndex += 1
+                }
+                GPUDrawPacketRole.PathStencilProducer -> {
+                    val cover = render.drawPackets[packetIndex + 1]
+                    check(cover.role == GPUDrawPacketRole.PathStencilCover)
+                    val geometry = semantic.geometry as GPUCorePrimitiveGeometry.TriangulatedPath
+                    val pair = GPUCorePrimitivePathStencilNativeRoute.AcceptedPair(
+                        packet.packetId,
+                        cover.packetId,
+                        FloatArray(geometry.vertices.size) { geometry.vertices[it] },
+                        IntArray(geometry.indices.size) { geometry.indices[it] },
+                        geometry.coverBounds,
+                        semantic.targetBounds,
+                        geometry.inverseFill,
+                    )
+                    val producerKey = requireNotNull(packet.corePrimitivePreparedAuthority).structuralPipelineKey
+                    val coverKey = requireNotNull(cover.corePrimitivePreparedAuthority).structuralPipelineKey
+                    pathPairs += pair
+                    preparedPairs += GPUCorePrimitivePathStencilPreparedPairSeal(
+                        packet.commandIdValue,
+                        slab.commandIds.indexOf(packet.commandIdValue),
+                        packet.packetId,
+                        cover.packetId,
+                        producerKey,
+                        coverKey,
+                    )
+                    units += GPUCorePrimitiveNativeScopeRouteUnit.PathPair(
+                        packet.commandIdValue,
+                        pair,
+                        producerKey,
+                        coverKey,
+                    )
+                    packetIndex += 2
+                }
+                else -> error("Unexpected standalone CorePrimitive packet role ${packet.role}")
+            }
+        }
+        if (pathPairs.isEmpty()) {
+            val structural = requireNotNull(render.drawPackets.first().corePrimitivePreparedAuthority).structuralPipelineKey
+            return TestRouteSeals(
+                GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(
+                    directRoutes,
+                    GPUCorePrimitiveDirectPreparedPassSeal(structural, slab),
+                ),
+                GPUCorePrimitivePathStencilNativeRouteSeal.Empty,
+                GPUCorePrimitiveNativeScopeRouteSeal.Empty,
+            )
+        }
+        val directSeal = if (directRoutes.isEmpty()) {
+            GPUCorePrimitiveDirectNativeRouteSeal.Empty
+        } else {
+            val structural = units.filterIsInstance<GPUCorePrimitiveNativeScopeRouteUnit.Direct>()
+                .first().structuralPipelineKey
+            GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(
+                directRoutes,
+                GPUCorePrimitiveDirectPreparedPassSeal(structural, slab),
+            )
+        }
+        return TestRouteSeals(
+            directSeal,
+            GPUCorePrimitivePathStencilNativeRouteSeal.Pairs(
+                pathPairs,
+                GPUCorePrimitivePathStencilPreparedPassSeal(preparedPairs, slab),
+            ),
+            GPUCorePrimitiveNativeScopeRouteSeal.Routes(units, slab),
+        )
+    }
+
+    private fun indexedRenderOperandKeys(packets: List<GPUDrawPacket>): List<GPUPreparedNativeOperandKey> {
+        fun key(
+            role: GPUPreparedNativeOperandRole,
+            kind: GPUPreparedNativeOperandKind,
+            ordinal: Int = 0,
+        ) = GPUPreparedNativeOperandKey(
+            role,
+            kind,
+            gpuPreparedNativeBindingKey("core.indexed.${role.name}.$ordinal"),
+            GPUPreparedNativeOperandOwnership.Borrowed,
+        )
+        val pipelineCount = packets.distinctBy(GPUDrawPacket::renderPipelineKey).size
+        return listOf(
+            key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView),
+            key(GPUPreparedNativeOperandRole.RenderDepthStencilTarget, GPUPreparedNativeOperandKind.TextureView),
+        ) + List(pipelineCount) { ordinal ->
+            key(GPUPreparedNativeOperandRole.RenderPipeline, GPUPreparedNativeOperandKind.RenderPipeline, ordinal)
+        } + listOf(
+            key(GPUPreparedNativeOperandRole.RenderVertexBuffer, GPUPreparedNativeOperandKind.Buffer),
+            key(GPUPreparedNativeOperandRole.RenderIndexBuffer, GPUPreparedNativeOperandKind.Buffer),
+        ) + List(packets.size) { ordinal ->
+            key(GPUPreparedNativeOperandRole.RenderBindGroup, GPUPreparedNativeOperandKind.BindGroup, ordinal)
+        }
     }
 
     private fun renderOperandKeys(commandId: Int): List<GPUPreparedNativeOperandKey> {
@@ -879,6 +1474,40 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     GPURect(1f, 1f, 5f, 5f),
                     GPUTransformFacts.identity(),
                 ),
+            ),
+        )
+
+    private fun pathSemantic(
+        packet: GPUDrawPacket,
+        fillRule: GPUCorePrimitiveFillRule = GPUCorePrimitiveFillRule.Winding,
+        inverseFill: Boolean = false,
+        coordinateOffset: Float = 0f,
+    ): GPUDrawSemanticPayload.CorePrimitive =
+        GPUCorePrimitivePayloadGatherer().gatherSemantic(
+            GPUCorePrimitivePayloadInput(
+                commandIdValue = packet.commandIdValue,
+                sourceFamily = GPUCorePrimitiveSourceFamily.Path,
+                geometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+                    vertices = listOf(
+                        -1f, -1f, 1f + coordinateOffset, 1f, 5f + coordinateOffset, 1f,
+                        -1f, -1f, 5f + coordinateOffset, 1f, 4f + coordinateOffset, 5f,
+                        -1f, -1f, 4f + coordinateOffset, 5f, 1f + coordinateOffset, 1f,
+                    ),
+                    indices = (0..8).toList(),
+                    sourceContourStarts = listOf(0),
+                    sourceVertexCount = 3,
+                    coverBounds = GPUPixelBounds(0, 0, 8, 6),
+                    geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
+                    fillRule = fillRule,
+                    inverseFill = inverseFill,
+                ),
+                premultipliedRgba = listOf(0.5f, 0f, 0f, 0.5f),
+                targetBounds = TARGET,
+                scissorBounds = TARGET,
+                clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+                blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
+                frameProvenance = GPUFrameProvenance.GmContent,
+                coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
             ),
         )
 
@@ -1039,6 +1668,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val target: GPUWgpu4kPreparedSceneTarget,
         val cache: GPUWgpu4kCorePrimitiveSessionCache,
         val limits: GPULimits,
+        val preparedByPreflight: PreparedGPUFrame? = null,
     ) {
         fun materializeCoreResult(): GPUPreparedNativeFramePayloadMaterialization {
             val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
@@ -1064,6 +1694,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         }
 
         fun close() {
+            preparedByPreflight?.let { prepared ->
+                check(prepared.claimForRollback())
+                check(prepared.rollback.execute().successful)
+            }
             cache.close()
             target.close()
         }
@@ -1073,6 +1707,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val events = mutableListOf<String>()
         val writeBufferCalls = mutableListOf<WriteBufferCall>()
         val bindGroupLayoutDescriptors = mutableListOf<BindGroupLayoutDescriptor>()
+        val textureDescriptors = mutableListOf<TextureDescriptor>()
+        val renderPipelineDescriptors = mutableListOf<RenderPipelineDescriptor>()
         val closeCounts = IdentityHashMap<Any, Int>()
         private val createdHandlesByLabel = linkedMapOf<String, MutableList<Any>>()
         private val closeAttemptsByLabel = linkedMapOf<String, Int>()
@@ -1087,7 +1723,29 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         }
         val device: GPUDevice = proxy(GPUDevice::class.java) { method, args ->
             when (method.name) {
-                "createTexture" -> texture
+                "createTexture" -> {
+                    val descriptor = args?.firstOrNull() as TextureDescriptor
+                    textureDescriptors += descriptor
+                    val label = descriptor.label.orEmpty()
+                    events += "createTexture:$label"
+                    failIfRequested("createTexture")
+                    if (label == "Kanvas.session.corePrimitive.framePool.pathDepthStencil") {
+                        val pathViewLabel = "$label.view"
+                        handle(GPUTexture::class.java, label) { textureMethod ->
+                            if (textureMethod.name == "createView") {
+                                events += "createView:$pathViewLabel"
+                                failIfRequested("createView")
+                                recordedHandle(GPUTextureView::class.java, pathViewLabel) as GPUTextureView
+                            } else {
+                                null
+                            }
+                        }.also { created ->
+                            createdHandlesByLabel.getOrPut(label) { mutableListOf() } += created
+                        }
+                    } else {
+                        texture
+                    }
+                }
                 "createBuffer" -> {
                     val label = (args?.firstOrNull() as BufferDescriptor).label.orEmpty()
                     events += "createBuffer:$label"
@@ -1105,7 +1763,12 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     events += method.name
                     handle(method.returnType, method.name)
                 }
-                "createShaderModule", "createPipelineLayout", "createRenderPipeline" -> {
+                "createRenderPipeline" -> {
+                    renderPipelineDescriptors += args?.firstOrNull() as RenderPipelineDescriptor
+                    events += method.name
+                    handle(method.returnType, method.name)
+                }
+                "createShaderModule", "createPipelineLayout" -> {
                     events += method.name
                     handle(method.returnType, method.name)
                 }
@@ -1122,6 +1785,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     dataOffset = (args[3] as Long).toULong(),
                     dataBytes = data.size,
                     size = args[4] as ULong?,
+                    snapshot = data.toByteArray(),
                 )
                 failIfRequested("writeBuffer")
             }
@@ -1129,7 +1793,15 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         }
 
         fun fail(operation: String, ordinal: Int) {
-            require(operation in setOf("createBuffer", "writeBuffer", "createBindGroup") && ordinal > 0)
+            require(
+                operation in setOf(
+                    "createTexture",
+                    "createView",
+                    "createBuffer",
+                    "writeBuffer",
+                    "createBindGroup",
+                ) && ordinal > 0,
+            )
             failingOperation = operation
             failingOperationOrdinal = ordinal
             operationInvocationCount = 0
@@ -1232,9 +1904,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val dataOffset: ULong,
         val dataBytes: ULong,
         val size: ULong?,
+        val snapshot: ByteArray = EMPTY_UPLOAD_SNAPSHOT,
     )
 
     private companion object {
         val TARGET = GPUPixelBounds(0, 0, 16, 16)
+        val EMPTY_UPLOAD_SNAPSHOT = ByteArray(0)
     }
 }
