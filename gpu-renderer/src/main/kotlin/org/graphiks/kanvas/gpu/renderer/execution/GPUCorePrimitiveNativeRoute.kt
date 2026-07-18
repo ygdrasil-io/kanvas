@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
@@ -121,10 +122,36 @@ internal sealed interface GPUCorePrimitiveDirectNativeRouteSeal {
 }
 
 /** Builder authority proven structurally by pure preflight and retained for native materialization. */
-internal data class GPUCorePrimitiveDirectPreparedPassSeal(
+internal class GPUCorePrimitiveDirectPreparedPassSeal(
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
-    val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
-)
+    val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
+    analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal> = emptyList(),
+    analyticClipPackedBytes: ByteArray? = null,
+) {
+    private val analyticClipUniformSealsSnapshot = immutableList(analyticClipUniformSeals)
+    private val analyticClipPackedBytesSnapshot = analyticClipPackedBytes?.copyOf()
+
+    val analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal>
+        get() = analyticClipUniformSealsSnapshot
+
+    init {
+        require((uniformSlabSeal != null) xor analyticClipUniformSealsSnapshot.isNotEmpty()) {
+            "A direct CorePrimitive pass must retain exactly one uniform32 or analytic uniform64 authority"
+        }
+        require((analyticClipPackedBytesSnapshot != null) == analyticClipUniformSealsSnapshot.isNotEmpty()) {
+            "An analytic direct CorePrimitive pass must retain its exact packed uniform64 slab"
+        }
+        analyticClipPackedBytesSnapshot?.let { packed ->
+            require(packed.size.toLong() == analyticClipUniformSealsSnapshot.first().plan.totalBytes) {
+                "The analytic uniform64 packed slab must match its exact plan size"
+            }
+        }
+    }
+
+    /** Internal zero-copy borrow valid only for the immediate queue upload. */
+    fun packedUniformBytesForUpload(): ByteArray =
+        uniformSlabSeal?.packedBytesForUpload() ?: requireNotNull(analyticClipPackedBytesSnapshot)
+}
 
 internal data class GPUCorePrimitiveDirectNativeFrameRouteKey(
     val sourceStepIndex: Int,

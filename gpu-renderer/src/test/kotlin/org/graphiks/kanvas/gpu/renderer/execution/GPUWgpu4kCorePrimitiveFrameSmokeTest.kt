@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
@@ -175,6 +177,144 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
             assertEquals(1L, counters.commandBuffers)
             assertEquals(1L, counters.submits)
             assertEquals(1L, counters.readbackCopies)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `native analytic rect and elliptical rrect pixels prove coverage y blend and batching`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(
+            backend != null,
+            "wgpu4k native adapter unavailable; skipping analytic clip pixel proofs",
+        )
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        val ellipseRadii = listOf(6f, 3f, 6f, 3f, 6f, 3f, 6f, 3f)
+        try {
+            val fractionalHard = renderAnalyticScenario(
+                session,
+                capabilities,
+                generation,
+                12_032L,
+                "fractional-rect-hard-y",
+                listOf(
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticCoverage(
+                            GPUClipExecutionGeometry.Rect(GPUClipBounds(3.25f, 4.25f, 13.75f, 10.75f)),
+                            scissor = null,
+                            antiAlias = false,
+                        ),
+                        SmokeColor(255, 32, 16),
+                    ),
+                ),
+            )
+            assertPixel(fractionalHard, 32, 4, 5, 255, 32, 16, 255)
+            assertPixel(fractionalHard, 32, 14, 5, 0, 0, 0, 0)
+            assertPixel(fractionalHard, 32, 4, 11, 0, 0, 0, 0)
+            assertPixel(fractionalHard, 32, 4, 20, 0, 0, 0, 0)
+
+            val rectAa = renderAnalyticScenario(
+                session,
+                capabilities,
+                generation,
+                12_033L,
+                "fractional-rect-aa",
+                listOf(
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticCoverage(
+                            GPUClipExecutionGeometry.Rect(GPUClipBounds(4.25f, 4.25f, 12.75f, 12.75f)),
+                            scissor = null,
+                            antiAlias = true,
+                        ),
+                        SmokeColor(255, 0, 0),
+                    ),
+                ),
+            )
+            assertPixel(rectAa, 32, 5, 8, 255, 0, 0, 255)
+            assertPartialPrimaryPixel(rectAa, 32, 4, 8, channel = 0)
+            assertPixel(rectAa, 32, 3, 8, 0, 0, 0, 0)
+
+            val rrectHard = renderAnalyticScenario(
+                session,
+                capabilities,
+                generation,
+                12_034L,
+                "elliptical-rrect-hard-scissor",
+                listOf(
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticCoverage(
+                            GPUClipExecutionGeometry.RRect(
+                                GPUClipBounds(4f, 4f, 20f, 20f),
+                                ellipseRadii,
+                            ),
+                            scissor = GPUPixelBounds(4, 4, 20, 20),
+                            antiAlias = false,
+                        ),
+                        SmokeColor(0, 255, 0),
+                    ),
+                ),
+            )
+            assertPixel(rrectHard, 32, 12, 4, 0, 255, 0, 255)
+            assertPixel(rrectHard, 32, 12, 12, 0, 255, 0, 255)
+            assertPixel(rrectHard, 32, 4, 4, 0, 0, 0, 0)
+
+            val rrectAa = renderAnalyticScenario(
+                session,
+                capabilities,
+                generation,
+                12_035L,
+                "elliptical-rrect-aa",
+                listOf(
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticCoverage(
+                            GPUClipExecutionGeometry.RRect(
+                                GPUClipBounds(4f, 4f, 20f, 20f),
+                                ellipseRadii,
+                            ),
+                            scissor = null,
+                            antiAlias = true,
+                        ),
+                        SmokeColor(0, 0, 255),
+                    ),
+                ),
+            )
+            assertPixel(rrectAa, 32, 12, 12, 0, 0, 255, 255)
+            assertPartialPrimaryPixel(rrectAa, 32, 4, 5, channel = 2)
+            assertPixel(rrectAa, 32, 4, 4, 0, 0, 0, 0)
+
+            val blendedBatch = renderAnalyticScenario(
+                session,
+                capabilities,
+                generation,
+                12_036L,
+                "two-values-premul-src-over",
+                listOf(
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticCoverage(
+                            GPUClipExecutionGeometry.Rect(GPUClipBounds(0f, 0f, 32f, 32f)),
+                            scissor = null,
+                            antiAlias = false,
+                        ),
+                        SmokeColor(0, 0, 255, 128),
+                    ),
+                    AnalyticSmokeDraw(
+                        GPUClipExecutionPlan.AnalyticCoverage(
+                            GPUClipExecutionGeometry.Rect(GPUClipBounds(8f, 8f, 24f, 24f)),
+                            scissor = GPUPixelBounds(6, 6, 26, 26),
+                            antiAlias = false,
+                        ),
+                        SmokeColor(255, 0, 0, 128),
+                    ),
+                ),
+            )
+            assertPixel(blendedBatch, 32, 4, 4, 0, 0, 128, 128)
+            assertPixel(blendedBatch, 32, 12, 12, 128, 0, 64, 192)
+            assertPixel(blendedBatch, 32, 25, 12, 0, 0, 128, 128)
         } finally {
             session.close()
             GPUBackendRuntimeNativeFactory.dispose()
@@ -425,6 +565,100 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         return assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
     }
 
+    private fun renderAnalyticScenario(
+        session: GPUPreparedSceneFrameSession,
+        capabilities: org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities,
+        generation: GPUDeviceGenerationID,
+        frameValue: Long,
+        scenarioId: String,
+        draws: List<AnalyticSmokeDraw>,
+    ): ByteArray {
+        val frameId = GPUFrameID(frameValue)
+        val readbackId = GPUReadbackRequestID("readback.core-primitive.$scenarioId")
+        val targetBounds = GPUPixelBounds(0, 0, 32, 32)
+        val commands = draws.mapIndexed { index, draw ->
+            GPUFillRectCommandBuilder.build(
+                commandId = GPUDrawCommandID(700 + (frameValue - 12_000L).toInt() * 10 + index),
+                rect = GPURect(0f, 0f, 32f, 32f),
+                target = GPUTargetFacts(32, 32, "rgba8unorm"),
+                material = GPUMaterialDescriptor.SolidColor(
+                    draw.color.red / 255f,
+                    draw.color.green / 255f,
+                    draw.color.blue / 255f,
+                    draw.color.alpha / 255f,
+                ),
+                clip = GPUClipFacts(
+                    kind = GPUClipKind.WideOpen,
+                    bounds = GPUBounds(0f, 0f, 32f, 32f),
+                    coveragePlan = GPUClipCoveragePlan.NoClip,
+                ),
+                paintOrder = index,
+                source = GPUCommandSource("unit-test", "fillRect", GPUFrameProvenance.GmContent),
+            ).copy(antiAlias = false)
+        }
+        val base = GPURecorder(
+            GPURecordingID("recording.core.smoke.$scenarioId"),
+            frameId,
+            capabilities,
+            generation,
+        ).apply {
+            commands.forEach(::record)
+        }.close().taskList.withClipPlans(commands.mapIndexed { index, command ->
+            command.commandId.value to draws[index].clip
+        }.toMap())
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+        assertEquals(draws.size, packets.size, "Core analytic smoke base recording refused: ${base.diagnostics}")
+        val commandsById = commands.associateBy { command -> command.commandId.value }
+        val semantics = packets.associate { packet ->
+            val command = requireNotNull(commandsById[packet.commandIdValue])
+            packet.commandIdValue to command.coreSemantic(packet, targetBounds, targetBounds)
+        }
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                GPUCorePrimitivePreparedFrameRequest(
+                    baseTaskList = base,
+                    capabilities = capabilities,
+                    target = GPUFrameTargetRef("target.core.smoke"),
+                    targetBounds = targetBounds,
+                    semanticsByCommandId = semantics,
+                    readbackRequestId = readbackId,
+                ),
+            ),
+        ).taskList
+        val preparedRender = taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+        assertEquals(draws.size, preparedRender.drawPackets.size)
+        assertEquals(
+            1,
+            preparedRender.drawPackets.map { packet ->
+                requireNotNull(packet.corePrimitivePreparedAuthority).structuralPipelineKey
+            }.distinct().size,
+        )
+
+        val nativeBefore = session.nativeCounters()
+        val renderBefore = session.renderCounters()
+        val terminal = session.renderFrame(
+            taskList,
+            GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+        ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+        assertEquals(
+            GPUFrameStructuralOutcome.Succeeded,
+            terminal.outcome,
+            "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
+        )
+        val nativeAfter = session.nativeCounters()
+        val renderAfter = session.renderCounters()
+        assertEquals(1L, nativeAfter.encoders - nativeBefore.encoders)
+        assertEquals(1L, nativeAfter.commandBuffers - nativeBefore.commandBuffers)
+        assertEquals(1L, nativeAfter.submits - nativeBefore.submits)
+        assertEquals(1L, nativeAfter.readbackCopies - nativeBefore.readbackCopies)
+        assertEquals(1L, nativeAfter.retentionRegistrations - nativeBefore.retentionRegistrations)
+        assertEquals(1L, nativeAfter.retentionCompletions - nativeBefore.retentionCompletions)
+        assertEquals(0L, nativeAfter.retentionQuarantines - nativeBefore.retentionQuarantines)
+        assertEquals(1L, renderAfter.renderPasses - renderBefore.renderPasses)
+        assertEquals(draws.size.toLong(), renderAfter.drawIndexed - renderBefore.drawIndexed)
+        return assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
+    }
+
     private fun stencilFan(
         contours: List<List<Pair<Float, Float>>>,
         fillRule: GPUCorePrimitiveFillRule,
@@ -478,6 +712,11 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
             override val color: SmokeColor,
         ) : SmokeDraw
     }
+
+    private data class AnalyticSmokeDraw(
+        val clip: GPUClipExecutionPlan.AnalyticCoverage,
+        val color: SmokeColor,
+    )
 
     private data class SmokeColor(
         val red: Int,
@@ -570,6 +809,20 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
     ) {
         val offset = (y * width + x) * 4
         assertEquals(listOf(red, green, blue, alpha), (0..3).map { bytes[offset + it].toInt() and 0xff })
+    }
+
+    private fun assertPartialPrimaryPixel(
+        bytes: ByteArray,
+        width: Int,
+        x: Int,
+        y: Int,
+        channel: Int,
+    ) {
+        val offset = (y * width + x) * 4
+        val pixel = (0..3).map { bytes[offset + it].toInt() and 0xff }
+        assertTrue(pixel[channel] in 1..254, "Expected a partial coverage pixel, observed $pixel")
+        assertEquals(pixel[channel], pixel[3])
+        pixel.indices.filter { it != channel && it != 3 }.forEach { assertEquals(0, pixel[it]) }
     }
 
     private fun org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillRect.coreSemantic(

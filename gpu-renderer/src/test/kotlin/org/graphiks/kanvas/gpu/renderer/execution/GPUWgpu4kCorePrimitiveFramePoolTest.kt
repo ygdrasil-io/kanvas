@@ -61,6 +61,76 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     }
 
     @Test
+    fun `uniform layout transition replaces only the incompatible bind group transactionally`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val legacy = pool.acquire(requirements()).acquiredLease()
+        legacy.rollbackBeforeSubmit()
+
+        val analytic = pool.acquire(
+            requirements(componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY),
+        ).acquiredLease()
+
+        assertEquals(legacy.slotId, analytic.slotId)
+        assertSame(legacy.handles.vertexBuffer, analytic.handles.vertexBuffer)
+        assertSame(legacy.handles.indexBuffer, analytic.handles.indexBuffer)
+        assertSame(legacy.handles.uniformBuffer, analytic.handles.uniformBuffer)
+        assertNotSame(legacy.handles.bindGroup, analytic.handles.bindGroup)
+        assertEquals(
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY,
+            analytic.handles.componentIdentity,
+        )
+        assertEquals(
+            listOf(
+                PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY,
+            ),
+            factory.creations.filter {
+                it.resource == GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup
+            }.map(CreatedHandle::componentIdentity),
+        )
+        assertEquals(1, factory.closeAttempts(legacy.handles.bindGroup))
+        assertEquals(0, factory.closeAttempts(legacy.handles.uniformBuffer))
+
+        analytic.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `failed uniform layout transition keeps the published legacy slot untouched`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val legacy = pool.acquire(requirements()).acquiredLease()
+        legacy.rollbackBeforeSubmit()
+        factory.failNext(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup)
+
+        val refused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(
+            pool.acquire(
+                requirements(componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY),
+            ),
+        )
+
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed(
+                GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
+                "IllegalStateException",
+                "injected BindGroup allocation failure",
+            ),
+            refused.reason,
+        )
+        assertEquals(0, factory.closeAttempts(legacy.handles.bindGroup))
+        assertEquals(0, factory.closeAttempts(legacy.handles.uniformBuffer))
+        val reused = pool.acquire(requirements()).acquiredLease()
+        assertSame(legacy.handles.vertexBuffer, reused.handles.vertexBuffer)
+        assertSame(legacy.handles.indexBuffer, reused.handles.indexBuffer)
+        assertSame(legacy.handles.uniformBuffer, reused.handles.uniformBuffer)
+        assertSame(legacy.handles.bindGroup, reused.handles.bindGroup)
+
+        reused.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
     fun `path attachment keeps its exact non power of two extent and reuses the same texture and view`() {
         val factory = FakeFactory()
         val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
@@ -679,12 +749,15 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         indexBytes: Long = 1L,
         uniformBytes: Long = 1L,
         pathDepthStencil: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
+            PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
     ) = GPUWgpu4kCorePrimitiveFramePoolRequirements(
         deviceGeneration,
         vertexBytes,
         indexBytes,
         uniformBytes,
         pathDepthStencil,
+        componentIdentity,
     )
 
     private fun pathDepthStencil(
@@ -715,8 +788,15 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         override fun createUniformBuffer(capacityBytes: Long): GPUBuffer =
             create(GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer, "uniform", GPUBuffer::class.java)
 
-        override fun createBindGroup(uniformBuffer: GPUBuffer): GPUBindGroup =
-            create(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup, "bindGroup", GPUBindGroup::class.java)
+        override fun createBindGroup(
+            componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+            uniformBuffer: GPUBuffer,
+        ): GPUBindGroup = create(
+            GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
+            "bindGroup",
+            GPUBindGroup::class.java,
+            componentIdentity = componentIdentity,
+        )
 
         override fun createPathDepthStencilTexture(
             requirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement,
@@ -749,6 +829,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             label: String,
             type: Class<T>,
             pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
+            componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity? = null,
         ): T {
             if (nextFailure == resource) {
                 nextFailure = null
@@ -771,7 +852,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
                     else -> defaultValue(method.returnType)
                 }
             } as T
-            creations += CreatedHandle(resource, handle, pathDepthStencilRequirement)
+            creations += CreatedHandle(resource, handle, pathDepthStencilRequirement, componentIdentity)
             return handle
         }
 
@@ -792,6 +873,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         val resource: GPUWgpu4kCorePrimitiveFramePoolResource,
         val handle: AutoCloseable,
         val pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
+        val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity? = null,
     )
 
     private companion object {

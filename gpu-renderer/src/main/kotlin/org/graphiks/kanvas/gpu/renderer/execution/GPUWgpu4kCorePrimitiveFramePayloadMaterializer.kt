@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.corePrimitiveUniformBytes
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
@@ -113,19 +114,34 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 )
             Triple(renderStep, packet, semantic)
         }
+        val analyticClipUniformSeals = preparedPassSeal.analyticClipUniformSeals
+        val analyticClipPass = analyticClipUniformSeals.isNotEmpty()
+        if (analyticClipPass && analyticClipUniformSeals.size != semanticPackets.size) {
+            return refused(
+                "invalid.native-core-primitive.analytic-uniform-seal",
+                "The analytic uniform64 pass seal must retain exactly one packet-order entry per draw.",
+            )
+        }
+        val expectedBindingLayoutHash = if (analyticClipPass) {
+            CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
+        } else {
+            CORE_PRIMITIVE_BINDING_LAYOUT_HASH
+        }
         val targetBounds = semanticPackets.first().third.targetBounds
-        val acceptedGeometries = semanticPackets.map { (_, packet, semantic) ->
+        val acceptedGeometries = semanticPackets.mapIndexed { packetIndex, (_, packet, semantic) ->
+            val packetAuthority = packet.corePrimitivePreparedAuthority
+            val expectedAnalyticSeal = analyticClipUniformSeals.getOrNull(packetIndex)
             if (!semantic.hasStructuralIntegrity() || packet.role != GPUDrawPacketRole.Shading ||
                 packet.commandIdValue != semantic.payloadRef.commandIdValue ||
                 packet.uniformSlot != semantic.payloadRef.uniformSlot ||
-                packet.bindingLayoutHash != CORE_PRIMITIVE_BINDING_LAYOUT_HASH ||
+                packet.bindingLayoutHash != expectedBindingLayoutHash ||
                 packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
                 packet.targetStateHash != CORE_PRIMITIVE_TARGET_STATE_HASH ||
                 packet.scissorBoundsHash != corePrimitiveScissorAuthority(semantic.scissorBounds) ||
-                packet.corePrimitivePreparedAuthority?.structuralPipelineKey !=
-                preparedPassSeal.structuralPipelineKey ||
-                packet.corePrimitivePreparedAuthority?.renderPipelineKey != packet.renderPipelineKey ||
-                packet.corePrimitivePreparedAuthority?.uniformSlabSeal !== preparedPassSeal.uniformSlabSeal ||
+                packetAuthority?.structuralPipelineKey != preparedPassSeal.structuralPipelineKey ||
+                packetAuthority.renderPipelineKey != packet.renderPipelineKey ||
+                packetAuthority.uniformSlabSeal !== preparedPassSeal.uniformSlabSeal ||
+                packetAuthority.analyticClipUniformSeal !== expectedAnalyticSeal ||
                 semantic.targetBounds != targetBounds || semantic.payloadRef.uniformBlock?.byteSize !=
                 CORE_PRIMITIVE_UNIFORM_BYTES.toLong() || semantic.payloadRef.uniformBlock.bytes !=
                 corePrimitiveUniformBytes(semantic.targetBounds, semantic.premultipliedRgba)
@@ -295,7 +311,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "CorePrimitive uniform slab requires one exact buffer descriptor.",
             )
         val uniformSlabSeal = preparedPassSeal.uniformSlabSeal
-        val uniformSlabPlan = uniformSlabSeal.plan
+        val uniformSlabPlan = uniformSlabSeal?.plan ?: analyticClipUniformSeals.first().plan
         if (uniformSlabPlan.deviceGeneration != generationSeal.deviceGeneration.value ||
             uniformSlabPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment
         ) {
@@ -323,6 +339,30 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "CorePrimitive uniform slab exceeds the host-addressable ByteArray size.",
             )
         }
+        val uniformUploadBytes = preparedPassSeal.packedUniformBytesForUpload()
+        val pipelineMapping = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
+            preparedPassSeal.structuralPipelineKey,
+        ) as? GPUWgpu4kCorePrimitivePipelineMapping.Mapped ?: return refused(
+            "unsupported.native-core-primitive.pipeline",
+            "The direct CorePrimitive structural key has no exact native pipeline.",
+        )
+        val expectedComponentIdentity = if (analyticClipPass) {
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+        } else {
+            PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+        }
+        if (pipelineMapping.componentIdentity != expectedComponentIdentity ||
+            pipelineMapping.identity.program.isAnalyticClip() != analyticClipPass
+        ) {
+            return refused(
+                "invalid.native-core-primitive.pipeline-layout",
+                "The direct CorePrimitive pipeline and uniform layout authorities disagree.",
+            )
+        }
+        val pipelineCacheKey = GPUWgpu4kCorePrimitivePipelineCacheKey(
+            pipelineMapping.componentIdentity,
+            pipelineMapping.identity,
+        )
         val exactUses = setOf(
             org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse(
                 vertexPreparation.resource,
@@ -436,7 +476,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val (targetTexture, targetView) = preparedSceneTarget.borrow()
             val invariants = when (
                 val acquired = sessionCache.acquire(
-                    GPUWgpu4kCorePrimitivePipelineCacheKey(RGBA8_UNORM, 1),
+                    pipelineCacheKey,
                 )
             ) {
                 is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired -> acquired.handles
@@ -452,6 +492,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         vertexBytes,
                         indexBytes,
                         uniformSlabPlan.totalBytes,
+                        componentIdentity = pipelineMapping.componentIdentity,
                     ),
                 )
             ) {
@@ -480,7 +521,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
             uploadExact(
                 uniformBuffer,
-                ArrayBuffer.of(uniformSlabSeal.packedBytesForUpload()),
+                ArrayBuffer.of(uniformUploadBytes),
                 usedBytes = uniformSlabPlan.totalBytes,
                 capacityBytes = pooled.capacities.uniformBytes,
             )

@@ -108,11 +108,6 @@ class GPUCorePrimitiveNativeRouteTest {
 
     @Test
     fun `unsupported geometry coverage clip blend sample and format refuse before native work`() {
-        val analyticClip = GPUClipExecutionPlan.AnalyticCoverage(
-            GPUClipExecutionGeometry.Rect(GPUBounds(0f, 0f, 16f, 16f)),
-            TARGET,
-            antiAlias = false,
-        )
         val cases = listOf(
             validateCorePrimitiveDirectNativeRoute(
                 semantic(
@@ -135,13 +130,6 @@ class GPUCorePrimitiveNativeRouteTest {
                 GPUSamplePlan.SingleSampleFrame,
                 "rgba8unorm",
             ) to "unsupported.native-core-primitive.coverage",
-            validateCorePrimitiveDirectNativeRoute(
-                semantic(GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f)),
-                analyticClip,
-                srcOver(),
-                GPUSamplePlan.SingleSampleFrame,
-                "rgba8unorm",
-            ) to "unsupported.native-core-primitive.clip",
             validateCorePrimitiveDirectNativeRoute(
                 semantic(GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f), blend = src()),
                 GPUClipExecutionPlan.NoClip,
@@ -185,6 +173,25 @@ class GPUCorePrimitiveNativeRouteTest {
         cases.forEach { (result, code) ->
             assertEquals(code, assertIs<GPUCorePrimitiveDirectNativeRoute.Refused>(result).code)
         }
+    }
+
+    @Test
+    fun `analytic rect clip retains direct geometry with its conservative scissor authority`() {
+        val analyticClip = GPUClipExecutionPlan.AnalyticCoverage(
+            GPUClipExecutionGeometry.Rect(GPUBounds(0f, 0f, 16f, 16f)),
+            TARGET,
+            antiAlias = false,
+        )
+
+        assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+            validateCorePrimitiveDirectNativeRoute(
+                semantic(GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f)),
+                analyticClip,
+                srcOver(),
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ),
+        )
     }
 
     private fun semantic(

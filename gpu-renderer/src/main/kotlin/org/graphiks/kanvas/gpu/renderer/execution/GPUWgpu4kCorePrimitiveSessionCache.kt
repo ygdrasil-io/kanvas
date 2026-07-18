@@ -308,11 +308,19 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                 ),
             )
 
-            override fun createBindGroup(uniformBuffer: GPUBuffer): GPUBindGroup = device.createBindGroup(
+            override fun createBindGroup(
+                componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+                uniformBuffer: GPUBuffer,
+            ): GPUBindGroup = device.createBindGroup(
                 BindGroupDescriptor(
-                    label = "Kanvas.session.corePrimitive.framePool.bindGroup0",
+                    label = if (componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY) {
+                        "Kanvas.session.corePrimitive.framePool.bindGroup0"
+                    } else {
+                        "Kanvas.session.corePrimitive.framePool.bindGroup0." +
+                            componentIdentity.bindingLayoutIdentity
+                    },
                     layout = checkNotNull(
-                        sharedComponentsByIdentity[PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY]?.bindGroupLayout,
+                        sharedComponentsByIdentity[componentIdentity]?.bindGroupLayout,
                     ) {
                         "CorePrimitive components must exist before the frame pool allocates a bind group"
                     },
@@ -322,7 +330,10 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                             resource = BufferBinding(
                                 buffer = uniformBuffer,
                                 offset = 0uL,
-                                size = CORE_PRIMITIVE_MIN_UNIFORM_BINDING_BYTES,
+                                size = if (
+                                    componentIdentity ==
+                                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+                                ) 64uL else CORE_PRIMITIVE_MIN_UNIFORM_BINDING_BYTES,
                             ),
                         ),
                     ),

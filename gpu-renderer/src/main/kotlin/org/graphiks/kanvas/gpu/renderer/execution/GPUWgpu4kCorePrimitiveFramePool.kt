@@ -22,7 +22,10 @@ internal interface GPUWgpu4kCorePrimitiveFramePoolFactory {
     fun createVertexBuffer(capacityBytes: Long): GPUBuffer
     fun createIndexBuffer(capacityBytes: Long): GPUBuffer
     fun createUniformBuffer(capacityBytes: Long): GPUBuffer
-    fun createBindGroup(uniformBuffer: GPUBuffer): GPUBindGroup
+    fun createBindGroup(
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+        uniformBuffer: GPUBuffer,
+    ): GPUBindGroup
     fun createPathDepthStencilTexture(
         requirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement,
     ): GPUTexture
@@ -58,6 +61,8 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
     val indexBytes: Long,
     val uniformBytes: Long,
     val pathDepthStencil: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
+    val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
+        PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
 )
 
 internal data class GPUWgpu4kCorePrimitiveFramePoolCapacities(
@@ -78,6 +83,8 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolHandles(
     val uniformBuffer: GPUBuffer,
     val bindGroup: GPUBindGroup,
     val pathDepthStencil: GPUWgpu4kCorePrimitivePathDepthStencilHandles? = null,
+    val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
+        PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
 )
 
 internal data class GPUWgpu4kCorePrimitivePathDepthStencilHandles(
@@ -223,12 +230,18 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             available,
             requiredCapacities,
             requirements.pathDepthStencil,
+            requirements.componentIdentity,
         )
         if (slot != null &&
             (!slot.capacities.contains(requiredCapacities) ||
-                !slot.handles.matches(requirements.pathDepthStencil))
+                !slot.handles.matches(requirements.pathDepthStencil, requirements.componentIdentity))
         ) {
-            grow(slot, requiredCapacities, requirements.pathDepthStencil)?.let { refusal ->
+            grow(
+                slot,
+                requiredCapacities,
+                requirements.pathDepthStencil,
+                requirements.componentIdentity,
+            )?.let { refusal ->
                 return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(refusal)
             }
         }
@@ -243,6 +256,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     slots.size,
                     requiredCapacities,
                     requirements.pathDepthStencil,
+                    requirements.componentIdentity,
                 )
             ) {
                 is SlotCreation.Created -> {
@@ -363,6 +377,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         slotId: Int,
         capacities: GPUWgpu4kCorePrimitiveFramePoolCapacities,
         pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): SlotCreation {
         var vertex: GPUBuffer? = null
         var index: GPUBuffer? = null
@@ -381,7 +396,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 factory.createUniformBuffer(capacities.uniformBytes)
             }
             bindGroup = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup) {
-                factory.createBindGroup(requireNotNull(uniform))
+                factory.createBindGroup(componentIdentity, requireNotNull(uniform))
             }
             if (pathDepthStencilRequirement != null) {
                 pathDepthStencilTexture = allocate(
@@ -411,6 +426,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                                 requireNotNull(pathDepthStencilView),
                             )
                         },
+                        componentIdentity,
                     ),
                 ),
             )
@@ -431,6 +447,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         slot: Slot,
         capacities: GPUWgpu4kCorePrimitiveFramePoolCapacities,
         pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): GPUWgpu4kCorePrimitiveFramePoolRefusal? {
         val oldHandles = slot.handles
         var vertex: GPUBuffer? = null
@@ -441,6 +458,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         var pathDepthStencilView: GPUTextureView? = null
         val replacePathDepthStencil = pathDepthStencilRequirement != null &&
             oldHandles.pathDepthStencil?.requirement != pathDepthStencilRequirement
+        val replaceBindGroup = capacities.uniformBytes > slot.capacities.uniformBytes ||
+            oldHandles.componentIdentity != componentIdentity
         return try {
             if (capacities.vertexBytes > slot.capacities.vertexBytes) {
                 vertex = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer) {
@@ -456,8 +475,10 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 uniform = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer) {
                     factory.createUniformBuffer(capacities.uniformBytes)
                 }
+            }
+            if (replaceBindGroup) {
                 bindGroup = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup) {
-                    factory.createBindGroup(requireNotNull(uniform))
+                    factory.createBindGroup(componentIdentity, uniform ?: oldHandles.uniformBuffer)
                 }
             }
             if (replacePathDepthStencil) {
@@ -486,6 +507,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 } else {
                     oldHandles.pathDepthStencil
                 },
+                componentIdentity,
             )
             slot.handles = replacement
             slot.capacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(
@@ -622,21 +644,36 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
 
     private fun GPUWgpu4kCorePrimitiveFramePoolHandles.matches(
         requirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
-    ): Boolean = requirement == null || pathDepthStencil?.requirement == requirement
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+    ): Boolean = this.componentIdentity == componentIdentity &&
+        (requirement == null || pathDepthStencil?.requirement == requirement)
 
     private fun selectAvailableSlot(
         available: List<Slot>,
         requiredCapacities: GPUWgpu4kCorePrimitiveFramePoolCapacities,
         pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): Slot? {
         fun Slot.hasCapacities() = capacities.contains(requiredCapacities)
+        fun Slot.hasComponent() = handles.componentIdentity == componentIdentity
         if (pathDepthStencilRequirement == null) {
-            return available.firstOrNull { slot -> slot.hasCapacities() } ?: available.firstOrNull()
+            return available.firstOrNull { slot -> slot.hasCapacities() && slot.hasComponent() }
+                ?: available.firstOrNull { slot -> slot.hasComponent() }
+                ?: available.firstOrNull { slot -> slot.hasCapacities() }
+                ?: available.firstOrNull()
         }
         return available.firstOrNull { slot ->
-            slot.hasCapacities() && slot.handles.matches(pathDepthStencilRequirement)
+            slot.hasCapacities() && slot.handles.matches(pathDepthStencilRequirement, componentIdentity)
         } ?: available.firstOrNull { slot ->
-            slot.handles.matches(pathDepthStencilRequirement)
+            slot.handles.matches(pathDepthStencilRequirement, componentIdentity)
+        } ?: available.firstOrNull { slot ->
+            slot.hasCapacities() && slot.hasComponent() && slot.handles.pathDepthStencil == null
+        } ?: available.firstOrNull { slot ->
+            slot.hasCapacities() && slot.hasComponent()
+        } ?: available.firstOrNull { slot ->
+            slot.hasComponent() && slot.handles.pathDepthStencil == null
+        } ?: available.firstOrNull { slot ->
+            slot.hasComponent()
         } ?: available.firstOrNull { slot ->
             slot.hasCapacities() && slot.handles.pathDepthStencil == null
         } ?: available.firstOrNull { slot ->

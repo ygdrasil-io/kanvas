@@ -33,6 +33,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
@@ -255,6 +257,46 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         fixture.close()
         assertEquals(1, fixture.native.closeCounts.getOrDefault(vertices[0].buffer.buffer, 0))
         assertEquals(1, fixture.native.closeCounts.getOrDefault(indices[0].buffer.buffer, 0))
+    }
+
+    @Test
+    fun `two analytic clips upload one exact uniform64 slab with one compatible dynamic bind group`() {
+        val fixture = fixture(analyticClip = true, useRealPreflight = true)
+        fixture.native.events.clear()
+
+        val materialized = fixture.materializeCore()
+        val render = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        val commands = render.commands
+        val bindGroups = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+        val scissors = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetScissor>()
+        val pipelines = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+        val preparedPackets = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single().drawPackets
+        val seals = preparedPackets.map { packet ->
+            requireNotNull(packet.corePrimitivePreparedAuthority?.analyticClipUniformSeal)
+        }
+        val expectedUpload = ByteArray(seals.first().plan.totalBytes.toInt()).also { packed ->
+            seals.forEach { seal ->
+                seal.payloadBytesSnapshot().copyInto(packed, seal.alignedOffset.toInt())
+            }
+        }
+
+        assertEquals(1, pipelines.size)
+        assertEquals(listOf(listOf(0L), listOf(256L)), bindGroups.map { it.dynamicOffsets })
+        assertEquals(1, distinctIdentityCount(bindGroups.map { it.bindGroup.bindGroup }))
+        assertEquals(seals.map { it.conservativeScissor }, scissors.map {
+            GPUPixelBounds(it.x, it.y, it.x + it.width, it.y + it.height)
+        })
+        assertEquals(3, fixture.native.writeBufferCalls.size)
+        assertContentEquals(expectedUpload, fixture.native.writeBufferCalls.last().snapshot)
+        val uniformLayout = fixture.native.bindGroupLayoutDescriptors.single().entries.single().buffer
+        assertEquals(64uL, requireNotNull(uniformLayout).minBindingSize)
+        assertEquals(null, render.pass.depthStencilTarget)
+
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
     }
 
     @Test
@@ -1033,6 +1075,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         readback: Boolean = false,
         routeShape: RouteShape = RouteShape.Direct,
         useRealPreflight: Boolean = false,
+        analyticClip: Boolean = false,
     ): Fixture {
         val generation = GPUDeviceGenerationID(23L)
         val capabilities = capabilities()
@@ -1043,11 +1086,29 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             RouteShape.Mixed -> listOf(1, 2, 3)
             RouteShape.TwoPathPairs -> listOf(2, 3)
         }
-        val base = GPURecorder(GPURecordingID("recording.core.proxy"), frameId, capabilities, generation).apply {
+        val recorded = GPURecorder(GPURecordingID("recording.core.proxy"), frameId, capabilities, generation).apply {
             commandIds.forEachIndexed { order, commandId ->
                 record(command(commandId, order, GPURect(1f + order, 1f, 5f + order, 5f)))
             }
-        }.close().taskList.withNoClip()
+        }.close().taskList
+        val clipPlans = commandIds.associateWith { commandId ->
+            if (analyticClip) {
+                GPUClipExecutionPlan.AnalyticCoverage(
+                    GPUClipExecutionGeometry.Rect(
+                        if (commandId == commandIds.first()) {
+                            GPUClipBounds(0.5f, 0.75f, 7.5f, 8.25f)
+                        } else {
+                            GPUClipBounds(2.25f, 1.5f, 10.75f, 9.5f)
+                        },
+                    ),
+                    scissor = null,
+                    antiAlias = true,
+                )
+            } else {
+                GPUClipExecutionPlan.NoClip
+            }
+        }
+        val base = recorded.withClipPlans(clipPlans)
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
         val semantics = packets.associate { packet ->
             packet.commandIdValue to if (routeShape == RouteShape.TwoPathPairs ||
@@ -1543,14 +1604,18 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         rendererFeatures = setOf(GPURendererFeature.RenderPass, GPURendererFeature.Readback),
     )
 
-    private fun GPUTaskList.withNoClip(): GPUTaskList = GPUTaskList(
+    private fun GPUTaskList.withClipPlans(
+        plans: Map<Int, GPUClipExecutionPlan>,
+    ): GPUTaskList = GPUTaskList(
         frameId,
         capabilitySeal,
         recordingSeals,
         expectedReplayKeyHash,
         tasks.map { task ->
             if (task !is GPUTask.Render) return@map task
-            val packets = task.drawPackets.map { packet -> packet.withNoClip() }
+            val packets = task.drawPackets.map { packet ->
+                packet.withClipPlan(requireNotNull(plans[packet.commandIdValue]))
+            }
             GPUTask.Render(
                 task.taskId,
                 task.recordingId,
@@ -1572,12 +1637,12 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         diagnostics,
     )
 
-    private fun GPUDrawPacket.withNoClip() = GPUDrawPacket(
+    private fun GPUDrawPacket.withClipPlan(plan: GPUClipExecutionPlan) = GPUDrawPacket(
         packetId, commandIdValue, analysisRecordId, passId, layerId, bindingListId,
         insertionReasonCode, sortKey, sortKeyPreimage, renderStepId, renderStepVersion, role,
         blendPlan, renderPipelineKey, computePipelineKey, bindingLayoutHash, uniformSlot, resourceSlot,
         semanticPayload, vertexSourceLabel, scissorBoundsHash, targetStateHash, originalPaintOrder,
-        resourceGeneration, frameProvenance, clipCoveragePlan, GPUClipExecutionPlan.NoClip, diagnostics,
+        resourceGeneration, frameProvenance, clipCoveragePlan, plan, diagnostics,
     )
 
     private fun GPUDrawPacket.withSemantic(semantic: GPUDrawSemanticPayload.CorePrimitive) = GPUDrawPacket(

@@ -24,12 +24,12 @@ import io.ygdrasil.webgpu.StencilFaceState
 import io.ygdrasil.webgpu.VertexAttribute
 import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
-import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
-import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePathStencilStructuralProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
+import org.graphiks.kanvas.gpu.renderer.passes.pathStencilStructuralProgramOrNull
 
 /** Closed native programs materialized by the bounded CorePrimitive WebGPU lane. */
 internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
@@ -121,9 +121,11 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StencilEdgeFan &&
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StrokeStencilEdgeFan ||
                 blend != GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone -> null
-            depthStencil == PRODUCER_WINDING_STATE ->
+            depthStencil.pathStencilStructuralProgramOrNull() ==
+                GPUCorePrimitivePathStencilStructuralProgram.ProducerWinding ->
                 GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding
-            depthStencil == PRODUCER_EVEN_ODD_STATE ->
+            depthStencil.pathStencilStructuralProgramOrNull() ==
+                GPUCorePrimitivePathStencilStructuralProgram.ProducerEvenOdd ->
                 GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd
             else -> null
         }
@@ -132,9 +134,11 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.PathStencil ||
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
                 !blend.isCanonicalPremulSrcOver() -> null
-            depthStencil == REGULAR_COVER_STATE ->
+            depthStencil.pathStencilStructuralProgramOrNull() ==
+                GPUCorePrimitivePathStencilStructuralProgram.CoverRegular ->
                 GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular
-            depthStencil == INVERSE_COVER_STATE ->
+            depthStencil.pathStencilStructuralProgramOrNull() ==
+                GPUCorePrimitivePathStencilStructuralProgram.CoverInverse ->
                 GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse
             else -> null
         }
@@ -177,65 +181,6 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.isCanonicalPremulS
         fixed.state.alpha.operation == "add" &&
         fixed.state.writeMask == "rgba"
 }
-
-private val PRODUCER_WINDING_STATE = stencilState(
-    front = structuralFace(pass = GPUClipStencilOperation.IncrementWrap),
-    back = structuralFace(pass = GPUClipStencilOperation.DecrementWrap),
-    writeMask = 0xffu,
-)
-
-private val PRODUCER_EVEN_ODD_STATE = stencilState(
-    front = structuralFace(pass = GPUClipStencilOperation.Invert),
-    back = structuralFace(pass = GPUClipStencilOperation.Invert),
-    writeMask = 0x01u,
-)
-
-private val REGULAR_COVER_STATE = stencilState(
-    front = structuralFace(
-        compare = GPUClipStencilCompare.NotEqual,
-        pass = GPUClipStencilOperation.Zero,
-        depthFail = GPUClipStencilOperation.Zero,
-    ),
-    back = structuralFace(
-        compare = GPUClipStencilCompare.NotEqual,
-        pass = GPUClipStencilOperation.Zero,
-        depthFail = GPUClipStencilOperation.Zero,
-    ),
-    writeMask = 0xffu,
-)
-
-private val INVERSE_COVER_STATE = stencilState(
-    front = structuralFace(
-        compare = GPUClipStencilCompare.Equal,
-        pass = GPUClipStencilOperation.Keep,
-        fail = GPUClipStencilOperation.Zero,
-    ),
-    back = structuralFace(
-        compare = GPUClipStencilCompare.Equal,
-        pass = GPUClipStencilOperation.Keep,
-        fail = GPUClipStencilOperation.Zero,
-    ),
-    writeMask = 0xffu,
-)
-
-private fun stencilState(
-    front: GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace,
-    back: GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace,
-    writeMask: UInt,
-) = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil(
-    format = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencilFormat.Depth24PlusStencil8,
-    front = front,
-    back = back,
-    readMask = 0xffu,
-    writeMask = writeMask,
-)
-
-private fun structuralFace(
-    compare: GPUClipStencilCompare = GPUClipStencilCompare.Always,
-    pass: GPUClipStencilOperation,
-    fail: GPUClipStencilOperation = GPUClipStencilOperation.Keep,
-    depthFail: GPUClipStencilOperation = GPUClipStencilOperation.Keep,
-) = GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace(compare, pass, fail, depthFail)
 
 /** Pure descriptor lowering kept separate from native allocation and cache transactions. */
 internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(

@@ -166,6 +166,46 @@ class GPUUniformSlabPlan(
         "GPUUniformSlabPlan(planHash=$planHash, sourceLabel=$sourceLabel, deviceGeneration=$deviceGeneration, " +
             "alignmentBytes=$alignmentBytes, totalBytes=$totalBytes, uploadBudgetBytes=$uploadBudgetBytes, " +
             "slots=${slotsSnapshot.size})"
+
+    /** Pure verifier for a builder-sealed plan; unlike planning, this performs no policy selection. */
+    internal fun hasExactPayloads(
+        expectedSourceLabel: String,
+        expectedDeviceGeneration: Long,
+        expectedAlignmentBytes: Long,
+        payloads: List<GPUUniformSlabPayload>,
+    ): Boolean {
+        if (sourceLabel != expectedSourceLabel || deviceGeneration != expectedDeviceGeneration ||
+            alignmentBytes != expectedAlignmentBytes || payloads.size != slotsSnapshot.size
+        ) return false
+        val expectedSlots = mutableListOf<GPUUniformSlabSlot>()
+        val expectedTotalBytes = try {
+            var nextOffset = 0L
+            payloads.forEach { payload ->
+                val bytes = payload.bytes
+                val alignedOffset = alignUpChecked(nextOffset, expectedAlignmentBytes)
+                val allocatedBytes = alignUpChecked(bytes.size.toLong(), expectedAlignmentBytes)
+                expectedSlots += GPUUniformSlabSlot(
+                    payload.slotLabel,
+                    sha256Hex(bytes),
+                    bytes.size.toLong(),
+                    alignedOffset,
+                    allocatedBytes,
+                )
+                nextOffset = Math.addExact(alignedOffset, allocatedBytes)
+            }
+            nextOffset
+        } catch (_: ArithmeticException) {
+            return false
+        }
+        return slotsSnapshot == expectedSlots && totalBytes == expectedTotalBytes &&
+            planHash == uniformSlabPlanHash(
+                expectedSourceLabel,
+                expectedDeviceGeneration,
+                expectedAlignmentBytes,
+                uploadBudgetBytes,
+                expectedSlots,
+            )
+    }
 }
 
 /** Diagnostic for a refused uniform slab plan. */
@@ -355,21 +395,12 @@ object GPUUniformSlabPlanner {
             )
         }
 
-        val planHash = sha256Hex(
-            buildString {
-                append("uniform-slab-plan")
-                append("|source=").append(sourceLabel)
-                append("|deviceGeneration=").append(deviceGeneration)
-                append("|alignmentBytes=").append(alignmentBytes)
-                append("|uploadBudgetBytes=").append(uploadBudgetBytes)
-                slots.forEachIndexed { index, slot ->
-                    append("|slot[").append(index).append("].label=").append(slot.slotLabel)
-                    append("|slot[").append(index).append("].hash=").append(slot.payloadHash)
-                    append("|slot[").append(index).append("].payloadBytes=").append(slot.payloadBytes)
-                    append("|slot[").append(index).append("].alignedOffset=").append(slot.alignedOffset)
-                    append("|slot[").append(index).append("].allocatedBytes=").append(slot.allocatedBytes)
-                }
-            },
+        val planHash = uniformSlabPlanHash(
+            sourceLabel,
+            deviceGeneration,
+            alignmentBytes,
+            uploadBudgetBytes,
+            slots,
         )
 
         return GPUUniformSlabPlanningResult.Accepted(
@@ -394,6 +425,29 @@ object GPUUniformSlabPlanner {
             ),
         )
 }
+
+private fun uniformSlabPlanHash(
+    sourceLabel: String,
+    deviceGeneration: Long,
+    alignmentBytes: Long,
+    uploadBudgetBytes: Long,
+    slots: List<GPUUniformSlabSlot>,
+): String = sha256Hex(
+    buildString {
+        append("uniform-slab-plan")
+        append("|source=").append(sourceLabel)
+        append("|deviceGeneration=").append(deviceGeneration)
+        append("|alignmentBytes=").append(alignmentBytes)
+        append("|uploadBudgetBytes=").append(uploadBudgetBytes)
+        slots.forEachIndexed { index, slot ->
+            append("|slot[").append(index).append("].label=").append(slot.slotLabel)
+            append("|slot[").append(index).append("].hash=").append(slot.payloadHash)
+            append("|slot[").append(index).append("].payloadBytes=").append(slot.payloadBytes)
+            append("|slot[").append(index).append("].alignedOffset=").append(slot.alignedOffset)
+            append("|slot[").append(index).append("].allocatedBytes=").append(slot.allocatedBytes)
+        }
+    },
+)
 
 private fun alignUpChecked(value: Long, alignmentBytes: Long): Long {
     require(alignmentBytes > 0L) { "alignmentBytes must be positive" }

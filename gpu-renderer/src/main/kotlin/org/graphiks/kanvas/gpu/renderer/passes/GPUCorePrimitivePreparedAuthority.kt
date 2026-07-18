@@ -204,6 +204,23 @@ internal fun corePrimitiveDirectPathDepthStencilState():
     GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil =
     CORE_PRIMITIVE_DIRECT_PATH_DEPTH_STENCIL_STATE
 
+/** Closed handle-free projection consumed by native lowering without importing clip semantics. */
+internal enum class GPUCorePrimitivePathStencilStructuralProgram {
+    ProducerWinding,
+    ProducerEvenOdd,
+    CoverRegular,
+    CoverInverse,
+}
+
+internal fun GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.pathStencilStructuralProgramOrNull():
+    GPUCorePrimitivePathStencilStructuralProgram? = when (this) {
+    PATH_STENCIL_PRODUCER_WINDING_STATE -> GPUCorePrimitivePathStencilStructuralProgram.ProducerWinding
+    PATH_STENCIL_PRODUCER_EVEN_ODD_STATE -> GPUCorePrimitivePathStencilStructuralProgram.ProducerEvenOdd
+    PATH_STENCIL_COVER_REGULAR_STATE -> GPUCorePrimitivePathStencilStructuralProgram.CoverRegular
+    PATH_STENCIL_COVER_INVERSE_STATE -> GPUCorePrimitivePathStencilStructuralProgram.CoverInverse
+    else -> null
+}
+
 private val CORE_PRIMITIVE_DIRECT_PATH_DEPTH_STENCIL_STATE = run {
     val neutralFace = GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace(
         compare = GPUClipStencilCompare.Always,
@@ -361,6 +378,30 @@ private fun pathStencilState(
     )
 }
 
+private val PATH_STENCIL_PRODUCER_WINDING_STATE = pathStencilState(
+    GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+    GPUCorePrimitiveFillRule.Winding,
+    inverseFill = false,
+)
+
+private val PATH_STENCIL_PRODUCER_EVEN_ODD_STATE = pathStencilState(
+    GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+    GPUCorePrimitiveFillRule.EvenOdd,
+    inverseFill = false,
+)
+
+private val PATH_STENCIL_COVER_REGULAR_STATE = pathStencilState(
+    GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+    GPUCorePrimitiveFillRule.Winding,
+    inverseFill = false,
+)
+
+private val PATH_STENCIL_COVER_INVERSE_STATE = pathStencilState(
+    GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+    GPUCorePrimitiveFillRule.Winding,
+    inverseFill = true,
+)
+
 private fun GPUBlendPlan.corePrimitiveStructuralBlend():
     GPUCorePrimitiveRenderPipelineStructuralKey.Blend = when (this) {
     is GPUBlendPlan.FixedFunctionBlend -> GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
@@ -423,6 +464,10 @@ private fun GPUClipExecutionPlan.corePrimitiveStructuralClip():
     )
     is GPUClipExecutionPlan.Refused -> GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Refused
 }
+
+/** Handle-free route predicate used by execution without depending on clip-domain concrete types. */
+internal fun GPUClipExecutionPlan.isCorePrimitiveNoClipOrScissorExecution(): Boolean =
+    this == GPUClipExecutionPlan.NoClip || this is GPUClipExecutionPlan.ScissorOnly
 
 /** Builder-owned plan and bytes shared by every direct draw in one prepared pass. */
 internal class GPUCorePrimitiveUniformSlabSeal(

@@ -91,6 +91,13 @@ internal fun corePrimitiveDirectClipAuthority(
 ): GPUCorePrimitiveDirectClipAuthority = when (plan) {
     GPUClipExecutionPlan.NoClip -> GPUCorePrimitiveDirectClipAuthority.Accepted(targetBounds)
     is GPUClipExecutionPlan.ScissorOnly -> GPUCorePrimitiveDirectClipAuthority.Accepted(plan.scissor)
+    is GPUClipExecutionPlan.AnalyticCoverage -> when (
+        val authority = corePrimitiveAnalyticClipAuthority(plan, targetBounds)
+    ) {
+        is GPUCorePrimitiveAnalyticClipAuthority.Accepted ->
+            GPUCorePrimitiveDirectClipAuthority.Accepted(authority.conservativeScissor)
+        is GPUCorePrimitiveAnalyticClipAuthority.Refused -> GPUCorePrimitiveDirectClipAuthority.Refused
+    }
     else -> GPUCorePrimitiveDirectClipAuthority.Refused
 }
 
@@ -105,6 +112,22 @@ internal sealed interface GPUCorePrimitiveAnalyticClipAuthority {
     ) : GPUCorePrimitiveAnalyticClipAuthority
 
     data class Refused(val code: String, val message: String) : GPUCorePrimitiveAnalyticClipAuthority
+}
+
+/** Exact packet-local analytic facts projected for pure preflight without a clip-domain import. */
+internal data class GPUCorePrimitiveAnalyticClipPacketAuthority(
+    val clip: GPUCorePrimitiveAnalyticClipAuthority.Accepted,
+    val canonicalIdentity: String,
+)
+
+internal fun corePrimitiveAnalyticClipPacketAuthority(
+    packet: GPUDrawPacket,
+    targetBounds: GPUPixelBounds,
+): GPUCorePrimitiveAnalyticClipPacketAuthority? {
+    val plan = packet.clipExecutionPlan as? GPUClipExecutionPlan.AnalyticCoverage ?: return null
+    val clip = corePrimitiveAnalyticClipAuthority(plan, targetBounds) as?
+        GPUCorePrimitiveAnalyticClipAuthority.Accepted ?: return null
+    return GPUCorePrimitiveAnalyticClipPacketAuthority(clip, plan.canonicalIdentity())
 }
 
 internal fun corePrimitiveAnalyticClipAuthority(
@@ -185,7 +208,7 @@ internal fun corePrimitiveAnalyticClipAuthority(
     )
 }
 
-private fun corePrimitiveAnalyticClipUniformBytes(
+internal fun corePrimitiveAnalyticClipUniformBytes(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
     authority: GPUCorePrimitiveAnalyticClipAuthority.Accepted,
 ): ByteArray = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).apply {
