@@ -1386,6 +1386,7 @@ private fun dashIntervalsSnapshot(intervals: List<Float>): List<Float> = immutab
 private fun GPUClipCoveragePlan.snapshot(): GPUClipCoveragePlan = when (this) {
     GPUClipCoveragePlan.NoClip -> this
     is GPUClipCoveragePlan.Scissor -> copy(bounds = bounds.copy())
+    is GPUClipCoveragePlan.AnalyticIntersection -> GPUClipCoveragePlan.AnalyticIntersection(elements)
     is GPUClipCoveragePlan.Mask -> copy(elements = elements.toList())
     is GPUClipCoveragePlan.Refused -> copy()
 }
@@ -1395,6 +1396,12 @@ private fun GPUClipCoveragePlan.canonicalPreimage(): String = when (this) {
     is GPUClipCoveragePlan.Scissor ->
         "scissor:${bounds.left.toRawBits()}:${bounds.top.toRawBits()}:" +
             "${bounds.right.toRawBits()}:${bounds.bottom.toRawBits()}"
+    is GPUClipCoveragePlan.AnalyticIntersection ->
+        "analytic-intersection:${elements.joinToString(";") { element ->
+            "${element.operation.name}/${element.kind.name}/vertices=${element.vertexCount}/" +
+                "aa=${element.antiAlias}/fill=${element.fillRule.name}/inverse=${element.inverseFill}/" +
+                "values=${element.values.joinToString(",") { value -> value.toRawBits().toString() }}"
+        }}"
     is GPUClipCoveragePlan.Mask -> buildString {
         append("mask:").append(contentKey)
         append(":size=").append(width).append('x').append(height)

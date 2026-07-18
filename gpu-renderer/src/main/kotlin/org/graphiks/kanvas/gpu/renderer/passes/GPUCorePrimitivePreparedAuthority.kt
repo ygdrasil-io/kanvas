@@ -41,14 +41,16 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     enum class UniformLayout(val stableIdentity: String) {
         DynamicUniform32V2("dynamic-uniform32-v2"),
         AnalyticClipUniform64V1("dynamic-uniform64-analytic-clip-v1"),
+        AnalyticClipUniform160V1("dynamic-uniform160-analytic-clip-intersection4-v1"),
     }
 
     /** Derived executable ABI axis. It deliberately leaves the legacy constructor and hashes intact. */
     val uniformLayout: UniformLayout
-        get() = if (role == Role.Shading && clip is Clip.Analytic) {
-            UniformLayout.AnalyticClipUniform64V1
-        } else {
-            UniformLayout.DynamicUniform32V2
+        get() = when {
+            role == Role.Shading && clip is Clip.Analytic -> UniformLayout.AnalyticClipUniform64V1
+            role == Role.Shading && clip == Clip.AnalyticIntersection4 ->
+                UniformLayout.AnalyticClipUniform160V1
+            else -> UniformLayout.DynamicUniform32V2
         }
 
     data class StencilFace(
@@ -120,6 +122,9 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             val geometry: ClipGeometry,
             val antiAlias: Boolean,
         ) : Clip
+
+        /** Fixed-capacity analytic intersection; count, kinds, AA, and values are uniform-only. */
+        data object AnalyticIntersection4 : Clip
 
         data class Stencil(
             val compare: GPUClipStencilCompare,
@@ -449,6 +454,8 @@ private fun GPUClipExecutionPlan.corePrimitiveStructuralClip():
             },
             antiAlias = antiAlias,
         )
+    is GPUClipExecutionPlan.AnalyticIntersection ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.Clip.AnalyticIntersection4
     is GPUClipExecutionPlan.StencilCoverage -> GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Stencil(
         compare = consumer.compare,
         passOperation = consumer.passOperation,

@@ -39,6 +39,7 @@ internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
     AnalyticClipRectAA,
     AnalyticClipRRectHard,
     AnalyticClipRRectAA,
+    AnalyticClipIntersection4,
     PathStencilProducerWinding,
     PathStencilProducerEvenOdd,
     PathStencilCoverRegular,
@@ -57,7 +58,7 @@ internal sealed interface GPUWgpu4kCorePrimitivePipelineMapping {
 }
 
 /**
- * Consumes the handle-free structural authority and accepts only one of the ten exact native
+ * Consumes the handle-free structural authority and accepts only one of the eleven exact native
  * descriptors. Dynamic geometry, bounds, scissor, load/store, and stencil reference never enter
  * this identity.
  */
@@ -77,18 +78,11 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
             cullMode = "none",
             program = program,
         ),
-        componentIdentity = if (program.isAnalyticClip()) {
-            GPUWgpu4kCorePrimitiveComponentIdentity(
-                shaderIdentity = CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_SHADER_IDENTITY,
-                bindingLayoutIdentity = CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_BINDING_LAYOUT_IDENTITY,
-                vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
-            )
-        } else {
-            GPUWgpu4kCorePrimitiveComponentIdentity(
-                shaderIdentity = CORE_PRIMITIVE_NATIVE_SHADER_IDENTITY,
-                bindingLayoutIdentity = CORE_PRIMITIVE_NATIVE_BINDING_LAYOUT_IDENTITY,
-                vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
-            )
+        componentIdentity = when {
+            program.isAnalyticIntersection4() ->
+                PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
+            program.isAnalyticClip() -> PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+            else -> PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
         },
     )
 }
@@ -108,6 +102,9 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             clip is GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic &&
                 depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None ->
                 clip.nativeAnalyticProgramOrNull()
+            clip == GPUCorePrimitiveRenderPipelineStructuralKey.Clip.AnalyticIntersection4 &&
+                depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None ->
+                GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipIntersection4
             clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None -> null
             depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None ->
                 GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver
@@ -168,6 +165,9 @@ internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticClip(): Boolean = w
     -> true
     else -> false
 }
+
+internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticIntersection4(): Boolean =
+    this == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipIntersection4
 
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.isCanonicalPremulSrcOver(): Boolean {
     val fixed = this as? GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed ?: return false
@@ -308,6 +308,7 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthSten
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectAA,
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectHard,
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectAA,
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipIntersection4,
         -> error("Analytic clip programs have no depth/stencil state")
     }
     return DepthStencilState(

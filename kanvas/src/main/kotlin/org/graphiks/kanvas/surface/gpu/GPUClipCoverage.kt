@@ -260,6 +260,7 @@ internal object GPUClipUsePrepass {
                 is GPUClipCoveragePlan.Refused -> refusals += plan.code
                 GPUClipCoveragePlan.NoClip,
                 is GPUClipCoveragePlan.Scissor,
+                is GPUClipCoveragePlan.AnalyticIntersection,
                 -> Unit
             }
         }
@@ -307,6 +308,7 @@ internal object GPUClipUsePrepass {
                 null,
                 GPUClipCoveragePlan.NoClip,
                 is GPUClipCoveragePlan.Scissor,
+                is GPUClipCoveragePlan.AnalyticIntersection,
                 -> Unit
             }
         }

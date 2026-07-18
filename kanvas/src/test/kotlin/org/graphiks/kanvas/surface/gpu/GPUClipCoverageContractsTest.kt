@@ -21,6 +21,7 @@ import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.image.Image
@@ -115,6 +116,171 @@ class GPUClipCoverageContractsTest {
 
         assertEquals(GPUClipCoveragePlan.NoClip, noClip)
         assertIs<GPUClipCoveragePlan.Scissor>(scissor)
+    }
+
+    @Test
+    fun `frame route promotes two to four simple intersections before texture budget`() {
+        val elements = mutableListOf(
+            element(
+                kind = GPUClipCoverageElementKind.Rect,
+                values = listOf(1.25f, 2.5f, 31.75f, 33.5f),
+                vertexCount = 0,
+                antiAlias = true,
+            ),
+            element(
+                kind = GPUClipCoverageElementKind.RRect,
+                values = listOf(
+                    3f, 4f, 29f, 31f,
+                    2f, 3f, 2f, 3f, 2f, 3f, 2f, 3f,
+                ),
+                vertexCount = 0,
+                antiAlias = false,
+            ),
+        )
+        val request = request(width = 64, height = 64, elements = elements)
+        val config = RenderConfig(maxClipIntermediateBytes = 1u)
+
+        assertEquals(
+            "unsupported.clip.intermediate_budget",
+            assertIs<GPUClipCoveragePlan.Refused>(
+                GPUClipCoveragePlanner.plan(request, config, maxTextureDimension2D = 4096),
+            ).code,
+        )
+        val analytic = assertIs<GPUClipCoveragePlan.AnalyticIntersection>(
+            GPUClipCoveragePlanner.planForFrameRoute(request, config, maxTextureDimension2D = 4096),
+        )
+        elements.clear()
+
+        assertEquals(2, analytic.elements.size)
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
+            (analytic.elements as MutableList<GPUClipCoverageElement>).clear()
+        }
+    }
+
+    @Test
+    fun `coverage element values reject mutation and retain value identity`() {
+        val sourceValues = mutableListOf(1.25f, 2.5f, 31.75f, 33.5f)
+        val element = element(
+            kind = GPUClipCoverageElementKind.Rect,
+            values = sourceValues,
+            vertexCount = 0,
+            antiAlias = true,
+        )
+        val equivalent = element(
+            kind = GPUClipCoverageElementKind.Rect,
+            values = sourceValues.toList(),
+            vertexCount = 0,
+            antiAlias = true,
+        )
+        val request = request(width = 64, height = 64, elements = listOf(element))
+        val originalHash = element.hashCode()
+        val canonicalKey = request.contentKey
+
+        sourceValues[0] = 99f
+
+        assertEquals(equivalent, element)
+        assertEquals(originalHash, element.hashCode())
+        assertEquals(canonicalKey, request.contentKey)
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
+            (element.values as MutableList<Float>)[0] = 99f
+        }
+        assertEquals(equivalent, element)
+        assertEquals(originalHash, element.hashCode())
+        assertEquals(
+            canonicalKey,
+            request(width = 64, height = 64, elements = listOf(equivalent)).contentKey,
+        )
+    }
+
+    @Test
+    fun `frame route retains the canonical depth one mask while bypassing only its byte budget`() {
+        val request = request(
+            width = 64,
+            height = 64,
+            elements = listOf(
+                element(
+                    kind = GPUClipCoverageElementKind.Rect,
+                    values = listOf(1.25f, 2.5f, 31.75f, 33.5f),
+                    vertexCount = 0,
+                    antiAlias = true,
+                ),
+            ),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            GPUClipCoveragePlan.AnalyticIntersection(request.elements)
+        }
+        val canonical = assertIs<GPUClipCoveragePlan.Mask>(
+            GPUClipCoveragePlanner.plan(request, RenderConfig.DEFAULT, maxTextureDimension2D = 4096),
+        )
+        assertEquals(
+            "unsupported.clip.intermediate_budget",
+            assertIs<GPUClipCoveragePlan.Refused>(
+                GPUClipCoveragePlanner.plan(
+                    request,
+                    RenderConfig(maxClipIntermediateBytes = 1u),
+                    maxTextureDimension2D = 4096,
+                ),
+            ).code,
+        )
+
+        val frame = assertIs<GPUClipCoveragePlan.Mask>(
+            GPUClipCoveragePlanner.planForFrameRoute(
+                request,
+                RenderConfig(maxClipIntermediateBytes = 1u),
+                maxTextureDimension2D = 4096,
+            ),
+        )
+
+        assertEquals(canonical, frame)
+        assertEquals(canonical.hashCode(), frame.hashCode())
+        assertEquals(request.contentKey, frame.contentKey)
+    }
+
+    @Test
+    fun `frame route leaves unsupported analytic stacks on the historical mask route`() {
+        val rect = element(
+            kind = GPUClipCoverageElementKind.Rect,
+            values = listOf(1f, 1f, 15f, 15f),
+            vertexCount = 0,
+            antiAlias = true,
+        )
+        val unsupported = listOf(
+            List(5) { rect },
+            listOf(
+                rect,
+                element(
+                    operation = GPUClipCoverageOperation.Difference,
+                    kind = GPUClipCoverageElementKind.Rect,
+                    values = listOf(2f, 2f, 8f, 8f),
+                    vertexCount = 0,
+                ),
+            ),
+            listOf(rect, element()),
+            listOf(rect, element(vertexCount = 0, values = listOf(0f))),
+            listOf(
+                rect,
+                element(
+                    kind = GPUClipCoverageElementKind.RRect,
+                    values = listOf(
+                        2f, 2f, 14f, 14f,
+                        1f, 1f, 2f, 1f, 1f, 1f, 1f, 1f,
+                    ),
+                    vertexCount = 0,
+                ),
+            ),
+        )
+
+        unsupported.forEach { elements ->
+            assertIs<GPUClipCoveragePlan.Mask>(
+                GPUClipCoveragePlanner.planForFrameRoute(
+                    request(width = 16, height = 16, elements = elements),
+                    RenderConfig(),
+                    maxTextureDimension2D = 4096,
+                ),
+            )
+        }
     }
 
     @Test

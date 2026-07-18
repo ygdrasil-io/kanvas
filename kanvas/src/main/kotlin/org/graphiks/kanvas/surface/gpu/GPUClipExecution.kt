@@ -199,6 +199,7 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
             false
         }
     }
+    is GPUClipCoveragePlan.AnalyticIntersection -> false
     is GPUClipCoveragePlan.Refused -> false
     }
 }

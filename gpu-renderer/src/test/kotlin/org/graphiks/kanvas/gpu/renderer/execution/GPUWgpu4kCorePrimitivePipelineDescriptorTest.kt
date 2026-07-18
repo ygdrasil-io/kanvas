@@ -101,6 +101,25 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
+    fun `analytic intersection4 is one uniform160 structural program with runtime stack facts outside key`() {
+        val key = directKey().copy(
+            clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.AnalyticIntersection4,
+        )
+
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
+            key.uniformLayout,
+        )
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+        )
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipIntersection4, mapped.identity.program)
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY, mapped.componentIdentity)
+        assertNull(corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, shader, pipelineLayout).depthStencil)
+        assertSame(GPUCorePrimitiveRenderPipelineStructuralKey.Clip.AnalyticIntersection4, key.clip)
+    }
+
+    @Test
     fun `winding and even odd producers lower exact stencil8 state with no color writes`() {
         val winding = descriptor(pathKey(producerWinding()))
         val evenOdd = descriptor(pathKey(producerEvenOdd()))

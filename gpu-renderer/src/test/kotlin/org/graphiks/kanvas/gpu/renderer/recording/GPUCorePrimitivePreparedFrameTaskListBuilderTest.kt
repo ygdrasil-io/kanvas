@@ -1745,6 +1745,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             kind = when (clipPlan) {
                 GPUClipCoveragePlan.NoClip -> GPUClipKind.WideOpen
                 is GPUClipCoveragePlan.Scissor -> GPUClipKind.DeviceRect
+                is GPUClipCoveragePlan.AnalyticIntersection,
                 is GPUClipCoveragePlan.Mask,
                 is GPUClipCoveragePlan.Refused,
                 -> GPUClipKind.ComplexStack

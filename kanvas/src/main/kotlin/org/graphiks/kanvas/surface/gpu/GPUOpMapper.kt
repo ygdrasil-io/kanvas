@@ -44,6 +44,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
@@ -135,7 +136,11 @@ internal object GPUOpMapper {
                         val geometryRefusal = loweringRefusal ?: operation.coreGeometryRefusalOrNull()
                         val coverage = rawNormalized.geometryCoverage()
                         val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
-                            GPUClipCoveragePlanner.plan(request, config, maxOf(target.width, target.height))
+                            GPUClipCoveragePlanner.planForFrameRoute(
+                                request,
+                                config,
+                                maxOf(target.width, target.height),
+                            )
                         } ?: GPUClipCoveragePlan.NoClip
                         val clipExecutionPlan = clipPlan.toExecutionPlan(capabilities, target)
                         val normalized = rawNormalized.withClipPlans(clipPlan, clipExecutionPlan)
@@ -440,11 +445,31 @@ private fun GPUClipCoveragePlan.toExecutionPlan(
 ): GPUClipExecutionPlan = when (this) {
     GPUClipCoveragePlan.NoClip -> GPUClipExecutionPlan.NoClip
     is GPUClipCoveragePlan.Scissor -> toScissorExecutionPlan(capabilities, target)
+    is GPUClipCoveragePlan.AnalyticIntersection -> toAnalyticIntersectionExecutionPlan(capabilities)
     is GPUClipCoveragePlan.Refused -> GPUClipExecutionPlan.Refused(
         code = code,
         message = "Clip coverage planning refused before execution classification.",
     )
     is GPUClipCoveragePlan.Mask -> toMaskExecutionPlan(capabilities, target)
+}
+
+private fun GPUClipCoveragePlan.AnalyticIntersection.toAnalyticIntersectionExecutionPlan(
+    capabilities: GPUCapabilities,
+): GPUClipExecutionPlan {
+    if (!capabilities.supportsClipCapability(BOUNDED_CLIP_CAPABILITY)) {
+        return clipExecutionRefusal(
+            code = "unsupported.clip.analytic_unavailable",
+            message = "Analytic rect/rrect clip execution requires bounded clip support.",
+        )
+    }
+    val analyticElements = elements.map { element ->
+        GPUClipAnalyticElement(
+            geometry = element.executionGeometryOrRefusal()
+                ?: return invalidClipGeometryRefusal(element),
+            antiAlias = element.antiAlias,
+        )
+    }
+    return GPUClipExecutionPlan.AnalyticIntersection(analyticElements)
 }
 
 private fun GPUClipCoveragePlan.Scissor.toScissorExecutionPlan(

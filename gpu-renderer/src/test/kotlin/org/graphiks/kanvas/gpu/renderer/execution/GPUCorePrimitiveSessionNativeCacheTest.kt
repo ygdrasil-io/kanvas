@@ -123,6 +123,31 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     }
 
     @Test
+    fun `analytic intersection4 reuses one uniform160 pipeline isolated from uniform32 and uniform64`() {
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        val legacy = cache.acquire(productionKey()).acquiredHandles()
+        val analytic = cache.acquire(
+            analyticProductionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectAA),
+        ).acquiredHandles()
+        val intersectionKey = analyticIntersection4ProductionKey()
+        val intersection = cache.acquire(intersectionKey).acquiredHandles()
+
+        assertSame(intersection, cache.acquire(intersectionKey.copy()).acquiredHandles())
+        assertNotSame(legacy.bindGroupLayout, intersection.bindGroupLayout)
+        assertNotSame(legacy.shader, intersection.shader)
+        assertNotSame(analytic.bindGroupLayout, intersection.bindGroupLayout)
+        assertNotSame(analytic.shader, intersection.shader)
+        assertEquals(3, native.creationCount("component.bindGroupLayout"))
+        assertEquals(3, native.creationCount("component.shader"))
+        assertEquals(3, native.creationCount("component.pipelineLayout"))
+        assertEquals(3, native.pipelineCreationCount)
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(3, 1, 0), cache.counters())
+
+        cache.close()
+    }
+
+    @Test
     fun `concrete cache accepts sixteen factory validated pipelines and typed refuses the seventeenth`() {
         val native = SessionNativeProxy(acceptPipelineIdentity = { true })
         val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
@@ -398,6 +423,11 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     ) = productionKey(program).copy(
         componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY,
     )
+
+    private fun analyticIntersection4ProductionKey() =
+        productionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipIntersection4).copy(
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY,
+        )
 
     private fun testKey(identity: String) = productionKey().copy(
         pipelineIdentity = productionKey().pipelineIdentity.copy(targetFormat = "test:$identity"),

@@ -84,6 +84,13 @@ internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY =
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
 
+internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_NATIVE_SHADER_IDENTITY,
+        bindingLayoutIdentity = CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_NATIVE_BINDING_LAYOUT_IDENTITY,
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
 private val PRODUCTION_CORE_PRIMITIVE_PIPELINE_IDENTITY =
     GPUWgpu4kCorePrimitiveRenderPipelineIdentity(
         targetFormat = "rgba8unorm",
@@ -100,6 +107,8 @@ internal fun isSupportedCorePrimitivePipelineCacheKey(
     key.hasCompatibleComponentIdentity()
 
 private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentity(): Boolean = when {
+    pipelineIdentity.program.isAnalyticIntersection4() ->
+        componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
     pipelineIdentity.program.isAnalyticClip() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
     else -> componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
@@ -187,9 +196,7 @@ private class GPUWgpu4kCorePrimitiveDeviceSessionNativeFactory(
                     buffer = BufferBindingLayout(
                         type = GPUBufferBindingType.Uniform,
                         hasDynamicOffset = true,
-                        minBindingSize = if (
-                            componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
-                        ) 64uL else 32uL,
+                        minBindingSize = componentIdentity.uniformBindingSizeBytes(),
                     ),
                 ),
             ),
@@ -330,10 +337,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                             resource = BufferBinding(
                                 buffer = uniformBuffer,
                                 offset = 0uL,
-                                size = if (
-                                    componentIdentity ==
-                                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
-                                ) 64uL else CORE_PRIMITIVE_MIN_UNIFORM_BINDING_BYTES,
+                                size = componentIdentity.uniformBindingSizeBytes(),
                             ),
                         ),
                     ),
@@ -368,7 +372,8 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         }
         if (!key.hasCompatibleComponentIdentity()) {
             if (key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
-                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY &&
+                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
             ) {
             return refused(
                 GPUWgpu4kCorePrimitiveSessionCacheRefusal.IncompatibleComponentIdentity(
@@ -462,10 +467,12 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         var resource = GPUWgpu4kCorePrimitiveSessionCacheNativeResource.ShaderModule
         return try {
             val shaderPlan = when (
-                val shader = if (key.componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY) {
-                    buildCorePrimitiveAnalyticClipNativeShader()
-                } else {
-                    buildCorePrimitiveNativeShader()
+                val shader = when (key.componentIdentity) {
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY ->
+                        buildCorePrimitiveAnalyticClipNativeShader()
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY ->
+                        buildCorePrimitiveAnalyticIntersection4NativeShader()
+                    else -> buildCorePrimitiveNativeShader()
                 }
             ) {
                 is GPUCorePrimitiveNativeShaderResult.Ready -> shader.plan
@@ -542,7 +549,10 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         reason: GPUWgpu4kCorePrimitiveSessionCacheRefusal,
     ) = GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused(reason)
 
-    private companion object {
-        val CORE_PRIMITIVE_MIN_UNIFORM_BINDING_BYTES = 32uL
-    }
+}
+
+private fun GPUWgpu4kCorePrimitiveComponentIdentity.uniformBindingSizeBytes(): ULong = when (this) {
+    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY -> 64uL
+    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY -> 160uL
+    else -> 32uL
 }

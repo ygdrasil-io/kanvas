@@ -74,6 +74,64 @@ class GPUCorePrimitiveNativeShaderTest {
     }
 
     @Test
+    fun `analytic intersection4 shader reflects exact uniform160 and multiplies four runtime clips`() {
+        val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveAnalyticIntersection4NativeShader(),
+        )
+        val reflection = requireNotNull(ready.plan.wgslReflection).report
+
+        assertTrue(reflection.validation.success)
+        assertEquals(
+            setOf(
+                CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_NATIVE_VERTEX_ENTRY_POINT to "vertex",
+                CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_NATIVE_FRAGMENT_ENTRY_POINT to "fragment",
+            ),
+            reflection.entryPoints.map { it.name to it.stage }.toSet(),
+        )
+        assertEquals(listOf(0 to 0), reflection.bindings.map { it.group to it.binding })
+        val block = reflection.layouts.single {
+            it.structName == "CorePrimitiveAnalyticIntersection4Block"
+        }
+        assertEquals(160, block.size)
+        assertEquals(
+            listOf(
+                "target_size" to (0 to 8),
+                "clip_count" to (8 to 4),
+                "padding" to (12 to 4),
+                "premul_rgba" to (16 to 16),
+                "clip0_bounds" to (32 to 16),
+                "clip0_radii" to (48 to 8),
+                "clip0_kind" to (56 to 4),
+                "clip0_anti_alias" to (60 to 4),
+                "clip1_bounds" to (64 to 16),
+                "clip1_radii" to (80 to 8),
+                "clip1_kind" to (88 to 4),
+                "clip1_anti_alias" to (92 to 4),
+                "clip2_bounds" to (96 to 16),
+                "clip2_radii" to (112 to 8),
+                "clip2_kind" to (120 to 4),
+                "clip2_anti_alias" to (124 to 4),
+                "clip3_bounds" to (128 to 16),
+                "clip3_radii" to (144 to 8),
+                "clip3_kind" to (152 to 4),
+                "clip3_anti_alias" to (156 to 4),
+            ),
+            block.members.map { it.name to (it.offset to it.size) },
+        )
+        assertContains(ready.plan.wgslSource, "select(1.0, clip_coverage(position, analytic.clip0_bounds")
+        assertContains(ready.plan.wgslSource, "coverage0 * coverage1 * coverage2 * coverage3")
+        assertContains(ready.plan.wgslSource, "return analytic.premul_rgba * coverage;")
+        assertEquals(
+            "core-primitive-analytic-clip-intersection4-device-geometry-wgsl-v1",
+            CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_NATIVE_SHADER_IDENTITY,
+        )
+        assertEquals(
+            "vertex-fragment-dynamic-uniform160-analytic-clip-intersection4-v1",
+            CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_NATIVE_BINDING_LAYOUT_IDENTITY,
+        )
+    }
+
+    @Test
     fun `elliptic rrect aa distance remains in device pixels on strips and corners`() {
         val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
             buildCorePrimitiveAnalyticClipNativeShader(),

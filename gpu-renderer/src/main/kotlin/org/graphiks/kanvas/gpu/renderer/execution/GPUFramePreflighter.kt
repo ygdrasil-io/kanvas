@@ -2115,6 +2115,11 @@ internal class GPUFramePreflighter(
                 CORE_PRIMITIVE_BINDING_LAYOUT_HASH
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->
                 CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
+                return diagnostic(
+                    "unsupported.preflight.core_primitive_analytic_intersection4",
+                    "Analytic intersection4 execution requires the follow-up uniform160 preflight lane.",
+                )
         }
         if (preparedAuthority == null ||
             preparedAuthority.structuralPipelineKey != expectedStructuralPipelineKey ||

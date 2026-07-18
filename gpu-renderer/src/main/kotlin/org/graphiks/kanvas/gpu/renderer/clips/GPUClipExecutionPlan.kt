@@ -185,6 +185,18 @@ data class GPUClipStencilConsumerPlan(
     }
 }
 
+/** One immutable rect or simple-rrect input in an ordered analytic intersection. */
+data class GPUClipAnalyticElement(
+    val geometry: GPUClipExecutionGeometry,
+    val antiAlias: Boolean,
+) {
+    init {
+        require(geometry is GPUClipExecutionGeometry.Rect || geometry is GPUClipExecutionGeometry.RRect) {
+            "GPUClipAnalyticElement accepts only rect or rrect geometry"
+        }
+    }
+}
+
 /** Ordered, handle-free execution authority produced once by Canvas-state mapping. */
 sealed interface GPUClipExecutionPlan {
     fun canonicalIdentity(): String
@@ -217,6 +229,30 @@ sealed interface GPUClipExecutionPlan {
             nullablePixelBounds(scissor)
             boolean(antiAlias)
         }
+    }
+
+    class AnalyticIntersection(
+        elements: List<GPUClipAnalyticElement>,
+    ) : GPUClipExecutionPlan {
+        val elements: List<GPUClipAnalyticElement> = immutableList(elements)
+
+        init {
+            require(elements.size in 2..4) {
+                "AnalyticIntersection requires two to four ordered analytic elements"
+            }
+        }
+
+        override fun canonicalIdentity(): String = identity("AnalyticIntersection") {
+            integer(elements.size)
+            elements.forEach(::analyticElement)
+        }
+
+        override fun equals(other: Any?): Boolean =
+            this === other || other is AnalyticIntersection && elements == other.elements
+
+        override fun hashCode(): Int = elements.hashCode()
+
+        override fun toString(): String = "AnalyticIntersection(elements=$elements)"
     }
 
     data class StencilCoverage(
@@ -412,6 +448,11 @@ private class GPUClipExecutionIdentityBuilder {
         geometry(producer.geometry)
         string(producer.combine.name)
         boolean(producer.antiAlias)
+    }
+
+    fun analyticElement(element: GPUClipAnalyticElement) {
+        geometry(element.geometry)
+        boolean(element.antiAlias)
     }
 
     fun maskConsumer(consumer: GPUClipMaskConsumerPlan) {

@@ -1072,6 +1072,18 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
                     int("rightBits", clip.bounds.right.toRawBits())
                     int("bottomBits", clip.bounds.bottom.toRawBits())
                 }
+                is GPUClipCoveragePlan.AnalyticIntersection -> {
+                    tag("AnalyticIntersection")
+                    list("elements", clip.elements) { element ->
+                        string("operation", element.operation.name)
+                        string("kind", element.kind.name)
+                        bool("antiAlias", element.antiAlias)
+                        string("fillRule", element.fillRule.name)
+                        bool("inverseFill", element.inverseFill)
+                        int("vertexCount", element.vertexCount)
+                        list("values", element.values) { scalar -> int("scalarBits", scalar.toRawBits()) }
+                    }
+                }
                 is GPUClipCoveragePlan.Mask -> {
                     tag("Mask")
                     string("contentKey", clip.contentKey)
@@ -1472,6 +1484,12 @@ internal fun GPUClipCoveragePlan.stableCoreDump(): String = when (this) {
     is GPUClipCoveragePlan.Scissor ->
         "scissor:${bounds.left.toRawBits()}:${bounds.top.toRawBits()}:" +
             "${bounds.right.toRawBits()}:${bounds.bottom.toRawBits()}"
+    is GPUClipCoveragePlan.AnalyticIntersection ->
+        "analytic-intersection:${elements.joinToString(";") { element ->
+            "${element.operation.name}/${element.kind.name}/vertices=${element.vertexCount}/" +
+                "aa=${element.antiAlias}/fill=${element.fillRule.name}/inverse=${element.inverseFill}/" +
+                "values=${element.values.joinToString(",") { value -> value.toRawBits().toString() }}"
+        }}"
     is GPUClipCoveragePlan.Mask ->
         "mask:$contentKey:${width}x$height:samples=$sampleCount:resolvedBytes=$resolvedBytes:" +
             "requiredBytes=$requiredBytes:${elements.joinToString(";") { element ->

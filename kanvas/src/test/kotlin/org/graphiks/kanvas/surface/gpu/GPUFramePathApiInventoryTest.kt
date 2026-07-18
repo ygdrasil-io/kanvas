@@ -1205,7 +1205,49 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `mapper analytic authority stays closed to one intersect rect or rrect at depth one`() {
+    fun `mapper preserves depth one coverage and execution identity while bypassing frame mask budget`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipRRect(
+                RRect(Rect.fromLTRB(3f, 4f, 24f, 27f), radius = 3f),
+                ClipOp.INTERSECT,
+                antiAlias = true,
+            )
+            drawRect(Rect.fromLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+        }
+        val operations = surface.snapshotOps()
+        val capabilities = capabilitiesWith(FILL_RECT_CAPABILITY)
+        val canonical = GPUFramePathApiInventory.plan(
+            operations,
+            target(),
+            RenderConfig.DEFAULT,
+            capabilities,
+        )
+        val budgetBypass = GPUFramePathApiInventory.plan(
+            operations,
+            target(),
+            RenderConfig(maxClipIntermediateBytes = 1u),
+            capabilities,
+        )
+        val canonicalVisual = canonical.visualCommands.single()
+        val bypassVisual = budgetBypass.visualCommands.single()
+        val canonicalCoverage = assertIs<GPUClipCoveragePlan.Mask>(canonicalVisual.clipCoverage)
+        val bypassCoverage = assertIs<GPUClipCoveragePlan.Mask>(bypassVisual.clipCoverage)
+        val canonicalExecution = assertIs<GPUClipExecutionPlan.AnalyticCoverage>(
+            canonicalVisual.clipExecutionPlan,
+        )
+        val bypassExecution = assertIs<GPUClipExecutionPlan.AnalyticCoverage>(
+            bypassVisual.clipExecutionPlan,
+        )
+
+        assertEquals(canonicalCoverage, bypassCoverage)
+        assertEquals(canonicalCoverage.hashCode(), bypassCoverage.hashCode())
+        assertEquals(canonicalExecution.canonicalIdentity(), bypassExecution.canonicalIdentity())
+        assertClipExecutionPropagation(budgetBypass, bypassExecution)
+    }
+
+    @Test
+    fun `mapper promotes two to four simple intersections and preserves other clip routes`() {
         fun executionFor(buildClip: org.graphiks.kanvas.canvas.Canvas.() -> Unit): GPUClipExecutionPlan {
             val surface = Surface(32, 32)
             surface.canvas {
@@ -1235,7 +1277,7 @@ class GPUFramePathApiInventoryTest {
                 antiAlias = false,
             )
         })
-        assertIs<GPUClipExecutionPlan.CoverageMask>(executionFor {
+        assertIs<GPUClipExecutionPlan.AnalyticIntersection>(executionFor {
             clipRRect(
                 RRect(Rect.fromLTRB(2f, 2f, 29f, 29f), radius = 3f),
                 ClipOp.INTERSECT,
@@ -1261,6 +1303,29 @@ class GPUFramePathApiInventoryTest {
                 antiAlias = false,
             )
         })
+    }
+
+    @Test
+    fun `mapper uses the analytic intersection frame route before mask byte budget`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            clipRect(Rect.fromLTRB(2.25f, 2.5f, 29.25f, 29.5f), antiAlias = true)
+            clipRRect(RRect(Rect.fromLTRB(4f, 4f, 27f, 27f), radius = 3f), antiAlias = false)
+            drawRect(Rect.fromLTRB(0f, 0f, 32f, 32f), Paint.fill(Color.RED))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig(maxClipIntermediateBytes = 1u),
+            capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+
+        val execution = assertIs<GPUClipExecutionPlan.AnalyticIntersection>(
+            plan.visualCommands.single().clipExecutionPlan,
+        )
+        assertEquals(2, execution.elements.size)
+        assertClipExecutionPropagation(plan, execution)
     }
 
     @Test
