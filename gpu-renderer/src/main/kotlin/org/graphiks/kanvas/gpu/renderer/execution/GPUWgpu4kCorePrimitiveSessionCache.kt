@@ -7,6 +7,7 @@ import io.ygdrasil.webgpu.BindGroupEntry
 import io.ygdrasil.webgpu.BufferBinding
 import io.ygdrasil.webgpu.BufferBindingLayout
 import io.ygdrasil.webgpu.BufferDescriptor
+import io.ygdrasil.webgpu.Extent3D
 import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUBuffer
@@ -17,8 +18,11 @@ import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUShaderStage
+import io.ygdrasil.webgpu.GPUTexture
+import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
+import io.ygdrasil.webgpu.TextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 
 internal data class GPUCorePrimitiveNativeCacheCounters(
@@ -293,6 +297,21 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                     ),
                 ),
             )
+
+            override fun createPathDepthStencilTexture(
+                requirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement,
+            ): GPUTexture = device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(requirement.width.toUInt(), requirement.height.toUInt()),
+                    format = requirement.format,
+                    usage = requirement.usage,
+                    sampleCount = requirement.sampleCount.toUInt(),
+                    label = "Kanvas.session.corePrimitive.framePool.pathDepthStencil",
+                ),
+            )
+
+            override fun createPathDepthStencilView(texture: GPUTexture): GPUTextureView =
+                texture.createView()
         },
     )
 

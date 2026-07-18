@@ -2,6 +2,10 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUTexture
+import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
+import io.ygdrasil.webgpu.GPUTextureView
 import java.lang.reflect.Proxy
 import java.util.Collections
 import java.util.IdentityHashMap
@@ -57,6 +61,307 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     }
 
     @Test
+    fun `path attachment keeps its exact non power of two extent and reuses the same texture and view`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val attachment = pathDepthStencil(width = 63, height = 47)
+
+        val first = pool.acquire(requirements(pathDepthStencil = attachment)).acquiredLease()
+        val firstDepthStencil = requireNotNull(first.handles.pathDepthStencil)
+
+        assertEquals(attachment, firstDepthStencil.requirement)
+        assertEquals(
+            listOf(
+                GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.IndexBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
+                GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilTexture,
+                GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilView,
+            ),
+            factory.creations.map(CreatedHandle::resource),
+        )
+        assertEquals(
+            listOf(attachment),
+            factory.creations.mapNotNull(CreatedHandle::pathDepthStencilRequirement),
+        )
+        first.rollbackBeforeSubmit()
+
+        val reused = pool.acquire(requirements(pathDepthStencil = attachment)).acquiredLease()
+        val reusedDepthStencil = requireNotNull(reused.handles.pathDepthStencil)
+
+        assertEquals(first.slotId, reused.slotId)
+        assertSame(firstDepthStencil.texture, reusedDepthStencil.texture)
+        assertSame(firstDepthStencil.view, reusedDepthStencil.view)
+        assertSame(first.handles.vertexBuffer, reused.handles.vertexBuffer)
+        assertSame(first.handles.indexBuffer, reused.handles.indexBuffer)
+        assertSame(first.handles.uniformBuffer, reused.handles.uniformBuffer)
+        assertSame(first.handles.bindGroup, reused.handles.bindGroup)
+        assertEquals(6, factory.creations.size)
+
+        reused.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `direct slot adds only the path attachment while preserving every existing pooled handle`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val direct = pool.acquire(requirements()).acquiredLease()
+        direct.rollbackBeforeSubmit()
+        val attachment = pathDepthStencil(width = 63, height = 47)
+
+        val path = pool.acquire(requirements(pathDepthStencil = attachment)).acquiredLease()
+        val pathDepthStencil = requireNotNull(path.handles.pathDepthStencil)
+
+        assertEquals(direct.slotId, path.slotId)
+        assertSame(direct.handles.vertexBuffer, path.handles.vertexBuffer)
+        assertSame(direct.handles.indexBuffer, path.handles.indexBuffer)
+        assertSame(direct.handles.uniformBuffer, path.handles.uniformBuffer)
+        assertSame(direct.handles.bindGroup, path.handles.bindGroup)
+        assertEquals(attachment, pathDepthStencil.requirement)
+        assertEquals(
+            listOf(
+                GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.IndexBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
+                GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilTexture,
+                GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilView,
+            ),
+            factory.creations.map(CreatedHandle::resource),
+        )
+        assertTrue(factory.closeEvents.isEmpty())
+
+        path.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `path only growth never shrinks retained buffer capacities or recreates them later`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val largeRequirements = requirements(
+            vertexBytes = 16L * 1024L + 1L,
+            indexBytes = 4L * 1024L + 1L,
+            uniformBytes = 4L * 1024L + 1L,
+        )
+        val largeDirect = pool.acquire(largeRequirements).acquiredLease()
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolCapacities(
+                vertexBytes = 32L * 1024L,
+                indexBytes = 8L * 1024L,
+                uniformBytes = 8L * 1024L,
+            ),
+            largeDirect.capacities,
+        )
+        largeDirect.rollbackBeforeSubmit()
+
+        val smallPath = pool.acquire(
+            requirements(pathDepthStencil = pathDepthStencil(width = 63, height = 47)),
+        ).acquiredLease()
+
+        assertEquals(largeDirect.slotId, smallPath.slotId)
+        assertEquals(largeDirect.capacities, smallPath.capacities)
+        assertSame(largeDirect.handles.vertexBuffer, smallPath.handles.vertexBuffer)
+        assertSame(largeDirect.handles.indexBuffer, smallPath.handles.indexBuffer)
+        assertSame(largeDirect.handles.uniformBuffer, smallPath.handles.uniformBuffer)
+        assertSame(largeDirect.handles.bindGroup, smallPath.handles.bindGroup)
+        requireNotNull(smallPath.handles.pathDepthStencil)
+        smallPath.rollbackBeforeSubmit()
+
+        val largeDirectAgain = pool.acquire(largeRequirements).acquiredLease()
+
+        assertEquals(largeDirect.slotId, largeDirectAgain.slotId)
+        assertEquals(largeDirect.capacities, largeDirectAgain.capacities)
+        assertSame(largeDirect.handles.vertexBuffer, largeDirectAgain.handles.vertexBuffer)
+        assertSame(largeDirect.handles.indexBuffer, largeDirectAgain.handles.indexBuffer)
+        assertSame(largeDirect.handles.uniformBuffer, largeDirectAgain.handles.uniformBuffer)
+        assertSame(largeDirect.handles.bindGroup, largeDirectAgain.handles.bindGroup)
+        assertEquals(
+            listOf(
+                GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.IndexBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
+                GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilTexture,
+                GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilView,
+            ),
+            factory.creations.map(CreatedHandle::resource),
+        )
+
+        largeDirectAgain.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `path attachment resize publishes the replacement only after both new handles exist`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val initialRequirement = pathDepthStencil(width = 63, height = 47)
+        val replacementRequirement = pathDepthStencil(width = 65, height = 49)
+        val initial = pool.acquire(requirements(pathDepthStencil = initialRequirement)).acquiredLease()
+        val initialDepthStencil = requireNotNull(initial.handles.pathDepthStencil)
+        initial.rollbackBeforeSubmit()
+
+        val replacement = pool.acquire(
+            requirements(pathDepthStencil = replacementRequirement),
+        ).acquiredLease()
+        val replacementDepthStencil = requireNotNull(replacement.handles.pathDepthStencil)
+
+        assertEquals(initial.slotId, replacement.slotId)
+        assertEquals(replacementRequirement, replacementDepthStencil.requirement)
+        assertNotSame(initialDepthStencil.texture, replacementDepthStencil.texture)
+        assertNotSame(initialDepthStencil.view, replacementDepthStencil.view)
+        assertSame(initial.handles.vertexBuffer, replacement.handles.vertexBuffer)
+        assertSame(initial.handles.indexBuffer, replacement.handles.indexBuffer)
+        assertSame(initial.handles.uniformBuffer, replacement.handles.uniformBuffer)
+        assertSame(initial.handles.bindGroup, replacement.handles.bindGroup)
+        assertEquals(
+            listOf(initialRequirement, replacementRequirement),
+            factory.creations.mapNotNull(CreatedHandle::pathDepthStencilRequirement),
+        )
+        assertEquals(
+            listOf("close:pathDepthStencilView", "close:pathDepthStencilTexture"),
+            factory.closeEvents,
+        )
+        assertEquals(1, factory.closeAttempts(initialDepthStencil.view))
+        assertEquals(1, factory.closeAttempts(initialDepthStencil.texture))
+
+        replacement.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `path attachment texture allocation failure leaves the old slot published and untouched`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val initialRequirement = pathDepthStencil(width = 63, height = 47)
+        val initial = pool.acquire(requirements(pathDepthStencil = initialRequirement)).acquiredLease()
+        val initialDepthStencil = requireNotNull(initial.handles.pathDepthStencil)
+        initial.rollbackBeforeSubmit()
+        factory.failNext(GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilTexture)
+
+        val refused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(
+            pool.acquire(requirements(pathDepthStencil = pathDepthStencil(width = 65, height = 49))),
+        )
+
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilTexture,
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed>(refused.reason).resource,
+        )
+        assertEquals(0, factory.closeAttempts(initialDepthStencil.view))
+        assertEquals(0, factory.closeAttempts(initialDepthStencil.texture))
+        val reused = pool.acquire(requirements(pathDepthStencil = initialRequirement)).acquiredLease()
+        assertSame(initialDepthStencil.texture, requireNotNull(reused.handles.pathDepthStencil).texture)
+        assertSame(initialDepthStencil.view, requireNotNull(reused.handles.pathDepthStencil).view)
+
+        reused.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `path attachment view allocation failure closes only the unpublished new texture`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val initialRequirement = pathDepthStencil(width = 63, height = 47)
+        val initial = pool.acquire(requirements(pathDepthStencil = initialRequirement)).acquiredLease()
+        val initialDepthStencil = requireNotNull(initial.handles.pathDepthStencil)
+        initial.rollbackBeforeSubmit()
+        factory.failNext(GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilView)
+
+        val refused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(
+            pool.acquire(requirements(pathDepthStencil = pathDepthStencil(width = 65, height = 49))),
+        )
+
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilView,
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed>(refused.reason).resource,
+        )
+        val unpublishedTexture = factory.creations.last {
+            it.resource == GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilTexture
+        }.handle
+        assertEquals(1, factory.closeAttempts(unpublishedTexture))
+        assertEquals(0, factory.closeAttempts(initialDepthStencil.view))
+        assertEquals(0, factory.closeAttempts(initialDepthStencil.texture))
+        val reused = pool.acquire(requirements(pathDepthStencil = initialRequirement)).acquiredLease()
+        assertSame(initialDepthStencil.texture, requireNotNull(reused.handles.pathDepthStencil).texture)
+        assertSame(initialDepthStencil.view, requireNotNull(reused.handles.pathDepthStencil).view)
+
+        reused.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `three in flight path frames own distinct attachments and the fourth refuses`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val request = requirements(pathDepthStencil = pathDepthStencil(width = 63, height = 47))
+
+        val leases = List(3) { pool.acquire(request).acquiredLease() }
+
+        assertEquals(listOf(0, 1, 2), leases.map { it.slotId })
+        assertEquals(3, leases.map { requireNotNull(it.handles.pathDepthStencil).texture }.distinct().size)
+        assertEquals(3, leases.map { requireNotNull(it.handles.pathDepthStencil).view }.distinct().size)
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolRefusal.Saturated(maxSlots = 3),
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(pool.acquire(request)).reason,
+        )
+
+        leases.forEach { it.rollbackBeforeSubmit() }
+        pool.close()
+    }
+
+    @Test
+    fun `failed path view close blocks its texture while independent slot handles close and retry once`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val lease = pool.acquire(
+            requirements(pathDepthStencil = pathDepthStencil(width = 63, height = 47)),
+        ).acquiredLease()
+        val depthStencil = requireNotNull(lease.handles.pathDepthStencil)
+        lease.rollbackBeforeSubmit()
+        factory.failCloseOnce(depthStencil.view)
+
+        val failure = assertFailsWith<GPUWgpu4kCorePrimitiveFramePoolCloseFailure> { pool.close() }
+
+        assertEquals(2, failure.retainedHandleCount)
+        assertEquals(
+            listOf(
+                "close:pathDepthStencilView",
+                "close:bindGroup",
+                "close:uniform",
+                "close:index",
+                "close:vertex",
+            ),
+            factory.closeEvents,
+        )
+        assertEquals(1, factory.closeAttempts(depthStencil.view))
+        assertEquals(0, factory.closeAttempts(depthStencil.texture))
+
+        pool.close()
+
+        assertEquals(
+            listOf(
+                "close:pathDepthStencilView",
+                "close:bindGroup",
+                "close:uniform",
+                "close:index",
+                "close:vertex",
+                "close:pathDepthStencilView",
+                "close:pathDepthStencilTexture",
+            ),
+            factory.closeEvents,
+        )
+        assertEquals(2, factory.closeAttempts(depthStencil.view))
+        assertEquals(1, factory.closeAttempts(depthStencil.texture))
+        assertEquals(1, factory.closeAttempts(lease.handles.bindGroup))
+        assertEquals(1, factory.closeAttempts(lease.handles.uniformBuffer))
+        assertEquals(1, factory.closeAttempts(lease.handles.indexBuffer))
+        assertEquals(1, factory.closeAttempts(lease.handles.vertexBuffer))
+    }
+
+    @Test
     fun `generation mismatch and a fourth concurrent checkout are typed non blocking refusals`() {
         val factory = FakeFactory()
         val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
@@ -87,8 +392,11 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
 
     @Test
     fun `zero sized direct slabs are typed refusals and allocate nothing`() {
-        GPUWgpu4kCorePrimitiveFramePoolResource.entries.forEach { invalidResource ->
-            if (invalidResource == GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup) return@forEach
+        listOf(
+            GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer,
+            GPUWgpu4kCorePrimitiveFramePoolResource.IndexBuffer,
+            GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer,
+        ).forEach { invalidResource ->
             val factory = FakeFactory()
             val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
             val request = requirements(
@@ -370,11 +678,24 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         vertexBytes: Long = 1L,
         indexBytes: Long = 1L,
         uniformBytes: Long = 1L,
+        pathDepthStencil: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
     ) = GPUWgpu4kCorePrimitiveFramePoolRequirements(
         deviceGeneration,
         vertexBytes,
         indexBytes,
         uniformBytes,
+        pathDepthStencil,
+    )
+
+    private fun pathDepthStencil(
+        width: Int,
+        height: Int,
+    ) = GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
+        width = width,
+        height = height,
+        format = GPUTextureFormat.Depth24PlusStencil8,
+        sampleCount = 1,
+        usage = GPUTextureUsage.RenderAttachment,
     )
 
     private class FakeFactory : GPUWgpu4kCorePrimitiveFramePoolFactory {
@@ -397,6 +718,21 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         override fun createBindGroup(uniformBuffer: GPUBuffer): GPUBindGroup =
             create(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup, "bindGroup", GPUBindGroup::class.java)
 
+        override fun createPathDepthStencilTexture(
+            requirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement,
+        ): GPUTexture = create(
+            GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilTexture,
+            "pathDepthStencilTexture",
+            GPUTexture::class.java,
+            requirement,
+        )
+
+        override fun createPathDepthStencilView(texture: GPUTexture): GPUTextureView = create(
+            GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilView,
+            "pathDepthStencilView",
+            GPUTextureView::class.java,
+        )
+
         fun failNext(resource: GPUWgpu4kCorePrimitiveFramePoolResource) {
             nextFailure = resource
         }
@@ -412,6 +748,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             resource: GPUWgpu4kCorePrimitiveFramePoolResource,
             label: String,
             type: Class<T>,
+            pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
         ): T {
             if (nextFailure == resource) {
                 nextFailure = null
@@ -434,7 +771,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
                     else -> defaultValue(method.returnType)
                 }
             } as T
-            creations += CreatedHandle(resource, handle)
+            creations += CreatedHandle(resource, handle, pathDepthStencilRequirement)
             return handle
         }
 
@@ -454,6 +791,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     private data class CreatedHandle(
         val resource: GPUWgpu4kCorePrimitiveFramePoolResource,
         val handle: AutoCloseable,
+        val pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
     )
 
     private companion object {
