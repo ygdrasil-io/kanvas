@@ -49,6 +49,46 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     }
 
     @Test
+    fun `production cache normalizes four path semantics to four stencil pipelines and shared components`() {
+        val native = SessionNativeProxy()
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION)
+        val programs = listOf(
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding,
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding,
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse,
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd,
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd,
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse,
+        )
+
+        val acquisitions = programs.map { program ->
+            program to cache.acquire(productionKey(program)).acquiredHandles()
+        }
+        val first = acquisitions.first().second
+
+        acquisitions.forEach { (_, handles) ->
+            assertSame(first.bindGroupLayout, handles.bindGroupLayout)
+            assertSame(first.shader, handles.shader)
+            assertSame(first.pipelineLayout, handles.pipelineLayout)
+        }
+        programs.distinct().forEach { program ->
+            val matching = acquisitions.filter { it.first == program }.map { it.second.pipeline }
+            assertTrue(matching.all { it === matching.first() })
+        }
+        assertEquals(5, acquisitions.map { it.second.pipeline }.distinctBy { System.identityHashCode(it) }.size)
+        assertEquals(1, native.creationCount("createBindGroupLayout"))
+        assertEquals(1, native.creationCount("createShaderModule"))
+        assertEquals(1, native.creationCount("createPipelineLayout"))
+        assertEquals(5, native.pipelineCreationCount)
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(5, 4, 0), cache.counters())
+
+        cache.close()
+    }
+
+    @Test
     fun `concrete cache accepts sixteen factory validated pipelines and typed refuses the seventeenth`() {
         val native = SessionNativeProxy(acceptPipelineIdentity = { true })
         val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
@@ -80,7 +120,7 @@ class GPUCorePrimitiveSessionNativeCacheTest {
             componentIdentity = canonical.componentIdentity.copy(shaderIdentity = "shader.stale"),
         )
         val incompatiblePipeline = canonical.copy(
-            pipelineIdentity = canonical.pipelineIdentity.copy(blendIdentity = "future-stencil"),
+            pipelineIdentity = canonical.pipelineIdentity.copy(sampleCount = 4),
         )
 
         assertIs<GPUWgpu4kCorePrimitiveSessionCacheRefusal.IncompatibleComponentIdentity>(
@@ -300,7 +340,10 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         }
     }
 
-    private fun productionKey() = GPUWgpu4kCorePrimitivePipelineCacheKey(
+    private fun productionKey(
+        program: GPUWgpu4kCorePrimitivePipelineProgram =
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
+    ) = GPUWgpu4kCorePrimitivePipelineCacheKey(
         componentIdentity = GPUWgpu4kCorePrimitiveComponentIdentity(
             shaderIdentity = CORE_PRIMITIVE_NATIVE_SHADER_IDENTITY,
             bindingLayoutIdentity = CORE_PRIMITIVE_NATIVE_BINDING_LAYOUT_IDENTITY,
@@ -312,12 +355,12 @@ class GPUCorePrimitiveSessionNativeCacheTest {
             topology = "triangle-list",
             frontFace = "ccw",
             cullMode = "none",
-            blendIdentity = "premul-src-over",
+            program = program,
         ),
     )
 
     private fun testKey(identity: String) = productionKey().copy(
-        pipelineIdentity = productionKey().pipelineIdentity.copy(blendIdentity = identity),
+        pipelineIdentity = productionKey().pipelineIdentity.copy(targetFormat = "test:$identity"),
     )
 
     private fun GPUWgpu4kCorePrimitiveSessionCacheAcquire.acquiredHandles() =
@@ -376,10 +419,14 @@ class GPUCorePrimitiveSessionNativeCacheTest {
             pipelineLayout: GPUPipelineLayout,
         ): GPURenderPipeline {
             pipelineCreationCount += 1
-            creationEvents += "pipeline:${identity.blendIdentity}"
+            creationEvents += "pipeline:${identity.testLabel()}"
             if (pipelineCreationCount == failPipelineCreationAttempt) error("injected pipeline creation failure")
-            return handle("pipeline:${identity.blendIdentity}", GPURenderPipeline::class.java)
+            return handle("pipeline:${identity.testLabel()}", GPURenderPipeline::class.java)
         }
+
+        private fun GPUWgpu4kCorePrimitiveRenderPipelineIdentity.testLabel(): String =
+            targetFormat.removePrefix("test:").takeIf { targetFormat.startsWith("test:") }
+                ?: program.name
 
         fun creationCount(label: String): Int = creationEvents.count { it == label }
 
@@ -450,7 +497,7 @@ class GPUCorePrimitiveSessionNativeCacheTest {
                 topology = "triangle-list",
                 frontFace = "ccw",
                 cullMode = "none",
-                blendIdentity = "premul-src-over",
+                program = GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
             )
         }
     }

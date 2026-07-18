@@ -4,17 +4,11 @@ import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
 import io.ygdrasil.webgpu.BindGroupLayoutEntry
 import io.ygdrasil.webgpu.BindGroupDescriptor
 import io.ygdrasil.webgpu.BindGroupEntry
-import io.ygdrasil.webgpu.BlendComponent
-import io.ygdrasil.webgpu.BlendState
 import io.ygdrasil.webgpu.BufferBinding
 import io.ygdrasil.webgpu.BufferBindingLayout
 import io.ygdrasil.webgpu.BufferDescriptor
-import io.ygdrasil.webgpu.ColorTargetState
-import io.ygdrasil.webgpu.FragmentState
 import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPUBindGroupLayout
-import io.ygdrasil.webgpu.GPUBlendFactor
-import io.ygdrasil.webgpu.GPUBlendOperation
 import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUBufferUsage
@@ -23,16 +17,8 @@ import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUShaderStage
-import io.ygdrasil.webgpu.GPUTextureFormat
-import io.ygdrasil.webgpu.GPUVertexFormat
-import io.ygdrasil.webgpu.MultisampleState
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
-import io.ygdrasil.webgpu.PrimitiveState
-import io.ygdrasil.webgpu.RenderPipelineDescriptor
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
-import io.ygdrasil.webgpu.VertexAttribute
-import io.ygdrasil.webgpu.VertexBufferLayout
-import io.ygdrasil.webgpu.VertexState
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 
 internal data class GPUCorePrimitiveNativeCacheCounters(
@@ -59,11 +45,11 @@ internal data class GPUWgpu4kCorePrimitiveRenderPipelineIdentity(
     val topology: String,
     val frontFace: String,
     val cullMode: String,
-    val blendIdentity: String,
+    val program: GPUWgpu4kCorePrimitivePipelineProgram,
 ) {
     init {
         require(targetFormat.isNotBlank() && sampleCount > 0)
-        require(listOf(topology, frontFace, cullMode, blendIdentity).all(String::isNotBlank))
+        require(listOf(topology, frontFace, cullMode).all(String::isNotBlank))
     }
 }
 
@@ -94,13 +80,13 @@ private val PRODUCTION_CORE_PRIMITIVE_PIPELINE_IDENTITY =
         topology = "triangle-list",
         frontFace = "ccw",
         cullMode = "none",
-        blendIdentity = "premul-src-over",
+        program = GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
     )
 
 internal fun isSupportedCorePrimitivePipelineCacheKey(
     key: GPUWgpu4kCorePrimitivePipelineCacheKey,
 ): Boolean = key.componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
-    key.pipelineIdentity == PRODUCTION_CORE_PRIMITIVE_PIPELINE_IDENTITY
+    isSupportedCorePrimitiveRenderPipelineIdentity(key.pipelineIdentity)
 
 internal enum class GPUWgpu4kCorePrimitiveSessionCacheNativeResource {
     BindGroupLayout,
@@ -149,7 +135,7 @@ internal class GPUWgpu4kCorePrimitiveInvariantHandles(
     val pipeline: GPURenderPipeline,
 )
 
-/** Native creation seam. Production accepts only the exact currently executable pipeline identity. */
+/** Native creation seam. Production accepts only the closed exact executable pipeline identities. */
 internal interface GPUWgpu4kCorePrimitiveSessionNativeFactory {
     fun acceptsPipelineIdentity(identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity): Boolean
     fun createBindGroupLayout(): GPUBindGroupLayout
@@ -167,7 +153,7 @@ private class GPUWgpu4kCorePrimitiveDeviceSessionNativeFactory(
 ) : GPUWgpu4kCorePrimitiveSessionNativeFactory {
     override fun acceptsPipelineIdentity(
         identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
-    ): Boolean = identity == PRODUCTION_CORE_PRIMITIVE_PIPELINE_IDENTITY
+    ): Boolean = isSupportedCorePrimitiveRenderPipelineIdentity(identity)
 
     override fun createBindGroupLayout(): GPUBindGroupLayout = device.createBindGroupLayout(
         BindGroupLayoutDescriptor(
@@ -207,53 +193,11 @@ private class GPUWgpu4kCorePrimitiveDeviceSessionNativeFactory(
         shader: GPUShaderModule,
         pipelineLayout: GPUPipelineLayout,
     ): GPURenderPipeline {
-        require(identity == PRODUCTION_CORE_PRIMITIVE_PIPELINE_IDENTITY) {
-            "The production CorePrimitive factory accepts only its exact executable pipeline identity"
+        require(isSupportedCorePrimitiveRenderPipelineIdentity(identity)) {
+            "The production CorePrimitive factory accepts only exact executable pipeline identities"
         }
         return device.createRenderPipeline(
-            RenderPipelineDescriptor(
-                label = "Kanvas.session.corePrimitive.pipeline.srcOver",
-                layout = pipelineLayout,
-                vertex = VertexState(
-                    module = shader,
-                    entryPoint = "vs_main",
-                    buffers = listOf(
-                        VertexBufferLayout(
-                            arrayStride = 8uL,
-                            attributes = listOf(
-                                VertexAttribute(
-                                    shaderLocation = 0u,
-                                    offset = 0uL,
-                                    format = GPUVertexFormat.Float32x2,
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-                primitive = PrimitiveState(),
-                multisample = MultisampleState(count = 1u),
-                fragment = FragmentState(
-                    module = shader,
-                    entryPoint = "fs_main",
-                    targets = listOf(
-                        ColorTargetState(
-                            format = GPUTextureFormat.RGBA8Unorm,
-                            blend = BlendState(
-                                color = BlendComponent(
-                                    GPUBlendOperation.Add,
-                                    GPUBlendFactor.One,
-                                    GPUBlendFactor.OneMinusSrcAlpha,
-                                ),
-                                alpha = BlendComponent(
-                                    GPUBlendOperation.Add,
-                                    GPUBlendFactor.One,
-                                    GPUBlendFactor.OneMinusSrcAlpha,
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            ),
+            corePrimitiveWgpu4kRenderPipelineDescriptor(identity, shader, pipelineLayout),
         )
     }
 }

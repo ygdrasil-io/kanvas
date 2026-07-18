@@ -30,10 +30,13 @@ internal fun buildCorePrimitiveNativeShader(): GPUCorePrimitiveNativeShaderResul
         )
     }
 
-internal const val CORE_PRIMITIVE_NATIVE_SHADER_IDENTITY = "core-primitive-device-geometry-wgsl-v1"
+internal const val CORE_PRIMITIVE_NATIVE_SHADER_IDENTITY = "core-primitive-device-geometry-wgsl-v2"
 internal const val CORE_PRIMITIVE_NATIVE_BINDING_LAYOUT_IDENTITY =
     "vertex-fragment-dynamic-uniform32-v2"
 internal const val CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY = "float32x2-uint32-triangle-list-v1"
+internal const val CORE_PRIMITIVE_NATIVE_VERTEX_ENTRY_POINT = "vs_main"
+internal const val CORE_PRIMITIVE_NATIVE_COLOR_FRAGMENT_ENTRY_POINT = "fs_main"
+internal const val CORE_PRIMITIVE_NATIVE_STENCIL_FRAGMENT_ENTRY_POINT = "fs_stencil"
 
 internal val CORE_PRIMITIVE_NATIVE_WGSL = """
     struct CorePrimitiveBlock {
@@ -54,5 +57,10 @@ internal val CORE_PRIMITIVE_NATIVE_WGSL = """
     @fragment
     fn fs_main() -> @location(0) vec4<f32> {
         return core.premul_rgba;
+    }
+
+    @fragment
+    fn fs_stencil() -> @location(0) vec4<f32> {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
     }
 """.trimIndent()
