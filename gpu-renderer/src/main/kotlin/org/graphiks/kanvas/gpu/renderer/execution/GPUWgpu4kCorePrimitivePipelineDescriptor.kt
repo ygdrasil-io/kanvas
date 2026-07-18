@@ -35,6 +35,10 @@ import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStenc
 internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
     DirectSrcOver,
     DirectSrcOverWithPathDepthStencil,
+    AnalyticClipRectHard,
+    AnalyticClipRectAA,
+    AnalyticClipRRectHard,
+    AnalyticClipRRectAA,
     PathStencilProducerWinding,
     PathStencilProducerEvenOdd,
     PathStencilCoverRegular,
@@ -44,6 +48,7 @@ internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
 internal sealed interface GPUWgpu4kCorePrimitivePipelineMapping {
     data class Mapped(
         val identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
+        val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ) : GPUWgpu4kCorePrimitivePipelineMapping
 
     data class Refused(
@@ -52,7 +57,7 @@ internal sealed interface GPUWgpu4kCorePrimitivePipelineMapping {
 }
 
 /**
- * Consumes the handle-free structural authority and accepts only one of the six exact native
+ * Consumes the handle-free structural authority and accepts only one of the ten exact native
  * descriptors. Dynamic geometry, bounds, scissor, load/store, and stencil reference never enter
  * this identity.
  */
@@ -72,6 +77,19 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
             cullMode = "none",
             program = program,
         ),
+        componentIdentity = if (program.isAnalyticClip()) {
+            GPUWgpu4kCorePrimitiveComponentIdentity(
+                shaderIdentity = CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_SHADER_IDENTITY,
+                bindingLayoutIdentity = CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_BINDING_LAYOUT_IDENTITY,
+                vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+            )
+        } else {
+            GPUWgpu4kCorePrimitiveComponentIdentity(
+                shaderIdentity = CORE_PRIMITIVE_NATIVE_SHADER_IDENTITY,
+                bindingLayoutIdentity = CORE_PRIMITIVE_NATIVE_BINDING_LAYOUT_IDENTITY,
+                vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+            )
+        },
     )
 }
 
@@ -79,8 +97,7 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
     GPUWgpu4kCorePrimitivePipelineProgram? {
     if (sampleCount != 1 || frontFace != GPUCorePrimitiveRenderPipelineStructuralKey.FrontFace.Ccw ||
         cullMode != GPUCorePrimitiveRenderPipelineStructuralKey.CullMode.None ||
-        colorFormat != GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm ||
-        clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None
+        colorFormat != GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
     ) return null
 
     return when (role) {
@@ -88,6 +105,10 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry ||
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
                 !blend.isCanonicalPremulSrcOver() -> null
+            clip is GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic &&
+                depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None ->
+                clip.nativeAnalyticProgramOrNull()
+            clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None -> null
             depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None ->
                 GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver
             depthStencil == corePrimitiveDirectPathDepthStencilState() ->
@@ -95,6 +116,7 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             else -> null
         }
         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer -> when {
+            clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None -> null
             shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.PathStencil ||
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StencilEdgeFan &&
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StrokeStencilEdgeFan ||
@@ -106,6 +128,7 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             else -> null
         }
         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover -> when {
+            clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None -> null
             shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.PathStencil ||
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
                 !blend.isCanonicalPremulSrcOver() -> null
@@ -116,6 +139,30 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             else -> null
         }
     }
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic.nativeAnalyticProgramOrNull():
+    GPUWgpu4kCorePrimitivePipelineProgram? = when (geometry) {
+    GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect -> if (antiAlias) {
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectAA
+    } else {
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectHard
+    }
+    GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect -> if (antiAlias) {
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectAA
+    } else {
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectHard
+    }
+    GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Path -> null
+}
+
+internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticClip(): Boolean = when (this) {
+    GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectHard,
+    GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectAA,
+    GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectHard,
+    GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectAA,
+    -> true
+    else -> false
 }
 
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.isCanonicalPremulSrcOver(): Boolean {
@@ -199,7 +246,12 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
     require(isSupportedCorePrimitiveRenderPipelineIdentity(identity)) {
         "Unsupported CorePrimitive native pipeline identity: $identity"
     }
-    val stencilProgram = identity.program != GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver
+    val stencilProgram = identity.program ==
+        GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil ||
+        identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding ||
+        identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd ||
+        identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular ||
+        identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse
     val producer = identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding ||
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd
     return RenderPipelineDescriptor(
@@ -307,6 +359,11 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthSten
             )
         GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver ->
             error("DirectSrcOver has no depth/stencil state")
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectHard,
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectAA,
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectHard,
+        GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectAA,
+        -> error("Analytic clip programs have no depth/stencil state")
     }
     return DepthStencilState(
         format = GPUTextureFormat.Depth24PlusStencil8,

@@ -74,6 +74,33 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
+    fun `analytic rect and rrect hard and aa keys map to four exact uniform64 programs`() {
+        val cases = listOf(
+            analyticKey(GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect, false) to
+                GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectHard,
+            analyticKey(GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect, true) to
+                GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectAA,
+            analyticKey(GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect, false) to
+                GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectHard,
+            analyticKey(GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect, true) to
+                GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectAA,
+        )
+
+        cases.forEach { (key, expectedProgram) ->
+            val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+            )
+            assertEquals(expectedProgram, mapped.identity.program)
+            assertEquals(CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_SHADER_IDENTITY, mapped.componentIdentity.shaderIdentity)
+            assertEquals(
+                CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_BINDING_LAYOUT_IDENTITY,
+                mapped.componentIdentity.bindingLayoutIdentity,
+            )
+            assertNull(corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, shader, pipelineLayout).depthStencil)
+        }
+    }
+
+    @Test
     fun `winding and even odd producers lower exact stencil8 state with no color writes`() {
         val winding = descriptor(pathKey(producerWinding()))
         val evenOdd = descriptor(pathKey(producerEvenOdd()))
@@ -234,6 +261,13 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
         topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
         blend = srcOverBlend(),
         clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+    )
+
+    private fun analyticKey(
+        geometry: GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry,
+        antiAlias: Boolean,
+    ) = directKey().copy(
+        clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic(geometry, antiAlias),
     )
 
     private fun directWithPathDepthStencilKey() = directKey().copy(

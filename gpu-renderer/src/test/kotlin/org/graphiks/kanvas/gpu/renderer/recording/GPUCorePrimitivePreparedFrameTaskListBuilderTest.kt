@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
 import io.ygdrasil.webgpu.GPUTextureFormat
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -390,6 +392,226 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 it.role == GPUFrameResourceRole.ClipMask || it.role == GPUFrameResourceRole.ClipDepthStencil
             })
         }
+    }
+
+    @Test
+    fun `simple analytic rect and rrect clips seal one isolated uniform64 payload per direct draw`() {
+        val cases = listOf(
+            GPUClipExecutionPlan.AnalyticCoverage(
+                GPUClipExecutionGeometry.Rect(GPUClipBounds(1.25f, 2.25f, 8.75f, 9.75f)),
+                scissor = null,
+                antiAlias = true,
+            ).let { Triple(it, listOf(0f, 0f, 0f, 0f), GPUPixelBounds(0, 1, 10, 11)) },
+            GPUClipExecutionPlan.AnalyticCoverage(
+                GPUClipExecutionGeometry.RRect(
+                    GPUClipBounds(1.25f, 2.25f, 8.75f, 9.75f),
+                    listOf(2f, 3f, 2f, 3f, 2f, 3f, 2f, 3f),
+                ),
+                scissor = GPUPixelBounds(1, 2, 12, 13),
+                antiAlias = false,
+            ).let { Triple(it, listOf(2f, 3f, 0f, 0f), GPUPixelBounds(1, 2, 9, 10)) },
+            GPUClipExecutionPlan.AnalyticCoverage(
+                GPUClipExecutionGeometry.RRect(
+                    GPUClipBounds(1.25f, 2.25f, 8.75f, 9.75f),
+                    List(8) { 0f },
+                ),
+                scissor = null,
+                antiAlias = true,
+            ).let { Triple(it, listOf(0f, 0f, 0f, 0f), GPUPixelBounds(0, 1, 10, 11)) },
+            GPUClipExecutionPlan.AnalyticCoverage(
+                GPUClipExecutionGeometry.RRect(
+                    GPUClipBounds(1.25f, 2.25f, 8.75f, 9.75f),
+                    listOf(0f, 3f, 0f, 3f, 0f, 3f, 0f, 3f),
+                ),
+                scissor = null,
+                antiAlias = true,
+            ).let { Triple(it, listOf(0f, 0f, 0f, 0f), GPUPixelBounds(0, 1, 10, 11)) },
+            GPUClipExecutionPlan.AnalyticCoverage(
+                GPUClipExecutionGeometry.RRect(
+                    GPUClipBounds(1.25f, 2.25f, 8.75f, 9.75f),
+                    listOf(2f, 0f, 2f, 0f, 2f, 0f, 2f, 0f),
+                ),
+                scissor = null,
+                antiAlias = false,
+            ).let { Triple(it, listOf(0f, 0f, 0f, 0f), GPUPixelBounds(1, 2, 9, 10)) },
+        )
+
+        cases.forEachIndexed { index, (plan, expectedPackedRadii, expectedScissor) ->
+            val commandId = 220 + index
+            val base = recording(command(commandId, index)).taskList.withClipPlans(mapOf(commandId to plan))
+            val basePacket = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+            val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+                GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                    request(base, mapOf(commandId to semantic(basePacket))),
+                ),
+            ).taskList
+            val prepared = taskList.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets)
+                .single { it.commandIdValue == commandId }
+            val authority = requireNotNull(prepared.corePrimitivePreparedAuthority)
+            val seal = requireNotNull(authority.analyticClipUniformSeal)
+            val bytes = seal.payloadBytesSnapshot()
+
+            assertEquals(CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH, prepared.bindingLayoutHash)
+            assertEquals(null, authority.uniformSlabSeal)
+            assertEquals(commandId, seal.commandId)
+            assertEquals(prepared.packetId, seal.packetId)
+            assertEquals(plan.canonicalIdentity(), seal.clipCanonicalIdentity)
+            assertEquals(plan.antiAlias, seal.antiAlias)
+            assertEquals(expectedScissor, seal.conservativeScissor)
+            assertEquals(64, bytes.size)
+            assertEquals(64L, seal.payloadBytes)
+            assertEquals(0L, seal.alignedOffset % seal.alignmentBytes)
+            assertEquals(taskList.capabilitySeal.deviceGeneration.value, seal.deviceGeneration)
+            assertEquals(authority.structuralPipelineKey, seal.structuralPipelineKey)
+            assertEquals(authority.renderPipelineKey, seal.renderPipelineKey)
+            assertEquals(16f, bytes.float32(0))
+            assertEquals(16f, bytes.float32(4))
+            val expectedClipType = if (expectedPackedRadii.all { it == 0f }) 0 else 1
+            assertEquals(expectedClipType, bytes.uint32(8))
+            assertEquals(
+                if (expectedClipType == 0) {
+                    GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect
+                } else {
+                    GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect
+                },
+                seal.clipType,
+            )
+            assertEquals(
+                GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic(
+                    geometry = seal.clipType,
+                    antiAlias = plan.antiAlias,
+                ),
+                authority.structuralPipelineKey.clip,
+            )
+            assertEquals(if (plan.antiAlias) 1 else 0, bytes.uint32(12))
+            assertEquals(listOf(0.25f, 0.5f, 0.75f, 1f), (16 until 32 step 4).map { bytes.float32(it) })
+            assertEquals(listOf(1.25f, 2.25f, 8.75f, 9.75f), (32 until 48 step 4).map { bytes.float32(it) })
+            assertEquals(expectedPackedRadii, (48 until 64 step 4).map { bytes.float32(it) })
+
+            val corrupted = seal.payloadBytesSnapshot()
+            corrupted[0] = 0
+            assertEquals(16f, seal.payloadBytesSnapshot().float32(0))
+            assertTrue(taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+                .flatMap(GPUTask.PrepareResources::requests)
+                .any { it.diagnosticLabel == "core-primitive.analytic-clip-uniforms" })
+            assertFalse(taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+                .flatMap(GPUTask.PrepareResources::requests)
+                .any { it.role == GPUFrameResourceRole.ClipMask })
+        }
+    }
+
+    @Test
+    fun `complex analytic rrect is refused before uniform or mask budget planning`() {
+        val commandId = 222
+        val plan = GPUClipExecutionPlan.AnalyticCoverage(
+            GPUClipExecutionGeometry.RRect(
+                GPUClipBounds(1f, 1f, 12f, 12f),
+                listOf(2f, 3f, 2f, 3f, 4f, 3f, 2f, 3f),
+            ),
+            scissor = null,
+            antiAlias = true,
+        )
+        val base = recording(command(commandId, 0)).taskList.withClipPlans(mapOf(commandId to plan))
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, mapOf(commandId to semantic(packet))).copy(configuredAggregateBudgetBytes = 1L),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_analytic_clip_complex_rrect",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `analytic clip refuses a non direct core primitive coverage route`() {
+        val commandId = 223
+        val plan = GPUClipExecutionPlan.AnalyticCoverage(
+            GPUClipExecutionGeometry.Rect(GPUClipBounds(1f, 1f, 12f, 12f)),
+            scissor = null,
+            antiAlias = true,
+        )
+        val base = recording(command(commandId, 0)).taskList.withClipPlans(mapOf(commandId to plan))
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                base,
+                mapOf(commandId to semantic(packet, coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA)),
+            ),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `analytic direct clip refuses a frame mixed with path stencil`() {
+        val analyticPlan = GPUClipExecutionPlan.AnalyticCoverage(
+            GPUClipExecutionGeometry.Rect(GPUClipBounds(1f, 1f, 12f, 12f)),
+            scissor = null,
+            antiAlias = true,
+        )
+        val base = recording(command(224, 0), command(225, 1)).taskList.withClipPlans(
+            mapOf(224 to analyticPlan, 225 to GPUClipExecutionPlan.NoClip),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(
+                base,
+                mapOf(
+                    224 to semantic(packets.single { it.commandIdValue == 224 }),
+                    225 to semantic(
+                        packets.single { it.commandIdValue == 225 },
+                        stencilGeometry(GPUPixelBounds(1, 1, 8, 8)),
+                        GPUCorePrimitiveCoverageMode.Stencil1x,
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_analytic_clip_path_mix",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `analytic clip values stay out of the pipeline key and batch in one uniform64 slab`() {
+        val plans = mapOf(
+            226 to GPUClipExecutionPlan.AnalyticCoverage(
+                GPUClipExecutionGeometry.Rect(GPUClipBounds(1.25f, 1.5f, 9.25f, 10.5f)),
+                null,
+                true,
+            ),
+            227 to GPUClipExecutionPlan.AnalyticCoverage(
+                GPUClipExecutionGeometry.Rect(GPUClipBounds(3.25f, 2.5f, 12.25f, 14.5f)),
+                null,
+                true,
+            ),
+        )
+        val base = recording(command(226, 0), command(227, 1)).taskList.withClipPlans(plans)
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            ),
+        ).taskList
+        val prepared = taskList.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets
+        val seals = prepared.map { requireNotNull(it.corePrimitivePreparedAuthority?.analyticClipUniformSeal) }
+
+        assertEquals(2, prepared.size)
+        assertEquals(1, prepared.map(GPUDrawPacket::renderPipelineKey).distinct().size)
+        assertSame(seals[0].plan, seals[1].plan)
+        assertEquals(listOf(0L, 256L), seals.map { it.alignedOffset })
+        assertNotEquals(seals[0].clipBounds, seals[1].clipBounds)
     }
 
     @Test
@@ -1280,6 +1502,12 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         targetBounds = targetBounds,
         semanticsByCommandId = semantics,
     )
+
+    private fun ByteArray.float32(offset: Int): Float =
+        ByteBuffer.wrap(this, offset, Float.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).float
+
+    private fun ByteArray.uint32(offset: Int): Int =
+        ByteBuffer.wrap(this, offset, Int.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).int
 
     private fun semantic(
         packet: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket,

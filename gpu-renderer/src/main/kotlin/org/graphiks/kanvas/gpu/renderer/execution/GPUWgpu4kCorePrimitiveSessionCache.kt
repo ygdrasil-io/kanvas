@@ -70,10 +70,17 @@ internal data class GPUWgpu4kCorePrimitivePipelineCacheKey(
     )
 }
 
-private val PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY =
+internal val PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY =
     GPUWgpu4kCorePrimitiveComponentIdentity(
         shaderIdentity = CORE_PRIMITIVE_NATIVE_SHADER_IDENTITY,
         bindingLayoutIdentity = CORE_PRIMITIVE_NATIVE_BINDING_LAYOUT_IDENTITY,
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
+internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_SHADER_IDENTITY,
+        bindingLayoutIdentity = CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_BINDING_LAYOUT_IDENTITY,
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
 
@@ -89,8 +96,14 @@ private val PRODUCTION_CORE_PRIMITIVE_PIPELINE_IDENTITY =
 
 internal fun isSupportedCorePrimitivePipelineCacheKey(
     key: GPUWgpu4kCorePrimitivePipelineCacheKey,
-): Boolean = key.componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
-    isSupportedCorePrimitiveRenderPipelineIdentity(key.pipelineIdentity)
+): Boolean = isSupportedCorePrimitiveRenderPipelineIdentity(key.pipelineIdentity) &&
+    key.hasCompatibleComponentIdentity()
+
+private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentity(): Boolean = when {
+    pipelineIdentity.program.isAnalyticClip() ->
+        componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+    else -> componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+}
 
 internal enum class GPUWgpu4kCorePrimitiveSessionCacheNativeResource {
     BindGroupLayout,
@@ -142,8 +155,11 @@ internal class GPUWgpu4kCorePrimitiveInvariantHandles(
 /** Native creation seam. Production accepts only the closed exact executable pipeline identities. */
 internal interface GPUWgpu4kCorePrimitiveSessionNativeFactory {
     fun acceptsPipelineIdentity(identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity): Boolean
-    fun createBindGroupLayout(): GPUBindGroupLayout
-    fun createShaderModule(plan: GPUCorePrimitiveNativeShaderPlan): GPUShaderModule
+    fun createBindGroupLayout(componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity): GPUBindGroupLayout
+    fun createShaderModule(
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+        plan: GPUCorePrimitiveNativeShaderPlan,
+    ): GPUShaderModule
     fun createPipelineLayout(bindGroupLayout: GPUBindGroupLayout): GPUPipelineLayout
     fun createRenderPipeline(
         identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
@@ -159,9 +175,11 @@ private class GPUWgpu4kCorePrimitiveDeviceSessionNativeFactory(
         identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
     ): Boolean = isSupportedCorePrimitiveRenderPipelineIdentity(identity)
 
-    override fun createBindGroupLayout(): GPUBindGroupLayout = device.createBindGroupLayout(
+    override fun createBindGroupLayout(
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+    ): GPUBindGroupLayout = device.createBindGroupLayout(
         BindGroupLayoutDescriptor(
-            label = "Kanvas.session.corePrimitive.bindGroupLayout0",
+            label = "Kanvas.session.corePrimitive.bindGroupLayout0.${componentIdentity.bindingLayoutIdentity}",
             entries = listOf(
                 BindGroupLayoutEntry(
                     binding = 0u,
@@ -169,17 +187,22 @@ private class GPUWgpu4kCorePrimitiveDeviceSessionNativeFactory(
                     buffer = BufferBindingLayout(
                         type = GPUBufferBindingType.Uniform,
                         hasDynamicOffset = true,
-                        minBindingSize = 32uL,
+                        minBindingSize = if (
+                            componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+                        ) 64uL else 32uL,
                     ),
                 ),
             ),
         ),
     )
 
-    override fun createShaderModule(plan: GPUCorePrimitiveNativeShaderPlan): GPUShaderModule =
+    override fun createShaderModule(
+        componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+        plan: GPUCorePrimitiveNativeShaderPlan,
+    ): GPUShaderModule =
         device.createShaderModule(
             ShaderModuleDescriptor(
-                label = "Kanvas.session.corePrimitive.shader",
+                label = "Kanvas.session.corePrimitive.shader.${componentIdentity.shaderIdentity}",
                 code = plan.wgslSource,
             ),
         )
@@ -243,8 +266,14 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     private enum class State { Open, Closing, Closed }
 
     private var state = State.Open
-    private var sharedComponents: GPUWgpu4kCorePrimitiveSharedComponentJournal? = null
-    private var pendingSetupComponents: GPUWgpu4kCorePrimitiveSharedComponentJournal? = null
+    private val sharedComponentsByIdentity = linkedMapOf<
+        GPUWgpu4kCorePrimitiveComponentIdentity,
+        GPUWgpu4kCorePrimitiveSharedComponentJournal,
+    >()
+    private val pendingSetupComponentsByIdentity = linkedMapOf<
+        GPUWgpu4kCorePrimitiveComponentIdentity,
+        GPUWgpu4kCorePrimitiveSharedComponentJournal,
+    >()
     private val live = linkedMapOf<
         GPUWgpu4kCorePrimitivePipelineCacheKey,
         GPUWgpu4kCorePrimitiveInvariantHandles,
@@ -282,7 +311,9 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
             override fun createBindGroup(uniformBuffer: GPUBuffer): GPUBindGroup = device.createBindGroup(
                 BindGroupDescriptor(
                     label = "Kanvas.session.corePrimitive.framePool.bindGroup0",
-                    layout = checkNotNull(sharedComponents?.bindGroupLayout) {
+                    layout = checkNotNull(
+                        sharedComponentsByIdentity[PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY]?.bindGroupLayout,
+                    ) {
                         "CorePrimitive components must exist before the frame pool allocates a bind group"
                     },
                     entries = listOf(
@@ -324,12 +355,19 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
             State.Closed -> return refused(GPUWgpu4kCorePrimitiveSessionCacheRefusal.Closed)
             State.Open -> Unit
         }
-        if (key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY) {
+        if (!key.hasCompatibleComponentIdentity()) {
+            if (key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
+                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+            ) {
             return refused(
                 GPUWgpu4kCorePrimitiveSessionCacheRefusal.IncompatibleComponentIdentity(
                     PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
                     key.componentIdentity,
                 ),
+            )
+            }
+            return refused(
+                GPUWgpu4kCorePrimitiveSessionCacheRefusal.UnsupportedPipelineIdentity(key.pipelineIdentity),
             )
         }
         if (!nativeFactory.acceptsPipelineIdentity(key.pipelineIdentity)) {
@@ -348,15 +386,16 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                 ),
             )
         }
-        pendingSetupComponents?.let { pending ->
+        pendingSetupComponentsByIdentity[key.componentIdentity]?.let { pending ->
             if (pending.closeAfterPipelines() != 0) {
                 return refused(
                     GPUWgpu4kCorePrimitiveSessionCacheRefusal.CleanupPending(pending.pendingHandleCount),
                 )
             }
-            pendingSetupComponents = null
+            pendingSetupComponentsByIdentity.remove(key.componentIdentity)
         }
-        return sharedComponents?.let { components -> createAdditionalPipeline(key, components) }
+        return sharedComponentsByIdentity[key.componentIdentity]
+            ?.let { components -> createAdditionalPipeline(key, components) }
             ?: createFirstPipeline(key)
     }
 
@@ -384,17 +423,21 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
             }
         }
         if (live.isEmpty()) {
-            sharedComponents?.let { components ->
-                if (components.closeAfterPipelines() == 0) sharedComponents = null
+            sharedComponentsByIdentity.keys.toList().asReversed().forEach { identity ->
+                val components = sharedComponentsByIdentity.getValue(identity)
+                if (components.closeAfterPipelines() == 0) sharedComponentsByIdentity.remove(identity)
             }
         }
-        pendingSetupComponents?.let { pending ->
-            if (pending.closeAfterPipelines() == 0) pendingSetupComponents = null
+        pendingSetupComponentsByIdentity.keys.toList().asReversed().forEach { identity ->
+            val pending = pendingSetupComponentsByIdentity.getValue(identity)
+            if (pending.closeAfterPipelines() == 0) pendingSetupComponentsByIdentity.remove(identity)
         }
 
         val pendingHandles = live.size +
-            (sharedComponents?.pendingHandleCount ?: 0) +
-            (pendingSetupComponents?.pendingHandleCount ?: 0)
+            sharedComponentsByIdentity.values.sumOf(GPUWgpu4kCorePrimitiveSharedComponentJournal::pendingHandleCount) +
+            pendingSetupComponentsByIdentity.values.sumOf(
+                GPUWgpu4kCorePrimitiveSharedComponentJournal::pendingHandleCount,
+            )
         if (pendingHandles != 0) {
             error("CorePrimitive session cache retained $pendingHandles native handle(s)")
         }
@@ -407,16 +450,22 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         val components = GPUWgpu4kCorePrimitiveSharedComponentJournal()
         var resource = GPUWgpu4kCorePrimitiveSessionCacheNativeResource.ShaderModule
         return try {
-            val shaderPlan = when (val shader = buildCorePrimitiveNativeShader()) {
+            val shaderPlan = when (
+                val shader = if (key.componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY) {
+                    buildCorePrimitiveAnalyticClipNativeShader()
+                } else {
+                    buildCorePrimitiveNativeShader()
+                }
+            ) {
                 is GPUCorePrimitiveNativeShaderResult.Ready -> shader.plan
                 is GPUCorePrimitiveNativeShaderResult.Rejected -> error(
                     "CorePrimitive parser-backed WGSL validation failed: ${shader.reason}: ${shader.message}",
                 )
             }
             resource = GPUWgpu4kCorePrimitiveSessionCacheNativeResource.BindGroupLayout
-            components.bindGroupLayout = nativeFactory.createBindGroupLayout()
+            components.bindGroupLayout = nativeFactory.createBindGroupLayout(key.componentIdentity)
             resource = GPUWgpu4kCorePrimitiveSessionCacheNativeResource.ShaderModule
-            components.shader = nativeFactory.createShaderModule(shaderPlan)
+            components.shader = nativeFactory.createShaderModule(key.componentIdentity, shaderPlan)
             resource = GPUWgpu4kCorePrimitiveSessionCacheNativeResource.PipelineLayout
             components.pipelineLayout = nativeFactory.createPipelineLayout(requireNotNull(components.bindGroupLayout))
             resource = GPUWgpu4kCorePrimitiveSessionCacheNativeResource.RenderPipeline
@@ -425,11 +474,11 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                 requireNotNull(components.shader),
                 requireNotNull(components.pipelineLayout),
             )
-            sharedComponents = components
+            sharedComponentsByIdentity[key.componentIdentity] = components
             install(key, components, pipeline)
         } catch (failure: Throwable) {
             val pending = components.closeAfterPipelines()
-            if (pending != 0) pendingSetupComponents = components
+            if (pending != 0) pendingSetupComponentsByIdentity[key.componentIdentity] = components
             refused(
                 GPUWgpu4kCorePrimitiveSessionCacheRefusal.NativeCreationFailed(
                     resource,

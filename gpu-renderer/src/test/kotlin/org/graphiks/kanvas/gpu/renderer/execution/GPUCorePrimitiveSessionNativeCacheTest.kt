@@ -91,6 +91,38 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     }
 
     @Test
+    fun `analytic programs share one uniform64 component set isolated from legacy uniform32`() {
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        val legacy = cache.acquire(productionKey()).acquiredHandles()
+        val analyticPrograms = listOf(
+            GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectHard,
+            GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectAA,
+            GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectHard,
+            GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectAA,
+        )
+        val analytic = analyticPrograms.map { program ->
+            cache.acquire(analyticProductionKey(program)).acquiredHandles()
+        }
+
+        analytic.forEach { handles ->
+            assertSame(analytic.first().bindGroupLayout, handles.bindGroupLayout)
+            assertSame(analytic.first().shader, handles.shader)
+            assertSame(analytic.first().pipelineLayout, handles.pipelineLayout)
+            assertNotSame(legacy.bindGroupLayout, handles.bindGroupLayout)
+            assertNotSame(legacy.shader, handles.shader)
+            assertNotSame(legacy.pipelineLayout, handles.pipelineLayout)
+        }
+        assertEquals(2, native.creationCount("component.bindGroupLayout"))
+        assertEquals(2, native.creationCount("component.shader"))
+        assertEquals(2, native.creationCount("component.pipelineLayout"))
+        assertEquals(5, native.pipelineCreationCount)
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(5, 0, 0), cache.counters())
+
+        cache.close()
+    }
+
+    @Test
     fun `concrete cache accepts sixteen factory validated pipelines and typed refuses the seventeenth`() {
         val native = SessionNativeProxy(acceptPipelineIdentity = { true })
         val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
@@ -361,6 +393,12 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         ),
     )
 
+    private fun analyticProductionKey(
+        program: GPUWgpu4kCorePrimitivePipelineProgram,
+    ) = productionKey(program).copy(
+        componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY,
+    )
+
     private fun testKey(identity: String) = productionKey().copy(
         pipelineIdentity = productionKey().pipelineIdentity.copy(targetFormat = "test:$identity"),
     )
@@ -406,10 +444,15 @@ class GPUCorePrimitiveSessionNativeCacheTest {
             identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
         ): Boolean = acceptPipelineIdentity(identity)
 
-        override fun createBindGroupLayout(): GPUBindGroupLayout =
+        override fun createBindGroupLayout(
+            componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+        ): GPUBindGroupLayout =
             createdHandle("component.bindGroupLayout", GPUBindGroupLayout::class.java)
 
-        override fun createShaderModule(plan: GPUCorePrimitiveNativeShaderPlan): GPUShaderModule =
+        override fun createShaderModule(
+            componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
+            plan: GPUCorePrimitiveNativeShaderPlan,
+        ): GPUShaderModule =
             createdHandle("component.shader", GPUShaderModule::class.java)
 
         override fun createPipelineLayout(bindGroupLayout: GPUBindGroupLayout): GPUPipelineLayout =

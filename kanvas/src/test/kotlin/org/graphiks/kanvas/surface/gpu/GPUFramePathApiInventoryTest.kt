@@ -1205,6 +1205,85 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `mapper analytic authority stays closed to one intersect rect or rrect at depth one`() {
+        fun executionFor(buildClip: org.graphiks.kanvas.canvas.Canvas.() -> Unit): GPUClipExecutionPlan {
+            val surface = Surface(32, 32)
+            surface.canvas {
+                buildClip()
+                drawRect(Rect.fromLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+            }
+            return requireNotNull(
+                GPUFramePathApiInventory.plan(
+                    surface.snapshotOps(),
+                    target(),
+                    RenderConfig.DEFAULT,
+                    capabilitiesWith(
+                        FILL_RECT_CAPABILITY,
+                        "first_slice.path_fill.stencil_cover",
+                    ),
+                ).visualCommands.single().clipExecutionPlan,
+            )
+        }
+
+        assertIs<GPUClipExecutionPlan.AnalyticCoverage>(executionFor {
+            clipRect(Rect.fromLTRB(2.25f, 3.5f, 24.75f, 27.25f), ClipOp.INTERSECT, antiAlias = true)
+        })
+        assertIs<GPUClipExecutionPlan.AnalyticCoverage>(executionFor {
+            clipRRect(
+                RRect(Rect.fromLTRB(2f, 3f, 25f, 28f), radius = 3f),
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+        })
+        assertIs<GPUClipExecutionPlan.CoverageMask>(executionFor {
+            clipRRect(
+                RRect(Rect.fromLTRB(2f, 2f, 29f, 29f), radius = 3f),
+                ClipOp.INTERSECT,
+                antiAlias = true,
+            )
+            clipRect(Rect.fromLTRB(12f, 10f, 20f, 22f), ClipOp.INTERSECT, antiAlias = false)
+        })
+        assertIs<GPUClipExecutionPlan.CoverageMask>(executionFor {
+            clipRRect(
+                RRect(Rect.fromLTRB(2f, 2f, 29f, 29f), radius = 3f),
+                ClipOp.INTERSECT,
+                antiAlias = true,
+            )
+            clipRect(Rect.fromLTRB(12f, 10f, 20f, 22f), ClipOp.DIFFERENCE, antiAlias = false)
+        })
+        assertIs<GPUClipExecutionPlan.StencilCoverage>(executionFor {
+            clipPath(
+                Path().apply {
+                    addRect(Rect.fromLTRB(3f, 3f, 26f, 27f))
+                    fillType = FillType.INVERSE_WINDING
+                },
+                ClipOp.INTERSECT,
+                antiAlias = false,
+            )
+        })
+    }
+
+    @Test
+    fun `perspective clip capture cannot reach analytic execution authority`() {
+        val surface = Surface(32, 32)
+        surface.canvas {
+            setMatrix(Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f))
+            clipRect(Rect.fromLTRB(2f, 3f, 24f, 27f), ClipOp.INTERSECT, antiAlias = true)
+            resetMatrix()
+            drawRect(Rect.fromLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+        }
+
+        val plan = GPUFramePathApiInventory.plan(
+            surface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+
+        assertTrue(plan.visualCommands.none { it.clipExecutionPlan is GPUClipExecutionPlan.AnalyticCoverage })
+    }
+
+    @Test
     fun `mapper selects one path clip as stencil only when stencil capability exists`() {
         val surface = Surface(32, 32)
         surface.canvas {

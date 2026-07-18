@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskSampling
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
@@ -37,6 +38,18 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     enum class ColorFormat { Rgba8Unorm }
     enum class DepthStencilFormat { Depth24PlusStencil8 }
     enum class ClipGeometry { Rect, RRect, Path }
+    enum class UniformLayout(val stableIdentity: String) {
+        DynamicUniform32V2("dynamic-uniform32-v2"),
+        AnalyticClipUniform64V1("dynamic-uniform64-analytic-clip-v1"),
+    }
+
+    /** Derived executable ABI axis. It deliberately leaves the legacy constructor and hashes intact. */
+    val uniformLayout: UniformLayout
+        get() = if (role == Role.Shading && clip is Clip.Analytic) {
+            UniformLayout.AnalyticClipUniform64V1
+        } else {
+            UniformLayout.DynamicUniform32V2
+        }
 
     data class StencilFace(
         val compare: GPUClipStencilCompare,
@@ -153,7 +166,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 // Compatibility ABI: direct/analytic shading descriptors did not change in B3.2.
                 append("role=shading")
                 append("|shader=").append(shader.name)
-                append("|layout=dynamic-uniform32-v2")
+                append("|layout=").append(uniformLayout.stableIdentity)
                 append("|topology=").append(topology.name)
                 append("|frontFace=ccw|cull=none|target=rgba8unorm")
                 append("|samples=").append(sampleCount)
@@ -383,7 +396,13 @@ private fun GPUClipExecutionPlan.corePrimitiveStructuralClip():
                 is GPUClipExecutionGeometry.Rect ->
                     GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect
                 is GPUClipExecutionGeometry.RRect ->
-                    GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect
+                    if (geometry.radii.chunked(2).all { pair -> pair == geometry.radii.take(2) } &&
+                        geometry.radii.take(2).any { it == 0f }
+                    ) {
+                        GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect
+                    } else {
+                        GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect
+                    }
                 is GPUClipExecutionGeometry.Path ->
                     GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Path
             },
@@ -460,9 +479,76 @@ internal class GPUCorePrimitiveUniformSlabSeal(
     fun packedBytesSnapshot(): ByteArray = packedBytesSnapshot.copyOf()
 }
 
+/** Immutable per-packet authority for the separate analytic-clip uniform64 slab. */
+internal class GPUCorePrimitiveAnalyticClipUniformSeal(
+    val plan: GPUUniformSlabPlan,
+    val slotIndex: Int,
+    val commandId: Int,
+    val packetId: GPUDrawPacketID,
+    val clipCanonicalIdentity: String,
+    val clipType: GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry,
+    clipBounds: List<Float>,
+    clipRadii: List<Float>,
+    val antiAlias: Boolean,
+    val conservativeScissor: GPUPixelBounds,
+    val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+    val renderPipelineKey: GPURenderPipelineKey,
+    val bindingLayoutHash: String,
+    val resourceGeneration: Long,
+    payloadBytes: ByteArray,
+) {
+    private val clipBoundsSnapshot = immutableList(clipBounds)
+    private val clipRadiiSnapshot = immutableList(clipRadii)
+    private val payloadBytesSnapshot = payloadBytes.copyOf()
+    private val slot = plan.slots.getOrNull(slotIndex)
+        ?: error("Analytic clip uniform seal slot index is outside its slab plan")
+
+    val clipBounds: List<Float>
+        get() = clipBoundsSnapshot
+    val clipRadii: List<Float>
+        get() = clipRadiiSnapshot
+    val payloadBytes: Long
+        get() = slot.payloadBytes
+    val alignedOffset: Long
+        get() = slot.alignedOffset
+    val alignmentBytes: Long
+        get() = plan.alignmentBytes
+    val deviceGeneration: Long
+        get() = plan.deviceGeneration
+
+    init {
+        require(commandId >= 0) { "Analytic clip uniform seal command id must be non-negative" }
+        require(clipCanonicalIdentity.isNotBlank()) { "Analytic clip canonical identity must not be blank" }
+        require(clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect ||
+            clipType == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect
+        ) { "Analytic clip uniform seal accepts only rect or rrect" }
+        require(clipBoundsSnapshot.size == 4 && clipBoundsSnapshot.all(Float::isFinite)) {
+            "Analytic clip bounds require four finite scalars"
+        }
+        require(clipRadiiSnapshot.size == 8 && clipRadiiSnapshot.all { it.isFinite() && it >= 0f }) {
+            "Analytic clip radii require four finite non-negative pairs"
+        }
+        require(!conservativeScissor.isEmpty) { "Analytic clip conservative scissor must not be empty" }
+        require(structuralPipelineKey.uniformLayout ==
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1
+        ) { "Analytic clip uniform seal requires the uniform64 structural ABI" }
+        require(bindingLayoutHash.isNotBlank()) { "Analytic clip binding layout hash must not be blank" }
+        require(resourceGeneration >= 0L) { "Analytic clip resource generation must be non-negative" }
+        require(slot.payloadBytes == 64L && payloadBytesSnapshot.size == 64) {
+            "Analytic clip uniform seal requires exactly 64 payload bytes"
+        }
+    }
+
+    fun payloadBytesSnapshot(): ByteArray = payloadBytesSnapshot.copyOf()
+
+    internal fun hasExactPayload(expected: ByteArray): Boolean =
+        expected.size == 64 && payloadBytesSnapshot.contentEquals(expected)
+}
+
 /** One-shot authority attached by the prepared-frame builder before the packet escapes. */
 internal data class GPUCorePrimitivePreparedPacketAuthority(
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
     val renderPipelineKey: GPURenderPipelineKey,
     val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
+    val analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = null,
 )
