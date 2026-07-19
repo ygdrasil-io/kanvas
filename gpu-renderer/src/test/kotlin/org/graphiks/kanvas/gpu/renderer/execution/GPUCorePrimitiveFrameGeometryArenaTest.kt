@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
+
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -125,7 +127,6 @@ class GPUCorePrimitiveFrameGeometryArenaTest {
             "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUCorePrimitiveNativeRoute.kt",
         ).readText()
         val hotPath = source.substringAfter("internal fun packCorePrimitiveFrameGeometry(")
-            .substringBefore("internal fun validateCorePrimitiveDirectNativeRoute(")
 
         assertEquals(1, Regex("""\bFloatArray\(""").findAll(hotPath).count())
         assertEquals(1, Regex("""\bIntArray\(""").findAll(hotPath).count())

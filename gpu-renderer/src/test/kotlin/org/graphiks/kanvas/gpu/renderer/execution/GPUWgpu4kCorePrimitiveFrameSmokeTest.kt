@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
+
 import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -8,7 +10,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUCorePrimitiveRRectGeometryAuthorityIssue
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -21,11 +25,18 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
@@ -36,6 +47,8 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameTaskListBuilder
@@ -143,12 +156,9 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
                 packet.semanticPayload,
             )
             assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
-                validateCorePrimitiveDirectNativeRoute(
+                org.graphiks.kanvas.gpu.renderer.recording.classifyCorePrimitiveDirectNativeRoute(
                     semantic,
-                    org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDirectClipAuthority(
-                        requireNotNull(packet.clipExecutionPlan),
-                        targetBounds,
-                    ),
+                    requireNotNull(packet.clipExecutionPlan),
                     packet.blendPlan,
                     preparedRender.samplePlan,
                     "rgba8unorm",
@@ -182,6 +192,202 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         } finally {
             session.close()
             GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
+    fun `native analytic shape uniform80 proves rect aa asymmetric rrect pixels batching and reuse`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(
+            backend != null,
+            "wgpu4k native adapter unavailable; skipping analytic-shape uniform80 pixel proof",
+        )
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        try {
+            val firstFrame = buildAnalyticShapeSmokeFrame(
+                capabilities = capabilities,
+                generation = generation,
+                frameValue = 12_048L,
+                scenarioId = "analytic-shape-uniform80-first",
+                commandIdBase = 800,
+            )
+            val preparedRender = firstFrame.taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+            val authorities = preparedRender.drawPackets.map { packet ->
+                requireNotNull(packet.corePrimitivePreparedAuthority)
+            }
+            val structuralKey = authorities.first().structuralPipelineKey
+            val seals = authorities.map { authority ->
+                requireNotNull(authority.analyticShapeUniformSeal)
+            }
+
+            assertEquals(3, preparedRender.drawPackets.size)
+            assertEquals(1, authorities.map { it.structuralPipelineKey }.distinct().size)
+            assertEquals(
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape,
+                structuralKey.shader,
+            )
+            assertEquals(
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
+                structuralKey.uniformLayout,
+            )
+            val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(structuralKey),
+            )
+            assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver, mapped.identity.program)
+            assertTrue(seals.all { seal -> seal.plan === seals.first().plan })
+            assertEquals(listOf(0L, 256L, 512L), seals.map { seal -> seal.alignedOffset })
+            assertTrue(seals.all { seal -> seal.payloadBytes == 80L })
+            assertEquals(
+                listOf(
+                    GPUCorePrimitiveSourceFamily.Rect,
+                    GPUCorePrimitiveSourceFamily.RRect,
+                    GPUCorePrimitiveSourceFamily.RRect,
+                ),
+                preparedRender.drawPackets.map { packet ->
+                    assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload).sourceFamily
+                },
+            )
+            assertEquals(
+                listOf(
+                    GPUCorePrimitiveCoverageMode.ScalarAA,
+                    GPUCorePrimitiveCoverageMode.FullOrScissor,
+                    GPUCorePrimitiveCoverageMode.ScalarAA,
+                ),
+                preparedRender.drawPackets.map { packet ->
+                    assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload).coverageMode
+                },
+            )
+            assertTrue(preparedRender.drawPackets.all { packet ->
+                packet.clipExecutionPlan == GPUClipExecutionPlan.NoClip
+            })
+            preparedRender.drawPackets.forEach { packet ->
+                val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload)
+                val route = assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+                    org.graphiks.kanvas.gpu.renderer.recording.classifyCorePrimitiveDirectNativeRoute(
+                        semantic,
+                        requireNotNull(packet.clipExecutionPlan),
+                        packet.blendPlan,
+                        preparedRender.samplePlan,
+                        "rgba8unorm",
+                    ),
+                )
+                assertEquals(GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape, route.lane)
+            }
+
+            val framePlan = GPUFramePlanner.plan(firstFrame.taskList)
+            assertEquals(1, framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().size)
+            assertEquals(1, framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().size)
+            assertTrue(
+                framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                    .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+                    .none { request ->
+                        request.role in setOf(
+                            GPUFrameResourceRole.ClipMask,
+                            GPUFrameResourceRole.ClipDepthStencil,
+                            GPUFrameResourceRole.PathDepthStencil,
+                        )
+                    },
+                "AnalyticShapeSrcOver must not allocate a fallback clip, path, or mask attachment",
+            )
+
+            val nativeBefore = session.nativeCounters()
+            val renderBefore = session.renderCounters()
+            val firstTerminal = session.renderFrame(
+                firstFrame.taskList,
+                GPUSceneFrameOutputRequest.ReadbackRgba(firstFrame.readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                firstTerminal.outcome,
+                "${firstTerminal.diagnostic?.code?.value}: ${firstTerminal.diagnostic?.message}",
+            )
+            assertEquals(null, firstTerminal.diagnostic)
+            val pixels = assertIs<GPUSceneFrameOutput.ReadbackRgba>(firstTerminal.output).bytes
+
+            assertPixel(pixels, 32, 4, 6, 255, 0, 0, 255)
+            // Pixel center is 0.25 px inside the edge: coverage = 0.25 + 0.5 = 0.75.
+            assertPixelChannelIn(pixels, 32, 1, 6, channel = 0, expected = 190..192)
+            assertPixel(pixels, 32, 0, 6, 0, 0, 0, 0)
+
+            assertPixel(pixels, 32, 16, 7, 0, 255, 0, 255)
+            assertPixel(pixels, 32, 16, 2, 0, 255, 0, 255)
+            assertPixel(pixels, 32, 11, 2, 0, 0, 0, 0)
+            assertPixel(pixels, 32, 10, 7, 0, 0, 0, 0)
+
+            assertPixel(pixels, 32, 19, 23, 0, 0, 255, 255)
+            assertPixelChannelIn(pixels, 32, 19, 17, channel = 2, expected = 190..192)
+            assertPixel(pixels, 32, 19, 16, 0, 0, 0, 0)
+
+            val nativeAfterFirst = session.nativeCounters()
+            val renderAfterFirst = session.renderCounters()
+            assertEquals(1L, nativeAfterFirst.encoders - nativeBefore.encoders)
+            assertEquals(1L, nativeAfterFirst.commandBuffers - nativeBefore.commandBuffers)
+            assertEquals(1L, nativeAfterFirst.submits - nativeBefore.submits)
+            assertEquals(1L, nativeAfterFirst.readbackCopies - nativeBefore.readbackCopies)
+            assertEquals(
+                1L,
+                nativeAfterFirst.corePrimitiveInvariantCreations -
+                    nativeBefore.corePrimitiveInvariantCreations,
+            )
+            assertEquals(
+                0L,
+                nativeAfterFirst.corePrimitiveInvariantInvalidations -
+                    nativeBefore.corePrimitiveInvariantInvalidations,
+            )
+            assertEquals(1L, renderAfterFirst.renderPasses - renderBefore.renderPasses)
+            assertEquals(3L, renderAfterFirst.drawIndexed - renderBefore.drawIndexed)
+
+            val secondFrame = buildAnalyticShapeSmokeFrame(
+                capabilities = capabilities,
+                generation = generation,
+                frameValue = 12_049L,
+                scenarioId = "analytic-shape-uniform80-reuse",
+                commandIdBase = 810,
+            )
+            val secondTerminal = session.renderFrame(
+                secondFrame.taskList,
+                GPUSceneFrameOutputRequest.ReadbackRgba(secondFrame.readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                secondTerminal.outcome,
+                "${secondTerminal.diagnostic?.code?.value}: ${secondTerminal.diagnostic?.message}",
+            )
+            assertEquals(null, secondTerminal.diagnostic)
+            val secondPixels = assertIs<GPUSceneFrameOutput.ReadbackRgba>(secondTerminal.output).bytes
+            assertPixel(secondPixels, 32, 4, 6, 255, 0, 0, 255)
+            val nativeAfterSecond = session.nativeCounters()
+            val renderAfterSecond = session.renderCounters()
+            assertEquals(1L, nativeAfterSecond.encoders - nativeAfterFirst.encoders)
+            assertEquals(1L, nativeAfterSecond.commandBuffers - nativeAfterFirst.commandBuffers)
+            assertEquals(1L, nativeAfterSecond.submits - nativeAfterFirst.submits)
+            assertEquals(1L, nativeAfterSecond.readbackCopies - nativeAfterFirst.readbackCopies)
+            assertEquals(
+                0L,
+                nativeAfterSecond.corePrimitiveInvariantCreations -
+                    nativeAfterFirst.corePrimitiveInvariantCreations,
+            )
+            assertEquals(
+                1L,
+                nativeAfterSecond.corePrimitiveInvariantReuses -
+                    nativeAfterFirst.corePrimitiveInvariantReuses,
+            )
+            assertEquals(
+                0L,
+                nativeAfterSecond.corePrimitiveInvariantInvalidations -
+                    nativeAfterFirst.corePrimitiveInvariantInvalidations,
+            )
+            assertEquals(1L, renderAfterSecond.renderPasses - renderAfterFirst.renderPasses)
+            assertEquals(3L, renderAfterSecond.drawIndexed - renderAfterFirst.drawIndexed)
+        } finally {
+            try {
+                session.close()
+            } finally {
+                GPUBackendRuntimeNativeFactory.dispose()
+            }
         }
     }
 
@@ -649,6 +855,94 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         )
     }
 
+    private fun buildAnalyticShapeSmokeFrame(
+        capabilities: org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities,
+        generation: GPUDeviceGenerationID,
+        frameValue: Long,
+        scenarioId: String,
+        commandIdBase: Int,
+    ): AnalyticShapeSmokeFrame {
+        val frameId = GPUFrameID(frameValue)
+        val readbackId = GPUReadbackRequestID("readback.core-primitive.$scenarioId")
+        val targetBounds = GPUPixelBounds(0, 0, 32, 32)
+        val target = GPUTargetFacts(32, 32, "rgba8unorm")
+        val wideOpen = GPUClipFacts(
+            kind = GPUClipKind.WideOpen,
+            bounds = GPUBounds(0f, 0f, 32f, 32f),
+            coveragePlan = GPUClipCoveragePlan.NoClip,
+        )
+        val rectAa = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(commandIdBase),
+            rect = GPURect(1.25f, 2.25f, 8.75f, 10.75f),
+            target = target,
+            material = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f),
+            clip = wideOpen,
+            paintOrder = 0,
+            source = GPUCommandSource("unit-test", "fillRect", GPUFrameProvenance.GmContent),
+        ).copy(antiAlias = true)
+        val rrectHard = GPUFillRRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(commandIdBase + 1),
+            rrect = GPURRect(
+                rect = GPURect(11f, 2f, 21f, 12f),
+                topLeft = GPURRectCornerRadii(3f, 2f),
+                topRight = GPURRectCornerRadii(1f, 3f),
+                bottomRight = GPURRectCornerRadii(4f, 1f),
+                bottomLeft = GPURRectCornerRadii(2f, 4f),
+            ),
+            target = target,
+            material = GPUMaterialDescriptor.SolidColor(0f, 1f, 0f, 1f),
+            clip = wideOpen,
+            paintOrder = 1,
+            source = GPUCommandSource("unit-test", "fillRRect", GPUFrameProvenance.GmContent),
+        ).copy(antiAlias = false)
+        val rrectAa = GPUFillRRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(commandIdBase + 2),
+            rrect = GPURRect(
+                rect = GPURect(11.25f, 17.25f, 27.75f, 29.75f),
+                topLeft = GPURRectCornerRadii(3f, 2f),
+                topRight = GPURRectCornerRadii(2f, 4f),
+                bottomRight = GPURRectCornerRadii(4f, 2f),
+                bottomLeft = GPURRectCornerRadii(1f, 3f),
+            ),
+            target = target,
+            material = GPUMaterialDescriptor.SolidColor(0f, 0f, 1f, 1f),
+            clip = wideOpen,
+            paintOrder = 2,
+            source = GPUCommandSource("unit-test", "fillRRect", GPUFrameProvenance.GmContent),
+        ).copy(antiAlias = true)
+        val commands: List<NormalizedDrawCommand> = listOf(rectAa, rrectHard, rrectAa)
+        val base = GPURecorder(
+            GPURecordingID("recording.core.smoke.$scenarioId"),
+            frameId,
+            capabilities,
+            generation,
+        ).apply {
+            commands.forEach(::record)
+        }.close().taskList.withClipPlans(commands.associate { command ->
+            command.commandId.value to GPUClipExecutionPlan.NoClip
+        })
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+        assertEquals(3, packets.size, "Analytic-shape smoke base recording refused: ${base.diagnostics}")
+        val commandsById = commands.associateBy { command -> command.commandId.value }
+        val semantics = packets.associate { packet ->
+            val command = requireNotNull(commandsById[packet.commandIdValue])
+            packet.commandIdValue to command.analyticShapeCoreSemantic(packet, targetBounds)
+        }
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                GPUCorePrimitivePreparedFrameRequest(
+                    baseTaskList = base,
+                    capabilities = capabilities,
+                    target = GPUFrameTargetRef("target.core.smoke"),
+                    targetBounds = targetBounds,
+                    semanticsByCommandId = semantics,
+                    readbackRequestId = readbackId,
+                ),
+            ),
+        ).taskList
+        return AnalyticShapeSmokeFrame(taskList, readbackId)
+    }
+
     private fun renderScenario(
         session: GPUPreparedSceneFrameSession,
         capabilities: org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities,
@@ -894,6 +1188,11 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         val color: SmokeColor,
     )
 
+    private data class AnalyticShapeSmokeFrame(
+        val taskList: GPUTaskList,
+        val readbackId: GPUReadbackRequestID,
+    )
+
     private data class SmokeColor(
         val red: Int,
         val green: Int,
@@ -1020,6 +1319,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         packet: GPUDrawPacket,
         targetBounds: GPUPixelBounds,
         scissorBounds: GPUPixelBounds,
+        coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
     ) = GPUCorePrimitivePayloadGatherer().gatherSemantic(
         GPUCorePrimitivePayloadInput(
             commandIdValue = commandId.value,
@@ -1033,7 +1333,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
             clipCoveragePlan = GPUClipCoveragePlan.NoClip,
             blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
             frameProvenance = GPUFrameProvenance.GmContent,
-            coverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
+            coverageMode = coverageMode,
             analysisRecordId = "analysis.fill_rect.${commandId.value}",
             analysisCommandFamily = "FillRect",
             rectRouteAuthority = if (transform.skewX == 0f && transform.skewY == 0f) {
@@ -1044,6 +1344,54 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
             rectGeometryAuthority = corePrimitiveRectGeometryAuthority(rect, transform),
         ),
     )
+
+    private fun NormalizedDrawCommand.analyticShapeCoreSemantic(
+        packet: GPUDrawPacket,
+        targetBounds: GPUPixelBounds,
+    ) = when (this) {
+        is NormalizedDrawCommand.FillRect -> coreSemantic(
+            packet = packet,
+            targetBounds = targetBounds,
+            scissorBounds = targetBounds,
+            coverageMode = if (antiAlias) {
+                GPUCorePrimitiveCoverageMode.ScalarAA
+            } else {
+                GPUCorePrimitiveCoverageMode.FullOrScissor
+            },
+        )
+        is NormalizedDrawCommand.FillRRect -> {
+            val normalized = assertIs<GPURRectNormalizationResult.Accepted>(
+                GPURRectNormalizer.normalize(rrect),
+            )
+            val authority = assertIs<GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued>(
+                corePrimitiveRRectGeometryAuthority(rrect, normalized, transform),
+            ).authority
+            GPUCorePrimitivePayloadGatherer().gatherSemantic(
+                GPUCorePrimitivePayloadInput(
+                    commandIdValue = commandId.value,
+                    sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
+                    geometry = authority.sealedDeviceGeometryInput(),
+                    premultipliedRgba = (material as GPUMaterialDescriptor.SolidColor).let { color ->
+                        listOf(color.r * color.a, color.g * color.a, color.b * color.a, color.a)
+                    },
+                    targetBounds = targetBounds,
+                    scissorBounds = targetBounds,
+                    clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+                    blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
+                    frameProvenance = GPUFrameProvenance.GmContent,
+                    coverageMode = if (antiAlias) {
+                        GPUCorePrimitiveCoverageMode.ScalarAA
+                    } else {
+                        GPUCorePrimitiveCoverageMode.FullOrScissor
+                    },
+                    analysisRecordId = "analysis.fill_rrect.${commandId.value}",
+                    analysisCommandFamily = "FillRRect",
+                    rrectGeometryAuthority = authority,
+                ),
+            )
+        }
+        else -> error("Analytic-shape smoke accepts only FillRect and FillRRect commands")
+    }
 
     private fun org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand.FillRect.deviceGeometry(
         targetBounds: GPUPixelBounds,

@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
+
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -18,9 +20,13 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveDirectClipAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalSolidRectSrcOver
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
@@ -53,6 +59,128 @@ class GPUCorePrimitiveNativeRouteTest {
             accepted.vertexSnapshot(),
         )
         assertContentEquals(intArrayOf(0, 2, 1, 0, 3, 2), accepted.indexSnapshot())
+        assertEquals(GPUCorePrimitiveDirectNativeRoute.Lane.DirectGeometry, accepted.lane)
+        assertEquals(TARGET, accepted.renderScissor)
+    }
+
+    @Test
+    fun `scalar rect uses one pixel analytic quad and exact clipped scissor`() {
+        val clip = GPUPixelBounds(2, 4, 12, 12)
+        val accepted = assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+            validateCorePrimitiveDirectNativeRoute(
+                semantic(
+                    GPUCorePrimitiveGeometryInput.Rect(2.25f, 3.5f, 11.75f, 13.25f),
+                    coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                    scissor = clip,
+                ),
+                GPUClipExecutionPlan.ScissorOnly(clip),
+                srcOver(),
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ),
+        )
+
+        assertEquals(GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape, accepted.lane)
+        assertContentEquals(
+            floatArrayOf(1.25f, 2.5f, 12.75f, 2.5f, 12.75f, 14.25f, 1.25f, 14.25f),
+            accepted.vertexSnapshot(),
+        )
+        assertEquals(clip, accepted.renderScissor)
+    }
+
+    @Test
+    fun `hard rrect uses exact bounds while scalar rrect uses one pixel outset`() {
+        val geometry = GPUCorePrimitiveGeometryInput.RRect(
+            2.25f,
+            3.5f,
+            11.75f,
+            13.25f,
+            listOf(1f, 2f, 2f, 1f, 3f, 2f, 1f, 1f),
+        )
+        val hard = assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+            validateCorePrimitiveDirectNativeRoute(
+                semantic(geometry, GPUCorePrimitiveSourceFamily.RRect),
+                GPUClipExecutionPlan.NoClip,
+                srcOver(),
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ),
+        )
+        val scalar = assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+            validateCorePrimitiveDirectNativeRoute(
+                semantic(
+                    geometry,
+                    GPUCorePrimitiveSourceFamily.RRect,
+                    coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                ),
+                GPUClipExecutionPlan.NoClip,
+                srcOver(),
+                GPUSamplePlan.SingleSampleFrame,
+                "rgba8unorm",
+            ),
+        )
+
+        assertEquals(GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape, hard.lane)
+        assertEquals(GPUCorePrimitiveDirectNativeRoute.Lane.AnalyticShape, scalar.lane)
+        assertContentEquals(
+            floatArrayOf(2.25f, 3.5f, 11.75f, 3.5f, 11.75f, 13.25f, 2.25f, 13.25f),
+            hard.vertexSnapshot(),
+        )
+        assertContentEquals(
+            floatArrayOf(1.25f, 2.5f, 12.75f, 2.5f, 12.75f, 14.25f, 1.25f, 14.25f),
+            scalar.vertexSnapshot(),
+        )
+        assertEquals(GPUPixelBounds(2, 3, 12, 14), hard.renderScissor)
+        assertEquals(GPUPixelBounds(1, 2, 13, 15), scalar.renderScissor)
+    }
+
+    @Test
+    fun `analytic shape refuses an empty geometry clip intersection`() {
+        val clip = GPUPixelBounds(14, 14, 16, 16)
+        val result = validateCorePrimitiveDirectNativeRoute(
+            semantic(
+                GPUCorePrimitiveGeometryInput.Rect(2f, 2f, 8f, 8f),
+                coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                scissor = clip,
+            ),
+            GPUClipExecutionPlan.ScissorOnly(clip),
+            srcOver(),
+            GPUSamplePlan.SingleSampleFrame,
+            "rgba8unorm",
+        )
+
+        assertEquals(
+            "unsupported.native-core-primitive.analytic-shape.empty-scissor",
+            assertIs<GPUCorePrimitiveDirectNativeRoute.Refused>(result).code,
+        )
+    }
+
+    @Test
+    fun `rect AA and both rrect coverages share the sole analytic structural lane`() {
+        val rectAa = semantic(
+            GPUCorePrimitiveGeometryInput.Rect(2f, 3f, 11f, 13f),
+            coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+        )
+        val rrectGeometry = GPUCorePrimitiveGeometryInput.RRect(2f, 3f, 11f, 13f, List(8) { 1f })
+        val rrectHard = semantic(rrectGeometry, GPUCorePrimitiveSourceFamily.RRect)
+        val rrectAa = semantic(
+            rrectGeometry,
+            GPUCorePrimitiveSourceFamily.RRect,
+            coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+        )
+        val keys = listOf(rectAa, rrectHard, rrectAa).map { semantic ->
+            corePrimitiveRenderPipelineStructuralKey(semantic, GPUClipExecutionPlan.NoClip, srcOver())
+        }
+
+        keys.forEach { key ->
+            assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape, key.shader)
+            assertEquals(GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList, key.topology)
+            assertEquals(
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
+                key.uniformLayout,
+            )
+        }
+        assertEquals(1, keys.distinct().size)
     }
 
     @Test
@@ -115,27 +243,6 @@ class GPUCorePrimitiveNativeRouteTest {
     @Test
     fun `unsupported geometry coverage clip blend sample and format refuse before native work`() {
         val cases = listOf(
-            validateCorePrimitiveDirectNativeRoute(
-                semantic(
-                    GPUCorePrimitiveGeometryInput.RRect(1f, 1f, 8f, 8f, List(8) { 1f }),
-                    sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
-                ),
-                GPUClipExecutionPlan.NoClip,
-                srcOver(),
-                GPUSamplePlan.SingleSampleFrame,
-                "rgba8unorm",
-            ) to "unsupported.native-core-primitive.geometry",
-            validateCorePrimitiveDirectNativeRoute(
-                semantic(
-                    GPUCorePrimitiveGeometryInput.RRect(1f, 1f, 8f, 8f, List(8) { 1f }),
-                    sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
-                    coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
-                ),
-                GPUClipExecutionPlan.NoClip,
-                srcOver(),
-                GPUSamplePlan.SingleSampleFrame,
-                "rgba8unorm",
-            ) to "unsupported.native-core-primitive.coverage",
             validateCorePrimitiveDirectNativeRoute(
                 semantic(GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f), blend = src()),
                 GPUClipExecutionPlan.NoClip,
@@ -284,17 +391,19 @@ class GPUCorePrimitiveNativeRouteTest {
         blendPlan: GPUBlendPlan?,
         samplePlan: GPUSamplePlan,
         targetFormat: String,
-    ): GPUCorePrimitiveDirectNativeRoute =
-        org.graphiks.kanvas.gpu.renderer.execution.validateCorePrimitiveDirectNativeRoute(
-            semantic,
-            org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDirectClipAuthority(
-                clipExecutionPlan,
-                semantic.targetBounds,
-            ),
-            blendPlan,
-            samplePlan,
-            targetFormat,
+    ): GPUCorePrimitiveDirectNativeRoute {
+        val clipAuthority = org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDirectClipAuthority(
+            clipExecutionPlan,
+            semantic.targetBounds,
         )
+        return org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveDirectNativeRoute(
+            semantic = semantic,
+            exactClipScissor = (clipAuthority as? GPUCorePrimitiveDirectClipAuthority.Accepted)?.scissor,
+            canonicalPremultipliedSrcOver = blendPlan.isCanonicalSolidRectSrcOver(),
+            samplePlan = samplePlan,
+            targetFormat = targetFormat,
+        )
+    }
 
     private fun srcOver(): GPUBlendPlan.FixedFunctionBlend = fixed(GPUBlendMode.SRC_OVER)
 

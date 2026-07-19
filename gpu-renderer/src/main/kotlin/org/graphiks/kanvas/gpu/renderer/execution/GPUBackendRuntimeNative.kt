@@ -1037,6 +1037,13 @@ private class WgpuBackendSession(
                     evidenceLabel = "core-primitive-direct-native",
                 ),
                 GPUCapabilityFact(
+                    name = "first_slice.fill_rrect.native",
+                    source = "runtime",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "core-primitive-direct-native",
+                ),
+                GPUCapabilityFact(
                     name = "first_slice.scissor.native",
                     source = "runtime",
                     value = "supported",

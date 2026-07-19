@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
+
 import java.lang.reflect.Modifier
 import kotlin.test.Test
 import kotlin.test.assertContentEquals

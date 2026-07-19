@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
+
 import io.ygdrasil.webgpu.ArrayBuffer
 import io.ygdrasil.webgpu.BindGroupDescriptor
 import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
@@ -83,7 +85,6 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameTaskListBuilder
-import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDirectClipAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
@@ -111,23 +112,27 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingLease
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
-    private enum class RouteShape { Direct, PathOnly, Mixed, TwoPathPairs, ClipStencil, CoverageMask }
+    private enum class RouteShape {
+        Direct,
+        AnalyticShape,
+        PathOnly,
+        Mixed,
+        TwoPathPairs,
+        ClipStencil,
+        CoverageMask,
+    }
 
     @Test
-    fun `analytic shape closed route refuses at real preflight boundary before every side effect`() {
-        val fixture = fixture()
+    fun `analytic shape missing uniform80 seal refuses at real preflight boundary before every side effect`() {
+        val fixture = fixture(routeShape = RouteShape.AnalyticShape, useRealPreflight = true)
         val originalPackets = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .single().drawPackets
         val plan = originalPackets.fold(fixture.plan) { currentPlan, originalPacket ->
             val originalAuthority = requireNotNull(originalPacket.corePrimitivePreparedAuthority)
-            val analyticKey = originalAuthority.structuralPipelineKey.copy(
-                shader = org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
-                    .Shader.AnalyticShape,
-            )
             currentPlan.replacingPacket(
                 originalPacket,
                 originalPacket.withPreparedAuthority(
-                    originalAuthority.copy(structuralPipelineKey = analyticKey),
+                    originalAuthority.copy(analyticShapeUniformSeal = null),
                 ),
             )
         }
@@ -141,25 +146,25 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 request: GPUQueueCompletionTicketRequest,
             ): GPUQueueCompletionTicketReservation {
                 ticketCalls += 1
-                error("Closed analytic-shape preflight must not reserve a completion ticket")
+                error("Invalid analytic-shape preflight must not reserve a completion ticket")
             }
 
             override fun abandonReservedTicket(
                 ticket: GPUQueueCompletionTicket,
             ): GPUQueueCompletionTicketAbandonResult {
                 ticketCalls += 1
-                error("Closed analytic-shape preflight must not abandon a completion ticket")
+                error("Invalid analytic-shape preflight must not abandon a completion ticket")
             }
         }
         val surface = object : GPUSurfaceOutputProvider {
             override fun acquire(request: GPUSurfaceAcquisitionRequest): GPUSurfaceAcquisitionResult {
                 surfaceCalls += 1
-                error("Closed analytic-shape preflight must not acquire a surface")
+                error("Invalid analytic-shape preflight must not acquire a surface")
             }
 
             override fun release(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult {
                 surfaceCalls += 1
-                error("Closed analytic-shape preflight must not release a surface")
+                error("Invalid analytic-shape preflight must not release a surface")
             }
         }
         val nativeMaterializer = object : GPUPreparedNativeFramePayloadMaterializer {
@@ -170,7 +175,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 generationSeal: GPUPreparedGenerationSeal,
             ): GPUPreparedNativeFramePayloadMaterialization {
                 materializerCalls += 1
-                error("Closed analytic-shape preflight must not materialize native payloads")
+                error("Invalid analytic-shape preflight must not materialize native payloads")
             }
 
             override fun bindLateSurface(
@@ -178,7 +183,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 acquiredSurface: GPUAcquiredSurfaceOutput?,
             ): GPUPreparedNativeFrameLateSurfaceBinding {
                 materializerCalls += 1
-                error("Closed analytic-shape preflight must not bind a late surface")
+                error("Invalid analytic-shape preflight must not bind a late surface")
             }
         }
 
@@ -197,8 +202,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         ).preflight(plan)
 
         val refused = assertIs<GPUFramePreflightResult.Refused>(result)
-        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_CODE, refused.diagnostic.code.value)
-        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_MESSAGE, refused.diagnostic.message)
+        assertEquals(
+            "invalid.preflight.core_primitive_analytic_shape_uniform_seal",
+            refused.diagnostic.code.value,
+        )
         assertEquals(0, ticketCalls)
         assertEquals(0, surfaceCalls)
         assertEquals(0, materializerCalls)
@@ -210,7 +217,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
-    fun `analytic shape closed route refuses at real materializer boundary before cache pool and native`() {
+    fun `analytic shape forged uniform80 pass seal refuses at materializer before cache pool and native`() {
         val fixture = fixture()
         val scope = fixture.encoderPlan.scopes.single()
         val originalRoutes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
@@ -252,8 +259,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         )
 
         val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result)
-        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_CODE, refused.code)
-        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_MESSAGE, refused.message)
+        assertEquals("invalid.native-core-primitive.analytic-shape-uniform-seal", refused.code)
         assertEquals(cacheBefore, fixture.cache.counters())
         assertEquals(poolSlotsBefore, framePoolSlotCount(fixture.cache))
         assertEquals(emptyList(), fixture.native.events)
@@ -1400,6 +1406,31 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         assertFalse(source.contains("SHA-256"))
         assertFalse(source.contains("step !in renderEntries.map(RenderEntry::render)"))
         assertTrue(source.contains("retainedCoverageMaskRenderSteps"))
+        val analyticShapeValidation = source
+            .substringAfter(
+                "if (uniformLayout == " +
+                    "GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1)",
+            )
+            .substringBefore(
+                "if (uniformLayout ==\n            " +
+                    "GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1",
+            )
+        assertFalse(
+            analyticShapeValidation.contains("ByteArray(sealedUniformPlan.totalBytes.toInt())"),
+            "uniform80 materialization must validate the borrowed packed slab in place",
+        )
+        assertFalse(
+            analyticShapeValidation.contains("expectedPackedBytes"),
+            "uniform80 materialization must not reconstruct a second complete slab",
+        )
+        assertFalse(
+            analyticShapeValidation.contains("GPUUniformSlabPayload("),
+            "uniform80 materialization must not create a second payload snapshot per draw",
+        )
+        assertFalse(
+            analyticShapeValidation.contains(".hasExactPayloads("),
+            "uniform80 materialization must validate exact bytes without repeating planner SHA-256 per draw",
+        )
     }
 
     @Test
@@ -1552,6 +1583,130 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         fixture.close()
         assertEquals(1, fixture.native.closeCounts.getOrDefault(vertices[0].buffer.buffer, 0))
         assertEquals(1, fixture.native.closeCounts.getOrDefault(indices[0].buffer.buffer, 0))
+    }
+
+    @Test
+    fun `two analytic shapes upload one exact uniform80 slab with native quads and route scissors`() {
+        val fixture = fixture(routeShape = RouteShape.AnalyticShape, useRealPreflight = true)
+        fixture.native.events.clear()
+
+        val materialized = fixture.materializeCore()
+        val render = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        val commands = render.commands
+        val vertices = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>()
+        val indices = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetIndexBuffer>()
+        val bindGroups = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+        val scissors = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetScissor>()
+        val draws = commands.filterIsInstance<GPUPreparedNativeRenderCommand.DrawIndexed>()
+        val routes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            fixture.encoderPlan.scopes.single().corePrimitiveDirectNativeRouteSeal,
+        )
+        val passSeal = requireNotNull(routes.preparedPassSeal)
+        val seals = passSeal.analyticShapeUniformSeals
+        val expectedUpload = ByteArray(seals.first().plan.totalBytes.toInt()).also { packed ->
+            seals.forEach { seal ->
+                seal.payloadBytesSnapshot().copyInto(packed, seal.alignedOffset.toInt())
+            }
+        }
+
+        assertEquals(2, seals.size)
+        assertEquals(1, commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>().size)
+        assertEquals(
+            listOf("Kanvas.session.corePrimitive.pipeline.AnalyticShapeSrcOver"),
+            fixture.native.renderPipelineDescriptors.map { it.label },
+        )
+        assertEquals(1, vertices.size)
+        assertEquals(64L, vertices.single().size)
+        assertEquals(1, indices.size)
+        assertEquals(48L, indices.single().size)
+        assertEquals(listOf(0, 6), draws.map { it.drawCall.firstIndex })
+        assertEquals(listOf(0, 4), draws.map { it.drawCall.baseVertex })
+        assertEquals(listOf(listOf(0L), listOf(256L)), bindGroups.map { it.dynamicOffsets })
+        assertEquals(1, distinctIdentityCount(bindGroups.map { it.bindGroup.bindGroup }))
+        assertEquals(seals.map { it.renderScissor }, scissors.map {
+            GPUPixelBounds(it.x, it.y, it.x + it.width, it.y + it.height)
+        })
+        assertEquals(3, fixture.native.writeBufferCalls.size)
+        assertContentEquals(
+            ArrayBuffer.of(
+                packCorePrimitiveFrameGeometry(routes.routesByPacketId.values.toList()).vertices,
+            ).toByteArray(),
+            fixture.native.writeBufferCalls[0].snapshot,
+            "analytic shape vertex upload must retain the exact preflight-sealed route geometry",
+        )
+        assertContentEquals(expectedUpload, fixture.native.writeBufferCalls.last().snapshot)
+        val uniformLayout = fixture.native.bindGroupLayoutDescriptors.single().entries.single().buffer
+        assertEquals(80uL, requireNotNull(uniformLayout).minBindingSize)
+        assertEquals(null, render.pass.depthStencilTarget)
+        assertTrue(commands.none { it is GPUPreparedNativeRenderCommand.SetStencilReference })
+        assertTrue(fixture.native.textureDescriptors.none {
+            it.format == GPUTextureFormat.Depth24PlusStencil8
+        })
+
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `typed uniform80 packet seal substitution keeps the generic packet authority diagnostic`() {
+        val fixture = fixture(routeShape = RouteShape.AnalyticShape, useRealPreflight = true)
+        val render = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val first = render.drawPackets.first()
+        val secondSeal = requireNotNull(
+            render.drawPackets.last().corePrimitivePreparedAuthority?.analyticShapeUniformSeal,
+        )
+        val originalAuthority = requireNotNull(first.corePrimitivePreparedAuthority)
+        val substituted = first.withPreparedAuthority(
+            originalAuthority.copy(analyticShapeUniformSeal = secondSeal),
+        )
+        val plan = fixture.plan.replacingPacket(first, substituted)
+        fixture.native.events.clear()
+        fixture.native.writeBufferCalls.clear()
+
+        val result = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target,
+            fixture.cache,
+            fixture.limits,
+        ).materializeReusable(plan, fixture.encoderPlan, fixture.resources, fixture.generationSeal)
+
+        assertEquals(
+            "invalid.native-core-primitive.packet-authority",
+            assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result).code,
+        )
+        assertEquals(emptyList(), fixture.native.events)
+        assertEquals(emptyList(), fixture.native.writeBufferCalls)
+        fixture.close()
+    }
+
+    @Test
+    fun `uniform80 deep padding corruption refuses before every native action`() {
+        val fixture = fixture(routeShape = RouteShape.AnalyticShape, useRealPreflight = true)
+        val routes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            fixture.encoderPlan.scopes.single().corePrimitiveDirectNativeRouteSeal,
+        )
+        val passSeal = requireNotNull(routes.preparedPassSeal)
+        val firstSeal = passSeal.analyticShapeUniformSeals.first()
+        val packed = privateFieldValue<ByteArray>(passSeal, "analyticShapePackedBytesSnapshot")
+        val paddingIndex = Math.addExact(firstSeal.alignedOffset, firstSeal.payloadBytes).toInt()
+        assertTrue(paddingIndex < firstSeal.plan.slots[1].alignedOffset)
+        assertEquals(0, packed[paddingIndex].toInt())
+        packed[paddingIndex] = 1
+        fixture.native.events.clear()
+        fixture.native.writeBufferCalls.clear()
+
+        val result = fixture.materializeCoreResult()
+
+        assertEquals(
+            "invalid.native-core-primitive.analytic-shape-uniform-seal",
+            assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result).code,
+        )
+        assertEquals(emptyList(), fixture.native.events)
+        assertEquals(emptyList(), fixture.native.writeBufferCalls)
+        fixture.close()
     }
 
     @Test
@@ -2553,6 +2708,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val frameId = GPUFrameID(231L)
         val commandIds = when (routeShape) {
             RouteShape.Direct -> listOf(1, 2)
+            RouteShape.AnalyticShape -> listOf(1, 2)
             RouteShape.PathOnly -> listOf(2)
             RouteShape.Mixed -> listOf(1, 2, 3)
             RouteShape.TwoPathPairs -> listOf(2, 3)
@@ -2635,6 +2791,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val semantics = packets.associate { packet ->
             packet.commandIdValue to if (routeShape == RouteShape.TwoPathPairs ||
             packet.commandIdValue == 2 && routeShape != RouteShape.Direct &&
+                routeShape != RouteShape.AnalyticShape &&
                 routeShape != RouteShape.ClipStencil && routeShape != RouteShape.CoverageMask
             ) {
                 pathSemantic(
@@ -2652,6 +2809,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             } else {
                 semantic(
                     packet,
+                    coverageMode = if (routeShape == RouteShape.AnalyticShape) {
+                        GPUCorePrimitiveCoverageMode.ScalarAA
+                    } else {
+                        GPUCorePrimitiveCoverageMode.FullOrScissor
+                    },
                     scissorBounds = if (routeShape == RouteShape.ClipStencil) {
                         (clipStencilPlan ?: nativeClipStencilPlan()).consumer.scissor
                             ?: TARGET
@@ -2902,12 +3064,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             when (packet.role) {
                 GPUDrawPacketRole.Shading -> {
                     val route = assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
-                        validateCorePrimitiveDirectNativeRoute(
+                        org.graphiks.kanvas.gpu.renderer.recording.classifyCorePrimitiveDirectNativeRoute(
                             semantic,
-                            corePrimitiveDirectClipAuthority(
-                                requireNotNull(packet.clipExecutionPlan),
-                                semantic.targetBounds,
-                            ),
+                            requireNotNull(packet.clipExecutionPlan),
                             packet.blendPlan,
                             render.samplePlan,
                             "rgba8unorm",
@@ -3054,6 +3213,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     private fun semantic(
         packet: GPUDrawPacket,
         scissorBounds: GPUPixelBounds = TARGET,
+        coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.FullOrScissor,
     ): GPUDrawSemanticPayload.CorePrimitive =
         GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(
@@ -3066,6 +3226,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 clipCoveragePlan = GPUClipCoveragePlan.NoClip,
                 blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
                 frameProvenance = GPUFrameProvenance.GmContent,
+                coverageMode = coverageMode,
                 analysisRecordId = "analysis.fill_rect.${packet.commandIdValue}",
                 analysisCommandFamily = "FillRect",
                 rectRouteAuthority = GPUCorePrimitiveRectRouteAuthority.RectAxisAligned,

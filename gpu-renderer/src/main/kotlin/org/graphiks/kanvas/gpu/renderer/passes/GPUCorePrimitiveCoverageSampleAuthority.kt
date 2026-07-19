@@ -59,28 +59,37 @@ internal fun validateCorePrimitiveCoverageSampleAuthority(
             "CorePrimitive preparation does not accept a local-resolve approximation as frame sample authority.",
         )
     }
-    if (geometry is GPUCorePrimitiveGeometry.RRect) {
+    if (geometry is GPUCorePrimitiveGeometry.RRect &&
+        (coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor ||
+            coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA) &&
+        samplePlan != GPUSamplePlan.SingleSampleFrame
+    ) {
         return refused(
             "unsupported.core_primitive.coverage_sample.rrect_not_promoted",
-            "Drawn analytic RRect coverage is not promoted until the dedicated B3.5b route.",
+            "Analytic RRect coverage is promoted only by the exact single-sample B3.5b route.",
         )
     }
-    if (coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA) {
+    if (coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA &&
+        (geometry is GPUCorePrimitiveGeometry.Rect || geometry is GPUCorePrimitiveGeometry.RRect) &&
+        samplePlan != GPUSamplePlan.SingleSampleFrame
+    ) {
         return refused(
             "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
-            "ScalarAA coverage is not promoted until the dedicated B3.5b analytic route.",
+            "ScalarAA coverage is promoted only by the exact single-sample B3.5b analytic route.",
         )
     }
     val geometryCoverageCompatible = when (coverageMode) {
         GPUCorePrimitiveCoverageMode.FullOrScissor ->
             geometry is GPUCorePrimitiveGeometry.Rect ||
+                geometry is GPUCorePrimitiveGeometry.RRect ||
                 geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
                 geometry.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles
         GPUCorePrimitiveCoverageMode.Stencil1x,
         GPUCorePrimitiveCoverageMode.StencilAA,
         -> geometry is GPUCorePrimitiveGeometry.TriangulatedPath &&
             geometry.geometryMode == GPUCorePrimitiveGeometryMode.StencilEdgeFan
-        GPUCorePrimitiveCoverageMode.ScalarAA -> false
+        GPUCorePrimitiveCoverageMode.ScalarAA ->
+            geometry is GPUCorePrimitiveGeometry.Rect || geometry is GPUCorePrimitiveGeometry.RRect
     }
     if (!geometryCoverageCompatible) {
         return refused(

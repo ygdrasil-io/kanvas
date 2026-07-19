@@ -782,6 +782,9 @@ class GPUBackendRuntimeNativeSmokeTest {
             val limits = capabilities.limits
                 ?: error("GPU backend session should expose limits")
             val facts = limits.capabilityFacts(evidenceLabel = "runtime")
+            val nativeRouteFacts = capabilities.facts
+                .filter { fact -> fact.name.startsWith("first_slice.") }
+                .associateBy { fact -> fact.name }
 
             assertEquals("GPU", capabilities.implementation.facadeName)
             assertEquals("native", capabilities.implementation.implementationName)
@@ -820,6 +823,23 @@ class GPUBackendRuntimeNativeSmokeTest {
                 facts.map { it.name },
             )
             assertTrue(!facts.joinToString("\n").contains("@"))
+            assertEquals(
+                setOf(
+                    "first_slice.fill_rect.native",
+                    "first_slice.fill_rrect.native",
+                    "first_slice.scissor.native",
+                    "first_slice.fill_rect.affine.native",
+                ),
+                nativeRouteFacts.keys,
+            )
+            val rrect = nativeRouteFacts.getValue("first_slice.fill_rrect.native")
+            assertEquals("runtime", rrect.source)
+            assertEquals("supported", rrect.value)
+            assertTrue(rrect.affectsValidity)
+            assertEquals("core-primitive-direct-native", rrect.evidenceLabel)
+            assertTrue(nativeRouteFacts.keys.none { name ->
+                name.contains("msaa") || name.contains("stencil")
+            })
         }
     }
 

@@ -1,78 +1,14 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
-import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionUniformSeal
-import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
-import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
-import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
-import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
-import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalSolidRectSrcOver
-import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveDirectClipAuthority
-
-internal sealed interface GPUCorePrimitiveDirectNativeRoute {
-    class Accepted(
-        vertices: FloatArray,
-        indices: IntArray,
-    ) : GPUCorePrimitiveDirectNativeRoute {
-        private val vertexSnapshot = vertices.copyOf()
-        private val indexSnapshot = indices.copyOf()
-        val vertexCount: Int
-        val indexCount: Int = indexSnapshot.size
-        val maxLocalIndex: Int
-
-        init {
-            require(vertexSnapshot.isNotEmpty() && vertexSnapshot.size % 2 == 0 &&
-                vertexSnapshot.all(Float::isFinite)
-            ) {
-                "Direct CorePrimitive vertices must contain finite xy pairs"
-            }
-            vertexCount = vertexSnapshot.size / 2
-            require(indexSnapshot.isNotEmpty()) {
-                "Direct CorePrimitive geometry requires at least one local index"
-            }
-            var maximum = -1
-            indexSnapshot.forEach { index ->
-                require(index >= 0) { "Direct CorePrimitive local indices must be non-negative" }
-                if (index > maximum) maximum = index
-            }
-            require(maximum < vertexCount) {
-                "Direct CorePrimitive maximum local index must address its local vertices"
-            }
-            maxLocalIndex = maximum
-        }
-
-        fun copyVerticesInto(destination: FloatArray, destinationOffset: Int = 0) {
-            require(destinationOffset >= 0 && destinationOffset <= destination.size - vertexSnapshot.size) {
-                "Direct CorePrimitive vertex snapshot does not fit its destination"
-            }
-            vertexSnapshot.copyInto(destination, destinationOffset)
-        }
-
-        fun copyIndicesInto(destination: IntArray, destinationOffset: Int = 0) {
-            require(destinationOffset >= 0 && destinationOffset <= destination.size - indexSnapshot.size) {
-                "Direct CorePrimitive index snapshot does not fit its destination"
-            }
-            indexSnapshot.copyInto(destination, destinationOffset)
-        }
-
-        override fun equals(other: Any?): Boolean = other is Accepted &&
-            vertexSnapshot.contentEquals(other.vertexSnapshot) && indexSnapshot.contentEquals(other.indexSnapshot)
-
-        override fun hashCode(): Int = 31 * vertexSnapshot.contentHashCode() + indexSnapshot.contentHashCode()
-
-        override fun toString(): String =
-            "Accepted(vertexCount=$vertexCount, indexCount=$indexCount, maxLocalIndex=$maxLocalIndex)"
-    }
-
-    data class Refused(val code: String, val message: String) : GPUCorePrimitiveDirectNativeRoute
-}
 
 /**
  * Execution-only result of the sole direct-route classification pass.
@@ -123,19 +59,44 @@ internal sealed interface GPUCorePrimitiveDirectNativeRouteSeal {
 }
 
 /** Builder authority proven structurally by pure preflight and retained for native materialization. */
-internal class GPUCorePrimitiveDirectPreparedPassSeal(
+internal class GPUCorePrimitiveDirectPreparedPassSeal private constructor(
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
     val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
-    analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal> = emptyList(),
-    analyticClipPackedBytes: ByteArray? = null,
-    analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal> = emptyList(),
-    analyticIntersectionPackedBytes: ByteArray? = null,
+    analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>,
+    ownedAnalyticShapePackedBytes: ByteArray?,
+    analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal>,
+    ownedAnalyticClipPackedBytes: ByteArray?,
+    analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>,
+    ownedAnalyticIntersectionPackedBytes: ByteArray?,
 ) {
+    private val analyticShapeUniformSealsSnapshot = immutableList(analyticShapeUniformSeals)
+    private val analyticShapePackedBytesSnapshot = ownedAnalyticShapePackedBytes
     private val analyticClipUniformSealsSnapshot = immutableList(analyticClipUniformSeals)
-    private val analyticClipPackedBytesSnapshot = analyticClipPackedBytes?.copyOf()
+    private val analyticClipPackedBytesSnapshot = ownedAnalyticClipPackedBytes
     private val analyticIntersectionUniformSealsSnapshot = immutableList(analyticIntersectionUniformSeals)
-    private val analyticIntersectionPackedBytesSnapshot = analyticIntersectionPackedBytes?.copyOf()
+    private val analyticIntersectionPackedBytesSnapshot = ownedAnalyticIntersectionPackedBytes
 
+    /** Caller-owned uniform64/uniform160 bytes keep their defensive-copy API boundary. */
+    constructor(
+        structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+        uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
+        analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal> = emptyList(),
+        analyticClipPackedBytes: ByteArray? = null,
+        analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal> = emptyList(),
+        analyticIntersectionPackedBytes: ByteArray? = null,
+    ) : this(
+        structuralPipelineKey = structuralPipelineKey,
+        uniformSlabSeal = uniformSlabSeal,
+        analyticShapeUniformSeals = emptyList(),
+        ownedAnalyticShapePackedBytes = null,
+        analyticClipUniformSeals = analyticClipUniformSeals,
+        ownedAnalyticClipPackedBytes = analyticClipPackedBytes?.copyOf(),
+        analyticIntersectionUniformSeals = analyticIntersectionUniformSeals,
+        ownedAnalyticIntersectionPackedBytes = analyticIntersectionPackedBytes?.copyOf(),
+    )
+
+    val analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>
+        get() = analyticShapeUniformSealsSnapshot
     val analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal>
         get() = analyticClipUniformSealsSnapshot
     val analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>
@@ -144,10 +105,32 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal(
     init {
         require(listOf(
             uniformSlabSeal != null,
+            analyticShapeUniformSealsSnapshot.isNotEmpty(),
             analyticClipUniformSealsSnapshot.isNotEmpty(),
             analyticIntersectionUniformSealsSnapshot.isNotEmpty(),
         ).count { it } == 1) {
-            "A direct CorePrimitive pass must retain exactly one uniform32, uniform64, or uniform160 authority"
+            "A direct CorePrimitive pass must retain exactly one uniform32, uniform64, uniform80, or uniform160 authority"
+        }
+        require((analyticShapePackedBytesSnapshot != null) == analyticShapeUniformSealsSnapshot.isNotEmpty()) {
+            "An analytic-shape direct CorePrimitive pass must retain its exact packed uniform80 slab"
+        }
+        analyticShapePackedBytesSnapshot?.let { packed ->
+            val plan = analyticShapeUniformSealsSnapshot.first().plan
+            require(packed.size.toLong() == plan.totalBytes) {
+                "The analytic-shape uniform80 packed slab must match its exact plan size"
+            }
+            require(analyticShapeUniformSealsSnapshot.size == plan.slots.size &&
+                analyticShapeUniformSealsSnapshot.map { it.slotIndex } == plan.slots.indices.toList() &&
+                analyticShapeUniformSealsSnapshot.all {
+                    it.plan === plan && it.structuralPipelineKey == structuralPipelineKey
+                }
+            ) { "The analytic-shape uniform80 seals must retain one exact ordered pass plan" }
+            analyticShapeUniformSealsSnapshot.forEach { seal ->
+                val offset = seal.alignedOffset.toInt()
+                require(seal.hasExactPayloadAt(packed, offset)) {
+                    "The analytic-shape packed uniform80 slab must retain every sealed payload"
+                }
+            }
         }
         require((analyticClipPackedBytesSnapshot != null) == analyticClipUniformSealsSnapshot.isNotEmpty()) {
             "An analytic direct CorePrimitive pass must retain its exact packed uniform64 slab"
@@ -170,8 +153,50 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal(
     /** Internal zero-copy borrow valid only for the immediate queue upload. */
     fun packedUniformBytesForUpload(): ByteArray =
         uniformSlabSeal?.packedBytesForUpload()
+            ?: analyticShapePackedBytesSnapshot
             ?: analyticClipPackedBytesSnapshot
             ?: requireNotNull(analyticIntersectionPackedBytesSnapshot)
+
+    companion object {
+        /**
+         * Creates the sole packed uniform80 snapshot directly from immutable packet seals.
+         *
+         * No caller-owned full slab crosses this boundary, so the returned pass owns the only
+         * packed upload buffer and materialization may borrow it only for immediate validation and
+         * queue upload.
+         */
+        fun analyticShape(
+            structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+            analyticShapeUniformSeals: List<GPUCorePrimitiveAnalyticShapeUniformSeal>,
+        ): GPUCorePrimitiveDirectPreparedPassSeal {
+            val seals = immutableList(analyticShapeUniformSeals)
+            require(seals.isNotEmpty()) {
+                "An analytic-shape direct CorePrimitive pass requires at least one uniform80 seal"
+            }
+            val plan = seals.first().plan
+            require(plan.totalBytes <= Int.MAX_VALUE.toLong() &&
+                seals.size == plan.slots.size &&
+                seals.map { seal -> seal.slotIndex } == plan.slots.indices.toList() &&
+                seals.all { seal ->
+                    seal.plan === plan && seal.structuralPipelineKey == structuralPipelineKey
+                }
+            ) { "The analytic-shape uniform80 seals must retain one host-addressable ordered pass plan" }
+            val packed = ByteArray(plan.totalBytes.toInt())
+            seals.forEach { seal ->
+                seal.copyPayloadInto(packed, seal.alignedOffset.toInt())
+            }
+            return GPUCorePrimitiveDirectPreparedPassSeal(
+                structuralPipelineKey = structuralPipelineKey,
+                uniformSlabSeal = null,
+                analyticShapeUniformSeals = seals,
+                ownedAnalyticShapePackedBytes = packed,
+                analyticClipUniformSeals = emptyList(),
+                ownedAnalyticClipPackedBytes = null,
+                analyticIntersectionUniformSeals = emptyList(),
+                ownedAnalyticIntersectionPackedBytes = null,
+            )
+        }
+    }
 }
 
 internal data class GPUCorePrimitiveDirectNativeFrameRouteKey(
@@ -277,96 +302,4 @@ internal fun packCorePrimitiveFrameGeometry(
         "Direct CorePrimitive geometry sizing and copy passes diverged"
     }
     return GPUCorePrimitiveFrameGeometryArena(vertices, indices, slices)
-}
-
-internal fun validateCorePrimitiveDirectNativeRoute(
-    semantic: GPUDrawSemanticPayload.CorePrimitive,
-    clipAuthority: GPUCorePrimitiveDirectClipAuthority,
-    blendPlan: GPUBlendPlan?,
-    samplePlan: GPUSamplePlan,
-    targetFormat: String,
-): GPUCorePrimitiveDirectNativeRoute {
-    fun refused(code: String, message: String) = GPUCorePrimitiveDirectNativeRoute.Refused(code, message)
-    if (targetFormat != "rgba8unorm") {
-        return refused(
-            "unsupported.native-core-primitive.target-format",
-            "Direct CorePrimitive native geometry requires rgba8unorm.",
-        )
-    }
-    if (samplePlan != GPUSamplePlan.SingleSampleFrame) {
-        return refused(
-            "unsupported.native-core-primitive.sample-plan",
-            "Direct CorePrimitive native geometry requires one sample.",
-        )
-    }
-    if (!blendPlan.isCanonicalSolidRectSrcOver()) {
-        return refused(
-            "unsupported.native-core-primitive.blend",
-            "Direct CorePrimitive native geometry requires canonical premultiplied SrcOver.",
-        )
-    }
-    if (semantic.coverageMode != GPUCorePrimitiveCoverageMode.FullOrScissor) {
-        return refused(
-            "unsupported.native-core-primitive.coverage",
-            "Scalar AA and stencil coverage are not promoted by the direct native slice.",
-        )
-    }
-    if (clipAuthority !is GPUCorePrimitiveDirectClipAuthority.Accepted) {
-        return refused(
-            "unsupported.native-core-primitive.clip",
-            "Direct CorePrimitive native geometry accepts only no clip or scissor clip.",
-        )
-    }
-    val exactScissor = clipAuthority.scissor
-    if (semantic.scissorBounds != exactScissor) {
-        return refused(
-            "invalid.native-core-primitive.scissor-authority",
-            "The semantic scissor must exactly match the classified direct clip plan.",
-        )
-    }
-    fun accepted(vertices: FloatArray, indices: IntArray): GPUCorePrimitiveDirectNativeRoute = try {
-        GPUCorePrimitiveDirectNativeRoute.Accepted(vertices, indices)
-    } catch (_: IllegalArgumentException) {
-        refused(
-            "invalid.native-core-primitive.geometry-indices",
-            "Direct CorePrimitive geometry requires finite xy vertices and in-range local indices.",
-        )
-    }
-    return when (val geometry = semantic.geometry) {
-        is GPUCorePrimitiveGeometry.Rect -> accepted(
-            vertices = floatArrayOf(
-                geometry.left,
-                geometry.top,
-                geometry.right,
-                geometry.top,
-                geometry.right,
-                geometry.bottom,
-                geometry.left,
-                geometry.bottom,
-            ),
-            indices = intArrayOf(0, 2, 1, 0, 3, 2),
-        )
-        is GPUCorePrimitiveGeometry.RRect -> refused(
-            "unsupported.native-core-primitive.geometry",
-            "Analytic RRect geometry is not promoted by the direct native slice.",
-        )
-        is GPUCorePrimitiveGeometry.TriangulatedPath -> when {
-            geometry.inverseFill -> refused(
-                "unsupported.native-core-primitive.inverse-fill",
-                "Inverse fill requires a later cover or mask route.",
-            )
-            geometry.geometryMode != GPUCorePrimitiveGeometryMode.DirectTriangles -> refused(
-                "unsupported.native-core-primitive.geometry",
-                "Stencil edge fans require the later stencil-cover route.",
-            )
-            geometry.strokeStyle != null -> refused(
-                "unsupported.native-core-primitive.geometry",
-                "Direct triangles may not retain stroke lowering state.",
-            )
-            else -> accepted(
-                FloatArray(geometry.vertices.size) { index -> geometry.vertices[index] },
-                IntArray(geometry.indices.size) { index -> geometry.indices[index] },
-            )
-        }
-    }
 }

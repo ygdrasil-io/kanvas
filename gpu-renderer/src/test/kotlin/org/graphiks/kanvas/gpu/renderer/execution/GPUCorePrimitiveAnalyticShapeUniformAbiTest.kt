@@ -1,13 +1,14 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.passes.CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUniformBlock
+
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNull
-import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 
 class GPUCorePrimitiveAnalyticShapeUniformAbiTest {
     @Test
@@ -87,23 +88,6 @@ class GPUCorePrimitiveAnalyticShapeUniformAbiTest {
         invalidBlocks.forEach { construct ->
             assertFailsWith<IllegalArgumentException> { construct() }
         }
-    }
-
-    @Test
-    fun `analytic shape uniform80 route closure is stable at preflight and materialization boundaries`() {
-        val (code, message) = requireNotNull(
-            corePrimitiveAnalyticShapeClosedRouteDiagnostic(
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
-            ),
-        )
-
-        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_CODE, code)
-        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_MESSAGE, message)
-        assertNull(
-            corePrimitiveAnalyticShapeClosedRouteDiagnostic(
-                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
-            ),
-        )
     }
 
     private fun validBlock(

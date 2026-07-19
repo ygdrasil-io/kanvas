@@ -130,10 +130,11 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     }
 
     @Test
-    fun `all uniform32 uniform64 uniform160 transitions replace only the incompatible bind group`() {
+    fun `all uniform32 uniform64 uniform80 uniform160 transitions replace only the incompatible bind group`() {
         val identities = listOf(
             PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
             PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY,
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY,
             PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY,
         )
         val transitions = identities.flatMap { from ->

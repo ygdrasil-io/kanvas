@@ -610,10 +610,15 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
     blendPlan: GPUBlendPlan,
 ): GPUCorePrimitiveRenderPipelineStructuralKey = GPUCorePrimitiveRenderPipelineStructuralKey(
     shader = when (val geometry = semantic.geometry) {
-        is GPUCorePrimitiveGeometry.Rect ->
+        is GPUCorePrimitiveGeometry.Rect -> if (
+            semantic.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
+        ) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape
+        } else {
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
+        }
         is GPUCorePrimitiveGeometry.RRect ->
-            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticRRect
+            GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape
         is GPUCorePrimitiveGeometry.TriangulatedPath -> when (geometry.geometryMode) {
             GPUCorePrimitiveGeometryMode.DirectTriangles ->
                 GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry
@@ -626,7 +631,7 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
         is GPUCorePrimitiveGeometry.Rect ->
             GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
         is GPUCorePrimitiveGeometry.RRect ->
-            GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticRRect
+            GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
         is GPUCorePrimitiveGeometry.TriangulatedPath -> when (geometry.geometryMode) {
             GPUCorePrimitiveGeometryMode.DirectTriangles ->
                 GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
@@ -1008,6 +1013,75 @@ internal class GPUCorePrimitiveCoverageMaskUniformSlabSeal(
     fun packedBytesSnapshot(): ByteArray = packedBytesSnapshot.copyOf()
 }
 
+/** Immutable per-packet authority for the analytic Rect/RRect uniform80 slab. */
+internal class GPUCorePrimitiveAnalyticShapeUniformSeal(
+    val plan: GPUUniformSlabPlan,
+    val slotIndex: Int,
+    val commandId: Int,
+    val packetId: GPUDrawPacketID,
+    private val semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority,
+    val renderScissor: GPUPixelBounds,
+    val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+    val renderPipelineKey: GPURenderPipelineKey,
+    val bindingLayoutHash: String,
+    val resourceGeneration: Long,
+    payloadBytes: ByteArray,
+) {
+    private val payloadBytesSnapshot = payloadBytes.copyOf()
+    private val slot = plan.slots.getOrNull(slotIndex)
+        ?: error("Analytic shape uniform seal slot index is outside its slab plan")
+
+    val payloadBytes: Long get() = slot.payloadBytes
+    val alignedOffset: Long get() = slot.alignedOffset
+    val alignmentBytes: Long get() = plan.alignmentBytes
+    val deviceGeneration: Long get() = plan.deviceGeneration
+
+    init {
+        require(commandId >= 0) { "Analytic shape uniform seal command id must be non-negative" }
+        require(plan.sourceLabel == "core-primitive-analytic-shape-uniform-pass" &&
+            slot.slotLabel == "analytic-shape-draw-$commandId"
+        ) { "Analytic shape uniform seal requires its exact pass and slot labels" }
+        require(!renderScissor.isEmpty) { "Analytic shape render scissor must not be empty" }
+        require(structuralPipelineKey.role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading &&
+            structuralPipelineKey.shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape &&
+            structuralPipelineKey.uniformLayout ==
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1
+        ) { "Analytic shape uniform seal requires the uniform80 shading structural ABI" }
+        require(bindingLayoutHash.isNotBlank()) {
+            "Analytic shape binding layout hash must not be blank"
+        }
+        require(resourceGeneration >= 0L) {
+            "Analytic shape resource generation must be non-negative"
+        }
+        require(slot.payloadBytes == 80L && payloadBytesSnapshot.size == 80) {
+            "Analytic shape uniform seal requires exactly 80 payload bytes"
+        }
+    }
+
+    fun hasExactSemantic(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean =
+        semanticAuthority.matches(semantic)
+
+    fun payloadBytesSnapshot(): ByteArray = payloadBytesSnapshot.copyOf()
+
+    internal fun hasExactPayload(expected: ByteArray): Boolean =
+        expected.size == 80 && payloadBytesSnapshot.contentEquals(expected)
+
+    internal fun hasExactPayloadAt(source: ByteArray, sourceOffset: Int): Boolean {
+        if (sourceOffset < 0 || sourceOffset > source.size - payloadBytesSnapshot.size) return false
+        return payloadBytesSnapshot.indices.all { index ->
+            source[sourceOffset + index] == payloadBytesSnapshot[index]
+        }
+    }
+
+    /** Copies the immutable payload into one pass-owned packed slab without an intermediate snapshot. */
+    internal fun copyPayloadInto(destination: ByteArray, destinationOffset: Int) {
+        require(destinationOffset >= 0 &&
+            destinationOffset <= destination.size - payloadBytesSnapshot.size
+        ) { "Analytic shape uniform payload does not fit its pass-owned packed slab" }
+        payloadBytesSnapshot.copyInto(destination, destinationOffset)
+    }
+}
+
 /** Immutable per-packet authority for the separate analytic-clip uniform64 slab. */
 internal class GPUCorePrimitiveAnalyticClipUniformSeal(
     val plan: GPUUniformSlabPlan,
@@ -1158,6 +1232,7 @@ internal data class GPUCorePrimitivePreparedPacketAuthority(
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
     val renderPipelineKey: GPURenderPipelineKey,
     val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
+    val analyticShapeUniformSeal: GPUCorePrimitiveAnalyticShapeUniformSeal? = null,
     val analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = null,
     val analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = null,
     val coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = null,

@@ -18,30 +18,22 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 
 class GPUCorePrimitiveCoverageSampleAuthorityTest {
     @Test
-    fun `single sample authority accepts only the already promoted hard edge routes`() {
+    fun `single sample authority accepts the exact hard and analytic shape matrix`() {
         assertNull(code(rect, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.SingleSampleFrame))
         assertNull(code(directTriangles, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.SingleSampleFrame))
         assertNull(code(stencilEdgeFan, GPUCorePrimitiveCoverageMode.Stencil1x, GPUSamplePlan.SingleSampleFrame))
-
-        assertEquals(
-            "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
-            code(rect, GPUCorePrimitiveCoverageMode.ScalarAA, GPUSamplePlan.SingleSampleFrame),
-        )
-        assertEquals(
-            "unsupported.core_primitive.coverage_sample.rrect_not_promoted",
-            code(rrect, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.SingleSampleFrame),
-        )
-        assertEquals(
-            "unsupported.core_primitive.coverage_sample.rrect_not_promoted",
-            code(rrect, GPUCorePrimitiveCoverageMode.ScalarAA, GPUSamplePlan.SingleSampleFrame),
-        )
+        assertNull(code(rect, GPUCorePrimitiveCoverageMode.ScalarAA, GPUSamplePlan.SingleSampleFrame))
+        assertNull(code(rrect, GPUCorePrimitiveCoverageMode.FullOrScissor, GPUSamplePlan.SingleSampleFrame))
+        assertNull(code(rrect, GPUCorePrimitiveCoverageMode.ScalarAA, GPUSamplePlan.SingleSampleFrame))
     }
 
     @Test
     fun `coverage modes accept only their exact promoted geometry lane`() {
         listOf(
             rect to GPUCorePrimitiveCoverageMode.Stencil1x,
+            rrect to GPUCorePrimitiveCoverageMode.Stencil1x,
             directTriangles to GPUCorePrimitiveCoverageMode.Stencil1x,
+            directTriangles to GPUCorePrimitiveCoverageMode.ScalarAA,
             stencilEdgeFan to GPUCorePrimitiveCoverageMode.FullOrScissor,
             strokeStencilEdgeFan to GPUCorePrimitiveCoverageMode.Stencil1x,
         ).forEach { (geometry, coverageMode) ->
