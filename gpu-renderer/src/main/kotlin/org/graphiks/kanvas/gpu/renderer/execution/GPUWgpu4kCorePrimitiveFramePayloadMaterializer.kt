@@ -144,7 +144,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 it is GPUCorePrimitiveNativeScopeRouteUnit.PathPair
             } == true
         ) {
-            return materializeIndexedPathCore(
+            val indexed = materializeIndexedPathCore(
                 framePlan,
                 encoderPlan,
                 resources,
@@ -153,6 +153,17 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 renderScope,
                 unifiedRoute,
             )
+            return if (isMsaa4x && indexed is GPUPreparedNativeFramePayloadMaterialization.Refused &&
+                indexed.code.startsWith("invalid.native-core-primitive.") &&
+                indexed.code != "invalid.native-core-primitive.indexed-msaa-authority"
+            ) {
+                indexed.copy(
+                    code = "invalid.native-core-primitive.indexed-msaa-authority",
+                    message = "Indexed 4x CorePrimitive native authority is corrupt: ${indexed.message}",
+                )
+            } else {
+                indexed
+            }
         }
         val sealedRoutes = renderScope.corePrimitiveDirectNativeRouteSeal as?
             GPUCorePrimitiveDirectNativeRouteSeal.Routes ?: return refused(
@@ -2814,6 +2825,43 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         val directUnits = unifiedRoute.orderedUnits
             .filterIsInstance<GPUCorePrimitiveNativeScopeRouteUnit.Direct>()
+        val sampleCount = renderStep.samplePlan.sampleCount
+        val isMsaa4x = renderStep.samplePlan == GPUSamplePlan.MultisampleFrame(4)
+        val pathDepthStencilUse = renderStep.resourceUses.singleOrNull {
+            it.role == GPUFrameResourceRole.PathDepthStencil
+        }
+        if (isMsaa4x) {
+            val continuation = renderStep.sampleContinuation
+            val exactAuthority = directUnits.isEmpty() && pathDepthStencilUse != null &&
+                renderStep.resourceUses.none { it.role == GPUFrameResourceRole.ClipDepthStencil } &&
+                renderStep.drawPackets.all {
+                    it.role == GPUDrawPacketRole.PathStencilProducer ||
+                        it.role == GPUDrawPacketRole.PathStencilCover
+                } &&
+                continuation?.let { authority ->
+                    authority.key.target.value == renderStep.target.value &&
+                        authority.key.targetGeneration == generationSeal.targetGeneration &&
+                        authority.key.deviceGeneration == generationSeal.deviceGeneration &&
+                        authority.key.colorFormat.value == RGBA8_UNORM &&
+                        authority.key.colorInterpretation.value == "encoded-premul-srgb" &&
+                        authority.key.samplePlan == renderStep.samplePlan &&
+                        authority.key.attachmentAuthority ==
+                        org.graphiks.kanvas.gpu.renderer.passes
+                            .GPUSampleAttachmentAuthority.PreparedFramePayload &&
+                        authority.key.colorAttachment.value ==
+                        "msaa-color:${renderStep.target.value}:${generationSeal.targetGeneration}" &&
+                        authority.key.depthStencilAttachment?.value == pathDepthStencilUse.resource.value &&
+                        authority.loadTransition == GPUSampleLoadTransition.FreshClear &&
+                        authority.storeAction == GPUSampleStoreAction.Store &&
+                        authority.resolveAction == GPUSampleResolveAction.ResolveCanonical
+                } == true
+            if (!exactAuthority) {
+                return refused(
+                    "invalid.native-core-primitive.indexed-msaa-authority",
+                    "Indexed 4x CorePrimitive requires exact paired color/resolve and path D24S8 authority.",
+                )
+            }
+        }
         when (val directSeal = renderScope.corePrimitiveDirectNativeRouteSeal) {
             GPUCorePrimitiveDirectNativeRouteSeal.Empty -> if (directUnits.isNotEmpty()) {
                 return refused(
@@ -2896,10 +2944,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         producerSemantic.geometry != coverSemantic.geometry ||
                         producerSemantic.targetBounds != coverSemantic.targetBounds ||
                         producerSemantic.scissorBounds != coverSemantic.scissorBounds ||
-                        producerSemantic.coverageMode != org.graphiks.kanvas.gpu.renderer.payloads
-                            .GPUCorePrimitiveCoverageMode.Stencil1x ||
-                        coverSemantic.coverageMode != org.graphiks.kanvas.gpu.renderer.payloads
-                            .GPUCorePrimitiveCoverageMode.Stencil1x ||
+                        producerSemantic.coverageMode != if (isMsaa4x) {
+                            org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode.StencilAA
+                        } else {
+                            org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode.Stencil1x
+                        } ||
+                        coverSemantic.coverageMode != if (isMsaa4x) {
+                            org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode.StencilAA
+                        } else {
+                            org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode.Stencil1x
+                        } ||
                         producer.uniformSlot != cover.uniformSlot ||
                         producer.clipExecutionPlan != cover.clipExecutionPlan ||
                         producerSemantic.payloadRef.uniformBlock?.bytes !=
@@ -2948,7 +3002,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     plan.packet.uniformSlot != plan.semantic.payloadRef.uniformSlot ||
                     plan.packet.bindingLayoutHash != CORE_PRIMITIVE_BINDING_LAYOUT_HASH ||
                     plan.packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
-                    plan.packet.targetStateHash != CORE_PRIMITIVE_TARGET_STATE_HASH ||
+                    plan.packet.targetStateHash != corePrimitiveTargetStateHash(sampleCount) ||
                     plan.packet.scissorBoundsHash != corePrimitiveScissorAuthority(plan.semantic.scissorBounds) ||
                     authority?.structuralPipelineKey != plan.structuralKey ||
                     authority.renderPipelineKey != plan.packet.renderPipelineKey ||
@@ -2966,7 +3020,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 "Indexed CorePrimitive packet contradicts its sealed semantic, pipeline, or uniform authority.",
             )
         }
-        if (renderStep.samplePlan != GPUSamplePlan.SingleSampleFrame || renderStep.sampleContinuation != null ||
+        val exactSamplePlan = if (isMsaa4x) {
+            renderStep.sampleContinuation != null
+        } else {
+            renderStep.samplePlan == GPUSamplePlan.SingleSampleFrame && renderStep.sampleContinuation == null
+        }
+        if (!exactSamplePlan ||
             renderStep.loadStore.loadOp != "clear" || renderStep.loadStore.storePlan != GPUStorePlan.Store ||
             renderStep.loadStore.clearColorLabel != null ||
             renderStep.depthStencilLoadStore != org.graphiks.kanvas.gpu.renderer.recording
@@ -3049,7 +3108,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         val depthBytes = try {
             Math.multiplyExact(
                 Math.multiplyExact(targetBounds.width.toLong(), targetBounds.height.toLong()),
-                4L,
+                Math.multiplyExact(4L, sampleCount.toLong()),
             )
         } catch (_: ArithmeticException) {
             return refused(
@@ -3064,15 +3123,46 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 GPUFrameResourceUsage.CopySource,
             ) || targetPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
             depthDescriptor?.logicalBounds != targetBounds ||
-            depthDescriptor.format.value != DEPTH24PLUS_STENCIL8 || depthDescriptor.sampleCount != 1 ||
+            depthDescriptor.format.value != DEPTH24PLUS_STENCIL8 ||
+            depthDescriptor.sampleCount != sampleCount ||
             depthStencilPreparation.usages != setOf(GPUFrameResourceUsage.RenderAttachment) ||
             depthStencilPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
             depthStencilPreparation.byteSize != depthBytes
         ) {
+            if (isMsaa4x) {
+                return refused(
+                    "invalid.native-core-primitive.indexed-msaa-authority",
+                    "Indexed 4x CorePrimitive D24S8 preparation is not exact.",
+                )
+            }
             return refused(
                 "invalid.native-core-primitive.indexed-attachment-contract",
                 "Indexed CorePrimitive target or D24S8 attachment contract is not exact.",
             )
+        }
+        if (isMsaa4x) {
+            val expectedAttachmentBytes = try {
+                Math.multiplyExact(
+                    Math.multiplyExact(targetBounds.width.toLong(), targetBounds.height.toLong()),
+                    Math.multiplyExact(RGBA_BYTES_PER_PIXEL, sampleCount.toLong()),
+                )
+            } catch (_: ArithmeticException) {
+                return refused(
+                    "invalid.native-core-primitive.indexed-msaa-authority",
+                    "Indexed 4x CorePrimitive paired attachment memory authority overflowed.",
+                )
+            }
+            if (framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.FrameLocalMsaaColor] !=
+                expectedAttachmentBytes ||
+                framePlan.memoryBudget.categoryTotals[
+                    GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil
+                ] != depthBytes
+            ) {
+                return refused(
+                    "invalid.native-core-primitive.indexed-msaa-authority",
+                    "Indexed 4x CorePrimitive paired attachments require exact aggregate memory authority.",
+                )
+            }
         }
         fun exactGeometryBuffer(
             preparation: GPUResourcePreparationRequest,
@@ -3234,7 +3324,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
 
         val structuralKeys = packetPlans.map(PacketPlan::structuralKey).distinct()
         val expectedNativeRoles = buildList {
-            add(GPUPreparedNativeOperandRole.RenderColorTarget)
+            if (isMsaa4x) {
+                add(GPUPreparedNativeOperandRole.RenderMsaaColorTarget)
+                add(GPUPreparedNativeOperandRole.RenderResolveTarget)
+            } else {
+                add(GPUPreparedNativeOperandRole.RenderColorTarget)
+            }
             add(GPUPreparedNativeOperandRole.RenderDepthStencilTarget)
             repeat(structuralKeys.size) { add(GPUPreparedNativeOperandRole.RenderPipeline) }
             add(GPUPreparedNativeOperandRole.RenderVertexBuffer)
@@ -3243,18 +3338,40 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         val expectedNativeKinds = buildList {
             add(GPUPreparedNativeOperandKind.TextureView)
+            if (isMsaa4x) add(GPUPreparedNativeOperandKind.TextureView)
             add(GPUPreparedNativeOperandKind.TextureView)
             repeat(structuralKeys.size) { add(GPUPreparedNativeOperandKind.RenderPipeline) }
             add(GPUPreparedNativeOperandKind.Buffer)
             add(GPUPreparedNativeOperandKind.Buffer)
             repeat(packetPlans.size) { add(GPUPreparedNativeOperandKind.BindGroup) }
         }
+        val exactMsaaAttachmentKeys = !isMsaa4x || run {
+            val targetGeneration = generationSeal.resourceGenerations[targetPreparation.resource]
+            val depthGeneration = generationSeal.resourceGenerations[depthStencilPreparation.resource]
+            val keys = renderScope.nativeOperandKeys
+            targetGeneration != null && depthGeneration != null &&
+                keys.getOrNull(0)?.bindingKey == gpuPreparedNativeBindingKey(
+                    "msaa:${requireNotNull(renderStep.sampleContinuation).key.colorAttachment.value}",
+                ) &&
+                keys.getOrNull(1)?.bindingKey == gpuPreparedNativeBindingKey(
+                    "GPUFrameTargetRef:${targetPreparation.resource.value}@$targetGeneration",
+                ) &&
+                keys.getOrNull(2)?.bindingKey == gpuPreparedNativeBindingKey(
+                    "GPUFrameTextureRef:${depthStencilPreparation.resource.value}@$depthGeneration",
+                )
+        }
         if (renderScope.nativeOperandKeys.map { it.role } != expectedNativeRoles ||
             renderScope.nativeOperandKeys.map { it.kind } != expectedNativeKinds ||
             renderScope.nativeOperandKeys.any {
                 it.ownership != GPUPreparedNativeOperandOwnership.Borrowed
-            }
+            } || !exactMsaaAttachmentKeys
         ) {
+            if (isMsaa4x) {
+                return refused(
+                    "invalid.native-core-primitive.indexed-msaa-authority",
+                    "Indexed 4x CorePrimitive native keys must exactly bind color, resolve, and Path D24S8.",
+                )
+            }
             return refused(
                 "invalid.native-core-primitive.indexed-native-keys",
                 "Indexed CorePrimitive native keys must exactly encode target, depth/stencil, " +
@@ -3283,7 +3400,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
             cacheKeys[structuralKey] = GPUWgpu4kCorePrimitivePipelineCacheKey(
                 RGBA8_UNORM,
-                1,
+                sampleCount,
             ).copy(pipelineIdentity = mapped.identity)
         }
 
@@ -3300,6 +3417,19 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         var frameLeaseTransferred = false
         return try {
             val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val continuation = renderStep.sampleContinuation
+            val msaaColorRequirement = if (isMsaa4x) {
+                GPUWgpu4kCorePrimitiveMsaaColorRequirement(
+                    target = renderStep.target,
+                    colorAttachment = requireNotNull(continuation).key.colorAttachment,
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    targetGeneration = generationSeal.targetGeneration,
+                    width = targetBounds.width,
+                    height = targetBounds.height,
+                )
+            } else {
+                null
+            }
             val pipelineByStructural = linkedMapOf<
                 org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey,
                 GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired
@@ -3318,16 +3448,22 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 targetBounds.width,
                 targetBounds.height,
                 GPUTextureFormat.Depth24PlusStencil8,
-                1,
+                sampleCount,
                 GPUTextureUsage.RenderAttachment,
+                target = renderStep.target.takeIf { isMsaa4x },
+                depthStencilAttachment = continuation?.key?.depthStencilAttachment,
+                deviceGeneration = generationSeal.deviceGeneration.takeIf { isMsaa4x },
+                targetGeneration = generationSeal.targetGeneration.takeIf { isMsaa4x },
             )
             frameLease = when (val checkout = sessionCache.acquireFrame(
                 GPUWgpu4kCorePrimitiveFramePoolRequirements(
-                    generationSeal.deviceGeneration,
-                    vertexBytes,
-                    indexBytes,
-                    uniformPlan.totalBytes,
-                    pathRequirement,
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    vertexBytes = vertexBytes,
+                    indexBytes = indexBytes,
+                    uniformBytes = uniformPlan.totalBytes,
+                    pathDepthStencil = pathRequirement,
+                    sampleCount = sampleCount,
+                    msaaColor = msaaColorRequirement,
                 ),
             )) {
                 is GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired -> checkout.lease
@@ -3338,9 +3474,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
             val pooled = requireNotNull(frameLease)
             val pathHandles = requireNotNull(pooled.handles.pathDepthStencil)
-            require(pathHandles.requirement == pathRequirement) {
-                "Pooled CorePrimitive path depth/stencil attachment differs from its exact requirement"
-            }
+            require(
+                pathHandles.requirement == pathRequirement &&
+                    pooled.handles.sampleCount == sampleCount &&
+                    pooled.handles.msaaColor?.requirement == msaaColorRequirement &&
+                    (isMsaa4x == (pooled.handles.msaaColor != null)),
+            ) { "Pooled CorePrimitive paired path attachments differ from their exact requirements" }
             uploadExact(
                 pooled.handles.vertexBuffer,
                 ArrayBuffer.of(vertexData),
@@ -3369,11 +3508,18 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     ),
                 ).tracked()
             }
-            val targetOperand = GPUPreparedNativeTextureViewOperand(
+            val canonicalTargetOperand = GPUPreparedNativeTextureViewOperand(
                 targetView,
                 generationSeal.deviceGeneration,
                 GPUPreparedNativeOperandOwnership.Borrowed,
             )
+            val colorTargetOperand = pooled.handles.msaaColor?.let { msaa ->
+                GPUPreparedNativeTextureViewOperand(
+                    msaa.view,
+                    generationSeal.deviceGeneration,
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                )
+            } ?: canonicalTargetOperand
             val depthStencilOperand = GPUPreparedNativeTextureViewOperand(
                 pathHandles.view,
                 generationSeal.deviceGeneration,
@@ -3460,7 +3606,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val renderOperand = GPUPreparedNativeScopeOperand.Render(
                 sourceStepIndex = renderScope.sourceStepIndex,
                 pass = GPUPreparedNativeRenderPassConfig(
-                    colorTarget = targetOperand,
+                    colorTarget = colorTargetOperand,
+                    resolveTarget = canonicalTargetOperand.takeIf { isMsaa4x },
                     depthStencilTarget = depthStencilOperand,
                     loadOperation = GPUPreparedNativeLoadOperation.Clear,
                     storeOperation = GPUPreparedNativeStoreOperation.Store,
@@ -3526,6 +3673,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 },
                 scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys },
                 leaseLifecycle = GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(pooled),
+                pathDepthStencilViewAuthority = mapOf(
+                    renderScope.sourceStepIndex to pathHandles.view,
+                ),
             )
             val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
                 GPUPreparedNativeFrameDraft(payload),

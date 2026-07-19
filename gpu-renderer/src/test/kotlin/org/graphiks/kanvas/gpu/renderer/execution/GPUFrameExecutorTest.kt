@@ -28,6 +28,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey
@@ -35,6 +37,8 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
@@ -57,6 +61,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingSeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputDescriptor
@@ -66,9 +71,12 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskPhase
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskUseToken
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTargetTransitionKind
+import org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreparationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreparationInput
@@ -91,6 +99,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabSlot
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
@@ -214,6 +224,127 @@ class GPUFrameExecutorTest {
             "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}; ${fixture.events}",
         )
         assertEquals(1, fixture.events.count { it == "encoder:create" })
+    }
+
+    @Test
+    fun `prepared path stencil AA payload accepts exact paired attachment operands`() {
+        val fixture = GPUFrameCoreTestFixture.msaaPreparedFrame(
+            pathDepthStencil = true,
+            singleScope = true,
+        )
+        val completion = RecordingCompletion(fixture.events)
+
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = RecordingEncodingBackend(
+                fixture.events,
+                requireNativeOperands = true,
+                expectedNativeOperands = fixture.payload.scopeOperands,
+                canonicalResolveView = fixture.canonicalResolveView,
+            ),
+            completion = completion,
+            retention = RecordingRetention(fixture.events),
+        ).execute(fixture.preparedFrame)
+
+        assertIs<GPUFrameImmediateState.Submitted>(handle.immediateState)
+        completion.complete(
+            GPUQueueCompletionOutcome.Success,
+            fixture.preparedFrame.completionTicket.ticketId,
+        )
+        assertEquals(
+            GPUFrameStructuralOutcome.Succeeded,
+            handle.completion.toCompletableFuture().get(2, TimeUnit.SECONDS).outcome,
+        )
+    }
+
+    @Test
+    fun `prepared path stencil AA payload refuses forged depth binding before encoder`() {
+        val fixture = GPUFrameCoreTestFixture.msaaPreparedFrame(
+            pathDepthStencil = true,
+            singleScope = true,
+            depthBinding = "GPUFrameTextureRef:path.depth.foreign@1",
+        )
+
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = RecordingEncodingBackend(
+                fixture.events,
+                requireNativeOperands = true,
+                canonicalResolveView = fixture.canonicalResolveView,
+            ),
+            completion = RecordingCompletion(fixture.events),
+            retention = RecordingRetention(fixture.events),
+        ).execute(fixture.preparedFrame)
+
+        val immediate = assertIs<GPUFrameImmediateState.FailedBeforeSubmit>(handle.immediateState)
+        assertEquals("invalid.msaa.prepared_frame_operand_keys", immediate.diagnostic.code.value)
+        assertTrue(fixture.events.none { it == "encoder:create" })
+        assertTrue("rollback:resources" in fixture.events)
+        assertEquals(0, fixture.adapter.activePreparedNativeFramePayloadCount)
+    }
+
+    @Test
+    fun `prepared path stencil AA payload refuses substituted depth native operand before encoder`() {
+        data class Scenario(
+            val label: String,
+            val aliasColor: Boolean = false,
+            val mutate: (GPUPreparedNativeTextureViewOperand) -> Unit = {},
+        )
+
+        listOf(
+            Scenario("ownership") { operand ->
+                setPrivateField(
+                    operand,
+                    "ownership",
+                    GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
+                )
+            },
+            Scenario("generation") { operand ->
+                setPrivateField(operand, "deviceGeneration", 99L)
+            },
+            Scenario("view", aliasColor = true),
+        ).forEach { scenario ->
+            val fixture = GPUFrameCoreTestFixture.msaaPreparedFrame(
+                pathDepthStencil = true,
+                singleScope = true,
+                aliasDepthWithColor = scenario.aliasColor,
+            )
+            scenario.mutate(
+                requireNotNull(
+                    fixture.payload.scopeOperands
+                        .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                        .single().pass.depthStencilTarget,
+                ),
+            )
+
+            val handle = GPUFrameExecutor(
+                sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+                backend = RecordingEncodingBackend(
+                    fixture.events,
+                    requireNativeOperands = true,
+                    canonicalResolveView = fixture.canonicalResolveView,
+                ),
+                completion = RecordingCompletion(fixture.events),
+                retention = RecordingRetention(fixture.events),
+            ).execute(fixture.preparedFrame)
+
+            val immediate = assertIs<GPUFrameImmediateState.FailedBeforeSubmit>(
+                handle.immediateState,
+                scenario.label,
+            )
+            assertEquals(
+                "invalid.msaa.prepared_frame_native_operands",
+                immediate.diagnostic.code.value,
+                scenario.label,
+            )
+            assertTrue(fixture.events.none { it == "encoder:create" }, scenario.label)
+            assertTrue("rollback:resources" in fixture.events, scenario.label)
+            assertEquals(0, fixture.adapter.activePreparedNativeFramePayloadCount, scenario.label)
+        }
+    }
+
+    private fun setPrivateField(target: Any, name: String, value: Any) {
+        target.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(target, value)
     }
 
     @Test
@@ -1966,6 +2097,139 @@ internal object GPUFrameCoreTestFixture {
         )
     }
 
+    private fun pathRenderScope(
+        sourceStepIndex: Int,
+        producer: GPUDrawPacket,
+        cover: GPUDrawPacket,
+        step: GPUFrameStep.RenderPassStep,
+        label: String,
+        depthResource: GPUFrameTextureRef,
+    ): GPUCommandEncoderScopePlan {
+        val packets = listOf(producer, cover)
+        val commands = buildList {
+            add(GPUPassCommand.BeginRenderPass(producer.targetStateHash, "load-store"))
+            packets.forEach { packet ->
+                add(GPUPassCommand.SetRenderPipeline(requireNotNull(packet.renderPipelineKey), packet.packetId))
+                add(
+                    GPUPassCommand.SetBindGroup(
+                        packet.bindingLayoutHash,
+                        packet.uniformSlot,
+                        packet.resourceSlot,
+                        packet.packetId,
+                    ),
+                )
+                add(GPUPassCommand.Draw(packet.vertexSourceLabel, packet.packetId))
+            }
+            add(GPUPassCommand.EndRenderPass(producer.passId))
+        }
+        val stream = GPUPassCommandStream(
+            streamId = "stream.$label",
+            packetStreamId = "packets.$label",
+            passId = producer.passId,
+            commands = commands,
+            operandBridge = packets.flatMap { packet ->
+                listOf(
+                    commandOperand(
+                        packet,
+                        "setRenderPipeline",
+                        GPUMaterializedCommandOperandKind.RenderPipeline,
+                    ),
+                    commandOperand(
+                        packet,
+                        "setBindGroup",
+                        GPUMaterializedCommandOperandKind.BindGroup,
+                    ),
+                )
+            },
+        )
+        val face = GPUCorePrimitiveRenderPipelineStructuralKey.StencilFace(
+            GPUClipStencilCompare.Always,
+            GPUClipStencilOperation.Keep,
+            GPUClipStencilOperation.Keep,
+            GPUClipStencilOperation.Keep,
+        )
+        fun structural(role: GPUCorePrimitiveRenderPipelineStructuralKey.Role) =
+            GPUCorePrimitiveRenderPipelineStructuralKey(
+                shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.PathStencil,
+                topology = if (role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer) {
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StencilEdgeFan
+                } else {
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList
+                },
+                blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone,
+                clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+                role = role,
+                depthStencil = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil(
+                    GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencilFormat.Depth24PlusStencil8,
+                    face,
+                    face,
+                    0xffu,
+                    0xffu,
+                ),
+                sampleCount = 4,
+            )
+        val producerStructural = structural(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+        )
+        val coverStructural = structural(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+        )
+        val pair = GPUCorePrimitivePathStencilNativeRoute.AcceptedPair(
+            producer.packetId,
+            cover.packetId,
+            floatArrayOf(0f, 0f, 4f, 0f, 0f, 4f),
+            intArrayOf(0, 1, 2),
+            GPUPixelBounds(0, 0, 4, 4),
+            GPUPixelBounds(0, 0, 4, 4),
+            inverseFill = false,
+        )
+        val uniformPlan = GPUUniformSlabPlan(
+            planHash = "path.executor.uniform",
+            sourceLabel = "path-executor",
+            deviceGeneration = deviceGeneration.value,
+            alignmentBytes = 1,
+            totalBytes = 1,
+            uploadBudgetBytes = 1,
+            slots = listOf(
+                GPUUniformSlabSlot("path", "path", 1, 0, 1),
+            ),
+        )
+        val uniformSeal = GPUCorePrimitiveUniformSlabSeal(
+            uniformPlan,
+            listOf(producer.commandIdValue),
+            byteArrayOf(0),
+        )
+        val pathSeal = GPUCorePrimitivePathStencilNativeRouteSeal.Pairs(listOf(pair))
+        val unifiedSeal = GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+            listOf(
+                GPUCorePrimitiveNativeScopeRouteUnit.PathPair(
+                    producer.commandIdValue,
+                    pair,
+                    producerStructural,
+                    coverStructural,
+                ),
+            ),
+            uniformSeal,
+        )
+        return GPUCommandEncoderScopePlan(
+            sourceStepIndex = sourceStepIndex,
+            operationKind = GPUEncoderOperationKind.Render,
+            scopeLabel = "scope.$label",
+            sourceTaskIds = step.sourceTaskIds,
+            sourcePacketIds = listOf(producer.packetId, cover.packetId),
+            facadeOperationClasses = stream.commandLabels,
+            targetGeneration = 1,
+            resourceGenerationLabels = listOf(
+                "GPUFrameTargetRef:target.scene@1",
+                "GPUFrameTextureRef:${depthResource.value}@1",
+            ),
+            passCommandStream = stream,
+            corePrimitiveDirectNativeRouteSeal = GPUCorePrimitiveDirectNativeRouteSeal.Empty,
+            corePrimitivePathStencilNativeRouteSeal = pathSeal,
+            corePrimitiveNativeScopeRouteSeal = unifiedSeal,
+        )
+    }
+
     private fun commandOperand(
         packet: GPUDrawPacket,
         commandLabel: String,
@@ -2462,12 +2726,17 @@ internal object GPUFrameCoreTestFixture {
         splitResolveView: Boolean = false,
         splitColorView: Boolean = false,
         sharedForeignResolveView: Boolean = false,
+        pathDepthStencil: Boolean = false,
+        singleScope: Boolean = false,
+        depthBinding: String = "GPUFrameTextureRef:path.depth@1",
+        aliasDepthWithColor: Boolean = false,
     ): MsaaPreparedFrameFixture {
         val events = mutableListOf<String>()
         val capabilities = capabilities()
         val frameId = GPUFrameID(8)
         val seal = GPUFrameCapabilitySeal.capture(frameId, deviceGeneration, capabilities)
         val samplePlan = GPUSamplePlan.MultisampleFrame(4)
+        val pathDepthStencilRef = GPUFrameTextureRef("path.depth")
         val continuationKey = GPUSampleContinuationKey(
             target = GPUTargetIdentity(targetRef.value),
             targetGeneration = 1,
@@ -2477,22 +2746,51 @@ internal object GPUFrameCoreTestFixture {
             samplePlan = samplePlan,
             attachmentAuthority = GPUSampleAttachmentAuthority.PreparedFramePayload,
             colorAttachment = GPUTargetIdentity("msaa-color:target.scene:1"),
-            depthStencilAttachment = null,
+            depthStencilAttachment = pathDepthStencilRef.takeIf { pathDepthStencil }?.let {
+                GPUTargetIdentity(it.value)
+            },
         )
         val firstPacket = drawPacket("packet.msaa.first", 11, "pass.msaa.first")
+        val firstCoverPacket = drawPacket("packet.msaa.first.cover", 11, "pass.msaa.first")
         val secondPacket = drawPacket("packet.msaa.second", 12, "pass.msaa.second")
         val firstRender = GPUFrameStep.RenderPassStep(
             target = targetRef,
             loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
             samplePlan = samplePlan,
-            drawPackets = listOf(firstPacket),
+            drawPackets = if (pathDepthStencil) {
+                listOf(firstPacket, firstCoverPacket)
+            } else {
+                listOf(firstPacket)
+            },
             sourceTaskIds = listOf(GPUTaskID("task.msaa.first")),
+            resourceUses = if (pathDepthStencil) {
+                listOf(
+                    GPUFrameResourceUse(
+                        pathDepthStencilRef,
+                        GPUFrameResourceRole.PathDepthStencil,
+                        GPUFrameResourceUsage.RenderAttachment,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        write = true,
+                    ),
+                )
+            } else {
+                emptyList()
+            },
             sampleContinuation = GPUSampleContinuationRequest(
                 continuationKey,
                 GPUSampleLoadTransition.FreshClear,
                 GPUSampleStoreAction.Store,
                 GPUSampleResolveAction.ResolveCanonical,
             ),
+            depthStencilLoadStore = if (pathDepthStencil) {
+                GPUDepthStencilLoadStorePlan.WritableStencil(
+                    GPUStencilLoadOperation.Clear,
+                    GPUStorePlan.Discard,
+                    0u,
+                )
+            } else {
+                null
+            },
         )
         val secondRender = GPUFrameStep.RenderPassStep(
             target = targetRef,
@@ -2500,6 +2798,19 @@ internal object GPUFrameCoreTestFixture {
             samplePlan = samplePlan,
             drawPackets = listOf(secondPacket),
             sourceTaskIds = listOf(GPUTaskID("task.msaa.second")),
+            resourceUses = if (pathDepthStencil) {
+                listOf(
+                    GPUFrameResourceUse(
+                        pathDepthStencilRef,
+                        GPUFrameResourceRole.PathDepthStencil,
+                        GPUFrameResourceUsage.RenderAttachment,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        write = true,
+                    ),
+                )
+            } else {
+                emptyList()
+            },
             sampleContinuation = GPUSampleContinuationRequest(
                 continuationKey,
                 GPUSampleLoadTransition.RetainedLoad,
@@ -2517,32 +2828,53 @@ internal object GPUFrameCoreTestFixture {
             recordingSeals = listOf(
                 GPURecordingSeal(GPURecordingID("recording.msaa"), 0, "compat", "replay", seal.sealHash),
             ),
-            steps = listOf(prepare, firstRender, secondRender),
+            steps = if (singleScope) {
+                listOf(prepare, firstRender)
+            } else {
+                listOf(prepare, firstRender, secondRender)
+            },
             memoryBudget = budget(),
             diagnostics = emptyList(),
         )
-        fun operandKeys(scope: String): List<GPUPreparedNativeOperandKey> = listOf(
+        fun operandKeys(scope: String): List<GPUPreparedNativeOperandKey> = buildList {
+            add(
             GPUPreparedNativeOperandKey(
                 GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
                 GPUPreparedNativeOperandKind.TextureView,
                 gpuPreparedNativeBindingKey("msaa:${continuationKey.colorAttachment.value}"),
             ),
+            )
+            add(
             GPUPreparedNativeOperandKey(
                 GPUPreparedNativeOperandRole.RenderResolveTarget,
                 GPUPreparedNativeOperandKind.TextureView,
                 gpuPreparedNativeBindingKey(resolveBinding),
             ),
+            )
+            if (pathDepthStencil) {
+                add(
+                    GPUPreparedNativeOperandKey(
+                        GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                        GPUPreparedNativeOperandKind.TextureView,
+                        gpuPreparedNativeBindingKey(depthBinding),
+                    ),
+                )
+            }
+            add(
             GPUPreparedNativeOperandKey(
                 GPUPreparedNativeOperandRole.RenderPipeline,
                 GPUPreparedNativeOperandKind.RenderPipeline,
                 gpuPreparedNativeBindingKey("pipeline.$scope"),
             ),
+            )
+            add(
             GPUPreparedNativeOperandKey(
                 GPUPreparedNativeOperandRole.RenderBindGroup,
                 GPUPreparedNativeOperandKind.BindGroup,
                 gpuPreparedNativeBindingKey("bind-group.$scope"),
             ),
-        )
+            )
+        }
         val firstKeys = operandKeys("first")
         val secondKeys = operandKeys("second")
         val encoderPlan = GPUCommandEncoderPlan.ordered(
@@ -2550,15 +2882,33 @@ internal object GPUFrameCoreTestFixture {
             contextIdentity = targetRef.value,
             deviceGeneration = deviceGeneration,
             targetGeneration = 1,
-            scopes = listOf(
-                renderScope(1, firstPacket, firstRender, "msaa-first")
-                    .attachNativeOperandKeys(firstKeys),
-                renderScope(2, secondPacket, secondRender, "msaa-second")
-                    .attachNativeOperandKeys(secondKeys),
-            ),
+            scopes = buildList {
+                add(
+                    (if (pathDepthStencil) {
+                        pathRenderScope(
+                            1,
+                            firstPacket,
+                            firstCoverPacket,
+                            firstRender,
+                            "msaa-first",
+                            pathDepthStencilRef,
+                        )
+                    } else {
+                        renderScope(1, firstPacket, firstRender, "msaa-first")
+                    })
+                        .attachNativeOperandKeys(firstKeys),
+                )
+                if (!singleScope) {
+                    add(
+                        renderScope(2, secondPacket, secondRender, "msaa-second")
+                            .attachNativeOperandKeys(secondKeys),
+                    )
+                }
+            },
         )
         val sharedColorView = fakeNative<GPUTextureView>("msaa.color.shared")
         val canonicalResolveView = fakeNative<GPUTextureView>("target.scene.resolve")
+        val sharedDepthView = fakeNative<GPUTextureView>("path.depth.shared")
         val sharedResolveView = if (sharedForeignResolveView) {
             fakeNative<GPUTextureView>("target.foreign.resolve.shared")
         } else {
@@ -2584,6 +2934,13 @@ internal object GPUFrameCoreTestFixture {
                 pass = GPUPreparedNativeRenderPassConfig(
                     colorTarget = GPUPreparedNativeTextureViewOperand(colorView, deviceGeneration),
                     resolveTarget = GPUPreparedNativeTextureViewOperand(resolveView, deviceGeneration),
+                    depthStencilTarget = sharedDepthView.takeIf { pathDepthStencil }?.let {
+                        GPUPreparedNativeTextureViewOperand(
+                            if (aliasDepthWithColor) colorView else it,
+                            deviceGeneration,
+                            GPUPreparedNativeOperandOwnership.Borrowed,
+                        )
+                    },
                     loadOperation = load,
                     storeOperation = GPUPreparedNativeStoreOperation.Store,
                     clearColor = if (load == GPUPreparedNativeLoadOperation.Clear) {
@@ -2599,22 +2956,22 @@ internal object GPUFrameCoreTestFixture {
                 ),
             )
         }
-        val operands = listOf(
-            renderOperand(
+        val operands = buildList {
+            add(renderOperand(
                 1,
                 "first",
                 GPUPreparedNativeLoadOperation.Clear,
                 sharedColorView,
                 sharedResolveView,
-            ),
-            renderOperand(
+            ))
+            if (!singleScope) add(renderOperand(
                 2,
                 "second",
                 GPUPreparedNativeLoadOperation.Load,
                 if (splitColorView) fakeNative("msaa.color.foreign") else sharedColorView,
                 if (splitResolveView) fakeNative("target.foreign.resolve") else sharedResolveView,
-            ),
-        )
+            ))
+        }
         val payload = GPUPreparedNativeFramePayload(
             identity = GPUPreparedNativeFrameIdentity(
                 frameId = frameId,
@@ -2632,7 +2989,15 @@ internal object GPUFrameCoreTestFixture {
                 },
             ),
             scopeOperands = operands,
-            scopeOperandKeys = listOf(firstKeys, secondKeys),
+            scopeOperandKeys = if (singleScope) listOf(firstKeys) else listOf(firstKeys, secondKeys),
+            pathDepthStencilViewAuthority = if (pathDepthStencil) {
+                buildMap {
+                    put(1, sharedDepthView)
+                    if (!singleScope) put(2, sharedDepthView)
+                }
+            } else {
+                emptyMap()
+            },
         )
         val adapter = GPURuntimeResourceAdapter()
         val ownership = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
@@ -2647,21 +3012,37 @@ internal object GPUFrameCoreTestFixture {
             semanticPlan = semanticPlan,
             encoderPlan = encoderPlan,
             resources = GPUPreparedResourceSet(
-                ordinaryResources = listOf(
-                    GPUPreparedResourceEvidence(
+                ordinaryResources = buildList {
+                    add(GPUPreparedResourceEvidence(
                         targetRef,
                         GPUPreparedConcreteResourceRef.Texture(GPUTextureResourceRef("prepared:target.scene")),
                         GPUFrameResourceRole.SceneTarget,
                         deviceGeneration,
                         1,
-                    ),
-                ),
+                    ))
+                    if (pathDepthStencil) {
+                        add(
+                            GPUPreparedResourceEvidence(
+                                pathDepthStencilRef,
+                                GPUPreparedConcreteResourceRef.Texture(
+                                    GPUTextureResourceRef("prepared:path.depth"),
+                                ),
+                                GPUFrameResourceRole.PathDepthStencil,
+                                deviceGeneration,
+                                1,
+                            ),
+                        )
+                    }
+                },
                 outputOwnedReadbacks = emptyList(),
             ),
             generationSeal = GPUPreparedGenerationSeal(
                 deviceGeneration,
                 1,
-                mapOf(targetRef to 1L),
+                buildMap {
+                    put(targetRef, 1L)
+                    if (pathDepthStencil) put(pathDepthStencilRef, 1L)
+                },
                 seal.sealHash,
             ),
             completionTicket = completionTicket,
@@ -2675,11 +3056,13 @@ internal object GPUFrameCoreTestFixture {
                 completionProvider = NoOpCompletionProvider,
                 completionTicket = completionTicket,
             ),
-            stepPartition = listOf(
-                GPUPreparedStepEvidence(0, GPUPreparedStepLane.ResourcePreflight, "PrepareResources"),
-                GPUPreparedStepEvidence(1, GPUPreparedStepLane.Encoder, "RenderPass"),
-                GPUPreparedStepEvidence(2, GPUPreparedStepLane.Encoder, "RenderPass"),
-            ),
+            stepPartition = buildList {
+                add(GPUPreparedStepEvidence(0, GPUPreparedStepLane.ResourcePreflight, "PrepareResources"))
+                add(GPUPreparedStepEvidence(1, GPUPreparedStepLane.Encoder, "RenderPass"))
+                if (!singleScope) {
+                    add(GPUPreparedStepEvidence(2, GPUPreparedStepLane.Encoder, "RenderPass"))
+                }
+            },
             dependencyEvidence = emptyList(),
             hostActions = emptyList(),
         )

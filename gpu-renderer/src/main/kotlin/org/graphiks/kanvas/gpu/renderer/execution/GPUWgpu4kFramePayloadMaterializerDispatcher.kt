@@ -81,6 +81,7 @@ internal fun decorateWgpu4kSurfaceBlitDraft(
             scopeOperandKeys = fullEncoderPlan.scopes.map { it.nativeOperandKeys },
             auxiliaryOwnedHandles = reusable.auxiliaryOwnedHandles,
             leaseLifecycle = reusable.leaseLifecycle,
+            pathDepthStencilViewAuthority = reusable.pathDepthStencilViewAuthority,
         ),
     )
     check(reusableDraft.transferOwnershipToDraft(decorated)) {

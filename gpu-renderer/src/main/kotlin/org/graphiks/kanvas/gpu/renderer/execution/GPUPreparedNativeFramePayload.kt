@@ -8,6 +8,7 @@ import io.ygdrasil.webgpu.GPUSampler
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureView
+import java.util.Collections
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
@@ -1064,6 +1065,7 @@ internal class GPUPreparedNativeFramePayload(
     scopeOperandKeys: List<List<GPUPreparedNativeOperandKey>>,
     auxiliaryOwnedHandles: List<GPUPreparedNativeAuxiliaryHandle> = emptyList(),
     internal val leaseLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null,
+    pathDepthStencilViewAuthority: Map<Int, GPUTextureView> = emptyMap(),
 ) {
     val scopeOperands: List<GPUPreparedNativeScopeOperand> = immutableList(scopeOperands)
     val scopeOperandKeys: List<List<GPUPreparedNativeOperandKey>> = immutableList(
@@ -1071,6 +1073,8 @@ internal class GPUPreparedNativeFramePayload(
     )
     internal val auxiliaryOwnedHandles: List<GPUPreparedNativeAuxiliaryHandle> =
         immutableList(auxiliaryOwnedHandles)
+    internal val pathDepthStencilViewAuthority: Map<Int, GPUTextureView> =
+        Collections.unmodifiableMap(pathDepthStencilViewAuthority.toMap())
     private val ownershipByHandle = IdentityHashMap<AutoCloseable, GPUPreparedNativeOperandOwnership>()
 
     init {
@@ -1080,6 +1084,12 @@ internal class GPUPreparedNativeFramePayload(
         require(this.scopeOperandKeys.size == this.scopeOperands.size) {
             "Native payload operand keys must cover every scope"
         }
+        require(this.pathDepthStencilViewAuthority.keys.all { sourceStepIndex ->
+            this.scopeOperands.any { operand ->
+                operand.sourceStepIndex == sourceStepIndex &&
+                    operand is GPUPreparedNativeScopeOperand.Render
+            }
+        }) { "Path D24S8 native view authority must name an exact render scope" }
         require(this.scopeOperands.indices.all { index ->
             val operands = this.scopeOperands[index].declaredOperandDescriptors()
             val keys = this.scopeOperandKeys[index]

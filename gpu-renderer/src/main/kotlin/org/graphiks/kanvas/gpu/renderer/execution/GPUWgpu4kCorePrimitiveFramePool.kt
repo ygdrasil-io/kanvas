@@ -311,6 +311,8 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolCounters(
     val coverageMaskSlotReuses: Long = 0L,
     val msaaColorTextureCreations: Long = 0L,
     val msaaColorSlotReuses: Long = 0L,
+    val pathDepthStencilTextureCreations: Long = 0L,
+    val pathDepthStencilSlotReuses: Long = 0L,
 )
 
 internal data class GPUWgpu4kCorePrimitiveFramePoolHandles(
@@ -465,6 +467,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
     private var coverageMaskSlotReuses = 0L
     private var msaaColorTextureCreations = 0L
     private var msaaColorSlotReuses = 0L
+    private var pathDepthStencilTextureCreations = 0L
+    private var pathDepthStencilSlotReuses = 0L
     private var closing = false
     private var closed = false
 
@@ -504,6 +508,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         )
         val previousCoverageMaskTexture = slot?.handles?.coverageMask?.texture
         val previousMsaaColorTexture = slot?.handles?.msaaColor?.texture
+        val previousPathDepthStencilTexture = slot?.handles?.pathDepthStencil?.texture
         if (slot != null &&
             (!slot.capacities.contains(requiredCapacities) ||
                 !slot.handles.matches(
@@ -535,6 +540,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             ) {
                 msaaColorTextureCreations += 1L
             }
+            if (requirements.pathDepthStencil != null &&
+                previousPathDepthStencilTexture !== slot.handles.pathDepthStencil?.texture
+            ) {
+                pathDepthStencilTextureCreations += 1L
+            }
         }
         if (slot == null) {
             if (slots.size == MAX_SLOTS) {
@@ -563,6 +573,9 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     if (created.slot.handles.msaaColor != null) {
                         msaaColorTextureCreations += 1L
                     }
+                    if (created.slot.handles.pathDepthStencil != null) {
+                        pathDepthStencilTextureCreations += 1L
+                    }
                 }
                 is SlotCreation.Refused -> {
                     return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(created.reason)
@@ -579,6 +592,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             acquiredSlot.handles.msaaColor?.texture === previousMsaaColorTexture
         ) {
             msaaColorSlotReuses += 1L
+        }
+        if (requirements.pathDepthStencil != null && previousPathDepthStencilTexture != null &&
+            acquiredSlot.handles.pathDepthStencil?.texture === previousPathDepthStencilTexture
+        ) {
+            pathDepthStencilSlotReuses += 1L
         }
         val leaseId = nextLeaseId++
         acquiredSlot.state = SlotState.CheckedOut
@@ -598,10 +616,12 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
     @Synchronized
     fun counters(): GPUWgpu4kCorePrimitiveFramePoolCounters =
         GPUWgpu4kCorePrimitiveFramePoolCounters(
-            coverageMaskTextureCreations,
-            coverageMaskSlotReuses,
-            msaaColorTextureCreations,
-            msaaColorSlotReuses,
+            coverageMaskTextureCreations = coverageMaskTextureCreations,
+            coverageMaskSlotReuses = coverageMaskSlotReuses,
+            msaaColorTextureCreations = msaaColorTextureCreations,
+            msaaColorSlotReuses = msaaColorSlotReuses,
+            pathDepthStencilTextureCreations = pathDepthStencilTextureCreations,
+            pathDepthStencilSlotReuses = pathDepthStencilSlotReuses,
         )
 
     @Synchronized

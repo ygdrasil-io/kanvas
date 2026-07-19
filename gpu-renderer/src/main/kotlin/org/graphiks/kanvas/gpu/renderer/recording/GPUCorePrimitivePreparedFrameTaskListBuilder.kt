@@ -1350,7 +1350,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 "Prepared core primitives accept only an exact single-sample or 4x frame authority.",
             )
         }
-        val multisampleContinuationKey = if (preparedSamplePlan is GPUSamplePlan.MultisampleFrame) {
+        val baseMultisampleContinuationKey = if (preparedSamplePlan is GPUSamplePlan.MultisampleFrame) {
             val keys = baseRenders.mapNotNull(GPUTask.Render::sampleContinuationKey).distinct()
             if (keys.size != 1 || baseRenders.any { it.sampleContinuationKey == null } ||
                 keys.single().samplePlan != preparedSamplePlan ||
@@ -1518,12 +1518,17 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                     "Prepared path stencil topology does not yet accept stroke edge fans.",
                 )
                 GPUCorePrimitiveGeometryMode.StencilEdgeFan -> {
+                    val expectedCoverageMode = if (preparedSamplePlan == GPUSamplePlan.MultisampleFrame(4)) {
+                        GPUCorePrimitiveCoverageMode.StencilAA
+                    } else {
+                        GPUCorePrimitiveCoverageMode.Stencil1x
+                    }
                     if (packet.role != GPUDrawPacketRole.Shading ||
-                        semantic.coverageMode != GPUCorePrimitiveCoverageMode.Stencil1x
+                        semantic.coverageMode != expectedCoverageMode
                     ) {
                         return refused(
                             "unsupported.recording.core_primitive_path_stencil_coverage",
-                            "Prepared fill path stencil topology requires one Shading packet with Stencil1x coverage.",
+                            "Prepared fill path stencil topology requires one Shading packet with exact 1x/4x coverage authority.",
                         )
                     }
                     val clipExecutionPlan = requireNotNull(packet.clipExecutionPlan)
@@ -1546,6 +1551,31 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                     pathStencilPlansByCommandId[packet.commandIdValue] =
                         GPUCorePrimitivePathStencilPacketPlan(semantic, scissorBounds)
                 }
+            }
+        }
+        if (preparedSamplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+            pathStencilPlansByCommandId.isNotEmpty() &&
+            pathStencilPlansByCommandId.size != basePackets.size
+        ) {
+            return refused(
+                "unsupported.recording.core_primitive_path_stencil_msaa_mixed_direct",
+                "Path stencil MSAA 4x requires one path-only render scope and refuses direct packets.",
+            )
+        }
+        if (preparedSamplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+            pathStencilPlansByCommandId.isNotEmpty()
+        ) {
+            if (baseRenders.size != 1) {
+                return refused(
+                    "unsupported.recording.core_primitive_path_stencil_msaa_pass_break",
+                    "Path stencil MSAA 4x requires one uninterrupted base render scope.",
+                )
+            }
+            if (baseRenders.single().loadStore != GPULoadStorePlan("clear", GPUStorePlan.Store)) {
+                return refused(
+                    "unsupported.recording.core_primitive_path_stencil_msaa_retained_load",
+                    "Path stencil MSAA 4x requires canonical Clear+Store color authority and refuses retained load.",
+                )
             }
         }
         if ((analyticClipAuthoritiesByCommandId.isNotEmpty() ||
@@ -2164,7 +2194,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             null
         } else {
             try {
-                corePrimitiveDepthStencilByteSize(request.targetBounds, 1)
+                corePrimitiveDepthStencilByteSize(request.targetBounds, preparedSamplePlan.sampleCount)
             } catch (_: ArithmeticException) {
                 return refused(
                     "unsupported.recording.core_primitive_path_depth_stencil_size",
@@ -2174,6 +2204,17 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         }
         val pathDepthStencil = pathDepthStencilBytes?.let {
             GPUFrameTextureRef("texture.core-primitive.path-depth-stencil.${request.baseTaskList.frameId.value}")
+        }
+        val multisampleContinuationKey = baseMultisampleContinuationKey?.let { continuation ->
+            if (pathDepthStencil == null) {
+                continuation
+            } else {
+                continuation.copy(
+                    depthStencilAttachment = org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(
+                        pathDepthStencil.value,
+                    ),
+                )
+            }
         }
         val clipTopologies = clipArtifacts.map { (contentKey, plan) ->
             clipTopology(
@@ -2290,7 +2331,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 descriptor = GPUFrameTextureDescriptor(
                     request.targetBounds,
                     GPUColorFormat("depth24plus-stencil8"),
-                    1,
+                    preparedSamplePlan.sampleCount,
                 ),
                 role = GPUFrameResourceRole.PathDepthStencil,
                 usages = setOf(GPUFrameResourceUsage.RenderAttachment),
@@ -2573,6 +2614,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                             GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
                             corePrimitiveColorWriteNoneBlendPlan(),
                             requireNotNull(uniformSlabSeal),
+                            preparedSamplePlan.sampleCount,
                             publicPipelineKeys,
                         ),
                         pathStencilPacket(
@@ -2582,6 +2624,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                             GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
                             requireNotNull(basePacket.blendPlan),
                             requireNotNull(uniformSlabSeal),
+                            preparedSamplePlan.sampleCount,
                             publicPipelineKeys,
                         ),
                     )
@@ -3248,6 +3291,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         structuralRole: GPUCorePrimitiveRenderPipelineStructuralKey.Role,
         blendPlan: GPUBlendPlan,
         uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+        sampleCount: Int,
         publicPipelineKeys: MutableMap<GPUCorePrimitiveRenderPipelineStructuralKey, GPURenderPipelineKey>,
     ): GPUDrawPacket {
         require(
@@ -3267,6 +3311,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             structuralRole,
             clipExecutionPlan,
             blendPlan,
+            sampleCount,
         )
         val renderPipelineKey = publicPipelineKeys.getOrPut(structuralPipelineKey) {
             structuralPipelineKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
@@ -3293,7 +3338,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             semanticPayload = preparedSemantic,
             vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
             scissorBoundsHash = corePrimitiveScissorAuthority(preparedSemantic.scissorBounds),
-            targetStateHash = CORE_PRIMITIVE_TARGET_STATE_HASH,
+            targetStateHash = corePrimitiveTargetStateHash(sampleCount),
             originalPaintOrder = basePacket.originalPaintOrder,
             resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
             frameProvenance = basePacket.frameProvenance,

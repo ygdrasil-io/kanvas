@@ -106,6 +106,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializati
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreparationDecision
@@ -1795,6 +1796,7 @@ internal class GPUFramePreflighter(
             return diagnostic("stale.preflight.capability_seal", "The current capability snapshot differs from the frame seal.")
         }
         framePlan.memoryBudget.diagnostic?.let { return it }
+        validateCorePrimitivePathMsaaAuthority(framePlan)?.let { return it }
         validateCorePrimitiveSemanticEnvelopes(framePlan)?.let { return it }
         validateCorePrimitiveCoverageSampleMatrix(framePlan)?.let { return it }
         val hasClipStencilPreparedCandidate = framePlan.steps
@@ -2030,6 +2032,160 @@ internal class GPUFramePreflighter(
         )
     }
 
+    private fun validateCorePrimitivePathMsaaAuthority(framePlan: GPUFramePlan): GPUDiagnostic? {
+        fun refused(message: String) = diagnostic(
+            "invalid.preflight.core_primitive_path_stencil_msaa_authority",
+            message,
+        )
+
+        val renderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val coreRenders = renderSteps
+            .filter { render ->
+                render.drawPackets.any { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+                }
+            }
+        val pathMsaaRenders = coreRenders.filter { render ->
+            render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+                render.drawPackets.any { packet ->
+                    packet.role == GPUDrawPacketRole.PathStencilProducer ||
+                        packet.role == GPUDrawPacketRole.PathStencilCover
+                }
+        }
+        if (pathMsaaRenders.isEmpty()) return null
+        if (renderSteps.size != 1 || coreRenders.size != 1 || pathMsaaRenders.size != 1) {
+            return refused("Path stencil MSAA authority requires one unique all-path render scope.")
+        }
+        val render = pathMsaaRenders.single()
+        if (render.drawPackets.any { packet ->
+                packet.semanticPayload !is GPUDrawSemanticPayload.CorePrimitive ||
+                    packet.role != GPUDrawPacketRole.PathStencilProducer &&
+                    packet.role != GPUDrawPacketRole.PathStencilCover
+            } || render.drawPackets.size % 2 != 0 ||
+            render.drawPackets.chunked(2).any { pair ->
+                pair.size != 2 ||
+                    pair[0].role != GPUDrawPacketRole.PathStencilProducer ||
+                    pair[1].role != GPUDrawPacketRole.PathStencilCover ||
+                    pair[0].commandIdValue != pair[1].commandIdValue
+            }
+        ) {
+            return refused("Path stencil MSAA authority requires exact producer/cover pairs only.")
+        }
+        val semantics = render.drawPackets.map { packet ->
+            packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
+        }
+        val targetBounds = semantics.map(GPUDrawSemanticPayload.CorePrimitive::targetBounds)
+            .distinct().singleOrNull()
+            ?: return refused("Path stencil MSAA semantics require one exact target extent.")
+        if (semantics.any { semantic ->
+                semantic.coverageMode != GPUCorePrimitiveCoverageMode.StencilAA ||
+                    (semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)
+                        ?.geometryMode != GPUCorePrimitiveGeometryMode.StencilEdgeFan
+            }
+        ) {
+            return refused("Path stencil MSAA semantics require StencilAA edge-fan authority.")
+        }
+        val pathUses = render.resourceUses.filter { it.role == GPUFrameResourceRole.PathDepthStencil }
+        if (pathUses.singleOrNull()?.let { use ->
+                use.usage == GPUFrameResourceUsage.RenderAttachment &&
+                    use.lifetime == GPUFrameResourceLifetime.FrameLocal && use.write
+            } != true || render.resourceUses.any { it.role == GPUFrameResourceRole.ClipDepthStencil }
+        ) {
+            return refused("Path stencil MSAA requires one unique writable Path D24S8 use and no clip D24S8.")
+        }
+        val pathUse = pathUses.single()
+        val continuation = render.sampleContinuation
+            ?: return refused("Path stencil MSAA requires one payload-owned color and D24S8 continuation.")
+        val key = continuation.key
+        if (key.target.value != render.target.value ||
+            key.targetGeneration != context.targetGeneration ||
+            key.deviceGeneration != context.deviceGeneration ||
+            key.colorFormat.value != "rgba8unorm" ||
+            key.colorInterpretation.value != "encoded-premul-srgb" ||
+            key.samplePlan != GPUSamplePlan.MultisampleFrame(4) ||
+            key.attachmentAuthority != org.graphiks.kanvas.gpu.renderer.passes
+                .GPUSampleAttachmentAuthority.PreparedFramePayload ||
+            key.colorAttachment.value != "msaa-color:${render.target.value}:${context.targetGeneration}" ||
+            key.depthStencilAttachment?.value != pathUse.resource.value ||
+            continuation.loadTransition != GPUSampleLoadTransition.FreshClear ||
+            continuation.storeAction != GPUSampleStoreAction.Store ||
+            continuation.resolveAction != GPUSampleResolveAction.ResolveCanonical
+        ) {
+            return refused("Path stencil MSAA continuation identity, generation, or transition authority is not exact.")
+        }
+        if (render.loadStore != GPULoadStorePlan("clear", GPUStorePlan.Store) ||
+            render.depthStencilLoadStore != org.graphiks.kanvas.gpu.renderer.recording
+                .GPUDepthStencilLoadStorePlan.WritableStencil(
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                    GPUStorePlan.Discard,
+                    0u,
+                )
+        ) {
+            return refused("Path stencil MSAA requires color Clear+Store+Resolve and stencil Clear0+Discard.")
+        }
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val depthPreparation = preparations.singleOrNull { request ->
+            request.role == GPUFrameResourceRole.PathDepthStencil
+        } ?: return refused("Path stencil MSAA requires one exact Path D24S8 preparation.")
+        val depthDescriptor = depthPreparation.descriptor as? GPUFrameTextureDescriptor
+            ?: return refused("Path stencil MSAA Path D24S8 preparation must be a texture.")
+        val targetPreparation = preparations.singleOrNull { it.resource == render.target }
+            ?: return refused("Path stencil MSAA requires one exact canonical target preparation.")
+        val attachmentBytes = try {
+            corePrimitiveDepthStencilByteSize(targetBounds, 4)
+        } catch (_: ArithmeticException) {
+            return refused("Path stencil MSAA attachment byte authority overflows.")
+        }
+        if (!isCanonicalCorePrimitiveTargetPreparation(targetPreparation, render.target, targetBounds) ||
+            depthPreparation.resource != pathUse.resource ||
+            depthDescriptor.logicalBounds != targetBounds ||
+            depthDescriptor.format.value != "depth24plus-stencil8" ||
+            depthDescriptor.sampleCount != 4 ||
+            depthPreparation.usages != setOf(GPUFrameResourceUsage.RenderAttachment) ||
+            depthPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            depthPreparation.byteSize != attachmentBytes ||
+            context.resourceGenerations[depthPreparation.resource] == null ||
+            framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.FrameLocalMsaaColor] !=
+            attachmentBytes ||
+            framePlan.memoryBudget.categoryTotals[GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil] !=
+            attachmentBytes
+        ) {
+            return refused("Path stencil MSAA target, D24S8 descriptor, generation, or budget authority is not exact.")
+        }
+        render.drawPackets.forEach { packet ->
+            val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
+            val structuralRole = when (packet.role) {
+                GPUDrawPacketRole.PathStencilProducer ->
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer
+                GPUDrawPacketRole.PathStencilCover ->
+                    GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover
+                else -> error("Validated above")
+            }
+            val structural = try {
+                corePrimitivePathStencilRenderPipelineStructuralKey(
+                    semantic,
+                    structuralRole,
+                    packet.clipExecutionPlan ?: return refused("Path stencil MSAA clip authority is missing."),
+                    packet.blendPlan ?: return refused("Path stencil MSAA blend authority is missing."),
+                    4,
+                )
+            } catch (_: IllegalArgumentException) {
+                return refused("Path stencil MSAA structural pipeline authority is invalid.")
+            }
+            val authority = packet.corePrimitivePreparedAuthority
+            if (authority?.structuralPipelineKey != structural ||
+                authority.renderPipelineKey != packet.renderPipelineKey ||
+                packet.renderPipelineKey != structural.stableRenderPipelineKey(
+                    CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
+                ) || packet.targetStateHash != corePrimitiveTargetStateHash(4)
+            ) {
+                return refused("Path stencil MSAA structural key, pipeline key, or target state is not exact.")
+            }
+        }
+        return null
+    }
+
     private fun validateCorePrimitivePathGeometryResources(
         framePlan: GPUFramePlan,
     ): CorePrimitiveGeometryValidation {
@@ -2139,11 +2295,22 @@ internal class GPUFramePreflighter(
             val blend = packet.blendPlan ?: return null
             val expected = when (role) {
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading ->
-                    corePrimitiveRenderPipelineStructuralKey(semantic, clip, blend)
+                    corePrimitiveRenderPipelineStructuralKey(
+                        semantic,
+                        clip,
+                        blend,
+                        render.samplePlan.sampleCount,
+                    )
                         .copy(depthStencil = corePrimitiveDirectPathDepthStencilState())
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
-                -> corePrimitivePathStencilRenderPipelineStructuralKey(semantic, role, clip, blend)
+                -> corePrimitivePathStencilRenderPipelineStructuralKey(
+                    semantic,
+                    role,
+                    clip,
+                    blend,
+                    render.samplePlan.sampleCount,
+                )
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer,
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer,
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer,
@@ -2220,8 +2387,13 @@ internal class GPUFramePreflighter(
                         ?: return refused("Path producer requires triangulated path geometry.")
                     val coverGeometry = coverSemantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath
                         ?: return refused("Path cover requires triangulated path geometry.")
-                    if (semantic.coverageMode != GPUCorePrimitiveCoverageMode.Stencil1x ||
-                        coverSemantic.coverageMode != GPUCorePrimitiveCoverageMode.Stencil1x ||
+                    val expectedCoverageMode = if (render.samplePlan == GPUSamplePlan.MultisampleFrame(4)) {
+                        GPUCorePrimitiveCoverageMode.StencilAA
+                    } else {
+                        GPUCorePrimitiveCoverageMode.Stencil1x
+                    }
+                    if (semantic.coverageMode != expectedCoverageMode ||
+                        coverSemantic.coverageMode != expectedCoverageMode ||
                         producerGeometry.geometryMode != GPUCorePrimitiveGeometryMode.StencilEdgeFan ||
                         producerGeometry != coverGeometry ||
                         semantic.targetBounds != coverSemantic.targetBounds ||
@@ -2370,16 +2542,13 @@ internal class GPUFramePreflighter(
             ?: return refused("Path depth/stencil preparation must be a texture.")
         val targetBounds = targetDescriptor.logicalBounds
         val depthBytes = try {
-            Math.multiplyExact(
-                Math.multiplyExact(targetBounds.width.toLong(), targetBounds.height.toLong()),
-                4L,
-            )
+            corePrimitiveDepthStencilByteSize(targetBounds, render.samplePlan.sampleCount)
         } catch (_: ArithmeticException) {
             return refused("Path depth/stencil byte size overflows signed 64-bit arithmetic.")
         }
         if (depthDescriptor.logicalBounds != targetBounds ||
             depthDescriptor.format.value != "depth24plus-stencil8" ||
-            depthDescriptor.sampleCount != 1 ||
+            depthDescriptor.sampleCount != render.samplePlan.sampleCount ||
             depthStencil.usages != setOf(GPUFrameResourceUsage.RenderAttachment) ||
             depthStencil.lifetime != GPUFrameResourceLifetime.FrameLocal ||
             depthStencil.byteSize != depthBytes
@@ -3384,10 +3553,20 @@ internal class GPUFramePreflighter(
                         "The MSAA continuation sample plan does not match the render pass.",
                     )
                 }
-                if (request.key.depthStencilAttachment != null) {
+                val pathDepthUse = render.resourceUses.singleOrNull { use ->
+                    use.role == GPUFrameResourceRole.PathDepthStencil
+                }
+                val exactPathDepthAuthority = render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+                    pathDepthUse != null &&
+                    request.key.depthStencilAttachment?.value == pathDepthUse.resource.value &&
+                    render.drawPackets.all { packet ->
+                        packet.role == GPUDrawPacketRole.PathStencilProducer ||
+                            packet.role == GPUDrawPacketRole.PathStencilCover
+                    }
+                if (request.key.depthStencilAttachment != null && !exactPathDepthAuthority) {
                     return diagnostic(
                         "unsupported.msaa.continuation_depth_stencil_unavailable",
-                        "The first native MSAA continuation slice is color-only; depth/stencil authority is unproven.",
+                        "A prepared MSAA depth/stencil continuation requires the exact sealed Path 4x scope.",
                     )
                 }
                 val expectedLoad = when (render.loadStore.loadOp) {
@@ -3690,6 +3869,7 @@ internal class GPUFramePreflighter(
                     GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
                     clipExecutionPlan,
                     blendPlan,
+                    render.samplePlan.sampleCount,
                 )
             GPUDrawPacketRole.PathStencilCover ->
                 corePrimitivePathStencilRenderPipelineStructuralKey(
@@ -3697,6 +3877,7 @@ internal class GPUFramePreflighter(
                     GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
                     clipExecutionPlan,
                     blendPlan,
+                    render.samplePlan.sampleCount,
                 )
             else -> return diagnostic(
                 "invalid.preflight.core_primitive_packet_authority",

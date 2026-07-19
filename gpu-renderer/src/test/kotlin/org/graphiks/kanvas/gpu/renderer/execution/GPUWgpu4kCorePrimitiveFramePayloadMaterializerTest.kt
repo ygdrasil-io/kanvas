@@ -2215,6 +2215,256 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `path stencil AA 4x materializes one paired pooled attachment set and reuses it through completion`() {
+        val fixture = fixture(
+            routeShape = RouteShape.PathOnly,
+            useRealPreflight = true,
+            sampleCount = 4,
+        )
+        fixture.native.events.clear()
+        val scope = fixture.encoderPlan.scopes.single()
+
+        assertEquals(
+            listOf(
+                GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                GPUPreparedNativeOperandRole.RenderResolveTarget,
+                GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+            ),
+            scope.nativeOperandKeys.map { it.role },
+        )
+
+        val first = fixture.materializeCore()
+        val firstRender = first.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        val firstResolve = requireNotNull(firstRender.pass.resolveTarget)
+        val firstDepth = requireNotNull(firstRender.pass.depthStencilTarget)
+        assertNotSame(firstRender.pass.colorTarget.view, firstResolve.view)
+        assertNotSame(firstRender.pass.colorTarget.view, firstDepth.view)
+        assertNotSame(firstResolve.view, firstDepth.view)
+        assertTrue(fixture.native.renderPipelineDescriptors.all { it.multisample.count == 4u })
+        assertEquals(1L, fixture.cache.counters().msaaColorTextureCreations)
+        assertEquals(
+            1,
+            fixture.native.createdHandles(
+                "Kanvas.session.corePrimitive.framePool.pathDepthStencil",
+            ).size,
+        )
+        assertEquals(4u, fixture.native.textureDescriptors.single {
+            it.label == "Kanvas.session.corePrimitive.framePool.msaaColor4x"
+        }.sampleCount)
+        assertEquals(4u, fixture.native.textureDescriptors.single {
+            it.label == "Kanvas.session.corePrimitive.framePool.pathDepthStencil"
+        }.sampleCount)
+        assertTrue(first.draft.disposeBeforeRegistration())
+
+        val completed = fixture.materializeCore()
+        val completedRender = completed.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        assertSame(firstRender.pass.colorTarget.view, completedRender.pass.colorTarget.view)
+        assertSame(firstDepth.view, completedRender.pass.depthStencilTarget!!.view)
+        val adapter = GPURuntimeResourceAdapter()
+        val completedRegistration = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+            adapter.registerPreparedNativeFrameDraft(completed.draft),
+        )
+        assertIs<GPUPreparedNativeFrameBindingResult.Ready>(
+            completedRegistration.ownership.bindLateSurface(
+                null,
+                GPUPreparedNativeFrameLateSurfaceBinding.NotRequired,
+            ),
+        )
+        assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+            completedRegistration.ownership.consume(completed.draft.payload.identity),
+        )
+        assertTrue(completedRegistration.ownership.markSubmitted())
+        assertTrue(completedRegistration.ownership.releaseAfterCompletion())
+
+        val quarantined = fixture.materializeCore()
+        val quarantinedRender = quarantined.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        assertSame(firstRender.pass.colorTarget.view, quarantinedRender.pass.colorTarget.view)
+        assertSame(firstDepth.view, quarantinedRender.pass.depthStencilTarget!!.view)
+        val quarantinedRegistration = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+            adapter.registerPreparedNativeFrameDraft(quarantined.draft),
+        )
+        assertTrue(quarantinedRegistration.ownership.quarantine())
+
+        val replacement = fixture.materializeCore()
+        val replacementRender = replacement.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        assertNotSame(firstRender.pass.colorTarget.view, replacementRender.pass.colorTarget.view)
+        assertNotSame(firstDepth.view, replacementRender.pass.depthStencilTarget!!.view)
+        assertEquals(2L, fixture.cache.counters().msaaColorTextureCreations)
+        assertEquals(
+            2,
+            fixture.native.createdHandles(
+                "Kanvas.session.corePrimitive.framePool.pathDepthStencil",
+            ).size,
+        )
+        assertTrue(replacement.draft.disposeBeforeRegistration())
+        adapter.close()
+        fixture.close()
+    }
+
+    @Test
+    fun `path stencil AA 4x upload failure rolls back and reuses the exact pooled pair`() {
+        val fixture = fixture(
+            routeShape = RouteShape.PathOnly,
+            useRealPreflight = true,
+            sampleCount = 4,
+        )
+        val colorViewLabel = "Kanvas.session.corePrimitive.framePool.msaaColor4x.view"
+        val depthViewLabel = "Kanvas.session.corePrimitive.framePool.pathDepthStencil.view"
+        fixture.native.events.clear()
+        fixture.native.fail("writeBuffer", 1)
+
+        val refused = fixture.materializeCoreResult()
+
+        assertEquals(
+            "failed.native-core-primitive.materialization",
+            assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(refused).code,
+        )
+        val createdColorView = fixture.native.createdHandles(colorViewLabel).single()
+        val createdDepthView = fixture.native.createdHandles(depthViewLabel).single()
+        val recovered = fixture.materializeCore()
+        val recoveredRender = recovered.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        assertSame(createdColorView, recoveredRender.pass.colorTarget.view)
+        assertSame(createdDepthView, recoveredRender.pass.depthStencilTarget!!.view)
+        assertEquals(1L, fixture.cache.counters().msaaColorTextureCreations)
+        assertEquals(1L, fixture.cache.counters().msaaColorSlotReuses)
+        assertEquals(
+            1,
+            fixture.native.createdHandles(
+                "Kanvas.session.corePrimitive.framePool.pathDepthStencil",
+            ).size,
+        )
+
+        assertTrue(recovered.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `post preflight indexed 4x attachment corruption refuses before cache pool and native`() {
+        val fixture = fixture(
+            routeShape = RouteShape.PathOnly,
+            useRealPreflight = true,
+            sampleCount = 4,
+        )
+        val render = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val continuation = requireNotNull(render.sampleContinuation)
+        val corruptedPlan = fixture.plan.replacingStep(
+            render,
+            render.withRenderAuthority(
+                sampleContinuation = continuation.copy(
+                    key = continuation.key.copy(
+                        depthStencilAttachment = org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(
+                            "path-depth-stencil.foreign",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        fixture.native.events.clear()
+        val cacheBefore = fixture.cache.counters()
+        val poolSlotsBefore = framePoolSlotCount(fixture.cache)
+
+        val result = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target,
+            fixture.cache,
+            fixture.limits,
+        ).materializeReusable(
+            corruptedPlan,
+            fixture.encoderPlan,
+            fixture.resources,
+            fixture.generationSeal,
+        )
+
+        assertEquals(
+            "invalid.native-core-primitive.indexed-msaa-authority",
+            assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result).code,
+        )
+        assertEquals(emptyList(), fixture.native.events)
+        assertEquals(cacheBefore, fixture.cache.counters())
+        assertEquals(poolSlotsBefore, framePoolSlotCount(fixture.cache))
+        fixture.close()
+    }
+
+    @Test
+    fun `post preflight indexed 4x depth operand substitution refuses before cache pool and native`() {
+        val fixture = fixture(
+            routeShape = RouteShape.PathOnly,
+            useRealPreflight = true,
+            sampleCount = 4,
+        )
+        val originalScope = fixture.encoderPlan.scopes.single()
+        val corruptedScope = GPUCommandEncoderScopePlan(
+            sourceStepIndex = originalScope.sourceStepIndex,
+            operationKind = originalScope.operationKind,
+            scopeLabel = originalScope.scopeLabel,
+            sourceTaskIds = originalScope.sourceTaskIds,
+            sourcePacketIds = originalScope.sourcePacketIds,
+            facadeOperationClasses = originalScope.facadeOperationClasses,
+            targetGeneration = originalScope.targetGeneration,
+            resourceGenerationLabels = originalScope.resourceGenerationLabels,
+            passCommandStream = originalScope.passCommandStream,
+            corePrimitiveDirectNativeRouteSeal = originalScope.corePrimitiveDirectNativeRouteSeal,
+            corePrimitivePathStencilNativeRouteSeal = originalScope.corePrimitivePathStencilNativeRouteSeal,
+            corePrimitiveNativeScopeRouteSeal = originalScope.corePrimitiveNativeScopeRouteSeal,
+        ).attachNativeOperandKeys(originalScope.nativeOperandKeys.map { key ->
+            if (key.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget) {
+                key.copy(bindingKey = gpuPreparedNativeBindingKey("GPUFrameTextureRef:path.foreign@1"))
+            } else {
+                key
+            }
+        })
+        val encoderPlan = GPUCommandEncoderPlan.ordered(
+            fixture.encoderPlan.planId,
+            fixture.encoderPlan.contextIdentity,
+            fixture.encoderPlan.deviceGeneration,
+            fixture.encoderPlan.targetGeneration,
+            listOf(corruptedScope),
+        )
+        fixture.native.events.clear()
+        val cacheBefore = fixture.cache.counters()
+        val poolSlotsBefore = framePoolSlotCount(fixture.cache)
+
+        val result = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target,
+            fixture.cache,
+            fixture.limits,
+        ).materializeReusable(
+            fixture.plan,
+            encoderPlan,
+            fixture.resources,
+            fixture.generationSeal,
+        )
+
+        assertEquals(
+            "invalid.native-core-primitive.indexed-msaa-authority",
+            assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result).code,
+        )
+        assertEquals(emptyList(), fixture.native.events)
+        assertEquals(cacheBefore, fixture.cache.counters())
+        assertEquals(poolSlotsBefore, framePoolSlotCount(fixture.cache))
+        fixture.close()
+    }
+
+    @Test
     fun `adjacent winding regular and even odd inverse pairs retain reset order and exact programs`() {
         val fixture = fixture(routeShape = RouteShape.TwoPathPairs)
         fixture.native.events.clear()
@@ -3002,7 +3252,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 GPUClipExecutionPlan.NoClip
             }
         }
-        val base = recorded.withClipPlans(clipPlans).withSampleCount(sampleCount)
+        val base = recorded.withClipPlans(clipPlans).withSampleCount(
+            sampleCount,
+            canonicalClear = sampleCount == 4 && routeShape == RouteShape.PathOnly,
+        )
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
         val semantics = packets.associate { packet ->
             packet.commandIdValue to if (routeShape == RouteShape.TwoPathPairs ||
@@ -3019,6 +3272,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     },
                     inverseFill = packet.commandIdValue == 3,
                     coordinateOffset = if (packet.commandIdValue == 3) 2f else 0f,
+                    coverageMode = if (sampleCount == 4) {
+                        GPUCorePrimitiveCoverageMode.StencilAA
+                    } else {
+                        GPUCorePrimitiveCoverageMode.Stencil1x
+                    },
                 )
             } else if (routeShape == RouteShape.CoverageMask && packet.commandIdValue == 2) {
                 coverageMaskTriangleSemantic(packet)
@@ -3479,6 +3737,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         fillRule: GPUCorePrimitiveFillRule = GPUCorePrimitiveFillRule.Winding,
         inverseFill: Boolean = false,
         coordinateOffset: Float = 0f,
+        coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
     ): GPUDrawSemanticPayload.CorePrimitive =
         GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(
@@ -3504,7 +3763,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 clipCoveragePlan = GPUClipCoveragePlan.NoClip,
                 blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
                 frameProvenance = GPUFrameProvenance.GmContent,
-                coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
+                coverageMode = coverageMode,
             ),
         )
 
@@ -3630,7 +3889,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             maxBufferSize = 1L shl 30,
             maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),
-        supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm),
+        supportedTextureFormats = setOf(
+            GPUTextureFormat.RGBA8Unorm,
+            GPUTextureFormat.Depth24PlusStencil8,
+        ),
         textureFormatSampleSupport =
             org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport(
                 mapOf(
@@ -3643,12 +3905,23 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                             },
                             resolveSourceSampleCounts = if (sampleCount == 4) setOf(4) else emptySet(),
                         ),
+                    GPUTextureFormat.Depth24PlusStencil8 to
+                        org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport(
+                            renderAttachmentSampleCounts = if (sampleCount == 4) {
+                                setOf(1, 4)
+                            } else {
+                                setOf(1)
+                            },
+                        ),
                 ),
             ),
         rendererFeatures = setOf(GPURendererFeature.RenderPass, GPURendererFeature.Readback),
     )
 
-    private fun GPUTaskList.withSampleCount(sampleCount: Int): GPUTaskList {
+    private fun GPUTaskList.withSampleCount(
+        sampleCount: Int,
+        canonicalClear: Boolean = false,
+    ): GPUTaskList {
         require(sampleCount in setOf(1, 4))
         val samplePlan = if (sampleCount == 1) {
             org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.SingleSampleFrame
@@ -3691,7 +3964,14 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     task.recordingId,
                     task.phase,
                     task.target,
-                    task.loadStore,
+                    if (canonicalClear) {
+                        org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(
+                            "clear",
+                            org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                        )
+                    } else {
+                        task.loadStore
+                    },
                     samplePlan,
                     task.resourceUses,
                     task.provisionalSegmentKey,

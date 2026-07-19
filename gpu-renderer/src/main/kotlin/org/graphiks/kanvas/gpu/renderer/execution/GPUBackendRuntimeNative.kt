@@ -1378,6 +1378,9 @@ private class WgpuBackendSession(
                     coverageMaskSlotReuses = corePrimitive.coverageMaskSlotReuses,
                     msaaColorTextureCreations = corePrimitive.msaaColorTextureCreations,
                     msaaColorSlotReuses = corePrimitive.msaaColorSlotReuses,
+                    pathDepthStencilTextureCreations =
+                        corePrimitive.pathDepthStencilTextureCreations,
+                    pathDepthStencilSlotReuses = corePrimitive.pathDepthStencilSlotReuses,
                 )
             },
             nativeCountersFactory = {
