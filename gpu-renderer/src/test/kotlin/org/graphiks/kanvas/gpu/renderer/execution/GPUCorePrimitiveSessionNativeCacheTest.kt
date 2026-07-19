@@ -8,6 +8,8 @@ import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUTextureView
+import io.ygdrasil.webgpu.GPUTextureSampleType
+import io.ygdrasil.webgpu.GPUTextureViewDimension
 import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -24,6 +26,64 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class GPUCorePrimitiveSessionNativeCacheTest {
+    @Test
+    fun `coverage mask components expose exact uniform64 and sampled texture layouts`() {
+        val producer = corePrimitiveBindGroupLayoutDescriptor(
+            PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
+        )
+        val consumer = corePrimitiveBindGroupLayoutDescriptor(
+            PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY,
+        )
+
+        assertEquals(1, producer.entries.size)
+        assertEquals(0u, producer.entries.single().binding)
+        assertEquals(64uL, requireNotNull(producer.entries.single().buffer).minBindingSize)
+        assertEquals(2, consumer.entries.size)
+        assertEquals(64uL, requireNotNull(consumer.entries[0].buffer).minBindingSize)
+        assertEquals(1u, consumer.entries[1].binding)
+        val texture = requireNotNull(consumer.entries[1].texture)
+        assertEquals(GPUTextureSampleType.Float, texture.sampleType)
+        assertEquals(GPUTextureViewDimension.TwoD, texture.viewDimension)
+        assertEquals(false, texture.multisampled)
+    }
+
+    @Test
+    fun `coverage mask producer pipelines share one component while consumer is isolated`() {
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        val producerPrograms = listOf(
+            GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
+            GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference,
+            GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect,
+            GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference,
+        )
+        val producers = producerPrograms.map { program ->
+            cache.acquire(coverageMaskProducerProductionKey(program)).acquiredHandles()
+        }
+        val consumer = cache.acquire(coverageMaskConsumerProductionKey()).acquiredHandles()
+
+        producers.forEach { handles ->
+            assertSame(producers.first().bindGroupLayout, handles.bindGroupLayout)
+            assertSame(producers.first().shader, handles.shader)
+            assertSame(producers.first().pipelineLayout, handles.pipelineLayout)
+            assertNotSame(consumer.bindGroupLayout, handles.bindGroupLayout)
+            assertNotSame(consumer.shader, handles.shader)
+        }
+        assertEquals(
+            listOf(
+                CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_SHADER_IDENTITY,
+                CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_SHADER_IDENTITY,
+            ),
+            native.shaderIdentities,
+        )
+        assertEquals(2, native.creationCount("component.bindGroupLayout"))
+        assertEquals(2, native.creationCount("component.shader"))
+        assertEquals(2, native.creationCount("component.pipelineLayout"))
+        assertEquals(5, native.pipelineCreationCount)
+
+        cache.close()
+    }
+
     @Test
     fun `cache acquisition exposes no constructible raw invariant handles`() {
         assertTrue(GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired::class.java.isSealed)
@@ -254,25 +314,25 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     }
 
     @Test
-    fun `concrete cache accepts sixteen factory validated pipelines and typed refuses the seventeenth`() {
+    fun `concrete cache accepts twenty four factory validated pipelines and typed refuses the twenty fifth`() {
         val native = SessionNativeProxy(acceptPipelineIdentity = { true })
         val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
-        val live = (0 until 16).associate { index ->
+        val live = (0 until 24).associate { index ->
             val key = testKey("pipeline-$index")
             key to cache.acquire(key).acquiredHandles()
         }
 
         val refused = assertIs<GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused>(
-            cache.acquire(testKey("pipeline-16")),
+            cache.acquire(testKey("pipeline-24")),
         )
 
         assertEquals(
-            GPUWgpu4kCorePrimitiveSessionCacheRefusal.Saturated(maxEntries = 16),
+            GPUWgpu4kCorePrimitiveSessionCacheRefusal.Saturated(maxEntries = 24),
             refused.reason,
         )
-        assertEquals(16, native.pipelineCreationCount)
+        assertEquals(24, native.pipelineCreationCount)
         live.forEach { (key, handles) -> assertSame(handles, cache.acquire(key).acquiredHandles()) }
-        assertEquals(GPUCorePrimitiveNativeCacheCounters(16, 16, 0), cache.counters())
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(24, 24, 0), cache.counters())
         cache.close()
     }
 
@@ -540,6 +600,17 @@ class GPUCorePrimitiveSessionNativeCacheTest {
             componentIdentity = PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY,
         )
 
+    private fun coverageMaskProducerProductionKey(
+        program: GPUWgpu4kCorePrimitivePipelineProgram,
+    ) = productionKey(program).copy(
+        componentIdentity = PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
+    )
+
+    private fun coverageMaskConsumerProductionKey() =
+        productionKey(GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskConsumerNearest).copy(
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY,
+        )
+
     private fun testKey(identity: String) = productionKey().copy(
         pipelineIdentity = productionKey().pipelineIdentity.copy(targetFormat = "test:$identity"),
     )
@@ -560,6 +631,7 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         private val closeBlocks = mutableMapOf<String, Pair<CountDownLatch, CountDownLatch>>()
         var pipelineCreationCount = 0
             private set
+        val shaderIdentities = mutableListOf<String>()
 
         val device: GPUDevice = proxy(GPUDevice::class.java) { method, args ->
             when (method.name) {
@@ -593,8 +665,10 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         override fun createShaderModule(
             componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
             plan: GPUCorePrimitiveNativeShaderPlan,
-        ): GPUShaderModule =
-            createdHandle("component.shader", GPUShaderModule::class.java)
+        ): GPUShaderModule {
+            shaderIdentities += componentIdentity.shaderIdentity
+            return createdHandle("component.shader", GPUShaderModule::class.java)
+        }
 
         override fun createPipelineLayout(
             componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,

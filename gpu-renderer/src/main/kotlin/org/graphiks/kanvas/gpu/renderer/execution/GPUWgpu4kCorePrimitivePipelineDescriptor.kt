@@ -28,9 +28,11 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePathStencilStructuralProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilStructuralProgram
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskStructuralProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.clipStencilStructuralProgramOrNull
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
+import org.graphiks.kanvas.gpu.renderer.passes.coverageMaskStructuralProgramOrNull
 import org.graphiks.kanvas.gpu.renderer.passes.pathStencilStructuralProgramOrNull
 
 /** Closed native programs materialized by the bounded CorePrimitive WebGPU lane. */
@@ -50,6 +52,11 @@ internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
     ClipStencilProducerEvenOdd,
     ClipStencilConsumerRegular,
     ClipStencilConsumerInverse,
+    CoverageMaskProducerRectIntersect,
+    CoverageMaskProducerRectDifference,
+    CoverageMaskProducerRRectIntersect,
+    CoverageMaskProducerRRectDifference,
+    CoverageMaskConsumerNearest,
 }
 
 internal sealed interface GPUWgpu4kCorePrimitivePipelineMapping {
@@ -64,7 +71,7 @@ internal sealed interface GPUWgpu4kCorePrimitivePipelineMapping {
 }
 
 /**
- * Consumes the handle-free structural authority and accepts only one of the fifteen exact native
+ * Consumes the handle-free structural authority and accepts only one of the twenty exact native
  * descriptors. Dynamic geometry, bounds, scissor, load/store, and stencil reference never enter
  * this identity.
  */
@@ -87,6 +94,10 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
         componentIdentity = when {
             program.isClipStencilProducer() ->
                 PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY
+            program.isCoverageMaskProducer() ->
+                PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY
+            program.isCoverageMaskConsumer() ->
+                PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY
             program.isAnalyticIntersection4() ->
                 PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
             program.isAnalyticClip() -> PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
@@ -173,6 +184,28 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
                 GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerInverse
             else -> null
         }
+        GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer -> when (
+            coverageMaskStructuralProgramOrNull()
+        ) {
+            GPUCorePrimitiveCoverageMaskStructuralProgram.ProducerRectIntersect ->
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect
+            GPUCorePrimitiveCoverageMaskStructuralProgram.ProducerRectDifference ->
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference
+            GPUCorePrimitiveCoverageMaskStructuralProgram.ProducerRRectIntersect ->
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect
+            GPUCorePrimitiveCoverageMaskStructuralProgram.ProducerRRectDifference ->
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference
+            GPUCorePrimitiveCoverageMaskStructuralProgram.ConsumerNearest,
+            null,
+            -> null
+        }
+        GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskConsumer -> when {
+            coverageMaskStructuralProgramOrNull() ==
+                GPUCorePrimitiveCoverageMaskStructuralProgram.ConsumerNearest &&
+                blend.isCanonicalPremulSrcOver() ->
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskConsumerNearest
+            else -> null
+        }
     }
 }
 
@@ -210,6 +243,18 @@ internal fun GPUWgpu4kCorePrimitivePipelineProgram.isClipStencilProducer(): Bool
     else -> false
 }
 
+internal fun GPUWgpu4kCorePrimitivePipelineProgram.isCoverageMaskProducer(): Boolean = when (this) {
+    GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
+    GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference,
+    GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect,
+    GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference,
+    -> true
+    else -> false
+}
+
+internal fun GPUWgpu4kCorePrimitivePipelineProgram.isCoverageMaskConsumer(): Boolean =
+    this == GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskConsumerNearest
+
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.isCanonicalPremulSrcOver(): Boolean {
     val fixed = this as? GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed ?: return false
     return fixed.mode == GPUBlendMode.SRC_OVER &&
@@ -245,6 +290,7 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
     val producer = identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding ||
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd ||
         identity.program.isClipStencilProducer()
+    val coverageMaskProducer = identity.program.isCoverageMaskProducer()
     return RenderPipelineDescriptor(
         label = "Kanvas.session.corePrimitive.pipeline.${identity.program.name}",
         layout = pipelineLayout,
@@ -252,10 +298,14 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
             module = shader,
             entryPoint = if (identity.program.isClipStencilProducer()) {
                 CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_VERTEX_ENTRY_POINT
+            } else if (coverageMaskProducer) {
+                CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_VERTEX_ENTRY_POINT
+            } else if (identity.program.isCoverageMaskConsumer()) {
+                CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_VERTEX_ENTRY_POINT
             } else {
                 CORE_PRIMITIVE_NATIVE_VERTEX_ENTRY_POINT
             },
-            buffers = listOf(
+            buffers = if (coverageMaskProducer) emptyList() else listOf(
                 VertexBufferLayout(
                     arrayStride = 8uL,
                     attributes = listOf(
@@ -279,6 +329,10 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
             module = shader,
             entryPoint = if (identity.program.isClipStencilProducer()) {
                 CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_FRAGMENT_ENTRY_POINT
+            } else if (identity.program.isCoverageMaskProducer()) {
+                identity.program.coverageMaskProducerFragmentEntryPoint()
+            } else if (identity.program.isCoverageMaskConsumer()) {
+                CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_FRAGMENT_ENTRY_POINT
             } else if (producer) {
                 CORE_PRIMITIVE_NATIVE_STENCIL_FRAGMENT_ENTRY_POINT
             } else {
@@ -287,7 +341,11 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
             targets = listOf(
                 ColorTargetState(
                     format = GPUTextureFormat.RGBA8Unorm,
-                    blend = if (producer) null else premulSrcOverBlendState(),
+                    blend = when {
+                        producer -> null
+                        coverageMaskProducer -> identity.program.coverageMaskProducerBlendState()
+                        else -> premulSrcOverBlendState()
+                    },
                     writeMask = if (producer) GPUColorWrite.None else GPUColorWrite.All,
                 ),
             ),
@@ -389,6 +447,11 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthSten
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectHard,
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectAA,
         GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipIntersection4,
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference,
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect,
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference,
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskConsumerNearest,
         -> error("Analytic clip programs have no depth/stencil state")
     }
     return DepthStencilState(
@@ -428,3 +491,30 @@ private fun premulSrcOverBlendState() = BlendState(
         GPUBlendFactor.OneMinusSrcAlpha,
     ),
 )
+
+private fun GPUWgpu4kCorePrimitivePipelineProgram.coverageMaskProducerFragmentEntryPoint(): String =
+    when (this) {
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference,
+        -> CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_RECT_FRAGMENT_ENTRY_POINT
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect,
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference,
+        -> CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_RRECT_FRAGMENT_ENTRY_POINT
+        else -> error("$this is not a coverage-mask producer")
+    }
+
+private fun GPUWgpu4kCorePrimitivePipelineProgram.coverageMaskProducerBlendState(): BlendState {
+    val destinationFactor = when (this) {
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect,
+        -> GPUBlendFactor.SrcAlpha
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference,
+        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference,
+        -> GPUBlendFactor.OneMinusSrcAlpha
+        else -> error("$this is not a coverage-mask producer")
+    }
+    return BlendState(
+        color = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.Zero, destinationFactor),
+        alpha = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.Zero, destinationFactor),
+    )
+}

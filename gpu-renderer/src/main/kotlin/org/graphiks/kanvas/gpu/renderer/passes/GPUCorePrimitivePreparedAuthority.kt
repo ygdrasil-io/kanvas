@@ -4,6 +4,7 @@ import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskSampling
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
@@ -32,8 +33,24 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     val sampleCount: Int = 1,
     val clipStencilFillRule: GPUClipFillRule? = null,
 ) {
-    enum class Role { Shading, PathStencilProducer, PathStencilCover, ClipStencilProducer, ClipStencilConsumer }
-    enum class Shader { DirectGeometry, AnalyticRRect, PathStencil, ClipStencilProducer }
+    enum class Role {
+        Shading,
+        PathStencilProducer,
+        PathStencilCover,
+        ClipStencilProducer,
+        ClipStencilConsumer,
+        CoverageMaskProducer,
+        CoverageMaskConsumer,
+    }
+    enum class Shader {
+        DirectGeometry,
+        AnalyticRRect,
+        PathStencil,
+        ClipStencilProducer,
+        CoverageMaskRectProducer,
+        CoverageMaskRRectProducer,
+        CoverageMaskConsumer,
+    }
     enum class Topology { DirectTriangleList, AnalyticRRect, StencilEdgeFan, StrokeStencilEdgeFan }
     enum class FrontFace { Ccw }
     enum class CullMode { None }
@@ -45,12 +62,16 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
         AnalyticClipUniform64V1("dynamic-uniform64-analytic-clip-v1"),
         AnalyticClipUniform160V1("dynamic-uniform160-analytic-clip-intersection4-v1"),
         NoBindingsV1("no-bindings-v1"),
+        CoverageMaskProducerUniform64V1("dynamic-uniform64-coverage-mask-producer-v1"),
+        CoverageMaskConsumerUniform64V1("dynamic-uniform64-coverage-mask-consumer-v1"),
     }
 
     /** Derived executable ABI axis. It deliberately leaves the legacy constructor and hashes intact. */
     val uniformLayout: UniformLayout
         get() = when {
             role == Role.ClipStencilProducer -> UniformLayout.NoBindingsV1
+            role == Role.CoverageMaskProducer -> UniformLayout.CoverageMaskProducerUniform64V1
+            role == Role.CoverageMaskConsumer -> UniformLayout.CoverageMaskConsumerUniform64V1
             role == Role.Shading && clip is Clip.Analytic -> UniformLayout.AnalyticClipUniform64V1
             role == Role.Shading && clip == Clip.AnalyticIntersection4 ->
                 UniformLayout.AnalyticClipUniform160V1
@@ -155,6 +176,9 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             val depthStencilRequired: Boolean,
         ) : Clip
 
+        /** B3.3d structural token; origin, bounds, dimensions, and invert stay payload-only. */
+        data object CoverageMaskNearest : Clip
+
         data object Refused : Clip
     }
 
@@ -196,6 +220,30 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 }
                 require(sampleCount == 1) { "CorePrimitive clip-stencil consumer is single-sample" }
             }
+            Role.CoverageMaskProducer -> {
+                require(
+                    shader == Shader.CoverageMaskRectProducer ||
+                        shader == Shader.CoverageMaskRRectProducer,
+                ) { "CorePrimitive coverage-mask producer requires one exact analytic producer shader" }
+                require(hasExactCoverageMaskFixedAxes() && clip == Clip.None) {
+                    "CorePrimitive coverage-mask producer is color-only and cannot retain a nested clip"
+                }
+                require(blend.isCoverageMaskProducerBlend()) {
+                    "CorePrimitive coverage-mask producer requires exact DstIn or DstOut composition"
+                }
+                require(sampleCount == 1) { "CorePrimitive coverage-mask producer is single-sample" }
+            }
+            Role.CoverageMaskConsumer -> {
+                require(shader == Shader.CoverageMaskConsumer) {
+                    "CorePrimitive coverage-mask consumer requires the exact mask consumer shader"
+                }
+                require(hasExactCoverageMaskFixedAxes() && clip == Clip.CoverageMaskNearest) {
+                    "CorePrimitive coverage-mask consumer requires color-only nearest sampling"
+                }
+                require(blend == coverageMaskConsumerBlend()) {
+                    "CorePrimitive coverage-mask consumer requires exact canonical premultiplied SrcOver"
+                }
+            }
         }
     }
 
@@ -220,6 +268,8 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             Role.PathStencilCover,
             Role.ClipStencilProducer,
             Role.ClipStencilConsumer,
+            Role.CoverageMaskProducer,
+            Role.CoverageMaskConsumer,
             -> buildString {
                 append("role=").append(role.name)
                 append("|shader=").append(shader.name)
@@ -243,6 +293,166 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
         return GPURenderPipelineKey("$prefix.$digest")
     }
 }
+
+/** Closed set of color-only coverage-mask programs consumed by native pipeline lowering. */
+internal enum class GPUCorePrimitiveCoverageMaskStructuralProgram {
+    ProducerRectIntersect,
+    ProducerRectDifference,
+    ProducerRRectIntersect,
+    ProducerRRectDifference,
+    ConsumerNearest,
+}
+
+internal fun GPUCorePrimitiveRenderPipelineStructuralKey.coverageMaskStructuralProgramOrNull():
+    GPUCorePrimitiveCoverageMaskStructuralProgram? = when {
+    role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer &&
+        shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.CoverageMaskRectProducer &&
+        hasExactCoverageMaskFixedAxes() && clip == GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None &&
+        blend.isCoverageMaskProducerBlend(GPUClipMaskCombine.Intersect) ->
+        GPUCorePrimitiveCoverageMaskStructuralProgram.ProducerRectIntersect
+    role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer &&
+        shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.CoverageMaskRectProducer &&
+        hasExactCoverageMaskFixedAxes() && clip == GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None &&
+        blend.isCoverageMaskProducerBlend(GPUClipMaskCombine.Difference) ->
+        GPUCorePrimitiveCoverageMaskStructuralProgram.ProducerRectDifference
+    role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer &&
+        shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.CoverageMaskRRectProducer &&
+        hasExactCoverageMaskFixedAxes() && clip == GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None &&
+        blend.isCoverageMaskProducerBlend(GPUClipMaskCombine.Intersect) ->
+        GPUCorePrimitiveCoverageMaskStructuralProgram.ProducerRRectIntersect
+    role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer &&
+        shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.CoverageMaskRRectProducer &&
+        hasExactCoverageMaskFixedAxes() && clip == GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None &&
+        blend.isCoverageMaskProducerBlend(GPUClipMaskCombine.Difference) ->
+        GPUCorePrimitiveCoverageMaskStructuralProgram.ProducerRRectDifference
+    role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskConsumer &&
+        shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.CoverageMaskConsumer &&
+        hasExactCoverageMaskFixedAxes() &&
+        clip == GPUCorePrimitiveRenderPipelineStructuralKey.Clip.CoverageMaskNearest &&
+        blend == coverageMaskConsumerBlend() ->
+        GPUCorePrimitiveCoverageMaskStructuralProgram.ConsumerNearest
+    else -> null
+}
+
+internal fun corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
+    geometry: GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry,
+    combine: GPUClipMaskCombine,
+): GPUCorePrimitiveRenderPipelineStructuralKey {
+    require(geometry == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect ||
+        geometry == GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect
+    ) { "Coverage-mask producer structural authority accepts only Rect or RRect" }
+    return GPUCorePrimitiveRenderPipelineStructuralKey(
+        shader = when (geometry) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect ->
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.CoverageMaskRectProducer
+            GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect ->
+                GPUCorePrimitiveRenderPipelineStructuralKey.Shader.CoverageMaskRRectProducer
+            GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Path -> error("Validated above")
+        },
+        topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
+        blend = coverageMaskProducerBlend(combine),
+        clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+        role = GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer,
+        depthStencil = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None,
+        sampleCount = 1,
+    )
+}
+
+internal fun corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey(
+    blendPlan: GPUBlendPlan,
+): GPUCorePrimitiveRenderPipelineStructuralKey {
+    require(blendPlan.isCanonicalCoverageMaskConsumerSrcOver()) {
+        "Coverage-mask consumer structural authority requires canonical premultiplied SrcOver"
+    }
+    return GPUCorePrimitiveRenderPipelineStructuralKey(
+        shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.CoverageMaskConsumer,
+        topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
+        blend = coverageMaskConsumerBlend(),
+        clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.CoverageMaskNearest,
+        role = GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskConsumer,
+        depthStencil = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None,
+        sampleCount = 1,
+    )
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.hasExactCoverageMaskFixedAxes(): Boolean =
+    topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
+        frontFace == GPUCorePrimitiveRenderPipelineStructuralKey.FrontFace.Ccw &&
+        cullMode == GPUCorePrimitiveRenderPipelineStructuralKey.CullMode.None &&
+        colorFormat == GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm &&
+        depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None &&
+        sampleCount == 1 && clipStencilFillRule == null
+
+private fun coverageMaskConsumerBlend(): GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed =
+    GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
+        mode = GPUBlendMode.SRC_OVER,
+        sourceCoverage = GPUSourceCoverageEncoding.None,
+        state = GPUFixedFunctionBlendState(
+            stateId = "coverage-mask-consumer-src-over-v1",
+            color = org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent(
+                sourceFactor = "one",
+                destinationFactor = "one-minus-src-alpha",
+                operation = "add",
+            ),
+            alpha = org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent(
+                sourceFactor = "one",
+                destinationFactor = "one-minus-src-alpha",
+                operation = "add",
+            ),
+            writeMask = "rgba",
+        ),
+    )
+
+private fun GPUBlendPlan.isCanonicalCoverageMaskConsumerSrcOver(): Boolean {
+    val fixed = this as? GPUBlendPlan.FixedFunctionBlend ?: return false
+    return fixed.mode == GPUBlendMode.SRC_OVER &&
+        fixed.sourceCoverageEncoding == GPUSourceCoverageEncoding.None &&
+        fixed.state.color.sourceFactor == "one" &&
+        fixed.state.color.destinationFactor == "one-minus-src-alpha" &&
+        fixed.state.color.operation == "add" &&
+        fixed.state.alpha.sourceFactor == "one" &&
+        fixed.state.alpha.destinationFactor == "one-minus-src-alpha" &&
+        fixed.state.alpha.operation == "add" && fixed.state.writeMask == "rgba"
+}
+
+private fun coverageMaskProducerBlend(
+    combine: GPUClipMaskCombine,
+): GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed {
+    val mode = when (combine) {
+        GPUClipMaskCombine.Intersect -> GPUBlendMode.DST_IN
+        GPUClipMaskCombine.Difference -> GPUBlendMode.DST_OUT
+    }
+    val destinationFactor = when (combine) {
+        GPUClipMaskCombine.Intersect -> "src-alpha"
+        GPUClipMaskCombine.Difference -> "one-minus-src-alpha"
+    }
+    return GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
+        mode = mode,
+        sourceCoverage = GPUSourceCoverageEncoding.None,
+        state = GPUFixedFunctionBlendState(
+            stateId = "coverage-mask-${mode.gpuLabel}",
+            color = org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent(
+                sourceFactor = "zero",
+                destinationFactor = destinationFactor,
+                operation = "add",
+            ),
+            alpha = org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent(
+                sourceFactor = "zero",
+                destinationFactor = destinationFactor,
+                operation = "add",
+            ),
+            writeMask = "rgba",
+        ),
+    )
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.isCoverageMaskProducerBlend(): Boolean =
+    isCoverageMaskProducerBlend(GPUClipMaskCombine.Intersect) ||
+        isCoverageMaskProducerBlend(GPUClipMaskCombine.Difference)
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.isCoverageMaskProducerBlend(
+    combine: GPUClipMaskCombine,
+): Boolean = this == coverageMaskProducerBlend(combine)
 
 /** Exact no-op D24S8 state required when a direct draw shares a pass with path stencil draws. */
 internal fun corePrimitiveDirectPathDepthStencilState():

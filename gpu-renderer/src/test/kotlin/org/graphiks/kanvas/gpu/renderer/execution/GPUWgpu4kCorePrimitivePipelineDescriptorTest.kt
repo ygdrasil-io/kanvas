@@ -17,6 +17,7 @@ import io.ygdrasil.webgpu.GPUVertexFormat
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -24,15 +25,153 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilConsumerRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilProducerRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
+    @Test
+    fun `coverage mask structural keys map to four producers and one nearest consumer`() {
+        val cases = listOf(
+            corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+                GPUClipMaskCombine.Intersect,
+            ) to GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
+            corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+                GPUClipMaskCombine.Difference,
+            ) to GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference,
+            corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect,
+                GPUClipMaskCombine.Intersect,
+            ) to GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect,
+            corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect,
+                GPUClipMaskCombine.Difference,
+            ) to GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference,
+            corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey(srcOverBlendPlan()) to
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskConsumerNearest,
+        )
+
+        cases.forEach { (key, expectedProgram) ->
+            val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+            )
+            assertEquals(expectedProgram, mapped.identity.program)
+            assertEquals(
+                if (key.role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer) {
+                    PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY
+                } else {
+                    PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY
+                },
+                mapped.componentIdentity,
+            )
+        }
+        assertEquals(20, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(24, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+    }
+
+    @Test
+    fun `coverage mask keys retain the strict nearest token and reject topology mutation before mapping`() {
+        val producer = corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
+            GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+            GPUClipMaskCombine.Intersect,
+        )
+        val consumer = corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey(srcOverBlendPlan())
+
+        assertSame(GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None, producer.clip)
+        assertSame(GPUCorePrimitiveRenderPipelineStructuralKey.Clip.CoverageMaskNearest, consumer.clip)
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
+            producer.topology,
+        )
+        assertFailsWith<IllegalArgumentException> {
+            producer.copy(
+                topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticRRect,
+            )
+        }
+    }
+
+    @Test
+    fun `coverage mask producer descriptors use fullscreen hard coverage and exact dst composition`() {
+        val rectIntersect = descriptor(
+            corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+                GPUClipMaskCombine.Intersect,
+            ),
+        )
+        val rrectDifference = descriptor(
+            corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect,
+                GPUClipMaskCombine.Difference,
+            ),
+        )
+
+        listOf(rectIntersect, rrectDifference).forEach { descriptor ->
+            assertEquals(CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
+            assertEquals(emptyList(), descriptor.vertex.buffers)
+            assertNull(descriptor.depthStencil)
+            val target = assertIs<ColorTargetState>(requireNotNull(descriptor.fragment).targets.single())
+            assertEquals(GPUColorWrite.All, target.writeMask)
+            val blend = requireNotNull(target.blend)
+            assertEquals(GPUBlendFactor.Zero, blend.color.srcFactor)
+            assertEquals(GPUBlendFactor.Zero, blend.alpha.srcFactor)
+        }
+        assertEquals(
+            CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_RECT_FRAGMENT_ENTRY_POINT,
+            requireNotNull(rectIntersect.fragment).entryPoint,
+        )
+        assertEquals(
+            CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_RRECT_FRAGMENT_ENTRY_POINT,
+            requireNotNull(rrectDifference.fragment).entryPoint,
+        )
+        assertEquals(
+            GPUBlendFactor.SrcAlpha,
+            requireNotNull(
+                assertIs<ColorTargetState>(requireNotNull(rectIntersect.fragment).targets.single()).blend,
+            ).color.dstFactor,
+        )
+        assertEquals(
+            GPUBlendFactor.OneMinusSrcAlpha,
+            requireNotNull(
+                assertIs<ColorTargetState>(requireNotNull(rrectDifference.fragment).targets.single()).blend,
+            ).color.dstFactor,
+        )
+    }
+
+    @Test
+    fun `coverage mask consumer descriptor keeps nearest sampling in shader and src over in state`() {
+        val key = corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey(srcOverBlendPlan())
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+        )
+        val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(
+            mapped.identity,
+            shader,
+            pipelineLayout,
+        )
+
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY, mapped.componentIdentity)
+        assertEquals(CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
+        assertEquals(1, descriptor.vertex.buffers.size)
+        assertEquals(
+            CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_FRAGMENT_ENTRY_POINT,
+            requireNotNull(descriptor.fragment).entryPoint,
+        )
+        assertNull(descriptor.depthStencil)
+        val target = assertIs<ColorTargetState>(requireNotNull(descriptor.fragment).targets.single())
+        val blend = requireNotNull(target.blend)
+        assertEquals(GPUBlendFactor.One, blend.color.srcFactor)
+        assertEquals(GPUBlendFactor.OneMinusSrcAlpha, blend.color.dstFactor)
+    }
+
     @Test
     fun `four clip stencil structural keys map to four exact native programs and binding policies`() {
         val cases = listOf(
@@ -64,8 +203,8 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired, mapped.componentIdentity.bindingPolicy)
             }
         }
-        assertEquals(15, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
-        assertEquals(16, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+        assertEquals(20, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(24, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
     }
 
     @Test

@@ -10,6 +10,143 @@ import kotlin.test.assertTrue
 
 class GPUCorePrimitiveNativeShaderTest {
     @Test
+    fun `coverage mask producer shader reflects uniform64 fullscreen hard rect and rrect programs`() {
+        val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveCoverageMaskProducerNativeShader(),
+        )
+        val reflection = requireNotNull(ready.plan.wgslReflection).report
+
+        assertTrue(reflection.validation.success)
+        assertEquals(listOf(0 to 0), reflection.bindings.map { it.group to it.binding })
+        assertEquals(
+            setOf(
+                CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_VERTEX_ENTRY_POINT to "vertex",
+                CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_RECT_FRAGMENT_ENTRY_POINT to "fragment",
+                CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_RRECT_FRAGMENT_ENTRY_POINT to "fragment",
+            ),
+            reflection.entryPoints.map { it.name to it.stage }.toSet(),
+        )
+        val block = reflection.layouts.single {
+            it.structName == "CorePrimitiveCoverageMaskProducerBlock"
+        }
+        assertEquals(64, block.size)
+        assertEquals(
+            listOf(
+                "mask_origin" to (0 to 8),
+                "mask_size" to (8 to 8),
+                "shape_bounds" to (16 to 16),
+                "shape_radii0" to (32 to 16),
+                "shape_radii1" to (48 to 16),
+            ),
+            block.members.map { it.name to (it.offset to it.size) },
+        )
+        assertContains(ready.plan.wgslSource, "@builtin(vertex_index) vertex_index: u32")
+        assertContains(ready.plan.wgslSource, "let device_position = fragment_position.xy + producer.mask_origin;")
+        assertContains(ready.plan.wgslSource, "select(0.0, 1.0, rect_signed_distance(device_position) <= 0.0)")
+        assertContains(ready.plan.wgslSource, "select(0.0, 1.0, rrect_signed_distance(device_position) <= 0.0)")
+        assertTrue("fwidth" !in ready.plan.wgslSource)
+        assertTrue("sampler" !in ready.plan.wgslSource)
+        assertEquals(
+            "core-primitive-coverage-mask-producer-wgsl-v1",
+            CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_SHADER_IDENTITY,
+        )
+        assertEquals(
+            "vertex-fragment-dynamic-uniform64-coverage-mask-producer-v1",
+            CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_BINDING_LAYOUT_IDENTITY,
+        )
+    }
+
+    @Test
+    fun `coverage mask rrect keeps four asymmetric radii in tl tr br bl packing order`() {
+        val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveCoverageMaskProducerNativeShader(),
+        )
+        val source = ready.plan.wgslSource
+
+        assertContains(
+            source,
+            "let top_radius = select(producer.shape_radii0.xy, producer.shape_radii0.zw, local_position.x > 0.0);",
+        )
+        assertContains(
+            source,
+            "let bottom_radius = select(producer.shape_radii1.zw, producer.shape_radii1.xy, local_position.x > 0.0);",
+        )
+        assertContains(
+            source,
+            "select(top_radius, bottom_radius, local_position.y > 0.0)",
+        )
+
+        val topLeft = 2f to 3f
+        val topRight = 4f to 5f
+        val bottomRight = 6f to 7f
+        val bottomLeft = 8f to 9f
+        val shapeRadii0 = listOf(topLeft, topRight)
+        val shapeRadii1 = listOf(bottomRight, bottomLeft)
+
+        assertEquals(
+            listOf(topLeft, topRight, bottomLeft, bottomRight),
+            listOf(shapeRadii0[0], shapeRadii0[1], shapeRadii1[1], shapeRadii1[0]),
+        )
+        assertTrue(
+            listOf(topLeft, topRight, bottomRight, bottomLeft).all { (rx, ry) ->
+                rx <= 10f && ry <= 10f
+            },
+            "The bounded oracle must stay inside the accepted width/2 and height/2 subset.",
+        )
+    }
+
+    @Test
+    fun `coverage mask consumer reflects uniform64 textureLoad nearest with payload only invert`() {
+        val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveCoverageMaskConsumerNativeShader(),
+        )
+        val reflection = requireNotNull(ready.plan.wgslReflection).report
+
+        assertTrue(reflection.validation.success)
+        assertEquals(listOf(0 to 0, 0 to 1), reflection.bindings.map { it.group to it.binding })
+        assertEquals(
+            setOf(
+                CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_VERTEX_ENTRY_POINT to "vertex",
+                CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_FRAGMENT_ENTRY_POINT to "fragment",
+            ),
+            reflection.entryPoints.map { it.name to it.stage }.toSet(),
+        )
+        val block = reflection.layouts.single {
+            it.structName == "CorePrimitiveCoverageMaskConsumerBlock"
+        }
+        assertEquals(64, block.size)
+        assertEquals(
+            listOf(
+                "target_size" to (0 to 8),
+                "mask_origin" to (8 to 8),
+                "mask_size" to (16 to 8),
+                "padding0" to (24 to 8),
+                "premul_rgba" to (32 to 16),
+                "invert" to (48 to 4),
+                "padding1" to (52 to 4),
+                "padding2" to (56 to 4),
+                "padding3" to (60 to 4),
+            ),
+            block.members.map { it.name to (it.offset to it.size) },
+        )
+        assertContains(ready.plan.wgslSource, "@group(0) @binding(1) var coverage_mask: texture_2d<f32>;")
+        assertContains(ready.plan.wgslSource, "let stored_sample = textureLoad(coverage_mask, mask_pixel, 0);")
+        assertContains(ready.plan.wgslSource, "stored_coverage = stored_sample[0];")
+        assertContains(ready.plan.wgslSource, "consumer.invert != 0u")
+        assertContains(ready.plan.wgslSource, "device_position.x / consumer.target_size.x * 2.0 - 1.0")
+        assertTrue("sampler" !in ready.plan.wgslSource)
+        assertTrue("textureSample" !in ready.plan.wgslSource)
+        assertEquals(
+            "core-primitive-coverage-mask-consumer-nearest-wgsl-v1",
+            CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_SHADER_IDENTITY,
+        )
+        assertEquals(
+            "vertex-fragment-dynamic-uniform64-texture2d-coverage-mask-consumer-v1",
+            CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_BINDING_LAYOUT_IDENTITY,
+        )
+    }
+
+    @Test
     fun `clip stencil producer shader is reflected without bindings and consumes sealed NDC vertices`() {
         val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
             buildCorePrimitiveClipStencilProducerNativeShader(),

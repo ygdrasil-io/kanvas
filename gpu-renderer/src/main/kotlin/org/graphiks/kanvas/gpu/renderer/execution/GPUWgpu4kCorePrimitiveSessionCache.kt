@@ -23,6 +23,9 @@ import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.PipelineLayoutDescriptor
 import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.TextureDescriptor
+import io.ygdrasil.webgpu.TextureBindingLayout
+import io.ygdrasil.webgpu.GPUTextureSampleType
+import io.ygdrasil.webgpu.GPUTextureViewDimension
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 
 internal data class GPUCorePrimitiveNativeCacheCounters(
@@ -31,7 +34,7 @@ internal data class GPUCorePrimitiveNativeCacheCounters(
     val invariantInvalidations: Long = 0,
 )
 
-internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 16
+internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 24
 
 internal enum class GPUWgpu4kCorePrimitiveBindingPolicy {
     DynamicUniformRequired,
@@ -106,6 +109,20 @@ internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
 
+internal val PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_SHADER_IDENTITY,
+        bindingLayoutIdentity = CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_BINDING_LAYOUT_IDENTITY,
+        vertexLayoutIdentity = CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
+internal val PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_SHADER_IDENTITY,
+        bindingLayoutIdentity = CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_NATIVE_BINDING_LAYOUT_IDENTITY,
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
 private val PRODUCTION_CORE_PRIMITIVE_PIPELINE_IDENTITY =
     GPUWgpu4kCorePrimitiveRenderPipelineIdentity(
         targetFormat = "rgba8unorm",
@@ -128,6 +145,10 @@ private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentit
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
     pipelineIdentity.program.isAnalyticClip() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
+    pipelineIdentity.program.isCoverageMaskProducer() ->
+        componentIdentity == PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY
+    pipelineIdentity.program.isCoverageMaskConsumer() ->
+        componentIdentity == PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY
     else -> componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
 }
 
@@ -397,7 +418,9 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         if (!key.hasCompatibleComponentIdentity()) {
             if (key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY &&
-                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
+                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY &&
+                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY &&
+                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY
             ) {
             return refused(
                 GPUWgpu4kCorePrimitiveSessionCacheRefusal.IncompatibleComponentIdentity(
@@ -498,6 +521,10 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                         buildCorePrimitiveAnalyticClipNativeShader()
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY ->
                         buildCorePrimitiveAnalyticIntersection4NativeShader()
+                    PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY ->
+                        buildCorePrimitiveCoverageMaskProducerNativeShader()
+                    PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY ->
+                        buildCorePrimitiveCoverageMaskConsumerNativeShader()
                     else -> buildCorePrimitiveNativeShader()
                 }
             ) {
@@ -586,6 +613,9 @@ private fun GPUWgpu4kCorePrimitiveComponentIdentity.uniformBindingSizeBytes(): U
         error("Clip-stencil producer has no uniform binding")
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY -> 64uL
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY -> 160uL
+    PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
+    PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY,
+    -> 64uL
     else -> 32uL
 }
 
@@ -596,17 +626,32 @@ internal fun corePrimitiveBindGroupLayoutDescriptor(
     entries = if (componentIdentity.bindingPolicy == GPUWgpu4kCorePrimitiveBindingPolicy.NoBindings) {
         emptyList()
     } else {
-        listOf(
-            BindGroupLayoutEntry(
-                binding = 0u,
-                visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
-                buffer = BufferBindingLayout(
-                    type = GPUBufferBindingType.Uniform,
-                    hasDynamicOffset = true,
-                    minBindingSize = componentIdentity.uniformBindingSizeBytes(),
+        buildList {
+            add(
+                BindGroupLayoutEntry(
+                    binding = 0u,
+                    visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                    buffer = BufferBindingLayout(
+                        type = GPUBufferBindingType.Uniform,
+                        hasDynamicOffset = true,
+                        minBindingSize = componentIdentity.uniformBindingSizeBytes(),
+                    ),
                 ),
-            ),
-        )
+            )
+            if (componentIdentity == PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY) {
+                add(
+                    BindGroupLayoutEntry(
+                        binding = 1u,
+                        visibility = GPUShaderStage.Fragment,
+                        texture = TextureBindingLayout(
+                            sampleType = GPUTextureSampleType.Float,
+                            viewDimension = GPUTextureViewDimension.TwoD,
+                            multisampled = false,
+                        ),
+                    ),
+                )
+            }
+        }
     },
 )
 
