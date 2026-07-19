@@ -33,7 +33,16 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticElement
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipOrderingToken
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilLoadOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilStoreOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
@@ -94,7 +103,179 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingLease
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
-    private enum class RouteShape { Direct, PathOnly, Mixed, TwoPathPairs }
+    private enum class RouteShape { Direct, PathOnly, Mixed, TwoPathPairs, ClipStencil }
+
+    @Test
+    fun `prepared clip stencil materializes producer and consumers with one shared attachment`() {
+        val fixture = fixture(
+            readback = true,
+            routeShape = RouteShape.ClipStencil,
+            useRealPreflight = true,
+        )
+
+        val materialized = fixture.materializeCore()
+        val renders = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+        assertEquals(3, renders.size)
+        val producer = renders.first()
+        val consumers = renders.drop(1)
+        val depthStencilTargets = renders.map { requireNotNull(it.pass.depthStencilTarget).view }
+
+        assertEquals(1, distinctIdentityCount(depthStencilTargets))
+        assertEquals(GPUPreparedNativeLoadOperation.Load, producer.pass.loadOperation)
+        assertEquals(GPUPreparedNativeLoadOperation.Clear, producer.pass.stencilLoadOperation)
+        assertEquals(GPUPreparedNativeStoreOperation.Store, producer.pass.stencilStoreOperation)
+        assertFalse(producer.pass.stencilReadOnly)
+        assertTrue(producer.commands.none { it is GPUPreparedNativeRenderCommand.SetBindGroup })
+        assertEquals(1, producer.commands.filterIsInstance<GPUPreparedNativeRenderCommand.DrawIndexed>().size)
+        assertEquals(listOf(0u), producer.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetStencilReference>()
+            .map { it.reference })
+
+        assertEquals(
+            listOf(GPUPreparedNativeLoadOperation.Clear, GPUPreparedNativeLoadOperation.Load),
+            consumers.map { it.pass.loadOperation },
+        )
+        consumers.forEach { consumer ->
+            assertTrue(consumer.pass.stencilReadOnly)
+            assertEquals(null, consumer.pass.stencilLoadOperation)
+            assertEquals(null, consumer.pass.stencilStoreOperation)
+            assertEquals(1, consumer.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>().size)
+            assertEquals(1, consumer.commands.filterIsInstance<GPUPreparedNativeRenderCommand.DrawIndexed>().size)
+            assertEquals(listOf(0u), consumer.commands
+                .filterIsInstance<GPUPreparedNativeRenderCommand.SetStencilReference>()
+                .map { it.reference })
+        }
+        assertEquals(3, fixture.native.writeBufferCalls.size)
+        assertEquals(1, fixture.native.events.count {
+            it == "createTexture:Kanvas.session.corePrimitive.framePool.clipDepthStencil"
+        })
+        assertIs<GPUPreparedNativeScopeOperand.Readback>(materialized.draft.payload.scopeOperands.last())
+
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `prepared clip stencil accepts a pooled slot that retains an independent path attachment`() {
+        val pathFixture = fixture(routeShape = RouteShape.PathOnly)
+        val clipFixture = fixture(routeShape = RouteShape.ClipStencil, useRealPreflight = true)
+        val clipOnSharedPool = clipFixture.copy(
+            native = pathFixture.native,
+            target = pathFixture.target,
+            cache = pathFixture.cache,
+        )
+
+        val path = pathFixture.materializeCore()
+        val pathView = path.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single().pass.depthStencilTarget!!.view
+        assertTrue(path.draft.disposeBeforeRegistration())
+
+        val clip = clipOnSharedPool.materializeCore()
+        val clipViews = clip.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .map { it.pass.depthStencilTarget!!.view }
+        assertEquals(1, distinctIdentityCount(clipViews))
+        assertNotSame(pathView, clipViews.first())
+        assertEquals(1, pathFixture.native.events.count {
+            it == "createTexture:Kanvas.session.corePrimitive.framePool.pathDepthStencil"
+        })
+        assertEquals(1, pathFixture.native.events.count {
+            it == "createTexture:Kanvas.session.corePrimitive.framePool.clipDepthStencil"
+        })
+        assertTrue(clip.draft.disposeBeforeRegistration())
+
+        clipFixture.close()
+        pathFixture.close()
+    }
+
+    @Test
+    fun `second prepared clip frame reuses its clip view and clears stencil again`() {
+        val fixture = fixture(routeShape = RouteShape.ClipStencil, useRealPreflight = true)
+
+        val first = fixture.materializeCore()
+        val firstRenders = first.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+        val firstClipView = firstRenders.first().pass.depthStencilTarget!!.view
+        assertNotSame(firstRenders.first().pass.colorTarget.view, firstClipView)
+        assertEquals(GPUPreparedNativeLoadOperation.Clear, firstRenders.first().pass.stencilLoadOperation)
+        assertEquals(0u, firstRenders.first().pass.stencilClearValue)
+        assertTrue(first.draft.disposeBeforeRegistration())
+
+        val second = fixture.materializeCore()
+        val secondRenders = second.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+        assertSame(firstClipView, secondRenders.first().pass.depthStencilTarget!!.view)
+        assertEquals(GPUPreparedNativeLoadOperation.Clear, secondRenders.first().pass.stencilLoadOperation)
+        assertEquals(0u, secondRenders.first().pass.stencilClearValue)
+        assertEquals(1, fixture.native.events.count {
+            it == "createTexture:Kanvas.session.corePrimitive.framePool.clipDepthStencil"
+        })
+        assertTrue(second.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
+    fun `even odd inverse concave clip with a hole keeps partial scissor and two translucent consumers`() {
+        val partialScissor = GPUPixelBounds(1, 1, 14, 14)
+        val clipPlan = nativeClipStencilPlan(
+            fillRule = GPUClipFillRule.EvenOdd,
+            inverseFill = true,
+            vertices = listOf(
+                2f, 2f,
+                14f, 2f,
+                9f, 7f,
+                14f, 14f,
+                2f, 14f,
+                6f, 8f,
+                6f, 6f,
+                10f, 6f,
+                10f, 10f,
+                6f, 10f,
+            ),
+            contourStarts = listOf(0, 6),
+            scissor = partialScissor,
+        )
+        val fixture = fixture(
+            routeShape = RouteShape.ClipStencil,
+            useRealPreflight = true,
+            clipStencilPlan = clipPlan,
+        )
+
+        val materialized = fixture.materializeCore()
+        val renders = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+        assertEquals(3, renders.size)
+        assertEquals(
+            listOf(
+                "Kanvas.session.corePrimitive.pipeline.ClipStencilProducerEvenOdd",
+                "Kanvas.session.corePrimitive.pipeline.ClipStencilConsumerInverse",
+            ),
+            fixture.native.renderPipelineDescriptors.map { it.label },
+        )
+        assertTrue(renders.first().commands.none {
+            it is GPUPreparedNativeRenderCommand.SetBindGroup
+        })
+        assertTrue(renders.drop(1).all { render ->
+            render.semanticPayloads.single().let {
+                (it as GPUDrawSemanticPayload.CorePrimitive).premultipliedRgba[3] == 0.5f
+            } && render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetScissor>()
+                .single().let { scissor ->
+                    scissor.x == partialScissor.left && scissor.y == partialScissor.top &&
+                        scissor.width == partialScissor.width && scissor.height == partialScissor.height
+                }
+        })
+        val producerSeal = assertIs<GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer>(
+            fixture.encoderPlan.scopes.first().corePrimitiveClipStencilPreparedRouteSeal,
+        )
+        assertEquals(3, producerSeal.geometryArena.slices.size)
+        assertTrue(producerSeal.geometrySlice.vertexCount > 4)
+
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
     @Test
     fun `direct core materializer integrity gate performs no canonical hash work`() {
         val source = File(
@@ -1236,6 +1417,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         useRealPreflight: Boolean = false,
         analyticClip: Boolean = false,
         analyticIntersection: Boolean = false,
+        clipStencilPlan: GPUClipExecutionPlan.StencilCoverage? = null,
     ): Fixture {
         require(!analyticClip || !analyticIntersection)
         val generation = GPUDeviceGenerationID(23L)
@@ -1246,6 +1428,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             RouteShape.PathOnly -> listOf(2)
             RouteShape.Mixed -> listOf(1, 2, 3)
             RouteShape.TwoPathPairs -> listOf(2, 3)
+            RouteShape.ClipStencil -> listOf(1, 2)
         }
         val recorded = GPURecorder(GPURecordingID("recording.core.proxy"), frameId, capabilities, generation).apply {
             commandIds.forEachIndexed { order, commandId ->
@@ -1310,6 +1493,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     scissor = null,
                     antiAlias = true,
                 )
+            } else if (routeShape == RouteShape.ClipStencil) {
+                clipStencilPlan ?: nativeClipStencilPlan()
             } else {
                 GPUClipExecutionPlan.NoClip
             }
@@ -1318,7 +1503,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
         val semantics = packets.associate { packet ->
             packet.commandIdValue to if (routeShape == RouteShape.TwoPathPairs ||
-                packet.commandIdValue == 2 && routeShape != RouteShape.Direct
+                packet.commandIdValue == 2 && routeShape != RouteShape.Direct &&
+                routeShape != RouteShape.ClipStencil
             ) {
                 pathSemantic(
                     packet,
@@ -1331,7 +1517,15 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     coordinateOffset = if (packet.commandIdValue == 3) 2f else 0f,
                 )
             } else {
-                semantic(packet)
+                semantic(
+                    packet,
+                    scissorBounds = if (routeShape == RouteShape.ClipStencil) {
+                        (clipStencilPlan ?: nativeClipStencilPlan()).consumer.scissor
+                            ?: TARGET
+                    } else {
+                        TARGET
+                    },
+                )
             }
         }
         val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
@@ -1455,7 +1649,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     GPUPreparedResourceEvidence(
                         logicalResource = request.resource,
                         concreteResource = if (request.role == GPUFrameResourceRole.SceneTarget ||
-                            request.role == GPUFrameResourceRole.PathDepthStencil
+                            request.role == GPUFrameResourceRole.PathDepthStencil ||
+                            request.role == GPUFrameResourceRole.ClipDepthStencil
                         ) {
                             GPUPreparedConcreteResourceRef.Texture(GPUTextureResourceRef("prepared.target"))
                         } else {
@@ -1722,7 +1917,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         ),
     )
 
-    private fun semantic(packet: GPUDrawPacket): GPUDrawSemanticPayload.CorePrimitive =
+    private fun semantic(
+        packet: GPUDrawPacket,
+        scissorBounds: GPUPixelBounds = TARGET,
+    ): GPUDrawSemanticPayload.CorePrimitive =
         GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(
                 commandIdValue = packet.commandIdValue,
@@ -1730,7 +1928,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 geometry = GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 5f, 5f),
                 premultipliedRgba = listOf(0.5f, 0f, 0f, 0.5f),
                 targetBounds = TARGET,
-                scissorBounds = TARGET,
+                scissorBounds = scissorBounds,
                 clipCoveragePlan = GPUClipCoveragePlan.NoClip,
                 blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
                 frameProvenance = GPUFrameProvenance.GmContent,
@@ -1777,6 +1975,50 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
             ),
         )
+
+    private fun nativeClipStencilPlan(
+        fillRule: GPUClipFillRule = GPUClipFillRule.Winding,
+        inverseFill: Boolean = false,
+        vertices: List<Float> = listOf(2f, 2f, 14f, 2f, 14f, 14f, 2f, 14f),
+        contourStarts: List<Int> = listOf(0),
+        scissor: GPUPixelBounds = TARGET,
+    ) = GPUClipExecutionPlan.StencilCoverage(
+        contentKey = "clip.native.materializer.${fillRule.name}.${if (inverseFill) "inverse" else "regular"}",
+        bounds = TARGET,
+        sampleCount = 1,
+        atomicGroup = GPUClipAtomicGroupID("atomic.clip.native.materializer.${fillRule.name}"),
+        orderingToken = GPUClipOrderingToken("token.clip.native.materializer.${fillRule.name}"),
+        producer = GPUClipStencilProducerPlan(
+            geometry = GPUClipExecutionGeometry.Path(
+                vertices = vertices,
+                contourStarts = contourStarts,
+                fillRule = fillRule,
+                inverseFill = inverseFill,
+            ),
+            scissor = scissor,
+            fillRule = fillRule,
+            reference = 0u,
+            compare = GPUClipStencilCompare.Always,
+            frontPassOperation = if (fillRule == GPUClipFillRule.Winding) {
+                GPUClipStencilOperation.IncrementWrap
+            } else {
+                GPUClipStencilOperation.Invert
+            },
+            backPassOperation = if (fillRule == GPUClipFillRule.Winding) {
+                GPUClipStencilOperation.DecrementWrap
+            } else {
+                GPUClipStencilOperation.Invert
+            },
+            loadOperation = GPUClipStencilLoadOperation.Clear,
+            storeOperation = GPUClipStencilStoreOperation.Store,
+            clearValue = 0u,
+        ),
+        consumer = GPUClipStencilConsumerPlan(
+            scissor = scissor,
+            reference = 0u,
+            compare = if (inverseFill) GPUClipStencilCompare.Equal else GPUClipStencilCompare.NotEqual,
+        ),
+    )
 
     private fun command(id: Int, order: Int, rect: GPURect) = GPUFillRectCommandBuilder.build(
         commandId = GPUDrawCommandID(id),
@@ -2010,13 +2252,18 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     val label = descriptor.label.orEmpty()
                     events += "createTexture:$label"
                     failIfRequested("createTexture")
-                    if (label == "Kanvas.session.corePrimitive.framePool.pathDepthStencil") {
-                        val pathViewLabel = "$label.view"
+                    if (label == "Kanvas.session.corePrimitive.framePool.pathDepthStencil" ||
+                        label == "Kanvas.session.corePrimitive.framePool.clipDepthStencil"
+                    ) {
+                        val attachmentViewLabel = "$label.view"
                         handle(GPUTexture::class.java, label) { textureMethod ->
                             if (textureMethod.name == "createView") {
-                                events += "createView:$pathViewLabel"
+                                events += "createView:$attachmentViewLabel"
                                 failIfRequested("createView")
-                                recordedHandle(GPUTextureView::class.java, pathViewLabel) as GPUTextureView
+                                recordedHandle(
+                                    GPUTextureView::class.java,
+                                    attachmentViewLabel,
+                                ) as GPUTextureView
                             } else {
                                 null
                             }

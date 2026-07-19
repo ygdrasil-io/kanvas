@@ -503,6 +503,219 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     }
 
     @Test
+    fun `clip attachment is exact reusable and strictly separate from path attachment`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val path = pathDepthStencil(width = 63, height = 47)
+        val clip = clipDepthStencil(width = 63, height = 47)
+
+        val first = pool.acquire(
+            requirements(pathDepthStencil = path, clipDepthStencil = clip),
+        ).acquiredLease()
+        val firstPath = requireNotNull(first.handles.pathDepthStencil)
+        val firstClip = requireNotNull(first.handles.clipDepthStencil)
+
+        assertEquals(path, firstPath.requirement)
+        assertEquals(clip, firstClip.requirement)
+        assertNotSame(firstPath.texture, firstClip.texture)
+        assertNotSame(firstPath.view, firstClip.view)
+        assertEquals(
+            listOf(
+                GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilTexture,
+                GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilView,
+                GPUWgpu4kCorePrimitiveFramePoolResource.ClipDepthStencilTexture,
+                GPUWgpu4kCorePrimitiveFramePoolResource.ClipDepthStencilView,
+            ),
+            factory.creations.map(CreatedHandle::resource).takeLast(4),
+        )
+        first.rollbackBeforeSubmit()
+
+        val reused = pool.acquire(
+            requirements(pathDepthStencil = path, clipDepthStencil = clip),
+        ).acquiredLease()
+        assertSame(firstPath.texture, requireNotNull(reused.handles.pathDepthStencil).texture)
+        assertSame(firstPath.view, requireNotNull(reused.handles.pathDepthStencil).view)
+        assertSame(firstClip.texture, requireNotNull(reused.handles.clipDepthStencil).texture)
+        assertSame(firstClip.view, requireNotNull(reused.handles.clipDepthStencil).view)
+
+        reused.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `clip attachment requirement is exact D24S8 target sized single sample render attachment`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
+                0,
+                47,
+                GPUTextureFormat.Depth24PlusStencil8,
+                1,
+                GPUTextureUsage.RenderAttachment,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
+                63,
+                47,
+                GPUTextureFormat.RGBA8Unorm,
+                1,
+                GPUTextureUsage.RenderAttachment,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
+                63,
+                47,
+                GPUTextureFormat.Depth24PlusStencil8,
+                4,
+                GPUTextureUsage.RenderAttachment,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
+                63,
+                47,
+                GPUTextureFormat.Depth24PlusStencil8,
+                1,
+                GPUTextureUsage.TextureBinding,
+            )
+        }
+    }
+
+    @Test
+    fun `clip resize is transactional and view failure preserves the published attachment`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val initialRequirement = clipDepthStencil(width = 63, height = 47)
+        val replacementRequirement = clipDepthStencil(width = 65, height = 49)
+        val initial = pool.acquire(
+            requirements(clipDepthStencil = initialRequirement),
+        ).acquiredLease()
+        val initialClip = requireNotNull(initial.handles.clipDepthStencil)
+        initial.rollbackBeforeSubmit()
+        factory.failNext(GPUWgpu4kCorePrimitiveFramePoolResource.ClipDepthStencilView)
+
+        val refused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(
+            pool.acquire(requirements(clipDepthStencil = replacementRequirement)),
+        )
+
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolResource.ClipDepthStencilView,
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed>(refused.reason).resource,
+        )
+        val unpublishedTexture = factory.creations.last {
+            it.resource == GPUWgpu4kCorePrimitiveFramePoolResource.ClipDepthStencilTexture
+        }.handle
+        assertEquals(1, factory.closeAttempts(unpublishedTexture))
+        assertEquals(0, factory.closeAttempts(initialClip.view))
+        assertEquals(0, factory.closeAttempts(initialClip.texture))
+
+        val replacement = pool.acquire(
+            requirements(clipDepthStencil = replacementRequirement),
+        ).acquiredLease()
+        val replacementClip = requireNotNull(replacement.handles.clipDepthStencil)
+        assertEquals(initial.slotId, replacement.slotId)
+        assertEquals(replacementRequirement, replacementClip.requirement)
+        assertNotSame(initialClip.texture, replacementClip.texture)
+        assertNotSame(initialClip.view, replacementClip.view)
+        assertSame(initial.handles.vertexBuffer, replacement.handles.vertexBuffer)
+        assertSame(initial.handles.indexBuffer, replacement.handles.indexBuffer)
+        assertSame(initial.handles.uniformBuffer, replacement.handles.uniformBuffer)
+        assertSame(initial.handles.bindGroup, replacement.handles.bindGroup)
+        assertEquals(1, factory.closeAttempts(initialClip.view))
+        assertEquals(1, factory.closeAttempts(initialClip.texture))
+
+        replacement.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `clip leases honor generation saturation completion and uncertain quarantine`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val clip = clipDepthStencil(width = 63, height = 47)
+        val mismatch = pool.acquire(
+            requirements(
+                deviceGeneration = GPUDeviceGenerationID(8),
+                clipDepthStencil = clip,
+            ),
+        )
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolRefusal.DeviceGenerationMismatch(
+                GENERATION,
+                GPUDeviceGenerationID(8),
+            ),
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(mismatch).reason,
+        )
+        assertTrue(factory.creations.isEmpty())
+
+        val leases = List(3) {
+            pool.acquire(requirements(clipDepthStencil = clip)).acquiredLease()
+        }
+        assertEquals(
+            3,
+            leases.map { requireNotNull(it.handles.clipDepthStencil).texture }.distinct().size,
+        )
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolRefusal.Saturated(3),
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(
+                pool.acquire(requirements(clipDepthStencil = clip)),
+            ).reason,
+        )
+
+        leases[0].markSubmitted()
+        leases[1].quarantineUncertain()
+        leases[2].rollbackBeforeSubmit()
+        val rolledBack = pool.acquire(requirements(clipDepthStencil = clip)).acquiredLease()
+        assertEquals(leases[2].slotId, rolledBack.slotId)
+        rolledBack.rollbackBeforeSubmit()
+        leases[0].completeSuccessfully()
+        val completed = pool.acquire(requirements(clipDepthStencil = clip)).acquiredLease()
+        assertEquals(leases[0].slotId, completed.slotId)
+        assertSame(
+            requireNotNull(leases[0].handles.clipDepthStencil).texture,
+            requireNotNull(completed.handles.clipDepthStencil).texture,
+        )
+        completed.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `failed clip view close blocks texture and retries without double closing independent handles`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val lease = pool.acquire(
+            requirements(clipDepthStencil = clipDepthStencil(width = 63, height = 47)),
+        ).acquiredLease()
+        val clip = requireNotNull(lease.handles.clipDepthStencil)
+        lease.rollbackBeforeSubmit()
+        factory.failCloseOnce(clip.view)
+
+        val failure = assertFailsWith<GPUWgpu4kCorePrimitiveFramePoolCloseFailure> { pool.close() }
+
+        assertEquals(2, failure.retainedHandleCount)
+        assertEquals(1, factory.closeAttempts(clip.view))
+        assertEquals(0, factory.closeAttempts(clip.texture))
+        assertEquals(1, factory.closeAttempts(lease.handles.bindGroup))
+        assertEquals(1, factory.closeAttempts(lease.handles.uniformBuffer))
+        assertEquals(1, factory.closeAttempts(lease.handles.indexBuffer))
+        assertEquals(1, factory.closeAttempts(lease.handles.vertexBuffer))
+
+        pool.close()
+
+        assertEquals(2, factory.closeAttempts(clip.view))
+        assertEquals(1, factory.closeAttempts(clip.texture))
+        assertEquals(1, factory.closeAttempts(lease.handles.bindGroup))
+        assertEquals(1, factory.closeAttempts(lease.handles.uniformBuffer))
+        assertEquals(1, factory.closeAttempts(lease.handles.indexBuffer))
+        assertEquals(1, factory.closeAttempts(lease.handles.vertexBuffer))
+        assertTrue(
+            factory.closeEvents.indexOf("close:clipDepthStencilView") <
+                factory.closeEvents.indexOf("close:clipDepthStencilTexture"),
+        )
+    }
+
+    @Test
     fun `generation mismatch and a fourth concurrent checkout are typed non blocking refusals`() {
         val factory = FakeFactory()
         val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
@@ -820,21 +1033,34 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         indexBytes: Long = 1L,
         uniformBytes: Long = 1L,
         pathDepthStencil: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
+        clipDepthStencil: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
             PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
     ) = GPUWgpu4kCorePrimitiveFramePoolRequirements(
-        deviceGeneration,
-        vertexBytes,
-        indexBytes,
-        uniformBytes,
-        pathDepthStencil,
-        componentIdentity,
+        deviceGeneration = deviceGeneration,
+        vertexBytes = vertexBytes,
+        indexBytes = indexBytes,
+        uniformBytes = uniformBytes,
+        pathDepthStencil = pathDepthStencil,
+        componentIdentity = componentIdentity,
+        clipDepthStencil = clipDepthStencil,
     )
 
     private fun pathDepthStencil(
         width: Int,
         height: Int,
     ) = GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
+        width = width,
+        height = height,
+        format = GPUTextureFormat.Depth24PlusStencil8,
+        sampleCount = 1,
+        usage = GPUTextureUsage.RenderAttachment,
+    )
+
+    private fun clipDepthStencil(
+        width: Int,
+        height: Int,
+    ) = GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
         width = width,
         height = height,
         format = GPUTextureFormat.Depth24PlusStencil8,
@@ -884,6 +1110,21 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             GPUTextureView::class.java,
         )
 
+        override fun createClipDepthStencilTexture(
+            requirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement,
+        ): GPUTexture = create(
+            GPUWgpu4kCorePrimitiveFramePoolResource.ClipDepthStencilTexture,
+            "clipDepthStencilTexture",
+            GPUTexture::class.java,
+            clipDepthStencilRequirement = requirement,
+        )
+
+        override fun createClipDepthStencilView(texture: GPUTexture): GPUTextureView = create(
+            GPUWgpu4kCorePrimitiveFramePoolResource.ClipDepthStencilView,
+            "clipDepthStencilView",
+            GPUTextureView::class.java,
+        )
+
         fun failNext(resource: GPUWgpu4kCorePrimitiveFramePoolResource) {
             nextFailure = resource
         }
@@ -900,6 +1141,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             label: String,
             type: Class<T>,
             pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
+            clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
             componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity? = null,
         ): T {
             if (nextFailure == resource) {
@@ -923,7 +1165,13 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
                     else -> defaultValue(method.returnType)
                 }
             } as T
-            creations += CreatedHandle(resource, handle, pathDepthStencilRequirement, componentIdentity)
+            creations += CreatedHandle(
+                resource,
+                handle,
+                pathDepthStencilRequirement,
+                clipDepthStencilRequirement,
+                componentIdentity,
+            )
             return handle
         }
 
@@ -944,6 +1192,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         val resource: GPUWgpu4kCorePrimitiveFramePoolResource,
         val handle: AutoCloseable,
         val pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
+        val clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
         val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity? = null,
     )
 

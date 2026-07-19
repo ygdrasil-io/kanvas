@@ -2,6 +2,14 @@ package org.graphiks.kanvas.gpu.renderer.passes
 
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 
+private fun List<GPUPassCommandOperandBridge>.requiresBindGroup(packetId: GPUDrawPacketID): Boolean {
+    val packetCommandLabels = asSequence()
+        .filter { bridge -> bridge.packetId == packetId }
+        .map(GPUPassCommandOperandBridge::commandLabel)
+        .toSet()
+    return "setRenderPipeline" !in packetCommandLabels || "setBindGroup" in packetCommandLabels
+}
+
 /**
  * Lowers an accepted pass-batch plan into the explicit render-pass command stream used by
  * runtime evidence and follow-on diagnostics.
@@ -74,14 +82,16 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
                         packetId = packet.packetId,
                     ),
                 )
-                add(
-                    GPUPassCommand.SetBindGroup(
-                        bindingLayoutHash = packet.bindingLayoutHash,
-                        uniformSlot = packet.uniformSlot,
-                        resourceSlot = packet.resourceSlot,
-                        packetId = packet.packetId,
-                    ),
-                )
+                if (effectiveOperandBridge.requiresBindGroup(packet.packetId)) {
+                    add(
+                        GPUPassCommand.SetBindGroup(
+                            bindingLayoutHash = packet.bindingLayoutHash,
+                            uniformSlot = packet.uniformSlot,
+                            resourceSlot = packet.resourceSlot,
+                            packetId = packet.packetId,
+                        ),
+                    )
+                }
                 if (effectiveOperandBridge.any { bridge ->
                         bridge.packetId == packet.packetId && bridge.commandLabel == "setVertexBuffer"
                     }
@@ -192,14 +202,16 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
                 "Packet ${packet.packetId.value} cannot be lowered from batch plan without renderPipelineKey"
             }
             add(GPUPassCommand.SetRenderPipeline(renderPipelineKey, packet.packetId))
-            add(
-                GPUPassCommand.SetBindGroup(
-                    bindingLayoutHash = packet.bindingLayoutHash,
-                    uniformSlot = packet.uniformSlot,
-                    resourceSlot = packet.resourceSlot,
-                    packetId = packet.packetId,
-                ),
-            )
+            if (effectiveOperandBridge.requiresBindGroup(packet.packetId)) {
+                add(
+                    GPUPassCommand.SetBindGroup(
+                        bindingLayoutHash = packet.bindingLayoutHash,
+                        uniformSlot = packet.uniformSlot,
+                        resourceSlot = packet.resourceSlot,
+                        packetId = packet.packetId,
+                    ),
+                )
+            }
             if (effectiveOperandBridge.any { bridge ->
                     bridge.packetId == packet.packetId && bridge.commandLabel == "setVertexBuffer"
                 }

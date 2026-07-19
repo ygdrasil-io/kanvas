@@ -154,6 +154,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPhysicalPoolMaintenanceDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPhysicalPoolRollbackSummary
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
@@ -402,11 +403,143 @@ class GPUFramePreflighterTest {
             accepted.attachment.logicalReference,
             producerScope.attachmentAuthority.resource.value,
         )
+        val producerEncoderScope = scopesByStep.getValue(producerStepIndex)
+        val consumerEncoderScopes = consumers.map { consumer ->
+            scopesByStep.getValue(plan.steps.indexOf(consumer))
+        }
+        assertEquals(
+            listOf(
+                GPUPreparedNativeOperandRole.RenderColorTarget,
+                GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                GPUPreparedNativeOperandRole.RenderIndexBuffer,
+            ),
+            producerEncoderScope.nativeOperandKeys.map(GPUPreparedNativeOperandKey::role),
+        )
+        val expectedConsumerRoles = listOf(
+                GPUPreparedNativeOperandRole.RenderColorTarget,
+                GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+            )
+        assertTrue(consumerEncoderScopes.all { scope ->
+            scope.nativeOperandKeys.map(GPUPreparedNativeOperandKey::role) == expectedConsumerRoles
+        })
+        assertTrue((listOf(producerEncoderScope) + consumerEncoderScopes).flatMap {
+            it.nativeOperandKeys
+        }.all { key -> key.ownership == GPUPreparedNativeOperandOwnership.Borrowed })
+        val depthStencilKeys = (listOf(producerEncoderScope) + consumerEncoderScopes).map { scope ->
+            scope.nativeOperandKeys.single {
+                it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
+            }
+        }
+        assertTrue(depthStencilKeys.all {
+            it.kind == GPUPreparedNativeOperandKind.TextureView &&
+                it.bindingKey == gpuPreparedNativeBindingKey(
+                    "GPUFrameTextureRef:${producerScope.attachmentAuthority.resource.value}@" +
+                        producerScope.attachmentAuthority.resourceGeneration,
+                )
+        })
+        val vertexKeys = (listOf(producerEncoderScope) + consumerEncoderScopes).map { scope ->
+            scope.nativeOperandKeys.single {
+                it.role == GPUPreparedNativeOperandRole.RenderVertexBuffer
+            }.bindingKey
+        }
+        val indexKeys = (listOf(producerEncoderScope) + consumerEncoderScopes).map { scope ->
+            scope.nativeOperandKeys.single {
+                it.role == GPUPreparedNativeOperandRole.RenderIndexBuffer
+            }.bindingKey
+        }
+        assertEquals(1, vertexKeys.distinct().size)
+        assertEquals(1, indexKeys.distinct().size)
+        assertTrue(producerEncoderScope.passCommandStream!!.operandBridge.none {
+            it.operand.kind == GPUMaterializedCommandOperandKind.BindGroup
+        })
+        assertTrue(consumerEncoderScopes.all { scope ->
+            scope.passCommandStream!!.operandBridge.map { it.operand.kind }.toSet() == setOf(
+                GPUMaterializedCommandOperandKind.RenderPipeline,
+                GPUMaterializedCommandOperandKind.VertexBuffer,
+                GPUMaterializedCommandOperandKind.IndexBuffer,
+                GPUMaterializedCommandOperandKind.BindGroup,
+            )
+        })
         assertTrue(events.any { it.startsWith("resource:prepare:") })
     }
 
     @Test
-    fun `native path clip stencil preflight accepts fake native boundary with sealed scopes`() {
+    fun `clip stencil prepared scope rejects substituted native operand seals`() {
+        val plan = preparedNativeClipStencilFramePlan()
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            preflighter(
+                RecordingResourceProvider(mutableListOf()),
+                RecordingCompletionProvider(mutableListOf()),
+                RecordingSurfaceProvider(mutableListOf()),
+                context = clipPreflightContext(plan),
+                capabilities = pathCapabilities(),
+            ).preflight(plan),
+        ).frame
+        val producer = prepared.encoderPlan.scopes.single { scope ->
+            scope.corePrimitiveClipStencilPreparedRouteSeal is
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
+        }
+        val consumer = prepared.encoderPlan.scopes.first { scope ->
+            scope.corePrimitiveClipStencilPreparedRouteSeal is
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+        }
+
+        fun detached(scope: GPUCommandEncoderScopePlan) = GPUCommandEncoderScopePlan(
+            sourceStepIndex = scope.sourceStepIndex,
+            operationKind = scope.operationKind,
+            scopeLabel = scope.scopeLabel,
+            sourceTaskIds = scope.sourceTaskIds,
+            sourcePacketIds = scope.sourcePacketIds,
+            facadeOperationClasses = scope.facadeOperationClasses,
+            targetGeneration = scope.targetGeneration,
+            resourceGenerationLabels = scope.resourceGenerationLabels,
+            passCommandStream = scope.passCommandStream,
+            corePrimitiveDirectNativeRouteSeal = scope.corePrimitiveDirectNativeRouteSeal,
+            corePrimitivePathStencilNativeRouteSeal = scope.corePrimitivePathStencilNativeRouteSeal,
+            corePrimitiveNativeScopeRouteSeal = scope.corePrimitiveNativeScopeRouteSeal,
+            corePrimitiveClipStencilPreparedRouteSeal =
+                scope.corePrimitiveClipStencilPreparedRouteSeal,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            detached(producer).attachNativeOperandKeys(
+                producer.nativeOperandKeys + GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                    GPUPreparedNativeOperandKind.BindGroup,
+                    gpuPreparedNativeBindingKey("clip-stencil.forged.producer-bind-group"),
+                ),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            detached(consumer).attachNativeOperandKeys(
+                consumer.nativeOperandKeys.filterNot {
+                    it.role == GPUPreparedNativeOperandRole.RenderBindGroup
+                },
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            detached(consumer).attachNativeOperandKeys(
+                consumer.nativeOperandKeys.map { key ->
+                    if (key.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget) {
+                        key.copy(bindingKey = gpuPreparedNativeBindingKey(
+                            "GPUFrameTextureRef:texture.path-depth-stencil.forged@1",
+                        ))
+                    } else {
+                        key
+                    }
+                },
+            )
+        }
+    }
+
+    @Test
+    fun `native path clip stencil preflight refuses fake boundary without exact native operands`() {
         val plan = preparedNativeClipStencilFramePlan()
         val events = mutableListOf<String>()
         val adapter = GPURuntimeResourceAdapter()
@@ -423,24 +556,14 @@ class GPUFramePreflighterTest {
                     RenderOnlyNativePayloadMaterializer(events),
                 ),
             ).preflight(plan)
-            val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            val refused = assertIs<GPUFramePreflightResult.Refused>(
                 result,
-                (result as? GPUFramePreflightResult.Refused)?.diagnostic?.let {
-                    "${it.code.value}: ${it.message}"
-                },
-            ).frame
-
-            val routeScopes = prepared.encoderPlan.scopes.map {
-                it.corePrimitiveClipStencilPreparedRouteSeal
-            }
-            assertEquals(3, routeScopes.size)
-            assertIs<GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer>(routeScopes[0])
-            assertIs<GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer>(routeScopes[1])
-            assertIs<GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer>(routeScopes[2])
+            )
+            assertEquals(
+                "failed.preflight.native_payload_materialization",
+                refused.diagnostic.code.value,
+            )
             assertTrue(events.contains("native-payload:materialize"))
-            assertEquals(1, adapter.activePreparedNativeFramePayloadCount)
-
-            prepared.rollback.execute()
             assertEquals(0, adapter.activePreparedNativeFramePayloadCount)
             assertEquals(0, resources.pendingPhysicalReservationCount)
         } finally {
@@ -493,6 +616,41 @@ class GPUFramePreflighterTest {
                 resourceUses = producer.resourceUses.map { use ->
                     if (use === vertexUse) use.copy(usage = GPUFrameResourceUsage.Storage) else use
                 },
+            ),
+        )
+        val forgedProducerDepthStencilRole = valid.replacingRender(
+            producer,
+            renderWith(
+                producer,
+                resourceUses = producer.resourceUses.map { use ->
+                    if (use.role == GPUFrameResourceRole.ClipDepthStencil) {
+                        use.copy(role = GPUFrameResourceRole.PathDepthStencil)
+                    } else {
+                        use
+                    }
+                },
+            ),
+        )
+        val forgedProducerDepthStencilLoadStore = valid.replacingRender(
+            producer,
+            renderWith(
+                producer,
+                depthStencilLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
+                    GPUStencilLoadOperation.Load,
+                    GPUStorePlan.Store,
+                    null,
+                ),
+            ),
+        )
+        val forgedConsumerDepthStencilLoadStore = valid.replacingRender(
+            consumers.first(),
+            renderWith(
+                consumers.first(),
+                depthStencilLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
+                    GPUStencilLoadOperation.Clear,
+                    GPUStorePlan.Store,
+                    0u,
+                ),
             ),
         )
         val missingUniformUse = valid.replacingRender(
@@ -775,6 +933,9 @@ class GPUFramePreflighterTest {
             "missing producer candidate" to missingCandidate,
             "producer key" to forgedProducerKey,
             "producer vertex use" to forgedProducerUse,
+            "producer depth stencil role" to forgedProducerDepthStencilRole,
+            "producer depth stencil load store" to forgedProducerDepthStencilLoadStore,
+            "consumer depth stencil load store" to forgedConsumerDepthStencilLoadStore,
             "consumer uniform use" to missingUniformUse,
             "vertex preparation" to forgedVertexPreparation,
             "index preparation" to forgedIndexPreparation,
@@ -812,6 +973,9 @@ class GPUFramePreflighterTest {
                     "missing producer candidate",
                     "producer key",
                     "producer vertex use",
+                    "producer depth stencil role",
+                    "producer depth stencil load store",
+                    "consumer depth stencil load store",
                     "depth stencil preparation",
                     "depth stencil sample",
                     "depth stencil lifetime",

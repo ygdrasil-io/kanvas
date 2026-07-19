@@ -346,7 +346,12 @@ internal class GPUFramePreflighter(
         }
 
         acquiredAnyResource = true
-        val renderMaterialization = materializeRenderOperands(framePlan, ownerScope, corePrimitiveDirectRoutes)
+        val renderMaterialization = materializeRenderOperands(
+            framePlan,
+            ownerScope,
+            corePrimitiveDirectRoutes,
+            corePrimitiveClipStencilPreparedRoutes,
+        )
         val materialized = when (renderMaterialization) {
             is GPUResourceMaterializationDecision.Materialized -> renderMaterialization
             is GPUResourceMaterializationDecision.Refused -> return refuseWithRollback(
@@ -375,7 +380,13 @@ internal class GPUFramePreflighter(
                 ),
             )
         }
-        validateRenderOperands(framePlan, materialized, ownerScope, corePrimitiveDirectRoutes)?.let { invalid ->
+        validateRenderOperands(
+            framePlan,
+            materialized,
+            ownerScope,
+            corePrimitiveDirectRoutes,
+            corePrimitiveClipStencilPreparedRoutes,
+        )?.let { invalid ->
             return refuseWithRollback(rollback, acquiredAnyResource, invalid)
         }
 
@@ -3165,6 +3176,8 @@ internal class GPUFramePreflighter(
         framePlan: GPUFramePlan,
         ownerScope: String,
         corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
+        corePrimitiveClipStencilPreparedRoutes:
+            GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
     ): GPUResourceMaterializationDecision {
         val packets = framePlan.steps.mapIndexedNotNull { sourceStepIndex, step ->
             (step as? GPUFrameStep.RenderPassStep)?.let { render ->
@@ -3176,7 +3189,13 @@ internal class GPUFramePreflighter(
         }
         return try {
             val operands = packets.flatMap { (sourceStepIndex, packet) ->
-                plannedRenderOperands(sourceStepIndex, packet, ownerScope, corePrimitiveDirectRoutes)
+                plannedRenderOperands(
+                    sourceStepIndex,
+                    packet,
+                    ownerScope,
+                    corePrimitiveDirectRoutes,
+                    corePrimitiveClipStencilPreparedRoutes,
+                )
             }
             resourceProvider.materializeCommandOperands(
                 GPUCommandOperandMaterializationRequest(
@@ -3230,7 +3249,18 @@ internal class GPUFramePreflighter(
         packet: GPUDrawPacket,
         ownerScope: String,
         corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
+        corePrimitiveClipStencilPreparedRoutes:
+            GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
     ): List<GPUCommandOperandMaterializationPlan> = buildList {
+        val clipStencilScope = when (corePrimitiveClipStencilPreparedRoutes) {
+            GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Empty ->
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty
+            is GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Route ->
+                corePrimitiveClipStencilPreparedRoutes.retainedFor(
+                    sourceStepIndex,
+                    listOf(packet.packetId),
+                )
+        }
         add(
             operand(
                 packet,
@@ -3240,18 +3270,29 @@ internal class GPUFramePreflighter(
                 ownerScope,
             ),
         )
-        add(
-            operand(
-                packet,
-                "setBindGroup",
-                GPUMaterializedCommandOperandKind.BindGroup,
-                packet.bindingLayoutHash,
-                ownerScope,
-            ),
-        )
+        if (clipStencilScope !is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer) {
+            add(
+                operand(
+                    packet,
+                    "setBindGroup",
+                    GPUMaterializedCommandOperandKind.BindGroup,
+                    packet.bindingLayoutHash,
+                    ownerScope,
+                ),
+            )
+        }
         val colorGlyph = packet.semanticPayload as? GPUDrawSemanticPayload.ColorGlyph
         val directCore = corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId)
-        if (colorGlyph != null || directCore != null) {
+        val clipStencilSlabs = when (clipStencilScope) {
+            is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ->
+                clipStencilScope.slabAuthority
+            is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer ->
+                clipStencilScope.slabAuthority
+            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty,
+            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing,
+            -> null
+        }
+        if (colorGlyph != null || directCore != null || clipStencilSlabs != null) {
             add(
                 operand(
                     packet,
@@ -3259,6 +3300,10 @@ internal class GPUFramePreflighter(
                     GPUMaterializedCommandOperandKind.VertexBuffer,
                     if (colorGlyph != null) {
                         "${colorGlyph.canonicalHash}.vertices.${colorGlyph.vertexData.size}"
+                    } else if (clipStencilSlabs != null) {
+                        "clip-stencil.${clipStencilSlabs.vertexResource.value}@" +
+                            "${clipStencilSlabs.vertexGeneration}.vertices." +
+                            clipStencilSlabs.vertexByteSize
                     } else {
                         "core-direct.$sourceStepIndex.${packet.packetId.value}.vertices." +
                             requireNotNull(directCore).vertexCount * 2
@@ -3273,6 +3318,10 @@ internal class GPUFramePreflighter(
                     GPUMaterializedCommandOperandKind.IndexBuffer,
                     if (colorGlyph != null) {
                         "${colorGlyph.canonicalHash}.indices.${colorGlyph.indexData.size}"
+                    } else if (clipStencilSlabs != null) {
+                        "clip-stencil.${clipStencilSlabs.indexResource.value}@" +
+                            "${clipStencilSlabs.indexGeneration}.indices." +
+                            clipStencilSlabs.indexByteSize
                     } else {
                         "core-direct.$sourceStepIndex.${packet.packetId.value}.indices." +
                             requireNotNull(directCore).indexCount
@@ -3288,6 +3337,8 @@ internal class GPUFramePreflighter(
         materialized: GPUResourceMaterializationDecision.Materialized,
         ownerScope: String,
         corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
+        corePrimitiveClipStencilPreparedRoutes:
+            GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
     ): GPUDiagnostic? {
         val packets = framePlan.steps.mapIndexedNotNull { sourceStepIndex, step ->
             (step as? GPUFrameStep.RenderPassStep)?.let { render ->
@@ -3298,7 +3349,13 @@ internal class GPUFramePreflighter(
         val expectedTasks = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { it.sourceTaskIds }.map { it.value }.distinct()
         val expectedPlans = packets.flatMap { (sourceStepIndex, packet) ->
-            plannedRenderOperands(sourceStepIndex, packet, ownerScope, corePrimitiveDirectRoutes)
+            plannedRenderOperands(
+                sourceStepIndex,
+                packet,
+                ownerScope,
+                corePrimitiveDirectRoutes,
+                corePrimitiveClipStencilPreparedRoutes,
+            )
         }
         val expectedLabels = expectedPlans.map { it.label }
         if (materialized.targetId != context.targetId || materialized.taskIds != expectedTasks ||
@@ -3338,6 +3395,7 @@ internal class GPUFramePreflighter(
                 packet,
                 ownerScope,
                 corePrimitiveDirectRoutes,
+                corePrimitiveClipStencilPreparedRoutes,
             )
             val packetBridge = bridge.subList(bridgeOffset, bridgeOffset + expected.size)
             bridgeOffset += expected.size
@@ -3345,15 +3403,32 @@ internal class GPUFramePreflighter(
             val bindGroups = packetBridge.filter { it.commandLabel == "setBindGroup" && it.operand.kind == GPUMaterializedCommandOperandKind.BindGroup }
             val vertices = packetBridge.filter { it.commandLabel == "setVertexBuffer" && it.operand.kind == GPUMaterializedCommandOperandKind.VertexBuffer }
             val indices = packetBridge.filter { it.commandLabel == "setIndexBuffer" && it.operand.kind == GPUMaterializedCommandOperandKind.IndexBuffer }
+            val clipStencilScope = when (corePrimitiveClipStencilPreparedRoutes) {
+                GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Empty ->
+                    GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty
+                is GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Route ->
+                    corePrimitiveClipStencilPreparedRoutes.retainedFor(
+                        sourceStepIndex,
+                        listOf(packet.packetId),
+                    )
+            }
             val indexedPayload = packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
-                corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId) != null
-            if (pipelines.size != 1 || bindGroups.size != 1 ||
+                corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId) != null ||
+                clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
+                clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+            val expectedBindGroupCount =
+                if (clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer) {
+                    0
+                } else {
+                    1
+                }
+            if (pipelines.size != 1 || bindGroups.size != expectedBindGroupCount ||
                 (indexedPayload && (vertices.size != 1 || indices.size != 1)) ||
                 (!indexedPayload && (vertices.isNotEmpty() || indices.isNotEmpty()))
             ) {
                 return diagnostic(
                     "invalid.preflight.render_operand_bijection",
-                    "Every render packet requires one pipeline and bind group, plus exact indexed buffers for ColorGlyph.",
+                    "Every render packet requires one pipeline, its sealed bind-group count, and exact indexed buffers when required.",
                     mapOf("packet" to packet.packetId.value),
                 )
             }
@@ -3416,13 +3491,36 @@ internal class GPUFramePreflighter(
             framePlan.steps.forEachIndexed { sourceStepIndex, step ->
                 val render = step as? GPUFrameStep.RenderPassStep ?: return@forEachIndexed
                 val operandCount = render.drawPackets.sumOf { packet ->
-                    2 + if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
-                        corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId) != null
+                    val clipStencilScope = when (corePrimitiveClipStencilPreparedRoutes) {
+                        GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Empty ->
+                            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty
+                        is GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Route ->
+                            corePrimitiveClipStencilPreparedRoutes.retainedFor(
+                                sourceStepIndex,
+                                listOf(packet.packetId),
+                            )
+                    }
+                    val bindGroupCount =
+                        if (clipStencilScope is
+                            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
+                        ) {
+                            0
+                        } else {
+                            1
+                        }
+                    val indexedCount = if (
+                        packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+                        corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId) != null ||
+                        clipStencilScope is
+                            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
+                        clipStencilScope is
+                            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
                     ) {
                         2
                     } else {
                         0
                     }
+                    1 + bindGroupCount + indexedCount
                 }
                 put(
                     sourceStepIndex,
@@ -3536,6 +3634,7 @@ internal class GPUFramePreflighter(
                         stream,
                         stepCorePrimitiveDirectRoutes,
                         stepCorePrimitiveNativeScopeRoutes,
+                        stepCorePrimitiveClipStencilPreparedRoutes,
                     ),
                 )
             }
@@ -3569,6 +3668,9 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveDirectNativeRouteSeal.Empty,
         corePrimitiveNativeScopeRoutes: GPUCorePrimitiveNativeScopeRouteSeal =
             GPUCorePrimitiveNativeScopeRouteSeal.Empty,
+        corePrimitiveClipStencilPreparedRoutes:
+            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal =
+            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty,
     ): List<GPUPreparedNativeOperandKey> {
         fun key(
             role: GPUPreparedNativeOperandRole,
@@ -3591,24 +3693,46 @@ internal class GPUFramePreflighter(
                     packet.role == GPUDrawPacketRole.PathStencilProducer ||
                         packet.role == GPUDrawPacketRole.PathStencilCover
                 }
+                val clipStencilCore =
+                    corePrimitiveClipStencilPreparedRoutes is
+                        GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
+                        corePrimitiveClipStencilPreparedRoutes is
+                        GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+                check(!(pathCore && clipStencilCore)) {
+                    "PathDepthStencil and ClipDepthStencil native scope seals are mutually exclusive"
+                }
                 val drawOperandOwnership = if (colorGlyph) {
                     GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion
                 } else {
                     GPUPreparedNativeOperandOwnership.Borrowed
                 }
                 val streamBridges = requireNotNull(stream).operandBridge
-                val nativeBridges = if (pathCore) {
+                val nativeBridges = if (pathCore || clipStencilCore) {
                     val pipelineBridges = streamBridges.filter {
                         it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
                     }
                     check(pipelineBridges.size == step.drawPackets.size) {
                         "Indexed CorePrimitive pipelines must retain exact packet-order evidence"
                     }
-                    pipelineBridges.zip(step.drawPackets)
-                        .distinctBy { (_, packet) -> packet.renderPipelineKey }
-                        .map { (bridge, _) -> bridge } + streamBridges.filter {
+                    val bindGroupBridges = streamBridges.filter {
                         it.operand.kind == GPUMaterializedCommandOperandKind.BindGroup
                     }
+                    if (clipStencilCore) {
+                        val expectedBindGroups = if (
+                            corePrimitiveClipStencilPreparedRoutes is
+                            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
+                        ) {
+                            0
+                        } else {
+                            1
+                        }
+                        check(bindGroupBridges.size == expectedBindGroups) {
+                            "Clip-stencil producer forbids bind groups and consumers require exactly one"
+                        }
+                    }
+                    pipelineBridges.zip(step.drawPackets)
+                        .distinctBy { (_, packet) -> packet.renderPipelineKey }
+                        .map { (bridge, _) -> bridge } + bindGroupBridges
                 } else if (directCore) {
                     listOfNotNull(
                         streamBridges.firstOrNull {
@@ -3642,9 +3766,14 @@ internal class GPUFramePreflighter(
             } ?: listOf(
                 key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel),
             )
-                val depthStencilKeys = if (pathCore) {
+                val depthStencilKeys = if (pathCore || clipStencilCore) {
+                    val depthStencilRole = if (clipStencilCore) {
+                        GPUFrameResourceRole.ClipDepthStencil
+                    } else {
+                        GPUFrameResourceRole.PathDepthStencil
+                    }
                     step.resourceUses.withIndex().singleOrNull { (_, use) ->
-                        use.role == GPUFrameResourceRole.PathDepthStencil
+                        use.role == depthStencilRole
                     }?.let { (resourceIndex, _) ->
                         listOf(
                             key(
@@ -3690,7 +3819,7 @@ internal class GPUFramePreflighter(
                         )
                     else -> error("Render native operand bridge contains an unsupported operand kind")
                 }
-                if (pathCore) {
+                if (pathCore || clipStencilCore) {
                     val pipelineKeys = nativeBridges.filter {
                         it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
                     }.map(::bridgeKey)

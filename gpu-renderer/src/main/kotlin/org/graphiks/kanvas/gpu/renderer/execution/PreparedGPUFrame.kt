@@ -139,11 +139,18 @@ class GPUCommandEncoderScopePlan internal constructor(
         require(keys.isNotEmpty()) { "Native operand keys must not be empty" }
         val pathSealed = corePrimitivePathStencilNativeRouteSeal is
             GPUCorePrimitivePathStencilNativeRouteSeal.Pairs
+        val clipStencilSeal = corePrimitiveClipStencilPreparedRouteSeal
+        val clipStencilSealed =
+            clipStencilSeal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
+                clipStencilSeal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+        require(!(pathSealed && clipStencilSealed)) {
+            "PathDepthStencil and ClipDepthStencil native operand seals are mutually exclusive"
+        }
         val depthStencilKeys = keys.filter {
             it.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
         }
         require(
-            if (pathSealed) {
+            if (pathSealed || clipStencilSealed) {
                 depthStencilKeys.size == 1 &&
                     depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
                     depthStencilKeys.single().ownership == GPUPreparedNativeOperandOwnership.Borrowed
@@ -151,7 +158,124 @@ class GPUCommandEncoderScopePlan internal constructor(
                 depthStencilKeys.isEmpty()
             },
         ) {
-            "A path route requires exactly one borrowed depth/stencil texture-view operand, and other scopes forbid it"
+            "A sealed stencil route requires exactly one borrowed depth/stencil texture-view operand, and other scopes forbid it"
+        }
+        if (clipStencilSealed) {
+            val seal = when (clipStencilSeal) {
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer -> clipStencilSeal
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer -> clipStencilSeal
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty,
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing,
+                -> error("Unreachable clip-stencil seal")
+            }
+            val isProducer = seal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
+            val packetId = when (seal) {
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer -> seal.packetId
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer -> seal.packetId
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty,
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing,
+                -> error("Unreachable clip-stencil seal")
+            }
+            val sourceIndex = when (seal) {
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer -> seal.sourceStepIndex
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer -> seal.sourceStepIndex
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty,
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing,
+                -> error("Unreachable clip-stencil seal")
+            }
+            val slabs = when (seal) {
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer -> seal.slabAuthority
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer -> seal.slabAuthority
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty,
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing,
+                -> error("Unreachable clip-stencil seal")
+            }
+            val attachment = when (seal) {
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer -> seal.attachmentAuthority
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer -> seal.attachmentAuthority
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty,
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing,
+                -> error("Unreachable clip-stencil seal")
+            }
+            fun resourceLabel(resource: GPUFrameResourceRef, generation: Long): String =
+                "${resource::class.simpleName}:${resource.value}@$generation"
+            val expectedResourceLabels = buildList {
+                add(resourceGenerationLabels.first())
+                add(resourceLabel(slabs.vertexResource, slabs.vertexGeneration))
+                add(resourceLabel(slabs.indexResource, slabs.indexGeneration))
+                if (!isProducer) {
+                    add(resourceLabel(slabs.uniformResource, slabs.uniformGeneration))
+                }
+                add(resourceLabel(attachment.resource, attachment.resourceGeneration))
+            }
+            val expectedKeys = buildList {
+                add(GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderColorTarget,
+                    GPUPreparedNativeOperandKind.TextureView,
+                    gpuPreparedNativeBindingKey(resourceGenerationLabels.first()),
+                ))
+                add(GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                    GPUPreparedNativeOperandKind.TextureView,
+                    gpuPreparedNativeBindingKey(
+                        resourceLabel(attachment.resource, attachment.resourceGeneration),
+                    ),
+                ))
+                add(GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderPipeline,
+                    GPUPreparedNativeOperandKind.RenderPipeline,
+                    gpuPreparedNativeBindingKey(
+                        "setRenderPipeline:setRenderPipeline.${packetId.value}",
+                    ),
+                ))
+                add(GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                    GPUPreparedNativeOperandKind.Buffer,
+                    gpuPreparedNativeBindingKey(
+                        resourceLabel(slabs.vertexResource, slabs.vertexGeneration),
+                    ),
+                ))
+                add(GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                    GPUPreparedNativeOperandKind.Buffer,
+                    gpuPreparedNativeBindingKey(
+                        resourceLabel(slabs.indexResource, slabs.indexGeneration),
+                    ),
+                ))
+                if (!isProducer) {
+                    add(GPUPreparedNativeOperandKey(
+                        GPUPreparedNativeOperandRole.RenderBindGroup,
+                        GPUPreparedNativeOperandKind.BindGroup,
+                        gpuPreparedNativeBindingKey(
+                            "setBindGroup:setBindGroup.${packetId.value}",
+                        ),
+                    ))
+                }
+            }
+            require(sourceStepIndex == sourceIndex && sourcePacketIds == listOf(packetId)) {
+                "Clip-stencil native operands require the exact sealed scope and packet identity"
+            }
+            require(resourceGenerationLabels.size == expectedResourceLabels.size &&
+                resourceGenerationLabels.toSet() == expectedResourceLabels.toSet()
+            ) {
+                "Clip-stencil native operands require the exact typed resource generations"
+            }
+            require(keys == expectedKeys) {
+                "Clip-stencil native operands differ from the exact producer or consumer seal"
+            }
+            val expectedBridgeKinds = buildList {
+                add(org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.RenderPipeline)
+                if (!isProducer) {
+                    add(org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.BindGroup)
+                }
+                add(org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.VertexBuffer)
+                add(org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.IndexBuffer)
+            }
+            require(requireNotNull(passCommandStream).operandBridge.map { it.operand.kind } ==
+                expectedBridgeKinds
+            ) {
+                "Clip-stencil pass operands differ from the exact producer or consumer packet bridge"
+            }
         }
         nativeOperandKeys = immutableList(keys)
         return this
@@ -781,6 +905,15 @@ internal class PreparedGPUFrame(
                 val pathUses = step.resourceUses.filter {
                     it.role == GPUFrameResourceRole.PathDepthStencil
                 }
+                val clipStencilSeal = scope.corePrimitiveClipStencilPreparedRouteSeal
+                val clipStencilProducer = clipStencilSeal is
+                    GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
+                val clipStencilConsumer = clipStencilSeal is
+                    GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+                val clipStencilSealed = clipStencilProducer || clipStencilConsumer
+                val clipStencilUses = step.resourceUses.filter {
+                    it.role == GPUFrameResourceRole.ClipDepthStencil
+                }
                 val writablePathStencil = pathUses.size == 1 &&
                     step.depthStencilLoadStore is
                     org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil
@@ -791,16 +924,47 @@ internal class PreparedGPUFrame(
                     pathSealed == unifiedContainsPath &&
                         pathSealed == (pathUses.size == 1) &&
                         pathSealed == writablePathStencil &&
-                        pathSealed == (depthStencilKeys.size == 1) &&
                         (!pathSealed || (
+                            depthStencilKeys.size == 1 &&
                             pathUses.single().write &&
                                 pathUses.single().usage == GPUFrameResourceUsage.RenderAttachment &&
                                 depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
                                 depthStencilKeys.single().ownership ==
                                 GPUPreparedNativeOperandOwnership.Borrowed
-                            )),
+                            )) &&
+                        (pathSealed || clipStencilSealed || depthStencilKeys.isEmpty()),
                 ) {
                     "Prepared path seal, unified pair, writable attachment use, load/store, and native operand must agree exactly"
+                }
+                require(!(pathSealed && clipStencilSealed) &&
+                    (!clipStencilSealed || pathUses.isEmpty())
+                ) {
+                    "Prepared PathDepthStencil and ClipDepthStencil seals are mutually exclusive"
+                }
+                val expectedClipStencilLoadStore = when {
+                    clipStencilProducer ->
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .WritableStencil(
+                                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                                0u,
+                            )
+                    clipStencilConsumer ->
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                            .ReadOnlyKeep
+                    else -> null
+                }
+                require(!clipStencilSealed || (
+                    clipStencilUses.size == 1 &&
+                        clipStencilUses.single().usage == GPUFrameResourceUsage.RenderAttachment &&
+                        clipStencilUses.single().write == clipStencilProducer &&
+                        step.depthStencilLoadStore == expectedClipStencilLoadStore &&
+                        depthStencilKeys.size == 1 &&
+                        depthStencilKeys.single().kind == GPUPreparedNativeOperandKind.TextureView &&
+                        depthStencilKeys.single().ownership ==
+                        GPUPreparedNativeOperandOwnership.Borrowed
+                    )) {
+                    "Prepared clip-stencil seal, attachment use, load/store, and native operand must agree exactly"
                 }
                 val expectedPackets = step.drawPackets.map { it.packetId }
                 val stream = requireNotNull(scope.passCommandStream) {
@@ -1240,11 +1404,20 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFaca
             add("beginRenderPass")
             drawPackets.forEach { packet ->
                 add("setRenderPipeline")
-                add("setBindGroup")
+                val clipStencilProducer =
+                    scope.corePrimitiveClipStencilPreparedRouteSeal is
+                        GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
+                if (!clipStencilProducer) add("setBindGroup")
                 val directRoutes = scope.corePrimitiveDirectNativeRouteSeal as?
                     GPUCorePrimitiveDirectNativeRouteSeal.Routes
+                val clipStencilSealed =
+                    scope.corePrimitiveClipStencilPreparedRouteSeal is
+                        GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
+                        scope.corePrimitiveClipStencilPreparedRouteSeal is
+                        GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
                 if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
-                    directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true) {
+                    directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
+                    clipStencilSealed) {
                     add("setVertexBuffer")
                     add("setIndexBuffer")
                 }
@@ -1271,11 +1444,20 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassSt
     .expectedRenderCommandPacketIds(scope: GPUCommandEncoderScopePlan): List<GPUDrawPacketID> = buildList {
     val directRoutes = scope.corePrimitiveDirectNativeRouteSeal as?
         GPUCorePrimitiveDirectNativeRouteSeal.Routes
+    val clipStencilSealed =
+        scope.corePrimitiveClipStencilPreparedRouteSeal is
+            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
+            scope.corePrimitiveClipStencilPreparedRouteSeal is
+            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+    val clipStencilProducer =
+        scope.corePrimitiveClipStencilPreparedRouteSeal is
+            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
     drawPackets.forEach { packet ->
         add(packet.packetId)
-        add(packet.packetId)
+        if (!clipStencilProducer) add(packet.packetId)
         if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
-            directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true) {
+            directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
+            clipStencilSealed) {
             add(packet.packetId)
             add(packet.packetId)
         }

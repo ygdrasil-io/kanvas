@@ -65,6 +65,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             consumed = true
         }
 
+        if (encoderPlan.scopes.any { scope ->
+                scope.corePrimitiveClipStencilPreparedRouteSeal is
+                    GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
+                    scope.corePrimitiveClipStencilPreparedRouteSeal is
+                    GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+            }
+        ) {
+            return materializePreparedClipStencilCore(
+                framePlan,
+                encoderPlan,
+                resources,
+                generationSeal,
+            )
+        }
+
         val renderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         val renderStep = renderSteps.singleOrNull()
         if (renderStep == null || renderStep.drawPackets.isEmpty()) {
@@ -837,6 +852,699 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             "unsupported.native-core-primitive.surface",
             "The direct CorePrimitive route is offscreen-only before surface decoration.",
         )
+    }
+
+    private fun materializePreparedClipStencilCore(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        data class RenderEntry(
+            val scope: GPUCommandEncoderScopePlan,
+            val render: GPUFrameStep.RenderPassStep,
+            val seal: GPUCorePrimitiveClipStencilPreparedScopeRouteSeal,
+        )
+
+        val renderEntries = encoderPlan.scopes.filter {
+            it.operationKind == GPUEncoderOperationKind.Render
+        }.map { scope ->
+            val render = framePlan.steps.getOrNull(scope.sourceStepIndex) as?
+                GPUFrameStep.RenderPassStep ?: return refused(
+                "invalid.native-core-primitive.clip-stencil-scope",
+                "Every prepared clip-stencil render scope must retain its exact frame step.",
+            )
+            RenderEntry(scope, render, scope.corePrimitiveClipStencilPreparedRouteSeal)
+        }
+        val producerEntries = renderEntries.filter {
+            it.seal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
+        }
+        val consumerEntries = renderEntries.filter {
+            it.seal is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+        }
+        if (producerEntries.size != 1 || consumerEntries.isEmpty() ||
+            renderEntries.size != 1 + consumerEntries.size ||
+            renderEntries.any {
+                it.seal !is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer &&
+                    it.seal !is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+            }
+        ) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-scope",
+                "Prepared clip-stencil requires one sealed producer followed by only sealed consumers.",
+            )
+        }
+        val producerEntry = producerEntries.single()
+        val producerSeal = producerEntry.seal as
+            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
+        val orderedConsumers = consumerEntries.map { entry ->
+            entry to (entry.seal as GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer)
+        }
+        if (renderEntries.first() !== producerEntry ||
+            orderedConsumers.map { it.first } != renderEntries.drop(1) ||
+            producerSeal.sourceStepIndex != producerEntry.scope.sourceStepIndex ||
+            producerEntry.scope.sourcePacketIds != listOf(producerSeal.packetId) ||
+            orderedConsumers.any { (entry, seal) ->
+                seal.sourceStepIndex != entry.scope.sourceStepIndex ||
+                    entry.scope.sourcePacketIds != listOf(seal.packetId) ||
+                    seal.route !== producerSeal.route ||
+                    seal.geometryArena !== producerSeal.geometryArena ||
+                    seal.slabAuthority !== producerSeal.slabAuthority ||
+                    seal.attachmentAuthority !== producerSeal.attachmentAuthority
+            } || orderedConsumers.map { it.second.sourceOrder } !=
+            producerSeal.route.consumers.map { it.sourceOrder } ||
+            orderedConsumers.map { it.second.commandId } !=
+            producerSeal.route.consumers.map { it.commandId } ||
+            orderedConsumers.dropLast(1).any { it.second.isLastConsumer } ||
+            !orderedConsumers.last().second.isLastConsumer
+        ) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-seal",
+                "Prepared clip-stencil scope order or retained frame authority was substituted.",
+            )
+        }
+
+        val producerPacket = producerEntry.render.drawPackets.singleOrNull()
+        if (producerPacket?.packetId != producerSeal.packetId ||
+            producerPacket.commandIdValue != producerSeal.commandId ||
+            producerPacket.role != GPUDrawPacketRole.StencilProducer
+        ) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-packet",
+                "Prepared clip-stencil producer packet identity or role was substituted.",
+            )
+        }
+        val consumerSemantics = orderedConsumers.map { (entry, seal) ->
+            val packet = entry.render.drawPackets.singleOrNull()
+                ?: return refused(
+                    "invalid.native-core-primitive.clip-stencil-packet",
+                    "Every prepared clip-stencil consumer requires one exact packet.",
+                )
+            val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                ?: return refused(
+                    "invalid.native-core-primitive.clip-stencil-packet",
+                    "Every prepared clip-stencil consumer requires one typed semantic payload.",
+                )
+            val routeConsumer = producerSeal.route.consumers.singleOrNull {
+                it.commandId == seal.commandId && it.sourceOrder == seal.sourceOrder
+            } ?: return refused(
+                "invalid.native-core-primitive.clip-stencil-packet",
+                "Prepared clip-stencil consumer is absent from its sealed route.",
+            )
+            if (packet.packetId != seal.packetId || packet.commandIdValue != seal.commandId ||
+                packet.originalPaintOrder != seal.sourceOrder || packet.role != GPUDrawPacketRole.Shading ||
+                !semantic.hasStructuralIntegrity() ||
+                semantic.payloadRef.commandIdValue != seal.commandId ||
+                routeConsumer.structuralKey != packet.corePrimitivePreparedAuthority?.structuralPipelineKey ||
+                routeConsumer.scissor != semantic.scissorBounds
+            ) {
+                return refused(
+                    "invalid.native-core-primitive.clip-stencil-packet",
+                    "Prepared clip-stencil consumer packet contradicts its sealed semantic authority.",
+                )
+            }
+            semantic
+        }
+
+        val readbackSteps = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
+        val readbackStep = readbackSteps.singleOrNull()
+        if (readbackSteps.size > 1 || framePlan.steps.any { it is GPUFrameStep.CopyResourceStep }) {
+            return refused(
+                "unsupported.native-core-primitive.clip-stencil-frame-shape",
+                "Prepared clip-stencil accepts only its render chain and one optional readback.",
+            )
+        }
+        val readbackScope = readbackStep?.let { step ->
+            encoderPlan.scopes.singleOrNull {
+                it.sourceStepIndex == framePlan.steps.indexOf(step) &&
+                    it.operationKind == GPUEncoderOperationKind.Readback
+            } ?: return refused(
+                "invalid.native-core-primitive.clip-stencil-readback",
+                "Prepared clip-stencil lost its optional readback scope.",
+            )
+        }
+        if (encoderPlan.scopes != renderEntries.map(RenderEntry::scope) + listOfNotNull(readbackScope) ||
+            framePlan.steps.count { it.executionKind == GPUFrameStepExecutionKind.Encoder } !=
+            renderEntries.size + (if (readbackStep == null) 0 else 1)
+        ) {
+            return refused(
+                "unsupported.native-core-primitive.clip-stencil-scope-order",
+                "Prepared clip-stencil scopes must remain producer, consumers, then optional readback.",
+            )
+        }
+
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        fun preparation(role: GPUFrameResourceRole) = preparations.filter { it.role == role }.singleOrNull()
+        val targetPreparationOrNull = preparation(GPUFrameResourceRole.SceneTarget)
+        val vertexPreparationOrNull = preparation(GPUFrameResourceRole.VertexData)
+        val indexPreparationOrNull = preparation(GPUFrameResourceRole.IndexData)
+        val uniformPreparationOrNull = preparation(GPUFrameResourceRole.UniformData)
+        val clipDepthStencilPreparationOrNull = preparation(GPUFrameResourceRole.ClipDepthStencil)
+        val stagingPreparation = preparation(GPUFrameResourceRole.ReadbackStaging)
+        if (preparations.size != 5 + (if (readbackStep == null) 0 else 1) ||
+            targetPreparationOrNull == null || vertexPreparationOrNull == null ||
+            indexPreparationOrNull == null || uniformPreparationOrNull == null ||
+            clipDepthStencilPreparationOrNull == null ||
+            (readbackStep == null) != (stagingPreparation == null)
+        ) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-resource-shape",
+                "Prepared clip-stencil requires exactly target, V/I/U slabs, one clip D24S8, and optional staging.",
+            )
+        }
+        val targetPreparation = requireNotNull(targetPreparationOrNull)
+        val vertexPreparation = requireNotNull(vertexPreparationOrNull)
+        val indexPreparation = requireNotNull(indexPreparationOrNull)
+        val uniformPreparation = requireNotNull(uniformPreparationOrNull)
+        val clipDepthStencilPreparation = requireNotNull(clipDepthStencilPreparationOrNull)
+        val targetDescriptor = targetPreparation.descriptor as? GPUFrameTextureDescriptor
+            ?: return refused(
+                "invalid.native-core-primitive.clip-stencil-resource-contract",
+                "Prepared clip-stencil target is not a texture.",
+            )
+        val clipDescriptor = clipDepthStencilPreparation.descriptor as? GPUFrameTextureDescriptor
+            ?: return refused(
+                "invalid.native-core-primitive.clip-stencil-resource-contract",
+                "Prepared clip-stencil D24S8 authority is not a texture.",
+            )
+        val vertexDescriptor = vertexPreparation.descriptor as? GPUFrameBufferDescriptor
+            ?: return refused(
+                "invalid.native-core-primitive.clip-stencil-resource-contract",
+                "Prepared clip-stencil vertex authority is not a buffer.",
+            )
+        val indexDescriptor = indexPreparation.descriptor as? GPUFrameBufferDescriptor
+            ?: return refused(
+                "invalid.native-core-primitive.clip-stencil-resource-contract",
+                "Prepared clip-stencil index authority is not a buffer.",
+            )
+        val uniformDescriptor = uniformPreparation.descriptor as? GPUFrameBufferDescriptor
+            ?: return refused(
+                "invalid.native-core-primitive.clip-stencil-resource-contract",
+                "Prepared clip-stencil uniform authority is not a buffer.",
+            )
+        val targetBounds = targetDescriptor.logicalBounds
+        val route = producerSeal.route
+        val arena = producerSeal.geometryArena
+        val slab = producerSeal.slabAuthority
+        val uniformSeal = slab.uniformSlabSeal
+        val vertexData = arena.copyVertices()
+        val indexData = arena.copyIndices()
+        val vertexBytes = slab.vertexByteSize
+        val indexBytes = slab.indexByteSize
+        if (targetBounds.left != 0 || targetBounds.top != 0 ||
+            targetBounds.width != route.attachment.width || targetBounds.height != route.attachment.height ||
+            targetPreparation.resource != producerEntry.render.target ||
+            targetDescriptor.format.value != RGBA8_UNORM || targetDescriptor.sampleCount != 1 ||
+            targetPreparation.usages != setOf(
+                GPUFrameResourceUsage.RenderAttachment,
+                GPUFrameResourceUsage.CopySource,
+            ) || targetPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            clipDepthStencilPreparation.resource != producerSeal.attachmentAuthority.resource ||
+            clipDescriptor.logicalBounds != targetBounds ||
+            clipDescriptor.format.value != DEPTH24PLUS_STENCIL8 || clipDescriptor.sampleCount != 1 ||
+            clipDepthStencilPreparation.usages != setOf(GPUFrameResourceUsage.RenderAttachment) ||
+            clipDepthStencilPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            vertexPreparation.resource != slab.vertexResource ||
+            indexPreparation.resource != slab.indexResource ||
+            uniformPreparation.resource != slab.uniformResource ||
+            generationSeal.resourceGenerations[slab.vertexResource] != slab.vertexGeneration ||
+            generationSeal.resourceGenerations[slab.indexResource] != slab.indexGeneration ||
+            generationSeal.resourceGenerations[slab.uniformResource] != slab.uniformGeneration ||
+            generationSeal.resourceGenerations[producerSeal.attachmentAuthority.resource] !=
+            producerSeal.attachmentAuthority.resourceGeneration ||
+            vertexDescriptor.byteSize != vertexBytes || vertexDescriptor.alignmentBytes != 4L ||
+            vertexPreparation.byteSize != vertexBytes ||
+            vertexPreparation.usages != setOf(
+                GPUFrameResourceUsage.CopyDestination,
+                GPUFrameResourceUsage.Vertex,
+            ) || vertexPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            indexDescriptor.byteSize != indexBytes || indexDescriptor.alignmentBytes != 4L ||
+            indexPreparation.byteSize != indexBytes ||
+            indexPreparation.usages != setOf(
+                GPUFrameResourceUsage.CopyDestination,
+                GPUFrameResourceUsage.Index,
+            ) || indexPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            uniformDescriptor.byteSize != uniformSeal.plan.totalBytes ||
+            uniformDescriptor.alignmentBytes != uniformSeal.plan.alignmentBytes ||
+            uniformPreparation.byteSize != uniformSeal.plan.totalBytes ||
+            uniformPreparation.usages != setOf(
+                GPUFrameResourceUsage.CopyDestination,
+                GPUFrameResourceUsage.Uniform,
+            ) || uniformPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            uniformSeal.plan.deviceGeneration != generationSeal.deviceGeneration.value ||
+            uniformSeal.plan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
+            vertexBytes != vertexData.size.toLong() * Float.SIZE_BYTES ||
+            indexBytes != indexData.size.toLong() * Int.SIZE_BYTES ||
+            arena.slices.map { it.packetId } != listOf(producerSeal.packetId) +
+            orderedConsumers.map { it.second.packetId }
+        ) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-resource-contract",
+                "Prepared clip-stencil target, shared slabs, or D24S8 authority was substituted.",
+            )
+        }
+        val expectedDepthBytes = try {
+            Math.multiplyExact(Math.multiplyExact(targetBounds.width.toLong(), targetBounds.height.toLong()), 4L)
+        } catch (_: ArithmeticException) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-resource-contract",
+                "Prepared clip-stencil D24S8 byte sizing overflowed.",
+            )
+        }
+        if (clipDepthStencilPreparation.byteSize != expectedDepthBytes ||
+            producerEntry.render.loadStore != org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(
+                "load",
+                GPUStorePlan.Store,
+            ) || producerEntry.render.depthStencilLoadStore !=
+            org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil(
+                org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                GPUStorePlan.Store,
+                0u,
+            ) || orderedConsumers.withIndex().any { (index, pair) ->
+                pair.first.render.target != producerEntry.render.target ||
+                    pair.first.render.loadStore != org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(
+                        if (index == 0) "clear" else "load",
+                        GPUStorePlan.Store,
+                    ) || pair.first.render.depthStencilLoadStore !=
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.ReadOnlyKeep
+            }
+        ) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-render-state",
+                "Prepared clip-stencil load/store or shared attachment state was substituted.",
+            )
+        }
+
+        val preparedByLogical = resources.ordinaryResources.associateBy { it.logicalResource }
+        if (resources.ordinaryResources.size != 5 ||
+            listOf(
+                targetPreparation,
+                vertexPreparation,
+                indexPreparation,
+                uniformPreparation,
+                clipDepthStencilPreparation,
+            ).any { request ->
+                val evidence = preparedByLogical[request.resource]
+                val texture = request.role == GPUFrameResourceRole.SceneTarget ||
+                    request.role == GPUFrameResourceRole.ClipDepthStencil
+                evidence == null || evidence.role != request.role ||
+                    evidence.deviceGeneration != generationSeal.deviceGeneration ||
+                    evidence.resourceGeneration != generationSeal.resourceGenerations[request.resource] ||
+                    if (texture) {
+                        evidence.concreteResource !is GPUPreparedConcreteResourceRef.Texture
+                    } else {
+                        evidence.concreteResource !is GPUPreparedConcreteResourceRef.Buffer
+                    }
+            }
+        ) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-prepared-resources",
+                "Prepared clip-stencil concrete resource evidence is missing or substituted.",
+            )
+        }
+        if (preparedSceneTarget.width != targetBounds.width ||
+            preparedSceneTarget.height != targetBounds.height ||
+            preparedSceneTarget.deviceGeneration != generationSeal.deviceGeneration ||
+            preparedSceneTarget.targetGeneration != generationSeal.targetGeneration
+        ) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-prepared-target",
+                "Prepared clip-stencil scene target differs from its sealed target.",
+            )
+        }
+
+        val expectedProducerRoles = listOf(
+            GPUPreparedNativeOperandRole.RenderColorTarget,
+            GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+            GPUPreparedNativeOperandRole.RenderPipeline,
+            GPUPreparedNativeOperandRole.RenderVertexBuffer,
+            GPUPreparedNativeOperandRole.RenderIndexBuffer,
+        )
+        val expectedProducerKinds = listOf(
+            GPUPreparedNativeOperandKind.TextureView,
+            GPUPreparedNativeOperandKind.TextureView,
+            GPUPreparedNativeOperandKind.RenderPipeline,
+            GPUPreparedNativeOperandKind.Buffer,
+            GPUPreparedNativeOperandKind.Buffer,
+        )
+        val expectedConsumerRoles = expectedProducerRoles +
+            GPUPreparedNativeOperandRole.RenderBindGroup
+        val expectedConsumerKinds = expectedProducerKinds + GPUPreparedNativeOperandKind.BindGroup
+        if (producerEntry.scope.nativeOperandKeys.map { it.role } != expectedProducerRoles ||
+            producerEntry.scope.nativeOperandKeys.map { it.kind } != expectedProducerKinds ||
+            orderedConsumers.any { (entry, _) ->
+                entry.scope.nativeOperandKeys.map { it.role } != expectedConsumerRoles ||
+                    entry.scope.nativeOperandKeys.map { it.kind } != expectedConsumerKinds
+            } || renderEntries.flatMap { it.scope.nativeOperandKeys }.any {
+                it.ownership != GPUPreparedNativeOperandOwnership.Borrowed
+            }
+        ) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-native-keys",
+                "Prepared clip-stencil native keys must exactly encode shared target, D24S8, geometry, and consumer uniforms.",
+            )
+        }
+
+        val output = resources.outputOwnedReadbacks.singleOrNull()
+        if ((readbackStep == null) != (output == null) || resources.outputOwnedReadbacks.size > 1) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-readback",
+                "Prepared clip-stencil optional readback must retain one output-owned staging lease.",
+            )
+        }
+        if (readbackStep != null && stagingPreparation != null && output != null) {
+            val stagingDescriptor = stagingPreparation.descriptor as? GPUFrameBufferDescriptor
+            if (readbackStep.source != targetPreparation.resource ||
+                readbackStep.staging != stagingPreparation.resource ||
+                readbackStep.request.sourceBounds != targetBounds || output.request != readbackStep.request ||
+                output.stagingResource != stagingPreparation.resource ||
+                stagingDescriptor?.byteSize != output.layout.totalBufferBytes ||
+                stagingPreparation.byteSize != output.layout.totalBufferBytes ||
+                stagingPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.MapRead,
+                ) || stagingPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                output.resourceGeneration != generationSeal.resourceGenerations[stagingPreparation.resource] ||
+                output.layout.width != targetBounds.width || output.layout.height != targetBounds.height ||
+                output.layout.unpaddedBytesPerRow != targetBounds.width.toLong() * RGBA_BYTES_PER_PIXEL ||
+                output.layout.paddedBytesPerRow % WEBGPU_COPY_ROW_ALIGNMENT != 0L ||
+                output.layout.totalBufferBytes > output.stagingLease.backingBufferBytes
+            ) {
+                return refused(
+                    "invalid.native-core-primitive.clip-stencil-readback",
+                    "Prepared clip-stencil readback layout or staging authority was substituted.",
+                )
+            }
+        }
+
+        val structuralKeys = listOf(route.producer.structuralKey) +
+            route.consumers.map { it.structuralKey }
+        val cacheKeys = linkedMapOf<
+            GPUCorePrimitiveRenderPipelineStructuralKey,
+            GPUWgpu4kCorePrimitivePipelineCacheKey
+            >()
+        structuralKeys.distinct().forEach { structuralKey ->
+            val mapped = mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(structuralKey) as?
+                GPUWgpu4kCorePrimitivePipelineMapping.Mapped ?: return refused(
+                "unsupported.native-core-primitive.clip-stencil-pipeline",
+                "Prepared clip-stencil contains a structural pipeline outside the closed native programs.",
+            )
+            cacheKeys[structuralKey] = GPUWgpu4kCorePrimitivePipelineCacheKey(
+                mapped.componentIdentity,
+                mapped.identity,
+            )
+        }
+
+        synchronized(this) {
+            if (closed) {
+                return refused(
+                    "unsupported.native-core-primitive.materializer-state",
+                    "The CorePrimitive materializer closed during clip-stencil validation.",
+                )
+            }
+            materializing = true
+        }
+        var frameLease: GPUWgpu4kCorePrimitiveFramePoolLease? = null
+        var frameLeaseTransferred = false
+        return try {
+            val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val acquiredByStructural = linkedMapOf<
+                GPUCorePrimitiveRenderPipelineStructuralKey,
+                GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired
+                >()
+            cacheKeys.forEach { (structuralKey, cacheKey) ->
+                val acquired = when (val result = sessionCache.acquire(cacheKey)) {
+                    is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired -> result
+                    is GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused -> {
+                        synchronized(this) { materializing = false }
+                        return refusedSessionCacheAcquire(result.reason)
+                    }
+                }
+                acquiredByStructural[structuralKey] = acquired
+            }
+            val clipRequirement = GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
+                targetBounds.width,
+                targetBounds.height,
+                GPUTextureFormat.Depth24PlusStencil8,
+                1,
+                GPUTextureUsage.RenderAttachment,
+            )
+            frameLease = when (val checkout = sessionCache.acquireFrame(
+                GPUWgpu4kCorePrimitiveFramePoolRequirements(
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    vertexBytes = vertexBytes,
+                    indexBytes = indexBytes,
+                    uniformBytes = uniformSeal.plan.totalBytes,
+                    componentIdentity = PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+                    clipDepthStencil = clipRequirement,
+                ),
+            )) {
+                is GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired -> checkout.lease
+                is GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused -> {
+                    synchronized(this) { materializing = false }
+                    return refusedPoolCheckout(checkout.reason)
+                }
+            }
+            val pooled = requireNotNull(frameLease)
+            val clipHandles = requireNotNull(pooled.handles.clipDepthStencil)
+            require(clipHandles.requirement == clipRequirement) {
+                "Pooled clip D24S8 attachment differs from its exact requirement"
+            }
+            uploadExact(
+                pooled.handles.vertexBuffer,
+                ArrayBuffer.of(vertexData),
+                vertexBytes,
+                pooled.capacities.vertexBytes,
+            )
+            uploadExact(
+                pooled.handles.indexBuffer,
+                ArrayBuffer.of(indexData),
+                indexBytes,
+                pooled.capacities.indexBytes,
+            )
+            uploadExact(
+                pooled.handles.uniformBuffer,
+                ArrayBuffer.of(uniformSeal.packedBytesForUpload()),
+                uniformSeal.plan.totalBytes,
+                pooled.capacities.uniformBytes,
+            )
+            val stagingBuffer = output?.let { readback ->
+                device.createBuffer(
+                    BufferDescriptor(
+                        size = readback.stagingLease.backingBufferBytes.toULong(),
+                        usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                        mappedAtCreation = false,
+                        label = "Kanvas.frame.corePrimitive.clipStencil.readback",
+                    ),
+                ).tracked()
+            }
+            val targetOperand = GPUPreparedNativeTextureViewOperand(
+                targetView,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+            )
+            val clipOperand = GPUPreparedNativeTextureViewOperand(
+                clipHandles.view,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+            )
+            val vertexOperand = GPUPreparedNativeBufferOperand(
+                pooled.handles.vertexBuffer,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+                pooled.capacities.vertexBytes,
+            )
+            val indexOperand = GPUPreparedNativeBufferOperand(
+                pooled.handles.indexBuffer,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+                pooled.capacities.indexBytes,
+            )
+            val bindGroupOperand = GPUPreparedNativeBindGroupOperand(
+                pooled.handles.bindGroup,
+                generationSeal.deviceGeneration,
+                GPUPreparedNativeOperandOwnership.Borrowed,
+            )
+            val pipelineOperands = acquiredByStructural.mapValues { (_, acquired) ->
+                GPUPreparedNativeRenderPipelineOperand.fromCorePrimitiveAcquisition(
+                    acquired,
+                    generationSeal.deviceGeneration,
+                )
+            }
+            fun geometryCommands(
+                structuralKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+                slice: GPUCorePrimitiveClipStencilPreparedGeometrySlice,
+                scissor: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds,
+                dynamicOffset: Long?,
+            ) = buildList {
+                add(GPUPreparedNativeRenderCommand.SetPipeline(
+                    requireNotNull(pipelineOperands[structuralKey]),
+                ))
+                add(GPUPreparedNativeRenderCommand.SetStencilReference(route.stencilReference))
+                if (dynamicOffset != null) {
+                    add(GPUPreparedNativeRenderCommand.SetBindGroup(
+                        0,
+                        bindGroupOperand,
+                        listOf(dynamicOffset),
+                    ))
+                }
+                add(GPUPreparedNativeRenderCommand.SetVertexBuffer(
+                    0,
+                    vertexOperand,
+                    0L,
+                    vertexBytes,
+                    8L,
+                ))
+                add(GPUPreparedNativeRenderCommand.SetIndexBuffer(
+                    indexOperand,
+                    GPUPreparedNativeIndexFormat.Uint32,
+                    0L,
+                    indexBytes,
+                ))
+                add(GPUPreparedNativeRenderCommand.SetScissor(
+                    scissor.left,
+                    scissor.top,
+                    scissor.width,
+                    scissor.height,
+                ))
+                add(GPUPreparedNativeRenderCommand.DrawIndexed(
+                    GPUPreparedNativeDrawCall.DrawIndexed(
+                        indexCount = slice.indexCount,
+                        firstIndex = slice.firstIndex,
+                        baseVertex = slice.baseVertex,
+                        vertexCount = slice.vertexCount,
+                        maxLocalIndex = slice.maxLocalIndex,
+                    ),
+                ))
+            }
+            val producerOperand = GPUPreparedNativeScopeOperand.Render(
+                sourceStepIndex = producerEntry.scope.sourceStepIndex,
+                pass = GPUPreparedNativeRenderPassConfig(
+                    colorTarget = targetOperand,
+                    depthStencilTarget = clipOperand,
+                    loadOperation = GPUPreparedNativeLoadOperation.Load,
+                    storeOperation = GPUPreparedNativeStoreOperation.Store,
+                    clearColor = null,
+                    depthReadOnly = true,
+                    stencilClearValue = 0u,
+                    stencilLoadOperation = GPUPreparedNativeLoadOperation.Clear,
+                    stencilStoreOperation = GPUPreparedNativeStoreOperation.Store,
+                    stencilReadOnly = false,
+                ),
+                commands = geometryCommands(
+                    route.producer.structuralKey,
+                    producerSeal.geometrySlice,
+                    requireNotNull(route.producer.scissor),
+                    null,
+                ),
+                operandLayout = GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitive,
+            )
+            val consumerOperands = orderedConsumers.mapIndexed { index, (entry, seal) ->
+                val routeConsumer = route.consumers[index]
+                GPUPreparedNativeScopeOperand.Render(
+                    sourceStepIndex = entry.scope.sourceStepIndex,
+                    pass = GPUPreparedNativeRenderPassConfig(
+                        colorTarget = targetOperand,
+                        depthStencilTarget = clipOperand,
+                        loadOperation = if (index == 0) {
+                            GPUPreparedNativeLoadOperation.Clear
+                        } else {
+                            GPUPreparedNativeLoadOperation.Load
+                        },
+                        storeOperation = GPUPreparedNativeStoreOperation.Store,
+                        clearColor = if (index == 0) {
+                            GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
+                        } else {
+                            null
+                        },
+                        depthReadOnly = true,
+                        stencilReadOnly = true,
+                    ),
+                    commands = geometryCommands(
+                        routeConsumer.structuralKey,
+                        seal.geometrySlice,
+                        requireNotNull(routeConsumer.scissor),
+                        seal.uniformSlice.alignedOffset,
+                    ),
+                    semanticPayloads = listOf(consumerSemantics[index]),
+                    operandLayout = GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitive,
+                )
+            }
+            val readbackOperand = if (readbackScope != null && output != null && stagingBuffer != null) {
+                GPUPreparedNativeScopeOperand.Readback(
+                    sourceStepIndex = readbackScope.sourceStepIndex,
+                    source = GPUPreparedNativeTextureOperand(
+                        targetTexture,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    destination = GPUPreparedNativeBufferOperand(
+                        stagingBuffer,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
+                    ),
+                    layout = GPUPreparedNativeReadbackLayout(
+                        originX = output.request.sourceBounds.left,
+                        originY = output.request.sourceBounds.top,
+                        width = output.layout.width,
+                        height = output.layout.height,
+                        bytesPerRow = output.layout.paddedBytesPerRow,
+                        rowsPerImage = output.layout.rowsPerImage,
+                        bufferOffset = output.layout.bufferOffset,
+                        mappedSize = output.layout.totalBufferBytes,
+                        format = GPUTextureFormat.RGBA8Unorm,
+                    ),
+                )
+            } else {
+                null
+            }
+            val operandsByStep = (listOf(producerOperand) + consumerOperands +
+                listOfNotNull(readbackOperand)).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
+            val payload = GPUPreparedNativeFramePayload(
+                identity = GPUPreparedNativeFrameIdentity(
+                    framePlan.frameId,
+                    encoderPlan.contextIdentity,
+                    encoderPlan.planId,
+                    generationSeal.deviceGeneration,
+                    generationSeal.targetGeneration,
+                    encoderPlan.scopes.map { scope ->
+                        GPUPreparedNativeScopeKey(
+                            scope.sourceStepIndex,
+                            scope.operationKind,
+                            scope.resourceGenerationLabels,
+                            scope.nativeOperandKeys,
+                        )
+                    },
+                ),
+                scopeOperands = encoderPlan.scopes.map { scope ->
+                    requireNotNull(operandsByStep[scope.sourceStepIndex])
+                },
+                scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys },
+                leaseLifecycle = GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(pooled),
+            )
+            val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
+                GPUPreparedNativeFrameDraft(payload),
+            )
+            synchronized(this) {
+                check(!closed) { "Native CorePrimitive materializer closed during clip-stencil materialization" }
+                preRegistrationHandles.transferAll()
+                materializing = false
+                frameLeaseTransferred = true
+            }
+            result
+        } catch (failure: Throwable) {
+            if (!frameLeaseTransferred) terminalizePooledLeaseBeforeRegistration(frameLease)
+            synchronized(this) {
+                materializing = false
+                preRegistrationHandles.closeRetainingFailures()
+            }
+            refused(
+                "failed.native-core-primitive.clip-stencil-materialization",
+                "Public wgpu4k prepared clip-stencil materialization failed: " +
+                    "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
+            )
+        }
     }
 
     private fun materializeIndexedPathCore(

@@ -367,6 +367,21 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
 
             override fun createPathDepthStencilView(texture: GPUTexture): GPUTextureView =
                 texture.createView()
+
+            override fun createClipDepthStencilTexture(
+                requirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement,
+            ): GPUTexture = device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(requirement.width.toUInt(), requirement.height.toUInt()),
+                    format = requirement.format,
+                    usage = requirement.usage,
+                    sampleCount = requirement.sampleCount.toUInt(),
+                    label = "Kanvas.session.corePrimitive.framePool.clipDepthStencil",
+                ),
+            )
+
+            override fun createClipDepthStencilView(texture: GPUTexture): GPUTextureView =
+                texture.createView()
         },
     )
 

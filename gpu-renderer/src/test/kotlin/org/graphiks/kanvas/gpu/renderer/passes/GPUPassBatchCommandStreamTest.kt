@@ -13,8 +13,69 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
 
 class GPUPassBatchCommandStreamTest {
+    @Test
+    fun `packet stream overload omits bind group for explicit no-bindings producer`() {
+        val producer = packet("producer", 1, "target-a")
+        val consumer = packet("consumer", 2, "target-a")
+        val packetStream = packetStream(producer, consumer)
+        val plan = GPUPassBatcher().plan(requestForAll(packetStream))
+
+        val commandStream = GPUPassCommandStream.fromBatchPlan(
+            streamId = "batch-command-stream-main",
+            packetStream = packetStream,
+            batchPlan = plan,
+            loadStoreLabel = "clear-store",
+            operandBridge = clipStencilOperandBridge(producer, consumer),
+        )
+
+        assertEquals(
+            listOf(
+                "beginRenderPass",
+                "setRenderPipeline", "setVertexBuffer", "setIndexBuffer", "setScissor", "draw",
+                "setRenderPipeline", "setBindGroup", "setVertexBuffer", "setIndexBuffer", "setScissor", "draw",
+                "endRenderPass",
+            ),
+            commandStream.commandLabels,
+        )
+        assertEquals(
+            listOf(consumer.packetId),
+            commandStream.commands.filterIsInstance<GPUPassCommand.SetBindGroup>().map { it.packetId },
+        )
+    }
+
+    @Test
+    fun `render step overload omits bind group for explicit no-bindings producer`() {
+        val producer = packet("producer", 1, "target-a")
+        val consumer = packet("consumer", 2, "target-a")
+        val packetStream = packetStream(producer, consumer)
+        val plan = GPUPassBatcher().plan(requestForAll(packetStream))
+
+        val commandStream = GPUPassCommandStream.fromBatchPlan(
+            streamId = "batch-command-stream-main",
+            batchPlan = plan,
+            loadStoreLabel = "clear-store",
+            operandBridge = clipStencilOperandBridge(producer, consumer),
+        )
+
+        assertEquals(
+            listOf(
+                "beginRenderPass",
+                "setRenderPipeline", "setVertexBuffer", "setIndexBuffer", "setScissor", "draw",
+                "setRenderPipeline", "setBindGroup", "setVertexBuffer", "setIndexBuffer", "setScissor", "draw",
+                "endRenderPass",
+            ),
+            commandStream.commandLabels,
+        )
+        assertEquals(
+            listOf(consumer.packetId),
+            commandStream.commands.filterIsInstance<GPUPassCommand.SetBindGroup>().map { it.packetId },
+        )
+    }
+
     @Test
     fun `single accepted batch lowers to one render pass`() {
         val packetStream = packetStream(
@@ -241,6 +302,39 @@ class GPUPassBatchCommandStreamTest {
         GPUResourceMaterializationDecision.Materialized(
             resources = emptyList(),
             resourceLeases = leases.toList(),
+        )
+
+    private fun clipStencilOperandBridge(
+        producer: GPUDrawPacket,
+        consumer: GPUDrawPacket,
+    ): List<GPUPassCommandOperandBridge> =
+        listOf(
+            operandBridge(producer, "setRenderPipeline", GPUMaterializedCommandOperandKind.RenderPipeline),
+            operandBridge(producer, "setVertexBuffer", GPUMaterializedCommandOperandKind.VertexBuffer),
+            operandBridge(producer, "setIndexBuffer", GPUMaterializedCommandOperandKind.IndexBuffer),
+            operandBridge(consumer, "setRenderPipeline", GPUMaterializedCommandOperandKind.RenderPipeline),
+            operandBridge(consumer, "setBindGroup", GPUMaterializedCommandOperandKind.BindGroup),
+            operandBridge(consumer, "setVertexBuffer", GPUMaterializedCommandOperandKind.VertexBuffer),
+            operandBridge(consumer, "setIndexBuffer", GPUMaterializedCommandOperandKind.IndexBuffer),
+        )
+
+    private fun operandBridge(
+        packet: GPUDrawPacket,
+        commandLabel: String,
+        kind: GPUMaterializedCommandOperandKind,
+    ): GPUPassCommandOperandBridge =
+        GPUPassCommandOperandBridge(
+            packetId = packet.packetId,
+            commandLabel = commandLabel,
+            operand = GPUMaterializedCommandOperandReference(
+                label = "$commandLabel.${packet.packetId.value}",
+                kind = kind,
+                descriptorHash = "descriptor.$commandLabel.${packet.packetId.value}",
+                deviceGeneration = 7L,
+                ownerScope = "frame.clip-stencil",
+                usageLabels = listOf("render"),
+                invalidationPolicy = "submission-complete",
+            ),
         )
 
     private fun batch(
