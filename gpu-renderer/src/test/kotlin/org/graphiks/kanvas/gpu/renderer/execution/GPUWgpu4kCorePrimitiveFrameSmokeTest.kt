@@ -196,6 +196,146 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
     }
 
     @Test
+    fun `native hard direct 4x resolves fractional coverage and reuses one pooled attachment`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(backend != null, "wgpu4k native adapter unavailable; skipping hard-direct 4x pixel proof")
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val sampleSupport = capabilities.textureFormatSampleSupport[
+            io.ygdrasil.webgpu.GPUTextureFormat.RGBA8Unorm
+        ]
+        assumeTrue(
+            sampleSupport != null &&
+                4 in sampleSupport.renderAttachmentSampleCounts &&
+                4 in sampleSupport.resolveSourceSampleCounts,
+            "rgba8unorm 4x render+resolve unavailable; skipping hard-direct 4x pixel proof",
+        )
+        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val frameId = GPUFrameID(12_032L)
+        val readbackId = GPUReadbackRequestID("readback.core-primitive.hard-direct-4x")
+        val target = GPUFrameTargetRef("target.core.smoke.hard-direct-4x")
+        val targetBounds = GPUPixelBounds(0, 0, 32, 32)
+        val command = GPUFillRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(303),
+            rect = GPURect(6.25f, 7.25f, 22.75f, 23.75f),
+            target = GPUTargetFacts(32, 32, "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f),
+            clip = GPUClipFacts(
+                kind = GPUClipKind.WideOpen,
+                bounds = GPUBounds(0f, 0f, 32f, 32f),
+                coveragePlan = GPUClipCoveragePlan.NoClip,
+            ),
+            paintOrder = 0,
+            source = GPUCommandSource("unit-test", "fillRect", GPUFrameProvenance.GmContent),
+        ).copy(antiAlias = false)
+        val base = GPURecorder(
+            GPURecordingID("recording.core.smoke.hard-direct-4x"),
+            frameId,
+            capabilities,
+            generation,
+        ).apply {
+            record(command)
+        }.close().taskList
+            .withClipPlans(mapOf(command.commandId.value to GPUClipExecutionPlan.NoClip))
+            .withHardDirect4x(target, generation)
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val semantic = command.coreSemantic(packet, targetBounds, targetBounds)
+        assertEquals(GPUCorePrimitiveCoverageMode.FullOrScissor, semantic.coverageMode)
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                GPUCorePrimitivePreparedFrameRequest(
+                    baseTaskList = base,
+                    capabilities = capabilities,
+                    target = target,
+                    targetBounds = targetBounds,
+                    semanticsByCommandId = mapOf(command.commandId.value to semantic),
+                    readbackRequestId = readbackId,
+                ),
+            ),
+        ).taskList
+        val preparedRender = taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.MultisampleFrame(4),
+            preparedRender.samplePlan,
+        )
+        val structural = requireNotNull(
+            preparedRender.drawPackets.single().corePrimitivePreparedAuthority,
+        ).structuralPipelineKey
+        assertEquals(4, structural.sampleCount)
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(structural),
+        )
+        assertEquals(4, mapped.identity.sampleCount)
+
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        try {
+            val nativeBefore = session.nativeCounters()
+            val renderBefore = session.renderCounters()
+            val firstTerminal = session.renderFrame(
+                taskList,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                firstTerminal.outcome,
+                "${firstTerminal.diagnostic?.code?.value}: ${firstTerminal.diagnostic?.message}",
+            )
+            val firstPixels = assertIs<GPUSceneFrameOutput.ReadbackRgba>(firstTerminal.output).bytes
+            assertPixel(firstPixels, 32, 10, 10, 255, 0, 0, 255)
+            assertPixel(firstPixels, 32, 4, 10, 0, 0, 0, 0)
+            assertPartialPrimaryPixel(firstPixels, 32, 6, 10, channel = 0)
+
+            val nativeAfterFirst = session.nativeCounters()
+            val renderAfterFirst = session.renderCounters()
+            assertEquals(1L, nativeAfterFirst.encoders - nativeBefore.encoders)
+            assertEquals(1L, nativeAfterFirst.commandBuffers - nativeBefore.commandBuffers)
+            assertEquals(1L, nativeAfterFirst.submits - nativeBefore.submits)
+            assertEquals(1L, nativeAfterFirst.readbackCopies - nativeBefore.readbackCopies)
+            assertEquals(1L, renderAfterFirst.renderPasses - renderBefore.renderPasses)
+            assertEquals(1L, renderAfterFirst.drawIndexed - renderBefore.drawIndexed)
+            assertEquals(
+                1L,
+                renderAfterFirst.msaaColorTextureCreations - renderBefore.msaaColorTextureCreations,
+            )
+            assertEquals(0L, renderAfterFirst.msaaColorSlotReuses - renderBefore.msaaColorSlotReuses)
+
+            val secondTerminal = session.renderFrame(
+                taskList,
+                GPUSceneFrameOutputRequest.ReadbackRgba(readbackId),
+            ).completion.toCompletableFuture().get(15, TimeUnit.SECONDS)
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                secondTerminal.outcome,
+                "${secondTerminal.diagnostic?.code?.value}: ${secondTerminal.diagnostic?.message}",
+            )
+            val secondPixels = assertIs<GPUSceneFrameOutput.ReadbackRgba>(secondTerminal.output).bytes
+            assertPixel(secondPixels, 32, 10, 10, 255, 0, 0, 255)
+            assertPixel(secondPixels, 32, 4, 10, 0, 0, 0, 0)
+            assertPartialPrimaryPixel(secondPixels, 32, 6, 10, channel = 0)
+
+            val nativeAfterSecond = session.nativeCounters()
+            val renderAfterSecond = session.renderCounters()
+            assertEquals(1L, nativeAfterSecond.encoders - nativeAfterFirst.encoders)
+            assertEquals(1L, nativeAfterSecond.commandBuffers - nativeAfterFirst.commandBuffers)
+            assertEquals(1L, nativeAfterSecond.submits - nativeAfterFirst.submits)
+            assertEquals(1L, nativeAfterSecond.readbackCopies - nativeAfterFirst.readbackCopies)
+            assertEquals(1L, renderAfterSecond.renderPasses - renderAfterFirst.renderPasses)
+            assertEquals(1L, renderAfterSecond.drawIndexed - renderAfterFirst.drawIndexed)
+            assertEquals(
+                0L,
+                renderAfterSecond.msaaColorTextureCreations - renderAfterFirst.msaaColorTextureCreations,
+            )
+            assertEquals(
+                1L,
+                renderAfterSecond.msaaColorSlotReuses - renderAfterFirst.msaaColorSlotReuses,
+            )
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `native analytic shape uniform80 proves rect aa asymmetric rrect pixels batching and reuse`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(
@@ -1436,6 +1576,58 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         transform.scaleX * x + transform.skewX * y + transform.translateX,
         transform.skewY * x + transform.scaleY * y + transform.translateY,
     )
+
+    private fun GPUTaskList.withHardDirect4x(
+        target: GPUFrameTargetRef,
+        generation: GPUDeviceGenerationID,
+    ): GPUTaskList {
+        require(capabilitySeal.deviceGeneration == generation)
+        val samplePlan = org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.MultisampleFrame(4)
+        val continuationKey = org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey(
+            target = org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(target.value),
+            targetGeneration = 1L,
+            deviceGeneration = generation,
+            colorFormat = org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat("rgba8unorm"),
+            colorInterpretation = org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation(
+                "encoded-premul-srgb",
+            ),
+            samplePlan = samplePlan,
+            attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
+                .GPUSampleAttachmentAuthority.PreparedFramePayload,
+            colorAttachment = org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(
+                "msaa-color:${target.value}:1",
+            ),
+            depthStencilAttachment = null,
+        )
+        return GPUTaskList(
+            frameId = frameId,
+            capabilitySeal = capabilitySeal,
+            recordingSeals = recordingSeals,
+            expectedReplayKeyHash = expectedReplayKeyHash,
+            tasks = tasks.map { task ->
+                if (task !is GPUTask.Render) return@map task
+                GPUTask.Render(
+                    task.taskId,
+                    task.recordingId,
+                    task.phase,
+                    task.target,
+                    task.loadStore,
+                    samplePlan,
+                    task.resourceUses,
+                    task.provisionalSegmentKey,
+                    task.drawPackets,
+                    task.batchEligibilityByPacketId,
+                    continuationKey,
+                    task.compositeMembership,
+                    task.depthStencilLoadStore,
+                )
+            },
+            dependencies = dependencies,
+            phaseOrder = phaseOrder,
+            memoryBudget = memoryBudget,
+            diagnostics = diagnostics,
+        )
+    }
 
     private fun GPUTaskList.withClipPlans(plans: Map<Int, GPUClipExecutionPlan>): GPUTaskList = GPUTaskList(
         frameId = frameId,

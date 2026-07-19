@@ -10,7 +10,12 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleLoadTransition
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
@@ -56,6 +61,10 @@ internal interface GPUFrameEncodingBackend {
     val encodingMode: GPUFrameEncodingMode
         get() = GPUFrameEncodingMode.Instrumented
     fun createCommandEncoder(label: String): GPUFrameCommandEncoder
+    fun isCanonicalSceneTargetView(
+        sceneTarget: GPUSceneTarget,
+        operand: GPUPreparedNativeTextureViewOperand,
+    ): Boolean = false
     fun discard(commandBuffer: GPUFrameCommandBuffer): GPUFrameDiscardResult
     fun submit(commandBuffer: GPUFrameCommandBuffer)
 }
@@ -322,6 +331,21 @@ internal class GPUFrameExecutor(
                     )
                 }
             }
+        }
+
+        preparedFramePayloadMsaaDiagnostic(preparedFrame, consumedNativePayload)?.let { diagnostic ->
+            preparedFrame.rollbackAfterExecutionClaim()
+            telemetry.record(
+                GPUFrameStructuralPhase.Preflight,
+                GPUFrameStructuralEventKind.PreflightRefused,
+            )
+            return completedFailure(
+                attemptId,
+                diagnostic,
+                GPUFrameStructuralPhase.Preflight,
+                telemetry,
+                GPUFrameImmediateState.FailedBeforeSubmit(diagnostic),
+            )
         }
 
         val preparedReadbackOutput = preparedFrame.resources.outputOwnedReadbacks.singleOrNull()
@@ -1020,15 +1044,27 @@ internal class GPUFrameExecutor(
     }
 
     private fun msaaSceneTargetDiagnostic(frame: PreparedGPUFrame): GPUDiagnostic? {
-        val requests = frame.semanticPlan.steps
-            .filterIsInstance<GPUFrameStep.RenderPassStep>()
-            .mapNotNull(GPUFrameStep.RenderPassStep::sampleContinuation)
-        if (requests.isEmpty()) return null
+        val indexedRequests = frame.semanticPlan.steps.mapIndexedNotNull { index, step ->
+            val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
+            val request = render.sampleContinuation ?: return@mapIndexedNotNull null
+            Triple(index, render, request)
+        }
+        if (indexedRequests.isEmpty()) return null
+        val authorities = indexedRequests.map { it.third.key.attachmentAuthority }.distinct()
+        if (authorities.size != 1) {
+            return executionDiagnostic(
+                "invalid.msaa.continuation_attachment_authority",
+                "One prepared frame cannot mix MSAA attachment authority owners.",
+            )
+        }
+        if (authorities.single() == GPUSampleAttachmentAuthority.PreparedFramePayload) {
+            return preparedFrameMsaaAuthorityDiagnostic(frame, indexedRequests)
+        }
         val retained = sceneTarget.retainedMsaaAttachment ?: return executionDiagnostic(
             "unsupported.msaa.continuation_attachment_not_stored",
             "The scene target has no retained MSAA attachment authority.",
         )
-        val key = requests.first().key
+        val key = indexedRequests.first().third.key
         return when {
             key.target.value != retained.targetId -> executionDiagnostic(
                 "unsupported.msaa.continuation_target_identity",
@@ -1058,6 +1094,186 @@ internal class GPUFrameExecutor(
             )
             else -> null
         }
+    }
+
+    private fun preparedFrameMsaaAuthorityDiagnostic(
+        frame: PreparedGPUFrame,
+        indexedRequests: List<Triple<Int, GPUFrameStep.RenderPassStep, org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest>>,
+    ): GPUDiagnostic? {
+        if (!frame.hasNativePayload) {
+            return executionDiagnostic(
+                "unsupported.msaa.prepared_frame_payload_missing",
+                "Prepared-frame MSAA authority requires one sealed native payload.",
+            )
+        }
+        indexedRequests.forEachIndexed { sequenceIndex, (stepIndex, render, request) ->
+            val key = request.key
+            val expectedResolveBinding = preparedSceneTargetBindingKey(frame, render)
+                ?: return executionDiagnostic(
+                    "invalid.msaa.prepared_frame_resolve_authority",
+                    "Prepared-frame MSAA resolve requires the exact prepared canonical scene target.",
+                )
+            if (key.target.value != sceneTarget.targetId ||
+                key.deviceGeneration != frame.generationSeal.deviceGeneration ||
+                key.targetGeneration != frame.generationSeal.targetGeneration ||
+                key.colorFormat != sceneTarget.format ||
+                key.samplePlan != render.samplePlan ||
+                request.loadTransition != if (sequenceIndex == 0) {
+                    GPUSampleLoadTransition.FreshClear
+                } else {
+                    GPUSampleLoadTransition.RetainedLoad
+                } ||
+                request.storeAction != GPUSampleStoreAction.Store ||
+                request.resolveAction != GPUSampleResolveAction.ResolveCanonical
+            ) {
+                return executionDiagnostic(
+                    "invalid.msaa.prepared_frame_authority",
+                    "Prepared-frame MSAA continuation contradicts target, generation, sample, or transition authority.",
+                )
+            }
+            val scope = frame.encoderPlan.scopes.singleOrNull { it.sourceStepIndex == stepIndex }
+                ?: return executionDiagnostic(
+                    "invalid.msaa.prepared_frame_scope",
+                    "Prepared-frame MSAA continuation has no exact encoder scope.",
+                )
+            val msaaKeys = scope.nativeOperandKeys.filter {
+                it.role == GPUPreparedNativeOperandRole.RenderMsaaColorTarget
+            }
+            val resolveKeys = scope.nativeOperandKeys.filter {
+                it.role == GPUPreparedNativeOperandRole.RenderResolveTarget
+            }
+            if (msaaKeys.singleOrNull()?.let { operand ->
+                    operand.kind == GPUPreparedNativeOperandKind.TextureView &&
+                        operand.ownership == GPUPreparedNativeOperandOwnership.Borrowed &&
+                        operand.bindingKey == gpuPreparedNativeBindingKey(
+                            "msaa:${key.colorAttachment.value}",
+                        )
+                } != true ||
+                resolveKeys.singleOrNull()?.let { operand ->
+                    operand.kind == GPUPreparedNativeOperandKind.TextureView &&
+                        operand.ownership == GPUPreparedNativeOperandOwnership.Borrowed &&
+                        operand.bindingKey == expectedResolveBinding
+                } != true
+            ) {
+                return executionDiagnostic(
+                    "invalid.msaa.prepared_frame_operand_keys",
+                    "Prepared-frame MSAA authority requires exact color and resolve texture-view keys.",
+                )
+            }
+        }
+        return null
+    }
+
+    private fun preparedFramePayloadMsaaDiagnostic(
+        frame: PreparedGPUFrame,
+        payload: GPUPreparedNativeFramePayload?,
+    ): GPUDiagnostic? {
+        val indexedRequests = frame.semanticPlan.steps.mapIndexedNotNull { index, step ->
+            val render = step as? GPUFrameStep.RenderPassStep ?: return@mapIndexedNotNull null
+            val request = render.sampleContinuation ?: return@mapIndexedNotNull null
+            if (request.key.attachmentAuthority != GPUSampleAttachmentAuthority.PreparedFramePayload) {
+                return@mapIndexedNotNull null
+            }
+            Triple(index, render, request)
+        }
+        if (indexedRequests.isEmpty()) return null
+        val exactPayload = payload ?: return executionDiagnostic(
+            "unsupported.msaa.prepared_frame_payload_missing",
+            "Prepared-frame MSAA authority requires one consumed native payload.",
+        )
+        val retainedViews = mutableMapOf<String, Any>()
+        val canonicalResolveViews = mutableMapOf<String, Any>()
+        indexedRequests.forEach { (stepIndex, render, request) ->
+            val scopeIndex = frame.encoderPlan.scopes.indexOfFirst { it.sourceStepIndex == stepIndex }
+            val operand = exactPayload.scopeOperands.getOrNull(scopeIndex) as?
+                GPUPreparedNativeScopeOperand.Render ?: return executionDiagnostic(
+                "invalid.msaa.prepared_frame_native_scope",
+                "Prepared-frame MSAA authority requires one exact native render operand.",
+            )
+            val resolve = operand.pass.resolveTarget ?: return executionDiagnostic(
+                "invalid.msaa.prepared_frame_resolve_target",
+                "Prepared-frame MSAA render operands require an explicit canonical resolve target.",
+            )
+            val expectedResolveBinding = preparedSceneTargetBindingKey(frame, render)
+                ?: return executionDiagnostic(
+                    "invalid.msaa.prepared_frame_resolve_authority",
+                    "Prepared-frame MSAA resolve requires the exact prepared canonical scene target.",
+                )
+            val keyedOperands = operand.operands.zip(
+                exactPayload.scopeOperandKeys.getOrNull(scopeIndex).orEmpty(),
+            )
+            val keyedColor = keyedOperands.singleOrNull { (_, key) ->
+                key.role == GPUPreparedNativeOperandRole.RenderMsaaColorTarget
+            }
+            val keyedResolve = keyedOperands.singleOrNull { (_, key) ->
+                key.role == GPUPreparedNativeOperandRole.RenderResolveTarget
+            }
+            val expectedLoad = when (request.loadTransition) {
+                GPUSampleLoadTransition.FreshClear -> GPUPreparedNativeLoadOperation.Clear
+                GPUSampleLoadTransition.RetainedLoad -> GPUPreparedNativeLoadOperation.Load
+            }
+            if (operand.pass.colorTarget.view === resolve.view ||
+                operand.pass.colorTarget.deviceGeneration != frame.generationSeal.deviceGeneration ||
+                resolve.deviceGeneration != frame.generationSeal.deviceGeneration ||
+                operand.pass.colorTarget.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                resolve.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
+                !backend.isCanonicalSceneTargetView(sceneTarget, resolve) ||
+                keyedColor?.let { (native, key) ->
+                    native === operand.pass.colorTarget &&
+                        key.bindingKey == gpuPreparedNativeBindingKey(
+                            "msaa:${request.key.colorAttachment.value}",
+                        )
+                } != true ||
+                keyedResolve?.let { (native, key) ->
+                    native === resolve && key.bindingKey == expectedResolveBinding
+                } != true ||
+                operand.pass.loadOperation != expectedLoad ||
+                operand.pass.storeOperation != GPUPreparedNativeStoreOperation.Store ||
+                render.loadStore.loadOp != if (expectedLoad == GPUPreparedNativeLoadOperation.Clear) "clear" else "load"
+            ) {
+                return executionDiagnostic(
+                    "invalid.msaa.prepared_frame_native_operands",
+                    "Prepared-frame MSAA native operands contradict resolve, generation, ownership, or load/store authority.",
+                )
+            }
+            val attachment = request.key.colorAttachment.value
+            val retainedView = retainedViews[attachment]
+            if (retainedView != null && retainedView !== operand.pass.colorTarget.view) {
+                return executionDiagnostic(
+                    "invalid.msaa.prepared_frame_attachment_continuity",
+                    "Prepared-frame MSAA continuation changed its native color attachment view.",
+                )
+            }
+            retainedViews[attachment] = operand.pass.colorTarget.view
+            val canonicalResolveView = canonicalResolveViews[expectedResolveBinding]
+            if (canonicalResolveView != null && canonicalResolveView !== resolve.view) {
+                return executionDiagnostic(
+                    "invalid.msaa.prepared_frame_resolve_continuity",
+                    "Prepared-frame MSAA continuation changed its canonical resolve target view.",
+                )
+            }
+            canonicalResolveViews[expectedResolveBinding] = resolve.view
+        }
+        return null
+    }
+
+    private fun preparedSceneTargetBindingKey(
+        frame: PreparedGPUFrame,
+        render: GPUFrameStep.RenderPassStep,
+    ): String? {
+        val preparedTarget = frame.resources.ordinaryResources.singleOrNull { evidence ->
+            evidence.logicalResource == render.target &&
+                evidence.role == GPUFrameResourceRole.SceneTarget
+        } ?: return null
+        if (preparedTarget.concreteResource !is GPUPreparedConcreteResourceRef.Texture) return null
+        if (preparedTarget.deviceGeneration != frame.generationSeal.deviceGeneration ||
+            preparedTarget.resourceGeneration != frame.generationSeal.resourceGenerations[render.target]
+        ) {
+            return null
+        }
+        return gpuPreparedNativeBindingKey(
+            "GPUFrameTargetRef:${render.target.value}@${preparedTarget.resourceGeneration}",
+        )
     }
 }
 

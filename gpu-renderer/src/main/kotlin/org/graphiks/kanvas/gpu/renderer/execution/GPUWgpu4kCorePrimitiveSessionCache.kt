@@ -34,6 +34,8 @@ internal data class GPUCorePrimitiveNativeCacheCounters(
     val invariantInvalidations: Long = 0L,
     val coverageMaskTextureCreations: Long = 0L,
     val coverageMaskSlotReuses: Long = 0L,
+    val msaaColorTextureCreations: Long = 0L,
+    val msaaColorSlotReuses: Long = 0L,
 )
 
 internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 24
@@ -458,6 +460,21 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
                     ),
                 )
             }
+
+            override fun createMsaaColorTexture(
+                requirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement,
+            ): GPUTexture = device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(requirement.width.toUInt(), requirement.height.toUInt()),
+                    format = requirement.format,
+                    usage = requirement.usage,
+                    sampleCount = requirement.sampleCount.toUInt(),
+                    label = "Kanvas.session.corePrimitive.framePool.msaaColor4x",
+                ),
+            )
+
+            override fun createMsaaColorView(texture: GPUTexture): GPUTextureView =
+                texture.createView()
         },
     )
 
@@ -532,6 +549,8 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
             invariantInvalidations = 0,
             coverageMaskTextureCreations = pool.coverageMaskTextureCreations,
             coverageMaskSlotReuses = pool.coverageMaskSlotReuses,
+            msaaColorTextureCreations = pool.msaaColorTextureCreations,
+            msaaColorSlotReuses = pool.msaaColorSlotReuses,
         )
     }
 

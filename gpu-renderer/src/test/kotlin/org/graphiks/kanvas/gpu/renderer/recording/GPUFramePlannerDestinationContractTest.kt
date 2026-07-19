@@ -1572,6 +1572,8 @@ class GPUFramePlannerDestinationContractTest {
         colorFormat = GPUColorFormat("rgba8unorm"),
         colorInterpretation = GPUColorInterpretation("srgb-premul"),
         samplePlan = samplePlan,
+        attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
+            .GPUSampleAttachmentAuthority.SceneTargetRetained,
         colorAttachment = GPUTargetIdentity("${target.value}.msaa"),
         depthStencilAttachment = null,
     )

@@ -833,6 +833,7 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
                 string("colorFormat", continuation.key.colorFormat.value)
                 string("colorInterpretation", continuation.key.colorInterpretation.value)
                 string("samplePlan", continuation.key.samplePlan.specializationKey)
+                string("attachmentAuthority", continuation.key.attachmentAuthority.name)
                 string("colorAttachment", continuation.key.colorAttachment.value)
                 nullable("depthStencilAttachment", continuation.key.depthStencilAttachment) {
                     string("target", it.value)
@@ -1325,6 +1326,7 @@ private fun CanonicalHashSink.destinationSourceKey(
         string("sampleColorFormat", continuation.colorFormat.value)
         string("sampleColorInterpretation", continuation.colorInterpretation.value)
         int("sampleCount", continuation.samplePlan.sampleCount)
+        string("attachmentAuthority", continuation.attachmentAuthority.name)
         string("colorAttachment", continuation.colorAttachment.value)
         nullableString("depthStencilAttachment", continuation.depthStencilAttachment?.value)
     }
@@ -1365,6 +1367,7 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
                 "continuation=${sampleContinuation?.let { continuation ->
                     "${continuation.key.target.value}@${continuation.key.targetGeneration}:" +
                         "${continuation.key.deviceGeneration.value}:" +
+                        "${continuation.key.attachmentAuthority.name}:" +
                         "${continuation.key.colorAttachment.value}:" +
                         "${continuation.loadTransition.name}:" +
                         "${continuation.storeAction.name}:" +
@@ -1546,6 +1549,7 @@ private fun GPUDestinationSnapshotGroupKey.dumpDestinationSourceKey(): String {
             "sampleFormat=${value.colorFormat.value} " +
             "sampleColor=${value.colorInterpretation.value} " +
             "sampleCount=${value.samplePlan.sampleCount} " +
+            "attachmentAuthority=${value.attachmentAuthority.name} " +
             "colorAttachment=${value.colorAttachment.value} " +
             "depthStencilAttachment=${value.depthStencilAttachment?.value ?: "none"}"
     } ?: "sampleContinuation=none"

@@ -1418,6 +1418,8 @@ class GPUFramePlanIntegrityTest {
                     colorFormat = colorFormat,
                     colorInterpretation = colorInterpretation,
                     samplePlan = GPUSamplePlan.MultisampleFrame(4),
+                    attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
+                        .GPUSampleAttachmentAuthority.SceneTargetRetained,
                     colorAttachment = GPUTargetIdentity("root.msaa"),
                     depthStencilAttachment = null,
                 ),

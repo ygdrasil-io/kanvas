@@ -9,6 +9,12 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
+/** Explicit owner of the native MSAA attachment named by one continuation key. */
+enum class GPUSampleAttachmentAuthority {
+    SceneTargetRetained,
+    PreparedFramePayload,
+}
+
 /** Exact handle-free identity required to continue one stored MSAA attachment set. */
 data class GPUSampleContinuationKey(
     val target: GPUTargetIdentity,
@@ -17,6 +23,7 @@ data class GPUSampleContinuationKey(
     val colorFormat: GPUColorFormat,
     val colorInterpretation: GPUColorInterpretation,
     val samplePlan: GPUSamplePlan.MultisampleFrame,
+    val attachmentAuthority: GPUSampleAttachmentAuthority,
     val colorAttachment: GPUTargetIdentity,
     val depthStencilAttachment: GPUTargetIdentity?,
 ) {
@@ -155,6 +162,10 @@ private fun GPUSampleContinuationRequest.validationDiagnostic(
         storedKey.deviceGeneration != key.deviceGeneration -> refusal(
             "unsupported.msaa.continuation_device_generation",
             "Retained-load device generation does not match the stored MSAA device generation.",
+        )
+        storedKey.attachmentAuthority != key.attachmentAuthority -> refusal(
+            "unsupported.msaa.continuation_attachment_authority",
+            "Retained-load requires the same MSAA attachment ownership authority.",
         )
         storedKey.colorAttachment != key.colorAttachment ||
             storedKey.depthStencilAttachment != key.depthStencilAttachment -> refusal(

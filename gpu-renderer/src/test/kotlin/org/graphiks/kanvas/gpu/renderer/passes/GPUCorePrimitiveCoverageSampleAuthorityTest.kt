@@ -95,10 +95,17 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
                 capabilities(colorRender = setOf(1, 4), colorResolve = emptySet()),
             ),
         )
-        assertEquals(
-            "unsupported.core_primitive.coverage_sample.multisample_not_promoted",
+        assertNull(
             code(
                 rect,
+                GPUCorePrimitiveCoverageMode.FullOrScissor,
+                GPUSamplePlan.MultisampleFrame(4),
+                completeMsaaCapabilities(),
+            ),
+        )
+        assertNull(
+            code(
+                directTriangles,
                 GPUCorePrimitiveCoverageMode.FullOrScissor,
                 GPUSamplePlan.MultisampleFrame(4),
                 completeMsaaCapabilities(),

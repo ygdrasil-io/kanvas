@@ -1099,6 +1099,8 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
                 colorFormat = RGBA8,
                 colorInterpretation = GPUColorInterpretation("srgb-premul"),
                 samplePlan = GPUSamplePlan.MultisampleFrame(4),
+                attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
+                    .GPUSampleAttachmentAuthority.SceneTargetRetained,
                 colorAttachment = GPUTargetIdentity("target.scene.msaa"),
                 depthStencilAttachment = null,
             )

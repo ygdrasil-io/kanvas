@@ -159,6 +159,15 @@ class GPUDestinationSnapshotGroupingTest {
         )
         assertNotEquals(
             base,
+            base.copy(
+                sampleContinuation = continuationKey(
+                    attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
+                        .GPUSampleAttachmentAuthority.PreparedFramePayload,
+                ),
+            ),
+        )
+        assertNotEquals(
+            base,
             base.copy(sourceIntermediate = GPUIntermediateIdentity("intermediate:other")),
         )
     }
@@ -781,6 +790,8 @@ class GPUDestinationSnapshotGroupingTest {
 
     private fun continuationKey(
         colorAttachment: GPUTargetIdentity = GPUTargetIdentity("msaa-color:main"),
+        attachmentAuthority: org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority =
+            org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority.SceneTargetRetained,
     ): GPUSampleContinuationKey = GPUSampleContinuationKey(
         target = GPUTargetIdentity("target:main"),
         targetGeneration = 11,
@@ -788,6 +799,7 @@ class GPUDestinationSnapshotGroupingTest {
         colorFormat = GPUColorFormat("rgba8unorm"),
         colorInterpretation = GPUColorInterpretation("encoded-premul-srgb"),
         samplePlan = GPUSamplePlan.MultisampleFrame(4),
+        attachmentAuthority = attachmentAuthority,
         colorAttachment = colorAttachment,
         depthStencilAttachment = GPUTargetIdentity("msaa-depth-stencil:main"),
     )

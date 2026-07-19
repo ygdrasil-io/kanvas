@@ -162,7 +162,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `promotable multisample base render refuses with its specific closed route authority`() {
+    fun `promotable color only multisample base render retains exact continuation and budget authority`() {
         val base = recording(command(2, 0)).taskList.withClipPlans(
             mapOf(2 to GPUClipExecutionPlan.NoClip),
         ).withSamplePlan(GPUSamplePlan.MultisampleFrame(4))
@@ -171,11 +171,21 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
             request(base, mapOf(2 to semantic(packet))).copy(capabilities = msaaCapabilities()),
         )
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(result, result.toString()).taskList
 
+        val prepared = taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+        assertEquals(GPUSamplePlan.MultisampleFrame(4), prepared.samplePlan)
+        assertEquals(base.tasks.filterIsInstance<GPUTask.Render>().single().sampleContinuationKey,
+            prepared.sampleContinuationKey)
         assertEquals(
-            "unsupported.core_primitive.coverage_sample.multisample_not_promoted",
-            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+            targetBounds.width.toLong() * targetBounds.height * 4L * 4L,
+            taskList.memoryBudget.categoryTotals.getValue(GPUFrameMemoryCategory.FrameLocalMsaaColor),
         )
+        assertEquals(null, prepared.depthStencilLoadStore)
+        assertTrue(prepared.resourceUses.none {
+            it.role == GPUFrameResourceRole.PathDepthStencil ||
+                it.role == GPUFrameResourceRole.ClipDepthStencil
+        })
     }
 
     @Test
@@ -2353,6 +2363,24 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         expectedReplayKeyHash = expectedReplayKeyHash,
         tasks = tasks.map { task ->
             if (task !is GPUTask.Render) return@map task
+            val continuation = (samplePlan as? GPUSamplePlan.MultisampleFrame)?.let { multisample ->
+                org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey(
+                    target = org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity("target.core.authority"),
+                    targetGeneration = 0L,
+                    deviceGeneration = capabilitySeal.deviceGeneration,
+                    colorFormat = org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat("rgba8unorm"),
+                    colorInterpretation = org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation(
+                        "encoded-premul-srgb",
+                    ),
+                    samplePlan = multisample,
+                    attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
+                        .GPUSampleAttachmentAuthority.PreparedFramePayload,
+                    colorAttachment = org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(
+                        "msaa-color:target.core.authority:0",
+                    ),
+                    depthStencilAttachment = null,
+                )
+            }
             GPUTask.Render(
                 task.taskId,
                 task.recordingId,
@@ -2364,7 +2392,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 task.provisionalSegmentKey,
                 task.drawPackets,
                 task.batchEligibilityByPacketId,
-                null,
+                continuation,
                 task.compositeMembership,
                 task.depthStencilLoadStore,
             )

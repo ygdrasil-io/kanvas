@@ -1177,6 +1177,7 @@ private class WgpuBackendSession(
             deviceGeneration = deviceGeneration,
             device = glfw.wgpuContext.device,
             queue = glfw.wgpuContext.device.queue,
+            canonicalSceneTargetView = preparedTarget.view,
         ))
         val mappingExecutor = Executors.newSingleThreadExecutor { task ->
             Thread(task, "kanvas-prepared-scene-readback").apply { isDaemon = true }
@@ -1375,6 +1376,8 @@ private class WgpuBackendSession(
                     drawIndexed = encoding.drawIndexed,
                     coverageMaskTextureCreations = corePrimitive.coverageMaskTextureCreations,
                     coverageMaskSlotReuses = corePrimitive.coverageMaskSlotReuses,
+                    msaaColorTextureCreations = corePrimitive.msaaColorTextureCreations,
+                    msaaColorSlotReuses = corePrimitive.msaaColorSlotReuses,
                 )
             },
             nativeCountersFactory = {

@@ -96,6 +96,9 @@ class GPUMsaaContinuationTest {
                 "unsupported.msaa.continuation_color_contract",
             continuationKey().copy(colorAttachment = GPUTargetIdentity("msaa-color:other")) to
                 "unsupported.msaa.continuation_attachment_mismatch",
+            continuationKey().copy(
+                attachmentAuthority = GPUSampleAttachmentAuthority.PreparedFramePayload,
+            ) to "unsupported.msaa.continuation_attachment_authority",
         )
 
         cases.forEach { (nextKey, expectedCode) ->
@@ -246,6 +249,7 @@ class GPUMsaaContinuationTest {
         colorFormat = GPUColorFormat("rgba8unorm"),
         colorInterpretation = GPUColorInterpretation("encoded-premul-srgb"),
         samplePlan = samplePlan,
+        attachmentAuthority = GPUSampleAttachmentAuthority.SceneTargetRetained,
         colorAttachment = colorAttachment,
         depthStencilAttachment = GPUTargetIdentity("msaa-depth-stencil:scene:7"),
     )

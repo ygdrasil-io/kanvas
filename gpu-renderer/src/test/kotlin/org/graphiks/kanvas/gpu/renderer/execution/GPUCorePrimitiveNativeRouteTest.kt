@@ -213,6 +213,22 @@ class GPUCorePrimitiveNativeRouteTest {
     }
 
     @Test
+    fun `hard color only direct geometry accepts exact 4x sample authority`() {
+        val accepted = assertIs<GPUCorePrimitiveDirectNativeRoute.Accepted>(
+            validateCorePrimitiveDirectNativeRoute(
+                semantic(GPUCorePrimitiveGeometryInput.Rect(2f, 3f, 11f, 13f)),
+                GPUClipExecutionPlan.NoClip,
+                srcOver(),
+                GPUSamplePlan.MultisampleFrame(4),
+                "rgba8unorm",
+            ),
+        )
+
+        assertEquals(GPUCorePrimitiveDirectNativeRoute.Lane.DirectGeometry, accepted.lane)
+        assertEquals(TARGET, accepted.renderScissor)
+    }
+
+    @Test
     fun `clip plan and semantic scissor must be identical`() {
         val partial = GPUPixelBounds(2, 3, 12, 14)
         val noClipMismatch = validateCorePrimitiveDirectNativeRoute(
@@ -251,7 +267,10 @@ class GPUCorePrimitiveNativeRouteTest {
                 "rgba8unorm",
             ) to "unsupported.native-core-primitive.blend",
             validateCorePrimitiveDirectNativeRoute(
-                semantic(GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f)),
+                semantic(
+                    GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f),
+                    coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA,
+                ),
                 GPUClipExecutionPlan.NoClip,
                 srcOver(),
                 GPUSamplePlan.MultisampleFrame(4),

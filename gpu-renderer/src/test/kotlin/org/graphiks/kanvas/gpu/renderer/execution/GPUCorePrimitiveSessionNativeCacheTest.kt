@@ -21,6 +21,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -238,6 +240,59 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         assertEquals(1, native.closeCount("Kanvas.session.corePrimitive.framePool.coverageMask.consumerBindGroup"))
         assertEquals(1, native.closeCount("Kanvas.session.corePrimitive.framePool.coverageMask.view"))
         assertEquals(1, native.closeCount("Kanvas.session.corePrimitive.framePool.coverageMask"))
+    }
+
+    @Test
+    fun `concrete session frame pool owns and reuses exact target scoped 4x color attachment`() {
+        val native = SessionNativeProxy()
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION)
+        val key = productionKey().copy(
+            pipelineIdentity = productionKey().pipelineIdentity.copy(sampleCount = 4),
+        )
+        cache.acquire(key).acquiredHandles()
+        val msaaRequirement = GPUWgpu4kCorePrimitiveMsaaColorRequirement(
+            target = GPUFrameTargetRef("target.core.4x"),
+            colorAttachment = GPUTargetIdentity("msaa-color:target.core.4x:9"),
+            deviceGeneration = GENERATION,
+            targetGeneration = 9L,
+            width = 63,
+            height = 47,
+        )
+        val request = GPUWgpu4kCorePrimitiveFramePoolRequirements(
+            deviceGeneration = GENERATION,
+            vertexBytes = 64L,
+            indexBytes = 48L,
+            uniformBytes = 256L,
+            sampleCount = 4,
+            msaaColor = msaaRequirement,
+        )
+
+        val first = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+            cache.acquireFrame(request),
+        ).lease
+        val firstMsaa = requireNotNull(first.handles.msaaColor)
+        val descriptor = native.textureDescriptors.single()
+        assertEquals(63u, descriptor.size.width)
+        assertEquals(47u, descriptor.size.height)
+        assertEquals(GPUTextureFormat.RGBA8Unorm, descriptor.format)
+        assertEquals(4u, descriptor.sampleCount)
+        assertEquals(GPUTextureUsage.RenderAttachment, descriptor.usage)
+        assertEquals(msaaRequirement, firstMsaa.requirement)
+        first.rollbackBeforeSubmit()
+
+        val reused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+            cache.acquireFrame(request),
+        ).lease
+        assertSame(firstMsaa.texture, requireNotNull(reused.handles.msaaColor).texture)
+        assertSame(firstMsaa.view, requireNotNull(reused.handles.msaaColor).view)
+        assertEquals(1, native.textureDescriptors.size)
+        assertEquals(1L, cache.counters().msaaColorTextureCreations)
+        assertEquals(1L, cache.counters().msaaColorSlotReuses)
+        reused.rollbackBeforeSubmit()
+
+        cache.close()
+        assertEquals(1, native.closeCount("Kanvas.session.corePrimitive.framePool.msaaColor4x.view"))
+        assertEquals(1, native.closeCount("Kanvas.session.corePrimitive.framePool.msaaColor4x"))
     }
 
     @Test
@@ -501,7 +556,7 @@ class GPUCorePrimitiveSessionNativeCacheTest {
             componentIdentity = canonical.componentIdentity.copy(shaderIdentity = "shader.stale"),
         )
         val incompatiblePipeline = canonical.copy(
-            pipelineIdentity = canonical.pipelineIdentity.copy(sampleCount = 4),
+            pipelineIdentity = canonical.pipelineIdentity.copy(sampleCount = 2),
         )
 
         assertIs<GPUWgpu4kCorePrimitiveSessionCacheRefusal.IncompatibleComponentIdentity>(
@@ -518,6 +573,24 @@ class GPUCorePrimitiveSessionNativeCacheTest {
             ).reason,
         )
         assertTrue(native.creationEvents.isEmpty())
+        cache.close()
+    }
+
+    @Test
+    fun `production cache creates and reuses exact direct src over 4x pipeline`() {
+        val native = SessionNativeProxy()
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION)
+        val key = productionKey().copy(
+            pipelineIdentity = productionKey().pipelineIdentity.copy(sampleCount = 4),
+        )
+
+        val first = cache.acquire(key).acquiredHandles()
+        val second = cache.acquire(key).acquiredHandles()
+
+        assertSame(first, second)
+        assertEquals(4, key.pipelineIdentity.sampleCount)
+        assertEquals(1, native.pipelineCreationCount)
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(1, 1, 0), cache.counters())
         cache.close()
     }
 

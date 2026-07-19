@@ -39,8 +39,13 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleLoadTransition
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.recording.GPUComputeDispatch
@@ -177,6 +182,124 @@ class GPUFrameExecutorTest {
         assertEquals("stale.native-frame-payload.identity-mismatch", immediate.diagnostic.code.value)
         assertTrue(events.none { it == "encoder:create" })
         assertEquals(0, adapter.activePreparedNativeFramePayloadCount)
+    }
+
+    @Test
+    fun `prepared payload msaa authority accepts one canonical resolve view across scopes`() {
+        val fixture = GPUFrameCoreTestFixture.msaaPreparedFrame()
+        val completion = RecordingCompletion(fixture.events)
+        val backend = RecordingEncodingBackend(
+            fixture.events,
+            requireNativeOperands = true,
+            expectedNativeOperands = fixture.payload.scopeOperands,
+            canonicalResolveView = fixture.canonicalResolveView,
+        )
+
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = backend,
+            completion = completion,
+            retention = RecordingRetention(fixture.events),
+        ).execute(fixture.preparedFrame)
+
+        assertIs<GPUFrameImmediateState.Submitted>(handle.immediateState)
+        completion.complete(
+            GPUQueueCompletionOutcome.Success,
+            fixture.preparedFrame.completionTicket.ticketId,
+        )
+        val terminal = handle.completion.toCompletableFuture().get(2, TimeUnit.SECONDS)
+        assertEquals(
+            GPUFrameStructuralOutcome.Succeeded,
+            terminal.outcome,
+            "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}; ${fixture.events}",
+        )
+        assertEquals(1, fixture.events.count { it == "encoder:create" })
+    }
+
+    @Test
+    fun `prepared payload msaa authority refuses a foreign resolve binding before encoder`() {
+        val fixture = GPUFrameCoreTestFixture.msaaPreparedFrame(
+            resolveBinding = "GPUFrameTargetRef:target.foreign@1",
+        )
+
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = RecordingEncodingBackend(fixture.events, requireNativeOperands = true),
+            completion = RecordingCompletion(fixture.events),
+            retention = RecordingRetention(fixture.events),
+        ).execute(fixture.preparedFrame)
+
+        val immediate = assertIs<GPUFrameImmediateState.FailedBeforeSubmit>(handle.immediateState)
+        assertEquals("invalid.msaa.prepared_frame_operand_keys", immediate.diagnostic.code.value)
+        assertTrue(fixture.events.none { it == "encoder:create" })
+        assertTrue("rollback:resources" in fixture.events)
+        assertEquals(0, fixture.adapter.activePreparedNativeFramePayloadCount)
+    }
+
+    @Test
+    fun `prepared payload msaa authority refuses a foreign resolve view before encoder`() {
+        val fixture = GPUFrameCoreTestFixture.msaaPreparedFrame(splitResolveView = true)
+
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = RecordingEncodingBackend(
+                fixture.events,
+                requireNativeOperands = true,
+                canonicalResolveView = fixture.canonicalResolveView,
+            ),
+            completion = RecordingCompletion(fixture.events),
+            retention = RecordingRetention(fixture.events),
+        ).execute(fixture.preparedFrame)
+
+        val immediate = assertIs<GPUFrameImmediateState.FailedBeforeSubmit>(handle.immediateState)
+        assertEquals("invalid.msaa.prepared_frame_native_operands", immediate.diagnostic.code.value)
+        assertTrue(fixture.events.none { it == "encoder:create" })
+        assertTrue("rollback:resources" in fixture.events)
+        assertEquals(0, fixture.adapter.activePreparedNativeFramePayloadCount)
+    }
+
+    @Test
+    fun `prepared payload msaa authority refuses one shared foreign resolve view before encoder`() {
+        val fixture = GPUFrameCoreTestFixture.msaaPreparedFrame(sharedForeignResolveView = true)
+
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = RecordingEncodingBackend(
+                fixture.events,
+                requireNativeOperands = true,
+                canonicalResolveView = fixture.canonicalResolveView,
+            ),
+            completion = RecordingCompletion(fixture.events),
+            retention = RecordingRetention(fixture.events),
+        ).execute(fixture.preparedFrame)
+
+        val immediate = assertIs<GPUFrameImmediateState.FailedBeforeSubmit>(handle.immediateState)
+        assertEquals("invalid.msaa.prepared_frame_native_operands", immediate.diagnostic.code.value)
+        assertTrue(fixture.events.none { it == "encoder:create" })
+        assertTrue("rollback:resources" in fixture.events)
+        assertEquals(0, fixture.adapter.activePreparedNativeFramePayloadCount)
+    }
+
+    @Test
+    fun `prepared payload msaa authority refuses color attachment continuity break before encoder`() {
+        val fixture = GPUFrameCoreTestFixture.msaaPreparedFrame(splitColorView = true)
+
+        val handle = GPUFrameExecutor(
+            sceneTarget = GPUFrameCoreTestFixture.sceneTarget(),
+            backend = RecordingEncodingBackend(
+                fixture.events,
+                requireNativeOperands = true,
+                canonicalResolveView = fixture.canonicalResolveView,
+            ),
+            completion = RecordingCompletion(fixture.events),
+            retention = RecordingRetention(fixture.events),
+        ).execute(fixture.preparedFrame)
+
+        val immediate = assertIs<GPUFrameImmediateState.FailedBeforeSubmit>(handle.immediateState)
+        assertEquals("invalid.msaa.prepared_frame_attachment_continuity", immediate.diagnostic.code.value)
+        assertTrue(fixture.events.none { it == "encoder:create" })
+        assertTrue("rollback:resources" in fixture.events)
+        assertEquals(0, fixture.adapter.activePreparedNativeFramePayloadCount)
     }
 
     @Test
@@ -1329,6 +1452,7 @@ class GPUFrameExecutorTest {
         private val requireNativeOperands: Boolean = false,
         private val expectedNativeOperands: List<GPUPreparedNativeScopeOperand>? = null,
         private val failCommandBufferDiscard: Boolean = false,
+        private val canonicalResolveView: GPUTextureView? = null,
     ) : GPUFrameEncodingBackend {
         override val deviceGeneration = GPUDeviceGenerationID(7)
         override val encodingMode: GPUFrameEncodingMode = if (requireNativeOperands) {
@@ -1345,6 +1469,11 @@ class GPUFrameExecutorTest {
             private set
         var commandBufferDiscardCount = 0
             private set
+
+        override fun isCanonicalSceneTargetView(
+            sceneTarget: GPUSceneTarget,
+            operand: GPUPreparedNativeTextureViewOperand,
+        ): Boolean = canonicalResolveView != null && operand.view === canonicalResolveView
 
         override fun createCommandEncoder(label: String): GPUFrameCommandEncoder {
             events += "encoder:create"
@@ -1889,6 +2018,8 @@ internal object GPUFrameCoreTestFixture {
             colorFormat = GPUColorFormat("rgba8unorm"),
             colorInterpretation = GPUColorInterpretation("srgb-premul"),
             samplePlan = GPUSamplePlan.MultisampleFrame(4),
+            attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
+                .GPUSampleAttachmentAuthority.SceneTargetRetained,
             colorAttachment = GPUTargetIdentity("target.scene.msaa"),
             depthStencilAttachment = null,
         ),
@@ -2317,6 +2448,249 @@ internal object GPUFrameCoreTestFixture {
 
     fun nativePayloadWithMismatchedSameGenerationOperandKey(): GPUPreparedNativeFramePayload =
         nativePayload(copySourceBindingKey = "GPUFrameTargetRef:target.wrong@1")
+
+    internal data class MsaaPreparedFrameFixture(
+        val preparedFrame: PreparedGPUFrame,
+        val payload: GPUPreparedNativeFramePayload,
+        val adapter: GPURuntimeResourceAdapter,
+        val events: MutableList<String>,
+        val canonicalResolveView: GPUTextureView,
+    )
+
+    fun msaaPreparedFrame(
+        resolveBinding: String = "GPUFrameTargetRef:target.scene@1",
+        splitResolveView: Boolean = false,
+        splitColorView: Boolean = false,
+        sharedForeignResolveView: Boolean = false,
+    ): MsaaPreparedFrameFixture {
+        val events = mutableListOf<String>()
+        val capabilities = capabilities()
+        val frameId = GPUFrameID(8)
+        val seal = GPUFrameCapabilitySeal.capture(frameId, deviceGeneration, capabilities)
+        val samplePlan = GPUSamplePlan.MultisampleFrame(4)
+        val continuationKey = GPUSampleContinuationKey(
+            target = GPUTargetIdentity(targetRef.value),
+            targetGeneration = 1,
+            deviceGeneration = deviceGeneration,
+            colorFormat = GPUColorFormat("rgba8unorm"),
+            colorInterpretation = GPUColorInterpretation("encoded-premul-srgb"),
+            samplePlan = samplePlan,
+            attachmentAuthority = GPUSampleAttachmentAuthority.PreparedFramePayload,
+            colorAttachment = GPUTargetIdentity("msaa-color:target.scene:1"),
+            depthStencilAttachment = null,
+        )
+        val firstPacket = drawPacket("packet.msaa.first", 11, "pass.msaa.first")
+        val secondPacket = drawPacket("packet.msaa.second", 12, "pass.msaa.second")
+        val firstRender = GPUFrameStep.RenderPassStep(
+            target = targetRef,
+            loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
+            samplePlan = samplePlan,
+            drawPackets = listOf(firstPacket),
+            sourceTaskIds = listOf(GPUTaskID("task.msaa.first")),
+            sampleContinuation = GPUSampleContinuationRequest(
+                continuationKey,
+                GPUSampleLoadTransition.FreshClear,
+                GPUSampleStoreAction.Store,
+                GPUSampleResolveAction.ResolveCanonical,
+            ),
+        )
+        val secondRender = GPUFrameStep.RenderPassStep(
+            target = targetRef,
+            loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+            samplePlan = samplePlan,
+            drawPackets = listOf(secondPacket),
+            sourceTaskIds = listOf(GPUTaskID("task.msaa.second")),
+            sampleContinuation = GPUSampleContinuationRequest(
+                continuationKey,
+                GPUSampleLoadTransition.RetainedLoad,
+                GPUSampleStoreAction.Store,
+                GPUSampleResolveAction.ResolveCanonical,
+            ),
+        )
+        val prepare = GPUFrameStep.PrepareResourcesStep(
+            emptyList(),
+            listOf(GPUTaskID("task.msaa.prepare")),
+        )
+        val semanticPlan = GPUFramePlan(
+            frameId = frameId,
+            capabilitySeal = seal,
+            recordingSeals = listOf(
+                GPURecordingSeal(GPURecordingID("recording.msaa"), 0, "compat", "replay", seal.sealHash),
+            ),
+            steps = listOf(prepare, firstRender, secondRender),
+            memoryBudget = budget(),
+            diagnostics = emptyList(),
+        )
+        fun operandKeys(scope: String): List<GPUPreparedNativeOperandKey> = listOf(
+            GPUPreparedNativeOperandKey(
+                GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                GPUPreparedNativeOperandKind.TextureView,
+                gpuPreparedNativeBindingKey("msaa:${continuationKey.colorAttachment.value}"),
+            ),
+            GPUPreparedNativeOperandKey(
+                GPUPreparedNativeOperandRole.RenderResolveTarget,
+                GPUPreparedNativeOperandKind.TextureView,
+                gpuPreparedNativeBindingKey(resolveBinding),
+            ),
+            GPUPreparedNativeOperandKey(
+                GPUPreparedNativeOperandRole.RenderPipeline,
+                GPUPreparedNativeOperandKind.RenderPipeline,
+                gpuPreparedNativeBindingKey("pipeline.$scope"),
+            ),
+            GPUPreparedNativeOperandKey(
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+                GPUPreparedNativeOperandKind.BindGroup,
+                gpuPreparedNativeBindingKey("bind-group.$scope"),
+            ),
+        )
+        val firstKeys = operandKeys("first")
+        val secondKeys = operandKeys("second")
+        val encoderPlan = GPUCommandEncoderPlan.ordered(
+            planId = "frame.msaa",
+            contextIdentity = targetRef.value,
+            deviceGeneration = deviceGeneration,
+            targetGeneration = 1,
+            scopes = listOf(
+                renderScope(1, firstPacket, firstRender, "msaa-first")
+                    .attachNativeOperandKeys(firstKeys),
+                renderScope(2, secondPacket, secondRender, "msaa-second")
+                    .attachNativeOperandKeys(secondKeys),
+            ),
+        )
+        val sharedColorView = fakeNative<GPUTextureView>("msaa.color.shared")
+        val canonicalResolveView = fakeNative<GPUTextureView>("target.scene.resolve")
+        val sharedResolveView = if (sharedForeignResolveView) {
+            fakeNative<GPUTextureView>("target.foreign.resolve.shared")
+        } else {
+            canonicalResolveView
+        }
+        fun renderOperand(
+            stepIndex: Int,
+            scope: String,
+            load: GPUPreparedNativeLoadOperation,
+            colorView: GPUTextureView,
+            resolveView: GPUTextureView,
+        ): GPUPreparedNativeScopeOperand.Render {
+            val pipeline = GPUPreparedNativeRenderPipelineOperand(
+                fakeNative<GPURenderPipeline>("pipeline.$scope"),
+                deviceGeneration,
+            )
+            val bindGroup = GPUPreparedNativeBindGroupOperand(
+                fakeNative<GPUBindGroup>("bind-group.$scope"),
+                deviceGeneration,
+            )
+            return GPUPreparedNativeScopeOperand.Render(
+                sourceStepIndex = stepIndex,
+                pass = GPUPreparedNativeRenderPassConfig(
+                    colorTarget = GPUPreparedNativeTextureViewOperand(colorView, deviceGeneration),
+                    resolveTarget = GPUPreparedNativeTextureViewOperand(resolveView, deviceGeneration),
+                    loadOperation = load,
+                    storeOperation = GPUPreparedNativeStoreOperation.Store,
+                    clearColor = if (load == GPUPreparedNativeLoadOperation.Clear) {
+                        GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
+                    } else {
+                        null
+                    },
+                ),
+                commands = listOf(
+                    GPUPreparedNativeRenderCommand.SetPipeline(pipeline),
+                    GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroup),
+                    GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
+                ),
+            )
+        }
+        val operands = listOf(
+            renderOperand(
+                1,
+                "first",
+                GPUPreparedNativeLoadOperation.Clear,
+                sharedColorView,
+                sharedResolveView,
+            ),
+            renderOperand(
+                2,
+                "second",
+                GPUPreparedNativeLoadOperation.Load,
+                if (splitColorView) fakeNative("msaa.color.foreign") else sharedColorView,
+                if (splitResolveView) fakeNative("target.foreign.resolve") else sharedResolveView,
+            ),
+        )
+        val payload = GPUPreparedNativeFramePayload(
+            identity = GPUPreparedNativeFrameIdentity(
+                frameId = frameId,
+                contextIdentity = targetRef.value,
+                encoderPlanId = encoderPlan.planId,
+                deviceGeneration = deviceGeneration,
+                targetGeneration = 1,
+                scopes = encoderPlan.scopes.map { scope ->
+                    GPUPreparedNativeScopeKey(
+                        scope.sourceStepIndex,
+                        scope.operationKind,
+                        scope.resourceGenerationLabels,
+                        scope.nativeOperandKeys,
+                    )
+                },
+            ),
+            scopeOperands = operands,
+            scopeOperandKeys = listOf(firstKeys, secondKeys),
+        )
+        val adapter = GPURuntimeResourceAdapter()
+        val ownership = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+            adapter.registerReadyPayload(payload),
+        ).ownership
+        val completionTicket = GPUQueueCompletionTicket(
+            GPUQueueCompletionTicketID("ticket.msaa"),
+            frameId,
+            deviceGeneration,
+        )
+        val preparedFrame = PreparedGPUFrame(
+            semanticPlan = semanticPlan,
+            encoderPlan = encoderPlan,
+            resources = GPUPreparedResourceSet(
+                ordinaryResources = listOf(
+                    GPUPreparedResourceEvidence(
+                        targetRef,
+                        GPUPreparedConcreteResourceRef.Texture(GPUTextureResourceRef("prepared:target.scene")),
+                        GPUFrameResourceRole.SceneTarget,
+                        deviceGeneration,
+                        1,
+                    ),
+                ),
+                outputOwnedReadbacks = emptyList(),
+            ),
+            generationSeal = GPUPreparedGenerationSeal(
+                deviceGeneration,
+                1,
+                mapOf(targetRef to 1L),
+                seal.sealHash,
+            ),
+            completionTicket = completionTicket,
+            acquiredSurfaceOutput = null,
+            rollback = GPUFrameRollback(
+                ownerScope = "frame.msaa",
+                resourceProvider = RollbackProvider(events),
+                surfaceProvider = NoSurfaceProvider,
+                acquiredSurfaceOutput = null,
+                nativePayloadOwnership = ownership,
+                completionProvider = NoOpCompletionProvider,
+                completionTicket = completionTicket,
+            ),
+            stepPartition = listOf(
+                GPUPreparedStepEvidence(0, GPUPreparedStepLane.ResourcePreflight, "PrepareResources"),
+                GPUPreparedStepEvidence(1, GPUPreparedStepLane.Encoder, "RenderPass"),
+                GPUPreparedStepEvidence(2, GPUPreparedStepLane.Encoder, "RenderPass"),
+            ),
+            dependencyEvidence = emptyList(),
+            hostActions = emptyList(),
+        )
+        return MsaaPreparedFrameFixture(
+            preparedFrame,
+            payload,
+            adapter,
+            events,
+            canonicalResolveView,
+        )
+    }
 
     private fun copyNativeOperandKeys(
         sourceBinding: String = "GPUFrameTargetRef:target.scene@1",

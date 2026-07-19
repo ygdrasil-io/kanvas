@@ -8,6 +8,7 @@ import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPULoadOp
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPUStoreOp
+import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.Origin3D
 import io.ygdrasil.webgpu.RenderPassColorAttachment
 import io.ygdrasil.webgpu.RenderPassDepthStencilAttachment
@@ -194,6 +195,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
     override val deviceGeneration: GPUDeviceGenerationID,
     private val device: GPUDevice,
     private val queue: GPUQueue,
+    private val canonicalSceneTargetView: GPUTextureView? = null,
 ) : GPUFrameEncodingBackend, AutoCloseable {
     override val encodingMode: GPUFrameEncodingMode = GPUFrameEncodingMode.NativeOperandsRequired
 
@@ -213,6 +215,13 @@ internal class GPUWgpu4kFrameEncodingBackend(
     private var destinationCopyCount = 0L
     private var resourceCopyCount = 0L
     private var msaaResolveCount = 0L
+
+    override fun isCanonicalSceneTargetView(
+        sceneTarget: GPUSceneTarget,
+        operand: GPUPreparedNativeTextureViewOperand,
+    ): Boolean = canonicalSceneTargetView != null &&
+        operand.view === canonicalSceneTargetView &&
+        operand.deviceGeneration == deviceGeneration
 
     override fun createCommandEncoder(label: String): GPUFrameCommandEncoder {
         require(label.isNotBlank())

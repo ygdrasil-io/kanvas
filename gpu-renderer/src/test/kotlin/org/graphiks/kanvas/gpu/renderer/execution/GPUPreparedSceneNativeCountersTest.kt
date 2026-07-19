@@ -40,6 +40,8 @@ class GPUPreparedSceneNativeCountersTest {
                     drawIndexed = 13L,
                     coverageMaskTextureCreations = 17L,
                     coverageMaskSlotReuses = 19L,
+                    msaaColorTextureCreations = 23L,
+                    msaaColorSlotReuses = 29L,
                 )
             },
         )
@@ -52,6 +54,8 @@ class GPUPreparedSceneNativeCountersTest {
                 drawIndexed = 13L,
                 coverageMaskTextureCreations = 17L,
                 coverageMaskSlotReuses = 19L,
+                msaaColorTextureCreations = 23L,
+                msaaColorSlotReuses = 29L,
             ),
             instrumentedSession.renderCounters(),
         )

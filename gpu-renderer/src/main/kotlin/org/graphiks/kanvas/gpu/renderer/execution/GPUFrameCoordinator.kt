@@ -350,6 +350,8 @@ internal data class GPUPreparedSceneRenderCounters(
     val drawIndexed: Long = 0L,
     val coverageMaskTextureCreations: Long = 0L,
     val coverageMaskSlotReuses: Long = 0L,
+    val msaaColorTextureCreations: Long = 0L,
+    val msaaColorSlotReuses: Long = 0L,
 )
 
 /** Reusable prepared session that owns target lifetime and serializes the sole coordinator route. */

@@ -105,10 +105,15 @@ internal fun validateCorePrimitiveDirectNativeRoute(
             "Direct CorePrimitive native geometry requires rgba8unorm.",
         )
     }
-    if (samplePlan != GPUSamplePlan.SingleSampleFrame) {
+    val sampleCount = when (samplePlan) {
+        GPUSamplePlan.SingleSampleFrame -> 1
+        is GPUSamplePlan.MultisampleFrame -> samplePlan.sampleCount
+        is GPUSamplePlan.LocalResolveApproximation -> -1
+    }
+    if (sampleCount !in setOf(1, 4)) {
         return refused(
             "unsupported.native-core-primitive.sample-plan",
-            "Direct CorePrimitive native geometry requires one sample.",
+            "Direct CorePrimitive native geometry requires one or four exact samples.",
         )
     }
     if (!canonicalPremultipliedSrcOver) {
@@ -124,6 +129,12 @@ internal fun validateCorePrimitiveDirectNativeRoute(
             semantic.coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor ||
                 semantic.coverageMode == GPUCorePrimitiveCoverageMode.ScalarAA
         is GPUCorePrimitiveGeometry.TriangulatedPath -> false
+    }
+    if (sampleCount == 4 && analyticShape) {
+        return refused(
+            "unsupported.native-core-primitive.sample-plan",
+            "The color-only 4x lane accepts hard direct geometry; analytic coverage remains single-sample.",
+        )
     }
     val coverageCompatible = when (semantic.geometry) {
         is GPUCorePrimitiveGeometry.Rect,

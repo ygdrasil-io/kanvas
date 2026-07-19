@@ -23,9 +23,9 @@ internal sealed interface GPUCorePrimitiveCoverageSampleAuthority {
 /**
  * Freezes coverage/sample support before any resource planning or native route classification.
  *
- * Capability evidence is checked only for otherwise eligible multisample routes. B3.5a keeps
- * those routes closed after proving the exact color/resolve and depth/stencil facts needed by the
- * later positive slices.
+ * Capability evidence is checked only for otherwise eligible multisample routes. The bounded
+ * B3.5c lane promotes color-only hard direct geometry at 4x while stencil AA stays closed until
+ * its independent depth/stencil attachment contract is implemented.
  */
 internal fun validateCorePrimitiveCoverageSampleAuthority(
     geometry: GPUCorePrimitiveGeometry,
@@ -147,10 +147,7 @@ internal fun validateCorePrimitiveCoverageSampleAuthority(
         )
     }
 
-    return refused(
-        "unsupported.core_primitive.coverage_sample.multisample_not_promoted",
-        "CorePrimitive has exact 4x color/resolve capability evidence but its multisample route is not promoted until B3.5c.",
-    )
+    return GPUCorePrimitiveCoverageSampleAuthority.Accepted
 }
 
 private fun capabilityRefusalMessage(

@@ -1035,6 +1035,8 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             colorFormat = GPUColorFormat("rgba8unorm"),
             colorInterpretation = GPUColorInterpretation("srgb-premul"),
             samplePlan = samplePlan,
+            attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
+                .GPUSampleAttachmentAuthority.SceneTargetRetained,
             colorAttachment = GPUTargetIdentity(MSAA_COLOR.value),
             depthStencilAttachment = if (invalid == InvalidMsaaContinuation.DepthStencilRequired) {
                 GPUTargetIdentity("texture.msaa-depth-stencil")

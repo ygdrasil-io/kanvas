@@ -744,6 +744,7 @@ private fun GPUDestinationSnapshotGroupKey.dumpLabel(): String {
             "sampleFormat=${value.colorFormat.value};" +
             "sampleColor=${value.colorInterpretation.value};" +
             "sampleCount=${value.samplePlan.sampleCount};" +
+            "attachmentAuthority=${value.attachmentAuthority.name};" +
             "colorAttachment=${value.colorAttachment.value};" +
             "depthStencilAttachment=${value.depthStencilAttachment?.value ?: "none"};"
     } ?: "sampleContinuation=none;"

@@ -115,6 +115,11 @@ const val CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_BINDING_LAYOUT_HASH =
 const val CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_BINDING_LAYOUT_HASH =
     "layout.core-primitive.coverage-mask-consumer.uniform64-texture2d-v1"
 const val CORE_PRIMITIVE_TARGET_STATE_HASH = "target.rgba8unorm.single-sample"
+internal fun corePrimitiveTargetStateHash(sampleCount: Int): String = when (sampleCount) {
+    1 -> CORE_PRIMITIVE_TARGET_STATE_HASH
+    4 -> "target.rgba8unorm.multisample-4x-resolve"
+    else -> "target.rgba8unorm.unsupported-${sampleCount}x"
+}
 const val CORE_PRIMITIVE_VERTEX_SOURCE_LABEL = "core-primitive-device-geometry"
 const val CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL = "opaque-white"
 
@@ -1332,11 +1337,36 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 }
             }
         }
-        if (baseRenders.any { it.samplePlan != GPUSamplePlan.SingleSampleFrame }) {
+        val preparedSamplePlan = baseRenders.map(GPUTask.Render::samplePlan).distinct().singleOrNull()
+            ?: return refused(
+                "unsupported.recording.core_primitive_mixed_sample_plan",
+                "Prepared CorePrimitive renders require one exact frame sample plan.",
+            )
+        if (preparedSamplePlan != GPUSamplePlan.SingleSampleFrame &&
+            preparedSamplePlan != GPUSamplePlan.MultisampleFrame(4)
+        ) {
             return refused(
                 "unsupported.recording.core_primitive_base_sample_plan",
-                "Prepared core primitives cannot replace a non-single-sample base render authority.",
+                "Prepared core primitives accept only an exact single-sample or 4x frame authority.",
             )
+        }
+        val multisampleContinuationKey = if (preparedSamplePlan is GPUSamplePlan.MultisampleFrame) {
+            val keys = baseRenders.mapNotNull(GPUTask.Render::sampleContinuationKey).distinct()
+            if (keys.size != 1 || baseRenders.any { it.sampleContinuationKey == null } ||
+                keys.single().samplePlan != preparedSamplePlan ||
+                keys.single().target.value != request.target.value ||
+                keys.single().attachmentAuthority !=
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority.PreparedFramePayload ||
+                keys.single().depthStencilAttachment != null
+            ) {
+                return refused(
+                    "invalid.recording.core_primitive_msaa_continuation",
+                    "Color-only CorePrimitive MSAA requires one exact payload-owned depth-free continuation key.",
+                )
+            }
+            keys.single()
+        } else {
+            null
         }
         if (basePackets.any { it.clipExecutionPlan == null }) {
             return refused(
@@ -1348,6 +1378,17 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             .filterIsInstance<GPUClipExecutionPlan.Refused>()
             .firstOrNull()
             ?.let { return refused(it.code, it.message) }
+        if (preparedSamplePlan is GPUSamplePlan.MultisampleFrame &&
+            basePackets.any { packet ->
+                val plan = packet.clipExecutionPlan
+                plan != GPUClipExecutionPlan.NoClip && plan !is GPUClipExecutionPlan.ScissorOnly
+            }
+        ) {
+            return refused(
+                "unsupported.recording.core_primitive_msaa_color_only",
+                "The B3.5c 4x route is color-only and accepts only no clip or dynamic scissor.",
+            )
+        }
         val analyticClipAuthoritiesByCommandId = linkedMapOf<
             Int,
             GPUCorePrimitiveAnalyticClipAuthority.Accepted,
@@ -2279,6 +2320,15 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 request.targetBounds,
             ),
         )
+        if (preparedSamplePlan is GPUSamplePlan.MultisampleFrame) {
+            allocations += GPUFrameMemoryAllocation(
+                "core-primitive.msaa-color-4x",
+                GPUFrameMemoryCategory.FrameLocalMsaaColor,
+                Math.multiplyExact(targetBytes, preparedSamplePlan.sampleCount.toLong()),
+                GPUFrameMemoryResourceKind.Texture2D,
+                request.targetBounds,
+            )
+        }
         if (geometryVertex != null && geometryIndex != null) {
             allocations += GPUFrameMemoryAllocation(
                 "core-primitive.vertices",
@@ -2510,6 +2560,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                             analyticIntersectionUniformBytes =
                                 analyticIntersectionUniformBytesByCommandId[basePacket.commandIdValue],
                             coverageMaskUniformSlabSeal = coverageMaskUniformSlabSeal,
+                            sampleCount = preparedSamplePlan.sampleCount,
                             publicPipelineKeys = publicPipelineKeys,
                         ),
                     )
@@ -2547,14 +2598,14 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                         if (consumerOrdinal++ == 0) "clear" else "load",
                         GPUStorePlan.Store,
                     ),
-                    samplePlan = GPUSamplePlan.SingleSampleFrame,
+                    samplePlan = preparedSamplePlan,
                     resourceUses = resourceUses,
                     provisionalSegmentKey = baseRender.provisionalSegmentKey,
                     drawPackets = preparedPackets,
                     batchEligibilityByPacketId = preparedPackets.associate { packet ->
                         packet.packetId to batchEligibility
                     },
-                    sampleContinuationKey = null,
+                    sampleContinuationKey = multisampleContinuationKey,
                     compositeMembership = baseRender.compositeMembership,
                     depthStencilLoadStore = consumerDepthStencilLoadStore(pathPlan, resourceUses),
                 )
@@ -2588,7 +2639,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 phase = GPUTaskPhase.Render,
                 target = request.target,
                 loadStore = GPULoadStorePlan("clear", GPUStorePlan.Store),
-                samplePlan = GPUSamplePlan.SingleSampleFrame,
+                samplePlan = preparedSamplePlan,
                 resourceUses = renders.flatMap(GPUTask.Render::resourceUses).distinct(),
                 provisionalSegmentKey = GPUProvisionalRenderSegmentKey(
                     "core-primitive.${if (hasPathStencil) "path-stencil" else "direct"}-batch." +
@@ -2598,6 +2649,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 batchEligibilityByPacketId = renders
                     .flatMap { render -> render.batchEligibilityByPacketId.entries }
                     .associate { it.toPair() },
+                sampleContinuationKey = multisampleContinuationKey,
                 depthStencilLoadStore = pathDepthStencilLoadStore.takeIf { hasPathStencil },
             )
         }
@@ -3320,6 +3372,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         analyticIntersectionUniformSlabPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan?,
         analyticIntersectionUniformBytes: ByteArray?,
         coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal?,
+        sampleCount: Int,
         publicPipelineKeys: MutableMap<GPUCorePrimitiveRenderPipelineStructuralKey, GPURenderPipelineKey>,
     ): GPUDrawPacket {
         val clipExecutionPlan = requireNotNull(basePacket.clipExecutionPlan)
@@ -3346,6 +3399,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 preparedSemantic,
                 clipExecutionPlan,
                 requireNotNull(basePacket.blendPlan),
+                sampleCount,
             )
         }
         val structuralPipelineKey = if (pathDepthStencilCompatible) {
@@ -3466,7 +3520,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         } else {
             null
         },
-        targetStateHash = CORE_PRIMITIVE_TARGET_STATE_HASH,
+        targetStateHash = corePrimitiveTargetStateHash(sampleCount),
         originalPaintOrder = basePacket.originalPaintOrder,
         resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
         frameProvenance = basePacket.frameProvenance,

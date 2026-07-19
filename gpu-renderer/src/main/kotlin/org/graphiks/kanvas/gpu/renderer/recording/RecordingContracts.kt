@@ -1137,6 +1137,7 @@ private fun GPUTask.dumpLine(): String =
 private fun GPUSampleContinuationKey.stableLabel(): String =
     "${target.value}@${targetGeneration}:${deviceGeneration.value}:" +
         "${colorFormat.value}:${colorInterpretation.value}:${samplePlan.specializationKey}:" +
+        "${attachmentAuthority.name}:" +
         "${colorAttachment.value}:${depthStencilAttachment?.value ?: "none"}"
 
 private fun GPUTaskDependency.dumpLine(): String =

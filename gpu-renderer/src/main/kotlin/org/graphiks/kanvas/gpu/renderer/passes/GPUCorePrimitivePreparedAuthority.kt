@@ -608,6 +608,7 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
     semantic: GPUDrawSemanticPayload.CorePrimitive,
     clipExecutionPlan: GPUClipExecutionPlan,
     blendPlan: GPUBlendPlan,
+    sampleCount: Int = 1,
 ): GPUCorePrimitiveRenderPipelineStructuralKey = GPUCorePrimitiveRenderPipelineStructuralKey(
     shader = when (val geometry = semantic.geometry) {
         is GPUCorePrimitiveGeometry.Rect -> if (
@@ -643,6 +644,7 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
     },
     blend = blendPlan.corePrimitiveStructuralBlend(),
     clip = clipExecutionPlan.corePrimitiveStructuralClip(),
+    sampleCount = sampleCount,
 )
 
 /** Pure, handle-free structural authority for the two path stencil-cover roles. */

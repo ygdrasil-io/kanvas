@@ -68,7 +68,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_SHAPE_
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE_KEY
-import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveTargetStateHash
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDirectClipAuthority
@@ -2504,6 +2504,31 @@ internal class GPUFramePreflighter(
             render.drawPackets.any { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive }
         }
         if (coreRenders.isEmpty()) return null
+        if (coreRenders.any { render ->
+                render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+                    render.sampleContinuation?.key?.attachmentAuthority !=
+                    org.graphiks.kanvas.gpu.renderer.passes
+                        .GPUSampleAttachmentAuthority.PreparedFramePayload
+            }
+        ) {
+            return diagnostic(
+                "unsupported.preflight.core_primitive_msaa_attachment_authority",
+                "The B3.5c CorePrimitive 4x route requires payload-owned MSAA attachment authority.",
+            )
+        }
+        if (coreRenders.any { render ->
+                render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+                    (render.depthStencilLoadStore != null || render.resourceUses.any { use ->
+                        use.role == GPUFrameResourceRole.PathDepthStencil ||
+                            use.role == GPUFrameResourceRole.ClipDepthStencil
+                    })
+            }
+        ) {
+            return diagnostic(
+                "unsupported.preflight.core_primitive_msaa_depth_stencil",
+                "The B3.5c CorePrimitive 4x route is color-only and refuses depth/stencil state.",
+            )
+        }
         data class Direct(
             val sourceStepIndex: Int,
             val render: GPUFrameStep.RenderPassStep,
@@ -2722,6 +2747,7 @@ internal class GPUFramePreflighter(
                 entry.semantic,
                 clipExecutionPlan,
                 blendPlan,
+                directRender.samplePlan.sampleCount,
             )
             val authority = packetAuthorities[acceptedIndex]
             if (authority.structuralPipelineKey != expectedStructuralKey ||
@@ -3247,6 +3273,7 @@ internal class GPUFramePreflighter(
             .filterIsInstance<GPUFrameStep.RenderPassStep>()
             .firstOrNull { render ->
                 render.samplePlan != GPUSamplePlan.SingleSampleFrame &&
+                    render.samplePlan != GPUSamplePlan.MultisampleFrame(4) &&
                     render.drawPackets.any { packet ->
                         packet.renderStepId.value == CORE_PRIMITIVE_RENDER_STEP_IDENTITY
                     }
@@ -3254,7 +3281,7 @@ internal class GPUFramePreflighter(
         return invalidRender?.let {
             diagnostic(
                 "invalid.preflight.core_primitive_render_authority",
-                "Core primitive render passes require the canonical single-sample plan.",
+                "Core primitive render passes require the canonical single-sample or exact 4x plan.",
             )
         }
     }
@@ -3642,6 +3669,7 @@ internal class GPUFramePreflighter(
                         semantic,
                         clipExecutionPlan,
                         blendPlan,
+                        render.samplePlan.sampleCount,
                     ).let { structuralKey ->
                         if (render.resourceUses.any {
                                 it.role == GPUFrameResourceRole.PathDepthStencil
@@ -3707,7 +3735,7 @@ internal class GPUFramePreflighter(
             packet.renderStepVersion != 1 ||
             packet.bindingLayoutHash != expectedBindingLayoutHash ||
             packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
-            packet.targetStateHash != CORE_PRIMITIVE_TARGET_STATE_HASH ||
+            packet.targetStateHash != corePrimitiveTargetStateHash(render.samplePlan.sampleCount) ||
             packet.scissorBoundsHash != if (coverageMaskConsumerSlot == null) {
                 corePrimitiveScissorAuthority(semantic.scissorBounds)
             } else {

@@ -12,12 +12,140 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 class GPUWgpu4kCorePrimitiveFramePoolTest {
+    @Test
+    fun `single sample and 4x frame slots stay disjoint while each sample lane reuses independently`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+
+        val single = pool.acquire(requirements(sampleCount = 1)).acquiredLease()
+        single.rollbackBeforeSubmit()
+        val multisample = pool.acquire(requirements(sampleCount = 4)).acquiredLease()
+        multisample.rollbackBeforeSubmit()
+        val singleAgain = pool.acquire(requirements(sampleCount = 1)).acquiredLease()
+
+        assertNotEquals(single.slotId, multisample.slotId)
+        assertEquals(single.slotId, singleAgain.slotId)
+        assertSame(single.handles.vertexBuffer, singleAgain.handles.vertexBuffer)
+        assertEquals(1, single.handles.sampleCount)
+        assertEquals(4, multisample.handles.sampleCount)
+        assertNotSame(single.handles.vertexBuffer, multisample.handles.vertexBuffer)
+        assertSame(multisample.handles.msaaColor?.texture, multisample.handles.msaaColor?.texture)
+        assertEquals(msaaColor(32, 24), multisample.handles.msaaColor?.requirement)
+
+        val multisampleAgain = pool.acquire(requirements(sampleCount = 4)).acquiredLease()
+        assertEquals(multisample.slotId, multisampleAgain.slotId)
+        assertSame(multisample.handles.msaaColor?.texture, multisampleAgain.handles.msaaColor?.texture)
+        assertSame(multisample.handles.msaaColor?.view, multisampleAgain.handles.msaaColor?.view)
+        assertEquals(1L, pool.counters().msaaColorTextureCreations)
+        assertEquals(1L, pool.counters().msaaColorSlotReuses)
+
+        singleAgain.rollbackBeforeSubmit()
+        multisampleAgain.rollbackBeforeSubmit()
+        pool.close()
+        assertTrue(factory.closeEvents.contains("close:msaaColorView"))
+        assertTrue(factory.closeEvents.contains("close:msaaColorTexture"))
+        assertTrue(
+            factory.closeEvents.indexOf("close:msaaColorView") <
+                factory.closeEvents.indexOf("close:msaaColorTexture"),
+        )
+    }
+
+    @Test
+    fun `4x attachment resize and target generation replacement publish transactionally`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val firstRequirement = msaaColor(32, 24, targetGeneration = 1L)
+        val first = pool.acquire(
+            requirements(sampleCount = 4, msaaColorRequirement = firstRequirement),
+        ).acquiredLease()
+        val firstTexture = requireNotNull(first.handles.msaaColor).texture
+        val firstView = requireNotNull(first.handles.msaaColor).view
+        first.rollbackBeforeSubmit()
+
+        val changedGeneration = msaaColor(32, 24, targetGeneration = 2L)
+        factory.failNext(GPUWgpu4kCorePrimitiveFramePoolResource.MsaaColorView)
+        val refused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(
+            pool.acquire(
+                requirements(sampleCount = 4, msaaColorRequirement = changedGeneration),
+            ),
+        )
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolResource.MsaaColorView,
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed>(refused.reason).resource,
+        )
+
+        val originalAgain = pool.acquire(
+            requirements(sampleCount = 4, msaaColorRequirement = firstRequirement),
+        ).acquiredLease()
+        assertSame(firstTexture, requireNotNull(originalAgain.handles.msaaColor).texture)
+        assertSame(firstView, requireNotNull(originalAgain.handles.msaaColor).view)
+        originalAgain.rollbackBeforeSubmit()
+
+        val resized = msaaColor(64, 48, targetGeneration = 2L)
+        val replacement = pool.acquire(
+            requirements(sampleCount = 4, msaaColorRequirement = resized),
+        ).acquiredLease()
+        assertEquals(first.slotId, replacement.slotId)
+        assertEquals(resized, requireNotNull(replacement.handles.msaaColor).requirement)
+        assertNotSame(firstTexture, requireNotNull(replacement.handles.msaaColor).texture)
+        assertTrue(factory.closeAttempts(firstView) >= 1)
+        assertTrue(factory.closeAttempts(firstTexture) >= 1)
+        assertEquals(2L, pool.counters().msaaColorTextureCreations)
+
+        replacement.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `4x attachment identity change replaces texture at equal target generation and extent`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val firstRequirement = msaaColor(
+            32,
+            24,
+            colorAttachment = "msaa-color:target.core.authority:first",
+        )
+        val first = pool.acquire(
+            requirements(sampleCount = 4, msaaColorRequirement = firstRequirement),
+        ).acquiredLease()
+        val firstMsaa = requireNotNull(first.handles.msaaColor)
+        first.rollbackBeforeSubmit()
+
+        val replacementRequirement = firstRequirement.copy(
+            colorAttachment = GPUTargetIdentity("msaa-color:target.core.authority:replacement"),
+        )
+        val replacement = pool.acquire(
+            requirements(sampleCount = 4, msaaColorRequirement = replacementRequirement),
+        ).acquiredLease()
+        val replacementMsaa = requireNotNull(replacement.handles.msaaColor)
+
+        assertEquals(first.slotId, replacement.slotId)
+        assertNotSame(firstMsaa.texture, replacementMsaa.texture)
+        assertNotSame(firstMsaa.view, replacementMsaa.view)
+        assertEquals(replacementRequirement, replacementMsaa.requirement)
+        assertEquals(
+            replacementRequirement,
+            factory.creations.last {
+                it.resource == GPUWgpu4kCorePrimitiveFramePoolResource.MsaaColorTexture
+            }.msaaColorRequirement,
+        )
+        assertEquals(1, factory.closeAttempts(firstMsaa.view))
+        assertEquals(1, factory.closeAttempts(firstMsaa.texture))
+        assertEquals(2L, pool.counters().msaaColorTextureCreations)
+
+        replacement.rollbackBeforeSubmit()
+        pool.close()
+    }
+
     @Test
     fun `initial checkout uses generation scoped power of two floors and rollback reuses the slot`() {
         val factory = FakeFactory()
@@ -1532,6 +1660,9 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         coverageMask: GPUWgpu4kCorePrimitiveCoverageMaskRequirement? = null,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
             PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+        sampleCount: Int = 1,
+        msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement? =
+            if (sampleCount == 4) msaaColor(32, 24) else null,
     ) = GPUWgpu4kCorePrimitiveFramePoolRequirements(
         deviceGeneration = deviceGeneration,
         vertexBytes = vertexBytes,
@@ -1541,6 +1672,22 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         componentIdentity = componentIdentity,
         clipDepthStencil = clipDepthStencil,
         coverageMask = coverageMask,
+        sampleCount = sampleCount,
+        msaaColor = msaaColorRequirement,
+    )
+
+    private fun msaaColor(
+        width: Int,
+        height: Int,
+        targetGeneration: Long = 1L,
+        colorAttachment: String = "msaa-color:target.core.authority:1",
+    ) = GPUWgpu4kCorePrimitiveMsaaColorRequirement(
+        target = GPUFrameTargetRef("target.core.authority"),
+        colorAttachment = GPUTargetIdentity(colorAttachment),
+        deviceGeneration = GENERATION,
+        targetGeneration = targetGeneration,
+        width = width,
+        height = height,
     )
 
     private fun maskRequirements(
@@ -1665,6 +1812,21 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             GPUBindGroup::class.java,
         )
 
+        override fun createMsaaColorTexture(
+            requirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement,
+        ): GPUTexture = create(
+            GPUWgpu4kCorePrimitiveFramePoolResource.MsaaColorTexture,
+            "msaaColorTexture",
+            GPUTexture::class.java,
+            msaaColorRequirement = requirement,
+        )
+
+        override fun createMsaaColorView(texture: GPUTexture): GPUTextureView = create(
+            GPUWgpu4kCorePrimitiveFramePoolResource.MsaaColorView,
+            "msaaColorView",
+            GPUTextureView::class.java,
+        )
+
         fun failNext(resource: GPUWgpu4kCorePrimitiveFramePoolResource) {
             nextFailure = resource
         }
@@ -1689,6 +1851,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
             coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement? = null,
             componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity? = null,
+            msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement? = null,
         ): T {
             if (nextFailure == resource) {
                 nextFailure = null
@@ -1720,6 +1883,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
                 clipDepthStencilRequirement,
                 coverageMaskRequirement,
                 componentIdentity,
+                msaaColorRequirement,
             )
             return handle
         }
@@ -1744,6 +1908,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         val clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
         val coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement? = null,
         val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity? = null,
+        val msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement? = null,
     )
 
     private companion object {

@@ -41,6 +41,28 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     @Test
+    fun `direct color only pipeline maps exact 4x structural sample state`() {
+        val key = directKey().copy(sampleCount = 4)
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+        )
+        val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(
+            mapped.identity,
+            shader,
+            pipelineLayout,
+        )
+
+        assertEquals(4, mapped.identity.sampleCount)
+        assertEquals(4u, descriptor.multisample.count)
+        assertNull(descriptor.depthStencil)
+        assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Refused>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
+                key.copy(depthStencil = directWithPathDepthStencilKey().depthStencil),
+            ),
+        )
+    }
+
+    @Test
     fun `analytic shape has one unique uniform80 src over descriptor and twenty one total programs`() {
         val key = analyticShapeKey()
         val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(

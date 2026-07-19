@@ -96,7 +96,7 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
     return GPUWgpu4kCorePrimitivePipelineMapping.Mapped(
         GPUWgpu4kCorePrimitiveRenderPipelineIdentity(
             targetFormat = "rgba8unorm",
-            sampleCount = 1,
+            sampleCount = structuralKey.sampleCount,
             topology = "triangle-list",
             frontFace = "ccw",
             cullMode = "none",
@@ -121,9 +121,13 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
 
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
     GPUWgpu4kCorePrimitivePipelineProgram? {
-    if (sampleCount != 1 || frontFace != GPUCorePrimitiveRenderPipelineStructuralKey.FrontFace.Ccw ||
+    if (sampleCount !in setOf(1, 4) ||
+        frontFace != GPUCorePrimitiveRenderPipelineStructuralKey.FrontFace.Ccw ||
         cullMode != GPUCorePrimitiveRenderPipelineStructuralKey.CullMode.None ||
         colorFormat != GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
+    ) return null
+    if (sampleCount == 4 && (role != GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading ||
+            shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry)
     ) return null
 
     return when (role) {
@@ -138,6 +142,8 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry -> when {
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
                     !blend.isCanonicalPremulSrcOver() -> null
+                sampleCount == 4 && (clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None ||
+                    depthStencil != GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None) -> null
                 clip is GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic &&
                     depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None ->
                     clip.nativeAnalyticProgramOrNull()
@@ -351,7 +357,7 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
             cullMode = GPUCullMode.None,
         ),
         depthStencil = if (stencilProgram) identity.program.depthStencilState() else null,
-        multisample = MultisampleState(count = 1u),
+        multisample = MultisampleState(count = identity.sampleCount.toUInt()),
         fragment = FragmentState(
             module = shader,
             entryPoint = if (identity.program.isClipStencilProducer()) {
@@ -384,7 +390,9 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
 
 internal fun isSupportedCorePrimitiveRenderPipelineIdentity(
     identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
-): Boolean = identity.targetFormat == "rgba8unorm" && identity.sampleCount == 1 &&
+): Boolean = identity.targetFormat == "rgba8unorm" &&
+    (identity.sampleCount == 1 ||
+        identity.sampleCount == 4 && identity.program == GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver) &&
     identity.topology == "triangle-list" && identity.frontFace == "ccw" &&
     identity.cullMode == "none"
 
