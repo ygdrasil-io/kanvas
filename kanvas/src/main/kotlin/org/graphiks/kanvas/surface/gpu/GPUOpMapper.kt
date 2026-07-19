@@ -2,7 +2,6 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.math.ceil
 import kotlin.math.floor
-import kotlin.math.min
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -73,8 +72,6 @@ import org.graphiks.kanvas.types.isAxisAlignedAffine
 import org.graphiks.kanvas.types.mapAxisAligned
 import org.graphiks.kanvas.types.mapAxisAlignedRect
 import org.graphiks.kanvas.types.Rect
-import org.graphiks.kanvas.types.RRect
-import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Color
@@ -915,17 +912,17 @@ internal fun DisplayOp.DrawRRect.toNormalizedCommand(
 ): NormalizedDrawCommand.FillRRect {
     val paint = this.paint
     val material = paint.toMaterial()
-    val normalizedRRect = this.rrect.normalizedForCorePrimitive()
+    val sourceRRect = this.rrect
     val gpRect = GPURect(
-        normalizedRRect.rect.left, normalizedRRect.rect.top,
-        normalizedRRect.rect.right, normalizedRRect.rect.bottom,
+        sourceRRect.rect.left, sourceRRect.rect.top,
+        sourceRRect.rect.right, sourceRRect.rect.bottom,
     )
     val gpRRect = GPURRect(
         gpRect,
-        topLeft = GPURRectCornerRadii(normalizedRRect.topLeft.x, normalizedRRect.topLeft.y),
-        topRight = GPURRectCornerRadii(normalizedRRect.topRight.x, normalizedRRect.topRight.y),
-        bottomRight = GPURRectCornerRadii(normalizedRRect.bottomRight.x, normalizedRRect.bottomRight.y),
-        bottomLeft = GPURRectCornerRadii(normalizedRRect.bottomLeft.x, normalizedRRect.bottomLeft.y),
+        topLeft = GPURRectCornerRadii(sourceRRect.topLeft.x, sourceRRect.topLeft.y),
+        topRight = GPURRectCornerRadii(sourceRRect.topRight.x, sourceRRect.topRight.y),
+        bottomRight = GPURRectCornerRadii(sourceRRect.bottomRight.x, sourceRRect.bottomRight.y),
+        bottomLeft = GPURRectCornerRadii(sourceRRect.bottomLeft.x, sourceRRect.bottomLeft.y),
     )
     val bounds = GPUBounds(gpRect.left, gpRect.top, gpRect.right, gpRect.bottom)
     val clip = this.clip.toGPUClipFacts(target)
@@ -1195,29 +1192,6 @@ internal fun DisplayOp.DrawPoints.toPath(): Path = when (this.mode) {
 private val org.graphiks.kanvas.geometry.FillType.isInverse: Boolean
     get() = this == org.graphiks.kanvas.geometry.FillType.INVERSE_WINDING ||
         this == org.graphiks.kanvas.geometry.FillType.INVERSE_EVEN_ODD
-
-private fun RRect.normalizedForCorePrimitive(): RRect {
-    val width = rect.width.coerceAtLeast(0f)
-    val height = rect.height.coerceAtLeast(0f)
-    fun CornerRadii.nonNegative() = CornerRadii(x.coerceAtLeast(0f), y.coerceAtLeast(0f))
-    val tl = topLeft.nonNegative()
-    val tr = topRight.nonNegative()
-    val br = bottomRight.nonNegative()
-    val bl = bottomLeft.nonNegative()
-    fun ratioOrOne(limit: Float, sum: Float) = if (sum > limit && sum > 0f) limit / sum else 1f
-    val scale = min(
-        1f,
-        min(
-            ratioOrOne(width, tl.x + tr.x),
-            min(
-                ratioOrOne(width, bl.x + br.x),
-                min(ratioOrOne(height, tl.y + bl.y), ratioOrOne(height, tr.y + br.y)),
-            ),
-        ),
-    )
-    fun CornerRadii.scaled() = CornerRadii(x * scale, y * scale)
-    return RRect(rect, tl.scaled(), tr.scaled(), br.scaled(), bl.scaled())
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // DrawDRRect — outer RRect contour (CW) + inner RRect contour (CCW) for hole

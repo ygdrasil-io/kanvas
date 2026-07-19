@@ -659,6 +659,96 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `draw rrect preserves raw square corner input until shared normalization`() {
+        val inventory = inventoryFor(DisplayOp.DrawRRect(
+            RRect(
+                Rect.fromLTRB(2f, 3f, 12f, 13f),
+                topLeft = CornerRadii(0f, 100f),
+                topRight = CornerRadii(2f, 2f),
+                bottomRight = CornerRadii(2f, 2f),
+                bottomLeft = CornerRadii(2f, 2f),
+            ),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+
+        val command = assertIs<NormalizedDrawCommand.FillRRect>(inventory.normalizedCommands.single())
+        assertEquals(0f, command.rrect.topLeft.x)
+        assertEquals(100f, command.rrect.topLeft.y)
+        assertEquals(2f, command.rrect.topRight.x)
+        assertEquals(2f, command.rrect.bottomRight.x)
+        assertEquals(2f, command.rrect.bottomLeft.x)
+
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(gatheredSemantic(inventory).geometry)
+        assertEquals(listOf(0f, 0f, 2f, 2f, 2f, 2f, 2f, 2f), geometry.radii)
+    }
+
+    @Test
+    fun `draw rrect keeps negative radius raw until the shared typed refusal`() {
+        val inventory = inventoryFor(DisplayOp.DrawRRect(
+            RRect(
+                Rect.fromLTRB(2f, 3f, 12f, 13f),
+                topLeft = CornerRadii(-1f, 2f),
+                topRight = CornerRadii(2f, 2f),
+                bottomRight = CornerRadii(2f, 2f),
+                bottomLeft = CornerRadii(2f, 2f),
+            ),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+
+        val command = assertIs<NormalizedDrawCommand.FillRRect>(inventory.normalizedCommands.single())
+        assertEquals(-1f, command.rrect.topLeft.x)
+        val refused = assertIs<GPUTask.Refused>(inventory.recording.taskList.tasks.single())
+        assertEquals("unsupported.geometry.rrect_radii_negative", refused.diagnostic.code.value)
+    }
+
+    @Test
+    fun `draw rrect normalizes very large finite radii without float overflow`() {
+        val inventory = inventoryFor(DisplayOp.DrawRRect(
+            RRect(
+                Rect.fromLTRB(2f, 3f, 12f, 13f),
+                topLeft = CornerRadii(Float.MAX_VALUE, Float.MAX_VALUE),
+                topRight = CornerRadii(Float.MAX_VALUE, Float.MAX_VALUE),
+                bottomRight = CornerRadii(Float.MAX_VALUE, Float.MAX_VALUE),
+                bottomLeft = CornerRadii(Float.MAX_VALUE, Float.MAX_VALUE),
+            ),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+
+        val command = assertIs<NormalizedDrawCommand.FillRRect>(inventory.normalizedCommands.single())
+        assertTrue(command.rrect.topLeft.x.isFinite())
+        assertEquals(Float.MAX_VALUE, command.rrect.topLeft.x)
+
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(gatheredSemantic(inventory).geometry)
+        assertEquals(List(8) { 5f }, geometry.radii)
+    }
+
+    @Test
+    fun `semantic gathering normalizes the same raw asymmetric rrect analyzed from display ops`() {
+        val inventory = inventoryFor(DisplayOp.DrawRRect(
+            RRect(
+                rect = Rect.fromLTRB(2f, 3f, 14f, 13f),
+                topLeft = CornerRadii(8f, 2f),
+                topRight = CornerRadii(8f, 6f),
+                bottomRight = CornerRadii(4f, 6f),
+                bottomLeft = CornerRadii(2f, 2f),
+            ),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(gatheredSemantic(inventory).geometry)
+
+        assertEquals(listOf(6f, 1.5f, 6f, 4.5f, 3f, 4.5f, 1.5f, 1.5f), geometry.radii)
+    }
+
+    @Test
     fun `direct rrect reflection permutes normalized corners into device order`() {
         val semantic = semanticFor(DisplayOp.DrawRRect(
             RRect(
@@ -675,6 +765,44 @@ class GPUFramePathApiInventoryTest {
         val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(semantic.geometry)
 
         assertEquals(listOf(3f, 1f, 4f, 1f, 1f, 1f, 2f, 1f), geometry.radii)
+    }
+
+    @Test
+    fun `direct rrect horizontal reflection permutes normalized corners into device order`() {
+        val semantic = semanticFor(DisplayOp.DrawRRect(
+            RRect(
+                Rect.fromLTRB(2f, 4f, 12f, 14f),
+                topLeft = CornerRadii(1f, 1f),
+                topRight = CornerRadii(2f, 1f),
+                bottomRight = CornerRadii(3f, 1f),
+                bottomLeft = CornerRadii(4f, 1f),
+            ),
+            Paint.fill(Color.RED),
+            Matrix33.makeAll(-1f, 0f, 32f, 0f, 1f, 0f),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(semantic.geometry)
+
+        assertEquals(listOf(2f, 1f, 1f, 1f, 4f, 1f, 3f, 1f), geometry.radii)
+    }
+
+    @Test
+    fun `direct rrect vertical reflection permutes normalized corners into device order`() {
+        val semantic = semanticFor(DisplayOp.DrawRRect(
+            RRect(
+                Rect.fromLTRB(2f, 4f, 12f, 14f),
+                topLeft = CornerRadii(1f, 1f),
+                topRight = CornerRadii(2f, 1f),
+                bottomRight = CornerRadii(3f, 1f),
+                bottomLeft = CornerRadii(4f, 1f),
+            ),
+            Paint.fill(Color.RED),
+            Matrix33.makeAll(1f, 0f, 0f, 0f, -1f, 32f),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(semantic.geometry)
+
+        assertEquals(listOf(4f, 1f, 3f, 1f, 2f, 1f, 1f, 1f), geometry.radii)
     }
 
     @Test

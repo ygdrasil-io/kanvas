@@ -9,8 +9,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPULayerScopeKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
-import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
-import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
@@ -483,13 +483,15 @@ class GPUFirstRoutePlanner(
      */
     fun plan(command: NormalizedDrawCommand.FillRRect): GPUFirstRoutePlan {
         require(command.drawKind == GPUDrawKind.FillRRect) { "GPUFirstRoutePlanner accepts only FillRRect commands" }
+        val rrectNormalization = GPURRectNormalizer.normalize(command.rrect)
 
-        command.refusalCode()?.let { code ->
+        command.refusalCode(rrectNormalization)?.let { code ->
             return refusedPlan(command = command, code = code)
         }
+        val acceptedRRect = rrectNormalization as GPURRectNormalizationResult.Accepted
 
         command.maskFilter?.let {
-            return blurMaskFillRRectRouteDecision(command)
+            return blurMaskFillRRectRouteDecision(command, acceptedRRect)
         }
 
         val isLinearGradient = command.material is GPUMaterialDescriptor.LinearGradient
@@ -529,7 +531,7 @@ class GPUFirstRoutePlanner(
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
-                command.rrect.analysisDiagnostics(recordId = recordId),
+                acceptedRRect.analysisDiagnostics(recordId = recordId),
         )
         val routeDecision: GPURouteDecision.Native = if (isLinearGradient) {
             GPUFirstRouteDecisionBuilder.nativeLinearGradientRRect(
@@ -582,7 +584,10 @@ class GPUFirstRoutePlanner(
     }
 
     /** Builds an executable blur-mask FillRRect route contract. */
-    private fun blurMaskFillRRectRouteDecision(command: NormalizedDrawCommand.FillRRect): GPUFirstRoutePlan {
+    private fun blurMaskFillRRectRouteDecision(
+        command: NormalizedDrawCommand.FillRRect,
+        acceptedRRect: GPURRectNormalizationResult.Accepted,
+    ): GPUFirstRoutePlan {
         val recordId = "analysis.fill_rrect.${command.commandId.value}"
         val routeLabel = "executable.fill_rrect.mask_blur"
         val pipelineKey = "mask-blur.rrect-fill.rgba8unorm.src_over"
@@ -613,7 +618,7 @@ class GPUFirstRoutePlanner(
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
-                command.rrect.analysisDiagnostics(recordId = recordId),
+                acceptedRRect.analysisDiagnostics(recordId = recordId),
         )
         val routeDecision = GPUFirstRouteDecisionBuilder.preparedFillPath(
             commandIdValue = command.commandId.value,
@@ -1524,13 +1529,14 @@ class GPUFirstRoutePlanner(
         }
 
     /** Returns the canonical first-expansion rrect refusal code, or null when analysis may keep a native candidate. */
-    private fun NormalizedDrawCommand.FillRRect.refusalCode(): String? =
-        coordinateRefusalCode() ?: maskFilter?.let { mf ->
+    private fun NormalizedDrawCommand.FillRRect.refusalCode(
+        rrectNormalization: GPURRectNormalizationResult,
+    ): String? =
+        coordinateRefusalCode(rrectNormalization) ?: maskFilter?.let { mf ->
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
         } ?: when {
-            !rrect.hasAcceptedRadii() -> "unsupported.geometry.rrect_radii"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type == GPUTransformType.Scale -> "unsupported.transform.rrect_scale_unproven"
@@ -1983,13 +1989,15 @@ private fun NormalizedDrawCommand.FillRect.coordinateRefusalCode(): String? =
     }
 
 /** Returns a terminal coordinate, radii, or bounds refusal code before rrect route acceptance. */
-private fun NormalizedDrawCommand.FillRRect.coordinateRefusalCode(): String? =
+private fun NormalizedDrawCommand.FillRRect.coordinateRefusalCode(
+    rrectNormalization: GPURRectNormalizationResult,
+): String? =
     when {
         transform.hasNonFiniteFacts() -> "unsupported.transform.non_finite"
-        rrect.rect.hasNaN() || bounds.hasNaN() || clip.bounds.hasNaN() -> "unsupported.bounds.nan"
-        rrect.rect.hasNonFinite() || bounds.hasNonFinite() || clip.bounds.hasNonFinite() ->
+        rrectNormalization is GPURRectNormalizationResult.Refused -> rrectNormalization.code
+        bounds.hasNaN() || clip.bounds.hasNaN() -> "unsupported.bounds.nan"
+        bounds.hasNonFinite() || clip.bounds.hasNonFinite() ->
             "unsupported.bounds.non_finite"
-        rrect.hasNaN() || rrect.hasNonFinite() -> "unsupported.geometry.rrect_radii"
         else -> null
     }
 
@@ -2226,53 +2234,33 @@ private fun GPURect.hasNaN(): Boolean =
 private fun GPURect.hasNonFinite(): Boolean =
     !left.isFinite() || !top.isFinite() || !right.isFinite() || !bottom.isFinite()
 
-/** Returns true when any rounded rectangle coordinate or radius is NaN. */
-private fun GPURRect.hasNaN(): Boolean =
-    topLeft.hasNaN() || topRight.hasNaN() || bottomRight.hasNaN() || bottomLeft.hasNaN()
-
-/** Returns true when any rounded rectangle coordinate or radius is infinite or NaN. */
-private fun GPURRect.hasNonFinite(): Boolean =
-    topLeft.hasNonFinite() || topRight.hasNonFinite() ||
-        bottomRight.hasNonFinite() || bottomLeft.hasNonFinite()
-
-/** Returns true when either radius component is NaN. */
-private fun GPURRectCornerRadii.hasNaN(): Boolean =
-    x.isNaN() || y.isNaN()
-
-/** Returns true when either radius component is infinite or NaN. */
-private fun GPURRectCornerRadii.hasNonFinite(): Boolean =
-    !x.isFinite() || !y.isFinite()
-
-/** Returns true when both radius components are finite and positive. */
-private fun GPURRectCornerRadii.hasPositiveFiniteRadii(): Boolean =
-    x.isFinite() && y.isFinite() && x > 0f && y > 0f
-
-/** Returns true when rrect radii are finite, positive, and already normalized for the rect extent. */
-private fun GPURRect.hasAcceptedRadii(): Boolean {
-    val width = rect.right - rect.left
-    val height = rect.bottom - rect.top
-    if (width <= 0f || height <= 0f) return false
-    if (!topLeft.hasPositiveFiniteRadii() || !topRight.hasPositiveFiniteRadii()) return false
-    if (!bottomRight.hasPositiveFiniteRadii() || !bottomLeft.hasPositiveFiniteRadii()) return false
-    return topLeft.x + topRight.x <= width &&
-        bottomLeft.x + bottomRight.x <= width &&
-        topLeft.y + bottomLeft.y <= height &&
-        topRight.y + bottomRight.y <= height
-}
-
 /** Emits stable accepted rrect geometry facts for analysis dumps. */
-private fun GPURRect.analysisDiagnostics(recordId: String): List<GPUAnalysisDiagnostic> =
-    listOf(
+private fun GPURRectNormalizationResult.Accepted.analysisDiagnostics(
+    recordId: String,
+): List<GPUAnalysisDiagnostic> {
+    val geometry = rrect
+    return listOf(
         GPUAnalysisDiagnostic(
             code = "geometry:rrect.corner_radii=" +
-                "tl(${topLeft.x},${topLeft.y});" +
-                "tr(${topRight.x},${topRight.y});" +
-                "br(${bottomRight.x},${bottomRight.y});" +
-                "bl(${bottomLeft.x},${bottomLeft.y})",
+                "tl(${geometry.topLeft.x},${geometry.topLeft.y});" +
+                "tr(${geometry.topRight.x},${geometry.topRight.y});" +
+                "br(${geometry.bottomRight.x},${geometry.bottomRight.y});" +
+                "bl(${geometry.bottomLeft.x},${geometry.bottomLeft.y})",
             recordId = recordId,
             terminal = false,
         ),
-    )
+    ) + if (wasScaled) {
+        listOf(
+            GPUAnalysisDiagnostic(
+                code = "geometry:rrect.radius_scale=$scale",
+                recordId = recordId,
+                terminal = false,
+            ),
+        )
+    } else {
+        emptyList()
+    }
+}
 
 /** Returns true when any bounds coordinate is NaN. */
 private fun GPUBounds.hasNaN(): Boolean =

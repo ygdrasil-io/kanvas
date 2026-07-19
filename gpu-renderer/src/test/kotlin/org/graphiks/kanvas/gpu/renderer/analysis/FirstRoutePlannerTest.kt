@@ -530,6 +530,59 @@ class FirstRoutePlannerTest {
         )
     }
 
+    @Test
+    fun `solid fill rrect accepts Skia normalized overlapping radii and records exact facts`() {
+        val command = GPUFillRRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(115),
+            rrect = GPURRect(
+                rect = GPURect(left = 2f, top = 3f, right = 14f, bottom = 13f),
+                topLeft = GPURRectCornerRadii(x = 8f, y = 2f),
+                topRight = GPURRectCornerRadii(x = 8f, y = 6f),
+                bottomRight = GPURRectCornerRadii(x = 4f, y = 6f),
+                bottomLeft = GPURRectCornerRadii(x = 2f, y = 2f),
+            ),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSliceRRectCapabilities()).plan(command)
+
+        assertIs<GPURouteDecision.Native>(plan.routeDecision)
+        assertContains(
+            plan.analysisRecord.diagnostics.map { it.code },
+            "geometry:rrect.corner_radii=tl(6.0,1.5);tr(6.0,4.5);br(3.0,4.5);bl(1.5,1.5)",
+        )
+        assertContains(plan.analysisRecord.diagnostics.map { it.code }, "geometry:rrect.radius_scale=0.75")
+    }
+
+    @Test
+    fun `solid fill rrect squares zero component corners and scales oversized radii`() {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        val squareCorner = firstRRectRouteCommand(
+            target = target,
+            rrect = firstRouteRRect.copy(topLeft = firstRouteRRect.topLeft.copy(x = 0f)),
+        )
+        val oversizedCorner = firstRRectRouteCommand(
+            target = target,
+            rrect = firstRouteRRect.copy(bottomLeft = firstRouteRRect.bottomLeft.copy(x = 99f)),
+        )
+
+        val squareCornerPlan = GPUFirstRoutePlanner(capabilities = squareCorner.capabilities).plan(squareCorner.command)
+        val oversizedCornerPlan = GPUFirstRoutePlanner(capabilities = oversizedCorner.capabilities).plan(oversizedCorner.command)
+
+        assertIs<GPURouteDecision.Native>(squareCornerPlan.routeDecision)
+        assertContains(
+            squareCornerPlan.analysisRecord.diagnostics.map { it.code },
+            "geometry:rrect.corner_radii=tl(0.0,0.0);tr(4.0,5.0);br(4.0,5.0);bl(4.0,5.0)",
+        )
+        assertIs<GPURouteDecision.Native>(oversizedCornerPlan.routeDecision)
+        assertTrue(
+            oversizedCornerPlan.analysisRecord.diagnostics.any {
+                it.code.startsWith("geometry:rrect.radius_scale=")
+            },
+        )
+    }
+
     /** Accepted FillRRect with LinearGradient material routes natively with gradient render step. */
     @Test
     fun `linear gradient fill rrect routes natively with gradient step and pipeline key`() {
@@ -606,21 +659,33 @@ class FirstRoutePlannerTest {
     fun `unsupported fill rrect variants produce canonical refusal diagnostics`() {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val cases = listOf(
-            "unsupported.geometry.rrect_radii" to firstRRectRouteCommand(
+            "unsupported.geometry.rrect_bounds" to firstRRectRouteCommand(
                 target = target,
-                rrect = firstRouteRRect.copy(topLeft = firstRouteRRect.topLeft.copy(x = 0f)),
+                rrect = firstRouteRRect.copy(
+                    rect = firstRouteRRect.rect.copy(right = firstRouteRRect.rect.left),
+                ),
             ),
-            "unsupported.geometry.rrect_radii" to firstRRectRouteCommand(
+            "unsupported.geometry.rrect_bounds" to firstRRectRouteCommand(
+                target = target,
+                rrect = firstRouteRRect.copy(
+                    rect = firstRouteRRect.rect.copy(right = firstRouteRRect.rect.left - 1f),
+                ),
+            ),
+            "unsupported.geometry.rrect_bounds" to firstRRectRouteCommand(
+                target = target,
+                rrect = firstRouteRRect.copy(rect = firstRouteRRect.rect.copy(left = Float.NaN)),
+            ),
+            "unsupported.geometry.rrect_radii_non_finite" to firstRRectRouteCommand(
                 target = target,
                 rrect = firstRouteRRect.copy(topRight = firstRouteRRect.topRight.copy(y = Float.POSITIVE_INFINITY)),
             ),
-            "unsupported.geometry.rrect_radii" to firstRRectRouteCommand(
+            "unsupported.geometry.rrect_radii_non_finite" to firstRRectRouteCommand(
+                target = target,
+                rrect = firstRouteRRect.copy(topLeft = firstRouteRRect.topLeft.copy(x = Float.NaN)),
+            ),
+            "unsupported.geometry.rrect_radii_negative" to firstRRectRouteCommand(
                 target = target,
                 rrect = firstRouteRRect.copy(bottomRight = firstRouteRRect.bottomRight.copy(x = -1f)),
-            ),
-            "unsupported.geometry.rrect_radii" to firstRRectRouteCommand(
-                target = target,
-                rrect = firstRouteRRect.copy(bottomLeft = firstRouteRRect.bottomLeft.copy(x = 99f)),
             ),
             "unsupported.transform.rrect_scale_unproven" to firstRRectRouteCommand(
                 target = target,

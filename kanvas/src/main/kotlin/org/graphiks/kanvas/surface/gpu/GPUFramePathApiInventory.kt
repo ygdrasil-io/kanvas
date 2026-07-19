@@ -17,6 +17,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -407,17 +409,24 @@ private fun NormalizedDrawCommand.toDeviceGeometry(
                 mapOf("transformType" to transform.type.name),
             )
         }
-        val first = transform.map(rrect.rect.left, rrect.rect.top)
-        val second = transform.map(rrect.rect.right, rrect.rect.bottom)
+        val normalizedRRect = when (val normalized = GPURRectNormalizer.normalize(rrect)) {
+            is GPURRectNormalizationResult.Accepted -> normalized.rrect
+            is GPURRectNormalizationResult.Refused -> refuseGeometry(
+                normalized.code,
+                mapOf("normalizationReason" to normalized.message),
+            )
+        }
+        val first = transform.map(normalizedRRect.rect.left, normalizedRRect.rect.top)
+        val second = transform.map(normalizedRRect.rect.right, normalizedRRect.rect.bottom)
         val scaleX = abs(transform.scaleX)
         val scaleY = abs(transform.scaleY)
         fun deviceCorner(deviceLeft: Boolean, deviceTop: Boolean) = when {
             (if (transform.scaleX < 0f) !deviceLeft else deviceLeft) &&
-                (if (transform.scaleY < 0f) !deviceTop else deviceTop) -> rrect.topLeft
+                (if (transform.scaleY < 0f) !deviceTop else deviceTop) -> normalizedRRect.topLeft
             !(if (transform.scaleX < 0f) !deviceLeft else deviceLeft) &&
-                (if (transform.scaleY < 0f) !deviceTop else deviceTop) -> rrect.topRight
-            !(if (transform.scaleX < 0f) !deviceLeft else deviceLeft) -> rrect.bottomRight
-            else -> rrect.bottomLeft
+                (if (transform.scaleY < 0f) !deviceTop else deviceTop) -> normalizedRRect.topRight
+            !(if (transform.scaleX < 0f) !deviceLeft else deviceLeft) -> normalizedRRect.bottomRight
+            else -> normalizedRRect.bottomLeft
         }
         val tl = deviceCorner(deviceLeft = true, deviceTop = true)
         val tr = deviceCorner(deviceLeft = false, deviceTop = true)
