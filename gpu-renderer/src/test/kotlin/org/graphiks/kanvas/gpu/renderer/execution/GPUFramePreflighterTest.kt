@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUBindGroup
 import io.ygdrasil.webgpu.GPURenderPipeline
+import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureView
 import java.io.File
 import java.lang.reflect.Proxy
@@ -14,6 +15,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
@@ -220,6 +223,90 @@ class GPUFramePreflighterTest {
                 assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
             )
             assertTrue(events.isEmpty(), "pure validation side effects: $events")
+        }
+    }
+
+    @Test
+    fun `closed coverage route cannot mask a forged core semantic envelope`() {
+        val semantic = coreSemantic(coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA)
+        val render = coreRenderStep(
+            semantic,
+            packetCommandIdValue = semantic.payloadRef.commandIdValue + 1,
+        )
+        val events = mutableListOf<String>()
+        val resources = RecordingResourceProvider(events)
+
+        val result = preflighter(
+            resources = resources,
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+        ).preflight(
+            framePlan(
+                listOf(
+                    prepareScene(),
+                    render,
+                ),
+            ),
+        )
+
+        assertEquals(
+            "invalid.preflight.core_primitive_semantic_integrity",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertEquals(0, resources.beginFramePreparationCount)
+        assertTrue(events.isEmpty(), "semantic envelope refusal produced side effects: $events")
+    }
+
+    @Test
+    fun `later closed coverage route cannot mask an earlier missing core semantic`() {
+        val events = mutableListOf<String>()
+        val resources = RecordingResourceProvider(events)
+        val plan = framePlan(
+            listOf(
+                prepareScene(),
+                coreRenderStep(null, packetId = "packet.core.missing"),
+                coreRenderStep(
+                    coreSemantic(coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA),
+                    packetId = "packet.core.scalar",
+                ),
+            ),
+        )
+        val result = preflighter(
+            resources = resources,
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+        ).preflight(plan)
+
+        assertEquals(
+            "invalid.preflight.core_primitive_semantic_payload_missing",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertEquals(0, resources.beginFramePreparationCount)
+        assertTrue(events.isEmpty(), "missing semantic refusal produced side effects: $events")
+
+        val nativeEvents = mutableListOf<String>()
+        val adapter = GPURuntimeResourceAdapter()
+        val concreteResources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        try {
+            val nativeResult = preflighter(
+                resources = concreteResources,
+                completion = RecordingCompletionProvider(nativeEvents),
+                surface = RecordingSurfaceProvider(nativeEvents),
+                nativeBoundary = adapter.bindNativeFrameBoundary(
+                    concreteResources,
+                    RenderOnlyNativePayloadMaterializer(nativeEvents),
+                ),
+            ).preflight(plan)
+
+            assertEquals(
+                "invalid.preflight.core_primitive_semantic_payload_missing",
+                assertIs<GPUFramePreflightResult.Refused>(nativeResult).diagnostic.code.value,
+            )
+            assertTrue(nativeEvents.isEmpty(), "missing semantic reached native work: $nativeEvents")
+            assertEquals(0, adapter.activePreparedNativeFramePayloadCount)
+            assertEquals(0, concreteResources.pendingPhysicalReservationCount)
+        } finally {
+            adapter.close()
         }
     }
 
@@ -1275,6 +1362,15 @@ class GPUFramePreflighterTest {
         )
 
         scenarios.forEach { scenario ->
+            val expectedCode = if (scenario.label in setOf(
+                    "consumer-uniform-slot",
+                    "plan-with-seal",
+                )
+            ) {
+                "invalid.preflight.core_primitive_semantic_integrity"
+            } else {
+                "invalid.preflight.core_primitive_coverage_mask_prepared_route"
+            }
             val events = mutableListOf<String>()
             val result = preflighter(
                 resources = RecordingResourceProvider(events),
@@ -1285,7 +1381,7 @@ class GPUFramePreflighterTest {
             ).preflight(scenario.plan)
 
             assertEquals(
-                "invalid.preflight.core_primitive_coverage_mask_prepared_route",
+                expectedCode,
                 assertIs<GPUFramePreflightResult.Refused>(
                     result,
                     scenario.label,
@@ -1795,7 +1891,9 @@ class GPUFramePreflighterTest {
         )
 
         scenarios.forEach { (label, plan) ->
-            val expectedCode = if (label in setOf(
+            val expectedCode = if (label == "blend") {
+                "invalid.preflight.core_primitive_semantic_integrity"
+            } else if (label in setOf(
                     "candidate identity",
                     "missing producer candidate",
                     "producer key",
@@ -2713,7 +2811,7 @@ class GPUFramePreflighterTest {
         ).preflight(plan)
 
         assertEquals(
-            "invalid.preflight.core_primitive_path_stencil",
+            "invalid.preflight.core_primitive_semantic_integrity",
             assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
         )
         assertTrue(events.isEmpty(), "unsupported path clip escaped pure validation: $events")
@@ -2933,6 +3031,11 @@ class GPUFramePreflighterTest {
         )
         assertFalse(production.contains("directCorePrimitiveNativeRouteOrNull"))
         assertFalse(production.contains("validateCorePrimitiveNativeRoute"))
+        assertEquals(
+            3,
+            Regex("""\bvalidateCorePrimitiveCoverageSampleAuthority\(""").findAll(production).count(),
+            "expected one shared declaration plus the builder and pure-preflight call sites",
+        )
     }
 
     @Test
@@ -3033,7 +3136,7 @@ class GPUFramePreflighterTest {
                         ),
                     ),
                 ),
-            ) to "unsupported.native-core-primitive.geometry",
+            ) to "unsupported.core_primitive.coverage_sample.rrect_not_promoted",
             framePlan(
                 listOf(
                     prepareScene(),
@@ -3041,7 +3144,7 @@ class GPUFramePreflighterTest {
                         coreSemantic(coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA),
                     ),
                 ),
-            ) to "unsupported.native-core-primitive.coverage",
+            ) to "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
             framePlan(
                 listOf(
                     prepareScene(),
@@ -3052,7 +3155,7 @@ class GPUFramePreflighterTest {
                         ),
                     ),
                 ),
-            ) to "unsupported.native-core-primitive.geometry",
+            ) to "invalid.core_primitive.coverage_sample.geometry_coverage",
             framePlan(
                 listOf(
                     prepareScene(),
@@ -3094,7 +3197,7 @@ class GPUFramePreflighterTest {
                         samplePlan = GPUSamplePlan.MultisampleFrame(4),
                     ),
                 ),
-            ) to "unsupported.native-core-primitive.sample-plan",
+            ) to "unsupported.core_primitive.coverage_sample.color_capability",
             framePlan(
                 listOf(
                     prepareScene(format = "rgba16float"),
@@ -3329,26 +3432,140 @@ class GPUFramePreflighterTest {
     }
 
     @Test
-    fun `core multisample render authority refuses before every preflight side effect`() {
-        val events = mutableListOf<String>()
-        val result = preflighter(
-            resources = RecordingResourceProvider(events),
-            completion = RecordingCompletionProvider(events),
-            surface = RecordingSurfaceProvider(events),
-        ).preflight(
-            framePlan(
-                listOf(
-                    prepareScene(),
-                    coreRenderStep(coreSemantic(), samplePlan = GPUSamplePlan.MultisampleFrame(4)),
+    fun `core coverage sample matrix refuses before resource native registry and ticket side effects`() {
+        val completeMsaa = msaaCapabilities(depthStencil = true)
+        val colorOnlyMsaa = msaaCapabilities(depthStencil = false)
+        val cases = listOf(
+            Triple(
+                "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
+                coreRenderStep(coreSemantic(coverageMode = GPUCorePrimitiveCoverageMode.ScalarAA)),
+                capabilities(),
+            ),
+            Triple(
+                "unsupported.core_primitive.coverage_sample.rrect_not_promoted",
+                coreRenderStep(
+                    coreSemantic(
+                        sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
+                        geometry = GPUCorePrimitiveGeometryInput.RRect(
+                            1f,
+                            1f,
+                            3f,
+                            3f,
+                            List(8) { 0.5f },
+                        ),
+                    ),
                 ),
+                capabilities(),
+            ),
+            Triple(
+                "invalid.core_primitive.coverage_sample.stencil_aa_requires_multisample",
+                coreRenderStep(pathCoreSemantic(coverageMode = GPUCorePrimitiveCoverageMode.StencilAA)),
+                capabilities(),
+            ),
+            Triple(
+                "invalid.core_primitive.coverage_sample.stencil_1x_requires_single_sample",
+                coreRenderStep(
+                    pathCoreSemantic(),
+                    samplePlan = GPUSamplePlan.MultisampleFrame(4),
+                ),
+                completeMsaa,
+            ),
+            Triple(
+                "unsupported.core_primitive.coverage_sample.local_resolve",
+                coreRenderStep(
+                    coreSemantic(),
+                    samplePlan = GPUSamplePlan.LocalResolveApproximation(4),
+                ),
+                capabilities(),
+            ),
+            Triple(
+                "unsupported.core_primitive.coverage_sample.sample_count",
+                coreRenderStep(coreSemantic(), samplePlan = GPUSamplePlan.MultisampleFrame(8)),
+                completeMsaa,
+            ),
+            Triple(
+                "invalid.preflight.core_primitive_semantic_integrity",
+                coreRenderStep(
+                    coreSemantic().withTargetBounds(GPUPixelBounds(0, 0, 0, 4)),
+                    samplePlan = GPUSamplePlan.MultisampleFrame(4),
+                ),
+                completeMsaa,
+            ),
+            Triple(
+                "unsupported.core_primitive.coverage_sample.color_capability",
+                coreRenderStep(coreSemantic(), samplePlan = GPUSamplePlan.MultisampleFrame(4)),
+                capabilities(),
+            ),
+            Triple(
+                "unsupported.core_primitive.coverage_sample.multisample_not_promoted",
+                coreRenderStep(coreSemantic(), samplePlan = GPUSamplePlan.MultisampleFrame(4)),
+                completeMsaa,
+            ),
+            Triple(
+                "unsupported.core_primitive.coverage_sample.depth_stencil_capability",
+                coreRenderStep(
+                    pathCoreSemantic(coverageMode = GPUCorePrimitiveCoverageMode.StencilAA),
+                    samplePlan = GPUSamplePlan.MultisampleFrame(4),
+                ),
+                colorOnlyMsaa,
+            ),
+            Triple(
+                "unsupported.core_primitive.coverage_sample.stencil_aa_not_promoted",
+                coreRenderStep(
+                    pathCoreSemantic(coverageMode = GPUCorePrimitiveCoverageMode.StencilAA),
+                    samplePlan = GPUSamplePlan.MultisampleFrame(4),
+                ),
+                completeMsaa,
             ),
         )
 
-        assertEquals(
-            "invalid.preflight.core_primitive_render_authority",
-            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
-        )
-        assertTrue(events.isEmpty(), "pure validation side effects: $events")
+        cases.forEach { (expectedCode, render, caseCapabilities) ->
+            val plan = framePlan(
+                listOf(prepareScene(), render),
+                capabilities = caseCapabilities,
+            )
+            val events = mutableListOf<String>()
+            val resources = RecordingResourceProvider(events)
+            val result = preflighter(
+                resources = resources,
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                capabilities = caseCapabilities,
+            ).preflight(plan)
+
+            assertEquals(
+                expectedCode,
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertEquals(0, resources.beginFramePreparationCount, expectedCode)
+            assertTrue(events.isEmpty(), "$expectedCode produced pure-validation side effects: $events")
+
+            val nativeEvents = mutableListOf<String>()
+            val adapter = GPURuntimeResourceAdapter()
+            val concreteResources = GPUConcreteResourceProvider(leaseFactory = adapter)
+            try {
+                val nativeResult = preflighter(
+                    resources = concreteResources,
+                    completion = RecordingCompletionProvider(nativeEvents),
+                    surface = RecordingSurfaceProvider(nativeEvents),
+                    capabilities = caseCapabilities,
+                    nativeBoundary = adapter.bindNativeFrameBoundary(
+                        concreteResources,
+                        RenderOnlyNativePayloadMaterializer(nativeEvents),
+                    ),
+                ).preflight(plan)
+
+                assertEquals(
+                    expectedCode,
+                    assertIs<GPUFramePreflightResult.Refused>(nativeResult).diagnostic.code.value,
+                )
+                assertTrue(nativeEvents.isEmpty(), "$expectedCode reached native work: $nativeEvents")
+                assertEquals(0, adapter.activePreparedNativeFramePayloadCount, expectedCode)
+                assertEquals(0, concreteResources.pendingPhysicalReservationCount, expectedCode)
+            } finally {
+                adapter.close()
+            }
+        }
     }
 
     @Test
@@ -5945,10 +6162,11 @@ class GPUFramePreflighterTest {
         samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
         clipExecutionPlan: GPUClipExecutionPlan = GPUClipExecutionPlan.NoClip,
         packetId: String = "packet.core",
+        packetCommandIdValue: Int? = null,
     ): GPUFrameStep.RenderPassStep {
         val packet = GPUDrawPacket(
             packetId = GPUDrawPacketID(packetId),
-            commandIdValue = semantic?.payloadRef?.commandIdValue ?: 41,
+            commandIdValue = packetCommandIdValue ?: semantic?.payloadRef?.commandIdValue ?: 41,
             analysisRecordId = "analysis.core",
             passId = "pass.core",
             layerId = "root",
@@ -6429,6 +6647,7 @@ class GPUFramePreflighterTest {
 
     private fun pathCoreSemantic(
         clipExecutionPlan: GPUClipExecutionPlan = GPUClipExecutionPlan.NoClip,
+        coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
     ): GPUDrawSemanticPayload.CorePrimitive = coreSemantic(
         clipExecutionPlan = clipExecutionPlan,
         commandIdValue = 72,
@@ -6446,7 +6665,27 @@ class GPUFramePreflighterTest {
             geometryMode = GPUCorePrimitiveGeometryMode.StencilEdgeFan,
             fillRule = GPUCorePrimitiveFillRule.Winding,
         ),
-        coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
+        coverageMode = coverageMode,
+    )
+
+    private fun GPUDrawSemanticPayload.CorePrimitive.withTargetBounds(
+        targetBounds: GPUPixelBounds,
+    ): GPUDrawSemanticPayload.CorePrimitive = GPUDrawSemanticPayload.CorePrimitive(
+        payloadRef = payloadRef,
+        sourceFamily = sourceFamily,
+        geometry = geometry,
+        premultipliedRgba = premultipliedRgba,
+        targetBounds = targetBounds,
+        scissorBounds = scissorBounds,
+        clipCoveragePlan = clipCoveragePlan,
+        clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+        blendPlanIdentity = blendPlanIdentity,
+        frameProvenance = frameProvenance,
+        coverageMode = coverageMode,
+        analysisRecordId = analysisRecordId,
+        analysisCommandFamily = analysisCommandFamily,
+        rectRouteAuthority = rectRouteAuthority,
+        rectGeometryAuthority = rectGeometryAuthority,
     )
 
     private fun rectGeometryAuthorityFixture(
@@ -6833,6 +7072,26 @@ class GPUFramePreflighterTest {
             GPURendererFeature.RenderPass,
             GPURendererFeature.CopyUpload,
             GPURendererFeature.Readback,
+        ),
+    )
+
+    private fun msaaCapabilities(depthStencil: Boolean): GPUCapabilities = capabilities().copy(
+        textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+            buildMap {
+                put(
+                    GPUTextureFormat.RGBA8Unorm,
+                    GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1, 4),
+                        resolveSourceSampleCounts = setOf(4),
+                    ),
+                )
+                if (depthStencil) {
+                    put(
+                        GPUTextureFormat.Depth24PlusStencil8,
+                        GPUTextureSampleCountSupport(renderAttachmentSampleCounts = setOf(1, 4)),
+                    )
+                }
+            },
         ),
     )
 

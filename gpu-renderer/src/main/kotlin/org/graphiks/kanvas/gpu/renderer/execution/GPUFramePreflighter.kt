@@ -16,11 +16,13 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttac
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentFormat
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskConsumerInput
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedCandidateDecision
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageSampleAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRouteRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.sealGPUCorePrimitiveCoverageMaskPreparedRoute
 import org.graphiks.kanvas.gpu.renderer.passes.snapshotGPUCorePrimitiveCoverageMaskPreparedCandidate
+import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveCoverageSampleAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitivePathStencilRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
@@ -1786,6 +1788,8 @@ internal class GPUFramePreflighter(
             return diagnostic("stale.preflight.capability_seal", "The current capability snapshot differs from the frame seal.")
         }
         framePlan.memoryBudget.diagnostic?.let { return it }
+        validateCorePrimitiveSemanticEnvelopes(framePlan)?.let { return it }
+        validateCorePrimitiveCoverageSampleMatrix(framePlan)?.let { return it }
         val hasClipStencilPreparedCandidate = framePlan.steps
             .filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
@@ -3256,6 +3260,103 @@ internal class GPUFramePreflighter(
         return null
     }
 
+    private fun validateCorePrimitiveCoverageSampleMatrix(
+        framePlan: GPUFramePlan,
+    ): GPUDiagnostic? {
+        framePlan.steps.forEachIndexed { sourceStepIndex, step ->
+            val render = step as? GPUFrameStep.RenderPassStep ?: return@forEachIndexed
+            render.drawPackets.forEach { packet ->
+                val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                    ?: return@forEach
+                if (!hasCorePrimitiveSemanticEnvelopeIntegrity(packet, semantic)) {
+                    return diagnostic(
+                        "invalid.preflight.core_primitive_semantic_integrity",
+                        "Core primitive packet authority contradicts its immutable semantic input.",
+                    )
+                }
+                when (
+                    val authority = validateCorePrimitiveCoverageSampleAuthority(
+                        geometry = semantic.geometry,
+                        coverageMode = semantic.coverageMode,
+                        targetBounds = semantic.targetBounds,
+                        samplePlan = render.samplePlan,
+                        capabilities = capabilities,
+                    )
+                ) {
+                    GPUCorePrimitiveCoverageSampleAuthority.Accepted -> Unit
+                    is GPUCorePrimitiveCoverageSampleAuthority.Refused -> return diagnostic(
+                        authority.code,
+                        authority.message,
+                        mapOf(
+                            "sourceStepIndex" to sourceStepIndex.toString(),
+                            "packetId" to packet.packetId.value,
+                            "commandId" to packet.commandIdValue.toString(),
+                            "coverageMode" to semantic.coverageMode.name,
+                            "samplePlan" to render.samplePlan.specializationKey,
+                        ),
+                    )
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Validates every CorePrimitive semantic envelope before any route matrix can select a later
+     * packet refusal. This keeps missing or forged authority globally prior to coverage/sample
+     * support diagnostics and remains pure: no resource, native-registry, or ticket work occurs.
+     */
+    private fun validateCorePrimitiveSemanticEnvelopes(
+        framePlan: GPUFramePlan,
+    ): GPUDiagnostic? {
+        framePlan.steps.forEach { step ->
+            val render = step as? GPUFrameStep.RenderPassStep ?: return@forEach
+            render.drawPackets.forEach { packet ->
+                val semantic = packet.semanticPayload
+                if (packet.renderStepId.value == CORE_PRIMITIVE_RENDER_STEP_IDENTITY) {
+                    if (semantic == null) {
+                        return diagnostic(
+                            "invalid.preflight.core_primitive_semantic_payload_missing",
+                            "Executable core primitive packets require their gathered semantic payload.",
+                        )
+                    }
+                    if (semantic !is GPUDrawSemanticPayload.CorePrimitive ||
+                        !hasCorePrimitiveSemanticEnvelopeIntegrity(packet, semantic)
+                    ) {
+                        return diagnostic(
+                            "invalid.preflight.core_primitive_semantic_integrity",
+                            "Core primitive packet authority contradicts its immutable semantic input.",
+                        )
+                    }
+                } else if (semantic is GPUDrawSemanticPayload.CorePrimitive &&
+                    !hasCorePrimitiveSemanticEnvelopeIntegrity(packet, semantic)
+                ) {
+                    return diagnostic(
+                        "invalid.preflight.core_primitive_semantic_integrity",
+                        "Core primitive packet authority contradicts its immutable semantic input.",
+                    )
+                }
+            }
+        }
+        return null
+    }
+
+    private fun hasCorePrimitiveSemanticEnvelopeIntegrity(
+        packet: GPUDrawPacket,
+        semantic: GPUDrawSemanticPayload.CorePrimitive,
+    ): Boolean {
+        val clipExecutionPlan = packet.clipExecutionPlan ?: return false
+        return packet.renderStepId.value == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
+            semantic.payloadRef.renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
+            packet.commandIdValue == semantic.payloadRef.commandIdValue &&
+            packet.uniformSlot == semantic.payloadRef.uniformSlot &&
+            packet.clipCoveragePlan == semantic.clipCoveragePlan &&
+            packet.blendPlan?.canonicalIdentity() == semantic.blendPlanIdentity &&
+            packet.frameProvenance == semantic.frameProvenance &&
+            semantic.clipExecutionPlanIdentity == clipExecutionPlan.canonicalIdentity() &&
+            semantic.hasStructuralIntegrity()
+    }
+
     private fun validateSemanticPayload(
         framePlan: GPUFramePlan,
         sourceStepIndex: Int,
@@ -3320,23 +3421,13 @@ internal class GPUFramePreflighter(
         coverageMaskPreparedRouteSeal:
             GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
     ): GPUDiagnostic? {
-        val clipExecutionPlan = packet.clipExecutionPlan
-        if (packet.renderStepId.value != CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
-            semantic.payloadRef.renderStepIdentity != CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
-            packet.commandIdValue != semantic.payloadRef.commandIdValue ||
-            packet.uniformSlot != semantic.payloadRef.uniformSlot ||
-            packet.clipCoveragePlan != semantic.clipCoveragePlan ||
-            packet.blendPlan?.canonicalIdentity() != semantic.blendPlanIdentity ||
-            packet.frameProvenance != semantic.frameProvenance ||
-            clipExecutionPlan == null ||
-            semantic.clipExecutionPlanIdentity != clipExecutionPlan.canonicalIdentity() ||
-            !semantic.hasStructuralIntegrity()
-        ) {
+        if (!hasCorePrimitiveSemanticEnvelopeIntegrity(packet, semantic)) {
             return diagnostic(
                 "invalid.preflight.core_primitive_semantic_integrity",
                 "Core primitive packet authority contradicts its immutable semantic input.",
             )
         }
+        val clipExecutionPlan = requireNotNull(packet.clipExecutionPlan)
         if ((packet.role == GPUDrawPacketRole.PathStencilProducer ||
                 packet.role == GPUDrawPacketRole.PathStencilCover) &&
             !clipExecutionPlan.isCorePrimitiveNoClipOrScissorExecution()

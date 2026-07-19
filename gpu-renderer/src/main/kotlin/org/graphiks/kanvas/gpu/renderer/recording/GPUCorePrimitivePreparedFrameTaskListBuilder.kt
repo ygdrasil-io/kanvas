@@ -34,8 +34,10 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPrepa
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskUniformSlabSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageSampleAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveCoverageMaskConsumerDependencyToken
 import org.graphiks.kanvas.gpu.renderer.passes.snapshotGPUCorePrimitiveCoverageMaskPreparedCandidate
+import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveCoverageSampleAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRouteRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionElementSeal
@@ -1238,12 +1240,6 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 "Prepared core primitives require an accepted render-only base task list.",
             )
         }
-        if (baseRenders.any { it.samplePlan != GPUSamplePlan.SingleSampleFrame }) {
-            return refused(
-                "unsupported.recording.core_primitive_base_sample_plan",
-                "Prepared core primitives cannot replace a non-single-sample base render authority.",
-            )
-        }
         val basePackets = baseRenders.flatMap(GPUTask.Render::drawPackets)
         if (basePackets.map(GPUDrawPacket::commandIdValue).distinct().size != basePackets.size ||
             basePackets.map(GPUDrawPacket::commandIdValue).toSet() != request.semanticsByCommandId.keys ||
@@ -1263,6 +1259,30 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             return refused(
                 "invalid.recording.core_primitive_semantic_authority",
                 "Core primitive semantic source family and geometry must match the analyzed packet route.",
+            )
+        }
+        for (render in baseRenders) {
+            for (packet in render.drawPackets) {
+                val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
+                when (
+                    val authority = validateCorePrimitiveCoverageSampleAuthority(
+                        geometry = semantic.geometry,
+                        coverageMode = semantic.coverageMode,
+                        targetBounds = semantic.targetBounds,
+                        samplePlan = render.samplePlan,
+                        capabilities = request.capabilities,
+                    )
+                ) {
+                    GPUCorePrimitiveCoverageSampleAuthority.Accepted -> Unit
+                    is GPUCorePrimitiveCoverageSampleAuthority.Refused ->
+                        return refused(authority.code, authority.message)
+                }
+            }
+        }
+        if (baseRenders.any { it.samplePlan != GPUSamplePlan.SingleSampleFrame }) {
+            return refused(
+                "unsupported.recording.core_primitive_base_sample_plan",
+                "Prepared core primitives cannot replace a non-single-sample base render authority.",
             )
         }
         if (basePackets.any { it.clipExecutionPlan == null }) {

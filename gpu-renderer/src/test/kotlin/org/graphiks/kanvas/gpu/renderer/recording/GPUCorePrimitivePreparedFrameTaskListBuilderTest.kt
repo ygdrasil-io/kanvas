@@ -18,6 +18,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds as GPUClipBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
@@ -108,18 +110,35 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `multisample base render refuses before core builder can replace its authority`() {
+    fun `promotable multisample base render refuses with its specific closed route authority`() {
         val base = recording(command(2, 0)).taskList.withClipPlans(
             mapOf(2 to GPUClipExecutionPlan.NoClip),
         ).withSamplePlan(GPUSamplePlan.MultisampleFrame(4))
         val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
 
         val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
-            request(base, mapOf(2 to semantic(packet))),
+            request(base, mapOf(2 to semantic(packet))).copy(capabilities = msaaCapabilities()),
         )
 
         assertEquals(
-            "unsupported.recording.core_primitive_base_sample_plan",
+            "unsupported.core_primitive.coverage_sample.multisample_not_promoted",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `multisample base render without exact resolve capability refuses before route promotion`() {
+        val base = recording(command(6, 0)).taskList.withClipPlans(
+            mapOf(6 to GPUClipExecutionPlan.NoClip),
+        ).withSamplePlan(GPUSamplePlan.MultisampleFrame(4))
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, mapOf(6 to semantic(packet))),
+        )
+
+        assertEquals(
+            "unsupported.core_primitive.coverage_sample.color_capability",
             assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
         )
     }
@@ -303,34 +322,72 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `non direct coverage routes do not allocate geometry slabs`() {
+    fun `unpromoted analytic draw routes refuse before geometry or budget planning`() {
         val cases = listOf(
-            GPUCorePrimitiveGeometryInput.RRect(1f, 1f, 8f, 8f, List(8) { 1f }) to
+            Triple(
+                GPUCorePrimitiveGeometryInput.RRect(1f, 1f, 8f, 8f, List(8) { 1f }),
                 GPUCorePrimitiveCoverageMode.FullOrScissor,
-            GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f) to
+                "unsupported.core_primitive.coverage_sample.rrect_not_promoted",
+            ),
+            Triple(
+                GPUCorePrimitiveGeometryInput.Rect(1f, 1f, 8f, 8f),
                 GPUCorePrimitiveCoverageMode.ScalarAA,
+                "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
+            ),
         )
 
-        cases.forEachIndexed { index, (geometry, coverageMode) ->
+        cases.forEachIndexed { index, (geometry, coverageMode, expectedCode) ->
             val commandId = 92 + index
             val base = recording(command(commandId, index)).taskList.withClipPlans(
                 mapOf(commandId to GPUClipExecutionPlan.NoClip),
             )
             val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
-            val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            val result =
                 GPUCorePrimitivePreparedFrameTaskListBuilder().build(
-                    request(base, mapOf(commandId to semantic(packet, geometry, coverageMode))),
-                ),
-            ).taskList
+                    request(base, mapOf(commandId to semantic(packet, geometry, coverageMode))).copy(
+                        configuredAggregateBudgetBytes = 1L,
+                    ),
+                )
 
-            val preparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
-                .flatMap(GPUTask.PrepareResources::requests)
-            assertFalse(preparations.any {
-                it.role == GPUFrameResourceRole.VertexData || it.role == GPUFrameResourceRole.IndexData
-            })
             assertEquals(
-                0L,
-                taskList.memoryBudget.categoryTotals.getValue(GPUFrameMemoryCategory.ReusableScratch),
+                expectedCode,
+                assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+            )
+        }
+    }
+
+    @Test
+    fun `stencil coverage sample contradictions refuse before the legacy sample guard`() {
+        val stencilGeometry = stencilGeometry(GPUPixelBounds(1, 1, 8, 8))
+        val cases = listOf(
+            Triple(
+                GPUCorePrimitiveCoverageMode.StencilAA,
+                GPUSamplePlan.SingleSampleFrame,
+                "invalid.core_primitive.coverage_sample.stencil_aa_requires_multisample",
+            ),
+            Triple(
+                GPUCorePrimitiveCoverageMode.Stencil1x,
+                GPUSamplePlan.MultisampleFrame(4),
+                "invalid.core_primitive.coverage_sample.stencil_1x_requires_single_sample",
+            ),
+        )
+
+        cases.forEachIndexed { index, (coverageMode, samplePlan, expectedCode) ->
+            val commandId = 102 + index
+            val base = recording(command(commandId, index)).taskList.withClipPlans(
+                mapOf(commandId to GPUClipExecutionPlan.NoClip),
+            ).withSamplePlan(samplePlan)
+            val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+            val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(
+                    base,
+                    mapOf(commandId to semantic(packet, stencilGeometry, coverageMode)),
+                ).copy(capabilities = msaaCapabilities()),
+            )
+
+            assertEquals(
+                expectedCode,
+                assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
             )
         }
     }
@@ -551,7 +608,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         )
 
         assertEquals(
-            "unsupported.recording.core_primitive_analytic_clip_non_direct_geometry",
+            "unsupported.core_primitive.coverage_sample.scalar_aa_not_promoted",
             assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
         )
     }
@@ -1390,7 +1447,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             ).copy(configuredAggregateBudgetBytes = 1),
         )
         assertEquals(
-            "unsupported.recording.core_primitive_path_stencil_coverage",
+            "invalid.core_primitive.coverage_sample.geometry_coverage",
             assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(wrongCoverage).diagnostic.code.value,
         )
 
@@ -1418,7 +1475,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             ).copy(configuredAggregateBudgetBytes = 1),
         )
         assertEquals(
-            "unsupported.recording.core_primitive_path_stroke_stencil",
+            "invalid.core_primitive.coverage_sample.geometry_coverage",
             assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(unsupportedStroke).diagnostic.code.value,
         )
     }
@@ -1584,7 +1641,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `non batchable mixed frame keeps direct attachment free and isolates path stencil`() {
+    fun `unpromoted analytic draw refuses a mixed direct and path frame atomically`() {
         val base = recording(command(42, 0), command(43, 1), command(44, 2)).taskList.withClipPlans(
             mapOf(
                 42 to GPUClipExecutionPlan.NoClip,
@@ -1608,45 +1665,14 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             ),
         )
 
-        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
-            GPUCorePrimitivePreparedFrameTaskListBuilder().build(request(base, semantics)),
-        ).taskList
-        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
-        assertEquals(3, renders.size)
-
-        val direct = renders.single { render ->
-            render.drawPackets.map(GPUDrawPacket::commandIdValue) == listOf(42)
-        }
-        val path = renders.single { render ->
-            render.drawPackets.map(GPUDrawPacket::commandIdValue) == listOf(43, 43)
-        }
-        val analytic = renders.single { render ->
-            render.drawPackets.map(GPUDrawPacket::commandIdValue) == listOf(44)
-        }
-
-        listOf(direct, analytic).forEach { render ->
-            assertEquals(null, render.depthStencilLoadStore)
-            assertFalse(render.resourceUses.any { it.role == GPUFrameResourceRole.PathDepthStencil })
-            assertEquals(
-                GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None,
-                requireNotNull(render.drawPackets.single().corePrimitivePreparedAuthority)
-                    .structuralPipelineKey.depthStencil,
-            )
-        }
-        assertEquals(
-            GPUDepthStencilLoadStorePlan.WritableStencil(
-                GPUStencilLoadOperation.Clear,
-                GPUStorePlan.Discard,
-                0u,
-            ),
-            path.depthStencilLoadStore,
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, semantics).copy(configuredAggregateBudgetBytes = 1L),
         )
-        assertEquals(1, path.resourceUses.count { it.role == GPUFrameResourceRole.PathDepthStencil })
-        path.drawPackets.forEach { packet ->
-            assertIs<GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.Stencil>(
-                requireNotNull(packet.corePrimitivePreparedAuthority).structuralPipelineKey.depthStencil,
-            )
-        }
+
+        assertEquals(
+            "unsupported.core_primitive.coverage_sample.rrect_not_promoted",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
     }
 
     @Test
@@ -2365,6 +2391,20 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         ),
         supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm),
         rendererFeatures = setOf(GPURendererFeature.RenderPass, GPURendererFeature.Readback),
+    )
+
+    private fun msaaCapabilities() = capabilities().copy(
+        textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+            mapOf(
+                GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                    renderAttachmentSampleCounts = setOf(1, 4),
+                    resolveSourceSampleCounts = setOf(4),
+                ),
+                GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(
+                    renderAttachmentSampleCounts = setOf(1, 4),
+                ),
+            ),
+        ),
     )
 
     private companion object {
