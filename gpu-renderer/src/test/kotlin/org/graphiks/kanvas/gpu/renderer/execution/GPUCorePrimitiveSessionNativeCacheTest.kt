@@ -32,6 +32,39 @@ import kotlin.test.assertTrue
 
 class GPUCorePrimitiveSessionNativeCacheTest {
     @Test
+    fun `analytic shape component exposes exact uniform80 dynamic binding`() {
+        val descriptor = corePrimitiveBindGroupLayoutDescriptor(
+            PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY,
+        )
+
+        assertEquals(1, descriptor.entries.size)
+        val uniform = requireNotNull(descriptor.entries.single().buffer)
+        assertEquals(80uL, uniform.minBindingSize)
+        assertTrue(uniform.hasDynamicOffset)
+    }
+
+    @Test
+    fun `analytic shape cache identity is unique and reused within the twenty four entry ceiling`() {
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        val key = analyticShapeProductionKey()
+        val first = cache.acquire(key).acquiredHandles()
+        val second = cache.acquire(key.copy()).acquiredHandles()
+        val direct = cache.acquire(productionKey()).acquiredHandles()
+
+        assertSame(first, second)
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY, first.componentIdentity)
+        assertNotSame(first.bindGroupLayout, direct.bindGroupLayout)
+        assertNotSame(first.shader, direct.shader)
+        assertNotSame(first.pipelineLayout, direct.pipelineLayout)
+        assertEquals(2, native.pipelineCreationCount)
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(2, 1, 0), cache.counters())
+        assertEquals(24, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+
+        cache.close()
+    }
+
+    @Test
     fun `coverage mask components expose exact uniform64 and sampled texture layouts`() {
         val producer = corePrimitiveBindGroupLayoutDescriptor(
             PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
@@ -712,6 +745,11 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     ) = productionKey(program).copy(
         componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY,
     )
+
+    private fun analyticShapeProductionKey() =
+        productionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver).copy(
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY,
+        )
 
     private fun analyticIntersection4ProductionKey() =
         productionKey(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipIntersection4).copy(

@@ -7,6 +7,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -31,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
@@ -47,6 +49,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 
@@ -470,6 +473,245 @@ class FirstRoutePlannerTest {
         assertNull(invocation.scissorBoundsHash)
         assertNull(invocation.uniformSlot)
         assertNull(invocation.resourceSlot)
+    }
+
+    @Test
+    fun `fill rrect seals raw source normalized geometry and transform in one opaque authority`() {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        val command = GPUFillRRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(114),
+            rrect = GPURRect(
+                rect = GPURect(left = 2f, top = 3f, right = 14f, bottom = 13f),
+                topLeft = GPURRectCornerRadii(x = 8f, y = 2f),
+                topRight = GPURRectCornerRadii(x = 8f, y = 6f),
+                bottomRight = GPURRectCornerRadii(x = 4f, y = 6f),
+                bottomLeft = GPURRectCornerRadii(x = 2f, y = 2f),
+            ),
+            target = target,
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+        )
+
+        val plan = GPUFirstRoutePlanner(firstSliceRRectCapabilities()).plan(command)
+        val authority = requireNotNull(plan.analysisRecord.corePrimitiveRRectGeometryAuthority)
+
+        assertTrue(authority.matchesCorePrimitiveRRectGeometry(command.rrect, command.transform))
+        assertFalse(
+            authority.matchesCorePrimitiveRRectGeometry(
+                command.rrect.copy(topLeft = command.rrect.topLeft.copy(x = 7f)),
+                command.transform,
+            ),
+        )
+        assertFalse(
+            authority.matchesCorePrimitiveRRectGeometry(
+                command.rrect,
+                command.transform.copy(translateX = 1f),
+            ),
+        )
+
+        val sameNormalizedButDifferentSource = command.copy(
+            commandId = GPUDrawCommandID(116),
+            rrect = command.rrect.copy(
+                topLeft = command.rrect.topLeft.copy(
+                    x = command.rrect.topLeft.x * 2f,
+                    y = command.rrect.topLeft.y * 2f,
+                ),
+                topRight = command.rrect.topRight.copy(
+                    x = command.rrect.topRight.x * 2f,
+                    y = command.rrect.topRight.y * 2f,
+                ),
+                bottomRight = command.rrect.bottomRight.copy(
+                    x = command.rrect.bottomRight.x * 2f,
+                    y = command.rrect.bottomRight.y * 2f,
+                ),
+                bottomLeft = command.rrect.bottomLeft.copy(
+                    x = command.rrect.bottomLeft.x * 2f,
+                    y = command.rrect.bottomLeft.y * 2f,
+                ),
+            ),
+        )
+        val otherAuthority = requireNotNull(
+            GPUFirstRoutePlanner(firstSliceRRectCapabilities())
+                .plan(sameNormalizedButDifferentSource)
+                .analysisRecord
+                .corePrimitiveRRectGeometryAuthority,
+        )
+        assertEquals(authority.sealedDeviceGeometryInput(), otherAuthority.sealedDeviceGeometryInput())
+        assertNotEquals(authority, otherAuthority)
+    }
+
+    @Test
+    fun `valid refused rrect retains geometry authority while malformed rrect does not`() {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        val validRefused = firstRRectRouteCommand(
+            target = target,
+            transform = GPUTransformFacts.scale(x = 2f, y = 2f),
+        )
+        val malformed = firstRRectRouteCommand(
+            target = target,
+            rrect = firstRouteRRect.copy(
+                bottomRight = firstRouteRRect.bottomRight.copy(x = -1f),
+            ),
+        )
+
+        val validRefusedPlan = GPUFirstRoutePlanner(validRefused.capabilities).plan(validRefused.command)
+        val malformedPlan = GPUFirstRoutePlanner(malformed.capabilities).plan(malformed.command)
+
+        assertIs<GPURouteDecision.Refused>(validRefusedPlan.routeDecision)
+        assertNotNull(validRefusedPlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
+        assertIs<GPURouteDecision.Refused>(malformedPlan.routeDecision)
+        assertNull(malformedPlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
+    }
+
+    @Test
+    fun `rrect authority refuses incoherent transform facts and invalid device geometry before signing`() {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        val collapsedSource = GPURRect(
+            rect = GPURect(1f, 0f, Math.nextUp(1f), 10f),
+            radiusX = 0f,
+            radiusY = 0f,
+        )
+        val cases = listOf(
+            Triple(
+                "identity-hidden-scale",
+                "invalid.core_primitive.rrect.transform_facts",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts(GPUTransformType.Identity, scaleX = 2f),
+                ),
+            ),
+            Triple(
+                "identity-hidden-skew",
+                "invalid.core_primitive.rrect.transform_facts",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts(GPUTransformType.Identity, skewX = 0.25f),
+                ),
+            ),
+            Triple(
+                "translate-hidden-scale",
+                "invalid.core_primitive.rrect.transform_facts",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts(
+                        GPUTransformType.Translate,
+                        translateX = 4f,
+                        scaleX = 2f,
+                    ),
+                ),
+            ),
+            Triple(
+                "translate-hidden-skew",
+                "invalid.core_primitive.rrect.transform_facts",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts(
+                        GPUTransformType.Translate,
+                        translateX = 4f,
+                        skewY = 0.25f,
+                    ),
+                ),
+            ),
+            Triple(
+                "identity-signed-zero",
+                "invalid.core_primitive.rrect.transform_facts",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts(GPUTransformType.Identity, translateX = -0f),
+                ),
+            ),
+            Triple(
+                "scale-non-finite-determinant",
+                "invalid.core_primitive.rrect.transform_facts",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts.scale(Float.MAX_VALUE, Float.MAX_VALUE),
+                ),
+            ),
+            Triple(
+                "affine-zero-determinant",
+                "invalid.core_primitive.rrect.transform_facts",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts.affine(1f, 1f, 1f, 1f),
+                ),
+            ),
+            Triple(
+                "non-finite-coefficient",
+                "unsupported.transform.non_finite",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts.translation(Float.POSITIVE_INFINITY, 0f),
+                ),
+            ),
+            Triple(
+                "scale-zero-determinant",
+                "invalid.core_primitive.rrect.transform_facts",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts.scale(0f, 1f),
+                ),
+            ),
+            Triple(
+                "translation-overflow",
+                "invalid.core_primitive.rrect.device_geometry",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts.translation(Float.MAX_VALUE, 0f),
+                ),
+            ),
+            Triple(
+                "scale-collapse",
+                "invalid.core_primitive.rrect.device_geometry",
+                firstRRectRouteCommand(
+                    target,
+                    rrect = collapsedSource,
+                    transform = GPUTransformFacts.scale(Float.MIN_VALUE, 1f),
+                ),
+            ),
+            Triple(
+                "affine-skew",
+                "unsupported.transform.rrect_affine_unproven",
+                firstRRectRouteCommand(
+                    target,
+                    transform = GPUTransformFacts.affine(1f, 0.25f, 0f, 1f),
+                ),
+            ),
+            Triple(
+                "perspective",
+                "unsupported.transform.perspective",
+                firstRRectRouteCommand(target, transform = GPUTransformFacts.perspective()),
+            ),
+            Triple(
+                "singular",
+                "unsupported.transform.singular",
+                firstRRectRouteCommand(target, transform = GPUTransformFacts.singular()),
+            ),
+        )
+
+        cases.forEach { (label, expectedCode, fixture) ->
+            val plan = GPUFirstRoutePlanner(fixture.capabilities).plan(fixture.command)
+
+            assertEquals(
+                expectedCode,
+                assertIs<GPURouteDecision.Refused>(plan.routeDecision, label).diagnostic.code,
+                label,
+            )
+            assertNull(
+                plan.analysisRecord.corePrimitiveRRectGeometryAuthority,
+                "$label must not retain a partial device authority",
+            )
+        }
+
+        val validScale = firstRRectRouteCommand(
+            target,
+            transform = GPUTransformFacts.scale(2f, 3f),
+        )
+        val validScalePlan = GPUFirstRoutePlanner(validScale.capabilities).plan(validScale.command)
+        assertEquals(
+            "unsupported.transform.rrect_scale_unproven",
+            assertIs<GPURouteDecision.Refused>(validScalePlan.routeDecision).diagnostic.code,
+        )
+        assertNotNull(validScalePlan.analysisRecord.corePrimitiveRRectGeometryAuthority)
     }
 
     /** FillRRect blur metadata identifies an executable mask-blur route. */

@@ -45,6 +45,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     }
     enum class Shader {
         DirectGeometry,
+        AnalyticShape,
         AnalyticRRect,
         PathStencil,
         ClipStencilProducer,
@@ -60,6 +61,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     enum class ClipGeometry { Rect, RRect, Path }
     enum class UniformLayout(val stableIdentity: String) {
         DynamicUniform32V2("dynamic-uniform32-v2"),
+        AnalyticShapeUniform80V1("dynamic-uniform80-analytic-shape-v1"),
         AnalyticClipUniform64V1("dynamic-uniform64-analytic-clip-v1"),
         AnalyticClipUniform160V1("dynamic-uniform160-analytic-clip-intersection4-v1"),
         NoBindingsV1("no-bindings-v1"),
@@ -73,6 +75,8 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             role == Role.ClipStencilProducer -> UniformLayout.NoBindingsV1
             role == Role.CoverageMaskProducer -> UniformLayout.CoverageMaskProducerUniform64V1
             role == Role.CoverageMaskConsumer -> UniformLayout.CoverageMaskConsumerUniform64V1
+            role == Role.Shading && shader == Shader.AnalyticShape ->
+                UniformLayout.AnalyticShapeUniform80V1
             role == Role.Shading && clip is Clip.Analytic -> UniformLayout.AnalyticClipUniform64V1
             role == Role.Shading && clip == Clip.AnalyticIntersection4 ->
                 UniformLayout.AnalyticClipUniform160V1
@@ -899,13 +903,32 @@ internal data class GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal(
     val bindingLayoutHash: String,
 )
 
+/** O(1) builder authority for one exact prepared semantic object. */
+internal sealed class GPUCorePrimitivePreparedSemanticAuthority private constructor() {
+    internal abstract fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean
+
+    private class Exact(
+        private val preparedSemanticReference: GPUDrawSemanticPayload.CorePrimitive,
+    ) : GPUCorePrimitivePreparedSemanticAuthority() {
+        override fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean =
+            preparedSemanticReference === semantic
+    }
+
+    internal companion object {
+        fun capture(
+            semantic: GPUDrawSemanticPayload.CorePrimitive,
+        ): GPUCorePrimitivePreparedSemanticAuthority =
+            Exact(semantic)
+    }
+}
+
 internal data class GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal(
     val slotIndex: Int,
     val sourceOrder: Int,
     val packetId: GPUDrawPacketID,
     val commandId: Int,
     val dependencyFromPreviousConsumerToken: String?,
-    val semanticCanonicalIdentity: String,
+    val semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority,
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
     val renderPipelineKey: GPURenderPipelineKey,
     val bindingLayoutHash: String,
@@ -954,9 +977,6 @@ internal class GPUCorePrimitiveCoverageMaskUniformSlabSeal(
         require(producerSourceOrders.zipWithNext().all { (left, right) -> left < right } &&
             consumerSlots.map { it.sourceOrder }.zipWithNext().all { (left, right) -> left < right }
         ) { "Coverage-mask uniform slots require strict source order" }
-        require(consumerSlots.all { it.semanticCanonicalIdentity.isNotBlank() }) {
-            "Coverage-mask consumer slots require sealed semantic identities"
-        }
         require(consumerSlots.mapIndexed { index, slot ->
                 slot.dependencyFromPreviousConsumerToken == if (index == 0) {
                     null

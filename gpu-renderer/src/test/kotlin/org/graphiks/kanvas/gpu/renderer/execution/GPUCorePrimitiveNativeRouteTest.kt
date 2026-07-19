@@ -5,10 +5,15 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -20,6 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUCorePrimitiveRRectGeometryAuthorityIssue
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
@@ -213,8 +219,16 @@ class GPUCorePrimitiveNativeRouteTest {
             blendPlanIdentity = blend.canonicalIdentity(),
             frameProvenance = GPUFrameProvenance.GmContent,
             coverageMode = coverageMode,
-            analysisRecordId = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) "analysis.fill_rect.7" else null,
-            analysisCommandFamily = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) "FillRect" else null,
+            analysisRecordId = when (sourceFamily) {
+                GPUCorePrimitiveSourceFamily.Rect -> "analysis.fill_rect.7"
+                GPUCorePrimitiveSourceFamily.RRect -> "analysis.fill_rrect.7"
+                else -> null
+            },
+            analysisCommandFamily = when (sourceFamily) {
+                GPUCorePrimitiveSourceFamily.Rect -> "FillRect"
+                GPUCorePrimitiveSourceFamily.RRect -> "FillRRect"
+                else -> null
+            },
             rectRouteAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
                 GPUCorePrimitiveRectRouteAuthority.RectAxisAligned
             } else {
@@ -222,6 +236,11 @@ class GPUCorePrimitiveNativeRouteTest {
             },
             rectGeometryAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
                 rectGeometryAuthorityFixture(geometry as GPUCorePrimitiveGeometryInput.Rect)
+            } else {
+                null
+            },
+            rrectGeometryAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.RRect) {
+                rrectGeometryAuthorityFixture(geometry as GPUCorePrimitiveGeometryInput.RRect)
             } else {
                 null
             },
@@ -239,6 +258,24 @@ class GPUCorePrimitiveNativeRouteTest {
     ) = corePrimitiveRectGeometryAuthority(
         GPURect(geometry.left, geometry.top, geometry.right, geometry.bottom),
         GPUTransformFacts.identity(),
+    )
+
+    private fun rrectGeometryAuthorityFixture(
+        geometry: GPUCorePrimitiveGeometryInput.RRect,
+    ): org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAuthority {
+        val source = geometry.toSourceRRect()
+        val accepted = assertIs<GPURRectNormalizationResult.Accepted>(GPURRectNormalizer.normalize(source))
+        return assertIs<GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued>(
+            corePrimitiveRRectGeometryAuthority(source, accepted, GPUTransformFacts.identity()),
+        ).authority
+    }
+
+    private fun GPUCorePrimitiveGeometryInput.RRect.toSourceRRect(): GPURRect = GPURRect(
+        rect = GPURect(left, top, right, bottom),
+        topLeft = GPURRectCornerRadii(radii[0], radii[1]),
+        topRight = GPURRectCornerRadii(radii[2], radii[3]),
+        bottomRight = GPURRectCornerRadii(radii[4], radii[5]),
+        bottomLeft = GPURRectCornerRadii(radii[6], radii[7]),
     )
 
     private fun validateCorePrimitiveDirectNativeRoute(

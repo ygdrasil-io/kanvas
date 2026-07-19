@@ -79,7 +79,7 @@ internal data class GPUCorePrimitiveCoverageMaskConsumerInput(
     val packetId: GPUDrawPacketID,
     val commandId: Int,
     val sourceOrder: Int,
-    val semanticCanonicalIdentity: String,
+    val semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority,
     val coverageMode: GPUCorePrimitiveCoverageMode,
     val blendPlan: GPUBlendPlan,
     val orderingToken: GPUClipOrderingToken,
@@ -87,7 +87,7 @@ internal data class GPUCorePrimitiveCoverageMaskConsumerInput(
     val geometry: GPUCorePrimitiveGeometry,
 ) {
     init {
-        require(commandId >= 0 && sourceOrder >= 0 && semanticCanonicalIdentity.isNotBlank()) {
+        require(commandId >= 0 && sourceOrder >= 0) {
             "Coverage-mask consumer input requires stable CorePrimitive semantic and order authority"
         }
     }
@@ -120,7 +120,7 @@ internal data class GPUCorePrimitiveCoverageMaskPreparedConsumerSnapshot(
     val packetId: GPUDrawPacketID,
     val commandId: Int,
     val sourceOrder: Int,
-    val semanticCanonicalIdentity: String,
+    val semanticAuthority: GPUCorePrimitivePreparedSemanticAuthority,
     val packetRole: GPUDrawPacketRole,
     val geometry: GPUCorePrimitiveCoverageMaskConsumerGeometrySnapshot,
     val coverageMode: GPUCorePrimitiveCoverageMode,
@@ -369,7 +369,7 @@ private fun GPUCorePrimitiveCoverageMaskPreparedRouteRequest.validate(): Coverag
             packetId = consumer.packetId,
             commandId = consumer.commandId,
             sourceOrder = consumer.sourceOrder,
-            semanticCanonicalIdentity = consumer.semanticCanonicalIdentity,
+            semanticAuthority = consumer.semanticAuthority,
             packetRole = consumer.packetRole,
             geometry = requireNotNull(geometry),
             coverageMode = consumer.coverageMode,

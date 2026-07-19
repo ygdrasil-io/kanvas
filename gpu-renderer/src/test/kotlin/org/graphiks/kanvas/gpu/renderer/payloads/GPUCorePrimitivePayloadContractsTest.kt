@@ -5,24 +5,33 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import java.lang.reflect.Modifier
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUCorePrimitiveRRectGeometryAuthorityIssue
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.recording.stableCoreDump
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
@@ -111,6 +120,207 @@ class GPUCorePrimitivePayloadContractsTest {
         assertEquals(authority.hashCode(), rectGeometryAuthorityFixture().hashCode())
         assertEquals(authority.toString(), rectGeometryAuthorityFixture().toString())
         assertEquals("GPUCorePrimitiveRectGeometryAuthority(opaque)", authority.toString())
+    }
+
+    @Test
+    fun `rrect geometry authority has no public value forging surface`() {
+        val authority = rrectGeometryAuthorityFixture()
+        val publicMethodNames = authority.javaClass.methods.map { it.name }.toSet()
+        val declaredPublicMethodNames = authority.javaClass.methods
+            .filter { it.declaringClass == authority.javaClass && !it.isSynthetic }
+            .map { it.name }
+            .toSet()
+
+        assertTrue(GPUCorePrimitiveRRectGeometryAuthority::class.java.isInterface)
+        assertTrue(GPUCorePrimitiveRRectGeometryAuthority::class.java.declaredConstructors.isEmpty())
+        assertTrue(GPUCorePrimitiveRRectGeometryAuthority::class.java.declaredMethods.isEmpty())
+        assertFalse(Modifier.isPublic(authority.javaClass.modifiers))
+        assertTrue(declaredPublicMethodNames.containsAll(setOf("equals", "hashCode", "toString")))
+        assertTrue(publicMethodNames.none { it == "copy" || it.startsWith("component") })
+        assertEquals(authority, rrectGeometryAuthorityFixture())
+        assertEquals("GPUCorePrimitiveRRectGeometryAuthority(opaque)", authority.toString())
+    }
+
+    @Test
+    fun `rrect authority maps translation scale and every axis reflection with exact raw bits`() {
+        val source = GPURRect(
+            rect = GPURect(2f, 3f, 12f, 13f),
+            topLeft = GPURRectCornerRadii(1f, 2f),
+            topRight = GPURRectCornerRadii(3f, 1f),
+            bottomRight = GPURRectCornerRadii(2f, 4f),
+            bottomLeft = GPURRectCornerRadii(4f, 3f),
+        )
+        val cases = listOf(
+            Triple(
+                "translation",
+                GPUTransformFacts.translation(5f, -1f),
+                GPUCorePrimitiveGeometryInput.RRect(
+                    7f, 2f, 17f, 12f,
+                    listOf(1f, 2f, 3f, 1f, 2f, 4f, 4f, 3f),
+                ),
+            ),
+            Triple(
+                "scale",
+                GPUTransformFacts.scale(2f, 3f),
+                GPUCorePrimitiveGeometryInput.RRect(
+                    4f, 9f, 24f, 39f,
+                    listOf(2f, 6f, 6f, 3f, 4f, 12f, 8f, 9f),
+                ),
+            ),
+            Triple(
+                "reflection-x",
+                GPUTransformFacts(
+                    type = GPUTransformType.Affine,
+                    translateX = 30f,
+                    scaleX = -2f,
+                    scaleY = 3f,
+                ),
+                GPUCorePrimitiveGeometryInput.RRect(
+                    6f, 9f, 26f, 39f,
+                    listOf(6f, 3f, 2f, 6f, 8f, 9f, 4f, 12f),
+                ),
+            ),
+            Triple(
+                "reflection-y",
+                GPUTransformFacts(
+                    type = GPUTransformType.Affine,
+                    translateY = 50f,
+                    scaleX = 2f,
+                    scaleY = -3f,
+                ),
+                GPUCorePrimitiveGeometryInput.RRect(
+                    4f, 11f, 24f, 41f,
+                    listOf(8f, 9f, 4f, 12f, 6f, 3f, 2f, 6f),
+                ),
+            ),
+            Triple(
+                "reflection-xy",
+                GPUTransformFacts(
+                    type = GPUTransformType.Affine,
+                    translateX = 30f,
+                    translateY = 50f,
+                    scaleX = -2f,
+                    scaleY = -3f,
+                ),
+                GPUCorePrimitiveGeometryInput.RRect(
+                    6f, 11f, 26f, 41f,
+                    listOf(4f, 12f, 8f, 9f, 2f, 6f, 6f, 3f),
+                ),
+            ),
+        )
+
+        cases.forEach { (label, transform, expected) ->
+            val actual = rrectGeometryAuthorityFixture(source, transform).sealedDeviceGeometryInput()
+            assertRRectRawBits(expected, actual, label)
+        }
+    }
+
+    @Test
+    fun `rrect authority accepts only its sealed device geometry and analysis identity`() {
+        val authority = rrectGeometryAuthorityFixture()
+        val exactGeometry = authority.sealedDeviceGeometryInput()
+
+        val semantic = gather(
+            geometry = exactGeometry,
+            sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
+            rrectGeometryAuthority = authority,
+        )
+        assertTrue(semantic.hasCanonicalHashIntegrity())
+        assertEquals(authority, semantic.rrectGeometryAuthority)
+
+        assertFailsWith<IllegalArgumentException> {
+            gather(
+                geometry = exactGeometry,
+                sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
+                includeRRectAnalysisAuthority = false,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            gather(
+                geometry = exactGeometry.copy(
+                    radii = exactGeometry.radii.toMutableList().apply { this[0] += 1f },
+                ),
+                sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
+                rrectGeometryAuthority = authority,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            gather(
+                geometry = exactGeometry,
+                sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
+                analysisCommandFamily = "FillRect",
+                rrectGeometryAuthority = authority,
+            )
+        }
+    }
+
+    @Test
+    fun `different raw rrect sources with one normalized device geometry share structure but not canonical hash`() {
+        val source = GPURRect(
+            rect = GPURect(2f, 3f, 14f, 13f),
+            topLeft = GPURRectCornerRadii(8f, 2f),
+            topRight = GPURRectCornerRadii(8f, 6f),
+            bottomRight = GPURRectCornerRadii(4f, 6f),
+            bottomLeft = GPURRectCornerRadii(2f, 2f),
+        )
+        val doubled = source.withRadiiScale(2f)
+        val firstAuthority = rrectGeometryAuthorityFixture(source)
+        val secondAuthority = rrectGeometryAuthorityFixture(doubled)
+        val firstGeometry = firstAuthority.sealedDeviceGeometryInput()
+        val secondGeometry = secondAuthority.sealedDeviceGeometryInput()
+        val first = gather(
+            geometry = firstGeometry,
+            sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
+            rrectGeometryAuthority = firstAuthority,
+        )
+        val second = gather(
+            geometry = secondGeometry,
+            sourceFamily = GPUCorePrimitiveSourceFamily.RRect,
+            rrectGeometryAuthority = secondAuthority,
+        )
+        val blendPlan = blend(GPUBlendMode.SRC_OVER)
+        val firstStructuralKey = corePrimitiveRenderPipelineStructuralKey(
+            first,
+            GPUClipExecutionPlan.NoClip,
+            blendPlan,
+        )
+        val secondStructuralKey = corePrimitiveRenderPipelineStructuralKey(
+            second,
+            GPUClipExecutionPlan.NoClip,
+            blendPlan,
+        )
+        val copied = first.withClipExecutionPlanIdentity("clip.execution.rrect")
+
+        assertRRectRawBits(firstGeometry, secondGeometry, "normalized-device-geometry")
+        assertTrue(first.hasStructuralIntegrity())
+        assertTrue(second.hasStructuralIntegrity())
+        assertTrue(first.hasCanonicalHashIntegrity())
+        assertTrue(second.hasCanonicalHashIntegrity())
+        assertEquals(firstStructuralKey, secondStructuralKey)
+        assertNotEquals(firstAuthority, secondAuthority)
+        assertNotEquals(first.canonicalHash, second.canonicalHash)
+        assertEquals(first.rrectGeometryAuthority, copied.rrectGeometryAuthority)
+        assertTrue(copied.hasCanonicalHashIntegrity())
+    }
+
+    @Test
+    fun `rrect normalization provenance cannot be transplanted between raw sources`() {
+        val sourceA = rrectFixture()
+        val sourceB = sourceA.copy(topLeft = GPURRectCornerRadii(3f, 2f))
+        val acceptedB = assertIs<GPURRectNormalizationResult.Accepted>(
+            GPURRectNormalizer.normalize(sourceB),
+        )
+
+        assertEquals(
+            "invalid.core_primitive.rrect.normalization_provenance",
+            assertIs<GPUCorePrimitiveRRectGeometryAuthorityIssue.Refused>(
+                corePrimitiveRRectGeometryAuthority(
+                    sourceA,
+                    acceptedB,
+                    GPUTransformFacts.identity(),
+                ),
+            ).code,
+        )
     }
 
     @Test
@@ -669,6 +879,8 @@ class GPUCorePrimitivePayloadContractsTest {
         rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
         rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
         includeRectAnalysisAuthority: Boolean = true,
+        rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+        includeRRectAnalysisAuthority: Boolean = true,
     ): GPUDrawSemanticPayload.CorePrimitive {
         val resolvedSourceFamily = sourceFamily ?: when (geometry) {
             is GPUCorePrimitiveGeometryInput.Rect -> GPUCorePrimitiveSourceFamily.Rect
@@ -677,6 +889,8 @@ class GPUCorePrimitivePayloadContractsTest {
         }
         val isAuthorizedRect =
             includeRectAnalysisAuthority && resolvedSourceFamily == GPUCorePrimitiveSourceFamily.Rect
+        val isAuthorizedRRect =
+            includeRRectAnalysisAuthority && resolvedSourceFamily == GPUCorePrimitiveSourceFamily.RRect
         return GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(
             commandIdValue = 7,
@@ -689,15 +903,15 @@ class GPUCorePrimitivePayloadContractsTest {
             blendPlanIdentity = blendPlan.canonicalIdentity(),
             frameProvenance = provenance,
             coverageMode = coverageMode,
-                analysisRecordId = analysisRecordId ?: if (isAuthorizedRect) {
-                    "analysis.fill_rect.7"
-                } else {
-                    null
+                analysisRecordId = analysisRecordId ?: when {
+                    isAuthorizedRect -> "analysis.fill_rect.7"
+                    isAuthorizedRRect -> "analysis.fill_rrect.7"
+                    else -> null
                 },
-                analysisCommandFamily = analysisCommandFamily ?: if (isAuthorizedRect) {
-                    "FillRect"
-                } else {
-                    null
+                analysisCommandFamily = analysisCommandFamily ?: when {
+                    isAuthorizedRect -> "FillRect"
+                    isAuthorizedRRect -> "FillRRect"
+                    else -> null
                 },
                 rectRouteAuthority = rectRouteAuthority ?: if (isAuthorizedRect) {
                     GPUCorePrimitiveRectRouteAuthority.RectAxisAligned
@@ -709,6 +923,20 @@ class GPUCorePrimitivePayloadContractsTest {
                 } else {
                     null
                 },
+                rrectGeometryAuthority = rrectGeometryAuthority ?: if (isAuthorizedRRect) {
+                    val rrect = geometry as GPUCorePrimitiveGeometryInput.RRect
+                    rrectGeometryAuthorityFixture(
+                        source = GPURRect(
+                            rect = GPURect(rrect.left, rrect.top, rrect.right, rrect.bottom),
+                            topLeft = GPURRectCornerRadii(rrect.radii[0], rrect.radii[1]),
+                            topRight = GPURRectCornerRadii(rrect.radii[2], rrect.radii[3]),
+                            bottomRight = GPURRectCornerRadii(rrect.radii[4], rrect.radii[5]),
+                            bottomLeft = GPURRectCornerRadii(rrect.radii[6], rrect.radii[7]),
+                        ),
+                    )
+                } else {
+                    null
+                },
             ),
         )
     }
@@ -717,6 +945,47 @@ class GPUCorePrimitivePayloadContractsTest {
         rect: GPURect = GPURect(1f, 1f, 8f, 8f),
         transform: GPUTransformFacts = GPUTransformFacts.identity(),
     ) = corePrimitiveRectGeometryAuthority(rect, transform)
+
+    private fun rrectFixture() = GPURRect(
+        rect = GPURect(1f, 1f, 9f, 9f),
+        topLeft = GPURRectCornerRadii(2f, 2f),
+        topRight = GPURRectCornerRadii(2f, 2f),
+        bottomRight = GPURRectCornerRadii(2f, 2f),
+        bottomLeft = GPURRectCornerRadii(2f, 2f),
+    )
+
+    private fun rrectGeometryAuthorityFixture(
+        source: GPURRect = rrectFixture(),
+        transform: GPUTransformFacts = GPUTransformFacts.identity(),
+    ): GPUCorePrimitiveRRectGeometryAuthority {
+        val accepted = GPURRectNormalizer.normalize(source) as GPURRectNormalizationResult.Accepted
+        return assertIs<GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued>(
+            corePrimitiveRRectGeometryAuthority(source, accepted, transform),
+        ).authority
+    }
+
+    private fun assertRRectRawBits(
+        expected: GPUCorePrimitiveGeometryInput.RRect,
+        actual: GPUCorePrimitiveGeometryInput.RRect,
+        label: String,
+    ) {
+        assertEquals(expected.left.toRawBits(), actual.left.toRawBits(), "$label left")
+        assertEquals(expected.top.toRawBits(), actual.top.toRawBits(), "$label top")
+        assertEquals(expected.right.toRawBits(), actual.right.toRawBits(), "$label right")
+        assertEquals(expected.bottom.toRawBits(), actual.bottom.toRawBits(), "$label bottom")
+        assertEquals(
+            expected.radii.map(Float::toRawBits),
+            actual.radii.map(Float::toRawBits),
+            "$label radii",
+        )
+    }
+
+    private fun GPURRect.withRadiiScale(scale: Float): GPURRect = copy(
+        topLeft = GPURRectCornerRadii(topLeft.x * scale, topLeft.y * scale),
+        topRight = GPURRectCornerRadii(topRight.x * scale, topRight.y * scale),
+        bottomRight = GPURRectCornerRadii(bottomRight.x * scale, bottomRight.y * scale),
+        bottomLeft = GPURRectCornerRadii(bottomLeft.x * scale, bottomLeft.y * scale),
+    )
 
     private fun affineRectGeometryAuthorityFixture(
         rect: GPURect = GPURect(1f, 2f, 4f, 6f),

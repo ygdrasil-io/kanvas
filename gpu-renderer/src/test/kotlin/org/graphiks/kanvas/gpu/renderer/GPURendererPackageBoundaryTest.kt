@@ -56,6 +56,21 @@ class GPURendererPackageBoundaryTest {
         )
     }
 
+    /** Keeps payload contracts passive so command/planning imports cannot close a package cycle. */
+    @Test
+    fun `payload contracts do not import commands or analysis`() {
+        val payloadSources = productionFile("payloads").walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+
+        listOf("commands", "analysis").forEach { forbiddenPackage ->
+            assertTrue(
+                actual = "import org.graphiks.kanvas.gpu.renderer.$forbiddenPackage." !in payloadSources,
+                message = "payloads must remain passive and must not import $forbiddenPackage",
+            )
+        }
+    }
+
     /** Ensures geometry remains independent from execution-only contracts. */
     @Test
     fun `geometry source does not import execution contracts`() {

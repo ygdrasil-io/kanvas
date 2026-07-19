@@ -13,6 +13,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
@@ -49,11 +50,16 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -66,8 +72,11 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUCorePrimitiveRRectGeometryAuthorityIssue
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
@@ -107,6 +116,48 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             "invalid.recording.core_primitive_semantic_authority",
             assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
         )
+    }
+
+    @Test
+    fun `rrect packet analysis and render step mutations refuse before budget planning`() {
+        val commandId = 105
+        val base = recording(command(commandId, 0)).taskList
+            .withClipPlans(mapOf(commandId to GPUClipExecutionPlan.NoClip))
+            .withPacketRouteIdentity(
+                commandId = commandId,
+                analysisRecordId = "analysis.fill_rrect.$commandId",
+                renderStepIdentity = CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY,
+            )
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val semantic = semantic(
+            packet,
+            geometry = GPUCorePrimitiveGeometryInput.RRect(1f, 1f, 8f, 8f, List(8) { 1f }),
+        )
+        val mutations = listOf(
+            base.withPacketRouteIdentity(
+                commandId,
+                analysisRecordId = "analysis.fill_rect.$commandId",
+                renderStepIdentity = CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY,
+            ),
+            base.withPacketRouteIdentity(
+                commandId,
+                analysisRecordId = "analysis.fill_rrect.$commandId",
+                renderStepIdentity = CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY,
+            ),
+        )
+
+        mutations.forEach { mutated ->
+            val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(mutated, mapOf(commandId to semantic)).copy(
+                    configuredAggregateBudgetBytes = 1L,
+                ),
+            )
+
+            assertEquals(
+                "invalid.recording.core_primitive_semantic_authority",
+                assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+            )
+        }
     }
 
     @Test
@@ -338,9 +389,18 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
 
         cases.forEachIndexed { index, (geometry, coverageMode, expectedCode) ->
             val commandId = 92 + index
-            val base = recording(command(commandId, index)).taskList.withClipPlans(
+            val clipBase = recording(command(commandId, index)).taskList.withClipPlans(
                 mapOf(commandId to GPUClipExecutionPlan.NoClip),
             )
+            val base = if (geometry is GPUCorePrimitiveGeometryInput.RRect) {
+                clipBase.withPacketRouteIdentity(
+                    commandId,
+                    "analysis.fill_rrect.$commandId",
+                    CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY,
+                )
+            } else {
+                clipBase
+            }
             val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
             val result =
                 GPUCorePrimitivePreparedFrameTaskListBuilder().build(
@@ -1135,6 +1195,10 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 98 to GPUClipExecutionPlan.NoClip,
                 99 to GPUClipExecutionPlan.NoClip,
             ),
+        ).withPacketRouteIdentity(
+            commandId = 98,
+            analysisRecordId = "analysis.fill_rrect.98",
+            renderStepIdentity = CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY,
         )
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
         fun packet(commandId: Int) = packets.single { it.commandIdValue == commandId }
@@ -1648,6 +1712,10 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 43 to GPUClipExecutionPlan.NoClip,
                 44 to GPUClipExecutionPlan.NoClip,
             ),
+        ).withPacketRouteIdentity(
+            commandId = 44,
+            analysisRecordId = "analysis.fill_rrect.44",
+            renderStepIdentity = CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY,
         )
         val basePackets = base.tasks.filterIsInstance<GPUTask.Render>()
             .flatMap(GPUTask.Render::drawPackets)
@@ -1933,6 +2001,13 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         assertEquals(producers.map { it.packetId }, slab.producerPacketIds)
         assertEquals(listOf(74, 75), slab.consumerCommandIds)
         assertEquals(consumers.map { it.packetId }, slab.consumerPacketIds)
+        consumers.zip(slab.consumerSlots).forEach { (consumer, slot) ->
+            val preparedSemantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(
+                consumer.semanticPayload,
+            )
+            assertTrue(slot.semanticAuthority.matches(preparedSemantic))
+            assertFalse(slot.semanticAuthority.matches(preparedSemantic.sameContentClone()))
+        }
         assertEquals(
             listOf(
                 null,
@@ -2086,15 +2161,15 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
                 frameProvenance = packet.frameProvenance,
                 coverageMode = coverageMode,
-                analysisRecordId = if (resolvedSourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
-                    packet.analysisRecordId
-                } else {
-                    null
+                analysisRecordId = when (resolvedSourceFamily) {
+                    GPUCorePrimitiveSourceFamily.Rect -> packet.analysisRecordId
+                    GPUCorePrimitiveSourceFamily.RRect -> "analysis.fill_rrect.${packet.commandIdValue}"
+                    else -> null
                 },
-                analysisCommandFamily = if (resolvedSourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
-                    "FillRect"
-                } else {
-                    null
+                analysisCommandFamily = when (resolvedSourceFamily) {
+                    GPUCorePrimitiveSourceFamily.Rect -> "FillRect"
+                    GPUCorePrimitiveSourceFamily.RRect -> "FillRRect"
+                    else -> null
                 },
                 rectRouteAuthority = if (resolvedSourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
                     GPUCorePrimitiveRectRouteAuthority.RectAxisAligned
@@ -2106,15 +2181,59 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 } else {
                     null
                 },
+                rrectGeometryAuthority = if (resolvedSourceFamily == GPUCorePrimitiveSourceFamily.RRect) {
+                    rrectGeometryAuthorityFixture(geometry as GPUCorePrimitiveGeometryInput.RRect)
+                } else {
+                    null
+                },
             ),
         )
     }
+
+    private fun GPUDrawSemanticPayload.CorePrimitive.sameContentClone() =
+        GPUDrawSemanticPayload.CorePrimitive(
+            payloadRef = payloadRef,
+            sourceFamily = sourceFamily,
+            geometry = geometry,
+            premultipliedRgba = premultipliedRgba,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+            blendPlanIdentity = blendPlanIdentity,
+            frameProvenance = frameProvenance,
+            canonicalHash = canonicalHash,
+            coverageMode = coverageMode,
+            analysisRecordId = analysisRecordId,
+            analysisCommandFamily = analysisCommandFamily,
+            rectRouteAuthority = rectRouteAuthority,
+            rectGeometryAuthority = rectGeometryAuthority,
+            rrectGeometryAuthority = rrectGeometryAuthority,
+        )
 
     private fun rectGeometryAuthorityFixture(
         geometry: GPUCorePrimitiveGeometryInput.Rect,
     ) = corePrimitiveRectGeometryAuthority(
         GPURect(geometry.left, geometry.top, geometry.right, geometry.bottom),
         GPUTransformFacts.identity(),
+    )
+
+    private fun rrectGeometryAuthorityFixture(
+        geometry: GPUCorePrimitiveGeometryInput.RRect,
+    ): org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAuthority {
+        val source = geometry.toSourceRRect()
+        val accepted = assertIs<GPURRectNormalizationResult.Accepted>(GPURRectNormalizer.normalize(source))
+        return assertIs<GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued>(
+            corePrimitiveRRectGeometryAuthority(source, accepted, GPUTransformFacts.identity()),
+        ).authority
+    }
+
+    private fun GPUCorePrimitiveGeometryInput.RRect.toSourceRRect(): GPURRect = GPURRect(
+        rect = GPURect(left, top, right, bottom),
+        topLeft = GPURRectCornerRadii(radii[0], radii[1]),
+        topRight = GPURRectCornerRadii(radii[2], radii[3]),
+        bottomRight = GPURRectCornerRadii(radii[4], radii[5]),
+        bottomLeft = GPURRectCornerRadii(radii[6], radii[7]),
     )
 
     private fun stencilGeometry(
@@ -2224,9 +2343,57 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         diagnostics = diagnostics,
     )
 
-    private fun GPUDrawPacket.withClipPlan(plan: GPUClipExecutionPlan?): GPUDrawPacket = GPUDrawPacket(
+    private fun GPUTaskList.withPacketRouteIdentity(
+        commandId: Int,
+        analysisRecordId: String,
+        renderStepIdentity: String,
+    ): GPUTaskList = GPUTaskList(
+        frameId = frameId,
+        capabilitySeal = capabilitySeal,
+        recordingSeals = recordingSeals,
+        expectedReplayKeyHash = expectedReplayKeyHash,
+        tasks = tasks.map { task ->
+            if (task !is GPUTask.Render) return@map task
+            val packets = task.drawPackets.map { packet ->
+                if (packet.commandIdValue != commandId) {
+                    packet
+                } else {
+                    packet.withClipPlan(
+                        plan = packet.clipExecutionPlan,
+                        analysisRecordId = analysisRecordId,
+                        renderStepIdentity = renderStepIdentity,
+                    )
+                }
+            }
+            GPUTask.Render(
+                task.taskId,
+                task.recordingId,
+                task.phase,
+                task.target,
+                task.loadStore,
+                task.samplePlan,
+                task.resourceUses,
+                task.provisionalSegmentKey,
+                packets,
+                task.batchEligibilityByPacketId,
+                task.sampleContinuationKey,
+                task.compositeMembership,
+                task.depthStencilLoadStore,
+            )
+        },
+        dependencies = dependencies,
+        phaseOrder = phaseOrder,
+        memoryBudget = memoryBudget,
+        diagnostics = diagnostics,
+    )
+
+    private fun GPUDrawPacket.withClipPlan(
+        plan: GPUClipExecutionPlan?,
+        analysisRecordId: String = this.analysisRecordId,
+        renderStepIdentity: String = renderStepId.value,
+    ): GPUDrawPacket = GPUDrawPacket(
         packetId, commandIdValue, analysisRecordId, passId, layerId, bindingListId,
-        insertionReasonCode, sortKey, sortKeyPreimage, renderStepId, renderStepVersion, role,
+        insertionReasonCode, sortKey, sortKeyPreimage, GPURenderStepID(renderStepIdentity), renderStepVersion, role,
         blendPlan, renderPipelineKey, computePipelineKey, bindingLayoutHash, uniformSlot, resourceSlot,
         semanticPayload, vertexSourceLabel, scissorBoundsHash, targetStateHash, originalPaintOrder,
         resourceGeneration, frameProvenance, clipCoveragePlan, plan, diagnostics,

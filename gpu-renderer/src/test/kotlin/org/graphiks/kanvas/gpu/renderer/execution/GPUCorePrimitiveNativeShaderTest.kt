@@ -6,9 +6,173 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslReflection
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorWgslValidation
+import org.graphiks.kanvas.gpu.renderer.wgsl.WgslValidationSummary
 
 class GPUCorePrimitiveNativeShaderTest {
+    @Test
+    fun `analytic shape executable shader fails closed on absent or incomplete parser reflection`() {
+        val validReflection = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveAnalyticShapeNativeShader(),
+        ).plan.wgslReflection
+        requireNotNull(validReflection)
+        val report = validReflection.report
+        val invalidReflections = listOf(
+            null,
+            validReflection.copy(validated = false),
+            GPUColorWgslReflection(
+                report.copy(validation = WgslValidationSummary(success = false)),
+                validated = true,
+            ),
+            GPUColorWgslReflection(report.copy(entryPoints = report.entryPoints.dropLast(1))),
+            GPUColorWgslReflection(report.copy(bindings = emptyList())),
+            GPUColorWgslReflection(
+                report.copy(
+                    layouts = report.layouts.map { layout ->
+                        if (layout.structName == "CorePrimitiveAnalyticShapeBlock") {
+                            layout.copy(size = 64)
+                        } else {
+                            layout
+                        }
+                    },
+                ),
+            ),
+            GPUColorWgslReflection(
+                report.copy(
+                    layouts = report.layouts.map { layout ->
+                        if (layout.structName == "CorePrimitiveAnalyticShapeBlock") {
+                            layout.copy(
+                                members = layout.members.map { member ->
+                                    if (member.name == "radii1") member.copy(offset = 60) else member
+                                },
+                            )
+                        } else {
+                            layout
+                        }
+                    },
+                ),
+            ),
+        )
+
+        invalidReflections.forEach { reflection ->
+            val rejected = assertIs<GPUCorePrimitiveNativeShaderResult.Rejected>(
+                buildCorePrimitiveAnalyticShapeNativeShader { _, _ ->
+                    GPUColorWgslValidation.Validated(reflection)
+                },
+            )
+            assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_REFLECTION_INVALID_REASON, rejected.reason)
+            assertTrue(rejected.message.isNotBlank())
+        }
+    }
+
+    @Test
+    fun `analytic shape shader reflects uniform80 and applies Graphite like four corner coverage`() {
+        val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveAnalyticShapeNativeShader(),
+        )
+        val reflection = requireNotNull(ready.plan.wgslReflection).report
+
+        assertTrue(reflection.validation.success)
+        assertEquals(
+            setOf(
+                CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT to "vertex",
+                CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_FRAGMENT_ENTRY_POINT to "fragment",
+            ),
+            reflection.entryPoints.map { it.name to it.stage }.toSet(),
+        )
+        assertEquals(listOf(0 to 0), reflection.bindings.map { it.group to it.binding })
+        val block = reflection.layouts.single { it.structName == "CorePrimitiveAnalyticShapeBlock" }
+        assertEquals(80, block.size)
+        assertEquals(
+            listOf(
+                "target_size" to (0 to 8),
+                "anti_alias" to (8 to 4),
+                "padding0" to (12 to 4),
+                "premul_rgba" to (16 to 16),
+                "device_bounds" to (32 to 16),
+                "radii0" to (48 to 16),
+                "radii1" to (64 to 16),
+            ),
+            block.members.map { it.name to (it.offset to it.size) },
+        )
+
+        val source = ready.plan.wgslSource
+        assertContains(source, "corner_distance(distance, edge_distances.xy, analytic.radii0.xy)")
+        assertContains(source, "corner_distance(distance, edge_distances.zy, analytic.radii0.zw)")
+        assertContains(source, "corner_distance(distance, edge_distances.zw, analytic.radii1.xy)")
+        assertContains(source, "corner_distance(distance, edge_distances.xw, analytic.radii1.zw)")
+        assertContains(source, "uv.x > 0.0 && uv.y > 0.0")
+        assertContains(source, "radii.x > 0.0 && radii.y > 0.0")
+        assertContains(source, "0.5 * (1.0 - dot(uv, normalized_uv)) / normalized_length")
+        assertContains(source, "let scale = clamp(min(shape_size.x, shape_size.y), 0.0, 1.0);")
+        assertContains(source, "let bias = 1.0 - 0.5 * scale;")
+        assertContains(source, "return analytic.premul_rgba * coverage;")
+        assertEquals(1, source.split("premul_rgba * coverage").size - 1)
+        listOf("fwidth", "texture", "sampler", "discard").forEach { forbidden ->
+            assertFalse(forbidden in source, "Analytic shape shader must not contain $forbidden")
+        }
+        listOf("0.0001", "0.000001", "center", "quadrant").forEach { forbidden ->
+            assertFalse(forbidden in source, "Analytic shape shader must not contain $forbidden")
+        }
+    }
+
+    @Test
+    fun `analytic shape coverage math handles subpixel rect ellipse and square corners`() {
+        val rectBounds = listOf(1.25f, 2.5f, 3.75f, 4.75f)
+        val squareRadii = List(8) { 0f }
+        assertEquals(1f, analyticCoverage(2f, 3f, rectBounds, squareRadii, antiAlias = true))
+        assertEquals(0.25f, analyticCoverage(1f, 3f, rectBounds, squareRadii, antiAlias = true), 1e-6f)
+        assertEquals(0f, analyticCoverage(0.5f, 3f, rectBounds, squareRadii, antiAlias = true))
+        assertEquals(0f, analyticCoverage(1f, 3f, rectBounds, squareRadii, antiAlias = false))
+
+        val rrectBounds = listOf(0f, 0f, 10f, 10f)
+        val topLeftEllipse = listOf(4f, 4f, 0f, 0f, 0f, 0f, 0f, 0f)
+        val diagonalBoundary = 4f - 4f / sqrt(2f)
+        assertEquals(
+            0.5f,
+            analyticCoverage(
+                diagonalBoundary,
+                diagonalBoundary,
+                rrectBounds,
+                topLeftEllipse,
+                antiAlias = true,
+            ),
+            1e-5f,
+        )
+        assertEquals(0f, analyticCoverage(0.5f, 0.5f, rrectBounds, topLeftEllipse, antiAlias = true))
+        assertEquals(0.75f, analyticCoverage(9.75f, 9.75f, rrectBounds, topLeftEllipse, true), 1e-6f)
+
+        val oneZeroComponent = listOf(0f, 4f, 0f, 0f, 0f, 0f, 0f, 0f)
+        assertEquals(0.75f, analyticCoverage(0.25f, 0.25f, rrectBounds, oneZeroComponent, true), 1e-6f)
+    }
+
+    @Test
+    fun `asymmetric corner extending past center is not selected by center quadrant`() {
+        val bounds = listOf(0f, 0f, 100f, 100f)
+        val radii = listOf(80f, 80f, 10f, 10f, 0f, 0f, 0f, 0f)
+        val pointX = 60f
+        val pointY = 1f
+
+        val fourCornerDistance = graphiteLikeRRectDistance(pointX, pointY, bounds, radii)
+        val wrongCenterQuadrantDistance = minOf(
+            pointX - bounds[0],
+            pointY - bounds[1],
+            bounds[2] - pointX,
+            bounds[3] - pointY,
+        )
+
+        assertTrue(fourCornerDistance < 0f, "The point lies outside the large top-left ellipse")
+        assertTrue(wrongCenterQuadrantDistance > 0f, "A center-quadrant shortcut would incorrectly keep it")
+        val source = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
+            buildCorePrimitiveAnalyticShapeNativeShader(),
+        ).plan.wgslSource
+        assertFalse("position.x > center.x" in source)
+        assertFalse("position.y > center.y" in source)
+    }
+
     @Test
     fun `coverage mask producer shader reflects uniform64 fullscreen hard rect and rrect programs`() {
         val ready = assertIs<GPUCorePrimitiveNativeShaderResult.Ready>(
@@ -354,5 +518,52 @@ class GPUCorePrimitiveNativeShaderTest {
         assertTrue(abs(distance(boundaryX + normalX, boundaryY + normalY) - 1f) < 0.15f)
         assertTrue(abs(distance(boundaryX - normalX, boundaryY - normalY) + 1f) < 0.15f)
         assertTrue(requireNotNull(ready.plan.wgslReflection).report.validation.success)
+    }
+
+    private fun graphiteLikeRRectDistance(
+        x: Float,
+        y: Float,
+        bounds: List<Float>,
+        radii: List<Float>,
+    ): Float {
+        val left = x - bounds[0]
+        val top = y - bounds[1]
+        val right = bounds[2] - x
+        val bottom = bounds[3] - y
+        var distance = minOf(left, top, right, bottom)
+        fun applyCorner(edgeX: Float, edgeY: Float, radiusX: Float, radiusY: Float) {
+            val uvX = radiusX - edgeX
+            val uvY = radiusY - edgeY
+            if (uvX > 0f && uvY > 0f && radiusX > 0f && radiusY > 0f) {
+                val nx = uvX / (radiusX * radiusX)
+                val ny = uvY / (radiusY * radiusY)
+                val length = sqrt(nx * nx + ny * ny)
+                if (length > 0f) {
+                    distance = minOf(
+                        distance,
+                        0.5f * (1f - (uvX * nx + uvY * ny)) / length,
+                    )
+                }
+            }
+        }
+        applyCorner(left, top, radii[0], radii[1])
+        applyCorner(right, top, radii[2], radii[3])
+        applyCorner(right, bottom, radii[4], radii[5])
+        applyCorner(left, bottom, radii[6], radii[7])
+        return distance
+    }
+
+    private fun analyticCoverage(
+        x: Float,
+        y: Float,
+        bounds: List<Float>,
+        radii: List<Float>,
+        antiAlias: Boolean,
+    ): Float {
+        val distance = graphiteLikeRRectDistance(x, y, bounds, radii)
+        if (!antiAlias) return if (distance >= 0f) 1f else 0f
+        val scale = minOf(bounds[2] - bounds[0], bounds[3] - bounds[1]).coerceIn(0f, 1f)
+        val bias = 1f - 0.5f * scale
+        return (scale * (distance + bias)).coerceIn(0f, 1f)
     }
 }

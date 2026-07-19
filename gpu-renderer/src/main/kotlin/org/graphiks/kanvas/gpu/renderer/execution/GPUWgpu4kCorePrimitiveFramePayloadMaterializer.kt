@@ -165,6 +165,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             Triple(renderStep, packet, semantic)
         }
         val uniformLayout = preparedPassSeal.structuralPipelineKey.uniformLayout
+        corePrimitiveAnalyticShapeClosedRouteDiagnostic(uniformLayout)?.let { (code, message) ->
+            return refused(code, message)
+        }
         if (uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ||
             uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1 ||
             uniformLayout == GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1
@@ -187,6 +190,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 preparedPassSeal.uniformSlabSeal == null && analyticClipUniformSeals.isEmpty() &&
                     analyticIntersectionUniformSeals.size == semanticPackets.size
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                error("AnalyticShapeUniform80V1 was refused before direct uniform authority validation")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct uniform authority validation")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
@@ -206,6 +211,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 analyticClipUniformSeals.first().plan
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 analyticIntersectionUniformSeals.first().plan
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                error("AnalyticShapeUniform80V1 was refused before direct uniform plan selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct uniform plan selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
@@ -219,6 +226,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                error("AnalyticShapeUniform80V1 was refused before direct binding layout selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct binding layout selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
@@ -522,6 +531,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                error("AnalyticShapeUniform80V1 was refused before direct component selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct component selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
@@ -536,6 +547,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 pipelineMapping.identity.program.isAnalyticClip()
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 pipelineMapping.identity.program.isAnalyticIntersection4()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                error("AnalyticShapeUniform80V1 was refused before direct program validation")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct program validation")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
@@ -1036,7 +1049,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 slot.slotIndex != slab.uniformSlabSeal.producerSlots.size + index ||
                 slot.packetId != packet.packetId || slot.commandId != packet.commandIdValue ||
                 slot.sourceOrder != packet.originalPaintOrder ||
-                slot.semanticCanonicalIdentity != semantic.canonicalHash ||
+                !slot.semanticAuthority.matches(semantic) ||
                 slot.structuralPipelineKey != routeConsumer.structuralKey ||
                 slot.renderPipelineKey != stableRenderPipelineKey ||
                 slot.bindingLayoutHash != CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_BINDING_LAYOUT_HASH ||
@@ -1081,12 +1094,14 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         val request = GPUCorePrimitiveCoverageMaskPreparedRouteRequest(
             plan,
-            consumerPacketsAndSemantics.map { (packet, semantic) ->
+            consumerPacketsAndSemantics.zip(slab.uniformSlabSeal.consumerSlots).map { pair ->
+                val (packetAndSemantic, slot) = pair
+                val (packet, semantic) = packetAndSemantic
                 GPUCorePrimitiveCoverageMaskConsumerInput(
                     packet.packetId,
                     packet.commandIdValue,
                     packet.originalPaintOrder,
-                    semantic.canonicalHash,
+                    slot.semanticAuthority,
                     semantic.coverageMode,
                     packet.blendPlan ?: return invalid(
                         "route",

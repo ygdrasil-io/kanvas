@@ -26,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskSampling
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
@@ -37,6 +38,122 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
+    @Test
+    fun `analytic shape has one unique uniform80 src over descriptor and twenty one total programs`() {
+        val key = analyticShapeKey()
+        val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+        )
+        val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(
+            mapped.identity,
+            shader,
+            pipelineLayout,
+        )
+
+        assertEquals(GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver, mapped.identity.program)
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY, mapped.componentIdentity)
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
+            key.uniformLayout,
+        )
+        assertEquals(21, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(24, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
+        assertEquals(1, descriptor.vertex.buffers.size)
+        assertEquals(8uL, descriptor.vertex.buffers.single().arrayStride)
+        assertEquals(GPUVertexFormat.Float32x2, descriptor.vertex.buffers.single().attributes.single().format)
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_FRAGMENT_ENTRY_POINT, requireNotNull(descriptor.fragment).entryPoint)
+        assertNull(descriptor.depthStencil)
+        assertEquals(1u, descriptor.multisample.count)
+        assertEquals(false, descriptor.multisample.alphaToCoverageEnabled)
+        val target = assertIs<ColorTargetState>(requireNotNull(descriptor.fragment).targets.single())
+        val blend = requireNotNull(target.blend)
+        assertEquals(GPUBlendFactor.One, blend.color.srcFactor)
+        assertEquals(GPUBlendFactor.OneMinusSrcAlpha, blend.color.dstFactor)
+        assertEquals(GPUBlendFactor.One, blend.alpha.srcFactor)
+        assertEquals(GPUBlendFactor.OneMinusSrcAlpha, blend.alpha.dstFactor)
+    }
+
+    @Test
+    fun `analytic shape bounds radii color aa and target stay outside structural cache identity`() {
+        val key = analyticShapeKey()
+        val first = GPUCorePrimitiveAnalyticShapeUniformBlock(
+            targetWidth = 32f,
+            targetHeight = 32f,
+            antiAlias = true,
+            premultipliedRgba = listOf(1f, 0f, 0f, 1f),
+            deviceBounds = listOf(1f, 2f, 20f, 21f),
+            normalizedRadii = List(8) { 0f },
+        )
+        val second = GPUCorePrimitiveAnalyticShapeUniformBlock(
+            targetWidth = 640f,
+            targetHeight = 480f,
+            antiAlias = false,
+            premultipliedRgba = listOf(0f, 0.5f, 0.25f, 0.5f),
+            deviceBounds = listOf(100f, 120f, 500f, 400f),
+            normalizedRadii = listOf(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f),
+        )
+
+        assertTrue(!first.packedBytes().contentEquals(second.packedBytes()))
+        assertEquals(
+            key.stableRenderPipelineKey("core-primitive"),
+            key.copy().stableRenderPipelineKey("core-primitive"),
+        )
+        assertEquals(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key.copy()),
+        )
+    }
+
+    @Test
+    fun `analytic shape explicitly refuses analytic stencil and mask clips`() {
+        val incompatibleClips = listOf(
+            GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+                antiAlias = true,
+            ),
+            GPUCorePrimitiveRenderPipelineStructuralKey.Clip.AnalyticIntersection4,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Stencil(
+                compare = GPUClipStencilCompare.NotEqual,
+                passOperation = GPUClipStencilOperation.Keep,
+                failOperation = GPUClipStencilOperation.Keep,
+                depthFailOperation = GPUClipStencilOperation.Keep,
+                readMask = 0xffu,
+                writeMask = 0u,
+            ),
+            GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Mask(
+                sampling = GPUClipMaskSampling.Nearest,
+                invert = false,
+                depthStencilRequired = false,
+            ),
+            GPUCorePrimitiveRenderPipelineStructuralKey.Clip.CoverageMaskNearest,
+        )
+
+        incompatibleClips.forEach { clip ->
+            val refusal = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Refused>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(analyticShapeKey().copy(clip = clip)),
+            )
+            assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_INCOMPATIBLE_CLIP_REASON, refusal.reason)
+        }
+    }
+
+    @Test
+    fun `analytic shape refuses sample blend depth and topology mutations`() {
+        val key = analyticShapeKey()
+        val mutations = listOf(
+            key.copy(sampleCount = 4),
+            key.copy(blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone),
+            key.copy(depthStencil = directWithPathDepthStencilKey().depthStencil),
+            key.copy(topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.AnalyticRRect),
+        )
+
+        mutations.forEach { mutation ->
+            assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Refused>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(mutation),
+            )
+        }
+    }
+
     @Test
     fun `coverage mask structural keys map to four producers and one nearest consumer`() {
         val cases = listOf(
@@ -74,7 +191,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 mapped.componentIdentity,
             )
         }
-        assertEquals(20, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(21, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertEquals(24, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
     }
 
@@ -203,7 +320,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired, mapped.componentIdentity.bindingPolicy)
             }
         }
-        assertEquals(20, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(21, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertEquals(24, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
     }
 
@@ -527,6 +644,10 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
         topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
         blend = srcOverBlend(),
         clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+    )
+
+    private fun analyticShapeKey() = directKey().copy(
+        shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.AnalyticShape,
     )
 
     private fun analyticKey(

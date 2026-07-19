@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -268,6 +269,14 @@ class GPUFramePathApiInventoryTest {
                     analysis = inventory.recording.analysis.copy(records = records),
                 ),
             )
+        val rrectAuthority = inventoryFor(
+            DisplayOp.DrawRRect(
+                RRect(Rect.fromLTRB(2f, 3f, 12f, 11f), radius = 2f),
+                Paint.fill(Color.RED),
+                Matrix33.identity(),
+                org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+            ),
+        ).recording.analysis.records.single().corePrimitiveRRectGeometryAuthority
         val cases = listOf(
             withRecords(listOf(record.copy(corePrimitiveRectRouteAuthority = null))) to
                 "unsupported.core_primitive.rect.analysis_authority_missing",
@@ -279,6 +288,9 @@ class GPUFramePathApiInventoryTest {
                 "unsupported.core_primitive.analysis_command_family_mismatch",
             withRecords(listOf(record.copy(recordId = "analysis.fill_rect.forged"))) to
                 "unsupported.core_primitive.analysis_record_id_mismatch",
+            withRecords(
+                listOf(record.copy(corePrimitiveRRectGeometryAuthority = rrectAuthority)),
+            ) to "unsupported.core_primitive.rrect.analysis_authority_forbidden",
         )
 
         cases.forEach { (forged, expectedCode) ->
@@ -318,6 +330,99 @@ class GPUFramePathApiInventoryTest {
                 gatherRefusal(mutated).code,
             )
         }
+    }
+
+    @Test
+    fun `rrect semantic consumes the analysis sealed geometry authority`() {
+        val inventory = inventoryFor(DisplayOp.DrawRRect(
+            RRect(
+                rect = Rect.fromLTRB(2f, 3f, 14f, 13f),
+                topLeft = CornerRadii(8f, 2f),
+                topRight = CornerRadii(8f, 6f),
+                bottomRight = CornerRadii(4f, 6f),
+                bottomLeft = CornerRadii(2f, 2f),
+            ),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        ))
+        val analysisRecord = inventory.recording.analysis.records.single()
+        val semantic = gatheredSemantic(inventory)
+        val geometry = assertIs<GPUCorePrimitiveGeometry.RRect>(semantic.geometry)
+
+        assertNotNull(analysisRecord.corePrimitiveRRectGeometryAuthority)
+        assertSame(analysisRecord.corePrimitiveRRectGeometryAuthority, semantic.rrectGeometryAuthority)
+        assertEquals("analysis.fill_rrect.0", semantic.analysisRecordId)
+        assertEquals("FillRRect", semantic.analysisCommandFamily)
+        assertEquals(listOf(6f, 1.5f, 6f, 4.5f, 3f, 4.5f, 1.5f, 1.5f), geometry.radii)
+    }
+
+    @Test
+    fun `rrect semantic gathering refuses missing transplanted or mutated analysis authority`() {
+        val operation = DisplayOp.DrawRRect(
+            RRect(Rect.fromLTRB(2f, 3f, 14f, 13f), radius = 2f),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        )
+        val inventory = inventoryFor(operation)
+        val visual = inventory.visualCommands.single()
+        val command = assertIs<NormalizedDrawCommand.FillRRect>(visual.normalized)
+        val record = inventory.recording.analysis.records.single()
+        fun withRecord(mutated: org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord) =
+            inventory.copy(
+                recording = inventory.recording.copy(
+                    analysis = inventory.recording.analysis.copy(records = listOf(mutated)),
+                ),
+            )
+        fun withCommand(mutated: NormalizedDrawCommand.FillRRect) = inventory.copy(
+            visualCommands = listOf(visual.copy(normalized = mutated)),
+            normalizedCommands = listOf(mutated),
+        )
+        val donor = inventoryFor(DisplayOp.DrawRRect(
+            RRect(Rect.fromLTRB(4f, 5f, 18f, 17f), radius = 3f),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        )).recording.analysis.records.single()
+
+        val cases = listOf(
+            withRecord(record.copy(corePrimitiveRRectGeometryAuthority = null)) to
+                "unsupported.core_primitive.rrect.analysis_authority_missing",
+            withRecord(
+                record.copy(
+                    corePrimitiveRRectGeometryAuthority = donor.corePrimitiveRRectGeometryAuthority,
+                ),
+            ) to "unsupported.core_primitive.rrect.geometry_authority_mismatch",
+            withCommand(
+                command.copy(rrect = command.rrect.copy(
+                    topLeft = command.rrect.topLeft.copy(x = command.rrect.topLeft.x + 1f),
+                )),
+            ) to "unsupported.core_primitive.rrect.geometry_authority_mismatch",
+            withCommand(command.copy(transform = command.transform.copy(translateX = 1f))) to
+                "unsupported.core_primitive.rrect.geometry_authority_mismatch",
+        )
+
+        cases.forEach { (forged, expectedCode) ->
+            assertEquals(expectedCode, gatherRefusal(forged).code)
+        }
+    }
+
+    @Test
+    fun `rrect normalization is owned only by first route analysis`() {
+        val mapperSource = File(
+            "src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt",
+        ).readText()
+        val inventorySource = File(
+            "src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUFramePathApiInventory.kt",
+        ).readText()
+        val plannerSource = File(
+            "../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/AnalysisContracts.kt",
+        ).readText()
+
+        assertEquals(0, "GPURRectNormalizer.normalize".toRegex().findAll(mapperSource).count())
+        assertEquals(0, "GPURRectNormalizer.normalize".toRegex().findAll(inventorySource).count())
+        assertEquals(1, "GPURRectNormalizer.normalize".toRegex().findAll(plannerSource).count())
     }
 
     @Test

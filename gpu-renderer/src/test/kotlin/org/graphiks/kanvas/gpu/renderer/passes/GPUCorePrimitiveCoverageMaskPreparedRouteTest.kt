@@ -6,6 +6,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
@@ -17,11 +18,16 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUCorePrimitiveCoverageMaskPreparedRouteTest {
     @Test
@@ -317,7 +323,9 @@ class GPUCorePrimitiveCoverageMaskPreparedRouteTest {
 
         val substituted = request.copy(
             consumers = request.consumers.mapIndexed { index, consumer ->
-                if (index == 0) consumer.copy(semanticCanonicalIdentity = "semantic.substituted") else consumer
+                if (index == 0) consumer.copy(
+                    semanticAuthority = preparedSemanticAuthority(999),
+                ) else consumer
             },
         )
         assertRouteRefused(
@@ -519,13 +527,40 @@ class GPUCorePrimitiveCoverageMaskPreparedRouteTest {
         packetId = GPUDrawPacketID("packet.$commandId"),
         commandId = commandId,
         sourceOrder = sourceOrder,
-        semanticCanonicalIdentity = "semantic.$commandId",
+        semanticAuthority = preparedSemanticAuthority(commandId),
         coverageMode = coverageMode,
         blendPlan = blendPlan,
         orderingToken = orderingToken,
         packetRole = packetRole,
         geometry = geometry,
     )
+
+    private fun preparedSemanticAuthority(
+        commandId: Int,
+    ): GPUCorePrimitivePreparedSemanticAuthority =
+        GPUCorePrimitivePreparedSemanticAuthority.capture(
+            GPUCorePrimitivePayloadGatherer().gatherSemantic(
+                GPUCorePrimitivePayloadInput(
+                    commandIdValue = commandId,
+                    sourceFamily = GPUCorePrimitiveSourceFamily.Path,
+                    geometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+                        vertices = listOf(0f, 0f, 2f, 0f, 1f, 2f),
+                        indices = listOf(0, 2, 1),
+                        sourceContourStarts = listOf(0),
+                        sourceVertexCount = 3,
+                        coverBounds = GPUPixelBounds(0, 0, 2, 2),
+                        geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+                    ),
+                    premultipliedRgba = listOf(0.25f, 0.5f, 0.75f, 1f),
+                    targetBounds = GPUPixelBounds(0, 0, 2, 2),
+                    scissorBounds = GPUPixelBounds(0, 0, 2, 2),
+                    clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+                    blendPlanIdentity = fixedBlend(GPUBlendMode.SRC_OVER, "src-over")
+                        .canonicalIdentity(),
+                    frameProvenance = GPUFrameProvenance.GmContent,
+                ),
+            ),
+        )
 
     private fun directPath(
         mode: GPUCorePrimitiveGeometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,

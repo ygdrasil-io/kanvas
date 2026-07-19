@@ -89,6 +89,13 @@ internal val PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY =
         vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
     )
 
+internal val PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY =
+    GPUWgpu4kCorePrimitiveComponentIdentity(
+        shaderIdentity = CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_SHADER_IDENTITY,
+        bindingLayoutIdentity = CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_BINDING_LAYOUT_IDENTITY,
+        vertexLayoutIdentity = CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY,
+    )
+
 internal val PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY =
     GPUWgpu4kCorePrimitiveComponentIdentity(
         shaderIdentity = CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_SHADER_IDENTITY,
@@ -141,6 +148,8 @@ internal fun isSupportedCorePrimitivePipelineCacheKey(
     key.hasCompatibleComponentIdentity()
 
 private fun GPUWgpu4kCorePrimitivePipelineCacheKey.hasCompatibleComponentIdentity(): Boolean = when {
+    pipelineIdentity.program.isAnalyticShape() ->
+        componentIdentity == PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY
     pipelineIdentity.program.isClipStencilProducer() ->
         componentIdentity == PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY
     pipelineIdentity.program.isAnalyticIntersection4() ->
@@ -463,6 +472,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         }
         if (!key.hasCompatibleComponentIdentity()) {
             if (key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY &&
+                key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY &&
                 key.componentIdentity != PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY &&
@@ -570,6 +580,8 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
         return try {
             val shaderPlan = when (
                 val shader = when (key.componentIdentity) {
+                    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY ->
+                        buildCorePrimitiveAnalyticShapeNativeShader()
                     PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY ->
                         buildCorePrimitiveClipStencilProducerNativeShader()
                     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY ->
@@ -666,6 +678,7 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
 private fun GPUWgpu4kCorePrimitiveComponentIdentity.uniformBindingSizeBytes(): ULong = when (this) {
     PRODUCTION_CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_COMPONENT_IDENTITY ->
         error("Clip-stencil producer has no uniform binding")
+    PRODUCTION_CORE_PRIMITIVE_ANALYTIC_SHAPE_COMPONENT_IDENTITY -> 80uL
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY -> 64uL
     PRODUCTION_CORE_PRIMITIVE_ANALYTIC_INTERSECTION4_COMPONENT_IDENTITY -> 160uL
     PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,

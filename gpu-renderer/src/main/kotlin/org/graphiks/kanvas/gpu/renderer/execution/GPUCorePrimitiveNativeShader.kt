@@ -30,6 +30,85 @@ internal fun buildCorePrimitiveNativeShader(): GPUCorePrimitiveNativeShaderResul
         )
     }
 
+internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_REFLECTION_INVALID_REASON =
+    "wgsl_analytic_shape_reflection_invalid"
+
+internal fun buildCorePrimitiveAnalyticShapeNativeShader(
+    validator: (sourceId: String, wgslSource: String) -> GPUColorWgslValidation = ::validateColorWgsl,
+): GPUCorePrimitiveNativeShaderResult =
+    when (
+        val validation = validator(
+            CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_SHADER_IDENTITY,
+            CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_WGSL,
+        )
+    ) {
+        is GPUColorWgslValidation.Validated -> {
+            val invalidMessage = analyticShapeReflectionInvalidMessage(validation.reflection)
+            if (invalidMessage == null) {
+                GPUCorePrimitiveNativeShaderResult.Ready(
+                    GPUCorePrimitiveNativeShaderPlan(
+                        CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_WGSL,
+                        requireNotNull(validation.reflection),
+                    ),
+                )
+            } else {
+                GPUCorePrimitiveNativeShaderResult.Rejected(
+                    CORE_PRIMITIVE_ANALYTIC_SHAPE_REFLECTION_INVALID_REASON,
+                    invalidMessage,
+                )
+            }
+        }
+        is GPUColorWgslValidation.Rejected -> GPUCorePrimitiveNativeShaderResult.Rejected(
+            validation.reason,
+            validation.message,
+        )
+    }
+
+private fun analyticShapeReflectionInvalidMessage(reflection: GPUColorWgslReflection?): String? {
+    if (reflection == null) return "Analytic-shape executable WGSL requires parser reflection."
+    if (!reflection.validated) return "Analytic-shape executable WGSL reflection is not parser validated."
+    val report = reflection.report
+    if (!report.validation.success) {
+        return "Analytic-shape executable WGSL parser validation did not succeed."
+    }
+    val expectedEntryPoints = setOf(
+        CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT to "vertex",
+        CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_FRAGMENT_ENTRY_POINT to "fragment",
+    )
+    val reflectedEntryPoints = report.entryPoints.map { it.name to it.stage }
+    if (reflectedEntryPoints.size != expectedEntryPoints.size ||
+        reflectedEntryPoints.toSet() != expectedEntryPoints
+    ) {
+        return "Analytic-shape executable WGSL must expose exactly its vertex and fragment entry points."
+    }
+    val binding = report.bindings.singleOrNull()
+    if (binding == null || binding.group != 0 || binding.binding != 0 ||
+        binding.resourceKind != "uniformBuffer" ||
+        binding.minBindingSize != CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES
+    ) {
+        return "Analytic-shape executable WGSL must expose exactly one uniform binding at group 0 binding 0."
+    }
+    val layout = report.layouts.singleOrNull { reflected ->
+        reflected.structName == "CorePrimitiveAnalyticShapeBlock" && reflected.addressSpace == "uniform"
+    } ?: return "Analytic-shape executable WGSL must reflect its uniform block."
+    if (layout.size != CORE_PRIMITIVE_ANALYTIC_SHAPE_UNIFORM_BYTES) {
+        return "Analytic-shape executable WGSL uniform block must be exactly 80 bytes."
+    }
+    val expectedMembers = listOf(
+        "target_size" to (0 to 8),
+        "anti_alias" to (8 to 4),
+        "padding0" to (12 to 4),
+        "premul_rgba" to (16 to 16),
+        "device_bounds" to (32 to 16),
+        "radii0" to (48 to 16),
+        "radii1" to (64 to 16),
+    )
+    if (layout.members.map { it.name to (it.offset to it.size) } != expectedMembers) {
+        return "Analytic-shape executable WGSL uniform block members do not match the sealed ABI80 offsets."
+    }
+    return null
+}
+
 internal fun buildCorePrimitiveClipStencilProducerNativeShader(): GPUCorePrimitiveNativeShaderResult =
     when (
         val validation = validateColorWgsl(
@@ -132,6 +211,12 @@ internal const val CORE_PRIMITIVE_NATIVE_VERTEX_LAYOUT_IDENTITY = "float32x2-uin
 internal const val CORE_PRIMITIVE_NATIVE_VERTEX_ENTRY_POINT = "vs_main"
 internal const val CORE_PRIMITIVE_NATIVE_COLOR_FRAGMENT_ENTRY_POINT = "fs_main"
 internal const val CORE_PRIMITIVE_NATIVE_STENCIL_FRAGMENT_ENTRY_POINT = "fs_stencil"
+internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_SHADER_IDENTITY =
+    "core-primitive-analytic-shape-device-geometry-wgsl-v1"
+internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_BINDING_LAYOUT_IDENTITY =
+    "dynamic-uniform80-analytic-shape-v1"
+internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT = "vs_main"
+internal const val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_FRAGMENT_ENTRY_POINT = "fs_main"
 internal const val CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_SHADER_IDENTITY =
     "core-primitive-clip-stencil-producer-ndc-wgsl-v1"
 internal const val CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_BINDING_LAYOUT_IDENTITY =
@@ -190,6 +275,77 @@ internal val CORE_PRIMITIVE_NATIVE_WGSL = """
     @fragment
     fn fs_stencil() -> @location(0) vec4<f32> {
         return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+""".trimIndent()
+
+/** One parser-validated program handles zero-radius Rects and four-corner normalized RRects. */
+internal val CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_WGSL = """
+    struct CorePrimitiveAnalyticShapeBlock {
+        target_size: vec2<f32>,
+        anti_alias: u32,
+        padding0: u32,
+        premul_rgba: vec4<f32>,
+        device_bounds: vec4<f32>,
+        radii0: vec4<f32>,
+        radii1: vec4<f32>,
+    }
+
+    @group(0) @binding(0) var<uniform> analytic: CorePrimitiveAnalyticShapeBlock;
+
+    @vertex
+    fn vs_main(@location(0) device_position: vec2<f32>) -> @builtin(position) vec4<f32> {
+        let ndc_x = device_position.x / analytic.target_size.x * 2.0 - 1.0;
+        let ndc_y = 1.0 - device_position.y / analytic.target_size.y * 2.0;
+        return vec4<f32>(ndc_x, ndc_y, 0.0, 1.0);
+    }
+
+    fn corner_distance(
+        current_distance: f32,
+        corner_edge_distance: vec2<f32>,
+        radii: vec2<f32>,
+    ) -> f32 {
+        var distance = current_distance;
+        let uv = radii - corner_edge_distance;
+        if (uv.x > 0.0 && uv.y > 0.0 && radii.x > 0.0 && radii.y > 0.0) {
+            let normalized_uv = uv / (radii * radii);
+            let normalized_length = length(normalized_uv);
+            if (normalized_length > 0.0) {
+                let ellipse_inside = 0.5 * (1.0 - dot(uv, normalized_uv)) / normalized_length;
+                distance = min(distance, ellipse_inside);
+            }
+        }
+        return distance;
+    }
+
+    fn analytic_shape_distance(position: vec2<f32>) -> f32 {
+        let edge_distances = vec4<f32>(
+            position.x - analytic.device_bounds.x,
+            position.y - analytic.device_bounds.y,
+            analytic.device_bounds.z - position.x,
+            analytic.device_bounds.w - position.y,
+        );
+        var distance = min(min(edge_distances.x, edge_distances.y), min(edge_distances.z, edge_distances.w));
+        distance = corner_distance(distance, edge_distances.xy, analytic.radii0.xy);
+        distance = corner_distance(distance, edge_distances.zy, analytic.radii0.zw);
+        distance = corner_distance(distance, edge_distances.zw, analytic.radii1.xy);
+        distance = corner_distance(distance, edge_distances.xw, analytic.radii1.zw);
+        return distance;
+    }
+
+    fn analytic_shape_coverage(position: vec2<f32>) -> f32 {
+        let distance = analytic_shape_distance(position);
+        let hard = select(0.0, 1.0, distance >= 0.0);
+        let shape_size = max(analytic.device_bounds.zw - analytic.device_bounds.xy, vec2<f32>(0.0));
+        let scale = clamp(min(shape_size.x, shape_size.y), 0.0, 1.0);
+        let bias = 1.0 - 0.5 * scale;
+        let aa = clamp(scale * (distance + bias), 0.0, 1.0);
+        return select(hard, aa, analytic.anti_alias != 0u);
+    }
+
+    @fragment
+    fn fs_main(@builtin(position) fragment_position: vec4<f32>) -> @location(0) vec4<f32> {
+        let coverage = analytic_shape_coverage(fragment_position.xy);
+        return analytic.premul_rgba * coverage;
     }
 """.trimIndent()
 

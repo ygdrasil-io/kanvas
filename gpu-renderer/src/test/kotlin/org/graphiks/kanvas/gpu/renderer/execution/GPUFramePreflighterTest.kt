@@ -9,6 +9,7 @@ import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.analysis.corePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -46,6 +47,10 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupKey
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateIdentity
@@ -87,6 +92,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
+import org.graphiks.kanvas.gpu.renderer.analysis.GPUCorePrimitiveRRectGeometryAuthorityIssue
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
@@ -1182,11 +1188,27 @@ class GPUFramePreflighterTest {
             seal.consumerSlots,
             forgedBytes,
         )
+        val forgedSemanticAuthoritySeal = GPUCorePrimitiveCoverageMaskUniformSlabSeal(
+            seal.plan,
+            seal.contentKey,
+            seal.planCanonicalIdentity,
+            seal.maskResource,
+            seal.producerSlots,
+            seal.consumerSlots.mapIndexed { index, slot ->
+                if (index == 0) {
+                    slot.copy(semanticAuthority = seal.consumerSlots[1].semanticAuthority)
+                } else {
+                    slot
+                }
+            },
+            seal.packedBytesSnapshot(),
+        )
         val forgedSemantic = coreSemantic(
             clipExecutionPlan = clipPlan,
             commandIdValue = consumerPacket.commandIdValue,
             geometry = GPUCorePrimitiveGeometryInput.Rect(0.5f, 0.5f, 2.5f, 2.5f),
         )
+        val sameContentSemantic = consumerSemantic.withTargetBounds(consumerSemantic.targetBounds)
         val baseContext = clipPreflightContext(valid)
         val missingMaskGenerationContext = GPUFramePreflightContext(
             targetId = baseContext.targetId,
@@ -1289,7 +1311,18 @@ class GPUFramePreflighterTest {
                     cloneCorePacket(consumerPacket, semanticPayload = forgedSemantic),
                 ),
             ),
+            Scenario(
+                "same-content-semantic-instance",
+                valid.replacingCorePacket(
+                    consumerPacket,
+                    cloneCorePacket(consumerPacket, semanticPayload = sameContentSemantic),
+                ),
+            ),
             Scenario("uniform-bytes", valid.withCoverageMaskSeal(forgedByteSeal)),
+            Scenario(
+                "semantic-authority-token",
+                valid.withCoverageMaskSeal(forgedSemanticAuthoritySeal),
+            ),
             Scenario(
                 "plan-with-seal",
                 valid.replacingCorePacket(
@@ -3428,6 +3461,44 @@ class GPUFramePreflighterTest {
                 assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
             )
             assertTrue(events.isEmpty(), "pure validation side effects: $events")
+        }
+    }
+
+    @Test
+    fun `core packet analysis substitution refuses before resource native and ticket side effects`() {
+        val semantic = coreSemantic()
+        val valid = framePlan(listOf(coreDirectPrepare(), coreRenderStep(semantic)))
+        val render = valid.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val packet = render.drawPackets.single()
+        val substituted = cloneCorePacket(
+            packet = packet,
+            analysisRecordId = "analysis.fill_rect.999",
+        )
+        val plan = replaceRender(valid, renderWith(render, drawPackets = listOf(substituted)))
+        val events = mutableListOf<String>()
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        try {
+            val result = preflighter(
+                resources = resources,
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                nativeBoundary = adapter.bindNativeFrameBoundary(
+                    resources,
+                    RenderOnlyNativePayloadMaterializer(events),
+                ),
+            ).preflight(plan)
+
+            assertEquals(
+                "invalid.preflight.core_primitive_semantic_integrity",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertTrue(events.isEmpty(), "analysis substitution escaped pure validation: $events")
+            assertEquals(0, resources.pendingPhysicalReservationCount)
+            assertTrue(resources.telemetry.dumpEvents.isEmpty())
+        } finally {
+            adapter.close()
         }
     }
 
@@ -5830,6 +5901,7 @@ class GPUFramePreflighterTest {
         packetId: GPUDrawPacketID = packet.packetId,
         role: GPUDrawPacketRole = packet.role,
         commandIdValue: Int = packet.commandIdValue,
+        analysisRecordId: String = packet.analysisRecordId,
         blendPlan: GPUBlendPlan? = packet.blendPlan,
         renderPipelineKey: GPURenderPipelineKey = requireNotNull(packet.renderPipelineKey),
         scissorBoundsHash: String? = packet.scissorBoundsHash,
@@ -5855,7 +5927,7 @@ class GPUFramePreflighterTest {
         val cloned = GPUDrawPacket(
             packetId = packetId,
             commandIdValue = commandIdValue,
-            analysisRecordId = packet.analysisRecordId,
+            analysisRecordId = analysisRecordId,
             passId = packet.passId,
             layerId = packet.layerId,
             bindingListId = packet.bindingListId,
@@ -6167,7 +6239,7 @@ class GPUFramePreflighterTest {
         val packet = GPUDrawPacket(
             packetId = GPUDrawPacketID(packetId),
             commandIdValue = packetCommandIdValue ?: semantic?.payloadRef?.commandIdValue ?: 41,
-            analysisRecordId = "analysis.core",
+            analysisRecordId = semantic?.analysisRecordId ?: "analysis.core",
             passId = "pass.core",
             layerId = "root",
             bindingListId = "bindings.core",
@@ -6625,12 +6697,16 @@ class GPUFramePreflighterTest {
                 blendPlanIdentity = blend.canonicalIdentity(),
                 frameProvenance = GPUFrameProvenance.GmContent,
                 coverageMode = coverageMode,
-                analysisRecordId = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
-                    "analysis.fill_rect.$commandIdValue"
-                } else {
-                    null
+                analysisRecordId = when (sourceFamily) {
+                    GPUCorePrimitiveSourceFamily.Rect -> "analysis.fill_rect.$commandIdValue"
+                    GPUCorePrimitiveSourceFamily.RRect -> "analysis.fill_rrect.$commandIdValue"
+                    else -> null
                 },
-                analysisCommandFamily = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) "FillRect" else null,
+                analysisCommandFamily = when (sourceFamily) {
+                    GPUCorePrimitiveSourceFamily.Rect -> "FillRect"
+                    GPUCorePrimitiveSourceFamily.RRect -> "FillRRect"
+                    else -> null
+                },
                 rectRouteAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
                     GPUCorePrimitiveRectRouteAuthority.RectAxisAligned
                 } else {
@@ -6638,6 +6714,11 @@ class GPUFramePreflighterTest {
                 },
                 rectGeometryAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
                     rectGeometryAuthorityFixture(geometry as GPUCorePrimitiveGeometryInput.Rect)
+                } else {
+                    null
+                },
+                rrectGeometryAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.RRect) {
+                    rrectGeometryAuthorityFixture(geometry as GPUCorePrimitiveGeometryInput.RRect)
                 } else {
                     null
                 },
@@ -6686,6 +6767,7 @@ class GPUFramePreflighterTest {
         analysisCommandFamily = analysisCommandFamily,
         rectRouteAuthority = rectRouteAuthority,
         rectGeometryAuthority = rectGeometryAuthority,
+        rrectGeometryAuthority = rrectGeometryAuthority,
     )
 
     private fun rectGeometryAuthorityFixture(
@@ -6693,6 +6775,24 @@ class GPUFramePreflighterTest {
     ) = corePrimitiveRectGeometryAuthority(
         GPURect(geometry.left, geometry.top, geometry.right, geometry.bottom),
         GPUTransformFacts.identity(),
+    )
+
+    private fun rrectGeometryAuthorityFixture(
+        geometry: GPUCorePrimitiveGeometryInput.RRect,
+    ): org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAuthority {
+        val source = geometry.toSourceRRect()
+        val accepted = assertIs<GPURRectNormalizationResult.Accepted>(GPURRectNormalizer.normalize(source))
+        return assertIs<GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued>(
+            corePrimitiveRRectGeometryAuthority(source, accepted, GPUTransformFacts.identity()),
+        ).authority
+    }
+
+    private fun GPUCorePrimitiveGeometryInput.RRect.toSourceRRect(): GPURRect = GPURRect(
+        rect = GPURect(left, top, right, bottom),
+        topLeft = GPURRectCornerRadii(radii[0], radii[1]),
+        topRight = GPURRectCornerRadii(radii[2], radii[3]),
+        bottomRight = GPURRectCornerRadii(radii[4], radii[5]),
+        bottomLeft = GPURRectCornerRadii(radii[6], radii[7]),
     )
 
     private fun coreBlend(mode: GPUBlendMode): GPUBlendPlan = GPUBlendPlan.FixedFunctionBlend(

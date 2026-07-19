@@ -114,6 +114,155 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     private enum class RouteShape { Direct, PathOnly, Mixed, TwoPathPairs, ClipStencil, CoverageMask }
 
     @Test
+    fun `analytic shape closed route refuses at real preflight boundary before every side effect`() {
+        val fixture = fixture()
+        val originalPackets = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single().drawPackets
+        val plan = originalPackets.fold(fixture.plan) { currentPlan, originalPacket ->
+            val originalAuthority = requireNotNull(originalPacket.corePrimitivePreparedAuthority)
+            val analyticKey = originalAuthority.structuralPipelineKey.copy(
+                shader = org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+                    .Shader.AnalyticShape,
+            )
+            currentPlan.replacingPacket(
+                originalPacket,
+                originalPacket.withPreparedAuthority(
+                    originalAuthority.copy(structuralPipelineKey = analyticKey),
+                ),
+            )
+        }
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        var ticketCalls = 0
+        var surfaceCalls = 0
+        var materializerCalls = 0
+        val completion = object : GPUQueueCompletionProvider {
+            override fun reserveTicket(
+                request: GPUQueueCompletionTicketRequest,
+            ): GPUQueueCompletionTicketReservation {
+                ticketCalls += 1
+                error("Closed analytic-shape preflight must not reserve a completion ticket")
+            }
+
+            override fun abandonReservedTicket(
+                ticket: GPUQueueCompletionTicket,
+            ): GPUQueueCompletionTicketAbandonResult {
+                ticketCalls += 1
+                error("Closed analytic-shape preflight must not abandon a completion ticket")
+            }
+        }
+        val surface = object : GPUSurfaceOutputProvider {
+            override fun acquire(request: GPUSurfaceAcquisitionRequest): GPUSurfaceAcquisitionResult {
+                surfaceCalls += 1
+                error("Closed analytic-shape preflight must not acquire a surface")
+            }
+
+            override fun release(output: GPUAcquiredSurfaceOutput): GPUSurfaceReleaseResult {
+                surfaceCalls += 1
+                error("Closed analytic-shape preflight must not release a surface")
+            }
+        }
+        val nativeMaterializer = object : GPUPreparedNativeFramePayloadMaterializer {
+            override fun materializeReusable(
+                framePlan: GPUFramePlan,
+                encoderPlan: GPUCommandEncoderPlan,
+                resources: GPUPreparedResourceSet,
+                generationSeal: GPUPreparedGenerationSeal,
+            ): GPUPreparedNativeFramePayloadMaterialization {
+                materializerCalls += 1
+                error("Closed analytic-shape preflight must not materialize native payloads")
+            }
+
+            override fun bindLateSurface(
+                draft: GPUPreparedNativeFrameDraft,
+                acquiredSurface: GPUAcquiredSurfaceOutput?,
+            ): GPUPreparedNativeFrameLateSurfaceBinding {
+                materializerCalls += 1
+                error("Closed analytic-shape preflight must not bind a late surface")
+            }
+        }
+
+        val result = GPUFramePreflighter(
+            context = GPUFramePreflightContext(
+                targetId = "target.core.proxy",
+                deviceGeneration = fixture.generationSeal.deviceGeneration,
+                targetGeneration = fixture.generationSeal.targetGeneration,
+                resourceGenerations = fixture.generationSeal.resourceGenerations,
+            ),
+            capabilities = capabilities(),
+            resourceProvider = resources,
+            completionProvider = completion,
+            surfaceProvider = surface,
+            nativeBoundary = adapter.bindNativeFrameBoundary(resources, nativeMaterializer),
+        ).preflight(plan)
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(result)
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_CODE, refused.diagnostic.code.value)
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_MESSAGE, refused.diagnostic.message)
+        assertEquals(0, ticketCalls)
+        assertEquals(0, surfaceCalls)
+        assertEquals(0, materializerCalls)
+        assertEquals(0, adapter.activePreparedNativeFramePayloadCount)
+        assertEquals(0, resources.pendingPhysicalReservationCount)
+        assertTrue(resources.telemetry.dumpEvents.isEmpty())
+        fixture.close()
+        adapter.close()
+    }
+
+    @Test
+    fun `analytic shape closed route refuses at real materializer boundary before cache pool and native`() {
+        val fixture = fixture()
+        val scope = fixture.encoderPlan.scopes.single()
+        val originalRoutes = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            scope.corePrimitiveDirectNativeRouteSeal,
+        )
+        val originalPass = requireNotNull(originalRoutes.preparedPassSeal)
+        val analyticPass = GPUCorePrimitiveDirectPreparedPassSeal(
+            structuralPipelineKey = originalPass.structuralPipelineKey.copy(
+                shader = org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+                    .Shader.AnalyticShape,
+            ),
+            uniformSlabSeal = originalPass.uniformSlabSeal,
+        )
+        setPrivateField(
+            scope,
+            "corePrimitiveDirectNativeRouteSeal",
+            GPUCorePrimitiveDirectNativeRouteSeal.Routes.snapshot(
+                originalRoutes.routesByPacketId,
+                analyticPass,
+            ),
+        )
+        fixture.native.events.clear()
+        fixture.native.writeBufferCalls.clear()
+        val cacheBefore = fixture.cache.counters()
+        val poolSlotsBefore = framePoolSlotCount(fixture.cache)
+        val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target,
+            fixture.cache,
+            fixture.limits,
+        )
+
+        val result = materializer.materializeReusable(
+            fixture.plan,
+            fixture.encoderPlan,
+            fixture.resources,
+            fixture.generationSeal,
+        )
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result)
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_CODE, refused.code)
+        assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_MESSAGE, refused.message)
+        assertEquals(cacheBefore, fixture.cache.counters())
+        assertEquals(poolSlotsBefore, framePoolSlotCount(fixture.cache))
+        assertEquals(emptyList(), fixture.native.events)
+        assertEquals(emptyList(), fixture.native.writeBufferCalls)
+        materializer.close()
+        fixture.close()
+    }
+
+    @Test
     fun `prepared coverage mask materializes color-only producers and consumers with one shared mask`() {
         val fixture = fixture(
             readback = true,
@@ -295,6 +444,21 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     .first { it.role == GPUDrawPacketRole.Shading }
                 CoverageMaskMaterializationInput(
                     fixture.plan.replacingPacket(consumer, consumer.withSemantic(semantic(consumer))),
+                    fixture.encoderPlan,
+                    fixture.resources,
+                    fixture.generationSeal,
+                )
+            },
+            Scenario("same-content-consumer-semantic-instance") { fixture ->
+                val consumer = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                    .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+                    .first { it.role == GPUDrawPacketRole.Shading }
+                val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(consumer.semanticPayload)
+                CoverageMaskMaterializationInput(
+                    fixture.plan.replacingPacket(
+                        consumer,
+                        consumer.withSemantic(semantic.sameContentClone()),
+                    ),
                     fixture.encoderPlan,
                     fixture.resources,
                     fixture.generationSeal,
@@ -2910,6 +3074,27 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     GPUTransformFacts.identity(),
                 ),
             ),
+        )
+
+    private fun GPUDrawSemanticPayload.CorePrimitive.sameContentClone() =
+        GPUDrawSemanticPayload.CorePrimitive(
+            payloadRef = payloadRef,
+            sourceFamily = sourceFamily,
+            geometry = geometry,
+            premultipliedRgba = premultipliedRgba,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlanIdentity = clipExecutionPlanIdentity,
+            blendPlanIdentity = blendPlanIdentity,
+            frameProvenance = frameProvenance,
+            canonicalHash = canonicalHash,
+            coverageMode = coverageMode,
+            analysisRecordId = analysisRecordId,
+            analysisCommandFamily = analysisCommandFamily,
+            rectRouteAuthority = rectRouteAuthority,
+            rectGeometryAuthority = rectGeometryAuthority,
+            rrectGeometryAuthority = rrectGeometryAuthority,
         )
 
     private fun pathSemantic(

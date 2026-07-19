@@ -26,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedPacketAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentFormat
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskConsumerInput
@@ -63,6 +64,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStruct
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
@@ -547,8 +549,16 @@ private fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
 ): Boolean {
     if (!semantic.hasStructuralIntegrity()) return false
     if (semantic.sourceFamily != GPUCorePrimitiveSourceFamily.Rect) {
+        if (semantic.sourceFamily == GPUCorePrimitiveSourceFamily.RRect) {
+            return analysisRecordId == semantic.analysisRecordId &&
+                semantic.analysisRecordId == "analysis.fill_rrect.$commandIdValue" &&
+                semantic.analysisCommandFamily == "FillRRect" &&
+                renderStepId.value == CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY &&
+                semantic.geometry is GPUCorePrimitiveGeometry.RRect
+        }
         if (semantic.analysisRecordId != null || semantic.analysisCommandFamily != null ||
-            semantic.rectRouteAuthority != null
+            semantic.rectRouteAuthority != null || semantic.rectGeometryAuthority != null ||
+            semantic.rrectGeometryAuthority != null
         ) return false
         return when (semantic.sourceFamily) {
             GPUCorePrimitiveSourceFamily.Color -> semantic.geometry is GPUCorePrimitiveGeometry.Rect
@@ -556,7 +566,7 @@ private fun GPUDrawPacket.hasCorePrimitiveSemanticAuthority(
             GPUCorePrimitiveSourceFamily.DRRect,
             GPUCorePrimitiveSourceFamily.Path,
             -> semantic.geometry is GPUCorePrimitiveGeometry.TriangulatedPath
-            GPUCorePrimitiveSourceFamily.RRect -> semantic.geometry is GPUCorePrimitiveGeometry.RRect
+            GPUCorePrimitiveSourceFamily.RRect -> false
             GPUCorePrimitiveSourceFamily.Rect -> false
         }
     }
@@ -1428,6 +1438,13 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 packet.clipExecutionPlan?.canonicalIdentity() == maskPlan.canonicalIdentity()
             }
         }.orEmpty()
+        val preparedCoverageMaskSemanticsByCommandId = staticCoverageMaskPlan?.let { maskPlan ->
+            staticCoverageMaskConsumers.associate { packet ->
+                packet.commandIdValue to request.semanticsByCommandId
+                    .getValue(packet.commandIdValue)
+                    .withClipExecutionPlanIdentity(maskPlan.canonicalIdentity())
+            }
+        }.orEmpty()
         val coverageMaskPreparedCandidate = staticCoverageMaskPlan?.takeIf {
             staticCoverageMaskConsumers.size == basePackets.size
         }?.let { maskPlan ->
@@ -1436,12 +1453,13 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 GPUCorePrimitiveCoverageMaskPreparedRouteRequest(
                     plan = maskPlan,
                     consumers = staticCoverageMaskConsumers.map { packet ->
-                        val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
+                        val semantic = preparedCoverageMaskSemanticsByCommandId
+                            .getValue(packet.commandIdValue)
                         GPUCorePrimitiveCoverageMaskConsumerInput(
                             packetId = packet.packetId,
                             commandId = packet.commandIdValue,
                             sourceOrder = packet.originalPaintOrder,
-                            semanticCanonicalIdentity = semantic.canonicalHash,
+                            semanticAuthority = GPUCorePrimitivePreparedSemanticAuthority.capture(semantic),
                             coverageMode = semantic.coverageMode,
                             blendPlan = requireNotNull(packet.blendPlan),
                             orderingToken = maskPlan.orderingToken,
@@ -1827,10 +1845,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                                 consumer.sourceOrder,
                             )
                         },
-                        semanticCanonicalIdentity = request.semanticsByCommandId
-                            .getValue(consumer.commandId)
-                            .withClipExecutionPlanIdentity(maskPlan.canonicalIdentity())
-                            .canonicalHash,
+                        semanticAuthority = consumer.semanticAuthority,
                         structuralPipelineKey = consumer.structuralKey,
                         renderPipelineKey = renderPipelineKey,
                         bindingLayoutHash = CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_BINDING_LAYOUT_HASH,
@@ -2281,6 +2296,9 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                         packet(
                             basePacket,
                             requireNotNull(request.semanticsByCommandId[basePacket.commandIdValue]),
+                            preparedSemanticOverride = preparedCoverageMaskSemanticsByCommandId[
+                                basePacket.commandIdValue
+                            ],
                             direct = basePacket.commandIdValue in directGeometryBytesByCommandId ||
                                 basePacket.commandIdValue in
                                 nativeClipStencilConsumerGeometryBytesByCommandId,
@@ -3065,6 +3083,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         analysisCommandFamily = analysisCommandFamily,
         rectRouteAuthority = rectRouteAuthority,
         rectGeometryAuthority = rectGeometryAuthority,
+        rrectGeometryAuthority = rrectGeometryAuthority,
     )
 
     private fun GPUDrawSemanticPayload.CorePrimitive.withAnalyticClipState(
@@ -3086,12 +3105,14 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         analysisCommandFamily = analysisCommandFamily,
         rectRouteAuthority = rectRouteAuthority,
         rectGeometryAuthority = rectGeometryAuthority,
+        rrectGeometryAuthority = rrectGeometryAuthority,
     )
 
 
     private fun packet(
         basePacket: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.CorePrimitive,
+        preparedSemanticOverride: GPUDrawSemanticPayload.CorePrimitive?,
         direct: Boolean,
         clipStencilCompatible: Boolean,
         pathDepthStencilCompatible: Boolean,
@@ -3108,7 +3129,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         val clipExecutionPlan = requireNotNull(basePacket.clipExecutionPlan)
         val analyticScissor = analyticClipAuthority?.conservativeScissor
             ?: analyticIntersectionAuthority?.conservativeScissor
-        val preparedSemantic = analyticScissor?.let { scissor ->
+        val preparedSemantic = preparedSemanticOverride ?: analyticScissor?.let { scissor ->
             semantic.withAnalyticClipState(scissor, clipExecutionPlan.canonicalIdentity())
         } ?: semantic.withClipExecutionPlanIdentity(clipExecutionPlan.canonicalIdentity())
         val coverageMaskConsumerSlot = coverageMaskUniformSlabSeal?.consumerSlots

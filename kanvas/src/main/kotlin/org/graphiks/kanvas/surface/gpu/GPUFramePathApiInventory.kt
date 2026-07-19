@@ -1,6 +1,5 @@
 package org.graphiks.kanvas.surface.gpu
 
-import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -8,6 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRectGeometry
+import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRRectGeometry
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
@@ -17,8 +17,6 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
-import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
-import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -37,11 +35,14 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeLoweringProof
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameTaskListBuilder
@@ -281,46 +282,106 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     val alpha = material.a
     val sourceFamily = normalized.toCoreSourceFamily()
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?
-    val rectGeometryAuthority = if (sourceFamily == GPUCorePrimitiveSourceFamily.Rect) {
-        val fillRect = normalized as NormalizedDrawCommand.FillRect
-        rectRouteAuthority = analysisRecord.corePrimitiveRectRouteAuthority
-            ?: refuseGeometry(
-                "unsupported.core_primitive.rect.analysis_authority_missing",
-                mapOf("analysisRecordId" to analysisRecord.recordId),
-            )
-        analysisRecord.corePrimitiveRectGeometryAuthority?.also { authority ->
-            if (!authority.matchesCorePrimitiveRectGeometry(fillRect.rect, fillRect.transform)) {
+    val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?
+    val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?
+    val sealedRRectGeometry: GPUCorePrimitiveGeometryInput.RRect?
+    when (sourceFamily) {
+        GPUCorePrimitiveSourceFamily.Rect -> {
+            val fillRect = normalized as NormalizedDrawCommand.FillRect
+            if (analysisRecord.corePrimitiveRRectGeometryAuthority != null) {
                 refuseGeometry(
-                    "unsupported.core_primitive.rect.geometry_authority_mismatch",
+                    "unsupported.core_primitive.rrect.analysis_authority_forbidden",
+                    mapOf(
+                        "analysisRecordId" to analysisRecord.recordId,
+                        "sourceFamily" to sourceFamily.name,
+                    ),
+                )
+            }
+            rectRouteAuthority = analysisRecord.corePrimitiveRectRouteAuthority
+                ?: refuseGeometry(
+                    "unsupported.core_primitive.rect.analysis_authority_missing",
+                    mapOf("analysisRecordId" to analysisRecord.recordId),
+                )
+            rectGeometryAuthority = analysisRecord.corePrimitiveRectGeometryAuthority?.also { authority ->
+                if (!authority.matchesCorePrimitiveRectGeometry(fillRect.rect, fillRect.transform)) {
+                    refuseGeometry(
+                        "unsupported.core_primitive.rect.geometry_authority_mismatch",
+                        mapOf(
+                            "analysisRecordId" to analysisRecord.recordId,
+                            "analysisGeometryAuthority" to authority.toString(),
+                        ),
+                    )
+                }
+            } ?: refuseGeometry(
+                "unsupported.core_primitive.rect.geometry_authority_mismatch",
+                mapOf(
+                    "analysisRecordId" to analysisRecord.recordId,
+                    "analysisGeometryAuthority" to "missing",
+                ),
+            )
+            rrectGeometryAuthority = null
+            sealedRRectGeometry = null
+        }
+        GPUCorePrimitiveSourceFamily.RRect -> {
+            val fillRRect = normalized as NormalizedDrawCommand.FillRRect
+            if (analysisRecord.corePrimitiveRectRouteAuthority != null ||
+                analysisRecord.corePrimitiveRectGeometryAuthority != null
+            ) {
+                refuseGeometry(
+                    "unsupported.core_primitive.rect.analysis_authority_forbidden",
+                    mapOf(
+                        "analysisRecordId" to analysisRecord.recordId,
+                        "sourceFamily" to sourceFamily.name,
+                    ),
+                )
+            }
+            val authority = analysisRecord.corePrimitiveRRectGeometryAuthority
+                ?: refuseGeometry(
+                    "unsupported.core_primitive.rrect.analysis_authority_missing",
+                    mapOf("analysisRecordId" to analysisRecord.recordId),
+                )
+            if (!authority.matchesCorePrimitiveRRectGeometry(fillRRect.rrect, fillRRect.transform)) {
+                refuseGeometry(
+                    "unsupported.core_primitive.rrect.geometry_authority_mismatch",
                     mapOf(
                         "analysisRecordId" to analysisRecord.recordId,
                         "analysisGeometryAuthority" to authority.toString(),
                     ),
                 )
             }
-        } ?: refuseGeometry(
-            "unsupported.core_primitive.rect.geometry_authority_mismatch",
-            mapOf(
-                "analysisRecordId" to analysisRecord.recordId,
-                "analysisGeometryAuthority" to "missing",
-            ),
-        )
-    } else {
-        if (analysisRecord.corePrimitiveRectRouteAuthority != null ||
-            analysisRecord.corePrimitiveRectGeometryAuthority != null
-        ) {
-            refuseGeometry(
-                "unsupported.core_primitive.rect.analysis_authority_forbidden",
-                mapOf(
-                    "analysisRecordId" to analysisRecord.recordId,
-                    "sourceFamily" to sourceFamily.name,
-                ),
-            )
+            rectRouteAuthority = null
+            rectGeometryAuthority = null
+            rrectGeometryAuthority = authority
+            sealedRRectGeometry = authority.sealedDeviceGeometryInput()
         }
-        rectRouteAuthority = null
-        null
+        else -> {
+            if (analysisRecord.corePrimitiveRectRouteAuthority != null ||
+                analysisRecord.corePrimitiveRectGeometryAuthority != null
+            ) {
+                refuseGeometry(
+                    "unsupported.core_primitive.rect.analysis_authority_forbidden",
+                    mapOf(
+                        "analysisRecordId" to analysisRecord.recordId,
+                        "sourceFamily" to sourceFamily.name,
+                    ),
+                )
+            }
+            if (analysisRecord.corePrimitiveRRectGeometryAuthority != null) {
+                refuseGeometry(
+                    "unsupported.core_primitive.rrect.analysis_authority_forbidden",
+                    mapOf(
+                        "analysisRecordId" to analysisRecord.recordId,
+                        "sourceFamily" to sourceFamily.name,
+                    ),
+                )
+            }
+            rectRouteAuthority = null
+            rectGeometryAuthority = null
+            rrectGeometryAuthority = null
+            sealedRRectGeometry = null
+        }
     }
-    val geometry = normalized.toDeviceGeometry(targetBounds)
+    val geometry = sealedRRectGeometry ?: normalized.toDeviceGeometry(targetBounds)
     val scissor = when (val clip = clipCoverage) {
         is GPUClipCoveragePlan.Scissor -> GPUPixelBounds(
             floor(clip.bounds.left).toInt().coerceIn(targetBounds.left, targetBounds.right),
@@ -342,13 +403,16 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         frameProvenance = provenance,
         coverageMode = coverageMode(),
         analysisRecordId = analysisRecord.recordId.takeIf {
-            sourceFamily == GPUCorePrimitiveSourceFamily.Rect
+            sourceFamily == GPUCorePrimitiveSourceFamily.Rect ||
+                sourceFamily == GPUCorePrimitiveSourceFamily.RRect
         },
         analysisCommandFamily = analysisRecord.commandFamily.takeIf {
-            sourceFamily == GPUCorePrimitiveSourceFamily.Rect
+            sourceFamily == GPUCorePrimitiveSourceFamily.Rect ||
+                sourceFamily == GPUCorePrimitiveSourceFamily.RRect
         },
         rectRouteAuthority = rectRouteAuthority,
         rectGeometryAuthority = rectGeometryAuthority,
+        rrectGeometryAuthority = rrectGeometryAuthority,
     )
 }
 
@@ -402,49 +466,9 @@ private fun NormalizedDrawCommand.toDeviceGeometry(
             )
         }
     }
-    is NormalizedDrawCommand.FillRRect -> {
-        if (transform.skewX != 0f || transform.skewY != 0f) {
-            refuseGeometry(
-                "unsupported.core_primitive.rrect.non_axis_aligned_transform",
-                mapOf("transformType" to transform.type.name),
-            )
-        }
-        val normalizedRRect = when (val normalized = GPURRectNormalizer.normalize(rrect)) {
-            is GPURRectNormalizationResult.Accepted -> normalized.rrect
-            is GPURRectNormalizationResult.Refused -> refuseGeometry(
-                normalized.code,
-                mapOf("normalizationReason" to normalized.message),
-            )
-        }
-        val first = transform.map(normalizedRRect.rect.left, normalizedRRect.rect.top)
-        val second = transform.map(normalizedRRect.rect.right, normalizedRRect.rect.bottom)
-        val scaleX = abs(transform.scaleX)
-        val scaleY = abs(transform.scaleY)
-        fun deviceCorner(deviceLeft: Boolean, deviceTop: Boolean) = when {
-            (if (transform.scaleX < 0f) !deviceLeft else deviceLeft) &&
-                (if (transform.scaleY < 0f) !deviceTop else deviceTop) -> normalizedRRect.topLeft
-            !(if (transform.scaleX < 0f) !deviceLeft else deviceLeft) &&
-                (if (transform.scaleY < 0f) !deviceTop else deviceTop) -> normalizedRRect.topRight
-            !(if (transform.scaleX < 0f) !deviceLeft else deviceLeft) -> normalizedRRect.bottomRight
-            else -> normalizedRRect.bottomLeft
-        }
-        val tl = deviceCorner(deviceLeft = true, deviceTop = true)
-        val tr = deviceCorner(deviceLeft = false, deviceTop = true)
-        val br = deviceCorner(deviceLeft = false, deviceTop = false)
-        val bl = deviceCorner(deviceLeft = true, deviceTop = false)
-        GPUCorePrimitiveGeometryInput.RRect(
-            minOf(first.first, second.first),
-            minOf(first.second, second.second),
-            maxOf(first.first, second.first),
-            maxOf(first.second, second.second),
-            listOf(
-                tl.x * scaleX, tl.y * scaleY,
-                tr.x * scaleX, tr.y * scaleY,
-                br.x * scaleX, br.y * scaleY,
-                bl.x * scaleX, bl.y * scaleY,
-            ),
-        )
-    }
+    is NormalizedDrawCommand.FillRRect -> error(
+        "unsupported.core_primitive.rrect.analysis_authority_missing",
+    )
     is NormalizedDrawCommand.FillPath -> pathDeviceGeometry(targetBounds)
     else -> error("Non-core command reached Slice 12A semantic gathering")
 }

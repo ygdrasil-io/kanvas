@@ -253,6 +253,7 @@ const val REGISTERED_UNIFORM_RECT_RENDER_STEP_IDENTITY = "rect.registered-unifor
 const val SEPARABLE_BLUR_RECT_RENDER_STEP_IDENTITY = "filter.blur.separable-rect"
 const val CORE_PRIMITIVE_RENDER_STEP_IDENTITY = "core-primitive.device-geometry"
 const val CORE_PRIMITIVE_FILL_RECT_STEP_IDENTITY = "rect.fill.coverage"
+const val CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY = "rrect.fill.coverage"
 const val CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY = "rect.fill.affine-direct-triangles"
 const val CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY = "first_slice.fill_rect.affine.native"
 
@@ -515,6 +516,206 @@ class GPUCorePrimitiveRectGeometryAuthority private constructor(
     }
 }
 
+/**
+ * Collision-free raw facts proving one exact source RRect, its single normalized result,
+ * and the axis-aligned transform analyzed for it.
+ *
+ * The authority is opaque: downstream code can retain it and ask it for the sealed device
+ * geometry, but cannot construct, copy, or mutate its signed facts.
+ */
+sealed interface GPUCorePrimitiveRRectGeometryAuthority {
+    companion object {
+        @JvmSynthetic
+        internal fun issue(
+            source: GPUCorePrimitiveRRectRawFacts,
+            normalized: GPUCorePrimitiveRRectRawFacts,
+            transform: GPUCorePrimitiveRRectTransformRawFacts,
+            device: GPUCorePrimitiveRRectRawFacts,
+        ): GPUCorePrimitiveRRectGeometryAuthority? =
+            if (normalized.hasValidGeometry() && device.hasValidGeometry()) {
+                GPUCorePrimitiveRRectGeometryAuthorityImpl(source, normalized, transform, device)
+            } else {
+                null
+            }
+
+        internal fun canonicalPreimage(authority: GPUCorePrimitiveRRectGeometryAuthority): String =
+            authority.impl().canonicalPreimage()
+
+        internal fun matchesRawSource(
+            authority: GPUCorePrimitiveRRectGeometryAuthority,
+            source: GPUCorePrimitiveRRectRawFacts,
+            transform: GPUCorePrimitiveRRectTransformRawFacts,
+        ): Boolean = authority.impl().matchesRawSource(source, transform)
+
+        internal fun sealedDeviceGeometryInput(
+            authority: GPUCorePrimitiveRRectGeometryAuthority,
+        ): GPUCorePrimitiveGeometryInput.RRect = authority.impl().sealedDeviceGeometryInput()
+
+        internal fun hasExactDeviceGeometry(
+            authority: GPUCorePrimitiveRRectGeometryAuthority,
+            geometry: GPUCorePrimitiveGeometry.RRect,
+        ): Boolean = authority.impl().hasExactDeviceGeometry(geometry)
+    }
+}
+
+/** Raw, collision-free RRect values passed only across the analysis/payload boundary. */
+internal data class GPUCorePrimitiveRRectRawFacts(
+    val leftBits: Int,
+    val topBits: Int,
+    val rightBits: Int,
+    val bottomBits: Int,
+    val topLeftXBits: Int,
+    val topLeftYBits: Int,
+    val topRightXBits: Int,
+    val topRightYBits: Int,
+    val bottomRightXBits: Int,
+    val bottomRightYBits: Int,
+    val bottomLeftXBits: Int,
+    val bottomLeftYBits: Int,
+) {
+    private fun values(): List<Float> = listOf(
+        Float.fromBits(leftBits),
+        Float.fromBits(topBits),
+        Float.fromBits(rightBits),
+        Float.fromBits(bottomBits),
+        Float.fromBits(topLeftXBits),
+        Float.fromBits(topLeftYBits),
+        Float.fromBits(topRightXBits),
+        Float.fromBits(topRightYBits),
+        Float.fromBits(bottomRightXBits),
+        Float.fromBits(bottomRightYBits),
+        Float.fromBits(bottomLeftXBits),
+        Float.fromBits(bottomLeftYBits),
+    )
+
+    fun hasValidGeometry(): Boolean {
+        val values = values()
+        val left = values[0]
+        val top = values[1]
+        val right = values[2]
+        val bottom = values[3]
+        val radii = values.drop(4)
+        if (values.any { !it.isFinite() } || left >= right || top >= bottom ||
+            radii.any { it < 0f }
+        ) return false
+        for (corner in 0 until 4) {
+            val x = radii[corner * 2]
+            val y = radii[corner * 2 + 1]
+            if ((x == 0f) != (y == 0f)) return false
+        }
+        val width = right.toDouble() - left.toDouble()
+        val height = bottom.toDouble() - top.toDouble()
+        return radii[0].toDouble() + radii[2].toDouble() <= width &&
+            radii[3].toDouble() + radii[5].toDouble() <= height &&
+            radii[4].toDouble() + radii[6].toDouble() <= width &&
+            radii[7].toDouble() + radii[1].toDouble() <= height
+    }
+
+    fun canonicalBounds(): String = "$leftBits,$topBits,$rightBits,$bottomBits"
+
+    fun canonicalRadii(): String =
+        "$topLeftXBits,$topLeftYBits,$topRightXBits,$topRightYBits," +
+            "$bottomRightXBits,$bottomRightYBits,$bottomLeftXBits,$bottomLeftYBits"
+
+    fun toGeometryInput(): GPUCorePrimitiveGeometryInput.RRect = GPUCorePrimitiveGeometryInput.RRect(
+        left = Float.fromBits(leftBits),
+        top = Float.fromBits(topBits),
+        right = Float.fromBits(rightBits),
+        bottom = Float.fromBits(bottomBits),
+        radii = listOf(
+            Float.fromBits(topLeftXBits),
+            Float.fromBits(topLeftYBits),
+            Float.fromBits(topRightXBits),
+            Float.fromBits(topRightYBits),
+            Float.fromBits(bottomRightXBits),
+            Float.fromBits(bottomRightYBits),
+            Float.fromBits(bottomLeftXBits),
+            Float.fromBits(bottomLeftYBits),
+        ),
+    )
+
+    fun matches(geometry: GPUCorePrimitiveGeometry.RRect): Boolean =
+        geometry.left.toRawBits() == leftBits &&
+            geometry.top.toRawBits() == topBits &&
+            geometry.right.toRawBits() == rightBits &&
+            geometry.bottom.toRawBits() == bottomBits &&
+            geometry.radii.map(Float::toRawBits) == listOf(
+                topLeftXBits,
+                topLeftYBits,
+                topRightXBits,
+                topRightYBits,
+                bottomRightXBits,
+                bottomRightYBits,
+                bottomLeftXBits,
+                bottomLeftYBits,
+            )
+}
+
+/** Raw, command-agnostic transform values retained by the passive payload authority. */
+internal data class GPUCorePrimitiveRRectTransformRawFacts(
+    val type: GPUCorePrimitiveRectTransformType,
+    val translateXBits: Int,
+    val translateYBits: Int,
+    val scaleXBits: Int,
+    val scaleYBits: Int,
+    val skewXBits: Int,
+    val skewYBits: Int,
+) {
+    fun canonicalPreimage(): String =
+        "transformType=${type.wireId};" +
+            "transform=$translateXBits,$translateYBits,$scaleXBits,$scaleYBits,$skewXBits,$skewYBits"
+}
+
+/** Private implementation leaves no constructible public authority class on the JVM surface. */
+private class GPUCorePrimitiveRRectGeometryAuthorityImpl(
+    private val source: GPUCorePrimitiveRRectRawFacts,
+    private val normalized: GPUCorePrimitiveRRectRawFacts,
+    private val transform: GPUCorePrimitiveRRectTransformRawFacts,
+    private val device: GPUCorePrimitiveRRectRawFacts,
+) : GPUCorePrimitiveRRectGeometryAuthority {
+    fun canonicalPreimage(): String =
+        "v=1;" +
+            "sourceBounds=${source.canonicalBounds()};" +
+            "sourceRadii=${source.canonicalRadii()};" +
+            "normalizedBounds=${normalized.canonicalBounds()};" +
+            "normalizedRadii=${normalized.canonicalRadii()};" +
+            transform.canonicalPreimage()
+
+    fun matchesRawSource(
+        source: GPUCorePrimitiveRRectRawFacts,
+        transform: GPUCorePrimitiveRRectTransformRawFacts,
+    ): Boolean = this.source == source && this.transform == transform
+
+    fun sealedDeviceGeometryInput(): GPUCorePrimitiveGeometryInput.RRect = device.toGeometryInput()
+
+    fun hasExactDeviceGeometry(geometry: GPUCorePrimitiveGeometry.RRect): Boolean = device.matches(geometry)
+
+    override fun equals(other: Any?): Boolean = this === other || (
+        other is GPUCorePrimitiveRRectGeometryAuthorityImpl &&
+            source == other.source &&
+            normalized == other.normalized &&
+            transform == other.transform &&
+            device == other.device
+        )
+
+    override fun hashCode(): Int {
+        var result = source.hashCode()
+        result = 31 * result + normalized.hashCode()
+        result = 31 * result + transform.hashCode()
+        result = 31 * result + device.hashCode()
+        return result
+    }
+
+    override fun toString(): String = "GPUCorePrimitiveRRectGeometryAuthority(opaque)"
+}
+
+private fun GPUCorePrimitiveRRectGeometryAuthority.impl(): GPUCorePrimitiveRRectGeometryAuthorityImpl =
+    this as GPUCorePrimitiveRRectGeometryAuthorityImpl
+
+/** Returns the immutable device RRect signed by analysis, without repeating normalization. */
+fun GPUCorePrimitiveRRectGeometryAuthority.sealedDeviceGeometryInput(): GPUCorePrimitiveGeometryInput.RRect =
+    GPUCorePrimitiveRRectGeometryAuthority.sealedDeviceGeometryInput(this)
+
 /** Exact fill authority retained for path stencil-cover materialization. */
 enum class GPUCorePrimitiveFillRule {
     Winding,
@@ -626,6 +827,7 @@ data class GPUCorePrimitivePayloadInput(
     val analysisCommandFamily: String? = null,
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
     val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
+    val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
 )
 
 /** Closed geometry input; callers cannot smuggle backend handles into frame planning. */
@@ -729,6 +931,7 @@ sealed interface GPUDrawSemanticPayload {
         val analysisCommandFamily: String? = null,
         val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
         val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
+        val rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
     ) : GPUDrawSemanticPayload {
         override val canonicalType: String = "CorePrimitive"
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
@@ -751,6 +954,7 @@ sealed interface GPUDrawSemanticPayload {
                 analysisCommandFamily = analysisCommandFamily,
                 rectRouteAuthority = rectRouteAuthority,
                 rectGeometryAuthority = rectGeometryAuthority,
+                rrectGeometryAuthority = rrectGeometryAuthority,
             )
         }
 
@@ -764,7 +968,7 @@ sealed interface GPUDrawSemanticPayload {
                 targetBounds.containsRegisteredUniformRect(scissorBounds) &&
                 clipCoveragePlan !is GPUClipCoveragePlan.Refused &&
                 (clipExecutionPlanIdentity == null || clipExecutionPlanIdentity.isNotBlank()) &&
-                hasCorePrimitiveRectRouteAuthorityIntegrity(
+                hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
                     payloadRef.commandIdValue,
                     sourceFamily,
                     geometry,
@@ -774,6 +978,7 @@ sealed interface GPUDrawSemanticPayload {
                     analysisCommandFamily,
                     rectRouteAuthority,
                     rectGeometryAuthority,
+                    rrectGeometryAuthority,
                 )
 
         internal fun hasCanonicalHashIntegrity(): Boolean =
@@ -794,6 +999,7 @@ sealed interface GPUDrawSemanticPayload {
                     analysisCommandFamily = analysisCommandFamily,
                     rectRouteAuthority = rectRouteAuthority,
                     rectGeometryAuthority = rectGeometryAuthority,
+                    rrectGeometryAuthority = rrectGeometryAuthority,
                 ))
 
         internal fun withClipExecutionPlanIdentity(identity: String): CorePrimitive {
@@ -815,6 +1021,7 @@ sealed interface GPUDrawSemanticPayload {
                 analysisCommandFamily = analysisCommandFamily,
                 rectRouteAuthority = rectRouteAuthority,
                 rectGeometryAuthority = rectGeometryAuthority,
+                rrectGeometryAuthority = rrectGeometryAuthority,
             )
         }
     }
@@ -1003,7 +1210,7 @@ class GPUCorePrimitivePayloadGatherer {
 
         val geometry = input.geometry.snapshotAndValidate(input.targetBounds)
         require(
-            hasCorePrimitiveRectRouteAuthorityIntegrity(
+            hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
                 input.commandIdValue,
                 input.sourceFamily,
                 geometry,
@@ -1013,9 +1220,10 @@ class GPUCorePrimitivePayloadGatherer {
                 input.analysisCommandFamily,
                 input.rectRouteAuthority,
                 input.rectGeometryAuthority,
+                input.rrectGeometryAuthority,
             ),
         ) {
-            "Core primitive rect authority must match FillRect analysis identity and exact geometry"
+            "Core primitive analysis authority must match source family, identity, and exact geometry"
         }
         val color = input.premultipliedRgba.toList()
         val uniformBytes = corePrimitiveUniformBytes(input.targetBounds, color)
@@ -1059,6 +1267,7 @@ class GPUCorePrimitivePayloadGatherer {
             analysisCommandFamily = input.analysisCommandFamily,
             rectRouteAuthority = input.rectRouteAuthority,
             rectGeometryAuthority = input.rectGeometryAuthority,
+            rrectGeometryAuthority = input.rrectGeometryAuthority,
         )
     }
 }
@@ -1089,6 +1298,11 @@ private fun GPUCorePrimitiveRectGeometryAuthority?.canonicalPreimage(): String =
         GPUCorePrimitiveRectGeometryAuthority.canonicalPreimage(authority)
     } ?: "none"
 
+private fun GPUCorePrimitiveRRectGeometryAuthority?.canonicalPreimage(): String =
+    this?.let { authority ->
+        GPUCorePrimitiveRRectGeometryAuthority.canonicalPreimage(authority)
+    } ?: "none"
+
 private fun corePrimitiveCanonicalHash(
     payloadRef: GPUDrawPayloadRef,
     sourceFamily: GPUCorePrimitiveSourceFamily,
@@ -1105,6 +1319,7 @@ private fun corePrimitiveCanonicalHash(
     analysisCommandFamily: String?,
     rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
     rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+    rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
 ): String = sha256Hex(
     listOf(
         "type=CorePrimitive",
@@ -1114,6 +1329,7 @@ private fun corePrimitiveCanonicalHash(
         "commandFamily=${analysisCommandFamily ?: "none"}",
         "rectRoute=${rectRouteAuthority?.name ?: "none"}",
         "rectGeometryAuthority=${rectGeometryAuthority.canonicalPreimage()}",
+        "rrectGeometryAuthority=${rrectGeometryAuthority.canonicalPreimage()}",
         "fingerprint=${requireNotNull(payloadRef.uniformBlock).fingerprint.value}",
         "geometry=${geometry.canonicalPreimage()}",
         "color=${premultipliedRgba.joinToString(",")}",
@@ -1127,7 +1343,7 @@ private fun corePrimitiveCanonicalHash(
     ).joinToString("\n"),
 )
 
-private fun hasCorePrimitiveRectRouteAuthorityIntegrity(
+private fun hasCorePrimitiveAnalysisGeometryAuthorityIntegrity(
     commandIdValue: Int,
     sourceFamily: GPUCorePrimitiveSourceFamily,
     geometry: GPUCorePrimitiveGeometry,
@@ -1137,45 +1353,67 @@ private fun hasCorePrimitiveRectRouteAuthorityIntegrity(
     analysisCommandFamily: String?,
     rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?,
     rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?,
+    rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority?,
 ): Boolean {
-    if (sourceFamily != GPUCorePrimitiveSourceFamily.Rect) {
-        return rectRouteAuthority == null &&
-            rectGeometryAuthority == null &&
-            analysisRecordId == null &&
-            analysisCommandFamily == null
-    }
-    if (rectRouteAuthority == null ||
-        rectGeometryAuthority == null ||
-        analysisRecordId != "analysis.fill_rect.$commandIdValue" ||
-        analysisCommandFamily != "FillRect"
-    ) return false
-    return when (rectRouteAuthority) {
-        GPUCorePrimitiveRectRouteAuthority.RectAxisAligned ->
-            geometry is GPUCorePrimitiveGeometry.Rect &&
+    return when (sourceFamily) {
+        GPUCorePrimitiveSourceFamily.Rect -> {
+            if (rectRouteAuthority == null ||
+                rectGeometryAuthority == null ||
+                rrectGeometryAuthority != null ||
+                analysisRecordId != "analysis.fill_rect.$commandIdValue" ||
+                analysisCommandFamily != "FillRect"
+            ) return false
+            when (rectRouteAuthority) {
+                GPUCorePrimitiveRectRouteAuthority.RectAxisAligned ->
+                    geometry is GPUCorePrimitiveGeometry.Rect &&
+                        coverageMode in setOf(
+                            GPUCorePrimitiveCoverageMode.FullOrScissor,
+                            GPUCorePrimitiveCoverageMode.ScalarAA,
+                        ) &&
+                        GPUCorePrimitiveRectGeometryAuthority.hasExactAxisAlignedDeviceGeometry(
+                            rectGeometryAuthority,
+                            geometry,
+                        )
+                GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1 -> {
+                    val triangles = geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
+                    coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
+                        triangles.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
+                        triangles.vertices.size == 8 &&
+                        triangles.indices == listOf(0, 1, 2, 0, 2, 3) &&
+                        triangles.sourceContourStarts == listOf(0) &&
+                        triangles.sourceVertexCount == 4 &&
+                        triangles.fillRule == GPUCorePrimitiveFillRule.Winding &&
+                        !triangles.inverseFill && triangles.strokeStyle == null &&
+                        GPUCorePrimitiveRectGeometryAuthority.hasExactAffineDeviceGeometry(
+                            rectGeometryAuthority,
+                            triangles,
+                            targetBounds,
+                        )
+                }
+            }
+        }
+        GPUCorePrimitiveSourceFamily.RRect -> {
+            val rrect = geometry as? GPUCorePrimitiveGeometry.RRect ?: return false
+            rectRouteAuthority == null &&
+                rectGeometryAuthority == null &&
+                rrectGeometryAuthority != null &&
+                analysisRecordId == "analysis.fill_rrect.$commandIdValue" &&
+                analysisCommandFamily == "FillRRect" &&
                 coverageMode in setOf(
                     GPUCorePrimitiveCoverageMode.FullOrScissor,
                     GPUCorePrimitiveCoverageMode.ScalarAA,
                 ) &&
-                GPUCorePrimitiveRectGeometryAuthority.hasExactAxisAlignedDeviceGeometry(
-                    rectGeometryAuthority,
-                    geometry,
-                )
-        GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1 -> {
-            val triangles = geometry as? GPUCorePrimitiveGeometry.TriangulatedPath ?: return false
-            coverageMode == GPUCorePrimitiveCoverageMode.FullOrScissor &&
-                triangles.geometryMode == GPUCorePrimitiveGeometryMode.DirectTriangles &&
-                triangles.vertices.size == 8 &&
-                triangles.indices == listOf(0, 1, 2, 0, 2, 3) &&
-                triangles.sourceContourStarts == listOf(0) &&
-                triangles.sourceVertexCount == 4 &&
-                triangles.fillRule == GPUCorePrimitiveFillRule.Winding &&
-                !triangles.inverseFill && triangles.strokeStyle == null &&
-                GPUCorePrimitiveRectGeometryAuthority.hasExactAffineDeviceGeometry(
-                    rectGeometryAuthority,
-                    triangles,
-                    targetBounds,
+                GPUCorePrimitiveRRectGeometryAuthority.hasExactDeviceGeometry(
+                    rrectGeometryAuthority,
+                    rrect,
                 )
         }
+        else ->
+            rectRouteAuthority == null &&
+                rectGeometryAuthority == null &&
+                rrectGeometryAuthority == null &&
+                analysisRecordId == null &&
+                analysisCommandFamily == null
     }
 }
 

@@ -871,7 +871,7 @@ internal class GPUFramePreflighter(
                     slot.sourceOrder != packet.originalPaintOrder ||
                     packet.uniformSlot != semantic.payloadRef.uniformSlot ||
                     packet.resourceSlot != null ||
-                    semantic.canonicalHash != slot.semanticCanonicalIdentity ||
+                    !slot.semanticAuthority.matches(semantic) ||
                     packet.corePrimitivePreparedAuthority?.structuralPipelineKey !=
                     slot.structuralPipelineKey || packet.renderPipelineKey != slot.renderPipelineKey ||
                     slot.renderPipelineKey != slot.structuralPipelineKey.stableRenderPipelineKey(
@@ -1136,14 +1136,14 @@ internal class GPUFramePreflighter(
         )
         val request = GPUCorePrimitiveCoverageMaskPreparedRouteRequest(
             plan,
-            consumerLocations.map { location ->
+            consumerLocations.zip(slabSeal.consumerSlots).map { (location, slot) ->
                 val packet = location.packet
                 val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
                 GPUCorePrimitiveCoverageMaskConsumerInput(
                     packet.packetId,
                     packet.commandIdValue,
                     packet.originalPaintOrder,
-                    semantic.canonicalHash,
+                    slot.semanticAuthority,
                     semantic.coverageMode,
                     requireNotNull(packet.blendPlan),
                     plan.orderingToken,
@@ -2701,6 +2701,14 @@ internal class GPUFramePreflighter(
             entry.packet.corePrimitivePreparedAuthority
                 ?: return refuse("Direct CorePrimitive packet is missing its builder authority seal.")
         }
+        packetAuthorities.asSequence()
+            .mapNotNull { authority ->
+                corePrimitiveAnalyticShapeClosedRouteDiagnostic(
+                    authority.structuralPipelineKey.uniformLayout,
+                )
+            }
+            .firstOrNull()
+            ?.let { (code, message) -> return diagnostic(code, message) }
         accepted.indices.forEach { acceptedIndex ->
             val entry = accepted[acceptedIndex]
             val clipExecutionPlan = entry.packet.clipExecutionPlan
@@ -2735,6 +2743,8 @@ internal class GPUFramePreflighter(
         )
         val uniformLayout = structuralPipelineKey.uniformLayout
         when (uniformLayout) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                error("AnalyticShapeUniform80V1 was refused by the shared route-closure guard")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
             -> return diagnostic(
@@ -2773,6 +2783,8 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
             -> null
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                error("AnalyticShapeUniform80V1 was refused before direct uniform authority selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
             -> error("Coverage-mask layouts were refused before direct uniform authority selection")
@@ -2791,6 +2803,8 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
             -> emptyList()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                error("AnalyticShapeUniform80V1 was refused before analytic uniform selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
             -> error("Coverage-mask layouts were refused before analytic uniform selection")
@@ -2806,6 +2820,8 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
             -> emptyList()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                error("AnalyticShapeUniform80V1 was refused before intersection uniform selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
             -> error("Coverage-mask layouts were refused before intersection uniform selection")
@@ -2819,6 +2835,8 @@ internal class GPUFramePreflighter(
                 analyticSeals.first().plan
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 analyticIntersectionSeals.first().plan
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                error("AnalyticShapeUniform80V1 was refused before direct uniform plan selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
             -> error("Coverage-mask layouts were refused before direct uniform plan selection")
@@ -2850,6 +2868,8 @@ internal class GPUFramePreflighter(
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
                 -> false
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                    error("AnalyticShapeUniform80V1 was refused before direct uniform validation")
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
                 -> error("Coverage-mask layouts were refused before direct uniform validation")
@@ -3349,6 +3369,8 @@ internal class GPUFramePreflighter(
         return packet.renderStepId.value == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
             semantic.payloadRef.renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY &&
             packet.commandIdValue == semantic.payloadRef.commandIdValue &&
+            (semantic.analysisRecordId == null ||
+                packet.analysisRecordId == semantic.analysisRecordId) &&
             packet.uniformSlot == semantic.payloadRef.uniformSlot &&
             packet.clipCoveragePlan == semantic.clipCoveragePlan &&
             packet.blendPlan?.canonicalIdentity() == semantic.blendPlanIdentity &&
@@ -3523,6 +3545,11 @@ internal class GPUFramePreflighter(
             )
         }
         val expectedBindingLayoutHash = when (expectedStructuralPipelineKey.uniformLayout) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1 ->
+                return diagnostic(
+                    CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_CODE,
+                    CORE_PRIMITIVE_ANALYTIC_SHAPE_ROUTE_CLOSED_MESSAGE,
+                )
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2 ->
                 CORE_PRIMITIVE_BINDING_LAYOUT_HASH
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1 ->

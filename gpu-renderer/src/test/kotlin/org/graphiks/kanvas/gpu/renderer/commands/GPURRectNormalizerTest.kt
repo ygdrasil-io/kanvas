@@ -1,11 +1,46 @@
 package org.graphiks.kanvas.gpu.renderer.commands
 
+import java.lang.reflect.Modifier
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class GPURRectNormalizerTest {
+    @Test
+    fun `accepted normalization is opaque non copyable and seals exact raw source facts`() {
+        val source = rrect(
+            rect = GPURect(0f, 2f, 41f, 32f),
+            radii = listOf(3f, 4f, 5f, 6f, 7f, 8f, 9f, 10f),
+        )
+        val accepted = assertIs<GPURRectNormalizationResult.Accepted>(
+            GPURRectNormalizer.normalize(source),
+        )
+        val declaredMethods = accepted.javaClass.declaredMethods
+            .filterNot { it.isSynthetic }
+            .map { it.name }
+
+        assertTrue(GPURRectNormalizationResult.Accepted::class.java.isInterface)
+        assertTrue(GPURRectNormalizationResult.Accepted::class.java.declaredConstructors.isEmpty())
+        assertFalse(Modifier.isPublic(accepted.javaClass.modifiers))
+        assertTrue(declaredMethods.none { it == "copy" || it.startsWith("component") })
+        assertTrue(accepted.matchesSource(source))
+        assertTrue(accepted.matchesSource(source.copy()))
+        assertFalse(accepted.matchesSource(source.copy(rect = source.rect.copy(left = -0f))))
+        assertFalse(
+            accepted.matchesSource(
+                source.copy(topLeft = source.topLeft.copy(x = Math.nextUp(source.topLeft.x))),
+            ),
+        )
+
+        val detachedNormalizedCopy = accepted.rrect.copy(
+            bottomRight = accepted.rrect.bottomRight.copy(y = 1f),
+        )
+        assertFalse(detachedNormalizedCopy == accepted.rrect)
+        assertTrue(accepted.matchesSource(source))
+    }
+
     @Test
     fun `already fitting per corner radii remain unchanged`() {
         val source = rrect(
