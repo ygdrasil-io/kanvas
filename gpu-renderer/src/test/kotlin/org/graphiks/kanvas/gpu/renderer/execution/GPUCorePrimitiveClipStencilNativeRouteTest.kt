@@ -31,6 +31,9 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilNative
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilNativeRouteRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilProducerGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilNativePathOrNull
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.sealGPUCorePrimitiveClipStencilNativeRoute
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
@@ -39,6 +42,10 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabSlot
 
 class GPUCorePrimitiveClipStencilNativeRouteTest {
     @Test
@@ -64,6 +71,7 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
             accepted.producer.ndcVertices,
         )
         assertEquals(listOf(0, 4), accepted.producer.contourStarts)
+        assertEquals(null, accepted.producer.scissor)
         assertEquals("clip-0", accepted.producer.contentKey)
         assertEquals(request.clipArtifacts.single().canonicalIdentity(), accepted.producer.planCanonicalIdentity)
         assertEquals(listOf(7, 9), accepted.consumers.map { it.commandId })
@@ -86,14 +94,18 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
 
     @Test
     fun `seal retains exact attachment atomic ordering reference and structural keys`() {
+        val producerScissor = GPUPixelBounds(20, 10, 180, 90)
         val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
-            sealGPUCorePrimitiveClipStencilNativeRoute(request(inverse = true, reference = 37u)),
+            sealGPUCorePrimitiveClipStencilNativeRoute(
+                request(inverse = true, producerScissor = producerScissor),
+            ),
         )
 
+        assertEquals(producerScissor, accepted.producer.scissor)
         assertEquals("clip-depth-0", accepted.attachment.logicalReference)
         assertEquals(200, accepted.attachment.width)
         assertEquals(100, accepted.attachment.height)
-        assertEquals(37u, accepted.stencilReference)
+        assertEquals(0u, accepted.stencilReference)
         assertEquals(GPUClipAtomicGroupID("atomic-0"), accepted.atomicGroup)
         assertEquals(GPUClipOrderingToken("order-0"), accepted.orderingToken)
         assertEquals(
@@ -215,6 +227,10 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
             request(artifacts = mutableListOf(stencilPlan(producerOperation = GPUClipStencilOperation.Replace))),
         )
         assertRefused(
+            "invalid.native-core-primitive.clip-stencil.reference-authority",
+            request(reference = 37u),
+        )
+        assertRefused(
             "invalid.native-core-primitive.clip-stencil.ordering",
             request(consumers = mutableListOf(consumer(commandId = 1, sourceOrder = -1))),
         )
@@ -224,6 +240,22 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
                 consumer(commandId = 1, sourceOrder = 0, last = false),
                 consumer(commandId = 1, sourceOrder = 1),
             )),
+        )
+        assertRefused(
+            "invalid.native-core-primitive.clip-stencil.producer-scissor",
+            request(producerScissor = GPUPixelBounds(0, 0, 201, 100)),
+        )
+        assertRefused(
+            "invalid.native-core-primitive.clip-stencil.producer-scissor",
+            request(producerScissor = GPUPixelBounds(10, 10, 10, 20)),
+        )
+        assertRefused(
+            "invalid.native-core-primitive.clip-stencil.consumer-scissor",
+            request(consumerScissor = GPUPixelBounds(0, 0, 200, 101)),
+        )
+        assertRefused(
+            "invalid.native-core-primitive.clip-stencil.consumer-scissor",
+            request(consumerScissor = GPUPixelBounds(10, 10, 20, 10)),
         )
     }
 
@@ -257,6 +289,69 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         }
     }
 
+    @Test
+    fun `non AA edge fan accepts more than 256 vertices and native classifier rejects nonzero reference`() {
+        val vertices = (0..256).flatMap { index ->
+            val angle = index.toDouble() * Math.PI * 2.0 / 257.0
+            listOf(
+                (100.0 + kotlin.math.cos(angle) * 80.0).toFloat(),
+                (50.0 + kotlin.math.sin(angle) * 40.0).toFloat(),
+            )
+        }.toMutableList()
+        assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
+            sealGPUCorePrimitiveClipStencilNativeRoute(
+                request(vertices = vertices),
+            ),
+        )
+        assertEquals(null, stencilPlan(reference = 1u).corePrimitiveClipStencilNativePathOrNull())
+    }
+
+    @Test
+    fun `prepared frame seal refuses consumers whose scope indices reverse frame order`() {
+        val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
+            sealGPUCorePrimitiveClipStencilNativeRoute(
+                request(
+                    consumers = mutableListOf(
+                        consumer(commandId = 7, sourceOrder = 2, last = false),
+                        consumer(commandId = 9, sourceOrder = 5, last = true),
+                    ),
+                ),
+            ),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            sealGPUCorePrimitiveClipStencilPreparedFrameRoute(
+                route = accepted,
+                producerFanVertices = accepted.producer.ndcVertices.take(6),
+                producerFanIndices = listOf(0, 1, 2),
+                slabAuthority = preparedSlabAuthority(),
+                attachmentAuthority = GPUCorePrimitiveClipStencilPreparedAttachmentAuthority(
+                    GPUFrameTextureRef("clip-depth-0"),
+                    7L,
+                ),
+                producerSourceStepIndex = 1,
+                producerPacketId = GPUDrawPacketID("packet.producer"),
+                producerCommandId = 3,
+                consumers = listOf(
+                    GPUCorePrimitiveClipStencilPreparedConsumerLocation(
+                        5,
+                        GPUDrawPacketID("packet.consumer.7"),
+                        7,
+                        2,
+                        null,
+                    ),
+                    GPUCorePrimitiveClipStencilPreparedConsumerLocation(
+                        3,
+                        GPUDrawPacketID("packet.consumer.9"),
+                        9,
+                        5,
+                        "prepared-core-primitive.clip-stencil.consumer.9",
+                    ),
+                ),
+            )
+        }
+    }
+
     private fun assertRefused(code: String, request: GPUCorePrimitiveClipStencilNativeRouteRequest) {
         assertEquals(
             code,
@@ -281,13 +376,25 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         producerAntiAlias: Boolean = false,
         sampleCount: Int = 1,
         stencilBounds: GPUPixelBounds = GPUPixelBounds(0, 0, 200, 100),
+        producerScissor: GPUPixelBounds? = null,
+        consumerScissor: GPUPixelBounds? = null,
         producerGeometry: GPUCorePrimitiveClipStencilProducerGeometryAuthority =
             producerGeometry(vertices, contourStarts),
         consumers: MutableList<GPUCorePrimitiveClipStencilConsumerInput> = mutableListOf(
-            consumer(reference = reference, inverse = inverse),
+            consumer(reference = reference, inverse = inverse, scissor = consumerScissor),
         ),
         artifacts: MutableList<GPUClipExecutionPlan> = mutableListOf(
-            stencilPlan(vertices, contourStarts, inverse, reference, fillRule, sampleCount, stencilBounds),
+            stencilPlan(
+                vertices,
+                contourStarts,
+                inverse,
+                reference,
+                fillRule,
+                sampleCount,
+                stencilBounds,
+                producerScissor = producerScissor,
+                consumerScissor = consumerScissor,
+            ),
         ),
     ) = GPUCorePrimitiveClipStencilNativeRouteRequest(
         clipArtifacts = artifacts,
@@ -309,6 +416,8 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         fillRule: GPUClipFillRule = GPUClipFillRule.Winding,
         sampleCount: Int = 1,
         bounds: GPUPixelBounds = GPUPixelBounds(0, 0, 200, 100),
+        producerScissor: GPUPixelBounds? = null,
+        consumerScissor: GPUPixelBounds? = null,
         producerGeometry: GPUClipExecutionGeometry = GPUClipExecutionGeometry.Path(
             vertices,
             contourStarts,
@@ -328,7 +437,7 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         orderingToken = GPUClipOrderingToken("order-0"),
         producer = GPUClipStencilProducerPlan(
             geometry = producerGeometry,
-            scissor = null,
+            scissor = producerScissor,
             fillRule = fillRule,
             reference = reference,
             compare = GPUClipStencilCompare.Always,
@@ -341,7 +450,7 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
             clearValue = 0u,
         ),
         consumer = GPUClipStencilConsumerPlan(
-            scissor = null,
+            scissor = consumerScissor,
             reference = reference,
             compare = if (inverse) GPUClipStencilCompare.Equal else GPUClipStencilCompare.NotEqual,
         ),
@@ -358,6 +467,7 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         blendPlan: GPUBlendPlan = srcOverBlendPlan(),
         atomicGroup: GPUClipAtomicGroupID = GPUClipAtomicGroupID("atomic-0"),
         attachment: GPUCorePrimitiveClipStencilAttachmentAuthority = attachment(),
+        scissor: GPUPixelBounds? = null,
     ) = GPUCorePrimitiveClipStencilConsumerInput(
         commandId = commandId,
         sourceOrder = sourceOrder,
@@ -368,7 +478,7 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         stencilReference = reference,
         atomicGroup = atomicGroup,
         orderingToken = GPUClipOrderingToken("order-0"),
-        scissor = null,
+        scissor = scissor,
         attachment = attachment,
         isLastConsumer = last,
     )
@@ -382,6 +492,39 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         deviceGeneration = GPUDeviceGenerationID(4),
         resourceGeneration = 7L,
     )
+
+    private fun preparedSlabAuthority(): GPUCorePrimitiveClipStencilPreparedSlabAuthority {
+        val plan = GPUUniformSlabPlan(
+            planHash = "test-plan",
+            sourceLabel = "core-primitive-uniform-pass",
+            deviceGeneration = 4L,
+            alignmentBytes = 256L,
+            totalBytes = 512L,
+            uploadBudgetBytes = 512L,
+            slots = listOf(
+                GPUUniformSlabSlot("draw-7", "hash-7", 32L, 0L, 256L),
+                GPUUniformSlabSlot("draw-9", "hash-9", 32L, 256L, 256L),
+            ),
+        )
+        val seal = GPUCorePrimitiveUniformSlabSeal(
+            plan,
+            listOf(7, 9),
+            ByteArray(512),
+        )
+        return GPUCorePrimitiveClipStencilPreparedSlabAuthority(
+            GPUFrameBufferRef("vertices"),
+            1L,
+            88L,
+            GPUFrameBufferRef("indices"),
+            1L,
+            60L,
+            GPUFrameBufferRef("uniforms"),
+            1L,
+            512L,
+            256L,
+            seal,
+        )
+    }
 
     private fun maskPlan() = GPUClipExecutionPlan.CoverageMask(
         contentKey = "mask",

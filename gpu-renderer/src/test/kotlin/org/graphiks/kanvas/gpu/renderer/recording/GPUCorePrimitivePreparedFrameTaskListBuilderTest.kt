@@ -55,6 +55,9 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilPreparedCandidate
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilConsumerRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilProducerRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
@@ -873,6 +876,146 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             taskList.memoryBudget.categoryTotals.getValue(GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil),
         )
         assertFalse(GPUFramePlanner.plan(taskList).atomicallyRefused)
+    }
+
+    @Test
+    fun `native path clip producer and two consumers share exact geometry slabs and c1 structural keys`() {
+        listOf(GPUClipFillRule.Winding, GPUClipFillRule.EvenOdd).forEach { fillRule ->
+            val plan = nativePathStencilPlan(fillRule)
+            val base = recording(command(330, 7), command(331, 9)).taskList.withClipPlans(
+                mapOf(330 to plan, 331 to plan),
+            )
+            val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets)
+            val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, packets.associate { it.commandIdValue to semantic(it) }),
+            )
+            val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+                result,
+                (result as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                    "${fillRule.name}: ${it.code.value}: ${it.message}"
+                },
+            ).taskList
+
+            val preparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+                .flatMap(GPUTask.PrepareResources::requests)
+            val vertex = preparations.single { it.role == GPUFrameResourceRole.VertexData }
+            val index = preparations.single { it.role == GPUFrameResourceRole.IndexData }
+            assertEquals(160L, vertex.byteSize, fillRule.name)
+            assertEquals(96L, index.byteSize, fillRule.name)
+            assertEquals(
+                setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.Vertex),
+                vertex.usages,
+                fillRule.name,
+            )
+            assertEquals(
+                setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.Index),
+                index.usages,
+                fillRule.name,
+            )
+
+            val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+            val producer = renders.single { render ->
+                render.drawPackets.singleOrNull()?.role == GPUDrawPacketRole.StencilProducer
+            }
+            val consumers = renders.filter { render ->
+                render.drawPackets.any { it.role == GPUDrawPacketRole.Shading }
+            }
+            assertEquals(2, consumers.size, fillRule.name)
+            assertEquals(
+                setOf(
+                    GPUFrameResourceRole.VertexData,
+                    GPUFrameResourceRole.IndexData,
+                    GPUFrameResourceRole.ClipDepthStencil,
+                ),
+                producer.resourceUses.map { it.role }.toSet(),
+                fillRule.name,
+            )
+            assertFalse(
+                producer.resourceUses.any { it.role == GPUFrameResourceRole.UniformData },
+                fillRule.name,
+            )
+            assertEquals(
+                corePrimitiveClipStencilProducerRenderPipelineStructuralKey(fillRule)
+                    .stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY),
+                producer.drawPackets.single().renderPipelineKey,
+                fillRule.name,
+            )
+            consumers.forEach { consumer ->
+                assertEquals(
+                    setOf(
+                        GPUFrameResourceRole.VertexData,
+                        GPUFrameResourceRole.IndexData,
+                        GPUFrameResourceRole.UniformData,
+                        GPUFrameResourceRole.ClipDepthStencil,
+                    ),
+                    consumer.resourceUses.map { it.role }.toSet(),
+                    fillRule.name,
+                )
+                val packet = consumer.drawPackets.single()
+                assertEquals(
+                    corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
+                        inverseFill = false,
+                        blendPlan = requireNotNull(packet.blendPlan),
+                    ).stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY),
+                    packet.renderPipelineKey,
+                    fillRule.name,
+                )
+            }
+            val attachment = producer.resourceUses.single {
+                it.role == GPUFrameResourceRole.ClipDepthStencil
+            }.resource
+            val producerVertex = producer.resourceUses.single {
+                it.role == GPUFrameResourceRole.VertexData
+            }.resource
+            val producerIndex = producer.resourceUses.single {
+                it.role == GPUFrameResourceRole.IndexData
+            }.resource
+            assertTrue(consumers.all { consumer ->
+                val uses = consumer.resourceUses
+                uses.single {
+                    it.role == GPUFrameResourceRole.ClipDepthStencil
+                }.resource == attachment &&
+                    uses.single { it.role == GPUFrameResourceRole.VertexData }.resource == producerVertex &&
+                    uses.single { it.role == GPUFrameResourceRole.IndexData }.resource == producerIndex
+            })
+            val producerPacket = producer.drawPackets.single()
+            val candidate = assertIs<GPUCorePrimitiveClipStencilPreparedCandidate>(
+                producerPacket.corePrimitiveClipStencilPreparedCandidate,
+                fillRule.name,
+            )
+            assertEquals(producerPacket.packetId, candidate.producerPacketId, fillRule.name)
+            assertEquals(
+                consumers.map { it.drawPackets.single().packetId },
+                candidate.consumers.map { it.packetId },
+                fillRule.name,
+            )
+            assertEquals(listOf(7, 9), candidate.consumers.map { it.sourceOrder }, fillRule.name)
+            assertEquals(24, candidate.producerFanVertices.size, fillRule.name)
+            assertEquals((0..11).toList(), candidate.producerFanIndices, fillRule.name)
+            assertTrue(consumers.all { consumer ->
+                consumer.drawPackets.single().corePrimitiveClipStencilPreparedCandidate === candidate
+            })
+        }
+    }
+
+    @Test
+    fun `native path clip refuses foreign geometry in its bounded shared arena`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
+        val base = recording(command(340, 7), command(341, 9)).taskList.withClipPlans(
+            mapOf(340 to plan, 341 to GPUClipExecutionPlan.NoClip),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, packets.associate { it.commandIdValue to semantic(it) }),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_clip_stencil_mixed_geometry",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
     }
 
     @Test
@@ -1923,6 +2066,46 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
             scissor = targetBounds,
             reference = 1u,
             compare = GPUClipStencilCompare.Equal,
+        ),
+    )
+
+    private fun nativePathStencilPlan(
+        fillRule: GPUClipFillRule,
+    ) = GPUClipExecutionPlan.StencilCoverage(
+        contentKey = "clip.native.path.${fillRule.name}",
+        bounds = targetBounds,
+        sampleCount = 1,
+        atomicGroup = GPUClipAtomicGroupID("atomic.clip.native.path.${fillRule.name}"),
+        orderingToken = GPUClipOrderingToken("token.clip.native.path.${fillRule.name}"),
+        producer = GPUClipStencilProducerPlan(
+            geometry = GPUClipExecutionGeometry.Path(
+                vertices = listOf(2f, 2f, 14f, 2f, 14f, 14f, 2f, 14f),
+                contourStarts = listOf(0),
+                fillRule = fillRule,
+                inverseFill = false,
+            ),
+            scissor = targetBounds,
+            fillRule = fillRule,
+            reference = 0u,
+            compare = GPUClipStencilCompare.Always,
+            frontPassOperation = if (fillRule == GPUClipFillRule.Winding) {
+                GPUClipStencilOperation.IncrementWrap
+            } else {
+                GPUClipStencilOperation.Invert
+            },
+            backPassOperation = if (fillRule == GPUClipFillRule.Winding) {
+                GPUClipStencilOperation.DecrementWrap
+            } else {
+                GPUClipStencilOperation.Invert
+            },
+            loadOperation = GPUClipStencilLoadOperation.Clear,
+            storeOperation = GPUClipStencilStoreOperation.Store,
+            clearValue = 0u,
+        ),
+        consumer = GPUClipStencilConsumerPlan(
+            scissor = targetBounds,
+            reference = 0u,
+            compare = GPUClipStencilCompare.NotEqual,
         ),
     )
 

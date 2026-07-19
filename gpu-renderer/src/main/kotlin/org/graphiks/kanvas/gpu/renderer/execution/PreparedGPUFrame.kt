@@ -92,6 +92,13 @@ class GPUCommandEncoderScopePlan internal constructor(
         } else {
             GPUCorePrimitiveNativeScopeRouteSeal.Missing
         },
+    internal val corePrimitiveClipStencilPreparedRouteSeal:
+        GPUCorePrimitiveClipStencilPreparedScopeRouteSeal =
+        if (operationKind == GPUEncoderOperationKind.Render) {
+            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty
+        } else {
+            GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing
+        },
 ) {
     constructor(
         sourceStepIndex: Int,
@@ -170,6 +177,11 @@ class GPUCommandEncoderScopePlan internal constructor(
                 (corePrimitivePathStencilNativeRouteSeal !==
                     GPUCorePrimitivePathStencilNativeRouteSeal.Missing),
         ) { "Only Render encoder scopes retain a CorePrimitive path native route seal" }
+        require(
+            (operationKind == GPUEncoderOperationKind.Render) ==
+                (corePrimitiveClipStencilPreparedRouteSeal !==
+                    GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing),
+        ) { "Only Render encoder scopes retain a CorePrimitive clip-stencil prepared route seal" }
         require(
             (operationKind == GPUEncoderOperationKind.Render) ==
                 (corePrimitiveNativeScopeRouteSeal !== GPUCorePrimitiveNativeScopeRouteSeal.Missing),
@@ -749,6 +761,12 @@ internal class PreparedGPUFrame(
                         GPUCorePrimitivePathStencilNativeRouteSeal.Missing,
                 ) {
                     "PreparedGPUFrame render scopes require a pure-preflight CorePrimitive path route seal"
+                }
+                require(
+                    scope.corePrimitiveClipStencilPreparedRouteSeal !==
+                        GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing,
+                ) {
+                    "PreparedGPUFrame render scopes require a pure-preflight CorePrimitive clip-stencil route seal"
                 }
                 require(scope.corePrimitiveNativeScopeRouteSeal !== GPUCorePrimitiveNativeScopeRouteSeal.Missing) {
                     "PreparedGPUFrame render scopes require a pure-preflight unified CorePrimitive route seal"

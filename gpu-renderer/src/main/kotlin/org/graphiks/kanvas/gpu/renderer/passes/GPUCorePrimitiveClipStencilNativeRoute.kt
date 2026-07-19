@@ -88,6 +88,7 @@ internal sealed interface GPUCorePrimitiveClipStencilNativeRoute {
         ndcVertices: List<Float>,
         contourStarts: List<Int>,
         val fillRule: GPUClipFillRule,
+        val scissor: GPUPixelBounds?,
         val contentKey: String,
         val planCanonicalIdentity: String,
         val structuralKey: GPUCorePrimitiveRenderPipelineStructuralKey,
@@ -176,6 +177,14 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         "invalid.native-core-primitive.clip-stencil.attachment-authority",
         "All consumers must share one exact logical D24S8 attachment authority.",
     )
+    if (!stencil.producer.scissor.isValidForAttachment(attachment)) return refused(
+        "invalid.native-core-primitive.clip-stencil.producer-scissor",
+        "The producer scissor must be non-empty and contained by the stencil attachment.",
+    )
+    if (request.consumers.any { !it.scissor.isValidForAttachment(attachment) }) return refused(
+        "invalid.native-core-primitive.clip-stencil.consumer-scissor",
+        "Every consumer scissor must be non-empty and contained by the stencil attachment.",
+    )
     if (request.consumers.any { it.atomicGroup != stencil.atomicGroup }) return refused(
         "invalid.native-core-primitive.clip-stencil.atomic-authority",
         "All consumers must retain the producer atomic group.",
@@ -184,19 +193,23 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         "invalid.native-core-primitive.clip-stencil.ordering-authority",
         "All consumers must retain the producer ordering token.",
     )
-    if (stencil.producer.reference != stencil.consumer.reference ||
+    if (stencil.producer.reference != 0u || stencil.consumer.reference != 0u ||
+        stencil.producer.reference != stencil.consumer.reference ||
         request.consumers.any { it.stencilReference != stencil.producer.reference }
     ) return refused(
         "invalid.native-core-primitive.clip-stencil.reference-authority",
-        "Producer and consumers must share one logical stencil reference.",
+        "Winding and even-odd clip stencil require the exact zero comparison reference.",
     )
     if (!stencil.consumer.hasExactNativeState(path.inverseFill)) return refused(
         "invalid.native-core-primitive.clip-stencil.consumer-state",
         "The consumer state must be read-only NotEqual/Equal with Keep operations.",
     )
-
     val producerKey = corePrimitiveClipStencilProducerRenderPipelineStructuralKey(path.fillRule)
-    val ndcVertices = request.producerGeometry.vertices.toNdc(attachment.width, attachment.height) ?: return refused(
+    val ndcVertices = corePrimitiveClipStencilNdcVertices(
+        request.producerGeometry.vertices,
+        attachment.width,
+        attachment.height,
+    ) ?: return refused(
         "invalid.native-core-primitive.clip-stencil.producer-geometry",
         "Producer geometry could not be sealed as finite NDC vertices.",
     )
@@ -243,6 +256,7 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
             ndcVertices = ndcVertices,
             contourStarts = request.producerGeometry.contourStarts,
             fillRule = path.fillRule,
+            scissor = stencil.producer.scissor,
             contentKey = stencil.contentKey,
             planCanonicalIdentity = stencil.canonicalIdentity(),
             structuralKey = producerKey,
@@ -254,6 +268,17 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         orderingToken = stencil.orderingToken,
         lastConsumerCommandId = request.expectedLastConsumerCommandId,
     )
+}
+
+internal fun GPUClipExecutionPlan.StencilCoverage.corePrimitiveClipStencilNativePathOrNull():
+    GPUClipExecutionGeometry.Path? {
+    if (sampleCount != 1) return null
+    val path = producer.geometry as? GPUClipExecutionGeometry.Path ?: return null
+    if (!producer.hasExactNativeState(path.fillRule) ||
+        !consumer.hasExactNativeState(path.inverseFill) || producer.reference != 0u ||
+        consumer.reference != 0u || !path.hasTriangleContours()
+    ) return null
+    return path
 }
 
 private fun org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilProducerPlan.hasExactNativeState(
@@ -292,6 +317,11 @@ private fun GPUCorePrimitiveClipStencilAttachmentAuthority.isValidFor(
     stencil.bounds.right <= width && stencil.bounds.bottom <= height &&
     stencil.sampleCount == sampleCount
 
+private fun GPUPixelBounds?.isValidForAttachment(
+    attachment: GPUCorePrimitiveClipStencilAttachmentAuthority,
+): Boolean = this == null || (!isEmpty && left >= 0 && top >= 0 &&
+    right <= attachment.width && bottom <= attachment.height)
+
 private fun GPUCorePrimitiveGeometry.isDirectConsumerGeometry(): Boolean = when (this) {
     is GPUCorePrimitiveGeometry.Rect -> true
     is GPUCorePrimitiveGeometry.TriangulatedPath ->
@@ -312,6 +342,13 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.isCanonicalPremulS
 }
 
 private fun GPUCorePrimitiveClipStencilProducerGeometryAuthority.hasValidContours(): Boolean {
+    return hasTriangleContours(vertices, contourStarts)
+}
+
+private fun GPUClipExecutionGeometry.Path.hasTriangleContours(): Boolean =
+    hasTriangleContours(vertices, contourStarts)
+
+private fun hasTriangleContours(vertices: List<Float>, contourStarts: List<Int>): Boolean {
     if (vertices.size < 6 || vertices.size % 2 != 0 || !vertices.all(Float::isFinite)) return false
     val vertexCount = vertices.size / 2
     if (contourStarts.isEmpty() || contourStarts.first() != 0 ||
@@ -325,17 +362,23 @@ private fun GPUCorePrimitiveClipStencilProducerGeometryAuthority.hasValidContour
     }
 }
 
-private fun List<Float>.toNdc(width: Int, height: Int): List<Float>? {
-    if (size < 4 || size % 2 != 0 || !all(Float::isFinite) || width <= 0 || height <= 0) return null
-    val sealed = ArrayList<Float>(size)
-    chunked(2).forEach { (x, y) ->
+internal fun corePrimitiveClipStencilNdcVertices(
+    vertices: List<Float>,
+    width: Int,
+    height: Int,
+): List<Float>? {
+    if (vertices.size < 4 || vertices.size % 2 != 0 ||
+        !vertices.all(Float::isFinite) || width <= 0 || height <= 0
+    ) return null
+    val sealed = ArrayList<Float>(vertices.size)
+    vertices.chunked(2).forEach { (x, y) ->
         val ndcX = x / width.toFloat() * 2f - 1f
         val ndcY = 1f - y / height.toFloat() * 2f
         if (!ndcX.isFinite() || !ndcY.isFinite()) return null
         sealed += ndcX
         sealed += ndcY
     }
-    return sealed
+    return immutableList(sealed)
 }
 
 private fun refused(code: String, message: String) =

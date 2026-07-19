@@ -323,6 +323,10 @@ class GPUDrawPacket(
     internal var corePrimitivePreparedAuthority: GPUCorePrimitivePreparedPacketAuthority? = null
         private set
 
+    internal var corePrimitiveClipStencilPreparedCandidate:
+        GPUCorePrimitiveClipStencilPreparedCandidate? = null
+        private set
+
     internal fun attachCorePrimitivePreparedAuthority(
         authority: GPUCorePrimitivePreparedPacketAuthority,
     ): GPUDrawPacket {
@@ -336,6 +340,20 @@ class GPUDrawPacket(
             "CorePrimitive prepared authority must match the packet render pipeline key"
         }
         corePrimitivePreparedAuthority = authority
+        return this
+    }
+
+    internal fun attachCorePrimitiveClipStencilPreparedCandidate(
+        candidate: GPUCorePrimitiveClipStencilPreparedCandidate,
+    ): GPUDrawPacket {
+        check(corePrimitiveClipStencilPreparedCandidate == null) {
+            "CorePrimitive clip-stencil candidate is already attached"
+        }
+        require(
+            packetId == candidate.producerPacketId ||
+                candidate.consumers.any { it.packetId == packetId },
+        ) { "Clip-stencil candidate must name the exact packet receiving it" }
+        corePrimitiveClipStencilPreparedCandidate = candidate
         return this
     }
 
