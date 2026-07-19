@@ -1346,9 +1346,13 @@ private class WgpuBackendSession(
             closeAction = childTeardown::close,
             renderCountersFactory = {
                 val encoding = encodingBackend.counters()
+                val corePrimitive = corePrimitiveCache.counters()
                 GPUPreparedSceneRenderCounters(
                     renderPasses = encoding.renderPasses,
+                    draws = encoding.draws,
                     drawIndexed = encoding.drawIndexed,
+                    coverageMaskTextureCreations = corePrimitive.coverageMaskTextureCreations,
+                    coverageMaskSlotReuses = corePrimitive.coverageMaskSlotReuses,
                 )
             },
             nativeCountersFactory = {

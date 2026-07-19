@@ -191,6 +191,14 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         assertSame(firstMask.view, reusedMask.view)
         assertSame(firstMask.consumerBindGroup, reusedMask.consumerBindGroup)
         assertEquals(1, native.textureDescriptors.size)
+        assertEquals(
+            GPUCorePrimitiveNativeCacheCounters(
+                invariantCreations = 2L,
+                coverageMaskTextureCreations = 1L,
+                coverageMaskSlotReuses = 1L,
+            ),
+            cache.counters(),
+        )
         reused.rollbackBeforeSubmit()
 
         cache.close()

@@ -29,9 +29,11 @@ import io.ygdrasil.webgpu.GPUTextureViewDimension
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 
 internal data class GPUCorePrimitiveNativeCacheCounters(
-    val invariantCreations: Long = 0,
-    val invariantReuses: Long = 0,
-    val invariantInvalidations: Long = 0,
+    val invariantCreations: Long = 0L,
+    val invariantReuses: Long = 0L,
+    val invariantInvalidations: Long = 0L,
+    val coverageMaskTextureCreations: Long = 0L,
+    val coverageMaskSlotReuses: Long = 0L,
 )
 
 internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 24
@@ -512,7 +514,16 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
     ): GPUWgpu4kCorePrimitiveFramePoolCheckout = framePool.acquire(requirements)
 
     @Synchronized
-    fun counters() = GPUCorePrimitiveNativeCacheCounters(creations, reuses, invariantInvalidations = 0)
+    fun counters(): GPUCorePrimitiveNativeCacheCounters {
+        val pool = framePool.counters()
+        return GPUCorePrimitiveNativeCacheCounters(
+            invariantCreations = creations,
+            invariantReuses = reuses,
+            invariantInvalidations = 0,
+            coverageMaskTextureCreations = pool.coverageMaskTextureCreations,
+            coverageMaskSlotReuses = pool.coverageMaskSlotReuses,
+        )
+    }
 
     @Synchronized
     override fun close() {

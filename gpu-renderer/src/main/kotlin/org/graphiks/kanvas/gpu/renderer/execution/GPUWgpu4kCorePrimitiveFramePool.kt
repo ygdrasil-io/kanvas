@@ -154,6 +154,12 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolCapacities(
     }
 }
 
+/** Handle-free proof that coverage-mask textures publish transactionally and reuse by identity. */
+internal data class GPUWgpu4kCorePrimitiveFramePoolCounters(
+    val coverageMaskTextureCreations: Long = 0L,
+    val coverageMaskSlotReuses: Long = 0L,
+)
+
 internal data class GPUWgpu4kCorePrimitiveFramePoolHandles(
     val vertexBuffer: GPUBuffer,
     val indexBuffer: GPUBuffer,
@@ -294,6 +300,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
     private val slots = mutableListOf<Slot>()
     private val pendingClose = mutableListOf<PendingCloseHandle>()
     private var nextLeaseId = 1L
+    private var coverageMaskTextureCreations = 0L
+    private var coverageMaskSlotReuses = 0L
     private var closing = false
     private var closed = false
 
@@ -328,6 +336,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             requirements.coverageMask,
             requirements.componentIdentity,
         )
+        val previousCoverageMaskTexture = slot?.handles?.coverageMask?.texture
         if (slot != null &&
             (!slot.capacities.contains(requiredCapacities) ||
                 !slot.handles.matches(
@@ -346,6 +355,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 requirements.componentIdentity,
             )?.let { refusal ->
                 return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(refusal)
+            }
+            if (requirements.coverageMask != null &&
+                previousCoverageMaskTexture !== slot.handles.coverageMask?.texture
+            ) {
+                coverageMaskTextureCreations += 1L
             }
         }
         if (slot == null) {
@@ -367,6 +381,9 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 is SlotCreation.Created -> {
                     slot = created.slot
                     slots += created.slot
+                    if (created.slot.handles.coverageMask != null) {
+                        coverageMaskTextureCreations += 1L
+                    }
                 }
                 is SlotCreation.Refused -> {
                     return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(created.reason)
@@ -374,6 +391,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             }
         }
         val acquiredSlot = requireNotNull(slot)
+        if (requirements.coverageMask != null && previousCoverageMaskTexture != null &&
+            acquiredSlot.handles.coverageMask?.texture === previousCoverageMaskTexture
+        ) {
+            coverageMaskSlotReuses += 1L
+        }
         val leaseId = nextLeaseId++
         acquiredSlot.state = SlotState.CheckedOut
         acquiredSlot.activeLeaseId = leaseId
@@ -388,6 +410,13 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             ),
         )
     }
+
+    @Synchronized
+    fun counters(): GPUWgpu4kCorePrimitiveFramePoolCounters =
+        GPUWgpu4kCorePrimitiveFramePoolCounters(
+            coverageMaskTextureCreations,
+            coverageMaskSlotReuses,
+        )
 
     @Synchronized
     internal fun rollback(

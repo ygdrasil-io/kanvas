@@ -36,14 +36,23 @@ class GPUPreparedSceneNativeCountersTest {
             renderCountersFactory = {
                 GPUPreparedSceneRenderCounters(
                     renderPasses = 7L,
+                    draws = 11L,
                     drawIndexed = 13L,
+                    coverageMaskTextureCreations = 17L,
+                    coverageMaskSlotReuses = 19L,
                 )
             },
         )
 
         assertEquals(GPUPreparedSceneRenderCounters(), defaultSession.renderCounters())
         assertEquals(
-            GPUPreparedSceneRenderCounters(renderPasses = 7L, drawIndexed = 13L),
+            GPUPreparedSceneRenderCounters(
+                renderPasses = 7L,
+                draws = 11L,
+                drawIndexed = 13L,
+                coverageMaskTextureCreations = 17L,
+                coverageMaskSlotReuses = 19L,
+            ),
             instrumentedSession.renderCounters(),
         )
     }

@@ -346,7 +346,10 @@ data class GPUPreparedSceneNativeCounters(
 
 internal data class GPUPreparedSceneRenderCounters(
     val renderPasses: Long = 0L,
+    val draws: Long = 0L,
     val drawIndexed: Long = 0L,
+    val coverageMaskTextureCreations: Long = 0L,
+    val coverageMaskSlotReuses: Long = 0L,
 )
 
 /** Reusable prepared session that owns target lifetime and serializes the sole coordinator route. */

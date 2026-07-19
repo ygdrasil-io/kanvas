@@ -811,9 +811,19 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             unpublished.forEach { created ->
                 assertEquals(1, factory.closeAttempts(created.handle), failingResource.name)
             }
+            assertEquals(
+                GPUWgpu4kCorePrimitiveFramePoolCounters(),
+                pool.counters(),
+                failingResource.name,
+            )
 
             val retried = pool.acquire(request).acquiredLease()
             assertEquals(0, retried.slotId, failingResource.name)
+            assertEquals(
+                GPUWgpu4kCorePrimitiveFramePoolCounters(coverageMaskTextureCreations = 1L),
+                pool.counters(),
+                failingResource.name,
+            )
             retried.rollbackBeforeSubmit()
             pool.close()
             unpublished.forEach { created ->
@@ -834,6 +844,11 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
 
         val first = pool.acquire(request).acquiredLease()
         val firstMask = requireNotNull(first.handles.coverageMask)
+
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolCounters(coverageMaskTextureCreations = 1L),
+            pool.counters(),
+        )
 
         assertEquals(mask, firstMask.requirement)
         assertEquals(PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
@@ -861,6 +876,13 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         assertSame(firstMask.view, reusedMask.view)
         assertSame(firstMask.consumerBindGroup, reusedMask.consumerBindGroup)
         assertEquals(7, factory.creations.size)
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolCounters(
+                coverageMaskTextureCreations = 1L,
+                coverageMaskSlotReuses = 1L,
+            ),
+            pool.counters(),
+        )
 
         reused.rollbackBeforeSubmit()
         pool.close()
@@ -889,6 +911,10 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         assertEquals(1, factory.closeAttempts(initialMask.texture))
         assertEquals(0, factory.closeAttempts(initial.handles.bindGroup))
         assertEquals(0, factory.closeAttempts(initial.handles.uniformBuffer))
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolCounters(coverageMaskTextureCreations = 2L),
+            pool.counters(),
+        )
 
         resized.rollbackBeforeSubmit()
         pool.close()
@@ -918,6 +944,13 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         assertEquals(1, factory.closeAttempts(initial.handles.uniformBuffer))
         assertEquals(0, factory.closeAttempts(initialMask.view))
         assertEquals(0, factory.closeAttempts(initialMask.texture))
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolCounters(
+                coverageMaskTextureCreations = 1L,
+                coverageMaskSlotReuses = 1L,
+            ),
+            pool.counters(),
+        )
 
         grown.rollbackBeforeSubmit()
         pool.close()
@@ -1016,6 +1049,11 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             unpublished.forEach { created ->
                 assertEquals(1, factory.closeAttempts(created.handle), failingResource.name)
             }
+            assertEquals(
+                GPUWgpu4kCorePrimitiveFramePoolCounters(coverageMaskTextureCreations = 1L),
+                pool.counters(),
+                failingResource.name,
+            )
 
             val reused = pool.acquire(maskRequirements(initialRequirement)).acquiredLease()
             val reusedMask = requireNotNull(reused.handles.coverageMask)
@@ -1027,6 +1065,14 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             assertSame(initialMask.consumerBindGroup, reusedMask.consumerBindGroup)
             assertSame(initialMask.view, reusedMask.view)
             assertSame(initialMask.texture, reusedMask.texture)
+            assertEquals(
+                GPUWgpu4kCorePrimitiveFramePoolCounters(
+                    coverageMaskTextureCreations = 1L,
+                    coverageMaskSlotReuses = 1L,
+                ),
+                pool.counters(),
+                failingResource.name,
+            )
             reused.rollbackBeforeSubmit()
             pool.close()
             unpublished.forEach { created ->
