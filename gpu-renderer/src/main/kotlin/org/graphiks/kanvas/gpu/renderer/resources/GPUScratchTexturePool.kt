@@ -325,10 +325,14 @@ class GPUScratchTexturePool internal constructor(
             width = normalizedWidth,
             height = normalizedHeight,
             usage = capabilityUsage,
+            sampleCount = descriptor.sampleCount,
+            requiresResolve = false,
         )?.let { capabilityDiagnostic ->
             val suffix = when (capabilityDiagnostic.requirementName) {
                 "texture.format" -> "format"
                 "texture.usage" -> "usage"
+                "texture.sampleCount" -> "sample_count"
+                "texture.resolveSourceSampleCount" -> "resolve_sample_count"
                 else -> "size"
             }
             return refused(

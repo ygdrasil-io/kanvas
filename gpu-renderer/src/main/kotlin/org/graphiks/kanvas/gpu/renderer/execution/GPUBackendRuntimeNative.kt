@@ -90,6 +90,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
@@ -1051,6 +1053,8 @@ private class WgpuBackendSession(
             ),
             snapshotId = "gpu-runtime-${deviceGeneration.value}",
             limits = backendLimits,
+            // Legacy formats that may use the broad color/copy/texture-binding usage set below.
+            // Render-only D24S8 support is carried by textureFormatSampleSupport instead.
             supportedTextureFormats = setOf(
                 GPUTextureFormat.RGBA8Unorm,
                 GPUTextureFormat.BGRA8Unorm,
@@ -1061,6 +1065,17 @@ private class WgpuBackendSession(
                     GPUTextureUsage.CopyDst or
                     GPUTextureUsage.TextureBinding or
                     GPUTextureUsage.RenderAttachment,
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(
+                    GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1, 4),
+                        resolveSourceSampleCounts = setOf(4),
+                    ),
+                    GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1, 4),
+                    ),
+                ),
+            ),
             rendererFeatures = setOf(
                 GPURendererFeature.RenderPass,
                 GPURendererFeature.CopyUpload,

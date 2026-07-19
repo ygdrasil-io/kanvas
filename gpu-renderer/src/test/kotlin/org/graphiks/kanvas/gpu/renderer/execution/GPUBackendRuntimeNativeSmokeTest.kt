@@ -790,6 +790,25 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertEquals(256L, limits.minUniformBufferOffsetAlignment)
             assertTrue((limits.maxBufferSize ?: 0L) > 0L)
             assertEquals("adapter.limits", limits.source)
+            assertFalse(GPUTextureFormat.Depth24PlusStencil8 in capabilities.supportedTextureFormats)
+            assertEquals(
+                setOf(1, 4),
+                capabilities.textureFormatSampleSupport
+                    .getValue(GPUTextureFormat.RGBA8Unorm)
+                    .renderAttachmentSampleCounts,
+            )
+            assertEquals(
+                setOf(4),
+                capabilities.textureFormatSampleSupport
+                    .getValue(GPUTextureFormat.RGBA8Unorm)
+                    .resolveSourceSampleCounts,
+            )
+            assertEquals(
+                setOf(1, 4),
+                capabilities.textureFormatSampleSupport
+                    .getValue(GPUTextureFormat.Depth24PlusStencil8)
+                    .renderAttachmentSampleCounts,
+            )
             assertEquals(
                 listOf(
                     "maxTextureDimension2D",

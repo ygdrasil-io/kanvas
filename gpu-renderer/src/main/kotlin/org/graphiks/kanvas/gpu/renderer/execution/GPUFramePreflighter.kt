@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
@@ -4693,6 +4694,7 @@ private fun GPUCapabilities.preflightSnapshot(): GPUCapabilities = copy(
     facts = immutableList(facts),
     knownUnsupportedFacts = immutableList(knownUnsupportedFacts),
     supportedTextureFormats = immutableSet(supportedTextureFormats),
+    textureFormatSampleSupport = GPUTextureFormatSampleSupport(textureFormatSampleSupport),
     rendererFeatures = immutableSet(rendererFeatures),
 )
 

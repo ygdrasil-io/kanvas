@@ -570,7 +570,7 @@ internal fun GPUFrameMemoryBudgetPlan.snapshotForFramePlan(): GPUFrameMemoryBudg
     )
 
 private fun GPUCapabilities.canonicalSnapshotHash(): String =
-    CanonicalHashSink("GPUCapabilities/v2").apply {
+    CanonicalHashSink("GPUCapabilities/v3").apply {
         implementation("implementation", implementation)
         string("snapshotId", snapshotId)
         list("facts", facts.sortedWith(capabilityFactComparator)) { fact(it) }
@@ -599,6 +599,18 @@ private fun GPUCapabilities.canonicalSnapshotHash(): String =
         nullable("supportedTextureUsage", supportedTextureUsage) { usage ->
             list("labels", usage.dumpLabels().sorted()) { label ->
                 string("usage", label)
+            }
+        }
+        list(
+            "textureFormatSampleSupport",
+            textureFormatSampleSupport.entries.sortedBy { it.key.dumpLabel() },
+        ) { (format, support) ->
+            string("format", format.dumpLabel())
+            list("renderAttachmentSampleCounts", support.renderAttachmentSampleCounts.sorted()) {
+                int("sampleCount", it)
+            }
+            list("resolveSourceSampleCounts", support.resolveSourceSampleCounts.sorted()) {
+                int("sampleCount", it)
             }
         }
         list("rendererFeatures", rendererFeatures.map { it.dumpLabel }.sorted()) {

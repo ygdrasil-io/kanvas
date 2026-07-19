@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -15,6 +16,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
@@ -120,6 +123,38 @@ class GPUFramePlanIntegrityTest {
         assertNotEquals(firstObserved.capabilitySnapshotHash, secondObserved.capabilitySnapshotHash)
         assertNotEquals(unknown.sealHash, firstObserved.sealHash)
         assertNotEquals(firstObserved.sealHash, secondObserved.sealHash)
+    }
+
+    @Test
+    fun `capability seal deterministically includes exact per-format render and resolve samples`() {
+        val frameId = GPUFrameID(80)
+        fun support(reverse: Boolean, includeColorResolve: Boolean): GPUTextureFormatSampleSupport {
+            val color = GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                renderAttachmentSampleCounts = if (reverse) linkedSetOf(4, 1) else linkedSetOf(1, 4),
+                resolveSourceSampleCounts = if (includeColorResolve) setOf(4) else emptySet(),
+            )
+            val stencil = GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(
+                renderAttachmentSampleCounts = if (reverse) linkedSetOf(4, 1) else linkedSetOf(1, 4),
+            )
+            return GPUTextureFormatSampleSupport(
+                linkedMapOf(*(if (reverse) arrayOf(stencil, color) else arrayOf(color, stencil))),
+            )
+        }
+        fun seal(sampleSupport: GPUTextureFormatSampleSupport): GPUFrameCapabilitySeal =
+            GPUFrameCapabilitySeal.capture(
+                frameId = frameId,
+                deviceGeneration = GPUDeviceGenerationID(3),
+                capabilities = integrityCapabilities(textureFormatSampleSupport = sampleSupport),
+            )
+
+        val ordered = seal(support(reverse = false, includeColorResolve = true))
+        val reversed = seal(support(reverse = true, includeColorResolve = true))
+        val missingResolve = seal(support(reverse = false, includeColorResolve = false))
+
+        assertEquals(ordered.capabilitySnapshotHash, reversed.capabilitySnapshotHash)
+        assertEquals(ordered.sealHash, reversed.sealHash)
+        assertNotEquals(ordered.capabilitySnapshotHash, missingResolve.capabilitySnapshotHash)
+        assertNotEquals(ordered.sealHash, missingResolve.sealHash)
     }
 
     @Test
@@ -1488,6 +1523,7 @@ class GPUFramePlanIntegrityTest {
     private fun integrityCapabilities(
         supportedTextureUsage: GPUTextureUsage? = null,
         maxBufferSize: Long? = null,
+        textureFormatSampleSupport: GPUTextureFormatSampleSupport = GPUTextureFormatSampleSupport(),
     ): GPUCapabilities = GPUCapabilities(
         implementation = GPUImplementationIdentity(
             facadeName = "integrity-test-facade",
@@ -1504,6 +1540,7 @@ class GPUFramePlanIntegrityTest {
             maxBufferSize = maxBufferSize,
         ),
         supportedTextureUsage = supportedTextureUsage,
+        textureFormatSampleSupport = textureFormatSampleSupport,
     )
 
     private fun diagnostic(code: String): GPUDiagnostic = GPUDiagnostic(

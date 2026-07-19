@@ -5,6 +5,7 @@ import io.ygdrasil.webgpu.GPUTextureUsage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class GPUCapabilityContractsTest {
@@ -237,6 +238,168 @@ class GPUCapabilityContractsTest {
             "unsupported.capability.feature",
             capabilities.validateRendererFeature(GPURendererFeature.Readback)?.code,
         )
+    }
+
+    @Test
+    fun `GPU capabilities validate exact render and resolve sample support per format`() {
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "native",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "unit-format-samples",
+            supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopyDst,
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(
+                    GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1, 4),
+                        resolveSourceSampleCounts = setOf(4),
+                    ),
+                    GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1, 4),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            null,
+            capabilities.validateTextureRequest(
+                format = GPUTextureFormat.RGBA8Unorm,
+                width = 32,
+                height = 32,
+                usage = GPUTextureUsage.RenderAttachment,
+                sampleCount = 4,
+                requiresResolve = true,
+            ),
+        )
+        assertEquals(
+            "unsupported.capability.texture_format",
+            capabilities.validateTextureRequest(
+                format = GPUTextureFormat.Depth24PlusStencil8,
+                width = 32,
+                height = 32,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopyDst,
+                sampleCount = 4,
+                requiresResolve = false,
+            )?.code,
+        )
+        assertEquals(
+            null,
+            capabilities.validateTextureRequest(
+                format = GPUTextureFormat.Depth24PlusStencil8,
+                width = 32,
+                height = 32,
+                usage = GPUTextureUsage.RenderAttachment,
+                sampleCount = 4,
+                requiresResolve = false,
+            ),
+        )
+        assertEquals(
+            "unsupported.capability.texture_resolve_sample_count",
+            capabilities.validateTextureRequest(
+                format = GPUTextureFormat.Depth24PlusStencil8,
+                width = 32,
+                height = 32,
+                usage = GPUTextureUsage.RenderAttachment,
+                sampleCount = 4,
+                requiresResolve = true,
+            )?.code,
+        )
+        assertEquals(
+            "unsupported.capability.texture_sample_count",
+            capabilities.validateTextureRequest(
+                format = GPUTextureFormat.RGBA8Unorm,
+                width = 32,
+                height = 32,
+                usage = GPUTextureUsage.RenderAttachment,
+                sampleCount = 8,
+                requiresResolve = false,
+            )?.code,
+        )
+    }
+
+    @Test
+    fun `multisample requests fail closed without exact per-format evidence while legacy 1x remains compatible`() {
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "native",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "unit-format-samples-unknown",
+            supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment,
+        )
+
+        assertEquals(
+            null,
+            capabilities.validateTextureRequest(
+                GPUTextureFormat.RGBA8Unorm,
+                32,
+                32,
+                GPUTextureUsage.RenderAttachment,
+            ),
+        )
+        assertEquals(
+            "unsupported.capability.texture_sample_count",
+            capabilities.validateTextureRequest(
+                GPUTextureFormat.RGBA8Unorm,
+                32,
+                32,
+                GPUTextureUsage.RenderAttachment,
+                sampleCount = 4,
+                requiresResolve = false,
+            )?.code,
+        )
+    }
+
+    @Test
+    fun `format sample capability snapshots mutable inputs and accepts only WebGPU 1x and 4x`() {
+        val renderCounts = linkedSetOf(1, 4)
+        val resolveCounts = linkedSetOf(4)
+        val source = linkedMapOf(
+            GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                renderAttachmentSampleCounts = renderCounts,
+                resolveSourceSampleCounts = resolveCounts,
+            ),
+        )
+        val support = GPUTextureFormatSampleSupport(source)
+
+        renderCounts.clear()
+        resolveCounts.clear()
+        source.clear()
+
+        assertEquals(setOf(1, 4), support.getValue(GPUTextureFormat.RGBA8Unorm).renderAttachmentSampleCounts)
+        assertEquals(setOf(4), support.getValue(GPUTextureFormat.RGBA8Unorm).resolveSourceSampleCounts)
+        assertFalse(support.isEmpty())
+        val expectedMap = mapOf(
+            GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                renderAttachmentSampleCounts = setOf(1, 4),
+                resolveSourceSampleCounts = setOf(4),
+            ),
+        )
+        assertEquals(expectedMap, support)
+        assertEquals(support, expectedMap)
+        assertFailsWith<ClassCastException> {
+            @Suppress("UNCHECKED_CAST")
+            (support as Any as MutableMap<GPUTextureFormat, GPUTextureSampleCountSupport>).clear()
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUTextureSampleCountSupport(renderAttachmentSampleCounts = setOf(1, 8))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUTextureSampleCountSupport(
+                renderAttachmentSampleCounts = setOf(1),
+                resolveSourceSampleCounts = setOf(4),
+            )
+        }
     }
 
     @Test

@@ -11,6 +11,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 
@@ -189,7 +191,7 @@ class GPUScratchTexturePoolTest {
                     preparation = texturePreparation(
                         id = "overflow",
                         logicalBounds = hugeBounds,
-                        sampleCount = 8,
+                        sampleCount = 4,
                         usages = setOf(GPUFrameResourceUsage.RenderAttachment),
                         declaredByteSize = 0,
                     ),
@@ -357,6 +359,35 @@ class GPUScratchTexturePoolTest {
             ),
         )
         assertEquals("unsupported.scratch_texture.capability_texture_usage", usageRefusal.diagnostic.code.value)
+    }
+
+    @Test
+    fun `scratch forwards exact sample count to observed format capabilities before reservation`() {
+        val pool = GPUScratchTexturePool()
+        val refused = assertIs<GPUScratchTextureReservationResult.Refused>(
+            pool.reserve(
+                scratchRequest("capability-samples", sampleCount = 8),
+                budgetPlan(),
+                scratchCapabilities(
+                    supportedFormats = setOf(GPUTextureFormat.RGBA8Unorm),
+                    supportedUsage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+                    textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                        mapOf(
+                            GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                                renderAttachmentSampleCounts = setOf(1, 4),
+                                resolveSourceSampleCounts = setOf(4),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            "unsupported.scratch_texture.capability_texture_sample_count",
+            refused.diagnostic.code.value,
+        )
+        assertEquals(0, pool.trackedEntryCount)
     }
 
     @Test
@@ -608,11 +639,18 @@ private fun scratchRequest(
     deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(7),
     firstStep: Int = 0,
     lastStepExclusive: Int = 2,
+    sampleCount: Int = 1,
 ): GPUScratchTextureReservationRequest =
     GPUScratchTextureReservationRequest(
         reservationId = id,
         reservationScope = scope,
-        preparation = texturePreparation(id, logicalBounds, role = role, usages = usages),
+        preparation = texturePreparation(
+            id,
+            logicalBounds,
+            role = role,
+            sampleCount = sampleCount,
+            usages = usages,
+        ),
         deviceGeneration = deviceGeneration,
         firstStep = firstStep,
         lastStepExclusive = lastStepExclusive,
@@ -669,6 +707,14 @@ private fun scratchCapabilities(
     maxTextureDimension2D: Long = 16_384,
     supportedFormats: Set<GPUTextureFormat> = emptySet(),
     supportedUsage: GPUTextureUsage? = null,
+    textureFormatSampleSupport: GPUTextureFormatSampleSupport = GPUTextureFormatSampleSupport(
+        mapOf(
+            GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                renderAttachmentSampleCounts = setOf(1, 4),
+                resolveSourceSampleCounts = setOf(4),
+            ),
+        ),
+    ),
 ): GPUCapabilities =
     GPUCapabilities(
         implementation = GPUImplementationIdentity(
@@ -681,6 +727,7 @@ private fun scratchCapabilities(
         snapshotId = "scratch-unit",
         supportedTextureFormats = supportedFormats,
         supportedTextureUsage = supportedUsage,
+        textureFormatSampleSupport = textureFormatSampleSupport,
         limits = GPULimits(
             maxTextureDimension2D = maxTextureDimension2D,
             copyBytesPerRowAlignment = 256,

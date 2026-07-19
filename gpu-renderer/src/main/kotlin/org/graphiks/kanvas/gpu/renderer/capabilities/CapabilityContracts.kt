@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.renderer.capabilities
 
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
+import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 
 /** Handle-free identity for one GPU device generation. */
 @JvmInline
@@ -310,6 +312,72 @@ data class GPULimits(
     }
 }
 
+/** Immutable sample-count facts for one renderable texture format. */
+class GPUTextureSampleCountSupport(
+    renderAttachmentSampleCounts: Set<Int>,
+    resolveSourceSampleCounts: Set<Int> = emptySet(),
+) {
+    val renderAttachmentSampleCounts: Set<Int> = immutableSet(renderAttachmentSampleCounts)
+    val resolveSourceSampleCounts: Set<Int> = immutableSet(resolveSourceSampleCounts)
+
+    init {
+        require(this.renderAttachmentSampleCounts.isNotEmpty()) {
+            "GPUTextureSampleCountSupport.renderAttachmentSampleCounts must not be empty"
+        }
+        require(this.renderAttachmentSampleCounts.all { it in WEBGPU_SAMPLE_COUNTS }) {
+            "GPUTextureSampleCountSupport render sample counts must be 1 or 4"
+        }
+        require(this.resolveSourceSampleCounts.all { it == 4 }) {
+            "GPUTextureSampleCountSupport resolve source sample counts must be 4"
+        }
+        require(this.renderAttachmentSampleCounts.containsAll(this.resolveSourceSampleCounts)) {
+            "GPUTextureSampleCountSupport resolve source samples must also be renderable"
+        }
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is GPUTextureSampleCountSupport &&
+            renderAttachmentSampleCounts == other.renderAttachmentSampleCounts &&
+            resolveSourceSampleCounts == other.resolveSourceSampleCounts
+
+    override fun hashCode(): Int =
+        31 * renderAttachmentSampleCounts.hashCode() + resolveSourceSampleCounts.hashCode()
+
+    override fun toString(): String =
+        "GPUTextureSampleCountSupport(render=$renderAttachmentSampleCounts, resolve=$resolveSourceSampleCounts)"
+
+    private companion object {
+        val WEBGPU_SAMPLE_COUNTS = setOf(1, 4)
+    }
+}
+
+/** Deeply immutable per-format sample-count capability table. */
+class GPUTextureFormatSampleSupport(
+    values: Map<GPUTextureFormat, GPUTextureSampleCountSupport> = emptyMap(),
+) : Map<GPUTextureFormat, GPUTextureSampleCountSupport> {
+    private val snapshot: Map<GPUTextureFormat, GPUTextureSampleCountSupport> = immutableMap(values)
+
+    override val entries: Set<Map.Entry<GPUTextureFormat, GPUTextureSampleCountSupport>>
+        get() = snapshot.entries
+    override val keys: Set<GPUTextureFormat>
+        get() = snapshot.keys
+    override val size: Int
+        get() = snapshot.size
+    override val values: Collection<GPUTextureSampleCountSupport>
+        get() = snapshot.values
+
+    override fun containsKey(key: GPUTextureFormat): Boolean = snapshot.containsKey(key)
+    override fun containsValue(value: GPUTextureSampleCountSupport): Boolean = snapshot.containsValue(value)
+    override fun get(key: GPUTextureFormat): GPUTextureSampleCountSupport? = snapshot[key]
+    override fun isEmpty(): Boolean = snapshot.isEmpty()
+
+    override fun equals(other: Any?): Boolean = other is Map<*, *> && snapshot == other
+
+    override fun hashCode(): Int = snapshot.hashCode()
+
+    override fun toString(): String = snapshot.toString()
+}
+
 /** Capability snapshot for the selected GPU facade implementation. */
 data class GPUCapabilities(
     val implementation: GPUImplementationIdentity,
@@ -319,6 +387,7 @@ data class GPUCapabilities(
     val limits: GPULimits? = null,
     val supportedTextureFormats: Set<GPUTextureFormat> = emptySet(),
     val supportedTextureUsage: GPUTextureUsage? = null,
+    val textureFormatSampleSupport: GPUTextureFormatSampleSupport = GPUTextureFormatSampleSupport(),
     val rendererFeatures: Set<GPURendererFeature> = emptySet(),
     /** Optional real implementation primitive captured by the device capability registry. */
     val copyAsDrawCapability: GPUCopyAsDrawImplementationCapability? = null,
@@ -334,11 +403,38 @@ fun GPUCapabilities.validateTextureRequest(
     width: Int,
     height: Int,
     usage: GPUTextureUsage,
+): GPUCapabilityDiagnostic? = validateTextureRequest(
+    format = format,
+    width = width,
+    height = height,
+    usage = usage,
+    sampleCount = 1,
+    requiresResolve = false,
+)
+
+/** Validates a texture allocation request with an exact per-format sample topology. */
+fun GPUCapabilities.validateTextureRequest(
+    format: GPUTextureFormat,
+    width: Int,
+    height: Int,
+    usage: GPUTextureUsage,
+    sampleCount: Int,
+    requiresResolve: Boolean,
 ): GPUCapabilityDiagnostic? {
     require(width > 0) { "width must be positive" }
     require(height > 0) { "height must be positive" }
+    require(sampleCount > 0) { "sampleCount must be positive" }
+    require(!requiresResolve || sampleCount > 1) {
+        "requiresResolve requires a multisample texture request"
+    }
 
-    if (supportedTextureFormats.isNotEmpty() && format !in supportedTextureFormats) {
+    val sampleSupport = textureFormatSampleSupport[format]
+    val tableOnlyRenderAttachmentEvidence =
+        sampleSupport != null && usage == GPUTextureUsage.RenderAttachment
+    if (supportedTextureFormats.isNotEmpty() &&
+        format !in supportedTextureFormats &&
+        !tableOnlyRenderAttachmentEvidence
+    ) {
         return GPUCapabilityDiagnostic(
             code = "unsupported.capability.texture_format",
             severity = "error",
@@ -370,6 +466,30 @@ fun GPUCapabilities.validateTextureRequest(
             requirementName = "texture.maxTextureDimension2D",
             required = maxOf(width, height).toString(),
             observed = maxTextureDimension2D.toString(),
+            isTerminal = true,
+        )
+    }
+
+    if ((sampleCount > 1 && sampleSupport == null) ||
+        (sampleSupport != null && sampleCount !in sampleSupport.renderAttachmentSampleCounts)
+    ) {
+        return GPUCapabilityDiagnostic(
+            code = "unsupported.capability.texture_sample_count",
+            severity = "error",
+            requirementName = "texture.sampleCount",
+            required = "$sampleCount",
+            observed = sampleSupport?.renderAttachmentSampleCounts?.sorted()?.joinToString(",") ?: "unknown",
+            isTerminal = true,
+        )
+    }
+
+    if (requiresResolve && sampleCount !in checkNotNull(sampleSupport).resolveSourceSampleCounts) {
+        return GPUCapabilityDiagnostic(
+            code = "unsupported.capability.texture_resolve_sample_count",
+            severity = "error",
+            requirementName = "texture.resolveSourceSampleCount",
+            required = "$sampleCount",
+            observed = sampleSupport.resolveSourceSampleCounts.sorted().joinToString(",").ifEmpty { "none" },
             isTerminal = true,
         )
     }
