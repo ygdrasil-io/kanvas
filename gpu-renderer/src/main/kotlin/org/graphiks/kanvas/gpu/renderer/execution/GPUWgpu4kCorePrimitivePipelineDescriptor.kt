@@ -126,9 +126,7 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
         cullMode != GPUCorePrimitiveRenderPipelineStructuralKey.CullMode.None ||
         colorFormat != GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
     ) return null
-    if (sampleCount == 4 && (role != GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading ||
-            shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry)
-    ) return null
+    if (sampleCount == 4 && !supportsFourSampleProgram()) return null
 
     return when (role) {
         GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading -> when (shader) {
@@ -236,6 +234,14 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
         }
     }
 }
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.supportsFourSampleProgram(): Boolean =
+    (role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.Shading &&
+        shader == GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry) ||
+        role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer ||
+        role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover ||
+        role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer ||
+        role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer
 
 private fun GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic.nativeAnalyticProgramOrNull():
     GPUWgpu4kCorePrimitivePipelineProgram? = when (geometry) {
@@ -392,9 +398,23 @@ internal fun isSupportedCorePrimitiveRenderPipelineIdentity(
     identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
 ): Boolean = identity.targetFormat == "rgba8unorm" &&
     (identity.sampleCount == 1 ||
-        identity.sampleCount == 4 && identity.program == GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver) &&
+        identity.sampleCount == 4 && identity.program.supportsFourSamples()) &&
     identity.topology == "triangle-list" && identity.frontFace == "ccw" &&
     identity.cullMode == "none"
+
+private fun GPUWgpu4kCorePrimitivePipelineProgram.supportsFourSamples(): Boolean = when (this) {
+    GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerWinding,
+    GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerEvenOdd,
+    GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerInverse,
+    -> true
+    else -> false
+}
 
 private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthStencilState {
     val (front, back, readMask, writeMask) = when (this) {

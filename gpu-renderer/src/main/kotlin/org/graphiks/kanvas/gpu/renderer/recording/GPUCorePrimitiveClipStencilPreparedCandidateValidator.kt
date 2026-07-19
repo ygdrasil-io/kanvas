@@ -43,6 +43,12 @@ internal fun validateCorePrimitiveClipStencilPreparedCandidate(
         ?: return refuse("Prepared clip-stencil producer lost its typed stencil plan.")
     val path = plan.corePrimitiveClipStencilNativePathOrNull()
         ?: return refuse("Prepared clip-stencil producer no longer has exact native path state.")
+    if (candidate.attachmentLogicalReference != attachment.logicalReference ||
+        candidate.attachmentWidth != attachment.width ||
+        candidate.attachmentHeight != attachment.height ||
+        candidate.attachmentSampleCount != attachment.sampleCount ||
+        candidate.attachmentSampleCount != plan.sampleCount
+    ) return refuse("Prepared clip-stencil attachment sample authority was substituted.")
     if (candidate.contentKey != plan.contentKey ||
         candidate.planCanonicalIdentity != plan.canonicalIdentity() ||
         (listOf(producerPacket) + consumerPackets).any {
@@ -107,16 +113,21 @@ internal fun validateCorePrimitiveClipStencilPreparedCandidate(
                 path.contourStarts,
             ),
             producerAttachment = attachment,
-            producerAntiAlias = false,
+            producerAntiAlias = plan.sampleCount == 4,
             expectedLastConsumerCommandId = consumerPackets.last().commandIdValue,
         ),
     )) {
-        is GPUCorePrimitiveClipStencilNativeRoute.Accepted ->
+        is GPUCorePrimitiveClipStencilNativeRoute.Accepted -> {
+            if (candidate.producerStructuralKey != route.producer.structuralKey ||
+                candidate.consumers.map(GPUCorePrimitiveClipStencilPreparedCandidate.Consumer::structuralKey) !=
+                route.consumers.map(GPUCorePrimitiveClipStencilNativeRoute.ConsumerSeal::structuralKey)
+            ) return refuse("Prepared clip-stencil structural sample authority was substituted.")
             GPUCorePrimitiveClipStencilPreparedCandidateValidation.Accepted(
                 route,
                 recomputedFan.vertices.toList(),
                 recomputedFan.indices.toList(),
             )
+        }
         is GPUCorePrimitiveClipStencilNativeRoute.Refused ->
             refuse("${route.code}: ${route.message}")
     }

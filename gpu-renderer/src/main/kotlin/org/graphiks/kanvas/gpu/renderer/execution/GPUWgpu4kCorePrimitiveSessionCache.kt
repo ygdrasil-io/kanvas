@@ -38,7 +38,7 @@ internal data class GPUCorePrimitiveNativeCacheCounters(
     val msaaColorSlotReuses: Long = 0L,
 )
 
-internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 24
+internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 30
 
 internal enum class GPUWgpu4kCorePrimitiveBindingPolicy {
     DynamicUniformRequired,

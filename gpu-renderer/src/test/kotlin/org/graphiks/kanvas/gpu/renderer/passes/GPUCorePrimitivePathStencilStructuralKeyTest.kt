@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertFailsWith
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
@@ -83,6 +84,43 @@ class GPUCorePrimitivePathStencilStructuralKeyTest {
             ),
             cover.depthStencil,
         )
+    }
+
+    @Test
+    fun `path stencil keys include the exact one or four sample structural axis`() {
+        val singleSemantic = pathSemantic(
+            GPUCorePrimitiveFillRule.Winding,
+            inverseFill = false,
+            coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
+        )
+        val multisampleSemantic = pathSemantic(
+            GPUCorePrimitiveFillRule.Winding,
+            inverseFill = false,
+            coverageMode = GPUCorePrimitiveCoverageMode.StencilAA,
+        )
+        val single = pathKey(
+            singleSemantic,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+            sampleCount = 1,
+        )
+        val multisample = pathKey(
+            multisampleSemantic,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+            sampleCount = 4,
+        )
+
+        assertEquals(1, single.sampleCount)
+        assertEquals(4, multisample.sampleCount)
+        assertNotEquals(single, multisample)
+        assertNotEquals(
+            single.stableRenderPipelineKey("pipeline.test"),
+            multisample.stableRenderPipelineKey("pipeline.test"),
+        )
+        listOf(0, 2, 8).forEach { unsupported ->
+            assertFailsWith<IllegalArgumentException> {
+                single.copy(sampleCount = unsupported)
+            }
+        }
     }
 
     @Test
@@ -174,11 +212,13 @@ class GPUCorePrimitivePathStencilStructuralKeyTest {
     private fun pathKey(
         semantic: GPUDrawSemanticPayload.CorePrimitive,
         role: GPUCorePrimitiveRenderPipelineStructuralKey.Role,
+        sampleCount: Int = 1,
     ) = corePrimitivePathStencilRenderPipelineStructuralKey(
         semantic,
         role,
         GPUClipExecutionPlan.NoClip,
         blendPlan(),
+        sampleCount,
     )
 
     private fun expectedStencil(
@@ -213,6 +253,7 @@ class GPUCorePrimitivePathStencilStructuralKeyTest {
         xOffset: Float = 0f,
         targetBounds: GPUPixelBounds = GPUPixelBounds(0, 0, 16, 16),
         scissorBounds: GPUPixelBounds = targetBounds,
+        coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
     ): GPUDrawSemanticPayload.CorePrimitive = GPUCorePrimitivePayloadGatherer().gatherSemantic(
         GPUCorePrimitivePayloadInput(
             commandIdValue = 1,
@@ -237,7 +278,7 @@ class GPUCorePrimitivePathStencilStructuralKeyTest {
             clipCoveragePlan = GPUClipCoveragePlan.NoClip,
             blendPlanIdentity = "fixed-src-over",
             frameProvenance = GPUFrameProvenance.GmContent,
-            coverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
+            coverageMode = coverageMode,
         ),
     )
 

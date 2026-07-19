@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilAttach
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilConsumerInput
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilNativeRouteRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilPreparedCandidate
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilProducerGeometryAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
@@ -168,13 +169,35 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
     }
 
     @Test
+    fun `pure seal and prepared candidate retain exact four sample clip stencil authority`() {
+        val accepted = assertIs<GPUCorePrimitiveClipStencilNativeRoute.Accepted>(
+            sealGPUCorePrimitiveClipStencilNativeRoute(
+                request(sampleCount = 4, producerAntiAlias = true),
+            ),
+        )
+
+        assertEquals(4, accepted.attachment.sampleCount)
+        assertEquals(4, accepted.producer.structuralKey.sampleCount)
+        assertTrue(accepted.consumers.all { it.structuralKey.sampleCount == 4 })
+        assertEquals(4, mapped(accepted.producer.structuralKey).identity.sampleCount)
+
+        val candidate = preparedCandidate(accepted, sampleCount = 4)
+        assertEquals(4, candidate.attachmentSampleCount)
+        listOf(0, 2, 8).forEach { unsupported ->
+            assertFailsWith<IllegalArgumentException> {
+                preparedCandidate(accepted, sampleCount = unsupported)
+            }
+        }
+    }
+
+    @Test
     fun `seal refuses unsupported bounded policy cases with stable codes`() {
         assertRefused("unsupported.native-core-primitive.clip-stencil.anti-alias", request(producerAntiAlias = true))
         assertRefused(
             "unsupported.native-core-primitive.clip-stencil.consumer-coverage",
             request(consumers = mutableListOf(consumer(coverageMode = GPUCorePrimitiveCoverageMode.StencilAA))),
         )
-        assertRefused("unsupported.native-core-primitive.clip-stencil.msaa", request(sampleCount = 4))
+        assertRefused("unsupported.native-core-primitive.clip-stencil.msaa", request(sampleCount = 2))
         assertRefused(
             "unsupported.native-core-primitive.clip-stencil.consumer-geometry",
             request(consumers = mutableListOf(consumer(geometry = stencilPathConsumer()))),
@@ -381,7 +404,12 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         producerGeometry: GPUCorePrimitiveClipStencilProducerGeometryAuthority =
             producerGeometry(vertices, contourStarts),
         consumers: MutableList<GPUCorePrimitiveClipStencilConsumerInput> = mutableListOf(
-            consumer(reference = reference, inverse = inverse, scissor = consumerScissor),
+            consumer(
+                reference = reference,
+                inverse = inverse,
+                scissor = consumerScissor,
+                attachment = attachment(sampleCount),
+            ),
         ),
         artifacts: MutableList<GPUClipExecutionPlan> = mutableListOf(
             stencilPlan(
@@ -400,7 +428,7 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         clipArtifacts = artifacts,
         consumers = consumers,
         producerGeometry = producerGeometry,
-        producerAttachment = attachment(),
+        producerAttachment = attachment(sampleCount),
         producerAntiAlias = producerAntiAlias,
         expectedLastConsumerCommandId = consumers.lastOrNull()?.commandId ?: -1,
     )
@@ -483,14 +511,42 @@ class GPUCorePrimitiveClipStencilNativeRouteTest {
         isLastConsumer = last,
     )
 
-    private fun attachment() = GPUCorePrimitiveClipStencilAttachmentAuthority(
+    private fun attachment(sampleCount: Int = 1) = GPUCorePrimitiveClipStencilAttachmentAuthority(
         logicalReference = "clip-depth-0",
         width = 200,
         height = 100,
         format = GPUCorePrimitiveClipStencilAttachmentFormat.Depth24PlusStencil8,
-        sampleCount = 1,
+        sampleCount = sampleCount,
         deviceGeneration = GPUDeviceGenerationID(4),
         resourceGeneration = 7L,
+    )
+
+    private fun preparedCandidate(
+        route: GPUCorePrimitiveClipStencilNativeRoute.Accepted,
+        sampleCount: Int,
+    ) = GPUCorePrimitiveClipStencilPreparedCandidate(
+        contentKey = route.producer.contentKey,
+        planCanonicalIdentity = route.producer.planCanonicalIdentity,
+        producerPacketId = GPUDrawPacketID("packet.producer"),
+        producerCommandId = 1,
+        producerNdcVertices = route.producer.ndcVertices,
+        producerContourStarts = route.producer.contourStarts,
+        producerFanVertices = route.producer.ndcVertices.take(6),
+        producerFanIndices = listOf(0, 1, 2),
+        producerStructuralKey = route.producer.structuralKey,
+        consumers = route.consumers.mapIndexed { index, consumer ->
+            GPUCorePrimitiveClipStencilPreparedCandidate.Consumer(
+                packetId = GPUDrawPacketID("packet.consumer.$index"),
+                commandId = consumer.commandId,
+                sourceOrder = consumer.sourceOrder,
+                structuralKey = consumer.structuralKey,
+                dependencyFromPreviousConsumerToken = null,
+            )
+        },
+        attachmentLogicalReference = route.attachment.logicalReference,
+        attachmentWidth = route.attachment.width,
+        attachmentHeight = route.attachment.height,
+        attachmentSampleCount = sampleCount,
     )
 
     private fun preparedSlabAuthority(): GPUCorePrimitiveClipStencilPreparedSlabAuthority {

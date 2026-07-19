@@ -116,6 +116,19 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
     @Test
     fun `stencil AA requires independent color resolve and depth stencil render proofs`() {
         assertEquals(
+            "unsupported.core_primitive.coverage_sample.color_capability",
+            code(
+                stencilEdgeFan,
+                GPUCorePrimitiveCoverageMode.StencilAA,
+                GPUSamplePlan.MultisampleFrame(4),
+                capabilities(
+                    colorRender = setOf(1, 4),
+                    colorResolve = emptySet(),
+                    depthStencilRender = setOf(1, 4),
+                ),
+            ),
+        )
+        assertEquals(
             "unsupported.core_primitive.coverage_sample.depth_stencil_capability",
             code(
                 stencilEdgeFan,
@@ -124,8 +137,7 @@ class GPUCorePrimitiveCoverageSampleAuthorityTest {
                 capabilities(colorRender = setOf(1, 4), colorResolve = setOf(4)),
             ),
         )
-        assertEquals(
-            "unsupported.core_primitive.coverage_sample.stencil_aa_not_promoted",
+        assertNull(
             code(
                 stencilEdgeFan,
                 GPUCorePrimitiveCoverageMode.StencilAA,

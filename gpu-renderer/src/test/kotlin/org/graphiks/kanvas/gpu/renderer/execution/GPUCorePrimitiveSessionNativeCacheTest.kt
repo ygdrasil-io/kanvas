@@ -46,7 +46,7 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     }
 
     @Test
-    fun `analytic shape cache identity is unique and reused within the twenty four entry ceiling`() {
+    fun `analytic shape cache identity is unique and reused within the thirty entry ceiling`() {
         val native = SessionNativeProxy(acceptPipelineIdentity = { true })
         val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
         val key = analyticShapeProductionKey()
@@ -61,7 +61,7 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         assertNotSame(first.pipelineLayout, direct.pipelineLayout)
         assertEquals(2, native.pipelineCreationCount)
         assertEquals(GPUCorePrimitiveNativeCacheCounters(2, 1, 0), cache.counters())
-        assertEquals(24, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+        assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
 
         cache.close()
     }
@@ -525,25 +525,25 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     }
 
     @Test
-    fun `concrete cache accepts twenty four factory validated pipelines and typed refuses the twenty fifth`() {
+    fun `concrete cache accepts thirty factory validated pipelines and typed refuses the thirty first`() {
         val native = SessionNativeProxy(acceptPipelineIdentity = { true })
         val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
-        val live = (0 until 24).associate { index ->
+        val live = (0 until 30).associate { index ->
             val key = testKey("pipeline-$index")
             key to cache.acquire(key).acquiredHandles()
         }
 
         val refused = assertIs<GPUWgpu4kCorePrimitiveSessionCacheAcquire.Refused>(
-            cache.acquire(testKey("pipeline-24")),
+            cache.acquire(testKey("pipeline-30")),
         )
 
         assertEquals(
-            GPUWgpu4kCorePrimitiveSessionCacheRefusal.Saturated(maxEntries = 24),
+            GPUWgpu4kCorePrimitiveSessionCacheRefusal.Saturated(maxEntries = 30),
             refused.reason,
         )
-        assertEquals(24, native.pipelineCreationCount)
+        assertEquals(30, native.pipelineCreationCount)
         live.forEach { (key, handles) -> assertSame(handles, cache.acquire(key).acquiredHandles()) }
-        assertEquals(GPUCorePrimitiveNativeCacheCounters(24, 24, 0), cache.counters())
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(30, 30, 0), cache.counters())
         cache.close()
     }
 

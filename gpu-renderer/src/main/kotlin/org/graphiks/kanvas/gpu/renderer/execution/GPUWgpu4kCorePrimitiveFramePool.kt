@@ -68,6 +68,9 @@ internal data class GPUWgpu4kCorePrimitiveMsaaColorRequirement(
     val sampleCount: Int = 4,
     val usage: GPUTextureUsage = GPUTextureUsage.RenderAttachment,
 ) {
+    val byteSize: Long
+        get() = attachmentByteSize(width, height, sampleCount)
+
     init {
         require(target.value.isNotBlank() && colorAttachment.value.isNotBlank() && targetGeneration >= 0L) {
             "CorePrimitive MSAA color target, attachment identity, and generation must be explicit"
@@ -90,13 +93,32 @@ internal data class GPUWgpu4kCorePrimitiveMsaaColorRequirement(
     }
 }
 
+internal sealed interface GPUWgpu4kCorePrimitiveDepthStencilRequirement {
+    val width: Int
+    val height: Int
+    val format: GPUTextureFormat
+    val sampleCount: Int
+    val usage: GPUTextureUsage
+    val target: GPUFrameTargetRef?
+    val depthStencilAttachment: GPUTargetIdentity?
+    val deviceGeneration: GPUDeviceGenerationID?
+    val targetGeneration: Long?
+    val byteSize: Long
+        get() = attachmentByteSize(width, height, sampleCount)
+}
+
 internal data class GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
-    val width: Int,
-    val height: Int,
-    val format: GPUTextureFormat,
-    val sampleCount: Int,
-    val usage: GPUTextureUsage,
-) {
+    override val width: Int,
+    override val height: Int,
+    override val format: GPUTextureFormat,
+    override val sampleCount: Int,
+    override val usage: GPUTextureUsage,
+    override val target: GPUFrameTargetRef? = null,
+    override val depthStencilAttachment: GPUTargetIdentity? = null,
+    override val deviceGeneration: GPUDeviceGenerationID? = null,
+    override val targetGeneration: Long? = null,
+) : GPUWgpu4kCorePrimitiveDepthStencilRequirement {
+
     init {
         require(width > 0 && height > 0) {
             "CorePrimitive path depth/stencil extent must be positive"
@@ -104,22 +126,33 @@ internal data class GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
         require(format == GPUTextureFormat.Depth24PlusStencil8) {
             "CorePrimitive path depth/stencil format must be Depth24PlusStencil8"
         }
-        require(sampleCount == 1) {
-            "CorePrimitive path depth/stencil attachment must be single-sample"
+        require(sampleCount in setOf(1, 4)) {
+            "CorePrimitive path depth/stencil attachment requires one or four samples"
         }
         require(usage == GPUTextureUsage.RenderAttachment) {
             "CorePrimitive path depth/stencil usage must be exactly RenderAttachment"
         }
+        require(hasCompleteDepthStencilAuthority() || hasNoDepthStencilAuthority()) {
+            "CorePrimitive path depth/stencil authority must be complete or absent for the legacy 1x lane"
+        }
+        require(sampleCount == 1 || hasCompleteDepthStencilAuthority()) {
+            "CorePrimitive 4x path depth/stencil authority must be explicit"
+        }
+        validateDepthStencilAuthority("path")
     }
 }
 
 internal data class GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
-    val width: Int,
-    val height: Int,
-    val format: GPUTextureFormat,
-    val sampleCount: Int,
-    val usage: GPUTextureUsage,
-) {
+    override val width: Int,
+    override val height: Int,
+    override val format: GPUTextureFormat,
+    override val sampleCount: Int,
+    override val usage: GPUTextureUsage,
+    override val target: GPUFrameTargetRef? = null,
+    override val depthStencilAttachment: GPUTargetIdentity? = null,
+    override val deviceGeneration: GPUDeviceGenerationID? = null,
+    override val targetGeneration: Long? = null,
+) : GPUWgpu4kCorePrimitiveDepthStencilRequirement {
     init {
         require(width > 0 && height > 0) {
             "CorePrimitive clip depth/stencil extent must be positive"
@@ -127,12 +160,19 @@ internal data class GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
         require(format == GPUTextureFormat.Depth24PlusStencil8) {
             "CorePrimitive clip depth/stencil format must be Depth24PlusStencil8"
         }
-        require(sampleCount == 1) {
-            "CorePrimitive clip depth/stencil attachment must be single-sample"
+        require(sampleCount in setOf(1, 4)) {
+            "CorePrimitive clip depth/stencil attachment requires one or four samples"
         }
         require(usage == GPUTextureUsage.RenderAttachment) {
             "CorePrimitive clip depth/stencil usage must be exactly RenderAttachment"
         }
+        require(hasCompleteDepthStencilAuthority() || hasNoDepthStencilAuthority()) {
+            "CorePrimitive clip depth/stencil authority must be complete or absent for the legacy 1x lane"
+        }
+        require(sampleCount == 1 || hasCompleteDepthStencilAuthority()) {
+            "CorePrimitive 4x clip depth/stencil authority must be explicit"
+        }
+        validateDepthStencilAuthority("clip")
     }
 }
 
@@ -172,18 +212,52 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
     val sampleCount: Int = 1,
     val msaaColor: GPUWgpu4kCorePrimitiveMsaaColorRequirement? = null,
 ) {
+    val msaaColorByteSize: Long
+        get() = msaaColor?.byteSize ?: 0L
+
+    val depthStencilByteSize: Long
+        get() = (pathDepthStencil?.byteSize ?: clipDepthStencil?.byteSize) ?: 0L
+
+    val totalAttachmentByteSize: Long
+        get() = Math.addExact(msaaColorByteSize, depthStencilByteSize)
+
     init {
         require(sampleCount in setOf(1, 4)) {
             "CorePrimitive frame slots require one or four samples"
         }
-        require(sampleCount == 1 ||
-            pathDepthStencil == null && clipDepthStencil == null && coverageMask == null
-        ) { "The 4x B3.5c frame slot is color-only" }
+        require(pathDepthStencil == null || clipDepthStencil == null) {
+            "CorePrimitive path and clip D24S8 attachments cannot coexist in one frame slot"
+        }
+        require(coverageMask == null || sampleCount == 1) {
+            "CorePrimitive coverage-mask frame slots remain single-sample"
+        }
         require((sampleCount == 4) == (msaaColor != null)) {
-            "The 4x B3.5c frame slot requires exactly one pooled MSAA color attachment"
+            "The 4x frame slot requires exactly one pooled MSAA color attachment"
         }
         require(msaaColor == null || msaaColor.deviceGeneration == deviceGeneration) {
             "The pooled MSAA color attachment must match the frame device generation"
+        }
+        val depthStencil: GPUWgpu4kCorePrimitiveDepthStencilRequirement? =
+            pathDepthStencil ?: clipDepthStencil
+        require(depthStencil == null || depthStencil.sampleCount == sampleCount) {
+            "The pooled D24S8 attachment must match the frame sample count"
+        }
+        require(depthStencil?.deviceGeneration == null || depthStencil.deviceGeneration == deviceGeneration) {
+            "The pooled D24S8 attachment must match the frame device generation"
+        }
+        if (msaaColor != null && depthStencil != null) {
+            require(
+                depthStencil.target == msaaColor.target &&
+                    depthStencil.deviceGeneration == msaaColor.deviceGeneration &&
+                    depthStencil.targetGeneration == msaaColor.targetGeneration &&
+                    depthStencil.width == msaaColor.width &&
+                    depthStencil.height == msaaColor.height,
+            ) {
+                "The pooled MSAA color and D24S8 attachments must share target provenance and extent"
+            }
+            require(depthStencil.depthStencilAttachment != msaaColor.colorAttachment) {
+                "The pooled MSAA color and D24S8 attachments require distinct logical identities"
+            }
         }
         require(
             coverageMask == null ||
@@ -196,6 +270,28 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
         }
     }
 }
+
+private fun GPUWgpu4kCorePrimitiveDepthStencilRequirement.hasCompleteDepthStencilAuthority(): Boolean =
+    target != null && depthStencilAttachment != null && deviceGeneration != null && targetGeneration != null
+
+private fun GPUWgpu4kCorePrimitiveDepthStencilRequirement.hasNoDepthStencilAuthority(): Boolean =
+    target == null && depthStencilAttachment == null && deviceGeneration == null && targetGeneration == null
+
+private fun GPUWgpu4kCorePrimitiveDepthStencilRequirement.validateDepthStencilAuthority(lane: String) {
+    if (!hasCompleteDepthStencilAuthority()) return
+    require(requireNotNull(target).value.isNotBlank() && requireNotNull(depthStencilAttachment).value.isNotBlank() &&
+        requireNotNull(targetGeneration) >= 0L
+    ) { "CorePrimitive $lane depth/stencil target, attachment identity, and generation must be explicit" }
+    require(requireNotNull(depthStencilAttachment).value != requireNotNull(target).value) {
+        "CorePrimitive $lane depth/stencil attachment must be distinct from the canonical target"
+    }
+}
+
+private fun attachmentByteSize(width: Int, height: Int, sampleCount: Int): Long =
+    Math.multiplyExact(
+        Math.multiplyExact(Math.multiplyExact(width.toLong(), height.toLong()), 4L),
+        sampleCount.toLong(),
+    )
 
 internal data class GPUWgpu4kCorePrimitiveFramePoolCapacities(
     val vertexBytes: Long,

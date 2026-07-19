@@ -32,6 +32,47 @@ class GPUCorePrimitiveClipStencilStructuralKeyTest {
     }
 
     @Test
+    fun `clip stencil keys include the exact one or four sample structural axis`() {
+        val singleProducer = corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
+            GPUClipFillRule.Winding,
+            sampleCount = 1,
+        )
+        val multisampleProducer = corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
+            GPUClipFillRule.Winding,
+            sampleCount = 4,
+        )
+        val singleConsumer = corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
+            inverseFill = false,
+            blendPlan = srcOverBlendPlan(),
+            sampleCount = 1,
+        )
+        val multisampleConsumer = corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
+            inverseFill = false,
+            blendPlan = srcOverBlendPlan(),
+            sampleCount = 4,
+        )
+
+        listOf(singleProducer to multisampleProducer, singleConsumer to multisampleConsumer).forEach {
+            (single, multisample) ->
+            assertEquals(1, single.sampleCount)
+            assertEquals(4, multisample.sampleCount)
+            assertNotEquals(single, multisample)
+            assertNotEquals(
+                single.stableRenderPipelineKey("pipeline.test"),
+                multisample.stableRenderPipelineKey("pipeline.test"),
+            )
+        }
+        listOf(0, 2, 8).forEach { unsupported ->
+            assertFailsWith<IllegalArgumentException> {
+                singleProducer.copy(sampleCount = unsupported)
+            }
+            assertFailsWith<IllegalArgumentException> {
+                singleConsumer.copy(sampleCount = unsupported)
+            }
+        }
+    }
+
+    @Test
     fun `only clip stencil producer may retain clip fill rule authority`() {
         val clipProducer = corePrimitiveClipStencilProducerRenderPipelineStructuralKey(GPUClipFillRule.Winding)
         val clipConsumer = corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(false, srcOverBlendPlan())

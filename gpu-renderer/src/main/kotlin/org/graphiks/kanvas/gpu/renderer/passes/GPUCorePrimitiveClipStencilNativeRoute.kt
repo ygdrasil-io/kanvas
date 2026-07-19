@@ -128,13 +128,13 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         "unsupported.native-core-primitive.clip-stencil.plan",
         "The bounded route requires one stencil-coverage plan.",
     )
-    if (request.producerAntiAlias) return refused(
-        "unsupported.native-core-primitive.clip-stencil.anti-alias",
-        "The bounded clip-stencil producer is non-AA.",
-    )
-    if (stencil.sampleCount != 1) return refused(
+    if (stencil.sampleCount !in setOf(1, 4)) return refused(
         "unsupported.native-core-primitive.clip-stencil.msaa",
-        "The bounded clip-stencil route is single-sample.",
+        "The bounded clip-stencil route supports exactly one or four samples.",
+    )
+    if (request.producerAntiAlias != (stencil.sampleCount == 4)) return refused(
+        "unsupported.native-core-primitive.clip-stencil.anti-alias",
+        "Clip-stencil producer AA authority must match the exact one or four sample plan.",
     )
     val path = stencil.producer.geometry as? GPUClipExecutionGeometry.Path ?: return refused(
         "invalid.native-core-primitive.clip-stencil.producer-geometry",
@@ -204,7 +204,10 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         "invalid.native-core-primitive.clip-stencil.consumer-state",
         "The consumer state must be read-only NotEqual/Equal with Keep operations.",
     )
-    val producerKey = corePrimitiveClipStencilProducerRenderPipelineStructuralKey(path.fillRule)
+    val producerKey = corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
+        path.fillRule,
+        stencil.sampleCount,
+    )
     val ndcVertices = corePrimitiveClipStencilNdcVertices(
         request.producerGeometry.vertices,
         attachment.width,
@@ -237,6 +240,7 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
         val consumerKey = corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
             inverseFill = consumer.inverseFill,
             blendPlan = consumer.blendPlan,
+            sampleCount = stencil.sampleCount,
         )
         if (!consumerKey.blend.isCanonicalPremulSrcOver()) return refused(
             "unsupported.native-core-primitive.clip-stencil.blend",
@@ -272,7 +276,7 @@ internal fun sealGPUCorePrimitiveClipStencilNativeRoute(
 
 internal fun GPUClipExecutionPlan.StencilCoverage.corePrimitiveClipStencilNativePathOrNull():
     GPUClipExecutionGeometry.Path? {
-    if (sampleCount != 1) return null
+    if (sampleCount !in setOf(1, 4)) return null
     val path = producer.geometry as? GPUClipExecutionGeometry.Path ?: return null
     if (!producer.hasExactNativeState(path.fillRule) ||
         !consumer.hasExactNativeState(path.inverseFill) || producer.reference != 0u ||
@@ -311,7 +315,8 @@ private fun org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilConsumerPlan.ha
 private fun GPUCorePrimitiveClipStencilAttachmentAuthority.isValidFor(
     stencil: GPUClipExecutionPlan.StencilCoverage,
 ): Boolean = logicalReference.isNotBlank() && width > 0 && height > 0 &&
-    format == GPUCorePrimitiveClipStencilAttachmentFormat.Depth24PlusStencil8 && sampleCount == 1 &&
+    format == GPUCorePrimitiveClipStencilAttachmentFormat.Depth24PlusStencil8 &&
+    sampleCount in setOf(1, 4) &&
     resourceGeneration >= 0L && !stencil.bounds.isEmpty &&
     stencil.bounds.left >= 0 && stencil.bounds.top >= 0 &&
     stencil.bounds.right <= width && stencil.bounds.bottom <= height &&

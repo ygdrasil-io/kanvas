@@ -205,7 +205,9 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 require(shader == Shader.PathStencil && depthStencil is DepthStencil.Stencil) {
                     "CorePrimitive path stencil roles require the path shader and exact stencil state"
                 }
-                require(sampleCount == 1) { "CorePrimitive path stencil roles are single-sample" }
+                require(sampleCount in setOf(1, 4)) {
+                    "CorePrimitive path stencil roles require one or four samples"
+                }
             }
             Role.ClipStencilProducer -> {
                 require(shader == Shader.ClipStencilProducer && depthStencil is DepthStencil.Stencil) {
@@ -214,7 +216,9 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 require(clipStencilFillRule != null && blend == Blend.ColorWriteNone && clip == Clip.None) {
                     "CorePrimitive clip-stencil producer requires fill-rule authority with no color or nested clip"
                 }
-                require(sampleCount == 1) { "CorePrimitive clip-stencil producer is single-sample" }
+                require(sampleCount in setOf(1, 4)) {
+                    "CorePrimitive clip-stencil producer requires one or four samples"
+                }
             }
             Role.ClipStencilConsumer -> {
                 require(shader == Shader.DirectGeometry && depthStencil is DepthStencil.Stencil) {
@@ -223,7 +227,9 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 require(clipStencilFillRule == null && clip == Clip.None) {
                     "CorePrimitive clip-stencil consumer keeps fill and dynamic clip facts outside its key"
                 }
-                require(sampleCount == 1) { "CorePrimitive clip-stencil consumer is single-sample" }
+                require(sampleCount in setOf(1, 4)) {
+                    "CorePrimitive clip-stencil consumer requires one or four samples"
+                }
             }
             Role.CoverageMaskProducer -> {
                 require(
@@ -510,6 +516,7 @@ internal fun GPUCorePrimitiveRenderPipelineStructuralKey.clipStencilStructuralPr
 
 internal fun corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
     fillRule: GPUClipFillRule,
+    sampleCount: Int = 1,
 ): GPUCorePrimitiveRenderPipelineStructuralKey = GPUCorePrimitiveRenderPipelineStructuralKey(
     shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.ClipStencilProducer,
     topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StencilEdgeFan,
@@ -520,13 +527,14 @@ internal fun corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
         GPUClipFillRule.Winding -> CLIP_STENCIL_PRODUCER_WINDING_STATE
         GPUClipFillRule.EvenOdd -> CLIP_STENCIL_PRODUCER_EVEN_ODD_STATE
     },
-    sampleCount = 1,
+    sampleCount = sampleCount,
     clipStencilFillRule = fillRule,
 )
 
 internal fun corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
     inverseFill: Boolean,
     blendPlan: GPUBlendPlan,
+    sampleCount: Int = 1,
 ): GPUCorePrimitiveRenderPipelineStructuralKey = GPUCorePrimitiveRenderPipelineStructuralKey(
     shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
     topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
@@ -538,7 +546,7 @@ internal fun corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
     } else {
         CLIP_STENCIL_CONSUMER_REGULAR_STATE
     },
-    sampleCount = 1,
+    sampleCount = sampleCount,
 )
 
 private fun clipStencilState(
@@ -653,6 +661,7 @@ internal fun corePrimitivePathStencilRenderPipelineStructuralKey(
     role: GPUCorePrimitiveRenderPipelineStructuralKey.Role,
     clipExecutionPlan: GPUClipExecutionPlan,
     blendPlan: GPUBlendPlan,
+    sampleCount: Int = 1,
 ): GPUCorePrimitiveRenderPipelineStructuralKey {
     require(
         role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer ||
@@ -660,8 +669,11 @@ internal fun corePrimitivePathStencilRenderPipelineStructuralKey(
     ) {
         "Path stencil structural authority requires a producer or cover role"
     }
-    require(semantic.coverageMode == GPUCorePrimitiveCoverageMode.Stencil1x) {
-        "Path stencil structural authority requires Stencil1x coverage"
+    require(
+        (semantic.coverageMode == GPUCorePrimitiveCoverageMode.Stencil1x && sampleCount == 1) ||
+            (semantic.coverageMode == GPUCorePrimitiveCoverageMode.StencilAA && sampleCount == 4),
+    ) {
+        "Path stencil structural authority requires matching Stencil1x/1x or StencilAA/4x coverage"
     }
     require(
         clipExecutionPlan == GPUClipExecutionPlan.NoClip ||
@@ -697,7 +709,7 @@ internal fun corePrimitivePathStencilRenderPipelineStructuralKey(
         },
         clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
         depthStencil = pathStencilState(role, geometry.fillRule, geometry.inverseFill),
-        sampleCount = 1,
+        sampleCount = sampleCount,
     )
 }
 

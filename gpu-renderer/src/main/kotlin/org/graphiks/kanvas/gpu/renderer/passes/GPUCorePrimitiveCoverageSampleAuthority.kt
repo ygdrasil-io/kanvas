@@ -141,10 +141,6 @@ internal fun validateCorePrimitiveCoverageSampleAuthority(
                 capabilityRefusalMessage("Depth24PlusStencil8 render", capability),
             )
         }
-        return refused(
-            "unsupported.core_primitive.coverage_sample.stencil_aa_not_promoted",
-            "StencilAA has exact 4x attachment capability evidence but its producer/consumer route is not promoted until B3.5d.",
-        )
     }
 
     return GPUCorePrimitiveCoverageSampleAuthority.Accepted

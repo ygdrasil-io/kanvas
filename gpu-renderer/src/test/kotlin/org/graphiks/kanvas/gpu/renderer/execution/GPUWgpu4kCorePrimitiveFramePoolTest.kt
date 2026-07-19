@@ -22,6 +22,191 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 class GPUWgpu4kCorePrimitiveFramePoolTest {
     @Test
+    fun `4x path or clip D24S8 requirements match the exact multisample color frame`() {
+        val path = pathDepthStencil(32, 24, sampleCount = 4)
+        val clip = clipDepthStencil(32, 24, sampleCount = 4)
+        val color = msaaColor(32, 24)
+
+        val pathFrame = requirements(
+            sampleCount = 4,
+            pathDepthStencil = path,
+            msaaColorRequirement = color,
+        )
+        val clipFrame = requirements(
+            sampleCount = 4,
+            clipDepthStencil = clip,
+            msaaColorRequirement = color,
+        )
+
+        assertEquals(4, pathFrame.pathDepthStencil?.sampleCount)
+        assertEquals(4, clipFrame.clipDepthStencil?.sampleCount)
+        assertEquals(12_288L, pathFrame.msaaColorByteSize)
+        assertEquals(12_288L, pathFrame.depthStencilByteSize)
+        assertEquals(24_576L, pathFrame.totalAttachmentByteSize)
+        listOf<() -> GPUWgpu4kCorePrimitiveFramePoolRequirements>(
+            { requirements(sampleCount = 1, pathDepthStencil = path, msaaColorRequirement = null) },
+            { requirements(sampleCount = 1, clipDepthStencil = clip, msaaColorRequirement = null) },
+            { requirements(sampleCount = 4, pathDepthStencil = path.copy(sampleCount = 1)) },
+            { requirements(sampleCount = 4, clipDepthStencil = clip.copy(sampleCount = 1)) },
+            {
+                requirements(
+                    sampleCount = 4,
+                    pathDepthStencil = path.copy(width = 31),
+                    msaaColorRequirement = color,
+                )
+            },
+            {
+                requirements(
+                    sampleCount = 4,
+                    pathDepthStencil = path.copy(targetGeneration = 2L),
+                    msaaColorRequirement = color,
+                )
+            },
+            {
+                requirements(
+                    sampleCount = 1,
+                    pathDepthStencil = path.copy(
+                        sampleCount = 1,
+                        deviceGeneration = GPUDeviceGenerationID(99),
+                    ),
+                    msaaColorRequirement = null,
+                )
+            },
+            {
+                requirements(
+                    sampleCount = 4,
+                    pathDepthStencil = path.copy(target = GPUFrameTargetRef("target.other")),
+                    msaaColorRequirement = color,
+                )
+            },
+        ).forEach { invalid -> assertFailsWith<IllegalArgumentException> { invalid() } }
+    }
+
+    @Test
+    fun `4x path color and D24S8 replace together for resize generation and attachment identity`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        var color = msaaColor(32, 24, targetGeneration = 1L)
+        var depth = pathDepthStencil(32, 24, sampleCount = 4, targetGeneration = 1L)
+        var lease = pool.acquire(
+            requirements(sampleCount = 4, pathDepthStencil = depth, msaaColorRequirement = color),
+        ).acquiredLease()
+
+        listOf(
+            color.copy(targetGeneration = 2L) to depth.copy(targetGeneration = 2L),
+            color.copy(
+                targetGeneration = 2L,
+                colorAttachment = GPUTargetIdentity("msaa-color:target.core.authority:replacement"),
+            ) to depth.copy(
+                targetGeneration = 2L,
+                depthStencilAttachment = GPUTargetIdentity("path-depth-stencil:replacement"),
+            ),
+            color.copy(
+                targetGeneration = 3L,
+                colorAttachment = GPUTargetIdentity("msaa-color:target.core.authority:resized"),
+                width = 64,
+                height = 48,
+            ) to depth.copy(
+                targetGeneration = 3L,
+                depthStencilAttachment = GPUTargetIdentity("path-depth-stencil:resized"),
+                width = 64,
+                height = 48,
+            ),
+        ).forEach { (nextColor, nextDepth) ->
+            val oldColor = requireNotNull(lease.handles.msaaColor)
+            val oldDepth = requireNotNull(lease.handles.pathDepthStencil)
+            lease.rollbackBeforeSubmit()
+
+            val replacement = pool.acquire(
+                requirements(
+                    sampleCount = 4,
+                    pathDepthStencil = nextDepth,
+                    msaaColorRequirement = nextColor,
+                ),
+            ).acquiredLease()
+
+            assertNotSame(oldColor.texture, requireNotNull(replacement.handles.msaaColor).texture)
+            assertNotSame(oldColor.view, requireNotNull(replacement.handles.msaaColor).view)
+            assertNotSame(oldDepth.texture, requireNotNull(replacement.handles.pathDepthStencil).texture)
+            assertNotSame(oldDepth.view, requireNotNull(replacement.handles.pathDepthStencil).view)
+            assertTrue(factory.closeAttempts(oldColor.view) >= 1)
+            assertTrue(factory.closeAttempts(oldColor.texture) >= 1)
+            assertTrue(factory.closeAttempts(oldDepth.view) >= 1)
+            assertTrue(factory.closeAttempts(oldDepth.texture) >= 1)
+            color = nextColor
+            depth = nextDepth
+            lease = replacement
+        }
+
+        lease.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `4x attachment rollback and completion reuse views while quarantine removes the slot`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val request = requirements(
+            sampleCount = 4,
+            pathDepthStencil = pathDepthStencil(32, 24, sampleCount = 4),
+        )
+        val first = pool.acquire(request).acquiredLease()
+        first.rollbackBeforeSubmit()
+        val rolledBack = pool.acquire(request).acquiredLease()
+        assertSame(requireNotNull(first.handles.msaaColor).view, requireNotNull(rolledBack.handles.msaaColor).view)
+        assertSame(
+            requireNotNull(first.handles.pathDepthStencil).view,
+            requireNotNull(rolledBack.handles.pathDepthStencil).view,
+        )
+
+        rolledBack.markSubmitted()
+        rolledBack.completeSuccessfully()
+        val completed = pool.acquire(request).acquiredLease()
+        assertSame(requireNotNull(first.handles.msaaColor).view, requireNotNull(completed.handles.msaaColor).view)
+        assertSame(
+            requireNotNull(first.handles.pathDepthStencil).view,
+            requireNotNull(completed.handles.pathDepthStencil).view,
+        )
+
+        completed.quarantineUncertain()
+        val replacement = pool.acquire(request).acquiredLease()
+        assertNotEquals(completed.slotId, replacement.slotId)
+        assertNotSame(requireNotNull(completed.handles.msaaColor).view, requireNotNull(replacement.handles.msaaColor).view)
+        assertNotSame(
+            requireNotNull(completed.handles.pathDepthStencil).view,
+            requireNotNull(replacement.handles.pathDepthStencil).view,
+        )
+        replacement.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `4x partial allocation retires unpublished views before textures and publishes no slot`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val request = requirements(
+            sampleCount = 4,
+            pathDepthStencil = pathDepthStencil(32, 24, sampleCount = 4),
+        )
+        factory.failNext(GPUWgpu4kCorePrimitiveFramePoolResource.MsaaColorView)
+
+        val refused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(pool.acquire(request))
+
+        assertEquals(
+            GPUWgpu4kCorePrimitiveFramePoolResource.MsaaColorView,
+            assertIs<GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed>(refused.reason).resource,
+        )
+        assertTrue(
+            factory.closeEvents.indexOf("close:pathDepthStencilView") <
+                factory.closeEvents.indexOf("close:pathDepthStencilTexture"),
+        )
+        val retry = pool.acquire(request).acquiredLease()
+        assertEquals(0, retry.slotId)
+        retry.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
     fun `single sample and 4x frame slots stay disjoint while each sample lane reuses independently`() {
         val factory = FakeFactory()
         val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
@@ -38,7 +223,6 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         assertEquals(1, single.handles.sampleCount)
         assertEquals(4, multisample.handles.sampleCount)
         assertNotSame(single.handles.vertexBuffer, multisample.handles.vertexBuffer)
-        assertSame(multisample.handles.msaaColor?.texture, multisample.handles.msaaColor?.texture)
         assertEquals(msaaColor(32, 24), multisample.handles.msaaColor?.requirement)
 
         val multisampleAgain = pool.acquire(requirements(sampleCount = 4)).acquiredLease()
@@ -631,42 +815,16 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     }
 
     @Test
-    fun `clip attachment is exact reusable and strictly separate from path attachment`() {
+    fun `path and clip depth stencil requirements are mutually exclusive`() {
         val factory = FakeFactory()
         val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
         val path = pathDepthStencil(width = 63, height = 47)
         val clip = clipDepthStencil(width = 63, height = 47)
 
-        val first = pool.acquire(
-            requirements(pathDepthStencil = path, clipDepthStencil = clip),
-        ).acquiredLease()
-        val firstPath = requireNotNull(first.handles.pathDepthStencil)
-        val firstClip = requireNotNull(first.handles.clipDepthStencil)
-
-        assertEquals(path, firstPath.requirement)
-        assertEquals(clip, firstClip.requirement)
-        assertNotSame(firstPath.texture, firstClip.texture)
-        assertNotSame(firstPath.view, firstClip.view)
-        assertEquals(
-            listOf(
-                GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilTexture,
-                GPUWgpu4kCorePrimitiveFramePoolResource.PathDepthStencilView,
-                GPUWgpu4kCorePrimitiveFramePoolResource.ClipDepthStencilTexture,
-                GPUWgpu4kCorePrimitiveFramePoolResource.ClipDepthStencilView,
-            ),
-            factory.creations.map(CreatedHandle::resource).takeLast(4),
-        )
-        first.rollbackBeforeSubmit()
-
-        val reused = pool.acquire(
-            requirements(pathDepthStencil = path, clipDepthStencil = clip),
-        ).acquiredLease()
-        assertSame(firstPath.texture, requireNotNull(reused.handles.pathDepthStencil).texture)
-        assertSame(firstPath.view, requireNotNull(reused.handles.pathDepthStencil).view)
-        assertSame(firstClip.texture, requireNotNull(reused.handles.clipDepthStencil).texture)
-        assertSame(firstClip.view, requireNotNull(reused.handles.clipDepthStencil).view)
-
-        reused.rollbackBeforeSubmit()
+        assertFailsWith<IllegalArgumentException> {
+            requirements(pathDepthStencil = path, clipDepthStencil = clip)
+        }
+        assertTrue(factory.creations.isEmpty())
         pool.close()
     }
 
@@ -765,7 +923,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         val mismatch = pool.acquire(
             requirements(
                 deviceGeneration = GPUDeviceGenerationID(8),
-                clipDepthStencil = clip,
+                clipDepthStencil = clip.copy(deviceGeneration = GPUDeviceGenerationID(8)),
             ),
         )
         assertEquals(
@@ -1681,10 +1839,12 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         height: Int,
         targetGeneration: Long = 1L,
         colorAttachment: String = "msaa-color:target.core.authority:1",
+        target: GPUFrameTargetRef = GPUFrameTargetRef("target.core.authority"),
+        deviceGeneration: GPUDeviceGenerationID = GENERATION,
     ) = GPUWgpu4kCorePrimitiveMsaaColorRequirement(
-        target = GPUFrameTargetRef("target.core.authority"),
+        target = target,
         colorAttachment = GPUTargetIdentity(colorAttachment),
-        deviceGeneration = GENERATION,
+        deviceGeneration = deviceGeneration,
         targetGeneration = targetGeneration,
         width = width,
         height = height,
@@ -1702,23 +1862,37 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     private fun pathDepthStencil(
         width: Int,
         height: Int,
+        sampleCount: Int = 1,
+        targetGeneration: Long = 1L,
+        depthStencilAttachment: String = "path-depth-stencil:target.core.authority:1",
     ) = GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
         width = width,
         height = height,
         format = GPUTextureFormat.Depth24PlusStencil8,
-        sampleCount = 1,
+        sampleCount = sampleCount,
         usage = GPUTextureUsage.RenderAttachment,
+        target = GPUFrameTargetRef("target.core.authority"),
+        depthStencilAttachment = GPUTargetIdentity(depthStencilAttachment),
+        deviceGeneration = GENERATION,
+        targetGeneration = targetGeneration,
     )
 
     private fun clipDepthStencil(
         width: Int,
         height: Int,
+        sampleCount: Int = 1,
+        targetGeneration: Long = 1L,
+        depthStencilAttachment: String = "clip-depth-stencil:target.core.authority:1",
     ) = GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
         width = width,
         height = height,
         format = GPUTextureFormat.Depth24PlusStencil8,
-        sampleCount = 1,
+        sampleCount = sampleCount,
         usage = GPUTextureUsage.RenderAttachment,
+        target = GPUFrameTargetRef("target.core.authority"),
+        depthStencilAttachment = GPUTargetIdentity(depthStencilAttachment),
+        deviceGeneration = GENERATION,
+        targetGeneration = targetGeneration,
     )
 
     private fun coverageMask(

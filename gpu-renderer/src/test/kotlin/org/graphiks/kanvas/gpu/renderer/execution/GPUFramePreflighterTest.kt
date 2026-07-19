@@ -3812,7 +3812,7 @@ class GPUFramePreflighterTest {
                 colorOnlyMsaa,
             ),
             Triple(
-                "unsupported.core_primitive.coverage_sample.stencil_aa_not_promoted",
+                "unsupported.msaa.continuation_attachment_not_stored",
                 coreRenderStep(
                     pathCoreSemantic(coverageMode = GPUCorePrimitiveCoverageMode.StencilAA),
                     samplePlan = GPUSamplePlan.MultisampleFrame(4),
@@ -3857,8 +3857,15 @@ class GPUFramePreflighterTest {
                     ),
                 ).preflight(plan)
 
+                val expectedNativeCode = if (
+                    expectedCode == "unsupported.msaa.continuation_attachment_not_stored"
+                ) {
+                    "unsupported.preflight.core_primitive_msaa_attachment_authority"
+                } else {
+                    expectedCode
+                }
                 assertEquals(
-                    expectedCode,
+                    expectedNativeCode,
                     assertIs<GPUFramePreflightResult.Refused>(nativeResult).diagnostic.code.value,
                 )
                 assertTrue(nativeEvents.isEmpty(), "$expectedCode reached native work: $nativeEvents")

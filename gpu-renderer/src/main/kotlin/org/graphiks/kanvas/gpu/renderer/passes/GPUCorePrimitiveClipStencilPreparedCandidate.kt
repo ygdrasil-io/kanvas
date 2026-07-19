@@ -67,8 +67,11 @@ internal class GPUCorePrimitiveClipStencilPreparedCandidate(
             }
         ) { "Clip-stencil candidate consumers must retain exact unique source order" }
         require(attachmentLogicalReference.isNotBlank() && attachmentWidth > 0 &&
-            attachmentHeight > 0 && attachmentSampleCount == 1
-        ) { "Clip-stencil candidate requires one logical single-sample attachment" }
+            attachmentHeight > 0 && attachmentSampleCount in setOf(1, 4)
+        ) { "Clip-stencil candidate requires one logical one or four sample attachment" }
+        require(producerStructuralKey.sampleCount == attachmentSampleCount &&
+            consumers.all { it.structuralKey.sampleCount == attachmentSampleCount }
+        ) { "Clip-stencil candidate attachment and structural sample authority must match" }
     }
 }
 

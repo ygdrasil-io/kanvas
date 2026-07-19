@@ -21,6 +21,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -63,6 +64,43 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
+    fun `path and clip stencil programs map distinct 4x identities with unchanged D24S8 semantics`() {
+        val singleSampleKeys = listOf(
+            pathKey(producerWinding()),
+            pathKey(producerEvenOdd()),
+            pathKey(regularCover(), cover = true),
+            pathKey(inverseCover(), cover = true),
+            corePrimitiveClipStencilProducerRenderPipelineStructuralKey(GPUClipFillRule.Winding),
+            corePrimitiveClipStencilProducerRenderPipelineStructuralKey(GPUClipFillRule.EvenOdd),
+            corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(false, srcOverBlendPlan()),
+            corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(true, srcOverBlendPlan()),
+        )
+
+        singleSampleKeys.forEach { singleSampleKey ->
+            val multisampleKey = singleSampleKey.copy(sampleCount = 4)
+            val singleIdentity = mappedIdentity(singleSampleKey)
+            val multisampleIdentity = mappedIdentity(multisampleKey)
+            val singleDescriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(
+                singleIdentity,
+                shader,
+                pipelineLayout,
+            )
+            val multisampleDescriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(
+                multisampleIdentity,
+                shader,
+                pipelineLayout,
+            )
+
+            assertNotEquals(singleIdentity, multisampleIdentity)
+            assertEquals(singleIdentity.program, multisampleIdentity.program)
+            assertEquals(1u, singleDescriptor.multisample.count)
+            assertEquals(4u, multisampleDescriptor.multisample.count)
+            assertEquals(singleDescriptor.depthStencil, multisampleDescriptor.depthStencil)
+            assertEquals(GPUTextureFormat.Depth24PlusStencil8, requireNotNull(multisampleDescriptor.depthStencil).format)
+        }
+    }
+
+    @Test
     fun `analytic shape has one unique uniform80 src over descriptor and twenty one total programs`() {
         val key = analyticShapeKey()
         val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
@@ -81,7 +119,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             key.uniformLayout,
         )
         assertEquals(21, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
-        assertEquals(24, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+        assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
         assertEquals(1, descriptor.vertex.buffers.size)
         assertEquals(8uL, descriptor.vertex.buffers.single().arrayStride)
@@ -216,7 +254,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             )
         }
         assertEquals(21, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
-        assertEquals(24, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+        assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
     }
 
     @Test
@@ -345,7 +383,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             }
         }
         assertEquals(21, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
-        assertEquals(24, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
+        assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
     }
 
     @Test
