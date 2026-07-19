@@ -363,6 +363,8 @@ internal class GPUPreparedNativeRenderPipelineOperand private constructor(
 ) : GPUPreparedNativeOperand {
     val bindingPolicy: GPUPreparedNativeRenderPipelineBindingPolicy
         get() = bindingAuthority.bindingPolicy
+    internal val coverageMaskConsumerUniformAlignmentBytes: Long?
+        get() = bindingAuthority.coverageMaskConsumerUniformAlignmentBytes
 
     internal constructor(
         pipeline: GPURenderPipeline,
@@ -386,11 +388,28 @@ internal class GPUPreparedNativeRenderPipelineOperand private constructor(
             ownership,
             GPUPreparedNativeRenderPipelineBindingAuthority.CorePrimitiveAcquired(acquired),
         )
+
+        internal fun fromCoverageMaskConsumerAcquisition(
+            acquired: GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired,
+            deviceGeneration: GPUDeviceGenerationID,
+            uniformAlignmentBytes: Long,
+            ownership: GPUPreparedNativeOperandOwnership = GPUPreparedNativeOperandOwnership.Borrowed,
+        ) = GPUPreparedNativeRenderPipelineOperand(
+            acquired.pipeline,
+            deviceGeneration,
+            ownership,
+            GPUPreparedNativeRenderPipelineBindingAuthority.CoverageMaskConsumerAcquired(
+                acquired,
+                uniformAlignmentBytes,
+            ),
+        )
     }
 }
 
 private sealed interface GPUPreparedNativeRenderPipelineBindingAuthority {
     val bindingPolicy: GPUPreparedNativeRenderPipelineBindingPolicy
+    val coverageMaskConsumerUniformAlignmentBytes: Long?
+        get() = null
 
     data object BindGroupRequired : GPUPreparedNativeRenderPipelineBindingAuthority {
         override val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
@@ -404,6 +423,25 @@ private sealed interface GPUPreparedNativeRenderPipelineBindingAuthority {
                 GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
             GPUWgpu4kCorePrimitiveBindingPolicy.NoBindings ->
                 GPUPreparedNativeRenderPipelineBindingPolicy.NoBindings
+        }
+    }
+
+    class CoverageMaskConsumerAcquired(
+        acquired: GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired,
+        uniformAlignmentBytes: Long,
+    ) : GPUPreparedNativeRenderPipelineBindingAuthority {
+        override val bindingPolicy = GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
+        override val coverageMaskConsumerUniformAlignmentBytes = uniformAlignmentBytes
+
+        init {
+            require(
+                acquired.componentIdentity == PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY,
+            ) {
+                "Coverage-mask consumer pipeline authority requires an exact consumer acquisition"
+            }
+            require(uniformAlignmentBytes > 0L) {
+                "Coverage-mask consumer pipeline authority requires a positive uniform alignment"
+            }
         }
     }
 }
@@ -628,6 +666,7 @@ internal enum class GPUPreparedNativeIndexFormat { Uint16, Uint32 }
 internal enum class GPUPreparedNativeRenderOperandLayout {
     CommandOrder,
     IndexedCorePrimitive,
+    IndexedCorePrimitiveFullTarget,
 }
 
 /** Closed per-scope operand algebra. No arbitrary encode callback can enter the payload. */
@@ -658,6 +697,80 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             )
             if (operandLayout == GPUPreparedNativeRenderOperandLayout.CommandOrder) {
                 return attachments + commands.flatMap(GPUPreparedNativeRenderCommand::operands)
+            }
+            if (operandLayout == GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitiveFullTarget) {
+                require(pass.resolveTarget == null && pass.depthStencilTarget == null) {
+                    "Full-target indexed CorePrimitive render layout requires the color target as its only attachment"
+                }
+                require(commands.none { it is GPUPreparedNativeRenderCommand.SetScissor }) {
+                    "Full-target indexed CorePrimitive render layout forbids SetScissor"
+                }
+                require(commands.all { command ->
+                    command is GPUPreparedNativeRenderCommand.SetPipeline ||
+                        command is GPUPreparedNativeRenderCommand.SetBindGroup ||
+                        command is GPUPreparedNativeRenderCommand.SetVertexBuffer ||
+                        command is GPUPreparedNativeRenderCommand.SetIndexBuffer ||
+                        command is GPUPreparedNativeRenderCommand.DrawIndexed
+                }) {
+                    "Full-target indexed CorePrimitive render layout forbids additional command types"
+                }
+                require(
+                    commands.size == 5 &&
+                        commands[0] is GPUPreparedNativeRenderCommand.SetPipeline &&
+                        commands[1] is GPUPreparedNativeRenderCommand.SetBindGroup &&
+                        commands[2] is GPUPreparedNativeRenderCommand.SetVertexBuffer &&
+                        commands[3] is GPUPreparedNativeRenderCommand.SetIndexBuffer &&
+                        commands[4] is GPUPreparedNativeRenderCommand.DrawIndexed,
+                ) {
+                    "Full-target indexed CorePrimitive render layout requires canonical command order"
+                }
+                val pipelines = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+                require(pipelines.size == 1) {
+                    "Full-target indexed CorePrimitive render layout requires exactly one SetPipeline command"
+                }
+                val bindGroups = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                require(bindGroups.size == 1) {
+                    "Full-target indexed CorePrimitive render layout requires exactly one SetBindGroup command"
+                }
+                val vertexBuffers = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>()
+                require(vertexBuffers.size == 1) {
+                    "Full-target indexed CorePrimitive render layout requires exactly one SetVertexBuffer command"
+                }
+                val indexBuffers = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetIndexBuffer>()
+                require(indexBuffers.size == 1) {
+                    "Full-target indexed CorePrimitive render layout requires exactly one SetIndexBuffer command"
+                }
+                val draws = commands.filterIsInstance<GPUPreparedNativeRenderCommand.DrawIndexed>()
+                require(draws.size == 1) {
+                    "Full-target indexed CorePrimitive render layout requires exactly one DrawIndexed command"
+                }
+                val pipeline = pipelines.single().pipeline
+                val uniformAlignmentBytes = requireNotNull(
+                    pipeline.coverageMaskConsumerUniformAlignmentBytes,
+                ) {
+                    "Full-target indexed CorePrimitive render layout requires exact coverage-mask consumer acquisition"
+                }
+                val bindGroup = bindGroups.single()
+                require(bindGroup.index == 0) {
+                    "Full-target indexed CorePrimitive render layout requires bind group index zero"
+                }
+                require(bindGroup.dynamicOffsets.size == 1) {
+                    "Full-target indexed CorePrimitive render layout requires exactly one dynamic offset"
+                }
+                require(bindGroup.dynamicOffsets.single() % uniformAlignmentBytes == 0L) {
+                    "Full-target indexed CorePrimitive render layout requires an aligned dynamic offset"
+                }
+                val operands = listOf(
+                    pass.colorTarget,
+                    pipeline,
+                    vertexBuffers.single().buffer,
+                    indexBuffers.single().buffer,
+                    bindGroup.bindGroup,
+                )
+                require(operands.all { it.ownership == GPUPreparedNativeOperandOwnership.Borrowed }) {
+                    "Full-target indexed CorePrimitive pooled operands must all be borrowed"
+                }
+                return operands
             }
             val pipelinesByNativeIdentity =
                 IdentityHashMap<GPURenderPipeline, GPUPreparedNativeRenderPipelineOperand>()
@@ -753,7 +866,9 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                         }
                         require(vertexBufferBound) { "Every native indexed draw requires a preceding SetVertexBuffer command" }
                         require(indexBufferBound) { "Every native indexed draw requires a preceding SetIndexBuffer command" }
-                        require(scissorBound) { "Every native indexed draw requires a preceding SetScissor command" }
+                        if (operandLayout != GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitiveFullTarget) {
+                            require(scissorBound) { "Every native indexed draw requires a preceding SetScissor command" }
+                        }
                         val indexedBytes = try {
                             Math.multiplyExact(
                                 Math.addExact(
