@@ -11,7 +11,15 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilAttachmentAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveClipStencilAttachmentFormat
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentFormat
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskConsumerInput
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedCandidateDecision
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRoute
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRouteRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.sealGPUCorePrimitiveCoverageMaskPreparedRoute
+import org.graphiks.kanvas.gpu.renderer.passes.snapshotGPUCorePrimitiveCoverageMaskPreparedCandidate
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitivePathStencilRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
@@ -52,6 +60,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_INTERS
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE_KEY
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDirectClipAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveAnalyticClipPacketAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveAnalyticClipUniformBytes
@@ -63,6 +72,10 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveClipStencilPre
 import org.graphiks.kanvas.gpu.renderer.recording.validateCorePrimitiveClipStencilPreparedCandidate
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDepthStencilByteSize
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveCoverageMaskConsumerUniformBytes
+import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveCoverageMaskProducerUniformBytes
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.isCanonicalCorePrimitiveTargetPreparation
 import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.REGISTERED_UNIFORM_RECT_TARGET_STATE_HASH
@@ -125,6 +138,8 @@ internal class GPUFramePreflighter(
         val corePrimitiveNativeScopeRoutes = pureValidation.corePrimitiveNativeScopeRoutes
         val corePrimitiveClipStencilPreparedRoutes =
             pureValidation.corePrimitiveClipStencilPreparedRoutes
+        val corePrimitiveCoverageMaskPreparedRoutes =
+            pureValidation.corePrimitiveCoverageMaskPreparedRoutes
         if (nativeBoundary != null && nativeBoundary.resourceProvider !== resourceProvider) {
             return GPUFramePreflightResult.Refused(
                 diagnostic(
@@ -351,6 +366,7 @@ internal class GPUFramePreflighter(
             ownerScope,
             corePrimitiveDirectRoutes,
             corePrimitiveClipStencilPreparedRoutes,
+            corePrimitiveCoverageMaskPreparedRoutes,
         )
         val materialized = when (renderMaterialization) {
             is GPUResourceMaterializationDecision.Materialized -> renderMaterialization
@@ -386,6 +402,7 @@ internal class GPUFramePreflighter(
             ownerScope,
             corePrimitiveDirectRoutes,
             corePrimitiveClipStencilPreparedRoutes,
+            corePrimitiveCoverageMaskPreparedRoutes,
         )?.let { invalid ->
             return refuseWithRollback(rollback, acquiredAnyResource, invalid)
         }
@@ -399,6 +416,7 @@ internal class GPUFramePreflighter(
                 corePrimitivePathStencilRoutes,
                 corePrimitiveNativeScopeRoutes,
                 corePrimitiveClipStencilPreparedRoutes,
+                corePrimitiveCoverageMaskPreparedRoutes,
             )
         } catch (failure: Throwable) {
             return refuseWithRollback(
@@ -724,6 +742,516 @@ internal class GPUFramePreflighter(
         val routeSeal: GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
         val diagnostic: GPUDiagnostic? = null,
     )
+
+    private data class CorePrimitiveCoverageMaskPreparedValidation(
+        val routeSeal: GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
+        val diagnostic: GPUDiagnostic? = null,
+    )
+
+    private fun validateCorePrimitiveCoverageMaskPreparedRoutes(
+        framePlan: GPUFramePlan,
+    ): CorePrimitiveCoverageMaskPreparedValidation {
+        data class Location(
+            val sourceStepIndex: Int,
+            val render: GPUFrameStep.RenderPassStep,
+            val packet: GPUDrawPacket,
+        )
+
+        fun refuse(message: String) = CorePrimitiveCoverageMaskPreparedValidation(
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Empty,
+            diagnostic(
+                "invalid.preflight.core_primitive_coverage_mask_prepared_route",
+                message,
+            ),
+        )
+
+        val allLocations = framePlan.steps.flatMapIndexed { sourceStepIndex, step ->
+            val render = step as? GPUFrameStep.RenderPassStep ?: return@flatMapIndexed emptyList()
+            render.drawPackets.map { Location(sourceStepIndex, render, it) }
+        }
+        val locations = allLocations.filter {
+            it.packet.corePrimitivePreparedAuthority?.coverageMaskUniformSlabSeal != null
+        }
+        if (locations.isEmpty()) {
+            return CorePrimitiveCoverageMaskPreparedValidation(
+                GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Empty,
+            )
+        }
+        val slabSeal = requireNotNull(
+            locations.first().packet.corePrimitivePreparedAuthority?.coverageMaskUniformSlabSeal,
+        )
+        if (locations.any {
+                it.packet.corePrimitivePreparedAuthority?.coverageMaskUniformSlabSeal !== slabSeal
+            }
+        ) return refuse("Every prepared coverage-mask packet must share one exact uniform slab seal.")
+        val expectedPacketIds = slabSeal.producerPacketIds + slabSeal.consumerPacketIds
+        if (locations.map { it.packet.packetId } != expectedPacketIds ||
+            locations.size != expectedPacketIds.size
+        ) return refuse("Prepared coverage-mask packet identity or frame order was substituted.")
+        val boundedCoreLocations = allLocations.filter { location ->
+            location.packet.role == GPUDrawPacketRole.ClipProducer ||
+                location.packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+        }
+        if (boundedCoreLocations.map { it.packet.packetId } != expectedPacketIds) {
+            return refuse("Prepared coverage-mask must own every CorePrimitive packet in the bounded frame.")
+        }
+        if (locations.any { location ->
+                location.render.drawPackets != listOf(location.packet) ||
+                    location.render.sourceTaskIds.size != 1 || location.render.batches.size != 1 ||
+                    location.render.batches.single().packets != listOf(location.packet) ||
+                    location.render.batches.single().sourceTaskIds != location.render.sourceTaskIds
+            }
+        ) return refuse("Prepared coverage-mask requires one exact packet, task, and batch per render scope.")
+
+        val firstPreparedStepIndex = locations.first().sourceStepIndex
+        val lastPreparedStepIndex = locations.last().sourceStepIndex
+        val preparedRenderStepIndices = locations.map { it.sourceStepIndex }.toSet()
+        framePlan.steps.forEachIndexed { sourceStepIndex, step ->
+            if (sourceStepIndex !in firstPreparedStepIndex..lastPreparedStepIndex) {
+                return@forEachIndexed
+            }
+            when (step) {
+                is GPUFrameStep.RenderPassStep -> if (sourceStepIndex !in preparedRenderStepIndices) {
+                    return refuse("Foreign rendering splits the prepared coverage-mask atomic interval.")
+                }
+                is GPUFrameStep.DependencyBarrierStep -> Unit
+                else -> return refuse(
+                    "A foreign encoder or host step splits the prepared coverage-mask atomic interval.",
+                )
+            }
+        }
+        framePlan.steps.forEachIndexed { sourceStepIndex, step ->
+            if (sourceStepIndex <= lastPreparedStepIndex &&
+                (step is GPUFrameStep.ReadbackCopyStep ||
+                    step is GPUFrameStep.SurfaceBlitRenderPassStep ||
+                    step is GPUFrameStep.PostSubmitPresentAction)
+            ) return refuse(
+                "Readback, surface blit, and present must follow the final coverage-mask consumer.",
+            )
+        }
+
+        val producerLocations = locations.take(slabSeal.producerSlots.size)
+        val consumerLocations = locations.drop(slabSeal.producerSlots.size)
+        val plan = producerLocations.firstOrNull()?.packet?.clipExecutionPlan as?
+            org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.CoverageMask
+            ?: return refuse("Prepared coverage-mask producer is missing its typed execution plan.")
+        if (producerLocations.size != plan.producers.size || consumerLocations.size < 2 ||
+            locations.any {
+                it.packet.clipExecutionPlan?.canonicalIdentity() != slabSeal.planCanonicalIdentity
+            } || slabSeal.planCanonicalIdentity != plan.canonicalIdentity() ||
+            slabSeal.contentKey != plan.contentKey
+        ) return refuse("Prepared coverage-mask plan or producer/consumer cardinality was substituted.")
+        if (producerLocations.zip(slabSeal.producerSlots).any { (location, slot) ->
+                val packet = location.packet
+                val producer = packet.clipProducerAuthority as?
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority.Mask
+                    ?: return@any true
+                packet.role != GPUDrawPacketRole.ClipProducer ||
+                    slot.sourceOrder != producer.producer.sourceOrder ||
+                    slot.packetId != packet.packetId || slot.commandId != packet.commandIdValue ||
+                    packet.uniformSlot != null || packet.resourceSlot != null ||
+                    packet.corePrimitivePreparedAuthority?.structuralPipelineKey !=
+                    slot.structuralPipelineKey || packet.renderPipelineKey != slot.renderPipelineKey ||
+                    slot.renderPipelineKey != slot.structuralPipelineKey.stableRenderPipelineKey(
+                        CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
+                    ) || packet.bindingLayoutHash !=
+                    CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_BINDING_LAYOUT_HASH ||
+                    slot.bindingLayoutHash != packet.bindingLayoutHash
+            }
+        ) return refuse("Prepared coverage-mask producer packet authority was substituted.")
+        if (consumerLocations.zip(slabSeal.consumerSlots).any { (location, slot) ->
+                val packet = location.packet
+                val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.CorePrimitive
+                    ?: return@any true
+                packet.role != GPUDrawPacketRole.Shading || slot.packetId != packet.packetId ||
+                    slot.commandId != packet.commandIdValue ||
+                    slot.sourceOrder != packet.originalPaintOrder ||
+                    packet.uniformSlot != semantic.payloadRef.uniformSlot ||
+                    packet.resourceSlot != null ||
+                    semantic.canonicalHash != slot.semanticCanonicalIdentity ||
+                    packet.corePrimitivePreparedAuthority?.structuralPipelineKey !=
+                    slot.structuralPipelineKey || packet.renderPipelineKey != slot.renderPipelineKey ||
+                    slot.renderPipelineKey != slot.structuralPipelineKey.stableRenderPipelineKey(
+                        CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
+                    ) || packet.bindingLayoutHash !=
+                    CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_BINDING_LAYOUT_HASH ||
+                    slot.bindingLayoutHash != packet.bindingLayoutHash
+            }
+        ) return refuse("Prepared coverage-mask consumer packet authority was substituted.")
+
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val maskResource = slabSeal.maskResource
+        if (producerLocations.any { it.render.target != maskResource } ||
+            consumerLocations.map { it.render.target }.distinct().size != 1
+        ) return refuse("Prepared coverage-mask render targets were substituted.")
+        val sceneTarget = consumerLocations.first().render.target
+        val sceneTargetPreparation = preparations.singleOrNull {
+            it.resource == sceneTarget && it.role == GPUFrameResourceRole.SceneTarget
+        } ?: return refuse("Prepared coverage-mask scene target preparation is missing.")
+        val sceneDescriptor = sceneTargetPreparation.descriptor as? GPUFrameTextureDescriptor
+            ?: return refuse("Prepared coverage-mask scene target is not a texture.")
+        if (!isCanonicalCorePrimitiveTargetPreparation(
+                sceneTargetPreparation,
+                sceneTarget,
+                sceneDescriptor.logicalBounds,
+            ) || sceneDescriptor.logicalBounds != plan.bounds
+        ) return refuse("Prepared coverage-mask scene target authority was substituted.")
+        val maskPreparation = preparations.singleOrNull {
+            it.resource == maskResource && it.role == GPUFrameResourceRole.ClipMask
+        } ?: return refuse("Prepared coverage-mask color attachment preparation is missing.")
+        val maskDescriptor = maskPreparation.descriptor as? GPUFrameTextureDescriptor
+            ?: return refuse("Prepared coverage-mask color attachment is not a texture.")
+        if (maskPreparation.usages != setOf(
+                GPUFrameResourceUsage.RenderAttachment,
+                GPUFrameResourceUsage.TextureBinding,
+            ) || maskPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            maskPreparation.byteSize != plan.resolvedBytes || maskDescriptor.logicalBounds != plan.bounds ||
+            maskDescriptor.format.value != "rgba8unorm" || maskDescriptor.sampleCount != 1
+        ) return refuse("Prepared coverage-mask attachment format, bounds, samples, usages, or bytes were substituted.")
+
+        val producerUniformUses = producerLocations.mapIndexed { producerIndex, location ->
+            val maskUse = location.render.resourceUses.singleOrNull {
+                it.resource == maskResource && it.role == GPUFrameResourceRole.ClipMask &&
+                    it.usage == GPUFrameResourceUsage.RenderAttachment && it.write &&
+                    it.lifetime == GPUFrameResourceLifetime.FrameLocal
+            } ?: return refuse("Prepared coverage-mask producer mask use was substituted.")
+            val uniformUse = location.render.resourceUses.singleOrNull {
+                it.role == GPUFrameResourceRole.UniformData &&
+                    it.usage == GPUFrameResourceUsage.Uniform && !it.write &&
+                    it.lifetime == GPUFrameResourceLifetime.FrameLocal
+            } ?: return refuse("Prepared coverage-mask producer uniform use was substituted.")
+            if (location.render.resourceUses.toSet() != setOf(maskUse, uniformUse) ||
+                location.render.resourceUses.size != 2 || location.render.depthStencilLoadStore != null ||
+                location.render.samplePlan != GPUSamplePlan.SingleSampleFrame ||
+                location.render.loadStore != GPULoadStorePlan(
+                    if (producerIndex == 0) "clear" else "load",
+                    GPUStorePlan.Store,
+                    if (producerIndex == 0) CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL else null,
+                )
+            ) return refuse("Prepared coverage-mask producer uses must be mask plus uniform only.")
+            uniformUse
+        }
+        val vertexUses = mutableListOf<GPUFrameResourceUse>()
+        val indexUses = mutableListOf<GPUFrameResourceUse>()
+        val consumerUniformUses = mutableListOf<GPUFrameResourceUse>()
+        consumerLocations.forEachIndexed { consumerIndex, location ->
+            val vertexUse = location.render.resourceUses.singleOrNull {
+                it.role == GPUFrameResourceRole.VertexData &&
+                    it.usage == GPUFrameResourceUsage.Vertex && !it.write &&
+                    it.lifetime == GPUFrameResourceLifetime.FrameLocal
+            } ?: return refuse("Prepared coverage-mask consumer vertex use is missing.")
+            val indexUse = location.render.resourceUses.singleOrNull {
+                it.role == GPUFrameResourceRole.IndexData &&
+                    it.usage == GPUFrameResourceUsage.Index && !it.write &&
+                    it.lifetime == GPUFrameResourceLifetime.FrameLocal
+            } ?: return refuse("Prepared coverage-mask consumer index use is missing.")
+            val uniformUse = location.render.resourceUses.singleOrNull {
+                it.role == GPUFrameResourceRole.UniformData &&
+                    it.usage == GPUFrameResourceUsage.Uniform && !it.write &&
+                    it.lifetime == GPUFrameResourceLifetime.FrameLocal
+            } ?: return refuse("Prepared coverage-mask consumer uniform use is missing.")
+            val maskUse = location.render.resourceUses.singleOrNull {
+                it == GPUFrameResourceUse(
+                    maskResource,
+                    GPUFrameResourceRole.ClipMask,
+                    GPUFrameResourceUsage.TextureBinding,
+                    GPUFrameResourceLifetime.FrameLocal,
+                    false,
+                )
+            } ?: return refuse("Prepared coverage-mask consumer texture binding was substituted.")
+            if (location.render.resourceUses.toSet() != setOf(
+                    vertexUse,
+                    indexUse,
+                    uniformUse,
+                    maskUse,
+                ) || location.render.resourceUses.size != 4 ||
+                location.render.depthStencilLoadStore != null ||
+                location.render.samplePlan != GPUSamplePlan.SingleSampleFrame ||
+                location.render.loadStore != GPULoadStorePlan(
+                    if (consumerIndex == 0) "clear" else "load",
+                    GPUStorePlan.Store,
+                )
+            ) return refuse("Prepared coverage-mask consumer scope state was substituted.")
+            vertexUses += vertexUse
+            indexUses += indexUse
+            consumerUniformUses += uniformUse
+        }
+        val allUniformUses = producerUniformUses + consumerUniformUses
+        if (allUniformUses.map { it.resource }.distinct().size != 1 ||
+            vertexUses.map { it.resource }.distinct().size != 1 ||
+            indexUses.map { it.resource }.distinct().size != 1
+        ) return refuse("Prepared coverage-mask scopes must share exact uniform and geometry slabs.")
+        val uniformResource = allUniformUses.first().resource as? GPUFrameBufferRef
+            ?: return refuse("Prepared coverage-mask uniform slab is not a buffer.")
+        val vertexResource = vertexUses.first().resource as? GPUFrameBufferRef
+            ?: return refuse("Prepared coverage-mask vertex slab is not a buffer.")
+        val indexResource = indexUses.first().resource as? GPUFrameBufferRef
+            ?: return refuse("Prepared coverage-mask index slab is not a buffer.")
+        val sealedResources = setOf(
+            maskResource,
+            sceneTarget,
+            vertexResource,
+            indexResource,
+            uniformResource,
+        )
+        framePlan.steps.forEachIndexed { sourceStepIndex, step ->
+            if (sourceStepIndex !in firstPreparedStepIndex..lastPreparedStepIndex &&
+                step is GPUFrameStep.RenderPassStep &&
+                referencedResources(step).any(sealedResources::contains)
+            ) return refuse(
+                "Foreign rendering outside the coverage-mask interval aliases a sealed resource.",
+            )
+        }
+        val uniformPreparation = preparations.singleOrNull { it.resource == uniformResource }
+            ?: return refuse("Prepared coverage-mask uniform preparation is missing.")
+        val vertexPreparation = preparations.singleOrNull { it.resource == vertexResource }
+            ?: return refuse("Prepared coverage-mask vertex preparation is missing.")
+        val indexPreparation = preparations.singleOrNull { it.resource == indexResource }
+            ?: return refuse("Prepared coverage-mask index preparation is missing.")
+        val uniformDescriptor = uniformPreparation.descriptor as? GPUFrameBufferDescriptor
+            ?: return refuse("Prepared coverage-mask uniform descriptor is missing.")
+        val vertexDescriptor = vertexPreparation.descriptor as? GPUFrameBufferDescriptor
+            ?: return refuse("Prepared coverage-mask vertex descriptor is missing.")
+        val indexDescriptor = indexPreparation.descriptor as? GPUFrameBufferDescriptor
+            ?: return refuse("Prepared coverage-mask index descriptor is missing.")
+        val limits = capabilities.limits
+            ?: return refuse("Prepared coverage-mask requires observed device limits.")
+        val maxBufferSize = limits.maxBufferSize
+            ?: return refuse("Prepared coverage-mask requires observed maxBufferSize.")
+        val maxDynamicUniformBuffers = limits.maxDynamicUniformBuffersPerPipelineLayout
+            ?: return refuse("Prepared coverage-mask requires an observed dynamic-uniform limit.")
+        val producerPayloads = plan.producers.map { producer ->
+            corePrimitiveCoverageMaskProducerUniformBytes(plan, producer)
+        }
+        val consumerSemantics = consumerLocations.map { location ->
+            location.packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
+        }
+        val consumerPayloads = consumerSemantics.map { semantic ->
+            corePrimitiveCoverageMaskConsumerUniformBytes(plan, semantic)
+        }
+        val exactPayloads = producerPayloads.mapIndexed { index, bytes ->
+            GPUUniformSlabPayload(
+                "coverage-mask-producer-${plan.producers[index].sourceOrder}",
+                bytes,
+            )
+        } + consumerPayloads.mapIndexed { index, bytes ->
+            GPUUniformSlabPayload(
+                "coverage-mask-consumer-${consumerLocations[index].packet.packetId.value}",
+                bytes,
+            )
+        }
+        val expectedBytes = producerPayloads + consumerPayloads
+        if (!slabSeal.plan.hasExactPayloads(
+                "core-primitive-coverage-mask-uniform-pass",
+                context.deviceGeneration.value,
+                limits.minUniformBufferOffsetAlignment,
+                exactPayloads,
+            ) || slabSeal.plan.slots.size != expectedBytes.size ||
+            slabSeal.plan.slots.any {
+                it.payloadBytes != 64L || it.alignedOffset > UInt.MAX_VALUE.toLong()
+            } || slabSeal.plan.totalBytes > maxBufferSize ||
+            maxDynamicUniformBuffers < 1L ||
+            expectedBytes.indices.any { !slabSeal.hasExactPayload(it, expectedBytes[it]) } ||
+            uniformPreparation.role != GPUFrameResourceRole.UniformData ||
+            uniformPreparation.usages != setOf(
+                GPUFrameResourceUsage.CopyDestination,
+                GPUFrameResourceUsage.Uniform,
+            ) || uniformPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            uniformPreparation.byteSize != slabSeal.plan.totalBytes ||
+            uniformDescriptor.byteSize != slabSeal.plan.totalBytes ||
+            uniformDescriptor.alignmentBytes != slabSeal.plan.alignmentBytes
+        ) return refuse("Prepared coverage-mask uniform64 plan or bytes were substituted.")
+
+        fun exactGeometryPreparation(
+            request: GPUResourcePreparationRequest,
+            descriptor: GPUFrameBufferDescriptor,
+            role: GPUFrameResourceRole,
+            usage: GPUFrameResourceUsage,
+        ): Boolean = request.role == role &&
+            request.usages == setOf(GPUFrameResourceUsage.CopyDestination, usage) &&
+            request.lifetime == GPUFrameResourceLifetime.FrameLocal &&
+            request.byteSize == descriptor.byteSize && descriptor.alignmentBytes == 4L
+        if (!exactGeometryPreparation(
+                vertexPreparation,
+                vertexDescriptor,
+                GPUFrameResourceRole.VertexData,
+                GPUFrameResourceUsage.Vertex,
+            ) || !exactGeometryPreparation(
+                indexPreparation,
+                indexDescriptor,
+                GPUFrameResourceRole.IndexData,
+                GPUFrameResourceUsage.Index,
+            )
+        ) return refuse("Prepared coverage-mask geometry slab descriptors were substituted.")
+        val geometrySlices = mutableListOf<GPUCorePrimitiveCoverageMaskPreparedGeometrySlice>()
+        var firstIndex = 0
+        var baseVertex = 0
+        consumerSemantics.forEach { semantic ->
+            val (vertexCount, indexCount) = when (val geometry = semantic.geometry) {
+                is GPUCorePrimitiveGeometry.Rect -> 4 to 6
+                is GPUCorePrimitiveGeometry.TriangulatedPath ->
+                    geometry.vertices.size / 2 to geometry.indices.size
+                is GPUCorePrimitiveGeometry.RRect ->
+                    return refuse("Prepared coverage-mask consumer RRect geometry is unsupported.")
+            }
+            geometrySlices += GPUCorePrimitiveCoverageMaskPreparedGeometrySlice(
+                firstIndex,
+                indexCount,
+                baseVertex,
+                vertexCount,
+            )
+            firstIndex = try { Math.addExact(firstIndex, indexCount) } catch (_: ArithmeticException) {
+                return refuse("Prepared coverage-mask geometry index offsets overflowed.")
+            }
+            baseVertex = try { Math.addExact(baseVertex, vertexCount) } catch (_: ArithmeticException) {
+                return refuse("Prepared coverage-mask geometry vertex offsets overflowed.")
+            }
+        }
+        if (vertexDescriptor.byteSize != baseVertex.toLong() * 2L * Float.SIZE_BYTES ||
+            indexDescriptor.byteSize != firstIndex.toLong() * Int.SIZE_BYTES
+        ) return refuse("Prepared coverage-mask geometry slab byte sizes were substituted.")
+
+        val maskGeneration = context.resourceGenerations[maskResource]
+            ?: return refuse("Prepared coverage-mask attachment generation is missing.")
+        val sceneGeneration = context.resourceGenerations[sceneTarget]
+            ?: return refuse("Prepared coverage-mask scene generation is missing.")
+        val vertexGeneration = context.resourceGenerations[vertexResource]
+            ?: return refuse("Prepared coverage-mask vertex generation is missing.")
+        val indexGeneration = context.resourceGenerations[indexResource]
+            ?: return refuse("Prepared coverage-mask index generation is missing.")
+        val uniformGeneration = context.resourceGenerations[uniformResource]
+            ?: return refuse("Prepared coverage-mask uniform generation is missing.")
+        val attachment = GPUCorePrimitiveCoverageMaskAttachmentAuthority(
+            maskResource.value,
+            plan.bounds.width,
+            plan.bounds.height,
+            GPUCorePrimitiveCoverageMaskAttachmentFormat.Rgba8Unorm,
+            1,
+            context.deviceGeneration,
+            maskGeneration,
+        )
+        val request = GPUCorePrimitiveCoverageMaskPreparedRouteRequest(
+            plan,
+            consumerLocations.map { location ->
+                val packet = location.packet
+                val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
+                GPUCorePrimitiveCoverageMaskConsumerInput(
+                    packet.packetId,
+                    packet.commandIdValue,
+                    packet.originalPaintOrder,
+                    semantic.canonicalHash,
+                    semantic.coverageMode,
+                    requireNotNull(packet.blendPlan),
+                    plan.orderingToken,
+                    packet.role,
+                    semantic.geometry,
+                )
+            },
+            attachment,
+        )
+        val candidate = when (val decision =
+            snapshotGPUCorePrimitiveCoverageMaskPreparedCandidate(request)
+        ) {
+            is GPUCorePrimitiveCoverageMaskPreparedCandidateDecision.Accepted -> decision.candidate
+            is GPUCorePrimitiveCoverageMaskPreparedCandidateDecision.Refused ->
+                return refuse(decision.message)
+        }
+        val accepted = when (val route =
+            sealGPUCorePrimitiveCoverageMaskPreparedRoute(candidate, request)
+        ) {
+            is GPUCorePrimitiveCoverageMaskPreparedRoute.Accepted -> route
+            is GPUCorePrimitiveCoverageMaskPreparedRoute.Refused -> return refuse(route.message)
+        }
+        if (accepted.producers.map { it.structuralKey } !=
+            slabSeal.producerSlots.map { it.structuralPipelineKey } ||
+            accepted.consumers.map { it.structuralKey } !=
+            slabSeal.consumerSlots.map { it.structuralPipelineKey }
+        ) return refuse("Prepared coverage-mask pure structural route was substituted.")
+
+        val taskIds = locations.map { it.render.sourceTaskIds.single() }
+        val expectedPairs = taskIds.zipWithNext()
+        val taskIdSet = taskIds.toSet()
+        val routeDependencies = framePlan.dependencies.filter {
+            it.fromTaskId in taskIdSet && it.toTaskId in taskIdSet
+        }
+        if (routeDependencies.size != expectedPairs.size ||
+            routeDependencies.map { it.fromTaskId to it.toTaskId } != expectedPairs
+        ) return refuse("Prepared coverage-mask dependency graph was substituted.")
+        routeDependencies.forEachIndexed { index, dependency ->
+            val isConsumerOrder = index >= producerLocations.lastIndex + 1
+            if (isConsumerOrder) {
+                val targetConsumerIndex = index - producerLocations.size + 1
+                val expectedToken = slabSeal.consumerSlots[targetConsumerIndex]
+                    .dependencyFromPreviousConsumerToken
+                if (dependency.dependencyKind != "prepared-scene-order" ||
+                    dependency.useToken?.value != expectedToken ||
+                    dependency.reasonCode != "preserve.prepared-scene.order" ||
+                    dependency.atomicGroupId != null
+                ) return refuse("Prepared coverage-mask consumer dependency authority was substituted.")
+            } else if (dependency.dependencyKind != "clip-producer-consumer" ||
+                dependency.useToken?.value != plan.orderingToken.value ||
+                dependency.atomicGroupId != null ||
+                dependency.reasonCode != if (index < producerLocations.lastIndex) {
+                    "preserve.core-primitive.clip.mask-producer.$index"
+                } else {
+                    "preserve.core-primitive.clip.producer-before-consumer"
+                }
+            ) return refuse("Prepared coverage-mask producer dependency authority was substituted.")
+        }
+        val slabAuthority = try {
+            GPUCorePrimitiveCoverageMaskPreparedSlabAuthority(
+                vertexResource,
+                vertexGeneration,
+                vertexPreparation.byteSize,
+                indexResource,
+                indexGeneration,
+                indexPreparation.byteSize,
+                uniformResource,
+                uniformGeneration,
+                uniformPreparation.byteSize,
+                uniformDescriptor.alignmentBytes,
+                slabSeal,
+            )
+        } catch (_: IllegalArgumentException) {
+            return refuse("Prepared coverage-mask generated slab authority is invalid.")
+        }
+        val routeSeal = try {
+            sealGPUCorePrimitiveCoverageMaskPreparedFrameRoute(
+                accepted,
+                slabAuthority,
+                GPUCorePrimitiveCoverageMaskPreparedAttachmentAuthority(
+                    maskResource,
+                    maskGeneration,
+                ),
+                sceneTarget,
+                sceneGeneration,
+                producerLocations.zip(slabSeal.producerSlots).map { (location, slot) ->
+                    GPUCorePrimitiveCoverageMaskPreparedProducerLocation(
+                        location.sourceStepIndex,
+                        location.packet.packetId,
+                        location.packet.commandIdValue,
+                        slot.sourceOrder,
+                    )
+                },
+                consumerLocations.zip(geometrySlices).zip(slabSeal.consumerSlots).map {
+                    (locationAndSlice, slot) ->
+                    val (location, slice) = locationAndSlice
+                    GPUCorePrimitiveCoverageMaskPreparedConsumerLocation(
+                        location.sourceStepIndex,
+                        location.packet.packetId,
+                        location.packet.commandIdValue,
+                        location.packet.originalPaintOrder,
+                        slot.dependencyFromPreviousConsumerToken,
+                        slice,
+                    )
+                },
+            )
+        } catch (_: IllegalArgumentException) {
+            return refuse("Prepared coverage-mask frame scope seal is invalid.")
+        }
+        return CorePrimitiveCoverageMaskPreparedValidation(routeSeal)
+    }
 
     private fun validateCorePrimitiveClipStencilPreparedRoutes(
         framePlan: GPUFramePlan,
@@ -1193,6 +1721,8 @@ internal class GPUFramePreflighter(
         val corePrimitiveNativeScopeRoutes: GPUCorePrimitiveNativeScopeFrameRouteSeal,
         val corePrimitiveClipStencilPreparedRoutes:
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
+        val corePrimitiveCoverageMaskPreparedRoutes:
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
     )
 
     private fun pureValidation(framePlan: GPUFramePlan): PureValidationResult {
@@ -1202,6 +1732,9 @@ internal class GPUFramePreflighter(
         var corePrimitiveClipStencilPreparedRoutes:
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal =
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Empty
+        var corePrimitiveCoverageMaskPreparedRoutes:
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal =
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Empty
         val diagnostic = pureValidationDiagnostic(
             framePlan,
             retainCorePrimitiveRoutes = { validation ->
@@ -1212,6 +1745,9 @@ internal class GPUFramePreflighter(
             retainCorePrimitiveClipStencilPreparedRoutes = { validation ->
                 corePrimitiveClipStencilPreparedRoutes = validation.routeSeal
             },
+            retainCorePrimitiveCoverageMaskPreparedRoutes = { validation ->
+                corePrimitiveCoverageMaskPreparedRoutes = validation.routeSeal
+            },
         )
         return PureValidationResult(
             diagnostic,
@@ -1219,6 +1755,7 @@ internal class GPUFramePreflighter(
             corePrimitivePathStencilRoutes,
             corePrimitiveNativeScopeRoutes,
             corePrimitiveClipStencilPreparedRoutes,
+            corePrimitiveCoverageMaskPreparedRoutes,
         )
     }
 
@@ -1227,6 +1764,8 @@ internal class GPUFramePreflighter(
         retainCorePrimitiveRoutes: (CorePrimitiveGeometryValidation) -> Unit,
         retainCorePrimitiveClipStencilPreparedRoutes:
             (CorePrimitiveClipStencilPreparedValidation) -> Unit,
+        retainCorePrimitiveCoverageMaskPreparedRoutes:
+            (CorePrimitiveCoverageMaskPreparedValidation) -> Unit,
     ): GPUDiagnostic? {
         firstUnsafePreparedIdentity(framePlan)?.let { field ->
             return diagnostic(
@@ -1250,7 +1789,15 @@ internal class GPUFramePreflighter(
             .filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
             .any { it.corePrimitiveClipStencilPreparedCandidate != null }
-        if (nativeBoundary != null && !hasClipStencilPreparedCandidate) {
+        val coverageMaskPreparedValidation =
+            validateCorePrimitiveCoverageMaskPreparedRoutes(framePlan)
+        coverageMaskPreparedValidation.diagnostic?.let { return it }
+        retainCorePrimitiveCoverageMaskPreparedRoutes(coverageMaskPreparedValidation)
+        val hasCoverageMaskPreparedRoute = coverageMaskPreparedValidation.routeSeal is
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Route
+        if (nativeBoundary != null && !hasClipStencilPreparedCandidate &&
+            !hasCoverageMaskPreparedRoute
+        ) {
             val validation = validateCorePrimitiveGeometryResources(
                 framePlan,
                 strictNativeRoute = true,
@@ -1293,7 +1840,7 @@ internal class GPUFramePreflighter(
                 return diagnostic("invalid.preflight.surface_output_order", "Surface acquire, blit and present order is invalid.")
             }
         }
-        for (step in framePlan.steps) {
+        for ((sourceStepIndex, step) in framePlan.steps.withIndex()) {
             when (step) {
                 is GPUFrameStep.RenderPassStep -> {
                     val expected = context.resourceGenerations[step.target]
@@ -1323,9 +1870,11 @@ internal class GPUFramePreflighter(
                     step.drawPackets.forEach { packet ->
                         validateSemanticPayload(
                             framePlan,
+                            sourceStepIndex,
                             step,
                             packet,
                             clipStencilPreparedValidation.routeSeal,
+                            coverageMaskPreparedValidation.routeSeal,
                         )?.let { return it }
                     }
                 }
@@ -1370,7 +1919,9 @@ internal class GPUFramePreflighter(
         }
         if (nativeBoundary == null &&
             clipStencilPreparedValidation.routeSeal ===
-            GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Empty
+            GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Empty &&
+            coverageMaskPreparedValidation.routeSeal ===
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Empty
         ) {
             val validation = validateCorePrimitiveGeometryResources(
                 framePlan,
@@ -1583,6 +2134,8 @@ internal class GPUFramePreflighter(
                 -> corePrimitivePathStencilRenderPipelineStructuralKey(semantic, role, clip, blend)
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer,
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer,
+                GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer,
+                GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskConsumer,
                 -> return null
             }
             val authority = packet.corePrimitivePreparedAuthority ?: return null
@@ -2177,6 +2730,12 @@ internal class GPUFramePreflighter(
         )
         val uniformLayout = structuralPipelineKey.uniformLayout
         when (uniformLayout) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
+            -> return diagnostic(
+                "unsupported.native-core-primitive.coverage-mask-direct-route",
+                "Coverage-mask programs require their dedicated prepared multi-pass route.",
+            )
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 return diagnostic(
                     "unsupported.native-core-primitive.no-bindings-direct-route",
@@ -2209,6 +2768,9 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
             -> null
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
+            -> error("Coverage-mask layouts were refused before direct uniform authority selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct uniform authority selection")
         }
@@ -2224,6 +2786,9 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
             -> emptyList()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
+            -> error("Coverage-mask layouts were refused before analytic uniform selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before analytic uniform authority selection")
         }
@@ -2236,6 +2801,9 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.DynamicUniform32V2,
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
             -> emptyList()
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
+            -> error("Coverage-mask layouts were refused before intersection uniform selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before intersection uniform authority selection")
         }
@@ -2246,6 +2814,9 @@ internal class GPUFramePreflighter(
                 analyticSeals.first().plan
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 analyticIntersectionSeals.first().plan
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
+            -> error("Coverage-mask layouts were refused before direct uniform plan selection")
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                 error("NoBindingsV1 was refused before direct uniform plan selection")
         }
@@ -2274,6 +2845,9 @@ internal class GPUFramePreflighter(
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform64V1,
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1,
                 -> false
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1,
+                GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1,
+                -> error("Coverage-mask layouts were refused before direct uniform validation")
                 GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 ->
                     error("NoBindingsV1 was refused before direct uniform validation")
             }
@@ -2683,10 +3257,13 @@ internal class GPUFramePreflighter(
 
     private fun validateSemanticPayload(
         framePlan: GPUFramePlan,
+        sourceStepIndex: Int,
         render: GPUFrameStep.RenderPassStep,
         packet: GPUDrawPacket,
         clipStencilPreparedRouteSeal:
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
+        coverageMaskPreparedRouteSeal:
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
     ): GPUDiagnostic? {
         val semantic = packet.semanticPayload
         if (semantic == null) {
@@ -2715,10 +3292,12 @@ internal class GPUFramePreflighter(
             is GPUDrawSemanticPayload.CorePrimitive ->
                 validateCorePrimitiveSemanticPayload(
                     framePlan,
+                    sourceStepIndex,
                     render,
                     packet,
                     semantic,
                     clipStencilPreparedRouteSeal,
+                    coverageMaskPreparedRouteSeal,
                 )
             is GPUDrawSemanticPayload.RegisteredUniformRect ->
                 validateRegisteredUniformRectSemanticPayload(render, packet, semantic)
@@ -2731,11 +3310,14 @@ internal class GPUFramePreflighter(
 
     private fun validateCorePrimitiveSemanticPayload(
         framePlan: GPUFramePlan,
+        sourceStepIndex: Int,
         render: GPUFrameStep.RenderPassStep,
         packet: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.CorePrimitive,
         clipStencilPreparedRouteSeal:
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
+        coverageMaskPreparedRouteSeal:
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
     ): GPUDiagnostic? {
         val clipExecutionPlan = packet.clipExecutionPlan
         if (packet.renderStepId.value != CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
@@ -2765,16 +3347,47 @@ internal class GPUFramePreflighter(
         }
         val blendPlan = requireNotNull(packet.blendPlan)
         val preparedAuthority = packet.corePrimitivePreparedAuthority
+        val coverageMaskConsumerScope = when (coverageMaskPreparedRouteSeal) {
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Empty -> null
+            is GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Route ->
+                coverageMaskPreparedRouteSeal.retainedFor(
+                    sourceStepIndex,
+                    listOf(packet.packetId),
+                ) as? GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
+        }
+        val coverageMaskConsumerSlot = coverageMaskConsumerScope?.let { scope ->
+            val slabSeal = scope.slabAuthority.uniformSlabSeal
+            val consumerIndex = scope.uniformSlice.slotIndex - slabSeal.producerSlots.size
+            if (consumerIndex !in slabSeal.consumerSlots.indices) {
+                return diagnostic(
+                    "invalid.preflight.core_primitive_packet_authority",
+                    "Coverage-mask consumer slot index is outside its sealed partition.",
+                )
+            }
+            slabSeal.consumerSlots[consumerIndex].also { slot ->
+                if (slot.slotIndex != scope.uniformSlice.slotIndex ||
+                    slot.packetId != packet.packetId ||
+                    slot.commandId != packet.commandIdValue
+                ) {
+                    return diagnostic(
+                        "invalid.preflight.core_primitive_packet_authority",
+                        "Coverage-mask consumer indexed slot identity differs from its scope.",
+                    )
+                }
+            }
+        }
         val expectedStructuralPipelineKey = when (packet.role) {
             GPUDrawPacketRole.Shading -> {
                 val clipStencilConsumerSeal =
                     (clipStencilPreparedRouteSeal as?
                         GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Route)
                         ?.retainedFor(
-                            framePlan.steps.indexOf(render),
+                            sourceStepIndex,
                             listOf(packet.packetId),
                         ) as? GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
-                if (clipStencilConsumerSeal != null) {
+                if (coverageMaskConsumerSlot != null) {
+                    coverageMaskConsumerSlot.structuralPipelineKey
+                } else if (clipStencilConsumerSeal != null) {
                     clipStencilConsumerSeal.route.consumers.single { consumer ->
                         consumer.commandId == packet.commandIdValue &&
                             consumer.sourceOrder == packet.originalPaintOrder
@@ -2824,6 +3437,16 @@ internal class GPUFramePreflighter(
                 CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1 ->
                 CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskConsumerUniform64V1 ->
+                coverageMaskConsumerSlot?.bindingLayoutHash ?: return diagnostic(
+                    "unsupported.native-core-primitive.coverage-mask-direct-route",
+                    "Coverage-mask bindings require their dedicated prepared route.",
+                )
+            GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.CoverageMaskProducerUniform64V1 ->
+                return diagnostic(
+                    "unsupported.native-core-primitive.coverage-mask-direct-route",
+                    "Coverage-mask producer bindings require their dedicated prepared route.",
+                )
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.NoBindingsV1 -> return diagnostic(
                 "unsupported.native-core-primitive.no-bindings-direct-route",
                 "The no-bindings clip-stencil producer is not an executable direct packet role.",
@@ -2838,7 +3461,11 @@ internal class GPUFramePreflighter(
             packet.bindingLayoutHash != expectedBindingLayoutHash ||
             packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
             packet.targetStateHash != CORE_PRIMITIVE_TARGET_STATE_HASH ||
-            packet.scissorBoundsHash != corePrimitiveScissorAuthority(semantic.scissorBounds)
+            packet.scissorBoundsHash != if (coverageMaskConsumerSlot == null) {
+                corePrimitiveScissorAuthority(semantic.scissorBounds)
+            } else {
+                null
+            }
         ) {
             return diagnostic(
                 "invalid.preflight.core_primitive_packet_authority",
@@ -3178,6 +3805,8 @@ internal class GPUFramePreflighter(
         corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
         corePrimitiveClipStencilPreparedRoutes:
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
+        corePrimitiveCoverageMaskPreparedRoutes:
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
     ): GPUResourceMaterializationDecision {
         val packets = framePlan.steps.mapIndexedNotNull { sourceStepIndex, step ->
             (step as? GPUFrameStep.RenderPassStep)?.let { render ->
@@ -3195,6 +3824,7 @@ internal class GPUFramePreflighter(
                     ownerScope,
                     corePrimitiveDirectRoutes,
                     corePrimitiveClipStencilPreparedRoutes,
+                    corePrimitiveCoverageMaskPreparedRoutes,
                 )
             }
             resourceProvider.materializeCommandOperands(
@@ -3251,12 +3881,23 @@ internal class GPUFramePreflighter(
         corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
         corePrimitiveClipStencilPreparedRoutes:
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
+        corePrimitiveCoverageMaskPreparedRoutes:
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
     ): List<GPUCommandOperandMaterializationPlan> = buildList {
         val clipStencilScope = when (corePrimitiveClipStencilPreparedRoutes) {
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Empty ->
                 GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty
             is GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Route ->
                 corePrimitiveClipStencilPreparedRoutes.retainedFor(
+                    sourceStepIndex,
+                    listOf(packet.packetId),
+                )
+        }
+        val coverageMaskScope = when (corePrimitiveCoverageMaskPreparedRoutes) {
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Empty ->
+                GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty
+            is GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Route ->
+                corePrimitiveCoverageMaskPreparedRoutes.retainedFor(
                     sourceStepIndex,
                     listOf(packet.packetId),
                 )
@@ -3292,7 +3933,12 @@ internal class GPUFramePreflighter(
             GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing,
             -> null
         }
-        if (colorGlyph != null || directCore != null || clipStencilSlabs != null) {
+        val coverageMaskSlabs =
+            (coverageMaskScope as?
+                GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer)?.slabAuthority
+        if (colorGlyph != null || directCore != null || clipStencilSlabs != null ||
+            coverageMaskSlabs != null
+        ) {
             add(
                 operand(
                     packet,
@@ -3304,6 +3950,10 @@ internal class GPUFramePreflighter(
                         "clip-stencil.${clipStencilSlabs.vertexResource.value}@" +
                             "${clipStencilSlabs.vertexGeneration}.vertices." +
                             clipStencilSlabs.vertexByteSize
+                    } else if (coverageMaskSlabs != null) {
+                        "coverage-mask.${coverageMaskSlabs.vertexResource.value}@" +
+                            "${coverageMaskSlabs.vertexGeneration}.vertices." +
+                            coverageMaskSlabs.vertexByteSize
                     } else {
                         "core-direct.$sourceStepIndex.${packet.packetId.value}.vertices." +
                             requireNotNull(directCore).vertexCount * 2
@@ -3322,6 +3972,10 @@ internal class GPUFramePreflighter(
                         "clip-stencil.${clipStencilSlabs.indexResource.value}@" +
                             "${clipStencilSlabs.indexGeneration}.indices." +
                             clipStencilSlabs.indexByteSize
+                    } else if (coverageMaskSlabs != null) {
+                        "coverage-mask.${coverageMaskSlabs.indexResource.value}@" +
+                            "${coverageMaskSlabs.indexGeneration}.indices." +
+                            coverageMaskSlabs.indexByteSize
                     } else {
                         "core-direct.$sourceStepIndex.${packet.packetId.value}.indices." +
                             requireNotNull(directCore).indexCount
@@ -3339,6 +3993,8 @@ internal class GPUFramePreflighter(
         corePrimitiveDirectRoutes: GPUCorePrimitiveDirectNativeFrameRouteSeal,
         corePrimitiveClipStencilPreparedRoutes:
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
+        corePrimitiveCoverageMaskPreparedRoutes:
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
     ): GPUDiagnostic? {
         val packets = framePlan.steps.mapIndexedNotNull { sourceStepIndex, step ->
             (step as? GPUFrameStep.RenderPassStep)?.let { render ->
@@ -3355,6 +4011,7 @@ internal class GPUFramePreflighter(
                 ownerScope,
                 corePrimitiveDirectRoutes,
                 corePrimitiveClipStencilPreparedRoutes,
+                corePrimitiveCoverageMaskPreparedRoutes,
             )
         }
         val expectedLabels = expectedPlans.map { it.label }
@@ -3396,6 +4053,7 @@ internal class GPUFramePreflighter(
                 ownerScope,
                 corePrimitiveDirectRoutes,
                 corePrimitiveClipStencilPreparedRoutes,
+                corePrimitiveCoverageMaskPreparedRoutes,
             )
             val packetBridge = bridge.subList(bridgeOffset, bridgeOffset + expected.size)
             bridgeOffset += expected.size
@@ -3412,10 +4070,20 @@ internal class GPUFramePreflighter(
                         listOf(packet.packetId),
                     )
             }
+            val coverageMaskScope = when (corePrimitiveCoverageMaskPreparedRoutes) {
+                GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Empty ->
+                    GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty
+                is GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Route ->
+                    corePrimitiveCoverageMaskPreparedRoutes.retainedFor(
+                        sourceStepIndex,
+                        listOf(packet.packetId),
+                    )
+            }
             val indexedPayload = packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
                 corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId) != null ||
                 clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
-                clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+                clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer ||
+                coverageMaskScope is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
             val expectedBindGroupCount =
                 if (clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer) {
                     0
@@ -3485,6 +4153,8 @@ internal class GPUFramePreflighter(
         corePrimitiveNativeScopeRoutes: GPUCorePrimitiveNativeScopeFrameRouteSeal,
         corePrimitiveClipStencilPreparedRoutes:
             GPUCorePrimitiveClipStencilPreparedFrameRouteSeal,
+        corePrimitiveCoverageMaskPreparedRoutes:
+            GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal,
     ): List<GPUCommandEncoderScopePlan> {
         val renderBridgesByStepIndex = buildMap {
             var bridgeOffset = 0
@@ -3496,6 +4166,15 @@ internal class GPUFramePreflighter(
                             GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty
                         is GPUCorePrimitiveClipStencilPreparedFrameRouteSeal.Route ->
                             corePrimitiveClipStencilPreparedRoutes.retainedFor(
+                                sourceStepIndex,
+                                listOf(packet.packetId),
+                            )
+                    }
+                    val coverageMaskScope = when (corePrimitiveCoverageMaskPreparedRoutes) {
+                        GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Empty ->
+                            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty
+                        is GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Route ->
+                            corePrimitiveCoverageMaskPreparedRoutes.retainedFor(
                                 sourceStepIndex,
                                 listOf(packet.packetId),
                             )
@@ -3515,6 +4194,8 @@ internal class GPUFramePreflighter(
                             GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
                         clipStencilScope is
                             GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
+                        || coverageMaskScope is
+                            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
                     ) {
                         2
                     } else {
@@ -3576,6 +4257,16 @@ internal class GPUFramePreflighter(
                                 step.drawPackets.map(GPUDrawPacket::packetId),
                             )
                     }
+                val stepCorePrimitiveCoverageMaskPreparedRoutes =
+                    when (corePrimitiveCoverageMaskPreparedRoutes) {
+                        GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Empty ->
+                            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty
+                        is GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Route ->
+                            corePrimitiveCoverageMaskPreparedRoutes.retainedFor(
+                                index,
+                                step.drawPackets.map(GPUDrawPacket::packetId),
+                            )
+                    }
                 val submissionCompleteLeaseIds = materialized.resourceLeases
                     .filter { it.releasePolicy == "submission-complete" }
                     .map { it.leaseId }
@@ -3612,6 +4303,22 @@ internal class GPUFramePreflighter(
                     loadStoreLabel = step.loadStore.dumpLabel(),
                     materialization = stepMaterialized,
                 )
+                val sealedCoverageMaskPreparedRoutes = when (
+                    stepCorePrimitiveCoverageMaskPreparedRoutes
+                ) {
+                    is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer,
+                    is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer,
+                    -> sealGPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
+                        stepCorePrimitiveCoverageMaskPreparedRoutes,
+                        step.drawPackets.single(),
+                        stream,
+                        passPlan.passId,
+                        step.loadStore.dumpLabel(),
+                    )
+                    GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
+                    GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
+                    -> stepCorePrimitiveCoverageMaskPreparedRoutes
+                }
                 GPUCommandEncoderScopePlan(
                     sourceStepIndex = index,
                     operationKind = GPUEncoderOperationKind.Render,
@@ -3619,7 +4326,16 @@ internal class GPUFramePreflighter(
                     sourceTaskIds = step.sourceTaskIds,
                     sourcePacketIds = step.drawPackets.map { it.packetId },
                     facadeOperationClasses = stream.commandLabels,
-                    targetGeneration = context.targetGeneration,
+                    targetGeneration = when (sealedCoverageMaskPreparedRoutes) {
+                        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer ->
+                            sealedCoverageMaskPreparedRoutes
+                                .attachmentAuthority.resourceGeneration
+                        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ->
+                            sealedCoverageMaskPreparedRoutes.sceneTargetGeneration
+                        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
+                        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
+                        -> context.targetGeneration
+                    },
                     resourceGenerationLabels = labels,
                     passCommandStream = stream,
                     corePrimitiveDirectNativeRouteSeal = stepCorePrimitiveDirectRoutes,
@@ -3627,6 +4343,8 @@ internal class GPUFramePreflighter(
                     corePrimitiveNativeScopeRouteSeal = stepCorePrimitiveNativeScopeRoutes,
                     corePrimitiveClipStencilPreparedRouteSeal =
                         stepCorePrimitiveClipStencilPreparedRoutes,
+                    corePrimitiveCoverageMaskPreparedRouteSeal =
+                        sealedCoverageMaskPreparedRoutes,
                 ).attachNativeOperandKeys(
                     nativeOperandKeys(
                         step,
@@ -3635,6 +4353,7 @@ internal class GPUFramePreflighter(
                         stepCorePrimitiveDirectRoutes,
                         stepCorePrimitiveNativeScopeRoutes,
                         stepCorePrimitiveClipStencilPreparedRoutes,
+                        sealedCoverageMaskPreparedRoutes,
                     ),
                 )
             }
@@ -3671,6 +4390,9 @@ internal class GPUFramePreflighter(
         corePrimitiveClipStencilPreparedRoutes:
             GPUCorePrimitiveClipStencilPreparedScopeRouteSeal =
             GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty,
+        corePrimitiveCoverageMaskPreparedRoutes:
+            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal =
+            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
     ): List<GPUPreparedNativeOperandKey> {
         fun key(
             role: GPUPreparedNativeOperandRole,
@@ -3698,8 +4420,13 @@ internal class GPUFramePreflighter(
                         GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
                         corePrimitiveClipStencilPreparedRoutes is
                         GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
-                check(!(pathCore && clipStencilCore)) {
-                    "PathDepthStencil and ClipDepthStencil native scope seals are mutually exclusive"
+                val coverageMaskCore =
+                    corePrimitiveCoverageMaskPreparedRoutes is
+                        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer ||
+                        corePrimitiveCoverageMaskPreparedRoutes is
+                        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
+                check(listOf(pathCore, clipStencilCore, coverageMaskCore).count { it } <= 1) {
+                    "Prepared CorePrimitive multi-pass native scope seals are mutually exclusive"
                 }
                 val drawOperandOwnership = if (colorGlyph) {
                     GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion
@@ -3707,7 +4434,7 @@ internal class GPUFramePreflighter(
                     GPUPreparedNativeOperandOwnership.Borrowed
                 }
                 val streamBridges = requireNotNull(stream).operandBridge
-                val nativeBridges = if (pathCore || clipStencilCore) {
+                val nativeBridges = if (pathCore || clipStencilCore || coverageMaskCore) {
                     val pipelineBridges = streamBridges.filter {
                         it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
                     }
@@ -3728,6 +4455,10 @@ internal class GPUFramePreflighter(
                         }
                         check(bindGroupBridges.size == expectedBindGroups) {
                             "Clip-stencil producer forbids bind groups and consumers require exactly one"
+                        }
+                    } else if (coverageMaskCore) {
+                        check(bindGroupBridges.size == 1) {
+                            "Coverage-mask producers and consumers require exactly one bind group"
                         }
                     }
                     pipelineBridges.zip(step.drawPackets)
@@ -3819,7 +4550,7 @@ internal class GPUFramePreflighter(
                         )
                     else -> error("Render native operand bridge contains an unsupported operand kind")
                 }
-                if (pathCore || clipStencilCore) {
+                if (pathCore || clipStencilCore || coverageMaskCore) {
                     val pipelineKeys = nativeBridges.filter {
                         it.operand.kind == GPUMaterializedCommandOperandKind.RenderPipeline
                     }.map(::bridgeKey)
@@ -3837,16 +4568,23 @@ internal class GPUFramePreflighter(
                             resources[resourceIndex + 1],
                         )
                     }
-                    val geometryKeys = listOf(
-                        sharedGeometryKey(
-                            GPUFrameResourceRole.VertexData,
-                            GPUPreparedNativeOperandRole.RenderVertexBuffer,
-                        ),
-                        sharedGeometryKey(
-                            GPUFrameResourceRole.IndexData,
-                            GPUPreparedNativeOperandRole.RenderIndexBuffer,
-                        ),
-                    )
+                    val geometryKeys = if (coverageMaskCore &&
+                        corePrimitiveCoverageMaskPreparedRoutes is
+                        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer
+                    ) {
+                        emptyList()
+                    } else {
+                        listOf(
+                            sharedGeometryKey(
+                                GPUFrameResourceRole.VertexData,
+                                GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                            ),
+                            sharedGeometryKey(
+                                GPUFrameResourceRole.IndexData,
+                                GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                            ),
+                        )
+                    }
                     val bindGroupKeys = nativeBridges.filter {
                         it.operand.kind == GPUMaterializedCommandOperandKind.BindGroup
                     }.map(::bridgeKey)

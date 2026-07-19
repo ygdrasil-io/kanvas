@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 /** Compact code/layout axes computed once while the prepared packet is recorded. */
@@ -888,6 +889,105 @@ internal class GPUCorePrimitiveUniformSlabSeal(
     fun packedBytesSnapshot(): ByteArray = packedBytesSnapshot.copyOf()
 }
 
+internal data class GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal(
+    val slotIndex: Int,
+    val sourceOrder: Int,
+    val packetId: GPUDrawPacketID,
+    val commandId: Int,
+    val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+    val renderPipelineKey: GPURenderPipelineKey,
+    val bindingLayoutHash: String,
+)
+
+internal data class GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal(
+    val slotIndex: Int,
+    val sourceOrder: Int,
+    val packetId: GPUDrawPacketID,
+    val commandId: Int,
+    val dependencyFromPreviousConsumerToken: String?,
+    val semanticCanonicalIdentity: String,
+    val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
+    val renderPipelineKey: GPURenderPipelineKey,
+    val bindingLayoutHash: String,
+)
+
+internal fun corePrimitiveCoverageMaskConsumerDependencyToken(
+    packetId: GPUDrawPacketID,
+    sourceOrder: Int,
+): String {
+    require(sourceOrder >= 0) { "Coverage-mask consumer dependency source order must be non-negative" }
+    return "prepared-core-primitive.coverage-mask.consumer.$sourceOrder.${packetId.value}"
+}
+
+/** Builder-owned uniform64 slab authority shared by one exact ordered coverage-mask route. */
+internal class GPUCorePrimitiveCoverageMaskUniformSlabSeal(
+    val plan: GPUUniformSlabPlan,
+    val contentKey: String,
+    val planCanonicalIdentity: String,
+    val maskResource: GPUFrameTargetRef,
+    producerSlots: List<GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal>,
+    consumerSlots: List<GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal>,
+    packedBytes: ByteArray,
+) {
+    val producerSlots: List<GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal> =
+        immutableList(producerSlots)
+    val consumerSlots: List<GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal> =
+        immutableList(consumerSlots)
+    private val packedBytesSnapshot = packedBytes.copyOf()
+
+    val producerSourceOrders: List<Int> get() = producerSlots.map { it.sourceOrder }
+    val producerPacketIds: List<GPUDrawPacketID> get() = producerSlots.map { it.packetId }
+    val consumerCommandIds: List<Int> get() = consumerSlots.map { it.commandId }
+    val consumerPacketIds: List<GPUDrawPacketID> get() = consumerSlots.map { it.packetId }
+
+    init {
+        require(contentKey.isNotBlank() && planCanonicalIdentity.isNotBlank()) {
+            "Coverage-mask uniform slab requires exact plan identities"
+        }
+        require(producerSlots.isNotEmpty() && consumerSlots.size >= 2) {
+            "Coverage-mask uniform slab requires producers followed by at least two consumers"
+        }
+        require(producerSlots.map { it.slotIndex } == producerSlots.indices.toList() &&
+            consumerSlots.map { it.slotIndex } ==
+            consumerSlots.indices.map { it + producerSlots.size }
+        ) { "Coverage-mask uniform slots must retain exact producer-then-consumer order" }
+        require(producerSourceOrders.zipWithNext().all { (left, right) -> left < right } &&
+            consumerSlots.map { it.sourceOrder }.zipWithNext().all { (left, right) -> left < right }
+        ) { "Coverage-mask uniform slots require strict source order" }
+        require(consumerSlots.all { it.semanticCanonicalIdentity.isNotBlank() }) {
+            "Coverage-mask consumer slots require sealed semantic identities"
+        }
+        require(consumerSlots.mapIndexed { index, slot ->
+                slot.dependencyFromPreviousConsumerToken == if (index == 0) {
+                    null
+                } else {
+                    corePrimitiveCoverageMaskConsumerDependencyToken(slot.packetId, slot.sourceOrder)
+                }
+            }.all { it }
+        ) { "Coverage-mask consumer slots require exact previous-consumer dependency tokens" }
+        require((producerPacketIds + consumerPacketIds).distinct().size ==
+            producerSlots.size + consumerSlots.size &&
+            consumerCommandIds.distinct().size == consumerSlots.size
+        ) { "Coverage-mask uniform slots require unique packet and consumer command identities" }
+        require(plan.slots.size == producerSlots.size + consumerSlots.size &&
+            plan.slots.all { it.payloadBytes == 64L } &&
+            plan.totalBytes == packedBytesSnapshot.size.toLong()
+        ) { "Coverage-mask uniform slab requires exact uniform64 slots and packed bytes" }
+    }
+
+    fun hasExactPayload(slotIndex: Int, expected: ByteArray): Boolean {
+        val slot = plan.slots.getOrNull(slotIndex) ?: return false
+        if (expected.size != 64 || slot.payloadBytes != 64L ||
+            slot.alignedOffset > packedBytesSnapshot.size.toLong() - expected.size.toLong()
+        ) return false
+        return expected.indices.all { index ->
+            packedBytesSnapshot[slot.alignedOffset.toInt() + index] == expected[index]
+        }
+    }
+
+    fun packedBytesSnapshot(): ByteArray = packedBytesSnapshot.copyOf()
+}
+
 /** Immutable per-packet authority for the separate analytic-clip uniform64 slab. */
 internal class GPUCorePrimitiveAnalyticClipUniformSeal(
     val plan: GPUUniformSlabPlan,
@@ -1040,4 +1140,5 @@ internal data class GPUCorePrimitivePreparedPacketAuthority(
     val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?,
     val analyticClipUniformSeal: GPUCorePrimitiveAnalyticClipUniformSeal? = null,
     val analyticIntersectionUniformSeal: GPUCorePrimitiveAnalyticIntersectionUniformSeal? = null,
+    val coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = null,
 )

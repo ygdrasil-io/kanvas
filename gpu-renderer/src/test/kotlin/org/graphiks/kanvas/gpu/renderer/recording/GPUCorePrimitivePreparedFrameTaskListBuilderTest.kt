@@ -4,6 +4,7 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
@@ -1833,6 +1834,170 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `eligible coverage mask attaches prepared producer and consumer authorities`() {
+        val plan = maskPlan(
+            intersectAntiAlias = false,
+            differenceAntiAlias = false,
+            differenceGeometry = GPUClipExecutionGeometry.RRect(
+                GPUClipBounds(4f, 4f, 12f, 12f),
+                listOf(1f, 2f, 1f, 2f, 1f, 2f, 1f, 2f),
+            ),
+        )
+        val base = recording(command(74, 0), command(75, 1)).taskList.withClipPlans(
+            mapOf(74 to plan, 75 to plan),
+        )
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
+        val directTriangles = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+            vertices = listOf(1f, 1f, 8f, 1f, 4f, 8f),
+            indices = listOf(0, 2, 1),
+            sourceContourStarts = listOf(0),
+            sourceVertexCount = 3,
+            coverBounds = GPUPixelBounds(1, 1, 8, 8),
+            geometryMode = GPUCorePrimitiveGeometryMode.DirectTriangles,
+        )
+        val semantics = packets.associate { packet ->
+            packet.commandIdValue to if (packet.commandIdValue == 75) {
+                semantic(packet, directTriangles)
+            } else {
+                semantic(packet)
+            }
+        }
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, semantics),
+        )
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            result,
+            (result as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        val preparedPackets = taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val producers = preparedPackets.filter { it.role == GPUDrawPacketRole.ClipProducer }
+        val consumers = preparedPackets.filter { it.role == GPUDrawPacketRole.Shading }
+
+        assertEquals(2, producers.size)
+        assertEquals(2, consumers.size)
+        assertTrue(producers.all { it.corePrimitivePreparedAuthority != null })
+        assertTrue(consumers.all { it.corePrimitivePreparedAuthority != null })
+        assertEquals(
+            List(2) { GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer },
+            producers.map { requireNotNull(it.corePrimitivePreparedAuthority).structuralPipelineKey.role },
+        )
+        assertEquals(
+            List(2) { GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskConsumer },
+            consumers.map { requireNotNull(it.corePrimitivePreparedAuthority).structuralPipelineKey.role },
+        )
+        val slab = requireNotNull(
+            producers.first().corePrimitivePreparedAuthority?.coverageMaskUniformSlabSeal,
+        )
+        assertTrue((producers + consumers).all {
+            it.corePrimitivePreparedAuthority?.coverageMaskUniformSlabSeal === slab
+        })
+        val detachedProducer = producers.first().withClipPlan(producers.first().clipExecutionPlan)
+        assertFailsWith<IllegalArgumentException> {
+            detachedProducer.attachCorePrimitivePreparedAuthority(
+                requireNotNull(producers.first().corePrimitivePreparedAuthority).copy(
+                    coverageMaskUniformSlabSeal = null,
+                ),
+            )
+        }
+        assertEquals(listOf(0, 1), slab.producerSourceOrders)
+        assertEquals(producers.map { it.packetId }, slab.producerPacketIds)
+        assertEquals(listOf(74, 75), slab.consumerCommandIds)
+        assertEquals(consumers.map { it.packetId }, slab.consumerPacketIds)
+        assertEquals(
+            listOf(
+                null,
+                "prepared-core-primitive.coverage-mask.consumer.1.${consumers[1].packetId.value}",
+            ),
+            slab.consumerSlots.map { it.dependencyFromPreviousConsumerToken },
+        )
+        assertTrue(slab.plan.slots.all { it.payloadBytes == 64L })
+        assertEquals(listOf(0L, 256L, 512L, 768L), slab.plan.slots.map { it.alignedOffset })
+
+        val packedBytes = slab.packedBytesSnapshot()
+        fun slotBytes(index: Int): ByteArray {
+            val offset = slab.plan.slots[index].alignedOffset.toInt()
+            return packedBytes.copyOfRange(offset, offset + 64)
+        }
+        val expectedIntersect = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).apply {
+            listOf(
+                0f, 0f, 16f, 16f,
+                0f, 0f, 16f, 16f,
+                0f, 0f, 0f, 0f,
+                0f, 0f, 0f, 0f,
+            ).forEach(::putFloat)
+        }.array()
+        val expectedDifference = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).apply {
+            listOf(
+                0f, 0f, 16f, 16f,
+                4f, 4f, 12f, 12f,
+                1f, 2f, 1f, 2f,
+                1f, 2f, 1f, 2f,
+            ).forEach(::putFloat)
+        }.array()
+        val expectedConsumer = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN).apply {
+            putFloat(16f)
+            putFloat(16f)
+            putInt(0)
+            putInt(0)
+            putInt(16)
+            putInt(16)
+            putLong(0L)
+            listOf(0.25f, 0.5f, 0.75f, 1f).forEach(::putFloat)
+            putInt(0)
+            repeat(12) { put(0) }
+        }.array()
+        assertContentEquals(expectedIntersect, slotBytes(0))
+        assertContentEquals(expectedDifference, slotBytes(1))
+        assertContentEquals(expectedConsumer, slotBytes(2))
+        assertContentEquals(expectedConsumer, slotBytes(3))
+        assertEquals(0, slotBytes(2).uint32(8))
+        assertEquals(0, slotBytes(2).uint32(12))
+        assertEquals(16, slotBytes(2).uint32(16))
+        assertEquals(16, slotBytes(2).uint32(20))
+        packedBytes[slab.plan.slots[2].alignedOffset.toInt() + 16] = 0
+        assertContentEquals(expectedConsumer, slab.packedBytesSnapshot().let { snapshot ->
+            val offset = slab.plan.slots[2].alignedOffset.toInt()
+            snapshot.copyOfRange(offset, offset + 64)
+        })
+        val preparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+        assertEquals(
+            56L,
+            preparations.single { it.role == GPUFrameResourceRole.VertexData }.byteSize,
+        )
+        assertEquals(
+            36L,
+            preparations.single { it.role == GPUFrameResourceRole.IndexData }.byteSize,
+        )
+
+        val producerTasks = taskList.tasks.filterIsInstance<GPUTask.Render>().filter {
+            it.drawPackets.single().role == GPUDrawPacketRole.ClipProducer
+        }
+        val consumerTasks = taskList.tasks.filterIsInstance<GPUTask.Render>().filter {
+            it.drawPackets.single().role == GPUDrawPacketRole.Shading
+        }
+        assertEquals(
+            listOf(
+                producerTasks[0].taskId to producerTasks[1].taskId,
+                producerTasks[1].taskId to consumerTasks[0].taskId,
+                consumerTasks[0].taskId to consumerTasks[1].taskId,
+            ),
+            taskList.dependencies.map { it.fromTaskId to it.toTaskId },
+        )
+        assertEquals(
+            slab.consumerSlots[1].dependencyFromPreviousConsumerToken,
+            taskList.dependencies.single {
+                it.fromTaskId == consumerTasks[0].taskId &&
+                    it.toTaskId == consumerTasks[1].taskId
+            }.useToken?.value,
+        )
+    }
+
+    @Test
     fun `base DAG translation internalizes dependency when compatible draws coalesce`() {
         val base = recording(command(80, 0), command(81, 1)).taskList.withClipPlans(
             mapOf(80 to GPUClipExecutionPlan.NoClip, 81 to GPUClipExecutionPlan.NoClip),
@@ -2039,6 +2204,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
         blendPlan, renderPipelineKey, computePipelineKey, bindingLayoutHash, uniformSlot, resourceSlot,
         semanticPayload, vertexSourceLabel, scissorBoundsHash, targetStateHash, originalPaintOrder,
         resourceGeneration, frameProvenance, clipCoveragePlan, plan, diagnostics,
+        clipProducerAuthority,
     )
 
     private fun stencilPlan(
@@ -2110,9 +2276,12 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     )
 
     private fun maskPlan(
+        intersectAntiAlias: Boolean = true,
         differenceAntiAlias: Boolean = true,
         contentKey: String = "clip.shared.mask",
         depthStencilRequired: Boolean = false,
+        differenceGeometry: GPUClipExecutionGeometry =
+            GPUClipExecutionGeometry.Rect(GPUClipBounds(4f, 4f, 12f, 12f)),
     ) = GPUClipExecutionPlan.CoverageMask(
         contentKey = contentKey,
         bounds = targetBounds,
@@ -2124,11 +2293,11 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 0,
                 GPUClipExecutionGeometry.Rect(GPUClipBounds(0f, 0f, 16f, 16f)),
                 GPUClipMaskCombine.Intersect,
-                true,
+                intersectAntiAlias,
             ),
             GPUClipMaskProducerPlan(
                 1,
-                GPUClipExecutionGeometry.Rect(GPUClipBounds(4f, 4f, 12f, 12f)),
+                differenceGeometry,
                 GPUClipMaskCombine.Difference,
                 differenceAntiAlias,
             ),

@@ -333,11 +333,31 @@ class GPUDrawPacket(
         check(corePrimitivePreparedAuthority == null) {
             "CorePrimitive prepared packet authority is already attached"
         }
-        require(semanticPayload is GPUDrawSemanticPayload.CorePrimitive) {
-            "Only a CorePrimitive packet may retain prepared CorePrimitive authority"
-        }
+        require(
+            semanticPayload is GPUDrawSemanticPayload.CorePrimitive ||
+                role == GPUDrawPacketRole.ClipProducer &&
+                authority.structuralPipelineKey.role ==
+                GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer,
+        ) { "Only a CorePrimitive or coverage-mask producer packet may retain prepared authority" }
         require(renderPipelineKey == authority.renderPipelineKey) {
             "CorePrimitive prepared authority must match the packet render pipeline key"
+        }
+        if (role == GPUDrawPacketRole.ClipProducer) {
+            val coverageSeal = requireNotNull(authority.coverageMaskUniformSlabSeal) {
+                "Coverage-mask producer prepared authority requires its complete uniform slab seal"
+            }
+            require(authority.uniformSlabSeal == null &&
+                authority.analyticClipUniformSeal == null &&
+                authority.analyticIntersectionUniformSeal == null
+            ) { "Coverage-mask producer prepared authority forbids incompatible uniform seals" }
+            val producerSlot = coverageSeal.producerSlots.singleOrNull { slot ->
+                slot.packetId == packetId && slot.commandId == commandIdValue
+            }
+            require(producerSlot != null &&
+                producerSlot.structuralPipelineKey == authority.structuralPipelineKey &&
+                producerSlot.renderPipelineKey == authority.renderPipelineKey &&
+                producerSlot.bindingLayoutHash == bindingLayoutHash
+            ) { "Coverage-mask producer prepared authority must match its exact sealed producer slot" }
         }
         corePrimitivePreparedAuthority = authority
         return this
