@@ -403,6 +403,50 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
 
             override fun createClipDepthStencilView(texture: GPUTexture): GPUTextureView =
                 texture.createView()
+
+            override fun createCoverageMaskTexture(
+                requirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement,
+            ): GPUTexture = device.createTexture(
+                TextureDescriptor(
+                    size = Extent3D(requirement.width.toUInt(), requirement.height.toUInt()),
+                    format = requirement.format,
+                    usage = requirement.usage,
+                    sampleCount = requirement.sampleCount.toUInt(),
+                    label = "Kanvas.session.corePrimitive.framePool.coverageMask",
+                ),
+            )
+
+            override fun createCoverageMaskView(texture: GPUTexture): GPUTextureView =
+                texture.createView()
+
+            override fun createCoverageMaskConsumerBindGroup(
+                uniformBuffer: GPUBuffer,
+                coverageMaskView: GPUTextureView,
+            ): GPUBindGroup {
+                val componentIdentity =
+                    PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_COMPONENT_IDENTITY
+                return device.createBindGroup(
+                    BindGroupDescriptor(
+                        label = "Kanvas.session.corePrimitive.framePool.coverageMask.consumerBindGroup",
+                        layout = checkNotNull(
+                            sharedComponentsByIdentity[componentIdentity]?.bindGroupLayout,
+                        ) {
+                            "Coverage-mask consumer components must exist before frame-pool allocation"
+                        },
+                        entries = listOf(
+                            BindGroupEntry(
+                                binding = 0u,
+                                resource = BufferBinding(
+                                    buffer = uniformBuffer,
+                                    offset = 0uL,
+                                    size = componentIdentity.uniformBindingSizeBytes(),
+                                ),
+                            ),
+                            BindGroupEntry(binding = 1u, resource = coverageMaskView),
+                        ),
+                    ),
+                )
+            }
         },
     )
 

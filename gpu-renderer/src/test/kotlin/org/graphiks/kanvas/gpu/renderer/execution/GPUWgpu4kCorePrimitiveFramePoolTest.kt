@@ -7,7 +7,6 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
 import java.lang.reflect.Proxy
-import java.util.Collections
 import java.util.IdentityHashMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -716,6 +715,417 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
     }
 
     @Test
+    fun `coverage mask requirement is exact rgba8 single sample render attachment and texture binding`() {
+        val exactUsage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding
+
+        val exact = coverageMask(width = 63, height = 47)
+
+        assertEquals(63, exact.width)
+        assertEquals(47, exact.height)
+        assertEquals(GPUTextureFormat.RGBA8Unorm, exact.format)
+        assertEquals(1, exact.sampleCount)
+        assertEquals(exactUsage, exact.usage)
+        listOf(
+            { exact.copy(width = 0) },
+            { exact.copy(height = 0) },
+            { exact.copy(format = GPUTextureFormat.BGRA8Unorm) },
+            { exact.copy(sampleCount = 4) },
+            { exact.copy(usage = GPUTextureUsage.RenderAttachment) },
+            { exact.copy(usage = GPUTextureUsage.TextureBinding) },
+            { exact.copy(usage = exactUsage or GPUTextureUsage.CopySrc) },
+        ).forEach { invalid -> assertFailsWith<IllegalArgumentException> { invalid() } }
+    }
+
+    @Test
+    fun `coverage mask requirements refuse path and clip depth stencil before native creation`() {
+        listOf<() -> GPUWgpu4kCorePrimitiveFramePoolRequirements>(
+            {
+                requirements(
+                    coverageMask = coverageMask(32, 32),
+                    pathDepthStencil = pathDepthStencil(32, 32),
+                    componentIdentity =
+                        PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
+                )
+            },
+            {
+                requirements(
+                    coverageMask = coverageMask(32, 32),
+                    clipDepthStencil = clipDepthStencil(32, 32),
+                    componentIdentity =
+                        PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
+                )
+            },
+        ).forEach { invalidRequirements ->
+            val factory = FakeFactory()
+            val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+
+            assertFailsWith<IllegalArgumentException> { pool.acquire(invalidRequirements()) }
+
+            assertTrue(factory.creations.isEmpty())
+            pool.close()
+        }
+    }
+
+    @Test
+    fun `coverage mask initial creation failures retire every unpublished handle and retry slot zero`() {
+        val allocationOrder = listOf(
+            GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer,
+            GPUWgpu4kCorePrimitiveFramePoolResource.IndexBuffer,
+            GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer,
+            GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskTexture,
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskView,
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskConsumerBindGroup,
+        )
+        val failurePoints = listOf(
+            GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer,
+            GPUWgpu4kCorePrimitiveFramePoolResource.IndexBuffer,
+            GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer,
+            GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskTexture,
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskView,
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskConsumerBindGroup,
+        )
+        failurePoints.forEach { failingResource ->
+            val factory = FakeFactory()
+            val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+            val request = maskRequirements(coverageMask(63, 47))
+            factory.failNext(failingResource)
+
+            val refused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(
+                pool.acquire(request),
+            )
+
+            assertEquals(
+                failingResource,
+                assertIs<GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed>(
+                    refused.reason,
+                ).resource,
+            )
+            val unpublished = factory.creations.toList()
+            assertEquals(
+                allocationOrder.takeWhile { resource -> resource != failingResource },
+                unpublished.map(CreatedHandle::resource),
+                failingResource.name,
+            )
+            unpublished.forEach { created ->
+                assertEquals(1, factory.closeAttempts(created.handle), failingResource.name)
+            }
+
+            val retried = pool.acquire(request).acquiredLease()
+            assertEquals(0, retried.slotId, failingResource.name)
+            retried.rollbackBeforeSubmit()
+            pool.close()
+            unpublished.forEach { created ->
+                assertEquals(1, factory.closeAttempts(created.handle), failingResource.name)
+            }
+        }
+    }
+
+    @Test
+    fun `coverage mask creates producer and consumer bindings once and reuses the exact slot`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val mask = coverageMask(width = 63, height = 47)
+        val request = requirements(
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
+            coverageMask = mask,
+        )
+
+        val first = pool.acquire(request).acquiredLease()
+        val firstMask = requireNotNull(first.handles.coverageMask)
+
+        assertEquals(mask, firstMask.requirement)
+        assertEquals(PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
+            first.handles.componentIdentity)
+        assertEquals(
+            listOf(
+                GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.IndexBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
+                GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskTexture,
+                GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskView,
+                GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskConsumerBindGroup,
+            ),
+            factory.creations.map(CreatedHandle::resource),
+        )
+        first.rollbackBeforeSubmit()
+
+        val reused = pool.acquire(request).acquiredLease()
+        val reusedMask = requireNotNull(reused.handles.coverageMask)
+        assertEquals(first.slotId, reused.slotId)
+        assertSame(first.handles.uniformBuffer, reused.handles.uniformBuffer)
+        assertSame(first.handles.bindGroup, reused.handles.bindGroup)
+        assertSame(firstMask.texture, reusedMask.texture)
+        assertSame(firstMask.view, reusedMask.view)
+        assertSame(firstMask.consumerBindGroup, reusedMask.consumerBindGroup)
+        assertEquals(7, factory.creations.size)
+
+        reused.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `coverage mask resize replaces only texture view and consumer bind group transactionally`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val initial = pool.acquire(maskRequirements(coverageMask(63, 47))).acquiredLease()
+        val initialMask = requireNotNull(initial.handles.coverageMask)
+        initial.rollbackBeforeSubmit()
+
+        val resized = pool.acquire(maskRequirements(coverageMask(65, 49))).acquiredLease()
+        val resizedMask = requireNotNull(resized.handles.coverageMask)
+
+        assertSame(initial.handles.vertexBuffer, resized.handles.vertexBuffer)
+        assertSame(initial.handles.indexBuffer, resized.handles.indexBuffer)
+        assertSame(initial.handles.uniformBuffer, resized.handles.uniformBuffer)
+        assertSame(initial.handles.bindGroup, resized.handles.bindGroup)
+        assertNotSame(initialMask.texture, resizedMask.texture)
+        assertNotSame(initialMask.view, resizedMask.view)
+        assertNotSame(initialMask.consumerBindGroup, resizedMask.consumerBindGroup)
+        assertEquals(1, factory.closeAttempts(initialMask.consumerBindGroup))
+        assertEquals(1, factory.closeAttempts(initialMask.view))
+        assertEquals(1, factory.closeAttempts(initialMask.texture))
+        assertEquals(0, factory.closeAttempts(initial.handles.bindGroup))
+        assertEquals(0, factory.closeAttempts(initial.handles.uniformBuffer))
+
+        resized.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `coverage mask uniform growth replaces both bind groups but preserves texture and geometry`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val mask = coverageMask(63, 47)
+        val initial = pool.acquire(maskRequirements(mask)).acquiredLease()
+        val initialMask = requireNotNull(initial.handles.coverageMask)
+        initial.rollbackBeforeSubmit()
+
+        val grown = pool.acquire(maskRequirements(mask, uniformBytes = 4L * 1024L + 1L)).acquiredLease()
+        val grownMask = requireNotNull(grown.handles.coverageMask)
+
+        assertSame(initial.handles.vertexBuffer, grown.handles.vertexBuffer)
+        assertSame(initial.handles.indexBuffer, grown.handles.indexBuffer)
+        assertNotSame(initial.handles.uniformBuffer, grown.handles.uniformBuffer)
+        assertNotSame(initial.handles.bindGroup, grown.handles.bindGroup)
+        assertSame(initialMask.texture, grownMask.texture)
+        assertSame(initialMask.view, grownMask.view)
+        assertNotSame(initialMask.consumerBindGroup, grownMask.consumerBindGroup)
+        assertEquals(1, factory.closeAttempts(initial.handles.bindGroup))
+        assertEquals(1, factory.closeAttempts(initialMask.consumerBindGroup))
+        assertEquals(1, factory.closeAttempts(initial.handles.uniformBuffer))
+        assertEquals(0, factory.closeAttempts(initialMask.view))
+        assertEquals(0, factory.closeAttempts(initialMask.texture))
+
+        grown.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `coverage mask combined resize and uniform growth publishes one complete replacement`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val initial = pool.acquire(maskRequirements(coverageMask(63, 47))).acquiredLease()
+        val initialMask = requireNotNull(initial.handles.coverageMask)
+        initial.rollbackBeforeSubmit()
+
+        val grown = pool.acquire(
+            maskRequirements(coverageMask(65, 49), uniformBytes = 4L * 1024L + 1L),
+        ).acquiredLease()
+        val grownMask = requireNotNull(grown.handles.coverageMask)
+
+        assertEquals(initial.slotId, grown.slotId)
+        assertSame(initial.handles.vertexBuffer, grown.handles.vertexBuffer)
+        assertSame(initial.handles.indexBuffer, grown.handles.indexBuffer)
+        assertNotSame(initial.handles.uniformBuffer, grown.handles.uniformBuffer)
+        assertNotSame(initial.handles.bindGroup, grown.handles.bindGroup)
+        assertNotSame(initialMask.texture, grownMask.texture)
+        assertNotSame(initialMask.view, grownMask.view)
+        assertNotSame(initialMask.consumerBindGroup, grownMask.consumerBindGroup)
+        listOf(
+            initial.handles.uniformBuffer,
+            initial.handles.bindGroup,
+            initialMask.texture,
+            initialMask.view,
+            initialMask.consumerBindGroup,
+        ).forEach { retired -> assertEquals(1, factory.closeAttempts(retired)) }
+
+        grown.rollbackBeforeSubmit()
+        val reused = pool.acquire(
+            maskRequirements(coverageMask(65, 49), uniformBytes = 4L * 1024L + 1L),
+        ).acquiredLease()
+        assertEquals(initial.slotId, reused.slotId)
+        assertSame(grown.handles.uniformBuffer, reused.handles.uniformBuffer)
+        assertSame(grown.handles.bindGroup, reused.handles.bindGroup)
+        assertSame(grownMask.texture, requireNotNull(reused.handles.coverageMask).texture)
+        assertSame(grownMask.view, requireNotNull(reused.handles.coverageMask).view)
+        assertSame(
+            grownMask.consumerBindGroup,
+            requireNotNull(reused.handles.coverageMask).consumerBindGroup,
+        )
+        reused.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `coverage mask combined growth failures preserve the published slot without partial replacement`() {
+        listOf(
+            GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer,
+            GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskTexture,
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskView,
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskConsumerBindGroup,
+        ).forEach { failingResource ->
+            val factory = FakeFactory()
+            val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+            val initialRequirement = coverageMask(63, 47)
+            val initial = pool.acquire(maskRequirements(initialRequirement)).acquiredLease()
+            val initialMask = requireNotNull(initial.handles.coverageMask)
+            initial.rollbackBeforeSubmit()
+            val creationCountBeforeFailure = factory.creations.size
+            factory.failNext(failingResource)
+
+            val refused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused>(
+                pool.acquire(maskRequirements(coverageMask(65, 49), uniformBytes = 4L * 1024L + 1L)),
+            )
+
+            assertEquals(
+                failingResource,
+                assertIs<GPUWgpu4kCorePrimitiveFramePoolRefusal.AllocationFailed>(refused.reason).resource,
+            )
+            assertEquals(0, factory.closeAttempts(initial.handles.uniformBuffer), failingResource.name)
+            assertEquals(0, factory.closeAttempts(initial.handles.bindGroup), failingResource.name)
+            assertEquals(0, factory.closeAttempts(initialMask.consumerBindGroup), failingResource.name)
+            assertEquals(0, factory.closeAttempts(initialMask.view), failingResource.name)
+            assertEquals(0, factory.closeAttempts(initialMask.texture), failingResource.name)
+            val unpublished = factory.creations.drop(creationCountBeforeFailure)
+            val replacementOrder = listOf(
+                GPUWgpu4kCorePrimitiveFramePoolResource.UniformBuffer,
+                GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup,
+                GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskTexture,
+                GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskView,
+                GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskConsumerBindGroup,
+            )
+            assertEquals(
+                replacementOrder.takeWhile { resource -> resource != failingResource },
+                unpublished.map(CreatedHandle::resource),
+                failingResource.name,
+            )
+            unpublished.forEach { created ->
+                assertEquals(1, factory.closeAttempts(created.handle), failingResource.name)
+            }
+
+            val reused = pool.acquire(maskRequirements(initialRequirement)).acquiredLease()
+            val reusedMask = requireNotNull(reused.handles.coverageMask)
+            assertEquals(initial.slotId, reused.slotId)
+            assertSame(initial.handles.vertexBuffer, reused.handles.vertexBuffer)
+            assertSame(initial.handles.indexBuffer, reused.handles.indexBuffer)
+            assertSame(initial.handles.uniformBuffer, reused.handles.uniformBuffer)
+            assertSame(initial.handles.bindGroup, reused.handles.bindGroup)
+            assertSame(initialMask.consumerBindGroup, reusedMask.consumerBindGroup)
+            assertSame(initialMask.view, reusedMask.view)
+            assertSame(initialMask.texture, reusedMask.texture)
+            reused.rollbackBeforeSubmit()
+            pool.close()
+            unpublished.forEach { created ->
+                assertEquals(1, factory.closeAttempts(created.handle), failingResource.name)
+            }
+        }
+    }
+
+    @Test
+    fun `pending retired mask consumer remains a prerequisite of its shared uniform`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val initial = pool.acquire(maskRequirements(coverageMask(63, 47))).acquiredLease()
+        val initialMask = requireNotNull(initial.handles.coverageMask)
+        initial.rollbackBeforeSubmit()
+        factory.failClose(initialMask.consumerBindGroup, attempts = 2)
+
+        val resized = pool.acquire(maskRequirements(coverageMask(65, 49))).acquiredLease()
+        val resizedMask = requireNotNull(resized.handles.coverageMask)
+        assertEquals(1, factory.closeAttempts(initialMask.consumerBindGroup))
+        assertEquals(0, factory.closeAttempts(initial.handles.uniformBuffer))
+        resized.rollbackBeforeSubmit()
+
+        assertFailsWith<GPUWgpu4kCorePrimitiveFramePoolCloseFailure> { pool.close() }
+
+        assertEquals(2, factory.closeAttempts(initialMask.consumerBindGroup))
+        assertEquals(1, factory.closeAttempts(resizedMask.consumerBindGroup))
+        assertEquals(1, factory.closeAttempts(resized.handles.bindGroup))
+        assertEquals(0, factory.closeAttempts(initial.handles.uniformBuffer))
+        assertEquals(0, factory.closeAttempts(initialMask.view))
+        assertEquals(0, factory.closeAttempts(initialMask.texture))
+
+        pool.close()
+
+        assertEquals(3, factory.closeAttempts(initialMask.consumerBindGroup))
+        assertEquals(1, factory.closeAttempts(resizedMask.consumerBindGroup))
+        assertEquals(1, factory.closeAttempts(resized.handles.bindGroup))
+        assertEquals(1, factory.closeAttempts(initial.handles.uniformBuffer))
+        assertEquals(1, factory.closeAttempts(initialMask.view))
+        assertEquals(1, factory.closeAttempts(initialMask.texture))
+        assertTrue(
+            factory.closeEvents.lastIndexOf("close:coverageMaskConsumerBindGroup") <
+                factory.closeEvents.indexOf("close:uniform"),
+        )
+    }
+
+    @Test
+    fun `coverage mask completion reuses while uncertain completion quarantines the whole slot`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val request = maskRequirements(coverageMask(32, 32))
+        val completed = pool.acquire(request).acquiredLease()
+        completed.markSubmitted()
+        completed.completeSuccessfully()
+
+        val reused = pool.acquire(request).acquiredLease()
+        assertSame(requireNotNull(completed.handles.coverageMask).texture,
+            requireNotNull(reused.handles.coverageMask).texture)
+        reused.markSubmitted()
+        reused.quarantineUncertain()
+
+        val replacement = pool.acquire(request).acquiredLease()
+        assertNotSame(requireNotNull(reused.handles.coverageMask).texture,
+            requireNotNull(replacement.handles.coverageMask).texture)
+        replacement.rollbackBeforeSubmit()
+        pool.close()
+    }
+
+    @Test
+    fun `failed coverage consumer bind group close blocks uniform view and texture then retries exactly`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val lease = pool.acquire(maskRequirements(coverageMask(32, 32))).acquiredLease()
+        val mask = requireNotNull(lease.handles.coverageMask)
+        lease.rollbackBeforeSubmit()
+        factory.failCloseOnce(mask.consumerBindGroup)
+
+        assertFailsWith<GPUWgpu4kCorePrimitiveFramePoolCloseFailure> { pool.close() }
+
+        assertEquals(1, factory.closeAttempts(mask.consumerBindGroup))
+        assertEquals(1, factory.closeAttempts(lease.handles.bindGroup))
+        assertEquals(0, factory.closeAttempts(lease.handles.uniformBuffer))
+        assertEquals(0, factory.closeAttempts(mask.view))
+        assertEquals(0, factory.closeAttempts(mask.texture))
+
+        pool.close()
+
+        assertEquals(2, factory.closeAttempts(mask.consumerBindGroup))
+        assertEquals(1, factory.closeAttempts(lease.handles.bindGroup))
+        assertEquals(1, factory.closeAttempts(lease.handles.uniformBuffer))
+        assertEquals(1, factory.closeAttempts(mask.view))
+        assertEquals(1, factory.closeAttempts(mask.texture))
+        assertTrue(factory.closeEvents.indexOf("close:coverageMaskConsumerBindGroup") <
+            factory.closeEvents.lastIndexOf("close:coverageMaskView"))
+        assertTrue(factory.closeEvents.lastIndexOf("close:coverageMaskView") <
+            factory.closeEvents.lastIndexOf("close:coverageMaskTexture"))
+    }
+
+    @Test
     fun `generation mismatch and a fourth concurrent checkout are typed non blocking refusals`() {
         val factory = FakeFactory()
         val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
@@ -1024,6 +1434,44 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         assertEquals(1, factory.closeAttempts(grown.handles.vertexBuffer))
     }
 
+    @Test
+    fun `pending retired main bind group remains a prerequisite of its shared uniform`() {
+        val factory = FakeFactory()
+        val pool = GPUWgpu4kCorePrimitiveFramePool(GENERATION, factory)
+        val uniform32 = pool.acquire(requirements()).acquiredLease()
+        uniform32.rollbackBeforeSubmit()
+        factory.failClose(uniform32.handles.bindGroup, attempts = 2)
+
+        val uniform64 = pool.acquire(
+            requirements(componentIdentity = PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY),
+        ).acquiredLease()
+
+        assertEquals(uniform32.slotId, uniform64.slotId)
+        assertSame(uniform32.handles.uniformBuffer, uniform64.handles.uniformBuffer)
+        assertNotSame(uniform32.handles.bindGroup, uniform64.handles.bindGroup)
+        assertEquals(1, factory.closeAttempts(uniform32.handles.bindGroup))
+        assertEquals(0, factory.closeAttempts(uniform32.handles.uniformBuffer))
+        uniform64.rollbackBeforeSubmit()
+
+        assertFailsWith<GPUWgpu4kCorePrimitiveFramePoolCloseFailure> { pool.close() }
+
+        assertEquals(2, factory.closeAttempts(uniform32.handles.bindGroup))
+        assertEquals(1, factory.closeAttempts(uniform64.handles.bindGroup))
+        assertEquals(0, factory.closeAttempts(uniform32.handles.uniformBuffer))
+
+        pool.close()
+
+        assertEquals(3, factory.closeAttempts(uniform32.handles.bindGroup))
+        assertEquals(1, factory.closeAttempts(uniform64.handles.bindGroup))
+        assertEquals(1, factory.closeAttempts(uniform32.handles.uniformBuffer))
+        assertEquals(1, factory.closeAttempts(uniform64.handles.indexBuffer))
+        assertEquals(1, factory.closeAttempts(uniform64.handles.vertexBuffer))
+        assertTrue(
+            factory.closeEvents.lastIndexOf("close:bindGroup") <
+                factory.closeEvents.indexOf("close:uniform"),
+        )
+    }
+
     private fun GPUWgpu4kCorePrimitiveFramePoolCheckout.acquiredLease() =
         assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(this).lease
 
@@ -1034,6 +1482,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         uniformBytes: Long = 1L,
         pathDepthStencil: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
         clipDepthStencil: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
+        coverageMask: GPUWgpu4kCorePrimitiveCoverageMaskRequirement? = null,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
             PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
     ) = GPUWgpu4kCorePrimitiveFramePoolRequirements(
@@ -1044,6 +1493,16 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         pathDepthStencil = pathDepthStencil,
         componentIdentity = componentIdentity,
         clipDepthStencil = clipDepthStencil,
+        coverageMask = coverageMask,
+    )
+
+    private fun maskRequirements(
+        coverageMask: GPUWgpu4kCorePrimitiveCoverageMaskRequirement,
+        uniformBytes: Long = 1L,
+    ) = requirements(
+        uniformBytes = uniformBytes,
+        coverageMask = coverageMask,
+        componentIdentity = PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
     )
 
     private fun pathDepthStencil(
@@ -1068,12 +1527,22 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         usage = GPUTextureUsage.RenderAttachment,
     )
 
+    private fun coverageMask(
+        width: Int,
+        height: Int,
+    ) = GPUWgpu4kCorePrimitiveCoverageMaskRequirement(
+        width = width,
+        height = height,
+        format = GPUTextureFormat.RGBA8Unorm,
+        sampleCount = 1,
+        usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+    )
+
     private class FakeFactory : GPUWgpu4kCorePrimitiveFramePoolFactory {
         val creations = mutableListOf<CreatedHandle>()
         val closeEvents = mutableListOf<String>()
         private val closeCounts = IdentityHashMap<AutoCloseable, Int>()
-        private val closeFailures = Collections.newSetFromMap(IdentityHashMap<AutoCloseable, Boolean>())
-        private val consumedCloseFailures = Collections.newSetFromMap(IdentityHashMap<AutoCloseable, Boolean>())
+        private val closeFailuresRemaining = IdentityHashMap<AutoCloseable, Int>()
         private var nextFailure: GPUWgpu4kCorePrimitiveFramePoolResource? = null
 
         override fun createVertexBuffer(capacityBytes: Long): GPUBuffer =
@@ -1125,12 +1594,41 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             GPUTextureView::class.java,
         )
 
+        override fun createCoverageMaskTexture(
+            requirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement,
+        ): GPUTexture = create(
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskTexture,
+            "coverageMaskTexture",
+            GPUTexture::class.java,
+            coverageMaskRequirement = requirement,
+        )
+
+        override fun createCoverageMaskView(texture: GPUTexture): GPUTextureView = create(
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskView,
+            "coverageMaskView",
+            GPUTextureView::class.java,
+        )
+
+        override fun createCoverageMaskConsumerBindGroup(
+            uniformBuffer: GPUBuffer,
+            coverageMaskView: GPUTextureView,
+        ): GPUBindGroup = create(
+            GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskConsumerBindGroup,
+            "coverageMaskConsumerBindGroup",
+            GPUBindGroup::class.java,
+        )
+
         fun failNext(resource: GPUWgpu4kCorePrimitiveFramePoolResource) {
             nextFailure = resource
         }
 
         fun failCloseOnce(handle: AutoCloseable) {
-            closeFailures += handle
+            failClose(handle, attempts = 1)
+        }
+
+        fun failClose(handle: AutoCloseable, attempts: Int) {
+            require(attempts > 0)
+            closeFailuresRemaining[handle] = attempts
         }
 
         fun closeAttempts(handle: AutoCloseable): Int = closeCounts.getOrDefault(handle, 0)
@@ -1142,6 +1640,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
             type: Class<T>,
             pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
             clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
+            coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement? = null,
             componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity? = null,
         ): T {
             if (nextFailure == resource) {
@@ -1154,7 +1653,9 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
                         val closeable = proxy as AutoCloseable
                         closeCounts[closeable] = closeCounts.getOrDefault(closeable, 0) + 1
                         closeEvents += "close:$label"
-                        if (closeable in closeFailures && consumedCloseFailures.add(closeable)) {
+                        val remainingFailures = closeFailuresRemaining.getOrDefault(closeable, 0)
+                        if (remainingFailures > 0) {
+                            closeFailuresRemaining[closeable] = remainingFailures - 1
                             error("injected $label close failure")
                         }
                         null
@@ -1170,6 +1671,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
                 handle,
                 pathDepthStencilRequirement,
                 clipDepthStencilRequirement,
+                coverageMaskRequirement,
                 componentIdentity,
             )
             return handle
@@ -1193,6 +1695,7 @@ class GPUWgpu4kCorePrimitiveFramePoolTest {
         val handle: AutoCloseable,
         val pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement? = null,
         val clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
+        val coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement? = null,
         val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity? = null,
     )
 

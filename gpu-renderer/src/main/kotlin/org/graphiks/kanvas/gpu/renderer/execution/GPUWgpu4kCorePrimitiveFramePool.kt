@@ -17,6 +17,9 @@ internal enum class GPUWgpu4kCorePrimitiveFramePoolResource {
     PathDepthStencilView,
     ClipDepthStencilTexture,
     ClipDepthStencilView,
+    CoverageMaskTexture,
+    CoverageMaskView,
+    CoverageMaskConsumerBindGroup,
 }
 
 /** Native allocation seam. The pool owns every handle returned by this factory. */
@@ -36,6 +39,14 @@ internal interface GPUWgpu4kCorePrimitiveFramePoolFactory {
         requirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement,
     ): GPUTexture
     fun createClipDepthStencilView(texture: GPUTexture): GPUTextureView
+    fun createCoverageMaskTexture(
+        requirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement,
+    ): GPUTexture
+    fun createCoverageMaskView(texture: GPUTexture): GPUTextureView
+    fun createCoverageMaskConsumerBindGroup(
+        uniformBuffer: GPUBuffer,
+        coverageMaskView: GPUTextureView,
+    ): GPUBindGroup
 }
 
 internal data class GPUWgpu4kCorePrimitivePathDepthStencilRequirement(
@@ -84,6 +95,29 @@ internal data class GPUWgpu4kCorePrimitiveClipDepthStencilRequirement(
     }
 }
 
+internal data class GPUWgpu4kCorePrimitiveCoverageMaskRequirement(
+    val width: Int,
+    val height: Int,
+    val format: GPUTextureFormat,
+    val sampleCount: Int,
+    val usage: GPUTextureUsage,
+) {
+    init {
+        require(width > 0 && height > 0) {
+            "CorePrimitive coverage-mask extent must be positive"
+        }
+        require(format == GPUTextureFormat.RGBA8Unorm) {
+            "CorePrimitive coverage-mask format must be RGBA8Unorm"
+        }
+        require(sampleCount == 1) {
+            "CorePrimitive coverage mask must be single-sample"
+        }
+        require(usage == (GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding)) {
+            "CorePrimitive coverage-mask usage must be exactly RenderAttachment or TextureBinding"
+        }
+    }
+}
+
 internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
     val deviceGeneration: GPUDeviceGenerationID,
     val vertexBytes: Long,
@@ -93,7 +127,20 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
     val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
         PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
     val clipDepthStencil: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
-)
+    val coverageMask: GPUWgpu4kCorePrimitiveCoverageMaskRequirement? = null,
+) {
+    init {
+        require(
+            coverageMask == null ||
+                componentIdentity == PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
+        ) {
+            "Coverage-mask frame slots require the exact producer component identity"
+        }
+        require(coverageMask == null || (pathDepthStencil == null && clipDepthStencil == null)) {
+            "Coverage-mask frame slots are color-only and refuse depth-stencil attachments"
+        }
+    }
+}
 
 internal data class GPUWgpu4kCorePrimitiveFramePoolCapacities(
     val vertexBytes: Long,
@@ -116,6 +163,7 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolHandles(
     val componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity =
         PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
     val clipDepthStencil: GPUWgpu4kCorePrimitiveClipDepthStencilHandles? = null,
+    val coverageMask: GPUWgpu4kCorePrimitiveCoverageMaskHandles? = null,
 )
 
 internal data class GPUWgpu4kCorePrimitivePathDepthStencilHandles(
@@ -128,6 +176,13 @@ internal data class GPUWgpu4kCorePrimitiveClipDepthStencilHandles(
     val requirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement,
     val texture: GPUTexture,
     val view: GPUTextureView,
+)
+
+internal data class GPUWgpu4kCorePrimitiveCoverageMaskHandles(
+    val requirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement,
+    val texture: GPUTexture,
+    val view: GPUTextureView,
+    val consumerBindGroup: GPUBindGroup,
 )
 
 internal sealed interface GPUWgpu4kCorePrimitiveFramePoolRefusal {
@@ -230,7 +285,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
 
     private class PendingCloseHandle(
         val handle: AutoCloseable,
-        val prerequisite: PendingCloseHandle? = null,
+        val prerequisites: List<PendingCloseHandle> = emptyList(),
+        val dependentUniformBuffer: GPUBuffer? = null,
     ) {
         var closed: Boolean = false
     }
@@ -269,6 +325,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             requiredCapacities,
             requirements.pathDepthStencil,
             requirements.clipDepthStencil,
+            requirements.coverageMask,
             requirements.componentIdentity,
         )
         if (slot != null &&
@@ -276,6 +333,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 !slot.handles.matches(
                     requirements.pathDepthStencil,
                     requirements.clipDepthStencil,
+                    requirements.coverageMask,
                     requirements.componentIdentity,
                 ))
         ) {
@@ -284,6 +342,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 requiredCapacities,
                 requirements.pathDepthStencil,
                 requirements.clipDepthStencil,
+                requirements.coverageMask,
                 requirements.componentIdentity,
             )?.let { refusal ->
                 return GPUWgpu4kCorePrimitiveFramePoolCheckout.Refused(refusal)
@@ -301,6 +360,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     requiredCapacities,
                     requirements.pathDepthStencil,
                     requirements.clipDepthStencil,
+                    requirements.coverageMask,
                     requirements.componentIdentity,
                 )
             ) {
@@ -389,6 +449,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     slot.handles.pathDepthStencil?.texture,
                     slot.handles.clipDepthStencil?.view,
                     slot.handles.clipDepthStencil?.texture,
+                    slot.handles.coverageMask?.consumerBindGroup,
+                    slot.handles.uniformBuffer.takeIf { slot.handles.coverageMask != null },
+                    slot.handles.coverageMask?.view,
+                    slot.handles.coverageMask?.texture,
+                    slot.handles.uniformBuffer,
                 )
             }
             slots.clear()
@@ -425,6 +490,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         capacities: GPUWgpu4kCorePrimitiveFramePoolCapacities,
         pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
         clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement?,
+        coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): SlotCreation {
         var vertex: GPUBuffer? = null
@@ -435,6 +501,9 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         var pathDepthStencilView: GPUTextureView? = null
         var clipDepthStencilTexture: GPUTexture? = null
         var clipDepthStencilView: GPUTextureView? = null
+        var coverageMaskTexture: GPUTexture? = null
+        var coverageMaskView: GPUTextureView? = null
+        var coverageMaskConsumerBindGroup: GPUBindGroup? = null
         return try {
             vertex = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer) {
                 factory.createVertexBuffer(capacities.vertexBytes)
@@ -472,6 +541,26 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     factory.createClipDepthStencilView(requireNotNull(clipDepthStencilTexture))
                 }
             }
+            if (coverageMaskRequirement != null) {
+                coverageMaskTexture = allocate(
+                    GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskTexture,
+                ) {
+                    factory.createCoverageMaskTexture(coverageMaskRequirement)
+                }
+                coverageMaskView = allocate(
+                    GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskView,
+                ) {
+                    factory.createCoverageMaskView(requireNotNull(coverageMaskTexture))
+                }
+                coverageMaskConsumerBindGroup = allocate(
+                    GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskConsumerBindGroup,
+                ) {
+                    factory.createCoverageMaskConsumerBindGroup(
+                        requireNotNull(uniform),
+                        requireNotNull(coverageMaskView),
+                    )
+                }
+            }
             SlotCreation.Created(
                 Slot(
                     slotId,
@@ -496,6 +585,14 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                                 requireNotNull(clipDepthStencilView),
                             )
                         },
+                        coverageMaskRequirement?.let { requirement ->
+                            GPUWgpu4kCorePrimitiveCoverageMaskHandles(
+                                requirement,
+                                requireNotNull(coverageMaskTexture),
+                                requireNotNull(coverageMaskView),
+                                requireNotNull(coverageMaskConsumerBindGroup),
+                            )
+                        },
                     ),
                 ),
             )
@@ -509,6 +606,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 pathDepthStencilTexture,
                 clipDepthStencilView,
                 clipDepthStencilTexture,
+                coverageMaskConsumerBindGroup,
+                uniform.takeIf { coverageMaskConsumerBindGroup != null },
+                coverageMaskView,
+                coverageMaskTexture,
+                uniform.takeIf { bindGroup != null },
             )
             SlotCreation.Refused(failure.refusal())
         }
@@ -519,6 +621,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         capacities: GPUWgpu4kCorePrimitiveFramePoolCapacities,
         pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
         clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement?,
+        coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): GPUWgpu4kCorePrimitiveFramePoolRefusal? {
         val oldHandles = slot.handles
@@ -530,12 +633,20 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         var pathDepthStencilView: GPUTextureView? = null
         var clipDepthStencilTexture: GPUTexture? = null
         var clipDepthStencilView: GPUTextureView? = null
+        var coverageMaskTexture: GPUTexture? = null
+        var coverageMaskView: GPUTextureView? = null
+        var coverageMaskConsumerBindGroup: GPUBindGroup? = null
         val replacePathDepthStencil = pathDepthStencilRequirement != null &&
             oldHandles.pathDepthStencil?.requirement != pathDepthStencilRequirement
         val replaceClipDepthStencil = clipDepthStencilRequirement != null &&
             oldHandles.clipDepthStencil?.requirement != clipDepthStencilRequirement
+        val replaceCoverageMask = coverageMaskRequirement != null &&
+            oldHandles.coverageMask?.requirement != coverageMaskRequirement
         val replaceBindGroup = capacities.uniformBytes > slot.capacities.uniformBytes ||
             oldHandles.componentIdentity != componentIdentity
+        val replaceCoverageMaskConsumerBindGroup =
+            (oldHandles.coverageMask != null &&
+                capacities.uniformBytes > slot.capacities.uniformBytes) || replaceCoverageMask
         return try {
             if (capacities.vertexBytes > slot.capacities.vertexBytes) {
                 vertex = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer) {
@@ -581,6 +692,28 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     factory.createClipDepthStencilView(requireNotNull(clipDepthStencilTexture))
                 }
             }
+            if (replaceCoverageMask) {
+                coverageMaskTexture = allocate(
+                    GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskTexture,
+                ) {
+                    factory.createCoverageMaskTexture(requireNotNull(coverageMaskRequirement))
+                }
+                coverageMaskView = allocate(
+                    GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskView,
+                ) {
+                    factory.createCoverageMaskView(requireNotNull(coverageMaskTexture))
+                }
+            }
+            if (replaceCoverageMaskConsumerBindGroup) {
+                coverageMaskConsumerBindGroup = allocate(
+                    GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskConsumerBindGroup,
+                ) {
+                    factory.createCoverageMaskConsumerBindGroup(
+                        uniform ?: oldHandles.uniformBuffer,
+                        coverageMaskView ?: requireNotNull(oldHandles.coverageMask).view,
+                    )
+                }
+            }
             val replacement = GPUWgpu4kCorePrimitiveFramePoolHandles(
                 vertex ?: oldHandles.vertexBuffer,
                 index ?: oldHandles.indexBuffer,
@@ -605,6 +738,20 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 } else {
                     oldHandles.clipDepthStencil
                 },
+                if (replaceCoverageMask) {
+                    GPUWgpu4kCorePrimitiveCoverageMaskHandles(
+                        requireNotNull(coverageMaskRequirement),
+                        requireNotNull(coverageMaskTexture),
+                        requireNotNull(coverageMaskView),
+                        requireNotNull(coverageMaskConsumerBindGroup),
+                    )
+                } else if (replaceCoverageMaskConsumerBindGroup) {
+                    requireNotNull(oldHandles.coverageMask).copy(
+                        consumerBindGroup = requireNotNull(coverageMaskConsumerBindGroup),
+                    )
+                } else {
+                    oldHandles.coverageMask
+                },
             )
             slot.handles = replacement
             slot.capacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(
@@ -621,6 +768,13 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 oldHandles.pathDepthStencil?.texture.takeIf { replacePathDepthStencil },
                 oldHandles.clipDepthStencil?.view.takeIf { replaceClipDepthStencil },
                 oldHandles.clipDepthStencil?.texture.takeIf { replaceClipDepthStencil },
+                oldHandles.coverageMask?.consumerBindGroup.takeIf {
+                    replaceCoverageMaskConsumerBindGroup
+                },
+                oldHandles.uniformBuffer.takeIf { replaceCoverageMaskConsumerBindGroup },
+                oldHandles.coverageMask?.view.takeIf { replaceCoverageMask },
+                oldHandles.coverageMask?.texture.takeIf { replaceCoverageMask },
+                oldHandles.uniformBuffer.takeIf { bindGroup != null },
             )
             null
         } catch (failure: AllocationFailure) {
@@ -633,6 +787,13 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 pathDepthStencilTexture,
                 clipDepthStencilView,
                 clipDepthStencilTexture,
+                coverageMaskConsumerBindGroup,
+                (uniform ?: oldHandles.uniformBuffer).takeIf {
+                    coverageMaskConsumerBindGroup != null
+                },
+                coverageMaskView,
+                coverageMaskTexture,
+                (uniform ?: oldHandles.uniformBuffer).takeIf { bindGroup != null },
             )
             failure.refusal()
         }
@@ -662,6 +823,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         pathDepthStencilTexture: GPUTexture? = null,
         clipDepthStencilView: GPUTextureView? = null,
         clipDepthStencilTexture: GPUTexture? = null,
+        coverageMaskConsumerBindGroup: GPUBindGroup? = null,
+        coverageMaskConsumerUniformBuffer: GPUBuffer? = null,
+        coverageMaskView: GPUTextureView? = null,
+        coverageMaskTexture: GPUTexture? = null,
+        bindGroupUniformBuffer: GPUBuffer? = null,
     ) {
         enqueueRetirement(
             bindGroup,
@@ -672,6 +838,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             pathDepthStencilTexture,
             clipDepthStencilView,
             clipDepthStencilTexture,
+            coverageMaskConsumerBindGroup,
+            coverageMaskConsumerUniformBuffer,
+            coverageMaskView,
+            coverageMaskTexture,
+            bindGroupUniformBuffer,
         )
         closePending()
     }
@@ -685,20 +856,52 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         pathDepthStencilTexture: GPUTexture? = null,
         clipDepthStencilView: GPUTextureView? = null,
         clipDepthStencilTexture: GPUTexture? = null,
+        coverageMaskConsumerBindGroup: GPUBindGroup? = null,
+        coverageMaskConsumerUniformBuffer: GPUBuffer? = null,
+        coverageMaskView: GPUTextureView? = null,
+        coverageMaskTexture: GPUTexture? = null,
+        bindGroupUniformBuffer: GPUBuffer? = null,
     ) {
         val pathDepthStencilViewClose = pathDepthStencilView?.let(::PendingCloseHandle)
         pathDepthStencilViewClose?.let(pendingClose::add)
         pathDepthStencilTexture?.let {
-            pendingClose += PendingCloseHandle(it, pathDepthStencilViewClose)
+            pendingClose += PendingCloseHandle(it, listOfNotNull(pathDepthStencilViewClose))
         }
         val clipDepthStencilViewClose = clipDepthStencilView?.let(::PendingCloseHandle)
         clipDepthStencilViewClose?.let(pendingClose::add)
         clipDepthStencilTexture?.let {
-            pendingClose += PendingCloseHandle(it, clipDepthStencilViewClose)
+            pendingClose += PendingCloseHandle(it, listOfNotNull(clipDepthStencilViewClose))
         }
-        val bindGroupClose = bindGroup?.let(::PendingCloseHandle)
+        val coverageMaskConsumerBindGroupClose = coverageMaskConsumerBindGroup?.let { bindGroup ->
+            PendingCloseHandle(
+                handle = bindGroup,
+                dependentUniformBuffer = requireNotNull(coverageMaskConsumerUniformBuffer),
+            )
+        }
+        coverageMaskConsumerBindGroupClose?.let(pendingClose::add)
+        val coverageMaskViewClose = coverageMaskView?.let { view ->
+            PendingCloseHandle(view, listOfNotNull(coverageMaskConsumerBindGroupClose))
+        }
+        coverageMaskViewClose?.let(pendingClose::add)
+        coverageMaskTexture?.let {
+            pendingClose += PendingCloseHandle(it, listOfNotNull(coverageMaskViewClose))
+        }
+        val bindGroupClose = bindGroup?.let { group ->
+            PendingCloseHandle(
+                handle = group,
+                dependentUniformBuffer = requireNotNull(bindGroupUniformBuffer),
+            )
+        }
         bindGroupClose?.let(pendingClose::add)
-        uniformBuffer?.let { pendingClose += PendingCloseHandle(it, bindGroupClose) }
+        uniformBuffer?.let {
+            val bindGroupPrerequisites = pendingClose.filter { pending ->
+                pending.dependentUniformBuffer === it
+            }
+            pendingClose += PendingCloseHandle(
+                it,
+                bindGroupPrerequisites,
+            )
+        }
         indexBuffer?.let { pendingClose += PendingCloseHandle(it) }
         vertexBuffer?.let { pendingClose += PendingCloseHandle(it) }
     }
@@ -707,7 +910,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         val iterator = pendingClose.iterator()
         while (iterator.hasNext()) {
             val pending = iterator.next()
-            if (pending.prerequisite?.closed == false) continue
+            if (pending.prerequisites.any { prerequisite -> !prerequisite.closed }) continue
             try {
                 pending.handle.close()
                 pending.closed = true
@@ -757,21 +960,26 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
     private fun GPUWgpu4kCorePrimitiveFramePoolHandles.matches(
         pathRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
         clipRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement?,
+        coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): Boolean = this.componentIdentity == componentIdentity &&
         (pathRequirement == null || pathDepthStencil?.requirement == pathRequirement) &&
-        (clipRequirement == null || clipDepthStencil?.requirement == clipRequirement)
+        (clipRequirement == null || clipDepthStencil?.requirement == clipRequirement) &&
+        (coverageMaskRequirement == null || coverageMask?.requirement == coverageMaskRequirement)
 
     private fun selectAvailableSlot(
         available: List<Slot>,
         requiredCapacities: GPUWgpu4kCorePrimitiveFramePoolCapacities,
         pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
         clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement?,
+        coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): Slot? {
         fun Slot.hasCapacities() = capacities.contains(requiredCapacities)
         fun Slot.hasComponent() = handles.componentIdentity == componentIdentity
-        if (pathDepthStencilRequirement == null && clipDepthStencilRequirement == null) {
+        if (pathDepthStencilRequirement == null && clipDepthStencilRequirement == null &&
+            coverageMaskRequirement == null
+        ) {
             return available.firstOrNull { slot -> slot.hasCapacities() && slot.hasComponent() }
                 ?: available.firstOrNull { slot -> slot.hasComponent() }
                 ?: available.firstOrNull { slot -> slot.hasCapacities() }
@@ -781,24 +989,28 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             slot.hasCapacities() && slot.handles.matches(
                 pathDepthStencilRequirement,
                 clipDepthStencilRequirement,
+                coverageMaskRequirement,
                 componentIdentity,
             )
         } ?: available.firstOrNull { slot ->
             slot.handles.matches(
                 pathDepthStencilRequirement,
                 clipDepthStencilRequirement,
+                coverageMaskRequirement,
                 componentIdentity,
             )
         } ?: available.firstOrNull { slot ->
             slot.hasCapacities() && slot.hasComponent() &&
                 (pathDepthStencilRequirement == null || slot.handles.pathDepthStencil == null) &&
-                (clipDepthStencilRequirement == null || slot.handles.clipDepthStencil == null)
+                (clipDepthStencilRequirement == null || slot.handles.clipDepthStencil == null) &&
+                (coverageMaskRequirement == null || slot.handles.coverageMask == null)
         } ?: available.firstOrNull { slot ->
             slot.hasCapacities() && slot.hasComponent()
         } ?: available.firstOrNull { slot ->
             slot.hasComponent() &&
                 (pathDepthStencilRequirement == null || slot.handles.pathDepthStencil == null) &&
-                (clipDepthStencilRequirement == null || slot.handles.clipDepthStencil == null)
+                (clipDepthStencilRequirement == null || slot.handles.clipDepthStencil == null) &&
+                (coverageMaskRequirement == null || slot.handles.coverageMask == null)
         } ?: available.firstOrNull { slot ->
             slot.hasComponent()
         } ?: available.firstOrNull { slot ->
@@ -809,7 +1021,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             slot.hasCapacities()
         } ?: available.firstOrNull { slot ->
             (pathDepthStencilRequirement == null || slot.handles.pathDepthStencil == null) &&
-                (clipDepthStencilRequirement == null || slot.handles.clipDepthStencil == null)
+                (clipDepthStencilRequirement == null || slot.handles.clipDepthStencil == null) &&
+                (coverageMaskRequirement == null || slot.handles.coverageMask == null)
         } ?: available.firstOrNull()
     }
 

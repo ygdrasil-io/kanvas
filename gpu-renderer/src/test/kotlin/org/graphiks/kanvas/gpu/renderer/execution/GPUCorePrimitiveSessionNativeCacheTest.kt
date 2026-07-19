@@ -1,15 +1,20 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.BindGroupDescriptor
+import io.ygdrasil.webgpu.BufferBinding
 import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUShaderModule
+import io.ygdrasil.webgpu.GPUTexture
+import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.GPUTextureSampleType
 import io.ygdrasil.webgpu.GPUTextureViewDimension
+import io.ygdrasil.webgpu.TextureDescriptor
 import java.lang.reflect.Proxy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -37,9 +42,14 @@ class GPUCorePrimitiveSessionNativeCacheTest {
 
         assertEquals(1, producer.entries.size)
         assertEquals(0u, producer.entries.single().binding)
-        assertEquals(64uL, requireNotNull(producer.entries.single().buffer).minBindingSize)
+        val producerUniform = requireNotNull(producer.entries.single().buffer)
+        assertEquals(64uL, producerUniform.minBindingSize)
+        assertTrue(producerUniform.hasDynamicOffset)
         assertEquals(2, consumer.entries.size)
-        assertEquals(64uL, requireNotNull(consumer.entries[0].buffer).minBindingSize)
+        assertEquals(0u, consumer.entries[0].binding)
+        val consumerUniform = requireNotNull(consumer.entries[0].buffer)
+        assertEquals(64uL, consumerUniform.minBindingSize)
+        assertTrue(consumerUniform.hasDynamicOffset)
         assertEquals(1u, consumer.entries[1].binding)
         val texture = requireNotNull(consumer.entries[1].texture)
         assertEquals(GPUTextureSampleType.Float, texture.sampleType)
@@ -51,16 +61,33 @@ class GPUCorePrimitiveSessionNativeCacheTest {
     fun `coverage mask producer pipelines share one component while consumer is isolated`() {
         val native = SessionNativeProxy(acceptPipelineIdentity = { true })
         val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
-        val producerPrograms = listOf(
-            GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
-            GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference,
-            GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect,
-            GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference,
+        val keys = listOf(
+            coverageMaskProducerProductionKey(
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
+            ),
+            coverageMaskProducerProductionKey(
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference,
+            ),
+            coverageMaskProducerProductionKey(
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect,
+            ),
+            coverageMaskProducerProductionKey(
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference,
+            ),
+            coverageMaskConsumerProductionKey(),
         )
-        val producers = producerPrograms.map { program ->
-            cache.acquire(coverageMaskProducerProductionKey(program)).acquiredHandles()
+        val first = keys.map { key -> cache.acquire(key).acquiredHandles() }
+        val reused = keys.map { key -> cache.acquire(key).acquiredHandles() }
+        val producers = first.dropLast(1)
+        val consumer = first.last()
+
+        first.zip(reused).forEach { (created, reacquired) ->
+            assertSame(created.bindGroupLayout, reacquired.bindGroupLayout)
+            assertSame(created.shader, reacquired.shader)
+            assertSame(created.pipelineLayout, reacquired.pipelineLayout)
+            assertSame(created.pipeline, reacquired.pipeline)
         }
-        val consumer = cache.acquire(coverageMaskConsumerProductionKey()).acquiredHandles()
+        assertEquals(5, first.map { handles -> handles.pipeline }.toSet().size)
 
         producers.forEach { handles ->
             assertSame(producers.first().bindGroupLayout, handles.bindGroupLayout)
@@ -80,8 +107,96 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         assertEquals(2, native.creationCount("component.shader"))
         assertEquals(2, native.creationCount("component.pipelineLayout"))
         assertEquals(5, native.pipelineCreationCount)
+        assertEquals(GPUCorePrimitiveNativeCacheCounters(5, 5, 0), cache.counters())
 
         cache.close()
+        keys.forEach { key ->
+            assertEquals(1, native.closeCount("pipeline:${key.pipelineIdentity.program.name}"))
+        }
+        assertEquals(2, native.closeCount("component.pipelineLayout"))
+        assertEquals(2, native.closeCount("component.shader"))
+        assertEquals(2, native.closeCount("component.bindGroupLayout"))
+
+        cache.close()
+        keys.forEach { key ->
+            assertEquals(1, native.closeCount("pipeline:${key.pipelineIdentity.program.name}"))
+        }
+        assertEquals(2, native.closeCount("component.pipelineLayout"))
+        assertEquals(2, native.closeCount("component.shader"))
+        assertEquals(2, native.closeCount("component.bindGroupLayout"))
+    }
+
+    @Test
+    fun `concrete session frame pool creates and reuses exact public coverage mask resources`() {
+        val native = SessionNativeProxy(acceptPipelineIdentity = { true })
+        val cache = GPUWgpu4kCorePrimitiveSessionCache(native.device, GENERATION, native)
+        cache.acquire(
+            coverageMaskProducerProductionKey(
+                GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
+            ),
+        ).acquiredHandles()
+        val consumerComponents =
+            cache.acquire(coverageMaskConsumerProductionKey()).acquiredHandles()
+        val requirement = GPUWgpu4kCorePrimitiveCoverageMaskRequirement(
+            width = 63,
+            height = 47,
+            format = GPUTextureFormat.RGBA8Unorm,
+            sampleCount = 1,
+            usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+        )
+        val request = GPUWgpu4kCorePrimitiveFramePoolRequirements(
+            deviceGeneration = GENERATION,
+            vertexBytes = 64L,
+            indexBytes = 48L,
+            uniformBytes = 256L,
+            componentIdentity = PRODUCTION_CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_COMPONENT_IDENTITY,
+            coverageMask = requirement,
+        )
+
+        val first = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+            cache.acquireFrame(request),
+        ).lease
+        val firstMask = requireNotNull(first.handles.coverageMask)
+
+        val textureDescriptor = native.textureDescriptors.single()
+        assertEquals(63u, textureDescriptor.size.width)
+        assertEquals(47u, textureDescriptor.size.height)
+        assertEquals(GPUTextureFormat.RGBA8Unorm, textureDescriptor.format)
+        assertEquals(1u, textureDescriptor.sampleCount)
+        assertEquals(
+            GPUTextureUsage.RenderAttachment or GPUTextureUsage.TextureBinding,
+            textureDescriptor.usage,
+        )
+        val producer = native.bindGroupDescriptors.single {
+            it.label.contains("coverage-mask-producer")
+        }
+        val consumer = native.bindGroupDescriptors.single {
+            it.label == "Kanvas.session.corePrimitive.framePool.coverageMask.consumerBindGroup"
+        }
+        assertEquals(1, producer.entries.size)
+        assertEquals(2, consumer.entries.size)
+        assertEquals(listOf(0u, 1u), consumer.entries.map { it.binding })
+        assertSame(consumerComponents.bindGroupLayout, consumer.layout)
+        val consumerUniform = assertIs<BufferBinding>(consumer.entries[0].resource)
+        assertSame(first.handles.uniformBuffer, consumerUniform.buffer)
+        assertEquals(64uL, consumerUniform.size)
+        assertSame(firstMask.view, consumer.entries[1].resource)
+        first.rollbackBeforeSubmit()
+
+        val reused = assertIs<GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired>(
+            cache.acquireFrame(request),
+        ).lease
+        val reusedMask = requireNotNull(reused.handles.coverageMask)
+        assertSame(firstMask.texture, reusedMask.texture)
+        assertSame(firstMask.view, reusedMask.view)
+        assertSame(firstMask.consumerBindGroup, reusedMask.consumerBindGroup)
+        assertEquals(1, native.textureDescriptors.size)
+        reused.rollbackBeforeSubmit()
+
+        cache.close()
+        assertEquals(1, native.closeCount("Kanvas.session.corePrimitive.framePool.coverageMask.consumerBindGroup"))
+        assertEquals(1, native.closeCount("Kanvas.session.corePrimitive.framePool.coverageMask.view"))
+        assertEquals(1, native.closeCount("Kanvas.session.corePrimitive.framePool.coverageMask"))
     }
 
     @Test
@@ -632,6 +747,8 @@ class GPUCorePrimitiveSessionNativeCacheTest {
         var pipelineCreationCount = 0
             private set
         val shaderIdentities = mutableListOf<String>()
+        val bindGroupDescriptors = mutableListOf<BindGroupDescriptor>()
+        val textureDescriptors = mutableListOf<TextureDescriptor>()
 
         val device: GPUDevice = proxy(GPUDevice::class.java) { method, args ->
             when (method.name) {
@@ -639,10 +756,16 @@ class GPUCorePrimitiveSessionNativeCacheTest {
                     (args?.firstOrNull() as BufferDescriptor).label.orEmpty(),
                     method.returnType,
                 )
-                "createBindGroup" -> createdHandle(
-                    (args?.firstOrNull() as BindGroupDescriptor).label.orEmpty(),
-                    method.returnType,
-                )
+                "createBindGroup" -> {
+                    val descriptor = args?.firstOrNull() as BindGroupDescriptor
+                    bindGroupDescriptors += descriptor
+                    createdHandle(descriptor.label.orEmpty(), method.returnType)
+                }
+                "createTexture" -> {
+                    val descriptor = args?.firstOrNull() as TextureDescriptor
+                    textureDescriptors += descriptor
+                    texture(descriptor.label.orEmpty())
+                }
                 "createBindGroupLayout", "createShaderModule", "createPipelineLayout" ->
                     createdHandle(method.name, method.returnType)
                 "createRenderPipeline" -> {
@@ -697,6 +820,15 @@ class GPUCorePrimitiveSessionNativeCacheTest {
 
         fun textureView(label: String): GPUTextureView = handle(label, GPUTextureView::class.java)
 
+        private fun texture(label: String): GPUTexture = proxy(GPUTexture::class.java) { method, _ ->
+            when (method.name) {
+                "createView" -> createdHandle("$label.view", GPUTextureView::class.java)
+                "close" -> recordClose(label)
+                "toString" -> label
+                else -> defaultValue(method.returnType)
+            }
+        }
+
         fun failCloseOnce(label: String) {
             closeFailuresRemaining[label] = 1
         }
@@ -712,23 +844,25 @@ class GPUCorePrimitiveSessionNativeCacheTest {
 
         private fun <T> handle(label: String, type: Class<T>): T = proxy(type) { method, _ ->
             when (method.name) {
-                "close" -> {
-                    closeEvents += label
-                    closeAttempts[label] = closeAttempts.getOrDefault(label, 0) + 1
-                    closeBlocks.remove(label)?.let { (entered, release) ->
-                        entered.countDown()
-                        check(release.await(5, TimeUnit.SECONDS)) { "timed out waiting to release $label close" }
-                    }
-                    val failures = closeFailuresRemaining.getOrDefault(label, 0)
-                    if (failures > 0) {
-                        closeFailuresRemaining[label] = failures - 1
-                        error("injected $label close failure")
-                    }
-                    null
-                }
+                "close" -> recordClose(label)
                 "toString" -> label
                 else -> defaultValue(method.returnType)
             }
+        }
+
+        private fun recordClose(label: String): Nothing? {
+            closeEvents += label
+            closeAttempts[label] = closeAttempts.getOrDefault(label, 0) + 1
+            closeBlocks.remove(label)?.let { (entered, release) ->
+                entered.countDown()
+                check(release.await(5, TimeUnit.SECONDS)) { "timed out waiting to release $label close" }
+            }
+            val failures = closeFailuresRemaining.getOrDefault(label, 0)
+            if (failures > 0) {
+                closeFailuresRemaining[label] = failures - 1
+                error("injected $label close failure")
+            }
+            return null
         }
 
         @Suppress("UNCHECKED_CAST")
