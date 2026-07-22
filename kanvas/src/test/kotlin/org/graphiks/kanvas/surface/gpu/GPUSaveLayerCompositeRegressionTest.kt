@@ -55,7 +55,7 @@ class GPUSaveLayerCompositeRegressionTest {
             }
 
             assertEquals(0, result.diagnostics.fatalCount, "$mode ${result.diagnostics.entries}")
-            if (mode.ordinal >= BlendMode.MULTIPLY.ordinal) {
+            if (mode.toGpuBlendFacts().needsDestinationTexture()) {
                 assertTrue(
                     result.diagnostics.entries.any { entry ->
                         entry.code.startsWith("route:destination-read:saveLayer:") &&

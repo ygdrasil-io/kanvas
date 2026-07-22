@@ -61,7 +61,7 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
 
     cmd.fillGuardRefusalReasonOrNull()?.let { refuse(it); return }
 
-    val blendMode = cmd.blend.blendMode
+    val blendMode = cmd.blend.canonicalFixedFunctionState()
     val tessVertices = cmd.tessellatedVertices
     val vertexCount = cmd.totalVertexCount
     val allowsDegenerateRoundStroke = cmd.stroke &&

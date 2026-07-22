@@ -37,10 +37,10 @@ source-set names.
 
 | Band | Packages | Role |
 |---|---|---|
-| Foundation facts | `diagnostics`, `telemetry`, `capabilities`, `state`, `color`, `coordinates` | Shared immutable facts, status, limits, target state, color, and coordinate contracts. |
-| Input and semantic plans | `commands`, `materials`, `runtimeeffects`, `geometry`, `vertices`, `clips`, `destination`, `layers`, `filters`, `images`, `text` | Normalized command shape and domain-specific semantic plans. |
+| Foundation facts | `diagnostics`, `telemetry`, `capabilities`, `state`, `color`, `coordinates` | Shared immutable facts, status, limits, attachment state, color, and coordinate contracts. |
+| Input and semantic plans | `commands`, `materials`, `runtimeeffects`, `geometry`, `vertices`, `clips`, `passes`, `destination`, `layers`, `filters`, `images`, `text` | Normalized command shape, canonical blend/coverage and pass contracts, and domain-specific semantic plans. |
 | Shader, keys, and payload | `wgsl`, `payloads`, `pipelines` | WGSL ABI/module contracts, payload packing/gathering, render/compute pipeline keys. |
-| Recording and planning | `routing`, `analysis`, `recording`, `passes` | Route decisions, immutable analysis, recordings, task lists, draw passes, render steps, sort windows. |
+| Recording and planning | `routing`, `analysis`, `recording` | Route decisions, immutable analysis, recordings, task lists, final frame schedules, and sort windows. |
 | Materialization and submission | `resources`, `execution` | Resource provider, concrete resource lifetime, materialization, target preparation, command submission, readback. |
 | Evidence | `validation` | Contract fixtures, dump schemas, evidence helpers used by tests and PM bundles. |
 
@@ -96,29 +96,31 @@ Primary concepts:
 - `GPUFeatureRequirement`
 - `GPULimitRequirement`
 - `GPUImplementationIdentity`
+- `GPUDeviceGeneration`
 - `GPUCapabilityDiagnostic`
 
 Domain planners may read `GPUCapabilities`, but they must not import
-`execution` just to learn limits.
+`execution` just to learn limits or a handle-free device generation.
 
 ### `state`
 
-Owns target, blend, alpha, attachment, and high-level captured render-state
-facts that are not specific to one domain.
+Owns alpha, attachment, load/store, sample, and high-level captured
+render-state facts that are not specific to one domain. It does not own blend
+semantics, color formats, color interpretation, or device-generation facts.
 
 Primary concepts:
 
 - `GPUTargetState`
 - `GPUTargetTextureDescriptor`
-- `GPUBlendPlan`
-- `GPUBlendMode`
 - `GPUAlphaPlan`
 - `GPUStorePlan`
 - `GPULoadStorePlan`
 - `GPUSampleState`
 
-Detailed color-management facts live in `color`; detailed destination-read
-facts live in `destination`.
+`GPUTargetState` references format and interpretation values owned by `color`.
+Canonical blend semantics live in `passes`; detailed destination-read facts
+live in `destination`. Foundation `state` never imports those late-planning
+packages.
 
 ### `color`
 
@@ -130,6 +132,8 @@ Primary concepts:
 - `GPUColorManagementPlan`
 - `GPUColorValueSpec`
 - `GPUColorSpaceDescriptor`
+- `GPUColorFormat`
+- `GPUColorInterpretation`
 - `GPUColorProfileDescriptor`
 - `GPUColorConversionPlan`
 - `GPUColorTransformPlan`
@@ -320,11 +324,12 @@ resources remain in `resources`.
 
 ### `destination`
 
-Owns destination/backdrop read requirements and strategies.
+Owns destination/backdrop materialization strategies. It consumes the semantic
+blend requirement from `passes` and cannot reinterpret blend semantics.
 
 Primary concepts:
 
-- `GPUDestinationReadRequirement`
+- `GPUDestinationReadStrategyPlanner`
 - `GPUDestinationReadPlan`
 - `GPUDestinationReadStrategy`
 - `GPUDestinationReadBounds`
@@ -332,8 +337,9 @@ Primary concepts:
 - `GPUDestinationReadToken`
 - `GPUDestinationReadDiagnostic`
 
-This package owns destination-read legality. `execution` owns actual copy
-command submission.
+This package alone chooses bounded copy, existing-intermediate,
+layer-isolation, or refusal materialization after final frame order.
+`execution` owns actual copy command submission.
 
 ### `layers`
 
@@ -567,7 +573,8 @@ Analysis cannot materialize concrete GPU resources. Late outcomes belong to
 ### `recording`
 
 Owns recorder scopes, immutable recordings, recording compatibility keys,
-ordered recordings, and task-list assembly.
+ordered recordings, task-list assembly, and deterministic linear frame
+schedules.
 
 Primary concepts:
 
@@ -583,6 +590,9 @@ Primary concepts:
 - `GPUTask`
 - `GPUTaskList`
 - `GPUTaskDependency`
+- `GPUFramePlan`
+- `GPUFramePlanner`
+- `RefusedCompositeCommand`
 - `GPURecordingDiagnostic`
 
 `GPURecorder` accepts normalized commands and target facts; it does not accept
@@ -592,12 +602,18 @@ Recordings may contain a `GPURuntimeEffectUsageSet`, but that type is owned by
 
 ### `passes`
 
-Owns pass-level draw invocation, insertion, draw-pass, render-step, compute
-task, copy task, upload task, and sort-window contracts.
+Owns the canonical blend mode/planner, semantic destination-read requirement,
+coverage encoding, and pass-level draw invocation, insertion, draw-pass,
+render-step, compute task, copy task, upload task, and sort-window contracts.
 
 Primary concepts:
 
 - `GPUDrawInvocation`
+- `GPUBlendMode`
+- `GPUBlendPlan`
+- `GPUBlendDestinationReadRequirement`
+- `GPUBlendCoverageEncoding`
+- `LCDCoverage`
 - `GPUDrawInsertion`
 - `GPUDrawPass`
 - `GPUDrawPacket`
@@ -614,7 +630,8 @@ Primary concepts:
 - `GPUPassDiagnostic`
 
 Passes describe work close to submission, but `execution` owns command
-encoding against the `GPU` facade.
+encoding against the `GPU` facade. `passes` never imports `destination`; the
+destination planner consumes its semantic requirement one-way.
 
 ### `resources`
 
@@ -626,6 +643,10 @@ Primary concepts:
 
 - `GPUResourceProvider`
 - `GPUResourceMaterializationDecision`
+- `GPUPreparedResourceSet`
+- `GPUSceneTarget`
+- `GPUScratchTexturePool`
+- `GPUFrameMemoryBudgetPlan`
 - `GPUTargetPreparationContext`
 - `GPUTextureDescriptor`
 - `GPUTextureViewDescriptor`
@@ -654,11 +675,16 @@ only include resource topology, layout, usage, and capability facts.
 ### `execution`
 
 Owns execution context, target/surface binding, command submission, readback,
-device-generation handling, and facade interaction.
+frame coordination/execution, queue completion, and facade interaction.
 
 Primary concepts:
 
 - `GPUExecutionContext`
+- `GPUFrameCoordinator`
+- `GPUFramePreflighter`
+- `PreparedGPUFrame`
+- `GPUFrameExecutor`
+- `GPUQueueCompletionTicket`
 - `GPUCommandScope`
 - `GPUCommandEncoderPlan`
 - `GPUCommandSubmission`
@@ -667,12 +693,13 @@ Primary concepts:
 - `GPUFrameSubmission`
 - `GPUReadbackRequest`
 - `GPUReadbackResult`
-- `GPUDeviceGeneration`
 - `GPUExecutionDiagnostic`
 
 This package is the only production package allowed to call command-submission
 APIs on the `GPU` facade. Other packages describe work through plans,
 packet/command streams, and materialization records.
+`GPUFrameCoordinator` is the sole product entry and performs no route decision;
+no scene or surface entry may call `GPUFrameExecutor` directly.
 
 ### `validation`
 
@@ -712,18 +739,31 @@ Allowed cross-package dependencies:
 
 - domain planners may depend on `diagnostics`, `capabilities`, `state`,
   `color`, `coordinates`, and relevant domain descriptor packages;
-- `analysis` may depend on commands, routing, domain plans, layers, clips,
+- `destination` may depend on the semantic blend requirement owned by `passes`;
+  `passes` never imports `destination`;
+- `analysis` may depend on commands, routing, passes, domain plans, layers, clips,
   destination, materials, geometry, vertices, images, text, filters, color, and
   coordinates;
 - `recording` may depend on analysis, routing, layers, passes, resources,
   runtimeeffects, diagnostics, and telemetry;
-- `passes` may depend on analysis records, pipeline keys, payload plans,
-  resource descriptors, layer/destination/clip ordering tokens, and render-step
-  plans;
+- `passes` may depend on foundation facts, pipeline keys, payload plans,
+  handle-free resource contracts, layer/clip ordering tokens, and render-step
+  descriptors, but not on `analysis`, `recording`, `destination`, `resources`
+  implementations, or `execution`;
 - `resources` may depend on descriptors and keys from domain packages,
-  pipelines, payloads, wgsl, capabilities, diagnostics, and telemetry;
+  passes, pipelines, payloads, wgsl, capabilities, diagnostics, and telemetry;
+  it never imports `recording` or `execution`;
 - `execution` may depend on recordings, passes, resources, state,
   capabilities, diagnostics, and telemetry.
+
+The resulting frame path is one-way:
+
+```text
+passes blend semantics -> destination materialization semantics
+analysis -> recording/GPUTaskList -> recording/GPUFramePlan
+recording -> execution/GPUFramePreflighter -> resources
+execution/GPUFrameExecutor -> GPU facade
+```
 
 Any cycle across production packages is a design failure. If implementation
 pressure creates a cycle, extract a smaller immutable descriptor into a lower
@@ -785,6 +825,9 @@ package-boundary evidence:
 - a forbidden-import check for Skia-like API, Ganesh, and Graphite classes
   inside `:gpu-renderer`;
 - a package cycle check for production source packages;
+- an authority-coherence check proving the canonical blend, frame,
+  preflight, scene, completion, LCD coverage, and composite-refusal contracts
+  each have one owner and no contradictory active route;
 - a check that public package roots stay under
   `org.graphiks.kanvas.gpu.renderer`;
 - fixture dumps showing concept ownership for the first slice classes;

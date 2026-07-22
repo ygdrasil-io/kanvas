@@ -40,9 +40,12 @@ Detailed layer/saveLayer execution, including layer target planning,
 initialization, source filtering, restore composite, direct-to-parent elision,
 and layer ordering, is defined in `28-layer-savelayer-execution.md`.
 The detailed destination-read contract is defined in
-`20-destination-read-strategy.md`. `GPUBlendPlan` declares the requirement;
-`GPUDestinationReadPlan` defines bounds, strategy, copy/intermediate resources,
-barriers, payload bindings, budgets, diagnostics, and validation gates.
+`20-destination-read-strategy.md`. The canonical mode, blend planner,
+`GPUBlendPlan`, coverage encoding, and semantic
+`GPUBlendDestinationReadRequirement` live together in `passes`.
+`destination` consumes that requirement and alone chooses bounds,
+copy/intermediate/layer strategy, barriers, payload bindings, budgets,
+diagnostics, and validation gates. `passes` never imports `destination`.
 Common destination-read coordinate mapping, bounds proof, and rounding policy
 is defined in `30-coordinate-transform-bounds-policy.md`.
 Clip coverage, stencil, mask, and shader-mask constraints are defined in
@@ -53,17 +56,24 @@ not become material identity.
 ## `GPUBlendPlan`
 
 `GPUBlendPlan` is the explicit blend decision for one draw, layer composite, or
-filter composite.
+filter composite. It is the only blend authority and covers all 29 modes:
+`Clear`, `Src`, `Dst`, `SrcOver`, `DstOver`, `SrcIn`, `DstIn`, `SrcOut`,
+`DstOut`, `SrcATop`, `DstATop`, `Xor`, `Plus`, `Modulate`, `Screen`, `Overlay`,
+`Darken`, `Lighten`, `ColorDodge`, `ColorBurn`, `HardLight`, `SoftLight`,
+`Difference`, `Exclusion`, `Multiply`, `Hue`, `Saturation`, `Color`, and
+`Luminosity`. No foundation or domain package defines a second blend-mode enum
+or recalculates blend semantics.
 
 It records:
 
-- blend mode identity;
-- source opacity and alpha classification;
-- destination-read requirement;
-- `GPUDestinationReadPlan` reference when shader blend, coverage blend, layer
-  composite, or filter behavior needs previous destination pixels;
-- fixed-function blend eligibility;
-- shader blend eligibility;
+- canonical blend mode identity;
+- exact fixed-function attachment state when representable;
+- stable WGSL formula identity otherwise;
+- coverage encoding: `FullOrScissor`, `ScalarCoverage`,
+  `StencilCoverage1x`, `MultisampleAttachmentCoverage`, or `LCDCoverage`;
+- source opacity classification and any proven specialization;
+- semantic `GPUBlendDestinationReadRequirement`, closed to `None`,
+  `DestinationTextureRequired`, or `Refused`;
 - offscreen isolation requirement;
 - target format and alpha compatibility;
 - ordering and barrier requirements;
@@ -79,9 +89,19 @@ Plan kinds:
 | `LayerCompositeBlend` | The blend is applied while compositing an isolated `GPULayerPlan`. |
 | `UnsupportedBlend` | The renderer must refuse with a stable reason. |
 
-`ShaderBlendWithDstRead` is not promoted until the required target-copy,
-existing-intermediate, layer-isolation, ordering, payload, and validation rules
-from `20-destination-read-strategy.md` are accepted for that route.
+`ShaderBlendWithDstRead` names only the formula and semantic destination need.
+It is not promoted until the later target-copy, existing-intermediate,
+layer-isolation, ordering, payload, and validation rules from
+`20-destination-read-strategy.md` are accepted. The blend planner never names a
+copy, intermediate, layer allocation, or concrete destination strategy.
+
+Coverage uses the premultiplied reference
+`D + F * (Blend(S,D) - D)`. `LCDCoverage` keeps `F` as RGB vector coverage:
+each color channel interpolates independently and alpha is the maximum of the
+three channel-wise interpolated alpha results. `Dst` is a no-op; every other
+mode uses the stable `lcd.<mode>@v1` destination shader. When an exact
+single-sample lowering is unproven under MSAA, the draw refuses with
+`unsupported.blend.lcd_msaa_exactness`; vector coverage is never scalarized.
 
 ## `GPUColorPlan`
 
@@ -203,7 +223,8 @@ layout. `GPUBlendPlan`, `GPUColorPlan`, and `GPUTargetState` carry target and
 composite facts outside `MaterialKey`.
 Text atlas coordinates, glyph IDs, text atlas generations, `GPUTextBinding`
 values, and upload tokens are not material facts. Color glyph composites that
-need prior destination pixels must carry `GPUDestinationReadPlan`.
+need prior destination pixels must carry a typed semantic destination-read
+input and conservative bounds; preflight supplies `GPUDestinationReadPlan`.
 
 ## Diagnostics
 

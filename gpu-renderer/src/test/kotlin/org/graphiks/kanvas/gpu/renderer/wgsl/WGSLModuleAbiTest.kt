@@ -3,12 +3,89 @@ package org.graphiks.kanvas.gpu.renderer.wgsl
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCoverageKind
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaModuleAbi
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.wgsl.parser.Lowerer
+import org.graphiks.wgsl.parser.parseWgslResult
 
 /** Verifies generic WGSL render module assembly, ABI dumps, reflection fixtures, and rejection diagnostics. */
 class WGSLModuleAbiTest {
+    @Test
+    fun `blend formula ABI validator rejects a reflected sample type mismatch`() {
+        val coverageKind = GPUBlendCoverageKind.Scalar
+        val formula = requireNotNull(
+            GPUBlendFormulaLibrary.formulaFor(GPUBlendMode.SRC_OVER, coverageKind),
+        )
+        val parsed = parseWgslResult(GPUBlendFormulaLibrary.assembleValidationModule(formula))
+        assertTrue(parsed.isSuccess, parsed.errors.joinToString { it.message })
+        val reflected = Lowerer().lower(parsed.translationUnit).reflectWgslModule(formula.formulaId)
+        val declared = GPUBlendFormulaModuleAbi.declaredFor(coverageKind)
+        val mismatched = declared.copy(
+            bindings = declared.bindings.map { binding ->
+                if (binding.group == 1 && binding.binding == 1) {
+                    binding.copy(sampleType = "sint")
+                } else {
+                    binding
+                }
+            },
+        )
+
+        val result = validateWgslModuleAbi(mismatched, reflected)
+
+        val rejected = assertIs<WgslModuleAbiValidationResult.Mismatch>(result)
+        assertContains(rejected.diagnostics.joinToString(), "sampleType")
+        assertContains(rejected.diagnostics.joinToString(), "group=1,binding=1")
+    }
+
+    @Test
+    fun `blend formula ABI validator rejects a visibility availability mismatch`() {
+        val coverageKind = GPUBlendCoverageKind.Scalar
+        val formula = requireNotNull(
+            GPUBlendFormulaLibrary.formulaFor(GPUBlendMode.SRC_OVER, coverageKind),
+        )
+        val parsed = parseWgslResult(GPUBlendFormulaLibrary.assembleValidationModule(formula))
+        assertTrue(parsed.isSuccess, parsed.errors.joinToString { it.message })
+        val reflected = Lowerer().lower(parsed.translationUnit).reflectWgslModule(formula.formulaId)
+        val visibilityChanged = reflected.copy(
+            bindings = reflected.bindings.map { binding ->
+                if (binding.group == 1 && binding.binding == 1) {
+                    binding.copy(visibility = listOf(WgslShaderVisibility.Fragment.wireName))
+                } else {
+                    binding
+                }
+            },
+        )
+
+        val result = validateWgslModuleAbi(GPUBlendFormulaModuleAbi.declaredFor(coverageKind), visibilityChanged)
+
+        val rejected = assertIs<WgslModuleAbiValidationResult.Mismatch>(result)
+        assertContains(rejected.diagnostics.joinToString(), "visibilityState")
+        assertContains(rejected.diagnostics.joinToString(), "group=1,binding=1")
+    }
+
+    @Test
+    fun `blend formula modules match complete declared full scalar and LCD ABI`() {
+        GPUBlendCoverageKind.entries.forEach { coverageKind ->
+            val formula = requireNotNull(
+                GPUBlendFormulaLibrary.formulaFor(GPUBlendMode.SRC_OVER, coverageKind),
+            )
+            val parsed = parseWgslResult(GPUBlendFormulaLibrary.assembleValidationModule(formula))
+            assertTrue(parsed.isSuccess, "${formula.formulaId}: ${parsed.errors.joinToString { it.message }}")
+            val reflected = Lowerer().lower(parsed.translationUnit).reflectWgslModule(formula.formulaId)
+            val result = validateWgslModuleAbi(GPUBlendFormulaModuleAbi.declaredFor(coverageKind), reflected)
+
+            assertIs<WgslModuleAbiValidationResult.Match>(
+                result,
+                (result as? WgslModuleAbiValidationResult.Mismatch)?.diagnostics?.joinToString("\n"),
+            )
+        }
+    }
+
     /** The first ABI fixture exposes group zero draw data and group one solid material data deterministically. */
     @Test
     fun `solid render module fixture exposes group zero and group one ABI`() {

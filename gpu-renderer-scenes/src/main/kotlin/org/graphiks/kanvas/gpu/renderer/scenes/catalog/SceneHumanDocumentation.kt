@@ -175,7 +175,7 @@ object GPURendererSceneHumanDocs {
         doc("stroke-and-filter-card", "Verifier une carte combinant contour stroke et flou gaussien.", "Valide Stroke et FillRect avec blur dans une meme scene ordonnee.", "Ne revendique pas path coverage ni DAG filtre general.", "Preuve WebGPU offscreen avec scene combinee."),
         doc("text-a8-hello", "Verifier un texte Hello Kanvas via atlas A8 active.", "Valide TextRun avec route a8-atlas et fallback vide (route disponible).", "Ne revendique pas shaping complexe, emoji ou SDF atlas.", "Preuve WebGPU offscreen avec sortie PNG pour la scene."),
         doc("gradient-path-and-text", "Verifier une etoile degradee avec texte superpose via atlas A8.", "Valide PathFillGradient et TextRun actif en composition.", "Ne revendique pas stencil-cover GPU natif ni activation produit.", "Preuve WebGPU offscreen avec sortie PNG pour la scene."),
-        doc("colr-v0-color-glyph", "Verifier un glyphe couleur COLRv0 deux couches (A rouge sur B bleu).", "Valide ColorTextRun avec atlas A8 et composite single-pass drawColorGlyphPass.", "Ne revendique pas COLRv1, emoji, arabic shaping ou bezier curve glyphs.", "Preuve WebGPU offscreen avec sortie PNG pour la scene."),
+        doc("colr-v0-color-glyph", "Verifier le vrai glyphe 2 du fichier Skia colr.ttf et ses deux couches CPAL rouge/noire.", "Valide ColorTextRun avec rasterisation A8, atlas partage et frame preparee WebGPU.", "Ne revendique pas COLRv1, emoji, arabic shaping ou bezier curve glyphs.", "Preuve WebGPU offscreen avec reference CPU independante et sortie PNG pour la scene."),
     )
 
     val candidateScenes: List<CandidateScene> = listOf(

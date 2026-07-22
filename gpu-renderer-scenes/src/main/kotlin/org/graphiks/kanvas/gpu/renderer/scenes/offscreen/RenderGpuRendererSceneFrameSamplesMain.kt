@@ -1,9 +1,16 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import java.nio.file.Path
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 
-fun main(args: Array<String>) = renderGpuRendererSceneFrameSamples(args)
+fun main(args: Array<String>) {
+    try {
+        renderGpuRendererSceneFrameSamples(args)
+    } finally {
+        GPUBackendRuntimeFactory.dispose()
+    }
+}
 
 fun renderGpuRendererSceneFrameSamples(args: Array<String>) {
     require(args.size == 3) {

@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageRequest
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.clips.isSimpleAnalyticIntersection
 import org.graphiks.kanvas.surface.RenderConfig
 
 /** Chooses the immutable coverage strategy before any GPU intermediate allocation. */
@@ -22,8 +23,34 @@ object GPUClipCoveragePlanner {
         config: RenderConfig,
         maxTextureDimension2D: Int,
     ): GPUClipCoveragePlan {
-        require(maxTextureDimension2D > 0) { "maxTextureDimension2D must be positive" }
+        preIntermediatePlanOrNull(request, config, maxTextureDimension2D)?.let { return it }
+        return maskPlan(request, config, enforceIntermediateBudget = true)
+    }
 
+    /** Frame-only route that recognizes bounded analytic execution before texture budgeting. */
+    fun planForFrameRoute(
+        request: GPUClipCoverageRequest,
+        config: RenderConfig,
+        maxTextureDimension2D: Int,
+    ): GPUClipCoveragePlan {
+        preIntermediatePlanOrNull(request, config, maxTextureDimension2D)?.let { return it }
+        val simpleAnalytic = request.elements.all(GPUClipCoverageElement::isSimpleAnalyticIntersection)
+        if (request.elements.size in 2..4 && simpleAnalytic) {
+            return GPUClipCoveragePlan.AnalyticIntersection(request.elements)
+        }
+        return maskPlan(
+            request,
+            config,
+            enforceIntermediateBudget = !(request.elements.size == 1 && simpleAnalytic),
+        )
+    }
+
+    private fun preIntermediatePlanOrNull(
+        request: GPUClipCoverageRequest,
+        config: RenderConfig,
+        maxTextureDimension2D: Int,
+    ): GPUClipCoveragePlan? {
+        require(maxTextureDimension2D > 0) { "maxTextureDimension2D must be positive" }
         if (request.elements.isEmpty()) return GPUClipCoveragePlan.NoClip
         if (request.elements.any { element -> element.values.any { !it.isFinite() } }) {
             return GPUClipCoveragePlan.Refused(GPUClipCoverageRefusalCodes.NONFINITE_INPUT)
@@ -31,14 +58,18 @@ object GPUClipCoveragePlanner {
         if (request.targetWidth > maxTextureDimension2D || request.targetHeight > maxTextureDimension2D) {
             return GPUClipCoveragePlan.Refused(GPUClipCoverageRefusalCodes.TEXTURE_LIMIT)
         }
-
         val vertexCount = request.elements.sumOf { it.vertexCount.toLong() }
         if (vertexCount > config.maxPathVertices.toLong()) {
             return GPUClipCoveragePlan.Refused(GPUClipCoverageRefusalCodes.VERTEX_BUDGET)
         }
+        return scissorFor(request)
+    }
 
-        scissorFor(request)?.let { return it }
-
+    private fun maskPlan(
+        request: GPUClipCoverageRequest,
+        config: RenderConfig,
+        enforceIntermediateBudget: Boolean,
+    ): GPUClipCoveragePlan {
         val sampleCount = if (request.elements.any(GPUClipCoverageElement::antiAlias)) {
             AA_SAMPLE_COUNT
         } else {
@@ -49,19 +80,16 @@ object GPUClipCoveragePlanner {
             height = request.targetHeight,
             sampleCount = sampleCount,
         ) ?: return GPUClipCoveragePlan.Refused(GPUClipCoverageRefusalCodes.INTERMEDIATE_BUDGET)
-        val resolvedBytes = intermediateBytes.resolved
-        val requiredBytes = intermediateBytes.required
-        if (requiredBytes > config.maxClipIntermediateBytes.toLong()) {
+        if (enforceIntermediateBudget && intermediateBytes.required > config.maxClipIntermediateBytes.toLong()) {
             return GPUClipCoveragePlan.Refused(GPUClipCoverageRefusalCodes.INTERMEDIATE_BUDGET)
         }
-
         return GPUClipCoveragePlan.Mask(
             contentKey = request.contentKey,
             width = request.targetWidth,
             height = request.targetHeight,
             sampleCount = sampleCount,
-            resolvedBytes = resolvedBytes,
-            requiredBytes = requiredBytes,
+            resolvedBytes = intermediateBytes.resolved,
+            requiredBytes = intermediateBytes.required,
             elements = request.elements.toList(),
         )
     }

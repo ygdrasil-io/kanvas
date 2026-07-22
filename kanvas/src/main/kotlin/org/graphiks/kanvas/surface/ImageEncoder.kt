@@ -55,6 +55,12 @@ object ImageEncoderRegistry {
      * Subsequent calls with the same [format] overwrite the previous registration.
      */
     fun register(format: String, encoder: ImageEncoder) { encoders[format] = encoder }
+
+    internal fun replaceForTesting(format: String, encoder: ImageEncoder?): ImageEncoder? {
+        val previous = encoders[format]
+        if (encoder == null) encoders.remove(format) else encoders[format] = encoder
+        return previous
+    }
 }
 
 /**
@@ -64,11 +70,7 @@ object ImageEncoderRegistry {
 fun RenderResult.toPng(): ByteArray {
     val encoder = ImageEncoderRegistry.find("png")
         ?: error("No PNG encoder registered. Add :codec:png to your dependencies to enable PNG export.")
-    val layout = when (format) {
-        PixelFormat.RGBA8 -> ImageEncoder.PixelLayout.RGBA8
-        PixelFormat.BGRA8 -> ImageEncoder.PixelLayout.BGRA8
-    }
-    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(layout, colorSpace))
+    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(pixelLayout(), colorSpace))
 }
 
 /**
@@ -77,7 +79,7 @@ fun RenderResult.toPng(): ByteArray {
 fun RenderResult.toJpeg(quality: Int = 92): ByteArray {
     val encoder = ImageEncoderRegistry.find("jpeg")
         ?: throw IllegalStateException("Add :codec:jpeg to your dependencies to enable JPEG export")
-    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(ImageEncoder.PixelLayout.RGBA8, colorSpace), mapOf("quality" to quality.toString()))
+    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(pixelLayout(), colorSpace), mapOf("quality" to quality.toString()))
 }
 
 /**
@@ -86,14 +88,28 @@ fun RenderResult.toJpeg(quality: Int = 92): ByteArray {
 fun RenderResult.toWebP(quality: Int = 80): ByteArray {
     val encoder = ImageEncoderRegistry.find("webp")
         ?: throw IllegalStateException("Add :codec:webp to your dependencies to enable WebP export")
-    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(ImageEncoder.PixelLayout.RGBA8, colorSpace), mapOf("quality" to quality.toString()))
+    return encoder.encode(pixels.toByteArray(), width, height, ImageEncoder.Metadata(pixelLayout(), colorSpace), mapOf("quality" to quality.toString()))
 }
 
 /**
- * Convert this [RenderResult] into an [Image] with RGBA_8888 color type.
+ * Convert this [RenderResult] into an [Image] whose color type matches [RenderResult.format].
  *
  * The returned [Image] carries the pixel data from this render result,
  * making it suitable for subsequent [Canvas.drawImage] calls.
  */
 fun RenderResult.toImage(sourceId: String = "render-result"): Image =
-    Image(width, height, org.graphiks.kanvas.image.ColorType.RGBA_8888, sourceId, pixels = pixels.toByteArray())
+    Image(
+        width,
+        height,
+        when (format) {
+            PixelFormat.RGBA8 -> org.graphiks.kanvas.image.ColorType.RGBA_8888
+            PixelFormat.BGRA8 -> org.graphiks.kanvas.image.ColorType.BGRA_8888
+        },
+        sourceId,
+        pixels = pixels.toByteArray(),
+    )
+
+private fun RenderResult.pixelLayout(): ImageEncoder.PixelLayout = when (format) {
+    PixelFormat.RGBA8 -> ImageEncoder.PixelLayout.RGBA8
+    PixelFormat.BGRA8 -> ImageEncoder.PixelLayout.BGRA8
+}

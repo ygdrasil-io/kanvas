@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "gate": "open",
+  "verifiedAt": "2026-07-13",
+  "dependencyVersion": "1.0.0-20260629.231604-1",
+  "snapshotVersion": "1.0.0-SNAPSHOT",
+  "repositoryProvenance": {
+    "resolvedRepository": "https://central.sonatype.com/repository/maven-snapshots/",
+    "timestampedSnapshotPublished": "2026-06-29T23:16:04Z",
+    "settingsRepositoryOrder": [
+      "mavenLocal",
+      "google",
+      "mavenCentral",
+      "https://central.sonatype.com/repository/maven-snapshots/"
+    ],
+    "cacheMatchesPublishedRepository": true,
+    "localSnapshotMatchesPublishedRepository": true
+  },
+  "source": {
+    "repository": "https://github.com/ygdrasil-io/wgsl4k.git",
+    "revision": "6f6521c00c8bf6ae46288059b007f24575000cf2",
+    "commitTimestamp": "2026-06-29T23:04:04Z",
+    "subject": "fix(parser): for-statement init clause consumed a double semicolon (#13)",
+    "correlation": {
+      "method": "Compared every Kotlin source entry in both published sources JARs with the Git tree at each candidate revision from the reviewed reflection contract through repository HEAD.",
+      "coreFilesCompared": 39,
+      "parserFilesCompared": 22,
+      "mismatchesAtRevision": 0,
+      "uniqueAmongCandidateRevisions": true,
+      "nearestEarlierCandidateParserMismatches": 1
+    }
+  },
+  "moduleMetadata": {
+    "createdByGradle": "9.5.1",
+    "wgslCoreJvmRemoteMetadataLastModified": "2026-06-29T23:24:57Z",
+    "wgslParserJvmRemoteMetadataLastModified": "2026-06-29T23:22:25Z",
+    "timestamp": "20260629.231604",
+    "buildNumber": 1,
+    "localCopy": false
+  },
+  "artifacts": [
+    {
+      "coordinate": "org.graphiks:wgsl-core-jvm:1.0.0-20260629.231604-1",
+      "jarSha256": "d9193ba78ca068f031941dbabfba1b36d2bee725f6aeb80cb3243b23a8dcdf42",
+      "sourcesJarSha256": "6d05776a8a42085a759920c62362d8d23a7bec77940b0885f64b3634f7dd691c",
+      "moduleSha256": "0ea4ad8b3d60a405a05a44a47f077f9632b4d0d7dfb20da12fa245e3bc243be5",
+      "pomSha256": "ad34dce0db199f22e4b45d59dccb874a72dc038c00bee2ea15c6bdfcb205c787"
+    },
+    {
+      "coordinate": "org.graphiks:wgsl-parser-jvm:1.0.0-20260629.231604-1",
+      "jarSha256": "0331531a8222a689f6aca86994deb6bfb0e3802796afe22837696a5ed80cd284",
+      "sourcesJarSha256": "f4e91d1183a088d4f932c931bb3301a47848b7bb20e6008721b21ab0e77d488d",
+      "moduleSha256": "73020e798fd741adfee07ac72b308c2ea18ea972f15038d0f6ad8b6bd1ef553e",
+      "pomSha256": "d595cdd82864ae1a02a626746c31975628c1d565483ba4546e61b54328c1970b"
+    }
+  ],
+  "validation": {
+    "dependencyVerificationMetadata": "gradle/verification-metadata.xml",
+    "dependencyVerification": "passed for the timestamped wgsl4k JAR and module checksums",
+    "parserReflectionAbiBaseline": "passed",
+    "nativeShaderModuleBaseline": "passed",
+    "fullModuleBaseline": "1319 gpu-renderer tests completed with only the known ConvexFanExecutorTest regular-octagon failure; kanvas tests passed"
+  }
+}

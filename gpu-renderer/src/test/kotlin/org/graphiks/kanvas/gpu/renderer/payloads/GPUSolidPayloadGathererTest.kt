@@ -127,6 +127,47 @@ class GPUSolidPayloadGathererTest {
         assertTrue(fieldsByName.getValue("padding.reserved").zeroFilled)
     }
 
+    @Test
+    fun `solid semantic payload recursively snapshots gatherer bytes fields and explicit zero radii`() {
+        val gathered = GPUSolidPayloadGatherer().gather(solidGatherPlan(), solidPayload(commandId = 12))
+        val sourceBytes = requireNotNull(gathered.uniformBlock).bytes.toMutableList()
+        val sourceFields = gathered.uniformBlock.fields.toMutableList()
+        val semantic = GPUDrawSemanticPayload.SolidRect(
+            gathered.copy(
+                uniformBlock = gathered.uniformBlock.copy(bytes = sourceBytes, fields = sourceFields),
+            ),
+        )
+        val expectedBytes = semantic.payloadRef.uniformBlock!!.bytes
+        val expectedFields = semantic.payloadRef.uniformBlock!!.fields
+
+        sourceBytes.fill(255)
+        sourceFields.clear()
+
+        assertEquals(expectedBytes, semantic.payloadRef.uniformBlock!!.bytes)
+        assertEquals(expectedFields, semantic.payloadRef.uniformBlock!!.fields)
+        assertNull(semantic.payloadRef.resourceBlock)
+        assertTrue(semantic.payloadRef.uniformBlock!!.bytes.subList(16, 32).all { it == 0 })
+        assertEquals(
+            listOf("radii.topLeft", "radii.topRight", "radii.bottomRight", "radii.bottomLeft"),
+            semantic.payloadRef.uniformBlock!!.fields.subList(4, 8).map { it.fieldPath },
+        )
+        assertTrue(semantic.payloadRef.uniformBlock!!.fields.subList(4, 8).all { it.zeroFilled })
+    }
+
+    @Test
+    fun `solid gatherer is the semantic payload packing and validation authority`() {
+        val semantic = GPUSolidPayloadGatherer().gatherSemantic(
+            solidGatherPlan(),
+            solidPayload(commandId = 13, r = "0.75", g = "0.50", b = "0.25", a = "1.0"),
+        )
+
+        assertEquals(13, semantic.payloadRef.commandIdValue)
+        assertEquals("rect-step:v1", semantic.payloadRef.renderStepIdentity)
+        assertEquals(semantic.payloadRef.uniformBlock!!.fingerprint, semantic.payloadRef.uniformSlot!!.fingerprint)
+        assertEquals("solid-rect-layout-v1", semantic.payloadRef.uniformBlock!!.packingPlanHash)
+        assertEquals(64, semantic.payloadRef.uniformBlock!!.bytes.size)
+    }
+
     private fun solidGatherPlan(): GPUPayloadGatherPlan =
         GPUPayloadGatherPlan(
             planHash = "solid-gather-v1",

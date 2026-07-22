@@ -51,7 +51,7 @@ internal fun GPUBackendRenderRecorder.dispatchImageRect(
         return
     }
 
-    val blendMode = cmd.blend.blendMode
+    val blendMode = cmd.blend.canonicalFixedFunctionState()
     val dst = cmd.dst
     val src = cmd.src
     val clipBounds = cmd.clip.bounds

@@ -83,7 +83,11 @@ class Surface(
             val dstOff = row * sw * 4
             result.pixels.toByteArray().copyInto(pixels, dstOff, srcOff, srcOff + sw * 4)
         }
-        return Image(sw, sh, ColorType.RGBA_8888, "surface-snapshot-subset", pixels)
+        val colorType = when (result.format) {
+            PixelFormat.RGBA8 -> ColorType.RGBA_8888
+            PixelFormat.BGRA8 -> ColorType.BGRA_8888
+        }
+        return Image(sw, sh, colorType, "surface-snapshot-subset", pixels)
     }
 
     /**

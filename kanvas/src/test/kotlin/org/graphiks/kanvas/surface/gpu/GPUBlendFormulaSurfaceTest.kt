@@ -9,6 +9,7 @@ import kotlin.math.sqrt
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
@@ -34,16 +35,30 @@ class GPUBlendFormulaSurfaceTest {
 
     @org.junit.jupiter.api.Test
     fun everyDestinationReadModeHasAUniqueIndex() {
-        val modes = GPUBlendMode.entries.filter { it.requiresDestinationRead }
+        val modes = GPUBlendMode.entries.filter { mode ->
+            mode.canonicalBlendPlan().destinationReadRequirement ==
+                org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement.DestinationTextureRequired
+        }
         val indices = modes.map { destinationReadBlendModeIndex(it) }
 
-        assertEquals(15, modes.size)
+        assertEquals(14, modes.size)
         assertTrue(indices.all { it != null })
-        assertEquals(15, indices.filterNotNull().toSet().size)
+        assertEquals(14, indices.filterNotNull().toSet().size)
         assertEquals(0, destinationReadBlendModeIndex(GPUBlendMode.MULTIPLY))
         assertEquals(6, destinationReadBlendModeIndex(GPUBlendMode.EXCLUSION))
         assertEquals(7, destinationReadBlendModeIndex(GPUBlendMode.COLOR_DODGE))
         assertEquals(14, destinationReadBlendModeIndex(GPUBlendMode.LUMINOSITY))
+    }
+
+    @org.junit.jupiter.api.Test
+    fun `Kanvas compatibility programs assemble formula bodies from the gpu-renderer registry`() {
+        val destinationRead = GPUBlendFormulaLibrary.advancedBlendDispatcherWgsl()
+        val allModes = GPUBlendFormulaLibrary.allModeBlendDispatcherWgsl()
+
+        assertTrue(BLEND_FORMULA_WGSL.contains(destinationRead))
+        assertTrue(CLIP_BLEND_FORMULA_WGSL.contains(destinationRead))
+        assertTrue(SCISSOR_CLIP_BLEND_FORMULA_WGSL.contains(destinationRead))
+        assertTrue(CLIP_COVERAGE_BLEND_WGSL.contains(allModes))
     }
 
     @ParameterizedTest(name = "{0}")

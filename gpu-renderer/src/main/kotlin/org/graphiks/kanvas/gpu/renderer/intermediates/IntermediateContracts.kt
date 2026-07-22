@@ -1,6 +1,15 @@
 package org.graphiks.kanvas.gpu.renderer.intermediates
 
 import org.graphiks.kanvas.gpu.renderer.resources.GPUIntermediateTextureMaterializationDescriptor
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+
+/** Stable handle-free identity for an intermediate attachment or texture. */
+@JvmInline
+value class GPUIntermediateIdentity(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUIntermediateIdentity.value must not be blank" }
+    }
+}
 
 enum class GPUIntermediatePurpose {
     DestinationCopy,
@@ -196,12 +205,26 @@ data class GPUIntermediateTelemetry(
             "layerComposites=$layerComposites msaaTargets=$msaaTargets msaaResolves=$msaaResolves"
 }
 
+/** Destination-read identity and optional exact-intermediate eligibility emitted without selecting a strategy. */
+data class GPUIntermediateDestinationReadEligibility(
+    val commandId: String,
+    val requirement: GPUBlendDestinationReadRequirement,
+    val eligibleIntermediate: GPUIntermediateTextureDescriptor?,
+) {
+    init {
+        require(commandId.isNotBlank()) {
+            "GPUIntermediateDestinationReadEligibility.commandId must not be blank"
+        }
+    }
+}
+
 data class GPUIntermediatePlan(
     val planId: String,
     val targetId: String,
     val steps: List<GPUIntermediatePlanStep>,
     val diagnostics: List<GPUIntermediateDiagnostic> = emptyList(),
     val telemetry: GPUIntermediateTelemetry = GPUIntermediateTelemetry(),
+    val destinationReadEligibilities: List<GPUIntermediateDestinationReadEligibility> = emptyList(),
 ) {
     init {
         require(planId.isNotBlank()) { "GPUIntermediatePlan.planId must not be blank" }
@@ -228,7 +251,14 @@ fun GPUIntermediatePlan.dumpLines(): List<String> =
     listOf(
         "intermediate.plan id=$planId target=$targetId steps=${steps.size} " +
             "diagnostics=${headerDiagnostics().ifEmpty { listOf("none") }.joinToString(",")}",
-    ) + steps.map { step -> step.dumpLine() } + listOf(telemetry.dumpLine())
+    ) + steps.map { step -> step.dumpLine() } +
+        destinationReadEligibilities.map { eligibility -> eligibility.dumpLine() } +
+        listOf(telemetry.dumpLine())
+
+private fun GPUIntermediateDestinationReadEligibility.dumpLine(): String =
+    "intermediate.destination-read-eligibility command=$commandId requirement=$requirement " +
+        "eligible=${eligibleIntermediate?.label ?: "none"} " +
+        "descriptor=${eligibleIntermediate?.descriptorHash ?: "none"}"
 
 private fun GPUIntermediatePlan.headerDiagnostics(): List<String> {
     val refusalDiagnostic = steps.firstOrNull { it is GPUIntermediatePlanStep.Refuse } as? GPUIntermediatePlanStep.Refuse

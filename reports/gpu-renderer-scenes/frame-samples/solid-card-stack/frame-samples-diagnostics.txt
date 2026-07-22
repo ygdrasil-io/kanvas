@@ -1,0 +1,7 @@
+sampled solid-card-stack via reusable prepared WebGPU session
+metricSource=wall-clock-prepared-submit-completion
+measuredReadbacks=0 finalValidationReadbacks=1
+nativeFrames=61 encoders=61 commandBuffers=61 submits=61
+solidRectCache creations=1 reuses=60
+warmupFrames=3
+stableFrames=57

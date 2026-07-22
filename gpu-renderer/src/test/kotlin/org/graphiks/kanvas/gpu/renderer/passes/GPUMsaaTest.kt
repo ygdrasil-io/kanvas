@@ -270,4 +270,15 @@ class GPUMsaaTest {
             GPUMsaa.Reason.MULTISAMPLE_RESOLVE_FORMAT,
         )
     }
+
+    @Test
+    fun `single sample frame is distinct from a local multisample resolve approximation`() {
+        val exact = GPUSamplePlan.SingleSampleFrame
+        val approximation = GPUSamplePlan.LocalResolveApproximation(sourceSampleCount = 4)
+
+        assertEquals(1, exact.sampleCount)
+        assertEquals(1, approximation.sampleCount)
+        assertEquals(4, approximation.sourceSampleCount)
+        assertTrue(exact != approximation)
+    }
 }

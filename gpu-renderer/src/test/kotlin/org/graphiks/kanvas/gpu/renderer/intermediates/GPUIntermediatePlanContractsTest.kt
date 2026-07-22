@@ -3,6 +3,8 @@ package org.graphiks.kanvas.gpu.renderer.intermediates
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 
 class GPUIntermediatePlanContractsTest {
     @Test
@@ -193,6 +195,32 @@ class GPUIntermediatePlanContractsTest {
 
         assertFailsWith<IllegalArgumentException> {
             GPUIntermediateTelemetry(intermediatesRefused = -1)
+        }
+    }
+
+    @Test
+    fun `target intermediate identities and pixel bounds are validated value objects`() {
+        assertEquals(
+            GPUTargetIdentity("target:main"),
+            GPUTargetIdentity("target:main"),
+        )
+        assertEquals(
+            GPUIntermediateIdentity("intermediate:msaa-color"),
+            GPUIntermediateIdentity("intermediate:msaa-color"),
+        )
+        val bounds = GPUPixelBounds(left = 4, top = 8, right = 68, bottom = 40)
+        assertEquals(64, bounds.width)
+        assertEquals(32, bounds.height)
+        assertEquals(32_768L, bounds.checkedByteSize(bytesPerPixel = 4, sampleCount = 4))
+
+        assertFailsWith<IllegalArgumentException> { GPUTargetIdentity("") }
+        assertFailsWith<IllegalArgumentException> { GPUIntermediateIdentity(" ") }
+        assertFailsWith<IllegalArgumentException> {
+            GPUPixelBounds(left = 1, top = 0, right = 0, bottom = 1)
+        }
+        assertFailsWith<ArithmeticException> {
+            GPUPixelBounds(left = 0, top = 0, right = Int.MAX_VALUE, bottom = Int.MAX_VALUE)
+                .checkedByteSize(bytesPerPixel = Int.MAX_VALUE, sampleCount = Int.MAX_VALUE)
         }
     }
 

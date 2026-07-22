@@ -1,7 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.analysis
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
-import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendKind
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawKind
@@ -10,7 +11,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRect
-import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
+import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
@@ -34,7 +36,26 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageShaderPreparedPlanner
 import org.graphiks.kanvas.gpu.renderer.images.GPUImageDecodePlanner
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRRectGeometryAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectTransformType
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaterialPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadGatherPlan
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 import org.graphiks.kanvas.gpu.renderer.stroke.DashVertexExpansion
@@ -42,6 +63,38 @@ import org.graphiks.kanvas.gpu.renderer.stroke.DashVertexExpansion
 /** Compact stable sort-key value. */
 @JvmInline
 value class SortKey(val value: Long)
+
+/** Captures the exact local FillRect geometry and transform facts analyzed for one route. */
+internal fun corePrimitiveRectGeometryAuthority(
+    rect: GPURect,
+    transform: GPUTransformFacts,
+): GPUCorePrimitiveRectGeometryAuthority = GPUCorePrimitiveRectGeometryAuthority.issue(
+    version = 1,
+    rectLeftBits = rect.left.toRawBits(),
+    rectTopBits = rect.top.toRawBits(),
+    rectRightBits = rect.right.toRawBits(),
+    rectBottomBits = rect.bottom.toRawBits(),
+    transformType = when (transform.type) {
+        GPUTransformType.Identity -> GPUCorePrimitiveRectTransformType.Identity
+        GPUTransformType.Translate -> GPUCorePrimitiveRectTransformType.Translate
+        GPUTransformType.Scale -> GPUCorePrimitiveRectTransformType.Scale
+        GPUTransformType.Affine -> GPUCorePrimitiveRectTransformType.Affine
+        GPUTransformType.Perspective -> GPUCorePrimitiveRectTransformType.Perspective
+        GPUTransformType.Singular -> GPUCorePrimitiveRectTransformType.Singular
+    },
+    transformTranslateXBits = transform.translateX.toRawBits(),
+    transformTranslateYBits = transform.translateY.toRawBits(),
+    transformScaleXBits = transform.scaleX.toRawBits(),
+    transformScaleYBits = transform.scaleY.toRawBits(),
+    transformSkewXBits = transform.skewX.toRawBits(),
+    transformSkewYBits = transform.skewY.toRawBits(),
+)
+
+/** Lets downstream adapters verify analysis authority without exposing a signing factory. */
+fun GPUCorePrimitiveRectGeometryAuthority.matchesCorePrimitiveRectGeometry(
+    rect: GPURect,
+    transform: GPUTransformFacts,
+): Boolean = this == corePrimitiveRectGeometryAuthority(rect, transform)
 
 /** Immutable draw analysis for one recording scope. */
 data class GPUDrawAnalysis(
@@ -63,6 +116,9 @@ data class GPUDrawAnalysisRecord(
     val renderStepCandidates: List<String>,
     val sortKey: SortKey,
     val diagnostics: List<GPUAnalysisDiagnostic> = emptyList(),
+    val corePrimitiveRectRouteAuthority: GPUCorePrimitiveRectRouteAuthority? = null,
+    val corePrimitiveRectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority? = null,
+    val corePrimitiveRRectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
 )
 
 /** Analysis-time decision for a draw record. */
@@ -190,6 +246,8 @@ data class GPUFirstRoutePlan(
 class GPUFirstRoutePlanner(
     private val capabilities: GPUCapabilities,
 ) {
+    private val solidPayloadGatherer = GPUSolidPayloadGatherer()
+
     /**
      * Plans FillRect as native only when first-slice facts are supported.
      *
@@ -211,6 +269,13 @@ class GPUFirstRoutePlanner(
         }
 
         val isLinearGradient = command.material is GPUMaterialDescriptor.LinearGradient
+        val rectGeometryAuthority =
+            corePrimitiveRectGeometryAuthority(command.rect, command.transform)
+        val rectRouteAuthority = (command.material as? GPUMaterialDescriptor.SolidColor)?.let {
+            command.rectRouteAuthority()
+        }
+        val isAffineSolid =
+            rectRouteAuthority == GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1
         val recordId = "analysis.fill_rect.${command.commandId.value}"
         val pipelineKey: String
         val renderStep: String
@@ -218,7 +283,13 @@ class GPUFirstRoutePlanner(
         val materialKeyHash: String
         val capabilityName: String
 
-        if (isLinearGradient) {
+        if (isAffineSolid) {
+            pipelineKey = "pending.pipeline.fill_rect.affine.solid.rgba8unorm.src_over"
+            renderStep = CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
+            routeLabel = "native.fill_rect.affine.solid"
+            materialKeyHash = "pending.material.solid"
+            capabilityName = CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
+        } else if (isLinearGradient) {
             pipelineKey = "pending.pipeline.fill_rect.linear_gradient.rgba8unorm.src_over"
             renderStep = linearGradientRenderStep
             routeLabel = "native.fill_rect.linear_gradient"
@@ -242,6 +313,8 @@ class GPUFirstRoutePlanner(
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId),
+            corePrimitiveRectRouteAuthority = rectRouteAuthority,
+            corePrimitiveRectGeometryAuthority = rectGeometryAuthority,
         )
         val routeDecision: GPURouteDecision.Native = if (isLinearGradient) {
             GPUFirstRouteDecisionBuilder.nativeLinearGradientRect(
@@ -264,16 +337,29 @@ class GPUFirstRoutePlanner(
             resourceDeclarations = emptyList(),
             renderStepCandidates = listOf(renderStep),
         )
+        val semanticPayload = (command.material as? GPUMaterialDescriptor.SolidColor)?.let { material ->
+            gatherSolidRect(command, material, renderStep)
+        }
         val pass = GPUFirstRoutePassBuilder.acceptedFillRect(
             commandIdValue = command.commandId.value,
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            batchKind = if (isLinearGradient) {
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SimpleGradient
+            } else {
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SolidFill
+            },
+            semanticPayload = semanticPayload,
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -283,6 +369,44 @@ class GPUFirstRoutePlanner(
             pass = pass,
         )
     }
+
+    private fun gatherSolidRect(
+        command: NormalizedDrawCommand.FillRect,
+        material: GPUMaterialDescriptor.SolidColor,
+        renderStepIdentity: String,
+    ): GPUDrawSemanticPayload.SolidRect = solidPayloadGatherer.gatherSemantic(
+        GPUPayloadGatherPlan(
+            planHash = "first-route.fill-rect.solid.v1",
+            commandFamily = "FillRect",
+            materialAssemblyHash = "first-route.solid-material.v1",
+            renderStepIdentity = renderStepIdentity,
+            writePlanHash = "first-route.solid-write.v1",
+            bindingPlanHash = "first-route.solid-bindings.v1",
+            uploadPlanHash = "first-route.solid-upload.v1",
+            dedupScope = "pass.root.${command.commandId.value}",
+        ),
+        GPUMaterialPayload(
+            materialKeyHash = "pending.material.solid",
+            payloadClass = "solid-rgba-rect",
+            valueFacts = mapOf(
+                "command.id" to command.commandId.value.toString(),
+                "rect.left" to command.rect.left.toString(),
+                "rect.top" to command.rect.top.toString(),
+                "rect.right" to command.rect.right.toString(),
+                "rect.bottom" to command.rect.bottom.toString(),
+                "radii.topLeft" to 0f.toString(),
+                "radii.topRight" to 0f.toString(),
+                "radii.bottomRight" to 0f.toString(),
+                "radii.bottomLeft" to 0f.toString(),
+                "color.r" to material.r.toString(),
+                "color.g" to material.g.toString(),
+                "color.b" to material.b.toString(),
+                "color.a" to material.a.toString(),
+            ),
+            resourceFacts = emptyMap(),
+            diagnosticLabel = command.diagnosticName,
+        ),
+    )
 
     /** Builds an executable blur-mask FillRect route contract. */
     private fun blurMaskFillRectRouteDecision(command: NormalizedDrawCommand.FillRect): GPUFirstRoutePlan {
@@ -334,11 +458,17 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            batchKind = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.Isolated,
+            batchAdjacency = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency.Isolated,
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -358,19 +488,44 @@ class GPUFirstRoutePlanner(
      */
     fun plan(command: NormalizedDrawCommand.FillRRect): GPUFirstRoutePlan {
         require(command.drawKind == GPUDrawKind.FillRRect) { "GPUFirstRoutePlanner accepts only FillRRect commands" }
+        val rrectNormalization = GPURRectNormalizer.normalize(command.rrect)
+        val acceptedRRect = rrectNormalization as? GPURRectNormalizationResult.Accepted
+        val rrectGeometryAuthorityIssue = acceptedRRect?.let { accepted ->
+            corePrimitiveRRectGeometryAuthority(command.rrect, accepted, command.transform)
+        }
+        val rrectGeometryAuthority =
+            (rrectGeometryAuthorityIssue as? GPUCorePrimitiveRRectGeometryAuthorityIssue.Issued)
+                ?.authority
 
-        command.refusalCode()?.let { code ->
-            return refusedPlan(command = command, code = code)
+        (rrectGeometryAuthorityIssue as? GPUCorePrimitiveRRectGeometryAuthorityIssue.Refused)?.let { refusal ->
+            return refusedPlan(
+                command = command,
+                code = refusal.code,
+                rrectGeometryAuthority = null,
+            )
         }
 
+        command.refusalCode(rrectNormalization)?.let { code ->
+            return refusedPlan(
+                command = command,
+                code = code,
+                rrectGeometryAuthority = rrectGeometryAuthority,
+            )
+        }
+        requireNotNull(acceptedRRect)
+
         command.maskFilter?.let {
-            return blurMaskFillRRectRouteDecision(command)
+            return blurMaskFillRRectRouteDecision(command, acceptedRRect, requireNotNull(rrectGeometryAuthority))
         }
 
         val isLinearGradient = command.material is GPUMaterialDescriptor.LinearGradient
         val isSolid = command.material.kind == GPUMaterialKind.SolidColor
         if (!isSolid && !isLinearGradient) {
-            return refusedPlan(command = command, code = "unsupported.material.source_unimplemented")
+            return refusedPlan(
+                command = command,
+                code = "unsupported.material.source_unimplemented",
+                rrectGeometryAuthority = rrectGeometryAuthority,
+            )
         }
 
         val recordId = "analysis.fill_rrect.${command.commandId.value}"
@@ -388,7 +543,7 @@ class GPUFirstRoutePlanner(
             capabilityName = firstLinearGradientCapabilityName
         } else {
             pipelineKey = "pending.pipeline.fill_rrect.solid.rgba8unorm.src_over"
-            renderStep = "rrect.fill.coverage"
+            renderStep = CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY
             routeLabel = "native.fill_rrect.solid"
             materialKeyHash = "pending.material.solid"
             capabilityName = firstRRectRouteCapabilityName
@@ -404,7 +559,8 @@ class GPUFirstRoutePlanner(
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
-                command.rrect.analysisDiagnostics(recordId = recordId),
+                acceptedRRect.analysisDiagnostics(recordId = recordId),
+            corePrimitiveRRectGeometryAuthority = requireNotNull(rrectGeometryAuthority),
         )
         val routeDecision: GPURouteDecision.Native = if (isLinearGradient) {
             GPUFirstRouteDecisionBuilder.nativeLinearGradientRRect(
@@ -432,11 +588,20 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            batchKind = if (isLinearGradient) {
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SimpleGradient
+            } else {
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.SolidFill
+            },
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -448,7 +613,11 @@ class GPUFirstRoutePlanner(
     }
 
     /** Builds an executable blur-mask FillRRect route contract. */
-    private fun blurMaskFillRRectRouteDecision(command: NormalizedDrawCommand.FillRRect): GPUFirstRoutePlan {
+    private fun blurMaskFillRRectRouteDecision(
+        command: NormalizedDrawCommand.FillRRect,
+        acceptedRRect: GPURRectNormalizationResult.Accepted,
+        rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority,
+    ): GPUFirstRoutePlan {
         val recordId = "analysis.fill_rrect.${command.commandId.value}"
         val routeLabel = "executable.fill_rrect.mask_blur"
         val pipelineKey = "mask-blur.rrect-fill.rgba8unorm.src_over"
@@ -479,7 +648,8 @@ class GPUFirstRoutePlanner(
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = command.transform.analysisDiagnostics(recordId = recordId) +
-                command.rrect.analysisDiagnostics(recordId = recordId),
+                acceptedRRect.analysisDiagnostics(recordId = recordId),
+            corePrimitiveRRectGeometryAuthority = rrectGeometryAuthority,
         )
         val routeDecision = GPUFirstRouteDecisionBuilder.preparedFillPath(
             commandIdValue = command.commandId.value,
@@ -498,11 +668,17 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            batchKind = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.Isolated,
+            batchAdjacency = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency.Isolated,
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -588,11 +764,15 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
         return GPUFirstRoutePlan(
             analysisRecord = analysisRecord,
@@ -639,11 +819,15 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -707,11 +891,15 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -756,11 +944,15 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -840,7 +1032,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -893,7 +1086,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -963,14 +1157,17 @@ class GPUFirstRoutePlanner(
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type !in acceptedDrawImageRectTransformTypes -> "unsupported.transform.class_downgrade"
-            clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
+            clip.kind == GPUClipKind.ComplexStack &&
+                (clip.coveragePlan == null || clip.coveragePlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused) ->
+                "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination || blend.requiresDestinationRead ->
+            layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
             else -> null
@@ -1040,7 +1237,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -1089,7 +1287,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -1154,12 +1353,15 @@ class GPUFirstRoutePlanner(
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type !in acceptedDrawLayerTransformTypes -> "unsupported.transform.class_downgrade"
-            clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
+            clip.kind == GPUClipKind.ComplexStack &&
+                (clip.coveragePlan == null || clip.coveragePlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused) ->
+                "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
             material.kind !in acceptedMaterialKinds -> "unsupported.material.source_unimplemented"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             backdropRequired -> "unsupported.layer.backdrop_filter"
             initWithPrevious -> "unsupported.layer.init_previous_unaccepted"
             sourceFilterCount > 0 -> "unsupported.layer.filter_chain"
@@ -1213,6 +1415,12 @@ class GPUFirstRoutePlanner(
             renderStepCandidates = emptyList(),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = listOf(diagnostic),
+            corePrimitiveRectRouteAuthority =
+                (command.material as? GPUMaterialDescriptor.SolidColor)?.let {
+                    command.rectRouteAuthority()
+                },
+            corePrimitiveRectGeometryAuthority =
+                corePrimitiveRectGeometryAuthority(command.rect, command.transform),
         )
         return GPUFirstRoutePlan(
             analysisRecord = analysisRecord,
@@ -1227,7 +1435,11 @@ class GPUFirstRoutePlanner(
     }
 
     /** Builds refused rrect analysis, route, and pass descriptors without inventing executable fallback work. */
-    private fun refusedPlan(command: NormalizedDrawCommand.FillRRect, code: String): GPUFirstRoutePlan {
+    private fun refusedPlan(
+        command: NormalizedDrawCommand.FillRRect,
+        code: String,
+        rrectGeometryAuthority: GPUCorePrimitiveRRectGeometryAuthority? = null,
+    ): GPUFirstRoutePlan {
         val recordId = "analysis.fill_rrect.${command.commandId.value}"
         val diagnostic = GPUAnalysisDiagnostic(
             code = code,
@@ -1245,6 +1457,7 @@ class GPUFirstRoutePlanner(
             renderStepCandidates = emptyList(),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = listOf(diagnostic),
+            corePrimitiveRRectGeometryAuthority = rrectGeometryAuthority,
         )
         return GPUFirstRoutePlan(
             analysisRecord = analysisRecord,
@@ -1307,8 +1520,20 @@ class GPUFirstRoutePlanner(
         } ?: when {
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
+            transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"
+            transform.isAffineDeterminantSingular() -> "unsupported.transform.affine_singular"
+            transform.type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) &&
+                material !is GPUMaterialDescriptor.SolidColor ->
+                "unsupported.transform.affine_material"
+            transform.isNonAxisAlignedAffine() && antiAlias ->
+                "unsupported.transform.affine_antialias"
+            transform.isNonAxisAlignedAffine() &&
+                !capabilities.hasFact(CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY) ->
+                "unsupported.transform.affine_capability_missing"
             transform.type !in acceptedTransformTypes -> "unsupported.transform.class_downgrade"
-            clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
+            clip.kind == GPUClipKind.ComplexStack &&
+                (clip.coveragePlan == null || clip.coveragePlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused) ->
+                "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             material.kind !in acceptedMaterialKinds -> "unsupported.material.source_unimplemented"
             material is GPUMaterialDescriptor.LinearGradient && material.refusalCode() != null ->
@@ -1328,10 +1553,11 @@ class GPUFirstRoutePlanner(
                 "unsupported.material.sweep_gradient_capability_missing"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination || blend.requiresDestinationRead ->
+            layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
@@ -1339,13 +1565,14 @@ class GPUFirstRoutePlanner(
         }
 
     /** Returns the canonical first-expansion rrect refusal code, or null when analysis may keep a native candidate. */
-    private fun NormalizedDrawCommand.FillRRect.refusalCode(): String? =
-        coordinateRefusalCode() ?: maskFilter?.let { mf ->
+    private fun NormalizedDrawCommand.FillRRect.refusalCode(
+        rrectNormalization: GPURRectNormalizationResult,
+    ): String? =
+        coordinateRefusalCode(rrectNormalization) ?: maskFilter?.let { mf ->
             when (mf) {
                 is NormalizedMaskFilter.Blur -> mf.refusalCode()
             }
         } ?: when {
-            !rrect.hasAcceptedRadii() -> "unsupported.geometry.rrect_radii"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type == GPUTransformType.Scale -> "unsupported.transform.rrect_scale_unproven"
@@ -1361,10 +1588,11 @@ class GPUFirstRoutePlanner(
             material is GPUMaterialDescriptor.LinearGradient &&
                 !capabilities.hasFact(firstLinearGradientCapabilityName) ->
                 "unsupported.material.linear_gradient_capability_missing"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination || blend.requiresDestinationRead ->
+            layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRRectRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
@@ -1401,7 +1629,7 @@ class GPUFirstRoutePlanner(
                     width = strokeWidth,
                     cap = strokeCap.replaceFirstChar { it.uppercaseChar() },
                     join = strokeJoin.replaceFirstChar { it.uppercaseChar() },
-                    miter = 4f,
+                    miter = strokeMiterLimit,
                     dashOrPathEffectRef = dashIntervals?.let { "dash:${it.joinToString(",")}" },
                     transformClass = transform.type.name.lowercase(),
                     finiteWidth = strokeWidth > 0f && strokeWidth.isFinite(),
@@ -1411,6 +1639,9 @@ class GPUFirstRoutePlanner(
                 shapeDesc.strokeRefusalCode()
                     ?: pathDesc.strokePathRefusalCode()
                     ?: strokeDesc.refusalCode(maxEdges = 128)
+                    ?: "unsupported.pipeline.capability_missing".takeUnless {
+                        capabilities.hasFact(firstPreparedPathFillCapabilityName)
+                    }
             }
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
@@ -1426,13 +1657,16 @@ class GPUFirstRoutePlanner(
             material is GPUMaterialDescriptor.LinearGradient &&
                 !capabilities.hasFact(firstLinearGradientCapabilityName) ->
                 "unsupported.material.linear_gradient_capability_missing"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination || blend.requiresDestinationRead ->
+            layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
-            !capabilities.hasFact(firstPathFillCapabilityName) -> "unsupported.pipeline.capability_missing"
+            !capabilities.hasFact(firstPreparedPathFillCapabilityName) &&
+                (maskFilter != null || !capabilities.hasFact(firstStencilCoverCapabilityName)) ->
+                "unsupported.pipeline.capability_missing"
             else -> null
         }
 
@@ -1572,7 +1806,8 @@ class GPUFirstRoutePlanner(
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.stableHash(),
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
@@ -1656,11 +1891,12 @@ class GPUFirstRoutePlanner(
             transform.type !in acceptedApplyFilterTransformTypes -> "unsupported.transform.class_downgrade"
             clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
-            blend.kind != GPUBlendKind.SrcOver -> "unsupported.blend.mode_unimplemented"
+            blend.canonicalRefusalCode(layer.target.colorFormat) != null ->
+                blend.canonicalRefusalCode(layer.target.colorFormat)
             layer.scopeKind != GPULayerScopeKind.Root -> "unsupported.layer.elision_proof_missing"
             layer.requiresFilter -> "unsupported.layer.filter_chain"
-            layer.requiresDestinationRead || ordering.dependsOnDestination ||
-                blend.requiresDestinationRead -> "unsupported.destination_read.required"
+            layer.requiresDestinationRead || ordering.dependsOnDestination ->
+                "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
             !filterBounds.finite -> "unsupported.filter.bounds_unbounded"
             filterBounds.width <= 0 || filterBounds.height <= 0 -> "unsupported.filter.bounds_invalid"
@@ -1694,19 +1930,24 @@ class GPUFirstRoutePlanner(
         const val firstSweepGradientCapabilityName = "first_slice.sweep_gradient.native"
 
         /** Required capability fact for the scissor clip route. */
-        const val firstScissorCapabilityName = "first_slice.scissor.native"
+        const val firstScissorCapabilityName = GPUFirstSliceCapabilityName.SCISSOR_NATIVE
 
-        /** Required capability fact for the path fill native route. */
-        const val firstPathFillCapabilityName = "first_slice.path_fill.native"
+        /** Historical capability fact authorizing CPU-prepared/tessellated path routes. */
+        const val firstPreparedPathFillCapabilityName = "first_slice.path_fill.native"
 
         /** Required capability fact for the path fill stencil-cover native promotion. */
-        const val firstStencilCoverCapabilityName = "first_slice.path_fill.stencil_cover"
+        const val firstStencilCoverCapabilityName = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
 
         /** Transform classes supported by the first native FillRect route. */
-        val acceptedTransformTypes = setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+        val acceptedTransformTypes = setOf(
+            GPUTransformType.Identity,
+            GPUTransformType.Translate,
+            GPUTransformType.Scale,
+            GPUTransformType.Affine,
+        )
 
         /** Clip classes supported by the first native FillRect route. */
-        val acceptedClipKinds = setOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect)
+        val acceptedClipKinds = setOf(GPUClipKind.WideOpen, GPUClipKind.DeviceRect, GPUClipKind.ComplexStack)
 
         /** Material kinds supported by the first native FillRect expansion route. */
         val acceptedMaterialKinds = setOf(
@@ -1789,13 +2030,15 @@ private fun NormalizedDrawCommand.FillRect.coordinateRefusalCode(): String? =
     }
 
 /** Returns a terminal coordinate, radii, or bounds refusal code before rrect route acceptance. */
-private fun NormalizedDrawCommand.FillRRect.coordinateRefusalCode(): String? =
+private fun NormalizedDrawCommand.FillRRect.coordinateRefusalCode(
+    rrectNormalization: GPURRectNormalizationResult,
+): String? =
     when {
         transform.hasNonFiniteFacts() -> "unsupported.transform.non_finite"
-        rrect.rect.hasNaN() || bounds.hasNaN() || clip.bounds.hasNaN() -> "unsupported.bounds.nan"
-        rrect.rect.hasNonFinite() || bounds.hasNonFinite() || clip.bounds.hasNonFinite() ->
+        rrectNormalization is GPURRectNormalizationResult.Refused -> rrectNormalization.code
+        bounds.hasNaN() || clip.bounds.hasNaN() -> "unsupported.bounds.nan"
+        bounds.hasNonFinite() || clip.bounds.hasNonFinite() ->
             "unsupported.bounds.non_finite"
-        rrect.hasNaN() || rrect.hasNonFinite() -> "unsupported.geometry.rrect_radii"
         else -> null
     }
 
@@ -1836,6 +2079,24 @@ private fun GPUTransformFacts.hasNonFiniteFacts(): Boolean =
         !scaleX.isFinite() || !scaleY.isFinite() ||
         !skewX.isFinite() || !skewY.isFinite()
 
+private fun GPUTransformFacts.affineDeterminant(): Float = scaleX * scaleY - skewX * skewY
+
+private fun GPUTransformFacts.isAffineDeterminantNonFinite(): Boolean =
+    type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) && !affineDeterminant().isFinite()
+
+private fun GPUTransformFacts.isAffineDeterminantSingular(): Boolean =
+    type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) && affineDeterminant() == 0f
+
+private fun GPUTransformFacts.isNonAxisAlignedAffine(): Boolean =
+    type == GPUTransformType.Affine && (skewX != 0f || skewY != 0f)
+
+private fun NormalizedDrawCommand.FillRect.rectRouteAuthority(): GPUCorePrimitiveRectRouteAuthority =
+    if (transform.isNonAxisAlignedAffine()) {
+        GPUCorePrimitiveRectRouteAuthority.RectAffineDirectTrianglesV1
+    } else {
+        GPUCorePrimitiveRectRouteAuthority.RectAxisAligned
+    }
+
 /** Emits stable analysis facts for accepted transform classifications. */
 private fun GPUTransformFacts.analysisDiagnostics(
     recordId: String,
@@ -1863,11 +2124,15 @@ private fun GPUBounds.stableHash(): String =
 /** Returns the accepted simple scissor bounds hash, or null for wide-open clips. */
 private fun NormalizedDrawCommand.FillRect.scissorBoundsHash(): String? =
     when (clip.kind) {
-        GPUClipKind.DeviceRect -> clip.bounds.stableHash()
+        GPUClipKind.DeviceRect -> clip.bounds.solidRectScissorIdentity()
         GPUClipKind.WideOpen,
         GPUClipKind.ComplexStack,
         -> null
     }
+
+/** Dump-safe exact device-rectangle authority consumed by the native SolidRect encoder. */
+private fun GPUBounds.solidRectScissorIdentity(): String =
+    "scissor_${left}_${top}_${right}_${bottom}"
 
 /** Returns the accepted simple scissor bounds hash, or null for wide-open rrect clips. */
 private fun NormalizedDrawCommand.FillRRect.scissorBoundsHash(): String? =
@@ -1975,6 +2240,31 @@ private fun String.allowsStableAnalysisLocalMatrix(): Boolean =
             char in 'a'..'z' || char in 'A'..'Z' || char in '0'..'9' || char == '.' || char == '_' || char == '-'
         }
 
+private fun GPUBlendFacts.canonicalRefusalCode(targetFormatClass: String): String? {
+    val plan = canonicalPlan(targetFormatClass)
+    return when {
+        plan is GPUBlendPlan.UnsupportedBlend -> plan.diagnostic.code
+        plan.destinationReadRequirement == GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
+            "unsupported.destination_read.required"
+        else -> null
+    }
+}
+
+internal fun GPUBlendFacts.canonicalPlan(targetFormatClass: String): GPUBlendPlan =
+    GPUBlendPlanner().plan(
+        GPUBlendSpecializationRequest(
+            mode = mode,
+            coverage = GPUCoverageConsumption.FullOrScissor,
+            sourceAlpha = sourceAlpha,
+            target = GPUTargetBlendFacts(
+                formatClass = targetFormatClass,
+                clampsNormalizedColorWrites = targetFormatClass.endsWith("unorm"),
+                premultipliedAlpha = true,
+            ),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+        ),
+    )
+
 private const val maxStableAnalysisLocalMatrixLength = 64
 
 /** Returns true when any rectangle coordinate is NaN. */
@@ -1985,53 +2275,33 @@ private fun GPURect.hasNaN(): Boolean =
 private fun GPURect.hasNonFinite(): Boolean =
     !left.isFinite() || !top.isFinite() || !right.isFinite() || !bottom.isFinite()
 
-/** Returns true when any rounded rectangle coordinate or radius is NaN. */
-private fun GPURRect.hasNaN(): Boolean =
-    topLeft.hasNaN() || topRight.hasNaN() || bottomRight.hasNaN() || bottomLeft.hasNaN()
-
-/** Returns true when any rounded rectangle coordinate or radius is infinite or NaN. */
-private fun GPURRect.hasNonFinite(): Boolean =
-    topLeft.hasNonFinite() || topRight.hasNonFinite() ||
-        bottomRight.hasNonFinite() || bottomLeft.hasNonFinite()
-
-/** Returns true when either radius component is NaN. */
-private fun GPURRectCornerRadii.hasNaN(): Boolean =
-    x.isNaN() || y.isNaN()
-
-/** Returns true when either radius component is infinite or NaN. */
-private fun GPURRectCornerRadii.hasNonFinite(): Boolean =
-    !x.isFinite() || !y.isFinite()
-
-/** Returns true when both radius components are finite and positive. */
-private fun GPURRectCornerRadii.hasPositiveFiniteRadii(): Boolean =
-    x.isFinite() && y.isFinite() && x > 0f && y > 0f
-
-/** Returns true when rrect radii are finite, positive, and already normalized for the rect extent. */
-private fun GPURRect.hasAcceptedRadii(): Boolean {
-    val width = rect.right - rect.left
-    val height = rect.bottom - rect.top
-    if (width <= 0f || height <= 0f) return false
-    if (!topLeft.hasPositiveFiniteRadii() || !topRight.hasPositiveFiniteRadii()) return false
-    if (!bottomRight.hasPositiveFiniteRadii() || !bottomLeft.hasPositiveFiniteRadii()) return false
-    return topLeft.x + topRight.x <= width &&
-        bottomLeft.x + bottomRight.x <= width &&
-        topLeft.y + bottomLeft.y <= height &&
-        topRight.y + bottomRight.y <= height
-}
-
 /** Emits stable accepted rrect geometry facts for analysis dumps. */
-private fun GPURRect.analysisDiagnostics(recordId: String): List<GPUAnalysisDiagnostic> =
-    listOf(
+private fun GPURRectNormalizationResult.Accepted.analysisDiagnostics(
+    recordId: String,
+): List<GPUAnalysisDiagnostic> {
+    val geometry = rrect
+    return listOf(
         GPUAnalysisDiagnostic(
             code = "geometry:rrect.corner_radii=" +
-                "tl(${topLeft.x},${topLeft.y});" +
-                "tr(${topRight.x},${topRight.y});" +
-                "br(${bottomRight.x},${bottomRight.y});" +
-                "bl(${bottomLeft.x},${bottomLeft.y})",
+                "tl(${geometry.topLeft.x},${geometry.topLeft.y});" +
+                "tr(${geometry.topRight.x},${geometry.topRight.y});" +
+                "br(${geometry.bottomRight.x},${geometry.bottomRight.y});" +
+                "bl(${geometry.bottomLeft.x},${geometry.bottomLeft.y})",
             recordId = recordId,
             terminal = false,
         ),
-    )
+    ) + if (wasScaled) {
+        listOf(
+            GPUAnalysisDiagnostic(
+                code = "geometry:rrect.radius_scale=$scale",
+                recordId = recordId,
+                terminal = false,
+            ),
+        )
+    } else {
+        emptyList()
+    }
+}
 
 /** Returns true when any bounds coordinate is NaN. */
 private fun GPUBounds.hasNaN(): Boolean =

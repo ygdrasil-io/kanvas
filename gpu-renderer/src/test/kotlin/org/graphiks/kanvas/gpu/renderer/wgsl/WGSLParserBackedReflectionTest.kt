@@ -1,12 +1,38 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCoverageKind
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaModuleAbi
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.wgsl.parser.Lowerer
+import org.graphiks.wgsl.parser.parseWgslResult
 
 class WGSLParserBackedReflectionTest {
+    @Test
+    fun `generated blend formula modules exactly match declared full scalar and LCD ABI through wgsl4k`() {
+        GPUBlendCoverageKind.entries.forEach { coverageKind ->
+            val formula = requireNotNull(
+                GPUBlendFormulaLibrary.formulaFor(GPUBlendMode.MULTIPLY, coverageKind),
+            )
+            val source = GPUBlendFormulaLibrary.assembleValidationModule(formula)
+            val parsed = parseWgslResult(source)
+            assertTrue(parsed.isSuccess, "${formula.formulaId}: ${parsed.errors.joinToString { it.message }}")
+
+            val module = Lowerer().lower(parsed.translationUnit)
+            val reflected = module.reflectWgslModule(sourceId = formula.formulaId)
+            val result = validateWgslModuleAbi(GPUBlendFormulaModuleAbi.declaredFor(coverageKind), reflected)
+
+            assertIs<WgslModuleAbiValidationResult.Match>(
+                result,
+                (result as? WgslModuleAbiValidationResult.Mismatch)?.diagnostics?.joinToString("\n"),
+            )
+        }
+    }
+
     @Test
     fun `assembler produces parser-backed reflection for solid rect WGSL when parser available`() {
         val result = WGSLModuleAssembler.assembleRenderModule(solidModuleInput())

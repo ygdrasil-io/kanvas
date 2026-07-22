@@ -6,7 +6,9 @@ import java.nio.file.Files
 import java.nio.file.Path
 import javax.imageio.spi.IIORegistry
 import javax.imageio.spi.ImageWriterSpi
+import javax.imageio.ImageIO
 import kotlin.io.path.exists
+import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -59,6 +61,203 @@ class RenderGpuRendererSceneOffscreenMainTest {
             runJson.contains("\"status\": \"rendered\"") || runJson.contains("webgpu-context-unavailable"),
             "Expected rendered status or webgpu-context-unavailable fallback, got: $runJson",
         )
+    }
+
+    @Test
+    fun `real COLRv0 scene uses one prepared encoder submit and matches its CPU reference`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-colr")
+
+        val report = renderGpuRendererSceneOffscreen(arrayOf("colr-v0-color-glyph", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        val sceneOutput = root.resolve("colr-v0-color-glyph")
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(report.diagnostics, "colorTextRun:fontResource=/fonts/skia/colr.ttf")
+        assertContains(report.diagnostics, "colorTextRun:baseGlyph=2 layerGlyphs=7,8")
+        assertContains(report.diagnostics, "colorTextRun:uniformPack=784-byte-le")
+        assertContains(report.diagnostics, "colorTextRun:native encoders=1 commandBuffers=1 submits=1 readbacks=1")
+        assertEquals(
+            sceneOutput.resolve("reference.png").readBytes().toList(),
+            sceneOutput.resolve("render.png").readBytes().toList(),
+        )
+    }
+
+    @Test
+    fun `linear gradients use one generic prepared submit and stay within one unorm lsb`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-registered-uniform")
+
+        val report = renderGpuRendererSceneOffscreen(arrayOf("linear-gradient-lanes", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        val sceneOutput = root.resolve("linear-gradient-lanes")
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:programs=solid-color-v1,linear-gradient-2stop-v1",
+        )
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+        )
+        assertContains(report.diagnostics, "registeredUniform:cache creations=2 reuses=2")
+
+        val actual = ImageIO.read(sceneOutput.resolve("render.png").toFile())
+        val reference = ImageIO.read(sceneOutput.resolve("reference.png").toFile())
+        var maxChannelDelta = 0
+        repeat(actual.height) { y ->
+            repeat(actual.width) { x ->
+                val actualArgb = actual.getRGB(x, y)
+                val referenceArgb = reference.getRGB(x, y)
+                repeat(4) { channel ->
+                    val shift = channel * 8
+                    maxChannelDelta = maxOf(
+                        maxChannelDelta,
+                        kotlin.math.abs(
+                            ((actualArgb ushr shift) and 0xff) -
+                                ((referenceArgb ushr shift) and 0xff),
+                        ),
+                    )
+                }
+            }
+        }
+        assertTrue(maxChannelDelta <= 1, "max channel delta was $maxChannelDelta")
+    }
+
+    @Test
+    fun `radial and sweep gradients use the same generic prepared submit`() {
+        val cases = listOf(
+            "radial-swatch" to "radial-gradient-2stop-v1",
+            "sweep-disk" to "sweep-gradient-2stop-v1",
+        )
+
+        cases.forEach { (sceneId, program) ->
+            val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-$sceneId")
+            val report = renderGpuRendererSceneOffscreen(arrayOf(sceneId, root.toString()))
+            if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return@forEach
+
+            assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+            assertContains(
+                report.diagnostics,
+                "registeredUniform:programs=solid-color-v1,$program",
+            )
+            assertContains(
+                report.diagnostics,
+                "registeredUniform:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+            )
+            val sceneOutput = root.resolve(sceneId)
+            val actual = ImageIO.read(sceneOutput.resolve("render.png").toFile())
+            val reference = ImageIO.read(sceneOutput.resolve("reference.png").toFile())
+            assertEquals(actual.width, reference.width)
+            assertEquals(actual.height, reference.height)
+            repeat(actual.height) { y ->
+                repeat(actual.width) { x ->
+                    val actualArgb = actual.getRGB(x, y)
+                    val referenceArgb = reference.getRGB(x, y)
+                    repeat(4) { channel ->
+                        val shift = channel * 8
+                        val delta = kotlin.math.abs(
+                            ((actualArgb ushr shift) and 0xff) -
+                                ((referenceArgb ushr shift) and 0xff),
+                        )
+                        assertTrue(delta <= 1, "$sceneId pixel=($x,$y) channel=$channel delta=$delta")
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `registered runtime effect uses the generic prepared submit without source in the frame plan`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-runtime-effect")
+        val report = renderGpuRendererSceneOffscreen(arrayOf("runtime-effect-uniform", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:programs=solid-color-v1,simple-runtime-effect-v1",
+        )
+        assertContains(report.diagnostics, "registeredUniform:wgslSourceInFramePlan=false")
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+        )
+        assertContains(report.diagnostics, "registeredUniform:withinOneLsb=64000/64000 maxChannelDelta=0")
+    }
+
+    @Test
+    fun `color matrix uses one prepared submit and matches the independent row-major reference`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-color-matrix")
+        val report = renderGpuRendererSceneOffscreen(arrayOf("color-matrix-filter", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:programs=solid-color-v1,color-matrix-v1",
+        )
+        assertContains(
+            report.diagnostics,
+            "registeredUniform:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+        )
+        assertContains(report.diagnostics, "registeredUniform:withinOneLsb=64000/64000")
+    }
+
+    @Test
+    fun `gaussian blur photo uses three prepared passes in one submit`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-separable-blur")
+        val report = renderGpuRendererSceneOffscreen(arrayOf("gaussian-blur-photo", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(report.diagnostics, "separableBlur:route=prepared-source-horizontal-vertical")
+        assertContains(
+            report.diagnostics,
+            "separableBlur:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+        )
+        assertContains(
+            report.diagnostics,
+            "separableBlur:cache invariants=1/0 intermediates=1/0",
+        )
+        assertContains(report.diagnostics, "separableBlur:pixelExact=64000/64000")
+        assertContains(
+            report.diagnostics,
+            "separableBlur:withinOneLsb=64000/64000 maxChannelDelta=0",
+        )
+    }
+
+    @Test
+    fun `stroke rect outline uses geometry lowering and one prepared submit`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-offscreen-prepared-stroke-rect")
+        val report = renderGpuRendererSceneOffscreen(arrayOf("stroke-rect-outline", root.toString()))
+        if (report.diagnostics.any { it.contains("webgpu-context-unavailable") }) return
+
+        assertEquals(OffscreenRunStatus.Rendered, report.runStatus)
+        assertContains(report.diagnostics, "strokeRect:geometryRoute=analytic-annular-rect.coverage")
+        assertContains(report.diagnostics, "strokeRect:legacyStrokeWgsl=false")
+        assertContains(
+            report.diagnostics,
+            "strokeRect:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
+        )
+        assertContains(report.diagnostics, "strokeRect:pixelExact=64000/64000 maxChannelDelta=0")
+    }
+
+    @Test
+    fun `solid frame sampler measures completion only and performs one final readback`() {
+        val root = Files.createTempDirectory("gpu-renderer-scenes-prepared-samples")
+        val scene = org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry.registry
+            .requireScene("solid-card-stack")
+
+        val report = OffscreenFrameSampler().sample(scene, frames = 3, outputDir = root)
+        if (report.runStatus == OffscreenFrameSampleStatus.RenderFailed &&
+            report.diagnostics.any { it.contains("webgpu-context-unavailable") }
+        ) return
+
+        assertEquals(OffscreenFrameSampleStatus.Sampled, report.runStatus)
+        assertEquals("wall-clock-prepared-submit-completion", report.metricSource)
+        assertContains(report.diagnostics, "measuredReadbacks=0 finalValidationReadbacks=1")
+        assertContains(report.diagnostics, "nativeFrames=4 encoders=4 commandBuffers=4 submits=4")
+        assertContains(report.diagnostics, "solidRectCache creations=1 reuses=3")
     }
 
     @Test
@@ -151,15 +350,16 @@ class RenderGpuRendererSceneOffscreenMainTest {
                     assertContains(diagnostics, "intermediate.composite source=layer-target:group-alpha-layer")
                 }
                 "dst-read-strategy" -> {
-                    assertContains(diagnostics, "intermediate.readback-snapshot source=surface:dst-read-strategy")
+                    assertContains(diagnostics, "intermediate.copy source=surface:dst-read-strategy")
                     assertFalse(
-                        diagnostics.contains("intermediate.copy source=surface:dst-read-strategy"),
+                        diagnostics.contains("intermediate.readback-snapshot source=surface:dst-read-strategy"),
                         diagnostics,
                     )
                     assertContains(diagnostics, "intermediate.bind label=dst-copy:dst-foreground")
                     assertContains(diagnostics, "intermediate.render command=dst-foreground")
-                    assertContains(diagnostics, "route=shader-blend:Screen")
-                    assertContains(diagnostics, "intermediateTexturesCreated=2 destinationCopies=0 destinationReadbackSnapshots=1")
+                    assertContains(diagnostics, "route=shader-blend:Multiply")
+                    assertContains(diagnostics, "intermediateTexturesCreated=2")
+                    assertContains(diagnostics, "destinationCopies=1 destinationReadbackSnapshots=0")
                 }
             }
             assertFalse(

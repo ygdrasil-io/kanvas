@@ -56,6 +56,21 @@ class GPURendererPackageBoundaryTest {
         )
     }
 
+    /** Keeps payload contracts passive so command/planning imports cannot close a package cycle. */
+    @Test
+    fun `payload contracts do not import commands or analysis`() {
+        val payloadSources = productionFile("payloads").walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+
+        listOf("commands", "analysis").forEach { forbiddenPackage ->
+            assertTrue(
+                actual = "import org.graphiks.kanvas.gpu.renderer.$forbiddenPackage." !in payloadSources,
+                message = "payloads must remain passive and must not import $forbiddenPackage",
+            )
+        }
+    }
+
     /** Ensures geometry remains independent from execution-only contracts. */
     @Test
     fun `geometry source does not import execution contracts`() {
@@ -64,6 +79,254 @@ class GPURendererPackageBoundaryTest {
         assertTrue(
             actual = "org.graphiks.kanvas.gpu.renderer.execution." !in pathTessellatorSource,
             message = "Geometry must not import execution contracts",
+        )
+    }
+
+    /** Keeps the frame-plan/resource dependency one-way and handle-free. */
+    @Test
+    fun `frame planning imports only handle free resource contracts`() {
+        val resourcesRoot = productionFile("resources")
+        val recordingRoot = productionFile("recording")
+        val resourceSources = resourcesRoot.walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+        val recordingSources = recordingRoot.walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+
+        listOf("recording", "execution", "passes").forEach { forbiddenPackage ->
+            assertTrue(
+                actual = "import org.graphiks.kanvas.gpu.renderer.$forbiddenPackage." !in resourceSources,
+                message = "resources must not import $forbiddenPackage",
+            )
+        }
+        listOf("GPUConcreteResourceProvider", "GPUMaterialized", "GPUPrepared").forEach { forbiddenType ->
+            assertTrue(
+                actual = "import org.graphiks.kanvas.gpu.renderer.resources.$forbiddenType" !in recordingSources,
+                message = "recording must not import concrete resource type $forbiddenType",
+            )
+        }
+    }
+
+    /** Keeps task-list construction on the recording side of the recording/execution boundary. */
+    @Test
+    fun `public prepared frame recorders belong to recording not execution`() {
+        val recordingSources = productionFile("recording").walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+        val executionSources = productionFile("execution").walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+
+        listOf("GPUColorGlyphFrameRecorder", "GPUSolidRectFrameRecorder").forEach { recorder ->
+            assertContains(recordingSources, "class $recorder")
+            assertTrue(
+                actual = "class $recorder" !in executionSources,
+                message = "$recorder constructs task lists and must not be owned by execution",
+            )
+        }
+    }
+
+    /** Keeps frame telemetry observational and dependency direction one-way into execution. */
+    @Test
+    fun `frame structural telemetry stays independent from execution resources and recording`() {
+        val telemetrySource = productionFile("telemetry/TelemetryContracts.kt").readText()
+        val executorSource = productionFile("execution/GPUFrameExecutor.kt").readText()
+        val coordinatorSource = productionFile("execution/GPUFrameCoordinator.kt").readText()
+
+        listOf("execution", "resources", "recording").forEach { forbiddenPackage ->
+            assertTrue(
+                actual = "import org.graphiks.kanvas.gpu.renderer.$forbiddenPackage." !in telemetrySource,
+                message = "telemetry must not import $forbiddenPackage",
+            )
+        }
+        assertContains(executorSource, "org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID")
+        assertContains(coordinatorSource, "org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID")
+    }
+
+    /** Keeps low-level execution and preflight seams hidden behind the coordinator product API. */
+    @Test
+    fun `frame execution seams remain internal and coordinator is the product entry`() {
+        val executorSource = productionFile("execution/GPUFrameExecutor.kt").readText()
+        val coordinatorSource = productionFile("execution/GPUFrameCoordinator.kt").readText()
+        val preparedSource = productionFile("execution/PreparedGPUFrame.kt").readText()
+        val preflighterSource = productionFile("execution/GPUFramePreflighter.kt").readText()
+        val targetSource = productionFile("resources/GPUSceneTarget.kt").readText()
+
+        listOf(
+            "internal class GPUFrameExecutor",
+            "internal fun interface GPUFrameExecutionPort",
+            "internal interface GPUFrameEncodingBackend",
+            "internal interface GPUFrameResourceRetention",
+        ).forEach { declaration -> assertContains(executorSource, declaration) }
+        assertContains(coordinatorSource, "class GPUFrameCoordinator internal constructor")
+        assertContains(coordinatorSource, "internal fun interface GPUFramePlanningPort")
+        assertContains(coordinatorSource, "internal fun interface GPUFramePreflightPort")
+        assertContains(preparedSource, "internal class PreparedGPUFrame")
+        assertContains(preparedSource, "internal sealed interface GPUFramePreflightResult")
+        assertContains(preflighterSource, "internal class GPUFramePreflighter")
+        assertContains(targetSource, "internal class GPUSceneTarget")
+    }
+
+    /** Prevents scene callers from bypassing the coordinator through low-level execution types. */
+    @Test
+    fun `scene sources do not call frame executor or preflight seams directly`() {
+        val sceneSources = sceneSourceRoot.walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+        listOf(
+            "GPUFrameExecutor",
+            "GPUFrameExecutionPort",
+            "GPUFramePreflighter",
+            "GPUFramePreflightPort",
+            "PreparedGPUFrame",
+            "GPUSceneTarget",
+        ).forEach { forbiddenType ->
+            assertTrue(
+                actual = forbiddenType !in sceneSources,
+                message = "gpu-renderer-scenes must route through GPUFrameCoordinator, not $forbiddenType",
+            )
+        }
+    }
+
+    /** Keeps color-glyph native evidence on the canonical prepared-frame route. */
+    @Test
+    fun `color glyph native tests use task lists and prepared scene readback only`() {
+        val testFiles = listOf(
+            "execution/GPUColorGlyphRenderSmokeTest.kt",
+            "execution/GPUColorGlyphTrueColrFixtureTest.kt",
+        )
+        val violations = buildList {
+            testFiles.forEach { relativePath ->
+                val source = testFile(relativePath).readText()
+                listOf(
+                    "createOffscreenTarget(" to "legacy offscreen-target creation",
+                    "target.encode(" to "legacy immediate target encoding",
+                    "drawColorGlyphPass(" to "legacy immediate color-glyph draw",
+                    "target.readRgba(" to "legacy immediate readback",
+                ).forEach { (forbiddenCall, description) ->
+                    if (forbiddenCall in source) add("$relativePath uses $description: $forbiddenCall")
+                }
+                listOf(
+                    listOf("GPUTaskList", "buildPreparedColorGlyphTestTaskList(") to "one recorded task list",
+                    listOf("prepareSceneFrameSession(") to "one prepared scene session",
+                    listOf("GPUSceneFrameOutputRequest.ReadbackRgba") to "planned RGBA readback",
+                ).forEach { (acceptedCalls, description) ->
+                    if (acceptedCalls.none(source::contains)) {
+                        add("$relativePath is missing $description: ${acceptedCalls.joinToString(" or ")}")
+                    }
+                }
+            }
+        }
+
+        assertTrue(
+            actual = violations.isEmpty(),
+            message = "Color-glyph native tests bypass the canonical frame route:\n${violations.joinToString("\n")}",
+        )
+    }
+
+    /** Ensures active specs expose one frame-planning authority without legacy contradictions. */
+    @Test
+    fun `active gpu renderer specs expose one coherent frame planning authority`() {
+        val specs = authoritySpecFiles.associateWith { fileName ->
+            authoritySpecRoot.resolve(fileName).readText()
+        }
+        val violations = buildList {
+            canonicalAuthorityOwners.forEach { (concept, expectedOwner) ->
+                val authorityRows = specs.flatMap { (fileName, text) ->
+                    text.lineSequence()
+                        .filter { line -> line.startsWith("| `$concept` |") }
+                        .map { line -> "$fileName:$line" }
+                        .toList()
+                }
+                if (authorityRows.size != 1) {
+                    add(
+                        "$concept must have exactly one normative authority row; " +
+                            "found ${authorityRows.size}: ${authorityRows.joinToString()}",
+                    )
+                } else if ("| `$concept` | `$expectedOwner` owns" !in authorityRows.single()) {
+                    add(
+                        "$concept must be owned by $expectedOwner; " +
+                            "found: ${authorityRows.single()}",
+                    )
+                }
+            }
+
+            val forbiddenAuthority = listOf(
+                "a second blend-mode enum in state" to
+                    Regex(
+                        "(?ms)^### `state`\\s*$.*?" +
+                            "^- `GPUBlendMode`\\s*$.*?^### `color`\\s*$",
+                    ),
+                "an unconditional LCD product refusal" to
+                    Regex(
+                        "(?im)^(?:LCD subpixel masks are not a target representation\\.|" +
+                            "\\| LCD subpixel text \\| Future research; stable refusal\\. \\||" +
+                            "- Do not support LCD subpixel text as part of this target\\.)$",
+                    ),
+                "materialization before final task and frame order" to
+                    Regex(
+                        "GPUResourceMaterializationDecision\\s*" +
+                            "-> GPUTaskList finalization",
+                    ),
+                "a direct submission entry that bypasses GPUFrameCoordinator" to
+                    Regex("`GPUExecutionContext\\.submit\\(\\)`"),
+                "a CPU destination snapshot product route" to
+                    Regex(
+                        "(?i)(?:allow|accept|create|upload|use)[^\\n]{0,80}" +
+                            "CPU[^\\n]{0,40}destination snapshot",
+                    ),
+                "presentation as GPU completion" to
+                    Regex(
+                        "(?i)(?:present(?:ation)?\\s+" +
+                            "(?:is|means|constitutes|completes)\\s+" +
+                            "(?:GPU|queue) completion|" +
+                            "treat[^\\n]{0,40}present[^\\n]{0,40}as[^\\n]{0,20}" +
+                            "(?:GPU|queue) completion)",
+                    ),
+                "GPUTaskList or GPUResourceProvider encoding GPU work" to
+                    Regex(
+                        "(?i)\\bencoded\\s+(?:by|through)\\s+" +
+                            "(?:`GPUResourceProvider`|`GPUTaskList`)",
+                    ),
+                "late destination-read products flowing back to semantic planning stages" to
+                    Regex(
+                        "(?is)(?:" +
+                            "(?:`GPUDestinationReadAction`|\\bActions?\\b)" +
+                            "[^.]{0,320}\\b(?:consum(?:e|es|ed)|carr(?:y|ies|ied)|" +
+                            "feed(?:s|ing)?|fed|pass(?:es|ed)?|return(?:s|ed)?|" +
+                            "send(?:s|ing)?|sent)\\b" +
+                            "[^.]{0,240}(?:`GPUTaskList`|`GPUDrawLayerPlanner`)|" +
+                            "(?:`GPUDestinationReadPlan`|`GPUDestinationReadAction`|" +
+                            "`GPUDestinationReadBinding`|`GPUDestinationCopyPlan`|" +
+                            "`GPUDestinationCopyTextureDescriptor`|" +
+                            "`GPUResourceMaterializationDecision`|`GPUCommandEncoderPlan`)" +
+                            "[^.]{0,320}\\b(?:consum(?:e|es|ed)|carr(?:y|ies|ied)|" +
+                            "flow(?:s|ed|ing)?|feed(?:s|ing)?|fed|pass(?:es|ed)?|" +
+                            "return(?:s|ed)?|send(?:s|ing)?|sent)\\b[^.]{0,240}" +
+                            "(?:`GPUTaskList`|`GPUDrawLayerPlanner`)|" +
+                            "(?:`GPUTaskList`|`GPUDrawLayerPlanner`)" +
+                            "[^.]{0,240}\\b(?:consum(?:e|es|ed)|receive(?:s|d)|" +
+                            "accept(?:s|ed)|carr(?:y|ies|ied))\\b[^.]{0,320}" +
+                            "(?:`GPUDestinationReadPlan`|`GPUDestinationReadAction`|" +
+                            "`GPUDestinationReadBinding`|`GPUDestinationCopyPlan`|" +
+                            "`GPUDestinationCopyTextureDescriptor`|" +
+                            "`GPUResourceMaterializationDecision`|`GPUCommandEncoderPlan`)" +
+                            ")",
+                    ),
+            )
+            forbiddenAuthority.forEach { (description, pattern) ->
+                specs.forEach { (fileName, text) ->
+                    pattern.findAll(text).forEach { match ->
+                        add("$fileName authorizes $description: ${match.value}")
+                    }
+                }
+            }
+        }
+
+        assertTrue(
+            actual = violations.isEmpty(),
+            message = "GPU renderer authority conflicts:\n${violations.joinToString("\n")}",
         )
     }
 
@@ -260,9 +523,50 @@ class GPURendererPackageBoundaryTest {
     private fun productionFile(relativePath: String): File =
         mainSourceRoot.resolve("org/graphiks/kanvas/gpu/renderer").resolve(relativePath)
 
+    /** Resolves one test source file below the canonical renderer root. */
+    private fun testFile(relativePath: String): File =
+        testSourceRoot.resolve("org/graphiks/kanvas/gpu/renderer").resolve(relativePath)
+
     /** Test constants used by package-boundary validation. */
     private companion object {
         /** Main Kotlin source root for the gpu-renderer module under Gradle test execution. */
         val mainSourceRoot = File("src/main/kotlin")
+
+        /** Test Kotlin source root for architecture guards under Gradle test execution. */
+        val testSourceRoot = File("src/test/kotlin")
+
+        /** Scene source root, which may depend only on the coordinator product route. */
+        val sceneSourceRoot = File("../gpu-renderer-scenes/src")
+
+        /** Active authority pack root relative to the gpu-renderer Gradle project. */
+        val authoritySpecRoot = File("../.upstream/specs/gpu-renderer")
+
+        /** Active authority files synchronized by the frame-planning amendment. */
+        val authoritySpecFiles = listOf(
+            "README.md",
+            "02-gpu-recording-task-graph.md",
+            "10-gpu-execution-context-submission.md",
+            "12-blend-color-target-state.md",
+            "20-destination-read-strategy.md",
+            "21-text-glyph-pipeline.md",
+            "24-clip-stencil-mask-pipeline.md",
+            "32-target-authority-taxonomy-diagnostics.md",
+            "34-analysis-materialization-recording.md",
+            "35-package-class-layout.md",
+            "37-draw-packet-command-stream.md",
+        )
+
+        /** Concepts that must have one normative authority row with this exact owner. */
+        val canonicalAuthorityOwners = mapOf(
+            "GPUBlendPlan" to "passes",
+            "GPUFramePlan" to "recording",
+            "GPUFrameCoordinator" to "execution",
+            "GPUFramePreflighter" to "execution",
+            "PreparedGPUFrame" to "execution",
+            "GPUSceneTarget" to "resources",
+            "GPUQueueCompletionTicket" to "execution",
+            "LCDCoverage" to "passes",
+            "RefusedCompositeCommand" to "recording",
+        )
     }
 }

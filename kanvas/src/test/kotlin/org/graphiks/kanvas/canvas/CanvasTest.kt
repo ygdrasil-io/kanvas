@@ -81,5 +81,29 @@ class CanvasTest {
         assertEquals(outer, assertIs<ClipStack.DeviceRect>(draws[3].clip).rect)
     }
 
+    @Test
+    fun `save restore freezes the ordered clip snapshot on each draw`() {
+        val buffer = TestBuffer()
+        val canvas = Canvas(buffer)
+        val outer = Rect(1.25f, 2.5f, 15.75f, 16.5f)
+        val inner = RRect(Rect(3f, 4f, 13f, 14f), radius = 2f)
+        val draw = Rect(0f, 0f, 20f, 20f)
+
+        canvas.clipRect(outer, antiAlias = true)
+        canvas.save()
+        canvas.clipRRect(inner, antiAlias = false)
+        canvas.drawRect(draw, Paint.fill(Color.RED))
+        canvas.restore()
+        canvas.drawRect(draw, Paint.fill(Color.BLUE))
+
+        val draws = buffer.ops().filterIsInstance<DisplayOp.DrawRect>()
+        val nested = assertIs<ClipStack.Complex>(draws[0].clip)
+        assertEquals(2, nested.ops.size)
+        assertIs<ClipStackOp.RectOp>(nested.ops[0])
+        assertIs<ClipStackOp.RRectOp>(nested.ops[1])
+        assertEquals(outer, assertIs<ClipStack.DeviceRect>(draws[1].clip).rect)
+        assertEquals(2, assertIs<ClipStack.Complex>(draws[0].clip).ops.size)
+    }
+
     @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix33.identity(), c.matrix) }
 }

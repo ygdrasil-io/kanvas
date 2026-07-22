@@ -2,6 +2,16 @@ package org.graphiks.kanvas.gpu.renderer.capabilities
 
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
+import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
+
+/** Handle-free identity for one GPU device generation. */
+@JvmInline
+value class GPUDeviceGenerationID(val value: Long) {
+    init {
+        require(value >= 0L) { "GPUDeviceGenerationID.value must be non-negative" }
+    }
+}
 
 /** Implementation identity for native or future pure Kotlin GPU facade backends. */
 data class GPUImplementationIdentity(
@@ -22,6 +32,22 @@ enum class GPURendererFeature(val dumpLabel: String) {
     TextureSampling("texture-sampling"),
 }
 
+/** Exact implementation evidence for the optional copy-as-draw materialization primitive. */
+data class GPUCopyAsDrawImplementationCapability(
+    val implementationId: String,
+    val implementationVersion: String,
+    val available: Boolean,
+) {
+    init {
+        require(implementationId.isNotBlank()) {
+            "GPUCopyAsDrawImplementationCapability.implementationId must not be blank"
+        }
+        require(implementationVersion.isNotBlank()) {
+            "GPUCopyAsDrawImplementationCapability.implementationVersion must not be blank"
+        }
+    }
+}
+
 /** Stable dump label for GPU texture formats used in diagnostics and snapshots. */
 fun GPUTextureFormat.dumpLabel(): String =
     when (this) {
@@ -29,6 +55,8 @@ fun GPUTextureFormat.dumpLabel(): String =
         GPUTextureFormat.R8Snorm -> "r8snorm"
         GPUTextureFormat.R8Uint -> "r8uint"
         GPUTextureFormat.R8Sint -> "r8sint"
+        GPUTextureFormat.R16Unorm -> "r16unorm"
+        GPUTextureFormat.R16Snorm -> "r16snorm"
         GPUTextureFormat.R16Uint -> "r16uint"
         GPUTextureFormat.R16Sint -> "r16sint"
         GPUTextureFormat.R16Float -> "r16float"
@@ -39,6 +67,8 @@ fun GPUTextureFormat.dumpLabel(): String =
         GPUTextureFormat.R32Float -> "r32float"
         GPUTextureFormat.R32Uint -> "r32uint"
         GPUTextureFormat.R32Sint -> "r32sint"
+        GPUTextureFormat.RG16Unorm -> "rg16unorm"
+        GPUTextureFormat.RG16Snorm -> "rg16snorm"
         GPUTextureFormat.RG16Uint -> "rg16uint"
         GPUTextureFormat.RG16Sint -> "rg16sint"
         GPUTextureFormat.RG16Float -> "rg16float"
@@ -56,6 +86,8 @@ fun GPUTextureFormat.dumpLabel(): String =
         GPUTextureFormat.RG32Float -> "rg32float"
         GPUTextureFormat.RG32Uint -> "rg32uint"
         GPUTextureFormat.RG32Sint -> "rg32sint"
+        GPUTextureFormat.RGBA16Unorm -> "rgba16unorm"
+        GPUTextureFormat.RGBA16Snorm -> "rgba16snorm"
         GPUTextureFormat.RGBA16Uint -> "rgba16uint"
         GPUTextureFormat.RGBA16Sint -> "rgba16sint"
         GPUTextureFormat.RGBA16Float -> "rgba16float"
@@ -193,12 +225,24 @@ data class GPULimits(
     val copyBytesPerRowAlignment: Long,
     val minUniformBufferOffsetAlignment: Long,
     val source: String = "device.limits",
+    /** Facade-observed buffer allocation limit; absent until the selected backend reports it. */
+    val maxBufferSize: Long? = null,
+    /** Facade-observed dynamic uniform binding limit; absent until the selected backend reports it. */
+    val maxDynamicUniformBuffersPerPipelineLayout: Long? = null,
 ) {
     init {
         require(maxTextureDimension2D > 0L) { "GPULimits.maxTextureDimension2D must be positive" }
         require(copyBytesPerRowAlignment > 0L) { "GPULimits.copyBytesPerRowAlignment must be positive" }
         require(minUniformBufferOffsetAlignment > 0L) {
             "GPULimits.minUniformBufferOffsetAlignment must be positive"
+        }
+        require(maxBufferSize == null || maxBufferSize > 0L) {
+            "GPULimits.maxBufferSize must be positive when observed"
+        }
+        require(maxDynamicUniformBuffersPerPipelineLayout == null ||
+            maxDynamicUniformBuffersPerPipelineLayout >= 0L
+        ) {
+            "GPULimits.maxDynamicUniformBuffersPerPipelineLayout must be non-negative when observed"
         }
         require(source.isNotBlank()) { "GPULimits.source must not be blank" }
     }
@@ -228,6 +272,25 @@ data class GPULimits(
                 affectsValidity = true,
                 evidenceLabel = evidenceLabel,
             ),
+        ) + listOfNotNull(
+            maxBufferSize?.let { observedMaxBufferSize ->
+                GPUCapabilityFact(
+                    name = "maxBufferSize",
+                    source = source,
+                    value = observedMaxBufferSize.toString(),
+                    affectsValidity = true,
+                    evidenceLabel = evidenceLabel,
+                )
+            },
+            maxDynamicUniformBuffersPerPipelineLayout?.let { observedLimit ->
+                GPUCapabilityFact(
+                    name = "maxDynamicUniformBuffersPerPipelineLayout",
+                    source = source,
+                    value = observedLimit.toString(),
+                    affectsValidity = true,
+                    evidenceLabel = evidenceLabel,
+                )
+            },
         )
     }
 
@@ -237,14 +300,82 @@ data class GPULimits(
             maxTextureDimension2D: Long,
             copyBytesPerRowAlignment: Long,
             minUniformBufferOffsetAlignment: Long,
+            maxBufferSize: Long? = null,
         ): GPULimits =
             GPULimits(
                 maxTextureDimension2D = maxTextureDimension2D,
                 copyBytesPerRowAlignment = copyBytesPerRowAlignment,
                 minUniformBufferOffsetAlignment = minUniformBufferOffsetAlignment,
+                maxBufferSize = maxBufferSize,
                 source = "runtime.conservative",
             )
     }
+}
+
+/** Immutable sample-count facts for one renderable texture format. */
+class GPUTextureSampleCountSupport(
+    renderAttachmentSampleCounts: Set<Int>,
+    resolveSourceSampleCounts: Set<Int> = emptySet(),
+) {
+    val renderAttachmentSampleCounts: Set<Int> = immutableSet(renderAttachmentSampleCounts)
+    val resolveSourceSampleCounts: Set<Int> = immutableSet(resolveSourceSampleCounts)
+
+    init {
+        require(this.renderAttachmentSampleCounts.isNotEmpty()) {
+            "GPUTextureSampleCountSupport.renderAttachmentSampleCounts must not be empty"
+        }
+        require(this.renderAttachmentSampleCounts.all { it in WEBGPU_SAMPLE_COUNTS }) {
+            "GPUTextureSampleCountSupport render sample counts must be 1 or 4"
+        }
+        require(this.resolveSourceSampleCounts.all { it == 4 }) {
+            "GPUTextureSampleCountSupport resolve source sample counts must be 4"
+        }
+        require(this.renderAttachmentSampleCounts.containsAll(this.resolveSourceSampleCounts)) {
+            "GPUTextureSampleCountSupport resolve source samples must also be renderable"
+        }
+    }
+
+    override fun equals(other: Any?): Boolean =
+        other is GPUTextureSampleCountSupport &&
+            renderAttachmentSampleCounts == other.renderAttachmentSampleCounts &&
+            resolveSourceSampleCounts == other.resolveSourceSampleCounts
+
+    override fun hashCode(): Int =
+        31 * renderAttachmentSampleCounts.hashCode() + resolveSourceSampleCounts.hashCode()
+
+    override fun toString(): String =
+        "GPUTextureSampleCountSupport(render=$renderAttachmentSampleCounts, resolve=$resolveSourceSampleCounts)"
+
+    private companion object {
+        val WEBGPU_SAMPLE_COUNTS = setOf(1, 4)
+    }
+}
+
+/** Deeply immutable per-format sample-count capability table. */
+class GPUTextureFormatSampleSupport(
+    values: Map<GPUTextureFormat, GPUTextureSampleCountSupport> = emptyMap(),
+) : Map<GPUTextureFormat, GPUTextureSampleCountSupport> {
+    private val snapshot: Map<GPUTextureFormat, GPUTextureSampleCountSupport> = immutableMap(values)
+
+    override val entries: Set<Map.Entry<GPUTextureFormat, GPUTextureSampleCountSupport>>
+        get() = snapshot.entries
+    override val keys: Set<GPUTextureFormat>
+        get() = snapshot.keys
+    override val size: Int
+        get() = snapshot.size
+    override val values: Collection<GPUTextureSampleCountSupport>
+        get() = snapshot.values
+
+    override fun containsKey(key: GPUTextureFormat): Boolean = snapshot.containsKey(key)
+    override fun containsValue(value: GPUTextureSampleCountSupport): Boolean = snapshot.containsValue(value)
+    override fun get(key: GPUTextureFormat): GPUTextureSampleCountSupport? = snapshot[key]
+    override fun isEmpty(): Boolean = snapshot.isEmpty()
+
+    override fun equals(other: Any?): Boolean = other is Map<*, *> && snapshot == other
+
+    override fun hashCode(): Int = snapshot.hashCode()
+
+    override fun toString(): String = snapshot.toString()
 }
 
 /** Capability snapshot for the selected GPU facade implementation. */
@@ -256,7 +387,10 @@ data class GPUCapabilities(
     val limits: GPULimits? = null,
     val supportedTextureFormats: Set<GPUTextureFormat> = emptySet(),
     val supportedTextureUsage: GPUTextureUsage? = null,
+    val textureFormatSampleSupport: GPUTextureFormatSampleSupport = GPUTextureFormatSampleSupport(),
     val rendererFeatures: Set<GPURendererFeature> = emptySet(),
+    /** Optional real implementation primitive captured by the device capability registry. */
+    val copyAsDrawCapability: GPUCopyAsDrawImplementationCapability? = null,
 ) {
     init {
         require(snapshotId.isNotBlank()) { "GPUCapabilities.snapshotId must not be blank" }
@@ -269,11 +403,38 @@ fun GPUCapabilities.validateTextureRequest(
     width: Int,
     height: Int,
     usage: GPUTextureUsage,
+): GPUCapabilityDiagnostic? = validateTextureRequest(
+    format = format,
+    width = width,
+    height = height,
+    usage = usage,
+    sampleCount = 1,
+    requiresResolve = false,
+)
+
+/** Validates a texture allocation request with an exact per-format sample topology. */
+fun GPUCapabilities.validateTextureRequest(
+    format: GPUTextureFormat,
+    width: Int,
+    height: Int,
+    usage: GPUTextureUsage,
+    sampleCount: Int,
+    requiresResolve: Boolean,
 ): GPUCapabilityDiagnostic? {
     require(width > 0) { "width must be positive" }
     require(height > 0) { "height must be positive" }
+    require(sampleCount > 0) { "sampleCount must be positive" }
+    require(!requiresResolve || sampleCount > 1) {
+        "requiresResolve requires a multisample texture request"
+    }
 
-    if (supportedTextureFormats.isNotEmpty() && format !in supportedTextureFormats) {
+    val sampleSupport = textureFormatSampleSupport[format]
+    val tableOnlyRenderAttachmentEvidence =
+        sampleSupport != null && usage == GPUTextureUsage.RenderAttachment
+    if (supportedTextureFormats.isNotEmpty() &&
+        format !in supportedTextureFormats &&
+        !tableOnlyRenderAttachmentEvidence
+    ) {
         return GPUCapabilityDiagnostic(
             code = "unsupported.capability.texture_format",
             severity = "error",
@@ -305,6 +466,30 @@ fun GPUCapabilities.validateTextureRequest(
             requirementName = "texture.maxTextureDimension2D",
             required = maxOf(width, height).toString(),
             observed = maxTextureDimension2D.toString(),
+            isTerminal = true,
+        )
+    }
+
+    if ((sampleCount > 1 && sampleSupport == null) ||
+        (sampleSupport != null && sampleCount !in sampleSupport.renderAttachmentSampleCounts)
+    ) {
+        return GPUCapabilityDiagnostic(
+            code = "unsupported.capability.texture_sample_count",
+            severity = "error",
+            requirementName = "texture.sampleCount",
+            required = "$sampleCount",
+            observed = sampleSupport?.renderAttachmentSampleCounts?.sorted()?.joinToString(",") ?: "unknown",
+            isTerminal = true,
+        )
+    }
+
+    if (requiresResolve && sampleCount !in checkNotNull(sampleSupport).resolveSourceSampleCounts) {
+        return GPUCapabilityDiagnostic(
+            code = "unsupported.capability.texture_resolve_sample_count",
+            severity = "error",
+            requirementName = "texture.resolveSourceSampleCount",
+            required = "$sampleCount",
+            observed = sampleSupport.resolveSourceSampleCounts.sorted().joinToString(",").ifEmpty { "none" },
             isTerminal = true,
         )
     }

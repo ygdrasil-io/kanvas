@@ -5,12 +5,6 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
-import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadAction
-import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadBounds
-import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadRequirement
-import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategy
-import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategyPlanner
-import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategyRequest
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialAssemblyPlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialLoweringContext
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceDescriptor
@@ -29,16 +23,16 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadBlock
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadField
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendAllowlistGatePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendAllowlistPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendAllowlistRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.state.GPUAlphaPlan
-import org.graphiks.kanvas.gpu.renderer.state.GPUBlendAllowlistGatePlan
-import org.graphiks.kanvas.gpu.renderer.state.GPUBlendAllowlistPlanner
-import org.graphiks.kanvas.gpu.renderer.state.GPUBlendAllowlistRequest
-import org.graphiks.kanvas.gpu.renderer.state.GPUBlendMode
 
 /** Verifies KGPU-M11-009 paint dictionary and blend-plan execution boundary contracts. */
 class PaintBlendExecutionBoundaryTest {
@@ -89,10 +83,10 @@ class PaintBlendExecutionBoundaryTest {
             "paint-blend:execution row=gpu-renderer.paint-blend.execution-boundary " +
                 "material=${request.paintPlan.materialKey.value} program=program:${request.paintPlan.materialKey.value} " +
                 "dictionary=material-dictionary:solid:v1 root=sourceRoot:solid-color snippets=material.solid_color.v1 " +
-                "blend=SrcOver plan=FixedFunctionBlend target=rgba8unorm " +
+                "blend=SRC_OVER plan=FixedFunctionBlend target=rgba8unorm " +
                 "blendState=${request.blendGate.blendStateHash} renderKey=$renderKey pipelineCache=$expectedCacheKey " +
                 "payload=uniform-fingerprint-solid-paint " +
-                "destinationRead=FixedFunctionAttachmentBlend;plan=missing;planStrategy=none;activeAttachmentSampled=false " +
+                "destinationRead=None;plan=semantic;planStrategy=None;activeAttachmentSampled=false " +
                 "blendConstants=none uniformValuesInKey=false destinationResourcesInKey=false " +
                 "adapterBacked=false productActivation=true",
         )
@@ -106,7 +100,7 @@ class PaintBlendExecutionBoundaryTest {
         assertContains(
             lines,
             "paint-blend:destination-read " +
-                "strategy=FixedFunctionAttachmentBlend;plan=missing;planStrategy=none;activeAttachmentSampled=false",
+                "strategy=None;plan=semantic;planStrategy=None;activeAttachmentSampled=false",
         )
         assertContains(
             lines,
@@ -117,7 +111,7 @@ class PaintBlendExecutionBoundaryTest {
             "resource.materialization:operand operand=paint-blend-pipeline:${request.paintPlan.materialKey.value} kind=render-pipeline " +
                 "deviceGeneration=19 owner=paint-blend-pipeline-cache usage=render " +
                 "invalidation=material-dictionary descriptor=$expectedCacheKey " +
-                "facts=blend=SrcOver;blendState=${request.blendGate.blendStateHash};dictionary=material-dictionary:solid:v1;" +
+                "facts=blend=SRC_OVER;blendState=${request.blendGate.blendStateHash};dictionary=material-dictionary:solid:v1;" +
                 "material=${request.paintPlan.materialKey.value};program=program:${request.paintPlan.materialKey.value};" +
                 "root=sourceRoot:solid-color;snippets=material.solid_color.v1;uniformValuesInKey=false",
         )
@@ -129,9 +123,8 @@ class PaintBlendExecutionBoundaryTest {
     fun `paint blend execution refuses shader blend stale key payload and material mismatches`() {
         val shaderBlendGate = GPUBlendAllowlistPlanner().plan(
             blendRequest(
-                mode = GPUBlendMode.Screen,
+                mode = GPUBlendMode.MULTIPLY,
                 commandId = "blend:screen",
-                destinationReadPlan = destinationReadGate(),
             ),
         )
         val cases = listOf(
@@ -139,8 +132,8 @@ class PaintBlendExecutionBoundaryTest {
                 expectedCode = "unsupported.paint_blend.shader_blend_unvalidated",
                 request = paintBlendExecutionRequest(blendGate = shaderBlendGate),
                 expectedEvidence = "paint-blend:destination-read " +
-                    "strategy=TargetCopySnapshot;plan=gpu-renderer.destination-read.strategy:accepted;" +
-                    "planStrategy=TargetCopySnapshot;activeAttachmentSampled=false",
+                    "strategy=DestinationTextureRequired;plan=semantic;" +
+                    "planStrategy=DestinationTextureRequired;activeAttachmentSampled=false",
             ),
             RefusalCase(
                 expectedCode = "unsupported.paint_blend.target_state_mismatch",
@@ -176,39 +169,42 @@ class PaintBlendExecutionBoundaryTest {
                 ),
             ),
             RefusalCase(
-                expectedCode = "unsupported.blend.mode_unimplemented",
-                request = paintBlendExecutionRequest(
-                    blendGate = GPUBlendAllowlistPlanner().plan(
-                        blendRequest(mode = GPUBlendMode.Custom, commandId = "blend:custom"),
-                    ),
-                ),
-            ),
-            RefusalCase(
-                expectedCode = "unsupported.blend.dst_read_requires_intermediate",
-                request = paintBlendExecutionRequest(
-                    blendGate = GPUBlendAllowlistPlanner().plan(
-                        blendRequest(mode = GPUBlendMode.Screen, commandId = "blend:screen"),
-                    ),
-                ),
-            ),
-            RefusalCase(
-                expectedCode = "unsupported.blend.destination_read_plan_mismatch",
+                expectedCode = "unsupported.target.format_blend_incompatible",
                 request = paintBlendExecutionRequest(
                     blendGate = GPUBlendAllowlistPlanner().plan(
                         blendRequest(
-                            mode = GPUBlendMode.Screen,
-                            commandId = "blend:screen",
-                            destinationReadPlan = destinationReadGate(commandId = "blend:other"),
+                            mode = GPUBlendMode.SRC_OVER,
+                            commandId = "blend:unsupported-target",
+                            targetFormatClass = "r8unorm",
                         ),
                     ),
                 ),
             ),
             RefusalCase(
-                expectedCode = "unsupported.blend.alpha_plan_unaccepted",
+                expectedCode = "unsupported.paint_blend.shader_blend_unvalidated",
+                request = paintBlendExecutionRequest(
+                    blendGate = GPUBlendAllowlistPlanner().plan(
+                        blendRequest(mode = GPUBlendMode.MULTIPLY, commandId = "blend:multiply"),
+                    ),
+                ),
+            ),
+            RefusalCase(
+                expectedCode = "unsupported.paint_blend.shader_blend_unvalidated",
                 request = paintBlendExecutionRequest(
                     blendGate = GPUBlendAllowlistPlanner().plan(
                         blendRequest(
-                            mode = GPUBlendMode.SrcOver,
+                            mode = GPUBlendMode.MULTIPLY,
+                            commandId = "blend:multiply-second",
+                        ),
+                    ),
+                ),
+            ),
+            RefusalCase(
+                expectedCode = "unsupported.color.premul_conversion_unvalidated",
+                request = paintBlendExecutionRequest(
+                    blendGate = GPUBlendAllowlistPlanner().plan(
+                        blendRequest(
+                            mode = GPUBlendMode.SRC_OVER,
                             commandId = "blend:src-over-alpha",
                             alphaPlan = GPUAlphaPlan(
                                 inputAlpha = "unpremultiplied",
@@ -225,14 +221,14 @@ class PaintBlendExecutionBoundaryTest {
                 request = paintBlendExecutionRequest(
                     blendGate = GPUBlendAllowlistPlanner().plan(
                         blendRequest(
-                            mode = GPUBlendMode.Screen,
+                            mode = GPUBlendMode.SCREEN,
                             commandId = "blend:screen-active",
                             activeAttachmentSampled = true,
                         ),
                     ),
                 ),
                 expectedEvidence = "paint-blend:destination-read " +
-                    "strategy=RefuseDiagnostic;plan=missing;planStrategy=none;activeAttachmentSampled=true",
+                    "strategy=Refused;plan=semantic;planStrategy=Refused;activeAttachmentSampled=true",
             ),
         )
 
@@ -321,7 +317,7 @@ private fun solidAssembly(paintPlan: GPUPaintPipelinePlan): GPUMaterialAssemblyP
 private fun fixedFunctionBlendGate(paintPlan: GPUPaintPipelinePlan): GPUBlendAllowlistGatePlan =
     GPUBlendAllowlistPlanner().plan(
         blendRequest(
-            mode = GPUBlendMode.SrcOver,
+            mode = GPUBlendMode.SRC_OVER,
             commandId = "blend:src-over",
             materialKeyHash = paintPlan.materialKey.value,
         ),
@@ -331,7 +327,7 @@ private fun blendRequest(
     mode: GPUBlendMode,
     commandId: String,
     materialKeyHash: String = solidPaintPlan().materialKey.value,
-    destinationReadPlan: org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadStrategyGatePlan? = null,
+    targetFormatClass: String = "rgba8unorm",
     alphaPlan: GPUAlphaPlan = GPUAlphaPlan(
         inputAlpha = "premultiplied",
         outputAlpha = "premultiplied",
@@ -343,45 +339,11 @@ private fun blendRequest(
     GPUBlendAllowlistRequest(
         commandId = commandId,
         mode = mode,
-        targetFormatClass = "rgba8unorm",
+        targetFormatClass = targetFormatClass,
         materialKeyHash = materialKeyHash,
         renderStepIdentity = "rect-fill",
         alphaPlan = alphaPlan,
-        destinationReadPlan = destinationReadPlan,
-        destinationReadCopyBoundsLabel = destinationReadPlan?.plan?.bounds?.copyBoundsLabel,
-        destinationReadGeneration = destinationReadPlan?.plan?.binding?.generation,
         activeAttachmentSampled = activeAttachmentSampled,
-    )
-
-private fun destinationReadGate(commandId: String = "blend:screen") =
-    GPUDestinationReadStrategyPlanner().plan(
-        GPUDestinationReadStrategyRequest(
-            label = "accepted",
-            commandId = commandId,
-            requirement = GPUDestinationReadRequirement.TargetCopy,
-            strategy = GPUDestinationReadStrategy.CopyTarget,
-            action = GPUDestinationReadAction.SplitPassAndCopyTarget,
-            bounds = GPUDestinationReadBounds(
-                boundsLabel = "shape-local",
-                conservative = true,
-                pixelAligned = true,
-                requestedBoundsLabel = "shape-local",
-                unclippedBoundsLabel = "0,0,80,40",
-                clippedBoundsLabel = "4,8,64,32",
-                copyBoundsLabel = "4,8,64,32",
-                originX = 4,
-                originY = 8,
-                width = 64,
-                height = 32,
-                targetWidth = 256,
-                targetHeight = 128,
-            ),
-            sourceTargetLabel = "target:main",
-            sourceUsageLabels = setOf("render_attachment", "copy_src"),
-            copyUsageLabels = setOf("copy_dst", "texture_binding"),
-            targetFormatClass = "rgba8unorm",
-            targetGeneration = 42,
-        ),
     )
 
 private fun solidPayloadRequest(

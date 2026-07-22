@@ -2,15 +2,17 @@ package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import java.nio.file.Path
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSession
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
+import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
 import org.graphiks.kanvas.gpu.renderer.telemetry.FrameGatePolicy
-import org.graphiks.kanvas.gpu.renderer.telemetry.FrameGateStatus
+import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 
 /** One benchmarked draw family and the representative scene that exercises it. */
 data class BenchmarkFamily(val family: String, val sceneId: String)
@@ -100,8 +102,8 @@ data class FamilyBenchmarkResult(
 /**
  * Per-family benchmark report.
  *
- * `productActivation` stays false: this report measures the wired pipelines and
- * surfaces budget diagnostics, it does not activate or flip any renderer route.
+ * `productActivation` is true because the selected prepared routes are active.
+ * The report still measures only the wired pipelines and flips no renderer route.
  */
 data class PerFamilyBenchmarkReport(
     val backend: String,
@@ -219,62 +221,53 @@ class PerFamilyBenchmark(
     ): FamilyBenchmarkResult =
         runCatching {
             val scene = GPURendererSceneRegistry.registry.requireScene(family.sceneId)
-            val unsupported = rectOnlyCommandSequenceUnsupportedReason(scene.commands)
-            if (unsupported != null) {
-                return@runCatching skippedResult(
-                    family = family,
-                    status = BenchmarkFamilyStatus.Unsupported,
-                    warmupFrames = warmupFrames,
-                    measuredFrames = measuredFrames,
-                    reason = "unsupported: ${family.sceneId} $unsupported",
+            if (scene.usesPreparedSolidRectPilot()) {
+                return@runCatching benchmarkPreparedSolidRect(
+                    session,
+                    gate,
+                    family,
+                    scene,
+                    warmupFrames,
+                    measuredFrames,
                 )
             }
-            val width = scene.dimensions.width
-            val height = scene.dimensions.height
-            val drawPlan = prepareRectOnlyDrawPlan(
-                sceneId = family.sceneId,
-                commands = scene.commands,
-                width = width,
-                height = height,
+            if (scene.usesPreparedStrokeRectPilot()) {
+                return@runCatching benchmarkPreparedStrokeRect(
+                    session,
+                    gate,
+                    family,
+                    scene,
+                    warmupFrames,
+                    measuredFrames,
+                )
+            }
+            if (scene.usesPreparedRegisteredUniformRectPilot()) {
+                return@runCatching benchmarkPreparedRegisteredUniform(
+                    session,
+                    gate,
+                    family,
+                    scene,
+                    warmupFrames,
+                    measuredFrames,
+                )
+            }
+            if (scene.usesPreparedSeparableBlurRectPilot()) {
+                return@runCatching benchmarkPreparedSeparableBlur(
+                    session,
+                    gate,
+                    family,
+                    scene,
+                    warmupFrames,
+                    measuredFrames,
+                )
+            }
+            skippedResult(
+                family = family,
+                status = BenchmarkFamilyStatus.Unsupported,
+                warmupFrames = warmupFrames,
+                measuredFrames = measuredFrames,
+                reason = "unsupported.prepared-scene.family: ${family.sceneId} has no typed prepared semantic route",
             )
-            session.createOffscreenTarget(
-                GPUOffscreenTargetRequest(width = width, height = height, colorFormat = COLOR_FORMAT),
-            ).use { target ->
-                val renderer = RectOnlyOffscreenRenderer()
-                repeat(warmupFrames) { renderer.renderToPixels(target, drawPlan) }
-                val samples = ArrayList<Long>(measuredFrames)
-                repeat(measuredFrames) {
-                    val frameStart = System.nanoTime()
-                    renderer.renderToPixels(target, drawPlan)
-                    samples += (System.nanoTime() - frameStart).coerceAtLeast(1L)
-                }
-                val statistics = FrameTimeStatistics.of(samples)
-                val gateResult = gate.evaluate(family.family, statistics.meanMs)
-                val diagnostics = buildList {
-                    add("sampled ${family.family} scene=${family.sceneId} via WebGPU offscreen render+readback")
-                    add(
-                        "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
-                            "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
-                            "maxMs=${statistics.maxMs.fmt()}",
-                    )
-                    add("frameGateStatus=${gateResult.status.wireName}")
-                    if (gateResult.status != FrameGateStatus.Pass) {
-                        add(
-                            "BUDGET MISS: ${family.family} ${gateResult.status.wireName} " +
-                                "fps=${statistics.fps.fmt()} exceeds ${gate.targetFps}fps target",
-                        )
-                    }
-                }
-                FamilyBenchmarkResult(
-                    family = family.family,
-                    sceneId = family.sceneId,
-                    status = BenchmarkFamilyStatus.Sampled,
-                    warmupFrames = warmupFrames,
-                    measuredFrames = measuredFrames,
-                    statistics = statistics,
-                    diagnostics = diagnostics,
-                )
-            }
         }.getOrElse { error ->
             skippedResult(
                 family = family,
@@ -284,6 +277,326 @@ class PerFamilyBenchmark(
                 reason = "render-failed: ${family.sceneId} ${error.message ?: error::class.simpleName}",
             )
         }
+
+    private fun benchmarkPreparedSolidRect(
+        session: GPUBackendSession,
+        gate: FrameGatePolicy,
+        family: BenchmarkFamily,
+        scene: org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene<
+            org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand,
+        >,
+        warmupFrames: Int,
+        measuredFrames: Int,
+    ): FamilyBenchmarkResult {
+        val capabilities = session.capabilities ?: return skippedResult(
+            family,
+            BenchmarkFamilyStatus.Unsupported,
+            warmupFrames,
+            measuredFrames,
+            "unsupported: prepared SolidRect benchmark requires observed capabilities",
+        )
+        val generation = session.deviceGeneration
+        return session.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height),
+        ).use { preparedSession ->
+            fun render(frameOrdinal: Long, withReadback: Boolean): Long {
+                val recorded = when (
+                    val result = PreparedSolidRectSceneFrameRecorder().record(
+                        scene,
+                        capabilities,
+                        generation,
+                        frameOrdinal,
+                        withReadback,
+                    )
+                ) {
+                    is PreparedSolidRectSceneFrameResult.Recorded -> result
+                    is PreparedSolidRectSceneFrameResult.Refused -> error(result.reason)
+                }
+                val output = recorded.readbackRequestId?.let(GPUSceneFrameOutputRequest::ReadbackRgba)
+                    ?: GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly
+                val start = System.nanoTime()
+                val terminal = preparedSession.renderFrame(recorded.taskList, output)
+                    .completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                val duration = (System.nanoTime() - start).coerceAtLeast(1L)
+                check(terminal.outcome == GPUFrameStructuralOutcome.Succeeded) {
+                    terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared SolidRect benchmark frame failed"
+                }
+                return duration
+            }
+
+            repeat(warmupFrames) { index -> render(index + 1L, withReadback = false) }
+            val samples = List(measuredFrames) { index ->
+                render(warmupFrames + index + 1L, withReadback = false)
+            }
+            // Validate the last state once, outside every warmup/measured interval.
+            render(warmupFrames + measuredFrames + 1L, withReadback = true)
+            val statistics = FrameTimeStatistics.of(samples)
+            val gateResult = gate.evaluate(family.family, statistics.meanMs)
+            val counters = preparedSession.nativeCounters()
+            FamilyBenchmarkResult(
+                family = family.family,
+                sceneId = family.sceneId,
+                status = BenchmarkFamilyStatus.Sampled,
+                warmupFrames = warmupFrames,
+                measuredFrames = measuredFrames,
+                statistics = statistics,
+                diagnostics = listOf(
+                    "sampled ${family.family} scene=${family.sceneId} via prepared submit+completion",
+                    "metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 " +
+                        "finalValidationReadbacks=${counters.readbackCopies}",
+                    "nativeFrames=${warmupFrames + measuredFrames + 1} encoders=${counters.encoders} " +
+                        "commandBuffers=${counters.commandBuffers} submits=${counters.submits}",
+                    "solidRectCache creations=${counters.solidRectInvariantCreations} " +
+                        "reuses=${counters.solidRectInvariantReuses}",
+                    "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
+                        "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
+                        "maxMs=${statistics.maxMs.fmt()}",
+                    "frameGateStatus=${gateResult.status.wireName}",
+                ),
+            )
+        }
+    }
+
+    private fun benchmarkPreparedRegisteredUniform(
+        session: GPUBackendSession,
+        gate: FrameGatePolicy,
+        family: BenchmarkFamily,
+        scene: org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene<
+            org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand,
+        >,
+        warmupFrames: Int,
+        measuredFrames: Int,
+    ): FamilyBenchmarkResult {
+        val capabilities = session.capabilities ?: return skippedResult(
+            family,
+            BenchmarkFamilyStatus.Unsupported,
+            warmupFrames,
+            measuredFrames,
+            "unsupported: prepared registered uniform benchmark requires observed capabilities",
+        )
+        val generation = session.deviceGeneration
+        return session.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height),
+        ).use { preparedSession ->
+            fun render(frameOrdinal: Long, withReadback: Boolean): Long {
+                val recorded = when (
+                    val result = PreparedRegisteredUniformRectSceneFrameRecorder().record(
+                        scene,
+                        capabilities,
+                        generation,
+                        frameOrdinal,
+                        withReadback,
+                    )
+                ) {
+                    is PreparedRegisteredUniformRectSceneFrameResult.Recorded -> result
+                    is PreparedRegisteredUniformRectSceneFrameResult.Refused -> error(result.reason)
+                }
+                val output = recorded.readbackRequestId?.let(GPUSceneFrameOutputRequest::ReadbackRgba)
+                    ?: GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly
+                val start = System.nanoTime()
+                val terminal = preparedSession.renderFrame(recorded.taskList, output)
+                    .completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                val duration = (System.nanoTime() - start).coerceAtLeast(1L)
+                check(terminal.outcome == GPUFrameStructuralOutcome.Succeeded) {
+                    terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared registered uniform benchmark frame failed"
+                }
+                return duration
+            }
+
+            repeat(warmupFrames) { index -> render(index + 1L, withReadback = false) }
+            val samples = List(measuredFrames) { index ->
+                render(warmupFrames + index + 1L, withReadback = false)
+            }
+            render(warmupFrames + measuredFrames + 1L, withReadback = true)
+            val statistics = FrameTimeStatistics.of(samples)
+            val gateResult = gate.evaluate(family.family, statistics.meanMs)
+            val counters = preparedSession.nativeCounters()
+            FamilyBenchmarkResult(
+                family = family.family,
+                sceneId = family.sceneId,
+                status = BenchmarkFamilyStatus.Sampled,
+                warmupFrames = warmupFrames,
+                measuredFrames = measuredFrames,
+                statistics = statistics,
+                diagnostics = listOf(
+                    "sampled ${family.family} scene=${family.sceneId} via prepared submit+completion",
+                    "metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 " +
+                        "finalValidationReadbacks=${counters.readbackCopies}",
+                    "nativeFrames=${warmupFrames + measuredFrames + 1} encoders=${counters.encoders} " +
+                        "commandBuffers=${counters.commandBuffers} submits=${counters.submits}",
+                    "registeredUniformCache creations=${counters.registeredUniformInvariantCreations} " +
+                        "reuses=${counters.registeredUniformInvariantReuses}",
+                    "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
+                        "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
+                        "maxMs=${statistics.maxMs.fmt()}",
+                    "frameGateStatus=${gateResult.status.wireName}",
+                ),
+            )
+        }
+    }
+
+    private fun benchmarkPreparedStrokeRect(
+        session: GPUBackendSession,
+        gate: FrameGatePolicy,
+        family: BenchmarkFamily,
+        scene: org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene<
+            org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand,
+        >,
+        warmupFrames: Int,
+        measuredFrames: Int,
+    ): FamilyBenchmarkResult {
+        val capabilities = session.capabilities ?: return skippedResult(
+            family,
+            BenchmarkFamilyStatus.Unsupported,
+            warmupFrames,
+            measuredFrames,
+            "unsupported: prepared stroke-rect benchmark requires observed capabilities",
+        )
+        val generation = session.deviceGeneration
+        return session.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height),
+        ).use { preparedSession ->
+            fun render(frameOrdinal: Long, withReadback: Boolean): Long {
+                val recorded = when (
+                    val result = PreparedStrokeRectSceneFrameRecorder().record(
+                        scene,
+                        capabilities,
+                        generation,
+                        frameOrdinal,
+                        withReadback,
+                    )
+                ) {
+                    is PreparedStrokeRectSceneFrameResult.Recorded -> result
+                    is PreparedStrokeRectSceneFrameResult.Refused -> error(result.reason)
+                }
+                val output = recorded.readbackRequestId?.let(GPUSceneFrameOutputRequest::ReadbackRgba)
+                    ?: GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly
+                val start = System.nanoTime()
+                val terminal = preparedSession.renderFrame(recorded.taskList, output)
+                    .completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                val duration = (System.nanoTime() - start).coerceAtLeast(1L)
+                check(terminal.outcome == GPUFrameStructuralOutcome.Succeeded) {
+                    terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared stroke-rect benchmark frame failed"
+                }
+                return duration
+            }
+
+            repeat(warmupFrames) { index -> render(index + 1L, withReadback = false) }
+            val samples = List(measuredFrames) { index ->
+                render(warmupFrames + index + 1L, withReadback = false)
+            }
+            render(warmupFrames + measuredFrames + 1L, withReadback = true)
+            val statistics = FrameTimeStatistics.of(samples)
+            val gateResult = gate.evaluate(family.family, statistics.meanMs)
+            val counters = preparedSession.nativeCounters()
+            FamilyBenchmarkResult(
+                family = family.family,
+                sceneId = family.sceneId,
+                status = BenchmarkFamilyStatus.Sampled,
+                warmupFrames = warmupFrames,
+                measuredFrames = measuredFrames,
+                statistics = statistics,
+                diagnostics = listOf(
+                    "sampled ${family.family} scene=${family.sceneId} via prepared submit+completion",
+                    "metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 " +
+                        "finalValidationReadbacks=${counters.readbackCopies}",
+                    "nativeFrames=${warmupFrames + measuredFrames + 1} encoders=${counters.encoders} " +
+                        "commandBuffers=${counters.commandBuffers} submits=${counters.submits}",
+                    "strokeGeometry=analytic-annular-rect.coverage bands=4 legacyStrokeWgsl=false",
+                    "solidRectCache creations=${counters.solidRectInvariantCreations} " +
+                        "reuses=${counters.solidRectInvariantReuses}",
+                    "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
+                        "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
+                        "maxMs=${statistics.maxMs.fmt()}",
+                    "frameGateStatus=${gateResult.status.wireName}",
+                ),
+            )
+        }
+    }
+
+    private fun benchmarkPreparedSeparableBlur(
+        session: GPUBackendSession,
+        gate: FrameGatePolicy,
+        family: BenchmarkFamily,
+        scene: org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene<
+            org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand,
+        >,
+        warmupFrames: Int,
+        measuredFrames: Int,
+    ): FamilyBenchmarkResult {
+        val capabilities = session.capabilities ?: return skippedResult(
+            family,
+            BenchmarkFamilyStatus.Unsupported,
+            warmupFrames,
+            measuredFrames,
+            "unsupported: prepared separable blur benchmark requires observed capabilities",
+        )
+        val generation = session.deviceGeneration
+        return session.prepareSceneFrameSession(
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height),
+        ).use { preparedSession ->
+            fun render(frameOrdinal: Long, withReadback: Boolean): Long {
+                val recorded = when (
+                    val result = PreparedSeparableBlurRectSceneFrameRecorder().record(
+                        scene,
+                        capabilities,
+                        generation,
+                        frameOrdinal,
+                        withReadback,
+                    )
+                ) {
+                    is PreparedSeparableBlurRectSceneFrameResult.Recorded -> result
+                    is PreparedSeparableBlurRectSceneFrameResult.Refused -> error(result.reason)
+                }
+                val output = recorded.readbackRequestId?.let(GPUSceneFrameOutputRequest::ReadbackRgba)
+                    ?: GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly
+                val start = System.nanoTime()
+                val terminal = preparedSession.renderFrame(recorded.taskList, output)
+                    .completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                val duration = (System.nanoTime() - start).coerceAtLeast(1L)
+                check(terminal.outcome == GPUFrameStructuralOutcome.Succeeded) {
+                    terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared separable blur benchmark frame failed"
+                }
+                return duration
+            }
+
+            repeat(warmupFrames) { index -> render(index + 1L, withReadback = false) }
+            val samples = List(measuredFrames) { index ->
+                render(warmupFrames + index + 1L, withReadback = false)
+            }
+            render(warmupFrames + measuredFrames + 1L, withReadback = true)
+            val statistics = FrameTimeStatistics.of(samples)
+            val gateResult = gate.evaluate(family.family, statistics.meanMs)
+            val counters = preparedSession.nativeCounters()
+            FamilyBenchmarkResult(
+                family = family.family,
+                sceneId = family.sceneId,
+                status = BenchmarkFamilyStatus.Sampled,
+                warmupFrames = warmupFrames,
+                measuredFrames = measuredFrames,
+                statistics = statistics,
+                diagnostics = listOf(
+                    "sampled ${family.family} scene=${family.sceneId} via prepared submit+completion",
+                    "metricSource=wall-clock-prepared-submit-completion measuredReadbacks=0 " +
+                        "finalValidationReadbacks=${counters.readbackCopies}",
+                    "nativeFrames=${warmupFrames + measuredFrames + 1} encoders=${counters.encoders} " +
+                        "commandBuffers=${counters.commandBuffers} submits=${counters.submits}",
+                    "separableBlurCache invariants=${counters.separableBlurInvariantCreations}/" +
+                        "${counters.separableBlurInvariantReuses} intermediates=" +
+                        "${counters.separableBlurIntermediateCreations}/" +
+                        "${counters.separableBlurIntermediateReuses}",
+                    "fps=${statistics.fps.fmt()} meanMs=${statistics.meanMs.fmt()} " +
+                        "minMs=${statistics.minMs.fmt()} medianMs=${statistics.medianMs.fmt()} " +
+                        "maxMs=${statistics.maxMs.fmt()}",
+                    "frameGateStatus=${gateResult.status.wireName}",
+                ),
+            )
+        }
+    }
 
     private fun skippedResult(
         family: BenchmarkFamily,
@@ -306,10 +619,9 @@ class PerFamilyBenchmark(
         const val DEFAULT_WARMUP_FRAMES: Int = 10
         const val DEFAULT_MEASURED_FRAMES: Int = 90
         private const val BACKEND: String = "webgpu-offscreen"
-        private const val COLOR_FORMAT: String = "rgba8unorm"
         private const val HARDWARE_BASELINE: String = "Apple M-series"
 
-        /** The eight wired draw families and their representative benchmark scenes. */
+        /** The ten wired draw families and their representative benchmark scenes. */
         val families: List<BenchmarkFamily> = listOf(
             BenchmarkFamily("FillRect", "solid-card-stack"),
             BenchmarkFamily("LinearGradient", "linear-gradient-lanes"),
@@ -318,7 +630,9 @@ class PerFamilyBenchmark(
             BenchmarkFamily("PathFill", "path-fill-stencil"),
             BenchmarkFamily("BitmapRect", "bitmap-sampler-matrix"),
             BenchmarkFamily("Text", "glyph-atlas-strip"),
-            BenchmarkFamily("Blur", "blur-radius-ladder"),
+            BenchmarkFamily("Blur", "gaussian-blur-photo"),
+            BenchmarkFamily("ColorMatrix", "color-matrix-filter"),
+            BenchmarkFamily("Stroke", "stroke-rect-outline"),
         )
     }
 }

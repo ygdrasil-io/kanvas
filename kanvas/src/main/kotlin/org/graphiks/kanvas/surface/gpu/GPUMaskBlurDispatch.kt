@@ -155,7 +155,7 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
             colorFormat,
             styled,
             listOf(finalSolidUniformDraw(material, plan)),
-            GPUBlendMode.SRC_OVER,
+            GPUBlendMode.SRC_OVER.canonicalFixedFunctionState(),
         )
     }
 

@@ -1,5 +1,23 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     id("buildsrc.convention.kotlin-jvm")
+}
+
+val kadreWindowLifecycleUnitTest = tasks.register<Test>("kadreWindowLifecycleUnitTest") {
+    group = "verification"
+    description = "Runs only the headless Kadre lifecycle, launcher, and prepared-recorder contracts."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching(
+        "org.graphiks.kanvas.gpu.renderer.scenes.windowed.KadreWindowFrameLifecycleTest",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kanvas.gpu.renderer.scenes.windowed.RunGpuRendererSceneKadreMainTest",
+    )
+    filter.includeTestsMatching(
+        "org.graphiks.kanvas.gpu.renderer.scenes.offscreen.PreparedSceneFrameRecorderTest",
+    )
 }
 
 val mainSourceSet = sourceSets.main.get()
@@ -13,7 +31,7 @@ dependencies {
     implementation(project(":gpu-renderer"))
     implementation(project(":font"))
     implementation(project(":kanvas"))
-    implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
+    implementation(libs.wgpu4kToolkit)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
 
     "kadreImplementation"("org.graphiks.kadre:kadre:1.0.0")
@@ -24,6 +42,14 @@ dependencies {
     runtimeOnly(project(":codec:png"))
 
     testImplementation(kotlin("test"))
+}
+
+sourceSets {
+    main {
+        // The scene is a conformance fixture: reuse Skia's checked-in COLRv0 font instead of
+        // inventing a synthetic A/B atlas that cannot prove COLR table handling.
+        resources.srcDir("../font/scaler/src/test/resources")
+    }
 }
 
 tasks.register<JavaExec>("gpuRendererScenesCatalogReport") {
@@ -177,4 +203,12 @@ tasks.register<JavaExec>("runGpuRendererSceneKadre") {
             add("-XstartOnFirstThread")
         }
     })
+}
+
+tasks.register("kadreFrameLifecycleCheck") {
+    group = "verification"
+    description = "Opt-in: compiles Kadre and runs prepared-window lifecycle checks; requires external/poc-koreos."
+    dependsOn(tasks.named("compileKadreKotlin"))
+    dependsOn(project(":gpu-renderer").tasks.named("gpuWindowFrameLifecycleTest"))
+    dependsOn(kadreWindowLifecycleUnitTest)
 }

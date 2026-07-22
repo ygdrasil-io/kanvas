@@ -358,6 +358,49 @@ class PathTessellatorTest {
         assertEquals(24, triangles.indices.size)
     }
 
+    @Test
+    fun `edge fan lowers an empty degenerate stroke to a no-op triangle`() {
+        // Degenerate butt-cap strokes are represented by stroke lowering as no
+        // points with the initial contour sentinel still present.
+        val flattened = FlattenedPath(
+            points = emptyList(),
+            contourStarts = listOf(0),
+        )
+
+        val triangles = PathTessellator().stencilEdgeFan(flattened)
+
+        assertEquals(1, triangles.triangleCount)
+        assertEquals(3, triangles.vertexCount)
+        assertEquals(1, triangles.vertices.toList().chunked(2).distinct().size)
+        assertEquals(listOf(0, 1, 2), triangles.indices.toList())
+    }
+
+    @Test
+    fun `edge fan rejects invalid contour metadata instead of hiding it as an empty path`() {
+        val malformed = FlattenedPath(
+            points = emptyList(),
+            contourStarts = listOf(1),
+        )
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            PathTessellator().stencilEdgeFan(malformed)
+        }
+
+        assertContains(failure.message!!, "must point to zero")
+    }
+
+    @Test
+    fun `edge fan rejects duplicated zero contour sentinels for an empty path`() {
+        val malformed = FlattenedPath(
+            points = emptyList(),
+            contourStarts = listOf(0, 0),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            PathTessellator().stencilEdgeFan(malformed)
+        }
+    }
+
     private fun makeCircle(centerX: Float, centerY: Float, radius: Float): PathData {
         val n = 64
         val pts = (0 until n).map { i ->

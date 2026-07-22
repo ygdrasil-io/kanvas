@@ -10,13 +10,19 @@ dependencies {
     implementation(project(":font"))
 
     implementation(kotlin("stdlib"))
-    implementation("io.ygdrasil:wgpu4k-toolkit:0.2.0-SNAPSHOT")
+    implementation(libs.wgpu4kToolkit)
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
-    compileOnly("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
-    compileOnly("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
+    compileOnly(libs.wgslCoreJvm)
+    compileOnly(libs.wgslParserJvm)
     testImplementation(kotlin("test"))
-    testImplementation("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
-    testImplementation("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
+    testImplementation(libs.wgslCoreJvm)
+    testImplementation(libs.wgslParserJvm)
+}
+
+sourceSets {
+    test {
+        resources.srcDir("../font/scaler/src/test/resources")
+    }
 }
 
 tasks.withType<Test> {
@@ -27,6 +33,16 @@ tasks.withType<Test> {
     if (System.getProperty("os.name").lowercase().contains("mac")) {
         jvmArgs("-XstartOnFirstThread")
     }
+}
+
+tasks.register<Test>("gpuWindowFrameLifecycleTest") {
+    group = "verification"
+    description = "Runs only the prepared window frame lifecycle contract tests."
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    filter.includeTestsMatching(
+        "org.graphiks.kanvas.gpu.renderer.execution.GPUWindowFrameLifecycleTest",
+    )
 }
 
 tasks.register<JavaExec>("gpuRendererR6FirstRoutePmEvidenceBundle") {

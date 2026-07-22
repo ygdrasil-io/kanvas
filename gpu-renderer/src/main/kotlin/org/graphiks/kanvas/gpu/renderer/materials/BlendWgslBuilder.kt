@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import kotlin.math.pow
 
 object BlendWgslBuilder {
@@ -9,7 +10,10 @@ object BlendWgslBuilder {
         val srcFields = childFields("src", src)
         val dstEval = childEval("dst", dst)
         val srcEval = childEval("src", src)
-        val blendFn = blendFormula(mode)
+        val blendMode = GPUBlendMode.entries.singleOrNull {
+            it.name.equals(mode, ignoreCase = true) || it.gpuLabel.equals(mode, ignoreCase = true)
+        } ?: error("Unsupported blend mode: $mode")
+        val blendFormula = GPUBlendFormulaLibrary.selectedBlendFunctionWgsl(blendMode)
         val hasImageDraw = dst is GPUMaterialDescriptor.ImageDraw || src is GPUMaterialDescriptor.ImageDraw
         val texDecl = if (hasImageDraw) """
 @group(1) @binding(1) var blend_image_texture: texture_2d<f32>;
@@ -39,10 +43,12 @@ struct VertexOutput {
     return VertexOutput(vec4f(pos, 0.0, 1.0), vec2f(pos.x * 0.5 + 0.5, 1.0 - (pos.y * 0.5 + 0.5)));
 }
 
+${blendFormula}
+
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     ${dstEval}
     ${srcEval}
-    return ${blendFn};
+    return kanvasBlendPremul(src_result, dst_result);
 }
 """.trimIndent()
     }
@@ -118,21 +124,6 @@ struct VertexOutput {
     let ${prefix}_result = ${prefix}_sampled * blend.${prefix}_color;""".trimIndent()
         else -> error("Unsupported blend child: ${child.kind}")
     }
-
-    private fun blendFormula(mode: String): String = when (mode.uppercase()) {
-        "SRC_OVER" -> "src_result + dst_result * (1.0 - src_result.a)"
-        "DST_OVER" -> "dst_result + src_result * (1.0 - dst_result.a)"
-        "SRC_IN" -> "src_result * dst_result.a"
-        "DST_IN" -> "dst_result * src_result.a"
-        "SRC_OUT" -> "src_result * (1.0 - dst_result.a)"
-        "DST_OUT" -> "dst_result * (1.0 - src_result.a)"
-        "SRC_ATOP" -> "dst_result * src_result.a + src_result * (1.0 - dst_result.a)"
-        "DST_ATOP" -> "src_result * dst_result.a + dst_result * (1.0 - src_result.a)"
-        "XOR" -> "src_result * (1.0 - dst_result.a) + dst_result * (1.0 - src_result.a)"
-        "PLUS" -> "src_result + dst_result"
-        "MODULATE" -> "src_result * dst_result"
-        else -> "src_result * dst_result"
-    } + ";"
 
     private fun packChild(prefix: String, child: GPUMaterialDescriptor, bb: java.nio.ByteBuffer) {
         when (child) {

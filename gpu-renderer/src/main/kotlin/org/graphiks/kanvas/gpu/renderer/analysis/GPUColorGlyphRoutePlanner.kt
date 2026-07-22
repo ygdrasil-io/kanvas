@@ -4,6 +4,8 @@ import org.graphiks.kanvas.glyph.gpu.GPUColorGlyphLayerPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.text.ColorGlyphRefusalKind
 import org.graphiks.kanvas.gpu.renderer.text.GPUColorGlyphRouteDecision
@@ -42,7 +44,10 @@ class GPUColorGlyphRoutePlanner {
      * route, or a stable refusal when the first plan exceeds the layer budget.
      */
     fun plan(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
-        val colorPlan = command.colorGlyphPlans.firstOrNull()
+        if (command.colorGlyphPlans.size != 1) {
+            return refusedColorPlan(command, GPUTextDiagnosticCodes.COLOR_PLAN_UNSUPPORTED)
+        }
+        val colorPlan = command.colorGlyphPlans.singleOrNull()
             ?: return refusedColorPlan(command, GPUTextDiagnosticCodes.COLOR_PLAN_UNSUPPORTED)
         return when (val decision = planColorGlyphRoute(colorPlan)) {
             is GPUColorGlyphRouteDecision.Accepted -> acceptedColorPlan(command)
@@ -53,7 +58,7 @@ class GPUColorGlyphRoutePlanner {
     private fun acceptedColorPlan(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
         val recordId = "analysis.draw_text_run.${command.commandId.value}"
         val pipelineKey = "pending.pipeline.draw_text_run.colrv0_composite.rgba8unorm.src_over"
-        val renderStep = "text.colrv0.composite"
+        val renderStep = COLOR_GLYPH_RENDER_STEP_IDENTITY
         val wgslModuleId = "text.colrv0-composite"
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
@@ -86,7 +91,8 @@ class GPUColorGlyphRoutePlanner {
             analysisRecordId = recordId,
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
-            pipelineKeyHash = pipelineKey,
+            pipelineKey = GPURenderPipelineKey(pipelineKey),
+            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
             boundsHash = command.bounds.colorBoundsHash(),
             scissorBoundsHash = null,
             originalPaintOrder = command.ordering.paintOrder,

@@ -2,14 +2,86 @@ package org.graphiks.kanvas.gpu.renderer.capabilities
 
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class GPUCapabilityContractsTest {
     @Test
+    fun `first slice native capability names are canonical and exact`() {
+        assertEquals("first_slice.scissor.native", GPUFirstSliceCapabilityName.SCISSOR_NATIVE)
+        assertEquals("first_slice.bounded_clip.native", GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE)
+        assertEquals("first_slice.path_fill.stencil_cover", GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER)
+    }
+
+    @Test
+    fun `first slice capability literals are declared only by their authority`() {
+        val authority = File(
+            "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/" +
+                "GPUFirstSliceCapabilities.kt",
+        ).readText()
+        val consumers = listOf(
+            File("src/main/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/AnalysisContracts.kt"),
+            File("src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt"),
+            File("src/main/kotlin/org/graphiks/kanvas/gpu/renderer/product/ProductFlags.kt"),
+            File("../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt"),
+        )
+        val literals = listOf(
+            "first_slice.scissor.native",
+            "first_slice.bounded_clip.native",
+            "first_slice.path_fill.stencil_cover",
+        )
+
+        literals.forEach { literal ->
+            assertEquals(
+                1,
+                authority.windowed(literal.length).count { it == literal },
+                "Expected one canonical declaration for $literal",
+            )
+            consumers.forEach { consumer ->
+                assertFalse(
+                    consumer.readText().contains(literal),
+                    "$literal must not be redeclared in ${consumer.path}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `supported capability fact requires nonblank identity and emits validity evidence`() {
+        val fact = supportedGPUCapabilityFact(
+            name = GPUFirstSliceCapabilityName.SCISSOR_NATIVE,
+            source = "runtime",
+            evidenceLabel = "core-primitive-direct-native",
+        )
+
+        assertEquals(GPUFirstSliceCapabilityName.SCISSOR_NATIVE, fact.name)
+        assertEquals("runtime", fact.source)
+        assertEquals("supported", fact.value)
+        assertTrue(fact.affectsValidity)
+        assertEquals("core-primitive-direct-native", fact.evidenceLabel)
+        assertFailsWith<IllegalArgumentException> {
+            supportedGPUCapabilityFact("", "runtime", "evidence")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            supportedGPUCapabilityFact("name", " ", "evidence")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            supportedGPUCapabilityFact("name", "runtime", "\t")
+        }
+    }
+
+    @Test
     fun `GPU abstraction labels dump to stable public strings`() {
+        assertEquals("r16unorm", GPUTextureFormat.R16Unorm.dumpLabel())
+        assertEquals("r16snorm", GPUTextureFormat.R16Snorm.dumpLabel())
+        assertEquals("rg16unorm", GPUTextureFormat.RG16Unorm.dumpLabel())
+        assertEquals("rg16snorm", GPUTextureFormat.RG16Snorm.dumpLabel())
+        assertEquals("rgba16unorm", GPUTextureFormat.RGBA16Unorm.dumpLabel())
+        assertEquals("rgba16snorm", GPUTextureFormat.RGBA16Snorm.dumpLabel())
         assertEquals("rgba8unorm", GPUTextureFormat.RGBA8Unorm.dumpLabel())
         assertEquals("rgba8unorm-srgb", GPUTextureFormat.RGBA8UnormSrgb.dumpLabel())
         assertEquals("bgra8unorm", GPUTextureFormat.BGRA8Unorm.dumpLabel())
@@ -109,6 +181,33 @@ class GPUCapabilityContractsTest {
     }
 
     @Test
+    fun `GPU limits expose max buffer size only when facade observed it`() {
+        val legacyPositional = GPULimits(8192, 256, 256, "legacy-source")
+        val unknown = GPULimits(
+            maxTextureDimension2D = 8192L,
+            copyBytesPerRowAlignment = 256L,
+            minUniformBufferOffsetAlignment = 256L,
+        )
+        val observed = unknown.copy(maxBufferSize = 268_435_456L)
+
+        assertEquals("legacy-source", legacyPositional.source)
+        assertEquals(null, legacyPositional.maxBufferSize)
+        assertEquals(null, unknown.maxBufferSize)
+        assertTrue(unknown.capabilityFacts("unknown").none { it.name == "maxBufferSize" })
+        assertEquals(
+            GPUCapabilityFact(
+                name = "maxBufferSize",
+                source = "device.limits",
+                value = "268435456",
+                affectsValidity = true,
+                evidenceLabel = "observed",
+            ),
+            observed.capabilityFacts("observed").single { it.name == "maxBufferSize" },
+        )
+        assertFailsWith<IllegalArgumentException> { unknown.copy(maxBufferSize = 0) }
+    }
+
+    @Test
     fun `GPU capabilities can carry limits without forcing existing facts`() {
         val limits = GPULimits.conservative(
             maxTextureDimension2D = 8192L,
@@ -204,6 +303,168 @@ class GPUCapabilityContractsTest {
             "unsupported.capability.feature",
             capabilities.validateRendererFeature(GPURendererFeature.Readback)?.code,
         )
+    }
+
+    @Test
+    fun `GPU capabilities validate exact render and resolve sample support per format`() {
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "native",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "unit-format-samples",
+            supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopyDst,
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(
+                    GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1, 4),
+                        resolveSourceSampleCounts = setOf(4),
+                    ),
+                    GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1, 4),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            null,
+            capabilities.validateTextureRequest(
+                format = GPUTextureFormat.RGBA8Unorm,
+                width = 32,
+                height = 32,
+                usage = GPUTextureUsage.RenderAttachment,
+                sampleCount = 4,
+                requiresResolve = true,
+            ),
+        )
+        assertEquals(
+            "unsupported.capability.texture_format",
+            capabilities.validateTextureRequest(
+                format = GPUTextureFormat.Depth24PlusStencil8,
+                width = 32,
+                height = 32,
+                usage = GPUTextureUsage.RenderAttachment or GPUTextureUsage.CopyDst,
+                sampleCount = 4,
+                requiresResolve = false,
+            )?.code,
+        )
+        assertEquals(
+            null,
+            capabilities.validateTextureRequest(
+                format = GPUTextureFormat.Depth24PlusStencil8,
+                width = 32,
+                height = 32,
+                usage = GPUTextureUsage.RenderAttachment,
+                sampleCount = 4,
+                requiresResolve = false,
+            ),
+        )
+        assertEquals(
+            "unsupported.capability.texture_resolve_sample_count",
+            capabilities.validateTextureRequest(
+                format = GPUTextureFormat.Depth24PlusStencil8,
+                width = 32,
+                height = 32,
+                usage = GPUTextureUsage.RenderAttachment,
+                sampleCount = 4,
+                requiresResolve = true,
+            )?.code,
+        )
+        assertEquals(
+            "unsupported.capability.texture_sample_count",
+            capabilities.validateTextureRequest(
+                format = GPUTextureFormat.RGBA8Unorm,
+                width = 32,
+                height = 32,
+                usage = GPUTextureUsage.RenderAttachment,
+                sampleCount = 8,
+                requiresResolve = false,
+            )?.code,
+        )
+    }
+
+    @Test
+    fun `multisample requests fail closed without exact per-format evidence while legacy 1x remains compatible`() {
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "native",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "unit-format-samples-unknown",
+            supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm),
+            supportedTextureUsage = GPUTextureUsage.RenderAttachment,
+        )
+
+        assertEquals(
+            null,
+            capabilities.validateTextureRequest(
+                GPUTextureFormat.RGBA8Unorm,
+                32,
+                32,
+                GPUTextureUsage.RenderAttachment,
+            ),
+        )
+        assertEquals(
+            "unsupported.capability.texture_sample_count",
+            capabilities.validateTextureRequest(
+                GPUTextureFormat.RGBA8Unorm,
+                32,
+                32,
+                GPUTextureUsage.RenderAttachment,
+                sampleCount = 4,
+                requiresResolve = false,
+            )?.code,
+        )
+    }
+
+    @Test
+    fun `format sample capability snapshots mutable inputs and accepts only WebGPU 1x and 4x`() {
+        val renderCounts = linkedSetOf(1, 4)
+        val resolveCounts = linkedSetOf(4)
+        val source = linkedMapOf(
+            GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                renderAttachmentSampleCounts = renderCounts,
+                resolveSourceSampleCounts = resolveCounts,
+            ),
+        )
+        val support = GPUTextureFormatSampleSupport(source)
+
+        renderCounts.clear()
+        resolveCounts.clear()
+        source.clear()
+
+        assertEquals(setOf(1, 4), support.getValue(GPUTextureFormat.RGBA8Unorm).renderAttachmentSampleCounts)
+        assertEquals(setOf(4), support.getValue(GPUTextureFormat.RGBA8Unorm).resolveSourceSampleCounts)
+        assertFalse(support.isEmpty())
+        val expectedMap = mapOf(
+            GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                renderAttachmentSampleCounts = setOf(1, 4),
+                resolveSourceSampleCounts = setOf(4),
+            ),
+        )
+        assertEquals(expectedMap, support)
+        assertEquals(support, expectedMap)
+        assertFailsWith<ClassCastException> {
+            @Suppress("UNCHECKED_CAST")
+            (support as Any as MutableMap<GPUTextureFormat, GPUTextureSampleCountSupport>).clear()
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUTextureSampleCountSupport(renderAttachmentSampleCounts = setOf(1, 8))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            GPUTextureSampleCountSupport(
+                renderAttachmentSampleCounts = setOf(1),
+                resolveSourceSampleCounts = setOf(4),
+            )
+        }
     }
 
     @Test
@@ -323,6 +584,13 @@ class GPUCapabilityContractsTest {
                 snapshotId = "",
             )
         }
+    }
+
+    @Test
+    fun `device generation identity is checked and stable`() {
+        assertEquals(GPUDeviceGenerationID(7), GPUDeviceGenerationID(7))
+        assertEquals(7L, GPUDeviceGenerationID(7).value)
+        assertFailsWith<IllegalArgumentException> { GPUDeviceGenerationID(-1) }
     }
 
     private fun textureUsageForRawValue(value: ULong): GPUTextureUsage {

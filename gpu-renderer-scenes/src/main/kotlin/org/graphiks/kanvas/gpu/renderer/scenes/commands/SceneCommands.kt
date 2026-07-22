@@ -94,6 +94,7 @@ enum class SceneFilterKind(val wireName: String) {
 enum class SceneBlendMode {
     SrcOver,
     Screen,
+    Multiply,
 }
 
 sealed interface SceneCommand {
@@ -470,28 +471,32 @@ sealed interface SceneCommand {
 
     data class ColorTextRun(
         override val label: String,
-        val text: String? = null,
-        val fontSize: Float? = null,
-        val layerColors: List<SceneColor>? = null,
+        val colrFontResource: String,
+        val colrBaseGlyphId: Int,
+        val colrFontSize: Float,
         val paintOrder: Int = 0,
-        val glyphText: String = "AB",
-        val glyphFontSize: Float = 48f,
+        val glyphOriginX: Int = 8,
+        val glyphOriginY: Int = 8,
     ) : SceneCommand {
         override val family: String = "color-text-run"
-        val hasFixturePayload: Boolean = text != null && fontSize != null && layerColors != null
+        val hasColrFontFixture: Boolean = true
+        val hasFixturePayload: Boolean = true
 
         init {
             requireSceneCommandLabel(label)
-            val payloadFieldCount = listOf(text, fontSize, layerColors).count { it != null }
-            require(payloadFieldCount == 0 || payloadFieldCount == 3) {
-                "SceneCommand.ColorTextRun fixture payload requires text, fontSize, and layerColors"
+            require(colrFontResource.startsWith('/')) {
+                "SceneCommand.ColorTextRun.colrFontResource must be an absolute classpath resource"
             }
-            requireOptionalField(text, "SceneCommand.ColorTextRun.text")
-            layerColors?.let { require(it.isNotEmpty()) { "SceneCommand.ColorTextRun.layerColors must not be empty" } }
-            require(fontSize == null || fontSize > 0f) { "SceneCommand.ColorTextRun.fontSize must be positive" }
+            require(colrBaseGlyphId >= 0) {
+                "SceneCommand.ColorTextRun.colrBaseGlyphId must be non-negative"
+            }
+            require(colrFontSize > 0f) {
+                "SceneCommand.ColorTextRun.colrFontSize must be positive"
+            }
+            require(glyphOriginX >= 0 && glyphOriginY >= 0) {
+                "SceneCommand.ColorTextRun glyph origin must be non-negative"
+            }
             require(paintOrder >= 0) { "SceneCommand.ColorTextRun.paintOrder must be non-negative" }
-            require(glyphText.isNotBlank()) { "SceneCommand.ColorTextRun.glyphText must not be blank" }
-            require(glyphFontSize > 0f) { "SceneCommand.ColorTextRun.glyphFontSize must be positive" }
         }
     }
 

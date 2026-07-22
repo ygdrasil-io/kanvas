@@ -1,9 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.color
 
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class SDRColorBoundaryTest {
@@ -123,6 +125,56 @@ class SDRColorBoundaryTest {
         assertFalse(first.behaviorKeyFacts.joinToString(" ").contains("fixture-b"))
         assertTrue(refused.behaviorKeyFacts.isEmpty())
         assertFalse(refused.dumpLines().single { it.startsWith("color:diagnostic") }.contains("sha256:profile-object"))
+    }
+
+    @Test
+    fun `canonical prepared color constants retain exact stable identities`() {
+        assertEquals("rgba8unorm", GPUColorFormat.RGBA8Unorm.value)
+        assertEquals("bgra8unorm", GPUColorFormat.BGRA8Unorm.value)
+        assertEquals("encoded-premul-srgb", GPUColorInterpretation.EncodedPremulSrgb.value)
+        assertEquals(GPUColorFormat("rgba8unorm"), GPUColorFormat.RGBA8Unorm)
+        assertEquals(
+            GPUColorInterpretation("encoded-premul-srgb"),
+            GPUColorInterpretation.EncodedPremulSrgb,
+        )
+    }
+
+    @Test
+    fun `color format and interpretation identities reject blank values`() {
+        assertEquals(GPUColorFormat("rgba8unorm"), GPUColorFormat("rgba8unorm"))
+        assertEquals(
+            GPUColorInterpretation("encoded-premul-srgb"),
+            GPUColorInterpretation("encoded-premul-srgb"),
+        )
+        assertFailsWith<IllegalArgumentException> { GPUColorFormat(" ") }
+        assertFailsWith<IllegalArgumentException> { GPUColorInterpretation("") }
+    }
+
+    @Test
+    fun `prepared renderer producers use the canonical interpretation constant`() {
+        val sourceRoot = File("src/main/kotlin")
+        val forbiddenLiteralFiles = sourceRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .filter { it.readText().contains("\"srgb-premul\"") }
+            .map { it.relativeTo(sourceRoot).invariantSeparatorsPath }
+            .toList()
+
+        assertEquals(emptyList(), forbiddenLiteralFiles)
+        val producers = listOf(
+            "org/graphiks/kanvas/gpu/renderer/recording/GPUSolidRectFrameRecorder.kt",
+            "org/graphiks/kanvas/gpu/renderer/recording/GPUSeparableBlurRectFrameRecorder.kt",
+            "org/graphiks/kanvas/gpu/renderer/recording/GPURegisteredUniformRectFrameRecorder.kt",
+            "org/graphiks/kanvas/gpu/renderer/recording/GPUColorGlyphPreparedTaskListBuilder.kt",
+            "org/graphiks/kanvas/gpu/renderer/recording/GPUCorePrimitivePreparedFrameTaskListBuilder.kt",
+            "org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt",
+        )
+        producers.forEach { relativePath ->
+            assertContains(
+                File(sourceRoot, relativePath).readText(),
+                "GPUColorInterpretation.EncodedPremulSrgb",
+                message = relativePath,
+            )
+        }
     }
 }
 

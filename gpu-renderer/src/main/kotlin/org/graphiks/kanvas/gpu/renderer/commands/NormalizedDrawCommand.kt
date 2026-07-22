@@ -9,9 +9,12 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterCropPlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageRequest
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 
 /** Canonical command identifier name used by the package layout target. */
 @JvmInline
@@ -252,6 +255,8 @@ data class GPUClipFacts(
     val kind: GPUClipKind,
     val bounds: GPUBounds,
     val coverageRequest: GPUClipCoverageRequest? = null,
+    val coveragePlan: GPUClipCoveragePlan? = null,
+    val executionPlan: GPUClipExecutionPlan? = null,
     /** A Canvas clip captured under perspective, which the affine GPU route must refuse. */
     val perspectiveCaptureRefusal: Boolean = false,
 ) {
@@ -310,36 +315,18 @@ data class GPULayerFacts(
     }
 }
 
-/** Blend classification captured before fixed-function blend planning and destination-read strategy selection. */
-enum class GPUBlendKind {
-    /** Source-over fixed-function blend accepted by the first route. */
-    SrcOver,
-    /** Custom blend mode mapped from BlendMode. */
-    Custom,
-    /** Unsupported blend mode that must refuse deterministically. */
-    Unsupported,
-}
-
-/** Captured blend facts; unsupported or destination-reading blends are refused before pass construction. */
+/** Non-routing facts captured before canonical blend specialization. */
 data class GPUBlendFacts(
-    val kind: GPUBlendKind,
-    val modeLabel: String,
-    val requiresDestinationRead: Boolean,
-    val blendMode: GPUBlendMode? = null,
+    val mode: GPUBlendMode,
+    val sourceAlpha: GPUSourceAlphaClassification,
 ) {
-    /** Constructors for first-route blend fact records. */
     companion object {
-        /** Returns accepted source-over fixed-function blend facts. */
+        /** Returns the standard translucent source-over facts. */
         fun srcOver(): GPUBlendFacts =
-            GPUBlendFacts(kind = GPUBlendKind.SrcOver, modeLabel = "src_over", requiresDestinationRead = false)
-
-        /** Returns an unsupported blend mode fact record. */
-        fun unsupported(modeLabel: String): GPUBlendFacts =
-            GPUBlendFacts(kind = GPUBlendKind.Unsupported, modeLabel = modeLabel, requiresDestinationRead = false)
-
-        /** Returns a blend fact record that requires destination-read planning. */
-        fun destinationReadRequired(): GPUBlendFacts =
-            GPUBlendFacts(kind = GPUBlendKind.SrcOver, modeLabel = "dst_read", requiresDestinationRead = true)
+            GPUBlendFacts(
+                mode = GPUBlendMode.SRC_OVER,
+                sourceAlpha = GPUSourceAlphaClassification.Translucent,
+            )
     }
 }
 
@@ -495,10 +482,14 @@ data class GPUOrderingFacts(
     }
 }
 
+/** Compatibility alias for frame provenance owned by the foundation state package. */
+typealias GPUFrameProvenance = org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
+
 /** Source adapter information used by diagnostics and dumps. */
 data class GPUCommandSource(
     val adapter: String,
     val operation: String,
+    val frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
 ) {
     init {
         require(adapter.isNotBlank()) { "GPUCommandSource.adapter must not be blank" }
@@ -1034,6 +1025,8 @@ sealed interface NormalizedDrawCommand {
         val strokeCap: String = "butt",
         /** Stroke join style: "miter", "round", "bevel". */
         val strokeJoin: String = "miter",
+        /** Source miter limit retained until canonical stroke lowering consumes it. */
+        val strokeMiterLimit: Float = 4f,
         val antiAlias: Boolean = true,
         /** Mask filter descriptor for post-processing the fill output. Null when no mask filter is active. */
         val maskFilter: NormalizedMaskFilter? = null,

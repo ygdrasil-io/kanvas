@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketStream
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
@@ -8,36 +10,10 @@ import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineCreationPlan
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceDiagnostic
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
 
-/** Device-generation marker used to invalidate stale resources. */
-@JvmInline
-value class GPUDeviceGeneration(val value: Long) {
-    init {
-        require(value >= 0L) { "GPUDeviceGeneration.value must be non-negative" }
-    }
-}
-
-/**
- * Readback request descriptor for evidence collection after encoded GPU work.
- *
- * A request is not proof that readback is available. Execution contexts may
- * return `Skipped` or `Refused` with stable diagnostics when the target,
- * synchronization point, or backend capability cannot produce trustworthy
- * bytes for the requested bounds and format. [failureReason] carries a stable
- * non-handle refusal or skip reason into PM dumps when readback cannot produce
- * bytes.
- */
-data class GPUReadbackRequest(
-    val requestId: String,
-    val sourceLabel: String,
-    val boundsLabel: String,
-    val format: String,
-    val synchronizationLabel: String = "unspecified",
-    val expectedArtifactLabel: String? = null,
-    val failureReason: String? = null,
-) {
-    internal val dumpFailureReasonSnapshot: String = failureReason ?: "none"
-}
+/** Source bridge for the unchanged Task 9 native runtime; no second runtime type is created. */
+typealias GPUDeviceGeneration = GPUDeviceGenerationID
 
 /** Command class requested by a command-encoding scope. */
 enum class GPUCommandClass {
@@ -151,8 +127,8 @@ sealed interface GPUCommandScope {
     }
 
     /** Readback command-encoding scope. */
-    data class Readback(val request: GPUReadbackRequest) : GPUCommandScope {
-        override val scopeLabel: String get() = request.requestId
+    data class Readback(val request: GPUFrameReadbackRequest) : GPUCommandScope {
+        override val scopeLabel: String get() = request.requestId.value
         override val commandClass: GPUCommandClass get() = GPUCommandClass.Readback
     }
 }
@@ -165,60 +141,79 @@ sealed interface GPUCommandScope {
  * order. It still owns no backend encoder, command buffer, queue submission, bind group, texture,
  * or Dawn/WGPU object.
  */
-class GPUCommandEncoderPlan(
+class GPUCommandEncoderPlan private constructor(
     val planId: String,
     val contextIdentity: String,
-    val deviceGeneration: GPUDeviceGeneration,
+    val deviceGeneration: GPUDeviceGenerationID,
     val targetGeneration: Long,
-    val scope: GPUCommandScope,
-    val packetStreamId: String,
-    val passCommandStreamId: String,
-    val packetCount: Int,
-    val passCommandCount: Int,
-    facadeOperationClasses: List<String>,
-    resourceGenerationLabels: List<String>,
-    diagnostics: List<String> = emptyList(),
+    scopes: List<GPUCommandEncoderScopePlan>,
 ) {
-    /** Command class requested by the scope that will own encoder recording. */
-    val commandClass: GPUCommandClass
-        get() = scope.commandClass
+    /** The sole Task 8 encoding authority, in semantic step order. */
+    val scopes: List<GPUCommandEncoderScopePlan> = immutableList(scopes)
 
-    /** Facade operation labels copied from the pass command stream. */
-    val facadeOperationClasses: List<String> = facadeOperationClasses.toList()
-
-    /** Resource and target generation labels copied before backend validation. */
-    val resourceGenerationLabels: List<String> = resourceGenerationLabels.toList()
-
-    /** Stable diagnostics copied as compact string codes for execution evidence. */
-    val diagnostics: List<String> = diagnostics.toList()
+    /** Compatibility projections for established single-render-scope tests; all derive from [scopes]. */
+    val commandClass: GPUCommandClass?
+        get() = scopes.singleOrNull()?.let { single -> when (single.operationKind) {
+            GPUEncoderOperationKind.Render, GPUEncoderOperationKind.SurfaceBlit -> GPUCommandClass.Render
+            GPUEncoderOperationKind.Compute -> GPUCommandClass.Compute
+            GPUEncoderOperationKind.Readback -> GPUCommandClass.Readback
+            else -> GPUCommandClass.CopyUpload
+        } }
+    val scope: GPUCommandScope?
+        get() = scopes.singleOrNull()?.let { single ->
+            when (single.operationKind) {
+                GPUEncoderOperationKind.Render, GPUEncoderOperationKind.SurfaceBlit ->
+                    GPUCommandScope.Render(single.scopeLabel, single.sourceTaskIds.map { it.value })
+                GPUEncoderOperationKind.Compute ->
+                    GPUCommandScope.Compute(single.scopeLabel, single.sourceTaskIds.map { it.value })
+                GPUEncoderOperationKind.Readback -> null
+                else -> GPUCommandScope.CopyUpload(
+                    single.scopeLabel,
+                    single.sourceTaskIds.map { it.value },
+                )
+            }
+        }
+    val packetStreamId: String? get() = scopes.singleOrNull()?.passCommandStream?.packetStreamId
+    val passCommandStreamId: String? get() = scopes.singleOrNull()?.passCommandStream?.streamId
+    val packetCount: Int get() = scopes.singleOrNull()?.sourcePacketIds?.size ?: scopes.sumOf { it.sourcePacketIds.size }
+    val passCommandCount: Int get() = scopes.sumOf { it.facadeOperationClasses.size }
+    val facadeOperationClasses: List<String> get() = scopes.flatMap { it.facadeOperationClasses }
+    val resourceGenerationLabels: List<String> get() = scopes.flatMap { it.resourceGenerationLabels }
+    val diagnostics: List<String>
+        get() = scopes.flatMap { it.passCommandStream?.diagnostics?.map { diagnostic -> diagnostic.code }.orEmpty() }
 
     init {
-        require(planId.isNotBlank()) { "GPUCommandEncoderPlan.planId must not be blank" }
-        require(contextIdentity.isNotBlank()) { "GPUCommandEncoderPlan.contextIdentity must not be blank" }
+        requireExecutionDumpSafe("GPUCommandEncoderPlan.planId", planId)
+        requireExecutionDumpSafe("GPUCommandEncoderPlan.contextIdentity", contextIdentity)
         require(targetGeneration >= 0L) { "GPUCommandEncoderPlan.targetGeneration must be non-negative" }
-        require(packetStreamId.isNotBlank()) { "GPUCommandEncoderPlan.packetStreamId must not be blank" }
-        require(passCommandStreamId.isNotBlank()) {
-            "GPUCommandEncoderPlan.passCommandStreamId must not be blank"
-        }
-        require(packetCount >= 0) { "GPUCommandEncoderPlan.packetCount must be non-negative" }
-        require(passCommandCount > 0) { "GPUCommandEncoderPlan.passCommandCount must be positive" }
-        require(this.facadeOperationClasses.size == passCommandCount) {
-            "GPUCommandEncoderPlan facade operation count must match passCommandCount"
-        }
-        require(this.facadeOperationClasses.none { label -> label.isBlank() }) {
-            "GPUCommandEncoderPlan.facadeOperationClasses must not contain blanks"
-        }
-        require(this.resourceGenerationLabels.none { label -> label.isBlank() }) {
-            "GPUCommandEncoderPlan.resourceGenerationLabels must not contain blanks"
+        require(scopes.map { it.sourceStepIndex }.zipWithNext().all { (a, b) -> a < b }) {
+            "GPUCommandEncoderPlan.scopes must be strictly ordered by semantic step"
         }
     }
 
     companion object {
+        /** Builds the Task 8 ordered plan without creating an encoder or backend object. */
+        fun ordered(
+            planId: String,
+            contextIdentity: String,
+            deviceGeneration: GPUDeviceGenerationID,
+            targetGeneration: Long,
+            scopes: List<GPUCommandEncoderScopePlan>,
+        ): GPUCommandEncoderPlan {
+            return GPUCommandEncoderPlan(
+                planId = planId,
+                contextIdentity = contextIdentity,
+                deviceGeneration = deviceGeneration,
+                targetGeneration = targetGeneration,
+                scopes = scopes,
+            )
+        }
+
         /** Builds a render encoder plan from matching packet and pass command streams. */
         fun fromPassCommandStream(
             planId: String,
             contextIdentity: String,
-            deviceGeneration: GPUDeviceGeneration,
+            deviceGeneration: GPUDeviceGenerationID,
             targetGeneration: Long,
             scope: GPUCommandScope,
             packetStream: GPUDrawPacketStream,
@@ -240,14 +235,19 @@ class GPUCommandEncoderPlan(
                 contextIdentity = contextIdentity,
                 deviceGeneration = deviceGeneration,
                 targetGeneration = targetGeneration,
-                scope = scope,
-                packetStreamId = packetStream.streamId,
-                passCommandStreamId = passCommandStream.streamId,
-                packetCount = packetStream.packetCount,
-                passCommandCount = passCommandStream.commandCount,
-                facadeOperationClasses = passCommandStream.commandLabels,
-                resourceGenerationLabels = resourceGenerationLabels,
-                diagnostics = passCommandStream.diagnostics.map { diagnostic -> diagnostic.code },
+                scopes = listOf(
+                    GPUCommandEncoderScopePlan(
+                        sourceStepIndex = 0,
+                        operationKind = GPUEncoderOperationKind.Render,
+                        scopeLabel = scope.scopeLabel,
+                        sourceTaskIds = listOf(org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID("legacy.$planId")),
+                        sourcePacketIds = packetStream.packetIds,
+                        facadeOperationClasses = passCommandStream.commandLabels,
+                        targetGeneration = targetGeneration,
+                        resourceGenerationLabels = resourceGenerationLabels,
+                        passCommandStream = passCommandStream,
+                    ),
+                ),
             )
         }
     }
@@ -260,21 +260,31 @@ class GPUCommandEncoderPlan(
  * generation labels, and diagnostics only. It does not imply submission or backend completion.
  */
 fun GPUCommandEncoderPlan.dumpLines(): List<String> =
-    listOf(
-        "execution.encoder-plan id=$planId " +
-            "context=$contextIdentity " +
-            "class=$commandClass " +
-            "scope=${scope.scopeLabel} " +
-            "deviceGeneration=${deviceGeneration.value} " +
-            "targetGeneration=$targetGeneration " +
-            "packetStream=$packetStreamId " +
-            "passCommandStream=$passCommandStreamId " +
-            "packets=$packetCount " +
-            "commands=$passCommandCount " +
-            "operations=${facadeOperationClasses.dumpSequence()} " +
-            "resources=${resourceGenerationLabels.dumpSequence()} " +
-            "diagnostics=${diagnostics.dumpSequence()}",
-    )
+    if (scopes.size == 1) {
+        val single = scopes.single()
+        val singleClass = commandClass
+        listOf(
+            "execution.encoder-plan id=$planId " +
+                "context=$contextIdentity class=$singleClass scope=${single.scopeLabel} " +
+                "deviceGeneration=${deviceGeneration.value} targetGeneration=$targetGeneration " +
+                "packetStream=${packetStreamId ?: "none"} passCommandStream=${passCommandStreamId ?: "step.${single.sourceStepIndex}"} " +
+                "packets=$packetCount commands=$passCommandCount " +
+                "operations=${facadeOperationClasses.dumpSequence()} " +
+                "resources=${resourceGenerationLabels.dumpSequence()} diagnostics=${diagnostics.dumpSequence()}",
+        )
+    } else {
+        listOf(
+            "execution.encoder-plan id=$planId context=$contextIdentity " +
+                "deviceGeneration=${deviceGeneration.value} targetGeneration=$targetGeneration scopes=${scopes.size}",
+        ) + scopes.map { scope ->
+            "execution.encoder-scope index=${scope.sourceStepIndex} kind=${scope.operationKind} " +
+                "tasks=${scope.sourceTaskIds.map { it.value }.dumpSequence()} " +
+                "packets=${scope.sourcePacketIds.map { it.value }.dumpSequence()} " +
+                "commands=${scope.facadeOperationClasses.size} " +
+                "operations=${scope.facadeOperationClasses.dumpSequence()} " +
+                "resources=${scope.resourceGenerationLabels.dumpSequence()}"
+        }
+    }
 
 /**
  * Submission record for encoded GPU commands.
@@ -298,14 +308,14 @@ sealed interface GPUCommandSubmission {
     data class Submitted(
         val submissionId: String,
         val scopeLabel: String,
-        val deviceGeneration: GPUDeviceGeneration,
+        val deviceGeneration: GPUDeviceGenerationID,
         val targetGeneration: Long = 0L,
         val scopeLabels: List<String> = listOf(scopeLabel),
         val taskIds: List<String> = emptyList(),
         val passIds: List<String> = emptyList(),
         val resourceUsageSummary: List<String> = emptyList(),
         val submittedRouteCounts: Map<String, Int> = emptyMap(),
-        val readbackRequests: List<GPUReadbackRequest> = emptyList(),
+        val readbackRequests: List<GPUFrameReadbackRequest> = emptyList(),
         val diagnostics: List<GPUExecutionDiagnostic> = emptyList(),
     ) : GPUCommandSubmission {
         internal val dumpScopeLabelsSnapshot: List<String> = scopeLabels.toList()
@@ -313,7 +323,7 @@ sealed interface GPUCommandSubmission {
         internal val dumpPassIdsSnapshot: List<String> = passIds.toList()
         internal val dumpResourceUsageSummarySnapshot: List<String> = resourceUsageSummary.toList()
         internal val dumpSubmittedRouteCountsSnapshot: Map<String, Int> = submittedRouteCounts.toMap()
-        internal val dumpReadbackRequestsSnapshot: List<GPUReadbackRequest> = readbackRequests.toList()
+        internal val dumpReadbackRequestsSnapshot: List<GPUFrameReadbackRequest> = readbackRequests.toList()
         internal val dumpDiagnosticsSnapshot: List<GPUExecutionDiagnostic> = diagnostics.toList()
     }
 
@@ -382,7 +392,7 @@ class GPUFirstRouteRenderSubmitRequest(
     materialization: GPUResourceMaterializationDecision.Materialized,
     pipelinePlan: GPUPipelineCreationPlan,
     payloadRefs: List<GPUDrawPayloadRef>,
-    readbackRequests: List<GPUReadbackRequest> = emptyList(),
+    readbackRequests: List<GPUFrameReadbackRequest> = emptyList(),
 ) {
     /** Preflight input copied for backend validation and default refusal diagnostics. */
     val preflightRequest: GPUExecutionPreflightRequest = preflightRequest.snapshot()
@@ -400,13 +410,13 @@ class GPUFirstRouteRenderSubmitRequest(
     val payloadRefs: List<GPUDrawPayloadRef> = payloadRefs.toList()
 
     /** Optional readback requests copied for post-submit PM evidence. */
-    val readbackRequests: List<GPUReadbackRequest> = readbackRequests.toList()
+    val readbackRequests: List<GPUFrameReadbackRequest> = readbackRequests.toList()
 
     internal val dumpPassIdsSnapshot: List<String> = listOf(this.pass.passId)
     internal val dumpPipelineKeysSnapshot: List<String> = this.pass.pipelineKeys.toList()
     internal val dumpPayloadCommandIdsSnapshot: List<String> =
         this.payloadRefs.map { ref -> ref.commandIdValue.toString() }.toList()
-    internal val dumpReadbackRequestsSnapshot: List<GPUReadbackRequest> = this.readbackRequests.toList()
+    internal val dumpReadbackRequestsSnapshot: List<GPUFrameReadbackRequest> = this.readbackRequests.toList()
     internal val dumpPipelineCacheKeySnapshot: String = this.pipelinePlan.cacheKey.value
 
     init {
@@ -477,28 +487,20 @@ sealed interface GPUReadbackResult {
     /**
      * Readback completed and produced a typed payload descriptor.
      *
-     * Completed readbacks have produced bytes, so [request] must not carry a
-     * `failureReason`. Explicit skip or refusal reasons belong to [Skipped] or
-     * [Refused] evidence.
+     * Explicit skip or refusal reasons belong to [Skipped] or [Refused] evidence.
      */
     data class Completed(
-        val request: GPUReadbackRequest,
+        val request: GPUFrameReadbackRequest,
         val payloadHash: String,
         val byteCount: Long,
         val diagnostics: List<GPUExecutionDiagnostic> = emptyList(),
     ) : GPUReadbackResult {
-        init {
-            require(request.failureReason == null) {
-                "GPUReadbackResult.Completed.request.failureReason must be null"
-            }
-        }
-
         internal val dumpDiagnosticsSnapshot: List<GPUExecutionDiagnostic> = diagnostics.toList()
     }
 
     /** Readback was skipped by an explicit policy. */
     data class Skipped(
-        val request: GPUReadbackRequest,
+        val request: GPUFrameReadbackRequest,
         val reasonCode: String,
         val diagnostics: List<GPUExecutionDiagnostic> = emptyList(),
     ) : GPUReadbackResult {
@@ -506,13 +508,13 @@ sealed interface GPUReadbackResult {
     }
 
     /** Readback was refused before backend work. */
-    data class Refused(val request: GPUReadbackRequest, val diagnostic: GPUExecutionDiagnostic) : GPUReadbackResult
+    data class Refused(val request: GPUFrameReadbackRequest, val diagnostic: GPUExecutionDiagnostic) : GPUReadbackResult
 }
 
 /** Execution context that owns access to the selected GPU facade. */
 interface GPUExecutionContext {
     /** Current device generation used for stale resource detection. */
-    val deviceGeneration: GPUDeviceGeneration
+    val deviceGeneration: GPUDeviceGenerationID
 
     /** Capability facts for the selected facade implementation. */
     val capabilities: GPUExecutionCapabilities
@@ -616,7 +618,7 @@ interface GPUExecutionContext {
      * only proves target capability; an installed backend readback path is still required before
      * R6 evidence may become [GPUReadbackResult.Completed].
      */
-    fun readback(request: GPUReadbackRequest): GPUReadbackResult {
+    fun readback(request: GPUFrameReadbackRequest): GPUReadbackResult {
         val diagnostic = if (capabilities.readback) {
             GPUExecutionDiagnostic.readbackBackendUnconfigured(request = request)
         } else {
@@ -641,7 +643,7 @@ interface GPUExecutionContext {
 data class GPUSurfaceTarget(
     val targetId: String,
     val descriptor: GPUSurfaceTargetDescriptor,
-    val deviceGeneration: GPUDeviceGeneration,
+    val deviceGeneration: GPUDeviceGenerationID,
 )
 
 /**
@@ -757,7 +759,7 @@ data class GPUExecutionDiagnostic(
         /** Builds a diagnostic for a target bound to the wrong device generation. */
         fun deviceGenerationMismatch(
             target: GPUSurfaceTarget,
-            expectedDeviceGeneration: GPUDeviceGeneration,
+            expectedDeviceGeneration: GPUDeviceGenerationID,
         ): GPUExecutionDiagnostic =
             GPUExecutionDiagnostic(
                 code = "unsupported.execution.device_generation_mismatch",
@@ -839,36 +841,34 @@ data class GPUExecutionDiagnostic(
 
         /** Builds a skipped-readback diagnostic. */
         fun readbackUnavailable(
-            request: GPUReadbackRequest,
+            request: GPUFrameReadbackRequest,
             stage: String,
         ): GPUExecutionDiagnostic =
             GPUExecutionDiagnostic(
                 code = "unsupported.execution.readback_unavailable",
                 stage = stage,
-                message = "Readback ${request.requestId} from ${request.sourceLabel} is unavailable for ${request.boundsLabel} ${request.format}.",
+                message = "Readback ${request.requestId.value} is unavailable for ${request.sourceBounds.dumpLabel()} ${request.pixelFormat.name}.",
                 terminal = true,
                 facts = mapOf(
-                    "boundsLabel" to request.boundsLabel,
-                    "failureReason" to request.dumpFailureReasonSnapshot,
-                    "format" to request.format,
-                    "requestId" to request.requestId,
-                    "sourceLabel" to request.sourceLabel,
+                    "bufferOffsetBytes" to request.bufferOffsetBytes.toString(),
+                    "pixelFormat" to request.pixelFormat.name,
+                    "requestId" to request.requestId.value,
+                    "sourceBounds" to request.sourceBounds.dumpLabel(),
                 ),
             )
 
         /** Builds a readback diagnostic for contexts with capability facts but no backend path. */
-        fun readbackBackendUnconfigured(request: GPUReadbackRequest): GPUExecutionDiagnostic =
+        fun readbackBackendUnconfigured(request: GPUFrameReadbackRequest): GPUExecutionDiagnostic =
             GPUExecutionDiagnostic(
                 code = "unsupported.execution.readback_unconfigured",
                 stage = "readback",
-                message = "Execution context has readback capability facts but no configured backend readback path for request ${request.requestId}.",
+                message = "Execution context has readback capability facts but no configured backend readback path for request ${request.requestId.value}.",
                 terminal = true,
                 facts = mapOf(
-                    "boundsLabel" to request.boundsLabel,
-                    "failureReason" to request.dumpFailureReasonSnapshot,
-                    "format" to request.format,
-                    "requestId" to request.requestId,
-                    "sourceLabel" to request.sourceLabel,
+                    "bufferOffsetBytes" to request.bufferOffsetBytes.toString(),
+                    "pixelFormat" to request.pixelFormat.name,
+                    "requestId" to request.requestId.value,
+                    "sourceBounds" to request.sourceBounds.dumpLabel(),
                 ),
             )
     }
@@ -913,7 +913,7 @@ fun GPUCommandSubmission.dumpLines(): List<String> =
                     "passes=${dumpPassIdsSnapshot.dumpSequence()} " +
                     "resources=${dumpResourceUsageSummarySnapshot.dumpList()} " +
                     "routes=${dumpSubmittedRouteCountsSnapshot.dumpCounts()} " +
-                    "readbacks=${dumpReadbackRequestsSnapshot.map { request -> request.requestId }.dumpSequence()} " +
+                    "readbacks=${dumpReadbackRequestsSnapshot.map { request -> request.requestId.value }.dumpSequence()} " +
                     "diagnostics=${dumpDiagnosticsSnapshot.dumpCodes()}",
             ) + dumpDiagnosticsSnapshot.dumpLines()
         is GPUCommandSubmission.Refused ->
@@ -970,14 +970,15 @@ fun GPUReadbackResult.dumpLines(): List<String> =
 
 private const val UNSPECIFIED_DUMP_VALUE = "unspecified"
 
-private fun GPUReadbackRequest.dumpFacts(): String =
-    "request=$requestId " +
-        "source=$sourceLabel " +
-        "bounds=$boundsLabel " +
-        "format=$format " +
-        "sync=$synchronizationLabel " +
-        "expectedArtifact=${expectedArtifactLabel ?: "none"} " +
-        "failureReason=$dumpFailureReasonSnapshot"
+private fun GPUFrameReadbackRequest.dumpFacts(): String =
+    "request=${requestId.value} " +
+        "bounds=${sourceBounds.dumpLabel()} " +
+        "pixelFormat=${pixelFormat.name} " +
+        "color=${outputColorInterpretation.value} " +
+        "bufferOffsetBytes=$bufferOffsetBytes"
+
+private fun org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds.dumpLabel(): String =
+    "$left,$top,$right,$bottom"
 
 private fun GPUExecutionPreflightRequest.snapshot(): GPUExecutionPreflightRequest =
     GPUExecutionPreflightRequest(
@@ -996,11 +997,18 @@ private fun GPUSurfaceTargetDescriptor.snapshot(): GPUSurfaceTargetDescriptor =
     copy(usageLabels = usageLabels.toSet())
 
 private fun GPUDrawPass.snapshot(): GPUDrawPass =
-    copy(
+    GPUDrawPass(
+        passId = passId,
+        targetStateHash = targetStateHash,
+        layerScopeId = layerScopeId,
+        loadStoreLabel = loadStoreLabel,
         invocations = invocations.toList(),
         pipelineKeys = pipelineKeys.toList(),
         barriers = barriers.toList(),
         diagnostics = diagnostics.toList(),
+        drawPackets = drawPackets.toList(),
+        provisionalSegmentKey = provisionalSegmentKey,
+        batchEligibilityByPacketId = batchEligibilityByPacketId.toMap(),
     )
 
 private fun GPUResourceMaterializationDecision.Materialized.snapshot(): GPUResourceMaterializationDecision.Materialized =
@@ -1058,7 +1066,7 @@ private fun GPUFirstRouteRenderSubmitRequest.firstRouteRenderSubmitFacts(): Map<
         "payloadCommands" to dumpPayloadCommandIdsSnapshot.dumpSequence(),
         "pipelineCacheKey" to dumpPipelineCacheKeySnapshot,
         "pipelineKeys" to dumpPipelineKeysSnapshot.dumpSequence(),
-        "readbackRequests" to dumpReadbackRequestsSnapshot.map { request -> request.requestId }.dumpSequence(),
+        "readbackRequests" to dumpReadbackRequestsSnapshot.map { request -> request.requestId.value }.dumpSequence(),
         "resourcePlans" to materialization.dumpResourcePlanLabelsSnapshot.dumpList(),
         "scopeLabel" to scope.scopeLabel,
         "targetId" to materialization.targetId,

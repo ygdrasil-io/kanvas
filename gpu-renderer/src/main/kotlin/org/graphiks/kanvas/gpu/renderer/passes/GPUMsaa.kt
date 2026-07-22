@@ -2,6 +2,43 @@ package org.graphiks.kanvas.gpu.renderer.passes
 
 import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
 
+/** Handle-free sample topology consumed by blend specialization. */
+sealed interface GPUSamplePlan {
+    val sampleCount: Int
+    val exactSingleSampleDestinationRead: Boolean
+    val specializationKey: String
+
+    /** The frame writes a single-sample attachment. */
+    data object SingleSampleFrame : GPUSamplePlan {
+        override val sampleCount: Int = 1
+        override val exactSingleSampleDestinationRead: Boolean = true
+        override val specializationKey: String = "1"
+    }
+
+    /** The frame writes a persistent multisample attachment. */
+    data class MultisampleFrame(override val sampleCount: Int) : GPUSamplePlan {
+        override val exactSingleSampleDestinationRead: Boolean = false
+        override val specializationKey: String = sampleCount.toString()
+
+        init {
+            require(sampleCount > 1) { "GPUSamplePlan.MultisampleFrame.sampleCount must be greater than one" }
+        }
+    }
+
+    /** A local resolve has one output sample but does not prove exact frame destination semantics. */
+    data class LocalResolveApproximation(val sourceSampleCount: Int) : GPUSamplePlan {
+        override val sampleCount: Int = 1
+        override val exactSingleSampleDestinationRead: Boolean = false
+        override val specializationKey: String = "local-resolve:$sourceSampleCount"
+
+        init {
+            require(sourceSampleCount > 1) {
+                "GPUSamplePlan.LocalResolveApproximation.sourceSampleCount must be greater than one"
+            }
+        }
+    }
+}
+
 enum class GPUMsaaCoverageMode {
     Standard,
     AlphaToCoverage,

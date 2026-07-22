@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
@@ -94,7 +95,7 @@ internal object GPUClipDestinationReadRefusalComposer : GPUClipDestinationReadCo
         diagnostics.fatal(
             code = "refuse:clip-destination-read:${context.sourceLabelForDiagnostics}",
             operation = context.sourceLabelForDiagnostics,
-            reason = "unsupported.clip.destination_read.pending_task8:${blend.modeLabel}",
+            reason = "unsupported.clip.destination_read.pending_task8:${blend.mode.gpuLabel}",
             facts = listOf(
                 DiagnosticFact("clip.strategy", if (clipMaskLabel == null) "direct" else "alpha-mask"),
                 DiagnosticFact("clip.destination-read", "task8-pending"),
@@ -130,7 +131,7 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
     GPUClipCoveragePlan.NoClip,
     is GPUClipCoveragePlan.Scissor,
     -> {
-        if (blend.requiresDestinationRead || context.coverageCompositionRequired) {
+        if (blend.needsDestinationTexture() || context.coverageCompositionRequired) {
             context.destinationReadComposer.compose(
                 context,
                 null,
@@ -198,6 +199,7 @@ internal fun GPUBackendOffscreenTarget.renderWithClip(
             false
         }
     }
+    is GPUClipCoveragePlan.AnalyticIntersection -> false
     is GPUClipCoveragePlan.Refused -> false
     }
 }
@@ -209,13 +211,14 @@ private fun GPUBackendOffscreenTarget.compositeFixedSource(
     blend: GPUBlendFacts,
 ): Boolean {
     val draw = sourceCompositeUniformDraw(context, clipPlan, context.sourceCompositeBounds()) ?: return false
+    val fixedState = (blend.canonicalBlendPlan() as? GPUBlendPlan.FixedFunctionBlend)?.state ?: return false
     encodeOffscreenTexture(context.sceneLabel, null) {
         drawCompositePass(
             wgsl = COPY_WGSL,
             colorFormat = context.colorFormat,
             textureLabel = context.sourceLabel,
             draws = listOf(draw),
-            blendMode = blend.blendMode ?: GPUBlendMode.SRC_OVER,
+            blendMode = fixedState,
         )
     }
     return true

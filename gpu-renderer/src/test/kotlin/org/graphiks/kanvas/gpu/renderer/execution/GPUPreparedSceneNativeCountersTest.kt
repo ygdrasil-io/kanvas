@@ -1,0 +1,78 @@
+package org.graphiks.kanvas.gpu.renderer.execution
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+
+class GPUPreparedSceneNativeCountersTest {
+    @Test
+    fun `public counters preserve the exact historical data class ABI`() {
+        val counters = GPUPreparedSceneNativeCounters(
+            11L,
+            12L,
+            13L,
+            renderPasses = 17L,
+            draws = 19L,
+            drawIndexed = 23L,
+            pipelineBinds = 29L,
+        )
+
+        val (encoders, commandBuffers, targetCreations) = counters
+
+        assertEquals(11L, encoders)
+        assertEquals(12L, commandBuffers)
+        assertEquals(13L, targetCreations)
+
+        val type = GPUPreparedSceneNativeCounters::class.java
+        assertEquals(17L, counters.renderPasses)
+        assertEquals(19L, counters.draws)
+        assertEquals(23L, counters.drawIndexed)
+        assertEquals(29L, counters.pipelineBinds)
+        assertEquals(41, type.declaredMethods.count { it.name.matches(Regex("component\\d+")) })
+        assertEquals(41, type.declaredMethods.single { it.name == "copy" }.parameterCount)
+        assertEquals(
+            41,
+            type.declaredConstructors.filterNot { it.isSynthetic }.maxOf { it.parameterCount },
+        )
+    }
+
+    @Test
+    fun `internal render counters use a dedicated defaultable factory`() {
+        val coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> error("unused") }
+        val defaultSession = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
+            coordinatorFactory = coordinatorFactory,
+        )
+        val instrumentedSession = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
+            coordinatorFactory = coordinatorFactory,
+            renderCountersFactory = {
+                GPUPreparedSceneRenderCounters(
+                    renderPasses = 7L,
+                    draws = 11L,
+                    drawIndexed = 13L,
+                    pipelineBinds = 17L,
+                    coverageMaskTextureCreations = 17L,
+                    coverageMaskSlotReuses = 19L,
+                    msaaColorTextureCreations = 23L,
+                    msaaColorSlotReuses = 29L,
+                )
+            },
+        )
+
+        assertEquals(GPUPreparedSceneRenderCounters(), defaultSession.renderCounters())
+        assertEquals(
+            GPUPreparedSceneRenderCounters(
+                renderPasses = 7L,
+                draws = 11L,
+                drawIndexed = 13L,
+                pipelineBinds = 17L,
+                coverageMaskTextureCreations = 17L,
+                coverageMaskSlotReuses = 19L,
+                msaaColorTextureCreations = 23L,
+                msaaColorSlotReuses = 29L,
+            ),
+            instrumentedSession.renderCounters(),
+        )
+    }
+}

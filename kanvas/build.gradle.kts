@@ -11,12 +11,12 @@ dependencies {
     implementation(project(":math"))
     implementation(project(":font"))
     implementation(project(":font:colr"))
-    api("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
-    api("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
+    api(libs.wgslCoreJvm)
+    api(libs.wgslParserJvm)
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
-    testImplementation("org.graphiks:wgsl-core-jvm:1.0.0-SNAPSHOT")
-    testImplementation("org.graphiks:wgsl-parser-jvm:1.0.0-SNAPSHOT")
+    testImplementation(libs.wgslCoreJvm)
+    testImplementation(libs.wgslParserJvm)
 }
 
 sourceSets {

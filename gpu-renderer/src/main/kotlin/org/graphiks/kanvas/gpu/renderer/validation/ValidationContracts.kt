@@ -822,7 +822,7 @@ private fun firstRouteExecutedPMEvidenceConsistencyDiagnostics(
     telemetryLedger: GPUTelemetryLedger,
 ): List<String> {
     val renderTasks = recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
-    val recordingTaskIds = renderTasks.map { task -> task.taskId }.distinct()
+    val recordingTaskIds = renderTasks.map { task -> task.taskId.value }.distinct()
     val recordingPassIds = renderTasks.map { task -> task.passId }.distinct()
 
     return buildList {
@@ -875,15 +875,15 @@ private fun firstRouteExecutedPMEvidenceConsistencyDiagnostics(
             )
 
             val submittedReadbackIds = submission.readbackRequests
-                .map { request -> request.requestId }
+                .map { request -> request.requestId.value }
                 .distinct()
             val submittedReadbackIdSet = submittedReadbackIds.toSet()
             val readbackResultIds = readbacks
                 .map { readback ->
                     when (readback) {
-                        is GPUReadbackResult.Completed -> readback.request.requestId
-                        is GPUReadbackResult.Skipped -> readback.request.requestId
-                        is GPUReadbackResult.Refused -> readback.request.requestId
+                        is GPUReadbackResult.Completed -> readback.request.requestId.value
+                        is GPUReadbackResult.Skipped -> readback.request.requestId.value
+                        is GPUReadbackResult.Refused -> readback.request.requestId.value
                     }
                 }
             val duplicateReadbackResultIds = readbackResultIds
@@ -913,7 +913,7 @@ private fun firstRouteExecutedPMEvidenceConsistencyDiagnostics(
             }
             val unsubmittedCompletedReadbackIds = readbacks
                 .filterIsInstance<GPUReadbackResult.Completed>()
-                .map { readback -> readback.request.requestId }
+                .map { readback -> readback.request.requestId.value }
                 .distinct()
                 .filterNot { requestId -> requestId in submittedReadbackIdSet }
             if (unsubmittedCompletedReadbackIds.isNotEmpty()) {
@@ -1295,7 +1295,7 @@ private fun firstRouteRecordingPMEvidenceEntries(
                     ownerPackage = "payloads",
                     concept = "GPUPayloadGatherPlan",
                     detail = "recording $recordingId payload evidence for " +
-                        "renderTasks=${renderTasks.joinToString(",") { task -> task.taskId }}",
+                        "renderTasks=${renderTasks.joinToString(",") { task -> task.taskId.value }}",
                 ),
             )
             add(

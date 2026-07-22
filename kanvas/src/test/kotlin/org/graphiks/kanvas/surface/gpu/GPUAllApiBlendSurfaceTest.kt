@@ -601,7 +601,8 @@ class GPUAllApiBlendSurfaceTest {
         return if (clamped <= .0031308f) clamped * 12.92f else 1.055f * clamped.pow(1f / 2.4f) - .055f
     }
 
-    private fun BlendMode.requiresDestinationRead(): Boolean = this in ARTISTIC_MODES
+    private fun BlendMode.requiresDestinationRead(): Boolean =
+        toGpuBlendFacts().needsDestinationTexture()
 
     private data class BlendCase(
         val name: String,

@@ -47,6 +47,32 @@ data class WgslEntryPointReflection(
     val workgroupSize: List<Int>? = null,
 )
 
+/** Shader stages represented by the legacy binding-visibility list. */
+@Serializable
+enum class WgslShaderVisibility(val wireName: String) {
+    Vertex("vertex"),
+    Fragment("fragment"),
+    Compute("compute"),
+    ;
+
+    companion object {
+        fun fromWireName(wireName: String): WgslShaderVisibility =
+            requireNotNull(entries.singleOrNull { it.wireName == wireName }) {
+                "Unsupported WGSL binding visibility stage: $wireName"
+            }
+    }
+}
+
+/** Explicit availability of per-entry-point resource-visibility reflection. */
+@Serializable
+sealed interface WgslBindingVisibility {
+    @Serializable
+    data object Unavailable : WgslBindingVisibility
+
+    @Serializable
+    data class Available(val stages: Set<WgslShaderVisibility>) : WgslBindingVisibility
+}
+
 @Serializable
 data class WgslBindingReflection(
     val group: Int,
@@ -59,7 +85,18 @@ data class WgslBindingReflection(
     val viewDimension: String? = null,
     val storageFormat: String? = null,
     val minBindingSize: Int? = null,
-)
+) {
+    /**
+     * Typed interpretation of [visibility]. An empty legacy list means that wgsl4k did not expose
+     * resource-use visibility; it never implies a fabricated empty or all-stage visibility set.
+     */
+    val visibilityState: WgslBindingVisibility
+        get() = if (visibility.isEmpty()) {
+            WgslBindingVisibility.Unavailable
+        } else {
+            WgslBindingVisibility.Available(visibility.mapTo(linkedSetOf(), WgslShaderVisibility::fromWireName))
+        }
+}
 
 @Serializable
 data class WgslLayoutReflection(
@@ -265,7 +302,7 @@ private fun Module.reflectStructLayout(
     }
     val layout = layouter[handle]
     return WgslLayoutReflection(
-        structName = "struct_${handle.index}",
+        structName = type.name ?: "struct_${handle.index}",
         addressSpace = addressSpace,
         size = layout.size,
         alignment = layout.alignment.value,

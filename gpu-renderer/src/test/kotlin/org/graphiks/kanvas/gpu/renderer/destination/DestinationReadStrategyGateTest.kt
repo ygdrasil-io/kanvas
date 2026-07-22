@@ -1,11 +1,117 @@
 package org.graphiks.kanvas.gpu.renderer.destination
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePurpose
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DestinationReadStrategyGateTest {
+    @Test
+    fun `semantic requirement strategy and copy materialization stay distinct`() {
+        assertEquals(
+            listOf(
+                GPUBlendDestinationReadRequirement.None,
+                GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+                GPUBlendDestinationReadRequirement.Refused,
+            ),
+            GPUBlendDestinationReadRequirement.entries,
+        )
+        assertEquals(
+            listOf(
+                GPUDestinationReadStrategy.None,
+                GPUDestinationReadStrategy.CopyTarget,
+                GPUDestinationReadStrategy.BindIntermediate,
+                GPUDestinationReadStrategy.IsolateLayer,
+                GPUDestinationReadStrategy.Refuse,
+            ),
+            GPUDestinationReadStrategy.entries,
+        )
+        assertFalse(GPUDestinationReadStrategy.entries.any { it.name == "CopyAsDrawMaterialization" })
+    }
+
+    @Test
+    fun `planner selects approved existing isolation copy refusal priority`() {
+        val planner = GPUDestinationReadStrategyPlanner()
+        val exact = exactIntermediate()
+        val isolation = GPUDestinationReadMandatoryIsolation(
+            kind = GPUDestinationReadIsolationKind.Filter,
+            targetLabel = "filter-isolation:blend-screen",
+        )
+
+        val existingFirst = planner.plan(
+            targetCopyRequest(
+                eligibleIntermediate = exact,
+                mandatoryIsolation = isolation,
+                targetCopyAvailable = true,
+            ),
+        )
+        val isolationSecond = planner.plan(
+            targetCopyRequest(
+                eligibleIntermediate = null,
+                mandatoryIsolation = isolation,
+                targetCopyAvailable = true,
+            ),
+        )
+        val invalidExistingStillIsolates = planner.plan(
+            targetCopyRequest(
+                eligibleIntermediate = exact.copy(
+                    descriptor = exact.descriptor.copy(generation = 41),
+                ),
+                mandatoryIsolation = isolation,
+                targetCopyAvailable = true,
+            ),
+        )
+        val copyThird = planner.plan(
+            targetCopyRequest(
+                eligibleIntermediate = null,
+                mandatoryIsolation = null,
+                targetCopyAvailable = true,
+            ),
+        )
+        val refusedLast = planner.plan(
+            targetCopyRequest(
+                eligibleIntermediate = null,
+                mandatoryIsolation = null,
+                targetCopyAvailable = false,
+            ),
+        )
+
+        assertEquals(GPUDestinationReadStrategy.BindIntermediate, existingFirst.plan.strategy)
+        assertEquals(GPUDestinationReadAction.UseExistingIntermediate, existingFirst.action)
+        assertEquals(GPUDestinationReadStrategy.IsolateLayer, isolationSecond.plan.strategy)
+        assertEquals(GPUDestinationReadAction.CreateIsolatedLayer, isolationSecond.action)
+        assertTrue(isolationSecond.copyDescriptorHash.isNotBlank())
+        assertEquals(GPUDestinationReadStrategy.IsolateLayer, invalidExistingStillIsolates.plan.strategy)
+        assertEquals(GPUDestinationReadStrategy.CopyTarget, copyThird.plan.strategy)
+        assertEquals(GPUDestinationReadAction.SplitPassAndCopyTarget, copyThird.action)
+        assertEquals(GPUDestinationReadStrategy.Refuse, refusedLast.plan.strategy)
+        assertEquals("unsupported.destination_read.strategy_unavailable", refusedLast.diagnostics.single().code)
+    }
+
+    @Test
+    fun `no destination requirement remains a no-copy path`() {
+        val result = GPUDestinationReadStrategyPlanner().plan(
+            targetCopyRequest(
+                requirement = GPUBlendDestinationReadRequirement.None,
+                eligibleIntermediate = exactIntermediate(),
+                mandatoryIsolation = GPUDestinationReadMandatoryIsolation(
+                    kind = GPUDestinationReadIsolationKind.Layer,
+                    targetLabel = "layer:ignored",
+                ),
+                targetCopyAvailable = true,
+            ),
+        )
+
+        assertEquals(GPUDestinationReadStrategy.None, result.plan.strategy)
+        assertEquals(GPUDestinationReadAction.KeepInPass, result.action)
+        assertEquals(null, result.copyDescriptor)
+        assertEquals(null, result.copyPlan)
+        assertEquals(null, result.plan.binding)
+    }
     @Test
     fun boundedTargetCopyProducesDestinationReadEvidenceDump() {
         val result = GPUDestinationReadStrategyPlanner().plan(targetCopyRequest())
@@ -16,7 +122,7 @@ class DestinationReadStrategyGateTest {
         assertFalse(result.promoted)
         assertTrue(result.productActivation)
         assertFalse(result.materialized)
-        assertAcceptedDiagnostic(result, GPUDestinationReadRequirement.TargetCopy)
+        assertAcceptedDiagnostic(result, GPUBlendDestinationReadRequirement.DestinationTextureRequired)
         assertEquals(GPUDestinationReadStrategy.CopyTarget, result.plan.strategy)
         assertEquals(GPUDestinationReadAction.SplitPassAndCopyTarget, result.action)
         assertFalse(result.bindingInMaterialKey)
@@ -36,23 +142,107 @@ class DestinationReadStrategyGateTest {
     }
 
     @Test
+    fun `copy target gate rejects forged public copy descriptor and command evidence`() {
+        val valid = GPUDestinationReadStrategyPlanner().plan(targetCopyRequest())
+        val descriptor = requireNotNull(valid.copyDescriptor)
+        val copyPlan = requireNotNull(valid.copyPlan)
+        val forgedDescriptors = listOf(
+            descriptor.copy(label = "dst-copy:evil"),
+            descriptor.copy(descriptorHash = "sha256:evil"),
+            descriptor.copy(sourceTargetLabel = "target:evil"),
+            descriptor.copy(targetGeneration = descriptor.targetGeneration + 1L),
+            descriptor.copy(width = descriptor.width + 1),
+            descriptor.copy(height = descriptor.height + 1),
+            descriptor.copy(formatClass = "bgra8unorm"),
+            descriptor.copy(usageLabels = listOf("texture_binding")),
+            descriptor.copy(sampleCount = descriptor.sampleCount + 1),
+            descriptor.copy(lifetimeClass = "evil-lifetime"),
+            descriptor.copy(ownerLabel = "evil-owner"),
+            descriptor.copy(byteEstimate = descriptor.byteEstimate + 1L),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            valid.copy(copyDescriptor = null)
+        }
+        forgedDescriptors.forEach { forgedDescriptor ->
+            assertFailsWith<IllegalArgumentException> {
+                valid.copy(copyDescriptor = forgedDescriptor)
+            }
+            assertFailsWith<IllegalArgumentException> {
+                valid.copy(copyPlan = copyPlan.copy(descriptor = forgedDescriptor))
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            valid.copy(
+                plan = valid.plan.copy(
+                    bounds = valid.plan.bounds.copy(boundsLabel = "draw:evil|shape-local"),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `copy target gate requires unique congruent source facts`() {
+        val valid = GPUDestinationReadStrategyPlanner().plan(targetCopyRequest())
+        val requiredFactNames = listOf("source", "sourceUsage", "copyUsage", "targetFormat")
+
+        requiredFactNames.forEach { factName ->
+            assertFailsWith<IllegalArgumentException> {
+                valid.copy(
+                    plan = valid.plan.copy(
+                        sourceTargetFacts = valid.plan.sourceTargetFacts + "$factName=evil",
+                    ),
+                )
+            }
+        }
+
+        val incongruentFacts = mapOf(
+            "source" to "target:evil",
+            "sourceUsage" to "copy_src,render_attachment",
+            "copyUsage" to "texture_binding,copy_dst",
+            "targetFormat" to "bgra8unorm",
+        )
+        incongruentFacts.forEach { (factName, forgedValue) ->
+            assertFailsWith<IllegalArgumentException> {
+                valid.copy(
+                    plan = valid.plan.copy(
+                        sourceTargetFacts = valid.plan.sourceTargetFacts.map { fact ->
+                            if (fact.startsWith("$factName=")) "$factName=$forgedValue" else fact
+                        },
+                    ),
+                )
+            }
+        }
+        assertFailsWith<IllegalArgumentException> {
+            valid.copy(
+                plan = valid.plan.copy(
+                    sourceTargetFacts = valid.plan.sourceTargetFacts.map { fact ->
+                        if (fact.startsWith("sourceUsage=")) {
+                            "sourceUsage=render_attachment,copy_src,copy_src"
+                        } else {
+                            fact
+                        }
+                    },
+                ),
+            )
+        }
+    }
+
+    @Test
     fun validatedIntermediateProducesBindingWithoutCopyDump() {
         val result = GPUDestinationReadStrategyPlanner().plan(
             targetCopyRequest(
-                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
-                strategy = GPUDestinationReadStrategy.BindIntermediate,
-                action = GPUDestinationReadAction.UseExistingIntermediate,
-                intermediateLabel = "intermediate:layer-card",
-                intermediateValidated = true,
+                requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+                eligibleIntermediate = exactIntermediate(),
             ),
         )
 
         assertEquals(GPUDestinationReadStrategy.BindIntermediate, result.plan.strategy)
         assertEquals(GPUDestinationReadAction.UseExistingIntermediate, result.action)
-        assertAcceptedDiagnostic(result, GPUDestinationReadRequirement.ExistingIntermediate)
+        assertAcceptedDiagnostic(result, GPUBlendDestinationReadRequirement.DestinationTextureRequired)
         assertEquals(
             listOf(
-                "destination-read:strategy row=gpu-renderer.destination-read.strategy routeKind=GPUNative classification=TargetNative promoted=false productActivation=true materialized=false requirement=ExistingIntermediate strategy=SampleExistingIntermediate action=UseExistingIntermediate source=intermediate:layer-card generation=42",
+                "destination-read:strategy row=gpu-renderer.destination-read.strategy routeKind=GPUNative classification=TargetNative promoted=false productActivation=true materialized=false requirement=ShaderBlend strategy=SampleExistingIntermediate action=UseExistingIntermediate source=intermediate:layer-card generation=42",
                 "destination-read:bounds command=blend:screen requested=shape-local unclipped=0,0,80,40 clipped=4,8,64,32 copy=4,8,64,32 finite=true pixelAligned=true conservative=true target=128x96",
                 "destination-read:intermediate label=intermediate:layer-card descriptor=${result.copyDescriptorHash} separateAttachment=true generation=42 bounds=4,8,64,32 lifetime=layer-local",
                 "destination-read:binding label=dst-read:blend-screen layout=${result.bindingLayoutHash} textureView=${result.textureViewHash} sampler=${result.samplerHash} bounds=4,8,64,32 generation=42 slot=group1.binding3 materialKey=false",
@@ -86,28 +276,9 @@ class DestinationReadStrategyGateTest {
                 reason = "unsupported.destination_read.active_attachment_sampled",
             ),
             refusalCase(
-                "none-strategy-unaccepted",
-                requirement = GPUDestinationReadRequirement.None,
-                strategy = GPUDestinationReadStrategy.None,
-                action = GPUDestinationReadAction.KeepInPass,
-                reason = "unsupported.destination_read.strategy_unaccepted",
-            ),
-            refusalCase(
-                "fixed-function-strategy-unaccepted",
-                requirement = GPUDestinationReadRequirement.FixedFunctionBlend,
-                strategy = GPUDestinationReadStrategy.FixedFunction,
-                action = GPUDestinationReadAction.UseFixedFunctionBlend,
-                reason = "unsupported.destination_read.strategy_unaccepted",
-            ),
-            refusalCase(
                 "copy-usage",
                 sourceUsageLabels = setOf("render_attachment"),
                 reason = "unsupported.destination_read.copy_usage_missing",
-            ),
-            refusalCase(
-                "copy-action-mismatch",
-                action = GPUDestinationReadAction.UseExistingIntermediate,
-                reason = "unsupported.destination_read.strategy_action_mismatch",
             ),
             refusalCase(
                 "texture-binding",
@@ -115,33 +286,31 @@ class DestinationReadStrategyGateTest {
                 reason = "unsupported.destination_read.texture_binding_missing",
             ),
             refusalCase(
-                "intermediate-action-mismatch",
-                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
-                strategy = GPUDestinationReadStrategy.BindIntermediate,
-                action = GPUDestinationReadAction.SplitPassAndCopyTarget,
-                reason = "unsupported.destination_read.strategy_action_mismatch",
+                "strategy-unavailable",
+                targetCopyAvailable = false,
+                reason = "unsupported.destination_read.strategy_unavailable",
             ),
             refusalCase(
-                "layer-strategy-unaccepted",
-                requirement = GPUDestinationReadRequirement.LayerIsolation,
-                strategy = GPUDestinationReadStrategy.IsolateLayer,
-                action = GPUDestinationReadAction.CreateIsolatedLayer,
-                reason = "unsupported.destination_read.strategy_unaccepted",
-            ),
-            refusalCase(
-                "refuse-strategy-unaccepted",
-                requirement = GPUDestinationReadRequirement.Refused,
-                strategy = GPUDestinationReadStrategy.Refuse,
-                action = GPUDestinationReadAction.Refuse,
-                reason = "unsupported.destination_read.strategy_unaccepted",
+                "canonical-blend-refused",
+                requirement = GPUBlendDestinationReadRequirement.Refused,
+                reason = "unsupported.destination_read.blend_refused",
             ),
             refusalCase(
                 "intermediate-unvalidated",
-                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
-                strategy = GPUDestinationReadStrategy.BindIntermediate,
-                action = GPUDestinationReadAction.UseExistingIntermediate,
-                intermediateValidated = false,
+                eligibleIntermediate = exactIntermediate().copy(
+                    descriptor = exactIntermediate().descriptor.copy(boundsLabel = "mismatched-bounds"),
+                ),
+                targetCopyAvailable = false,
                 reason = "unsupported.destination_read.intermediate_unvalidated",
+            ),
+            refusalCase(
+                "isolation-unavailable",
+                mandatoryIsolation = GPUDestinationReadMandatoryIsolation(
+                    kind = GPUDestinationReadIsolationKind.Layer,
+                    targetLabel = "layer:blend-screen",
+                    available = false,
+                ),
+                reason = "unsupported.destination_read.isolation_unavailable",
             ),
             refusalCase(
                 "stale-generation",
@@ -188,7 +357,7 @@ class DestinationReadStrategyGateTest {
 
 private fun assertAcceptedDiagnostic(
     result: GPUDestinationReadStrategyGatePlan,
-    requirement: GPUDestinationReadRequirement,
+    requirement: GPUBlendDestinationReadRequirement,
 ) {
     val diagnostic = result.diagnostics.single()
 
@@ -206,14 +375,14 @@ private data class RefusalCase(
 private fun refusalCase(
     label: String,
     reason: String,
-    requirement: GPUDestinationReadRequirement = GPUDestinationReadRequirement.TargetCopy,
-    strategy: GPUDestinationReadStrategy = GPUDestinationReadStrategy.CopyTarget,
-    action: GPUDestinationReadAction = GPUDestinationReadAction.SplitPassAndCopyTarget,
+    requirement: GPUBlendDestinationReadRequirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
     bounds: GPUDestinationReadBounds = destinationBounds(),
     sourceUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
     copyUsageLabels: Set<String> = setOf("copy_dst", "texture_binding"),
     activeAttachmentSampled: Boolean = false,
-    intermediateValidated: Boolean = true,
+    eligibleIntermediate: GPUDestinationReadEligibleIntermediate? = null,
+    mandatoryIsolation: GPUDestinationReadMandatoryIsolation? = null,
+    targetCopyAvailable: Boolean = true,
     observedTargetGeneration: Long = 42,
     passSplitAllowed: Boolean = true,
     framebufferFetchRequested: Boolean = false,
@@ -225,13 +394,13 @@ private fun refusalCase(
     request = targetCopyRequest(
         label = label,
         requirement = requirement,
-        strategy = strategy,
-        action = action,
         bounds = bounds,
         sourceUsageLabels = sourceUsageLabels,
         copyUsageLabels = copyUsageLabels,
         activeAttachmentSampled = activeAttachmentSampled,
-        intermediateValidated = intermediateValidated,
+        eligibleIntermediate = eligibleIntermediate,
+        mandatoryIsolation = mandatoryIsolation,
+        targetCopyAvailable = targetCopyAvailable,
         observedTargetGeneration = observedTargetGeneration,
         passSplitAllowed = passSplitAllowed,
         framebufferFetchRequested = framebufferFetchRequested,
@@ -242,15 +411,14 @@ private fun refusalCase(
 
 private fun targetCopyRequest(
     label: String = "accepted",
-    requirement: GPUDestinationReadRequirement = GPUDestinationReadRequirement.TargetCopy,
-    strategy: GPUDestinationReadStrategy = GPUDestinationReadStrategy.CopyTarget,
-    action: GPUDestinationReadAction = GPUDestinationReadAction.SplitPassAndCopyTarget,
+    requirement: GPUBlendDestinationReadRequirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
     bounds: GPUDestinationReadBounds = destinationBounds(),
     sourceUsageLabels: Set<String> = setOf("render_attachment", "copy_src"),
     copyUsageLabels: Set<String> = setOf("copy_dst", "texture_binding"),
     activeAttachmentSampled: Boolean = false,
-    intermediateLabel: String = "target:main",
-    intermediateValidated: Boolean = true,
+    eligibleIntermediate: GPUDestinationReadEligibleIntermediate? = null,
+    mandatoryIsolation: GPUDestinationReadMandatoryIsolation? = null,
+    targetCopyAvailable: Boolean = true,
     targetGeneration: Long = 42,
     observedTargetGeneration: Long = targetGeneration,
     passSplitAllowed: Boolean = true,
@@ -261,8 +429,6 @@ private fun targetCopyRequest(
     label = label,
     commandId = "blend:screen",
     requirement = requirement,
-    strategy = strategy,
-    action = action,
     bounds = bounds,
     sourceTargetLabel = "target:main",
     sourceUsageLabels = sourceUsageLabels,
@@ -271,13 +437,34 @@ private fun targetCopyRequest(
     targetGeneration = targetGeneration,
     observedTargetGeneration = observedTargetGeneration,
     activeAttachmentSampled = activeAttachmentSampled,
-    intermediateLabel = intermediateLabel,
-    intermediateValidated = intermediateValidated,
+    eligibleIntermediate = eligibleIntermediate,
+    mandatoryIsolation = mandatoryIsolation,
+    targetCopyAvailable = targetCopyAvailable,
     passSplitAllowed = passSplitAllowed,
     framebufferFetchRequested = framebufferFetchRequested,
     cpuReadbackRequested = cpuReadbackRequested,
     maxCopyBytes = maxCopyBytes,
 )
+
+private fun exactIntermediate(): GPUDestinationReadEligibleIntermediate =
+    GPUDestinationReadEligibleIntermediate(
+        descriptor = GPUIntermediateTextureDescriptor(
+            label = "intermediate:layer-card",
+            purpose = GPUIntermediatePurpose.ExistingIntermediate,
+            descriptorHash = "descriptor:layer-card",
+            sourceTargetLabel = "target:main",
+            boundsLabel = "4,8,64,32",
+            width = 64,
+            height = 32,
+            formatClass = "rgba8unorm",
+            usageLabels = listOf("texture_binding"),
+            sampleCount = 1,
+            generation = 42,
+            lifetimeClass = "layer-local",
+            ownerScope = "layer:card",
+            byteEstimate = 8192,
+        ),
+    )
 
 private fun destinationBounds(finite: Boolean = true): GPUDestinationReadBounds = GPUDestinationReadBounds(
     boundsLabel = "shape-local",

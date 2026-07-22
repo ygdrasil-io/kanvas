@@ -1,10 +1,13 @@
 package org.graphiks.kanvas.gpu.renderer.destination
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.dumpLines
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediatePurpose
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateTextureDescriptor
 
 class DestinationReadMaterializationPreimageTest {
     @Test
@@ -19,6 +22,12 @@ class DestinationReadMaterializationPreimageTest {
         assertFalse(preimage.nonClaims.productRoute)
         assertEquals(listOf(GPUMaterializedResourceRole.DestinationCopyTexture), preimage.resources.map { it.role })
         assertEquals(
+            "sourceUsage=render_attachment,copy_src",
+            gate.plan.sourceTargetFacts.single { it.startsWith("sourceUsage=") },
+        )
+        assertFalse(preimage.dumpLines().joinToString("\n").contains("CopyAsDrawMaterialization"))
+        assertFalse(preimage.dumpLines().joinToString("\n").contains("cpuReadback", ignoreCase = true))
+        assertEquals(
             listOf(
                 "resource-preimage:accepted plan=destination-read:blend-screen source=gpu-renderer.destination-read.strategy resources=dst-copy:blend-screen bindings=dst-read:blend-screen adapterBacked=false liveHandles=false productRoute=false",
                 "resource-preimage:resource label=dst-copy:blend-screen role=destination-copy-texture generation=42 lifetime=pass-local descriptor=${gate.copyDescriptorHash} usage=copy_dst,texture_binding facts=action=SplitPassAndCopyTarget;source=target:main",
@@ -32,10 +41,8 @@ class DestinationReadMaterializationPreimageTest {
     fun `validated intermediate strategy derives existing intermediate materialization preimage`() {
         val gate = GPUDestinationReadStrategyPlanner().plan(
             destinationPreimageRequest(
-                requirement = GPUDestinationReadRequirement.ExistingIntermediate,
-                strategy = GPUDestinationReadStrategy.BindIntermediate,
-                action = GPUDestinationReadAction.UseExistingIntermediate,
-                intermediateLabel = "intermediate:layer-card",
+                requirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+                eligibleIntermediate = destinationEligibleIntermediate(),
             ),
         )
 
@@ -73,16 +80,12 @@ class DestinationReadMaterializationPreimageTest {
 }
 
 private fun destinationPreimageRequest(
-    requirement: GPUDestinationReadRequirement = GPUDestinationReadRequirement.TargetCopy,
-    strategy: GPUDestinationReadStrategy = GPUDestinationReadStrategy.CopyTarget,
-    action: GPUDestinationReadAction = GPUDestinationReadAction.SplitPassAndCopyTarget,
+    requirement: GPUBlendDestinationReadRequirement = GPUBlendDestinationReadRequirement.DestinationTextureRequired,
     activeAttachmentSampled: Boolean = false,
-    intermediateLabel: String = "target:main",
+    eligibleIntermediate: GPUDestinationReadEligibleIntermediate? = null,
 ): GPUDestinationReadStrategyRequest = GPUDestinationReadStrategyRequest(
     commandId = "blend:screen",
     requirement = requirement,
-    strategy = strategy,
-    action = action,
     bounds = GPUDestinationReadBounds(
         boundsLabel = "shape-local",
         conservative = true,
@@ -104,5 +107,25 @@ private fun destinationPreimageRequest(
     targetFormatClass = "rgba8unorm",
     targetGeneration = 42,
     activeAttachmentSampled = activeAttachmentSampled,
-    intermediateLabel = intermediateLabel,
+    eligibleIntermediate = eligibleIntermediate,
 )
+
+private fun destinationEligibleIntermediate(): GPUDestinationReadEligibleIntermediate =
+    GPUDestinationReadEligibleIntermediate(
+        descriptor = GPUIntermediateTextureDescriptor(
+            label = "intermediate:layer-card",
+            purpose = GPUIntermediatePurpose.ExistingIntermediate,
+            descriptorHash = "descriptor:layer-card",
+            sourceTargetLabel = "target:main",
+            boundsLabel = "4,8,64,32",
+            width = 64,
+            height = 32,
+            formatClass = "rgba8unorm",
+            usageLabels = listOf("texture_binding"),
+            sampleCount = 1,
+            generation = 42,
+            lifetimeClass = "layer-local",
+            ownerScope = "layer:card",
+            byteEstimate = 8192,
+        ),
+    )

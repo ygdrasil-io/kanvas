@@ -84,6 +84,7 @@ class GPUTextA8RouteAcceptanceTest {
 
         val recorder = GPURecorder(
             recordingId = GPURecordingID("test-a8-accept"),
+            frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(23),
             capabilities = textA8Capabilities(),
         )
         recorder.record(command)
@@ -92,7 +93,7 @@ class GPUTextA8RouteAcceptanceTest {
         val tasks = recording.taskList.tasks
         assertTrue(tasks.any { it is GPUTask.Render }, "Expected at least one Render task")
         val renderTask = tasks.filterIsInstance<GPUTask.Render>().single()
-        assertEquals("task.render.1", renderTask.taskId)
+        assertEquals("task.render.1", renderTask.taskId.value)
     }
 
     @Test
@@ -137,6 +138,7 @@ class GPUTextA8RouteAcceptanceTest {
 
         val recorder = GPURecorder(
             recordingId = GPURecordingID("test-a8-refuse"),
+            frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(23),
             capabilities = textA8Capabilities(),
         )
         recorder.record(command)
@@ -145,7 +147,7 @@ class GPUTextA8RouteAcceptanceTest {
         val tasks = recording.taskList.tasks
         assertTrue(tasks.all { it is GPUTask.Refused }, "Expected all Refused tasks")
         val refusedTask = assertIs<GPUTask.Refused>(tasks.single())
-        assertEquals("task.refused.2", refusedTask.taskId)
+        assertEquals("task.refused.2", refusedTask.taskId.value)
     }
 
     private fun textA8Capabilities(): GPUCapabilities =

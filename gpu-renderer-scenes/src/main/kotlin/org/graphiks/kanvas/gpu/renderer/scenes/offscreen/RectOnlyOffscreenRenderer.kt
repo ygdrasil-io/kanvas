@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.scenes.offscreen
 
 import java.awt.image.BufferedImage
 import java.nio.file.Path
+import java.util.concurrent.TimeUnit
 import javax.imageio.ImageIO
 import kotlin.io.path.createDirectories
 import kotlin.math.ceil
@@ -12,6 +13,10 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSimplePassBatchKind
 import org.graphiks.kanvas.gpu.renderer.execution.GPUClearColor
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
+import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutput
+import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.RadialGradientWgsl
@@ -65,7 +70,16 @@ import org.graphiks.kanvas.gpu.renderer.geometry.PathTessellator
 import org.graphiks.kanvas.gpu.renderer.geometry.StencilCoverExecutor
 import org.graphiks.kanvas.gpu.renderer.geometry.ConvexFanExecutor
 import org.graphiks.kanvas.gpu.renderer.geometry.isPathConvex
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.textRunRouteUnavailableReason
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.font.atlas.AtlasRegion
 import org.graphiks.kanvas.font.atlas.GlyphAtlasPlacement
 import java.nio.ByteBuffer
@@ -73,6 +87,24 @@ import java.nio.ByteOrder
 
 private const val BYTES_PER_PIXEL: Int = 4
 internal const val OFFSCREEN_COLOR_FORMAT: String = "rgba8unorm"
+
+/** Canonical attachment state for ordinary premultiplied-alpha scene composition. */
+internal val SCENE_SRC_OVER_BLEND_STATE: GPUFixedFunctionBlendState =
+    requireNotNull(
+        GPUBlendPlanner().plan(
+            GPUBlendSpecializationRequest(
+                mode = GPUBlendMode.SRC_OVER,
+                coverage = GPUCoverageConsumption.FullOrScissor,
+                sourceAlpha = GPUSourceAlphaClassification.Translucent,
+                target = GPUTargetBlendFacts(
+                    formatClass = OFFSCREEN_COLOR_FORMAT,
+                    clampsNormalizedColorWrites = true,
+                    premultipliedAlpha = true,
+                ),
+                samplePlan = GPUSamplePlan.SingleSampleFrame,
+            ),
+        ) as? GPUBlendPlan.FixedFunctionBlend,
+    ).state
 
 private data class GradientWgslInfo(
     val snippet: String,
@@ -93,6 +125,21 @@ class RectOnlyOffscreenRenderer internal constructor(
     fun render(scene: GPURendererScene<SceneCommand>, outputDir: Path): OffscreenRunReport {
         val sceneId = scene.sceneId.value
         outputDir.createDirectories()
+        if (scene.commands.any { it is SceneCommand.ColorTextRun }) {
+            return renderPreparedColorGlyphScene(scene, outputDir)
+        }
+        if (scene.usesPreparedSolidRectPilot()) {
+            return renderPreparedSolidRectScene(scene, outputDir)
+        }
+        if (scene.usesPreparedStrokeRectPilot()) {
+            return renderPreparedStrokeRectScene(scene, outputDir)
+        }
+        if (scene.usesPreparedRegisteredUniformRectPilot()) {
+            return renderPreparedRegisteredUniformRectScene(scene, outputDir)
+        }
+        if (scene.usesPreparedSeparableBlurRectPilot()) {
+            return renderPreparedSeparableBlurRectScene(scene, outputDir)
+        }
         val drawPlan = prepareRectOnlyDrawPlan(
             sceneId = sceneId,
             commands = scene.commands,
@@ -174,6 +221,530 @@ class RectOnlyOffscreenRenderer internal constructor(
         }
     }
 
+    private fun renderPreparedColorGlyphScene(
+        scene: GPURendererScene<SceneCommand>,
+        outputDir: Path,
+    ): OffscreenRunReport {
+        val sceneId = scene.sceneId.value
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+            ?: return OffscreenRunReport.failed(sceneId, "webgpu-context-unavailable")
+        runtime.use { session ->
+            val capabilities = session.capabilities
+                ?: return OffscreenRunReport.failed(sceneId, "prepared-color-glyph-capabilities-unavailable")
+            val generation = session.deviceGeneration
+            val preparedFrame = when (
+                val result = PreparedColorGlyphSceneFrameRecorder().record(
+                    scene = scene,
+                    capabilities = capabilities,
+                    deviceGeneration = generation,
+                    frameOrdinal = 1L,
+                    withReadback = true,
+                )
+            ) {
+                is PreparedColorGlyphSceneFrameResult.Refused ->
+                    return OffscreenRunReport.failed(sceneId, result.reason)
+                is PreparedColorGlyphSceneFrameResult.Recorded -> result
+            }
+            val requestId = requireNotNull(preparedFrame.readbackRequestId)
+            session.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(
+                    width = scene.dimensions.width,
+                    height = scene.dimensions.height,
+                ),
+            ).use { preparedSession ->
+                val terminal = preparedSession.renderFrame(
+                    preparedFrame.taskList,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+                ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                if (terminal.outcome != GPUFrameStructuralOutcome.Succeeded) {
+                    return OffscreenRunReport.failed(
+                        sceneId,
+                        terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                            ?: "prepared-color-glyph-frame-failed",
+                        diagnostics = preparedFrame.diagnostics,
+                    )
+                }
+                val pixels = (terminal.output as? GPUSceneFrameOutput.ReadbackRgba)?.bytes
+                    ?: return OffscreenRunReport.failed(
+                        sceneId,
+                        "prepared-color-glyph-readback-missing",
+                        diagnostics = preparedFrame.diagnostics,
+                    )
+                val reference = preparedFrame.cpuReferenceRgba
+                val nativeCounters = preparedSession.nativeCounters()
+                val matchingPixels = pixels.indices.step(BYTES_PER_PIXEL).count { offset ->
+                    pixels[offset] == reference[offset] &&
+                        pixels[offset + 1] == reference[offset + 1] &&
+                        pixels[offset + 2] == reference[offset + 2] &&
+                        pixels[offset + 3] == reference[offset + 3]
+                }
+                val totalPixels = scene.dimensions.width * scene.dimensions.height
+                writePng(pixels, scene.dimensions.width, scene.dimensions.height, outputDir.resolve(RENDER_FILE_NAME))
+                writePng(
+                    reference,
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                    outputDir.resolve("reference.png"),
+                )
+                if (!pixels.contentEquals(reference)) {
+                    writePng(
+                        colorGlyphDiff(pixels, reference),
+                        scene.dimensions.width,
+                        scene.dimensions.height,
+                        outputDir.resolve("diff.png"),
+                    )
+                } else {
+                    outputDir.resolve("diff.png").toFile().delete()
+                }
+                outputDir.resolve("parity.txt").toFile().writeText(
+                    buildString {
+                        appendLine("COLRv0 color glyph parity report")
+                        appendLine("fixture=/fonts/skia/colr.ttf")
+                        appendLine("baseGlyph=2")
+                        appendLine("layerGlyphs=7,8")
+                        appendLine("reference=independent-cpu-source-over")
+                        appendLine("matchingPixels=$matchingPixels/$totalPixels")
+                        appendLine("pixelExact=${pixels.contentEquals(reference)}")
+                        appendLine("targetSize=${scene.dimensions.width}x${scene.dimensions.height}")
+                        appendLine("uniformBytes=784")
+                    },
+                )
+                return OffscreenRunReport.rendered(
+                    sceneId = sceneId,
+                    imagePath = RENDER_FILE_NAME,
+                    width = scene.dimensions.width,
+                    height = scene.dimensions.height,
+                    byteCount = pixels.size.toLong(),
+                    nonTransparentPixels = pixels.countNonTransparentPixels(),
+                    diagnostics = listOf(
+                        "rendered $sceneId via prepared WebGPU frame",
+                        "adapter=${session.adapterInfo?.summary ?: "unknown-adapter"}",
+                    ) + preparedFrame.diagnostics + listOf(
+                        "colorTextRun:pixelExact=$matchingPixels/$totalPixels",
+                        "colorTextRun:native encoders=${nativeCounters.encoders} " +
+                            "commandBuffers=${nativeCounters.commandBuffers} " +
+                            "submits=${nativeCounters.submits} readbacks=${nativeCounters.readbackCopies}",
+                    ) + session.runtimeTelemetryDumpLines,
+                )
+            }
+        }
+    }
+
+    private fun renderPreparedSolidRectScene(
+        scene: GPURendererScene<SceneCommand>,
+        outputDir: Path,
+    ): OffscreenRunReport {
+        val sceneId = scene.sceneId.value
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+            ?: return OffscreenRunReport.failed(sceneId, "webgpu-context-unavailable")
+        runtime.use { session ->
+            val capabilities = session.capabilities
+                ?: return OffscreenRunReport.failed(sceneId, "prepared-solid-rect-capabilities-unavailable")
+            val generation = session.deviceGeneration
+            val preparedFrame = when (
+                val result = PreparedSolidRectSceneFrameRecorder().record(
+                    scene,
+                    capabilities,
+                    generation,
+                    frameOrdinal = 1L,
+                    withReadback = true,
+                )
+            ) {
+                is PreparedSolidRectSceneFrameResult.Refused ->
+                    return OffscreenRunReport.failed(sceneId, result.reason)
+                is PreparedSolidRectSceneFrameResult.Recorded -> result
+            }
+            val requestId = requireNotNull(preparedFrame.readbackRequestId)
+            session.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                ),
+            ).use { preparedSession ->
+                val terminal = preparedSession.renderFrame(
+                    preparedFrame.taskList,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+                ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                if (terminal.outcome != GPUFrameStructuralOutcome.Succeeded) {
+                    return OffscreenRunReport.failed(
+                        sceneId,
+                        terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                            ?: "prepared-solid-rect-frame-failed",
+                        diagnostics = preparedFrame.diagnostics,
+                    )
+                }
+                val pixels = (terminal.output as? GPUSceneFrameOutput.ReadbackRgba)?.bytes
+                    ?: return OffscreenRunReport.failed(
+                        sceneId,
+                        "prepared-solid-rect-readback-missing",
+                        diagnostics = preparedFrame.diagnostics,
+                    )
+                val counters = preparedSession.nativeCounters()
+                writePng(pixels, scene.dimensions.width, scene.dimensions.height, outputDir.resolve(RENDER_FILE_NAME))
+                return OffscreenRunReport.rendered(
+                    sceneId = sceneId,
+                    imagePath = RENDER_FILE_NAME,
+                    width = scene.dimensions.width,
+                    height = scene.dimensions.height,
+                    byteCount = pixels.size.toLong(),
+                    nonTransparentPixels = pixels.countNonTransparentPixels(),
+                    diagnostics = listOf(
+                        "rendered $sceneId via WebGPU offscreen",
+                        "frameRoute=prepared-WebGPU-frame",
+                        "adapter=${session.adapterInfo?.summary ?: "unknown-adapter"}",
+                        "fillRectCommands=${scene.commands.count { it is SceneCommand.FillRect }}",
+                        "fillRRectCommands=0",
+                    ) + preparedFrame.diagnostics + listOf(
+                        "solidRect:native encoders=${counters.encoders} " +
+                            "commandBuffers=${counters.commandBuffers} submits=${counters.submits} " +
+                            "readbacks=${counters.readbackCopies}",
+                        "solidRect:cache creations=${counters.solidRectInvariantCreations} " +
+                            "reuses=${counters.solidRectInvariantReuses} " +
+                            "invalidations=${counters.solidRectInvariantInvalidations}",
+                    ) + session.runtimeTelemetryDumpLines,
+                )
+            }
+        }
+    }
+
+    private fun renderPreparedStrokeRectScene(
+        scene: GPURendererScene<SceneCommand>,
+        outputDir: Path,
+    ): OffscreenRunReport {
+        val sceneId = scene.sceneId.value
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+            ?: return OffscreenRunReport.failed(sceneId, "webgpu-context-unavailable")
+        runtime.use { session ->
+            val capabilities = session.capabilities
+                ?: return OffscreenRunReport.failed(sceneId, "prepared-stroke-rect-capabilities-unavailable")
+            val generation = session.deviceGeneration
+            val preparedFrame = when (
+                val result = PreparedStrokeRectSceneFrameRecorder().record(
+                    scene,
+                    capabilities,
+                    generation,
+                    frameOrdinal = 1L,
+                    withReadback = true,
+                )
+            ) {
+                is PreparedStrokeRectSceneFrameResult.Refused ->
+                    return OffscreenRunReport.failed(sceneId, result.reason)
+                is PreparedStrokeRectSceneFrameResult.Recorded -> result
+            }
+            val requestId = requireNotNull(preparedFrame.readbackRequestId)
+            session.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                ),
+            ).use { preparedSession ->
+                val terminal = preparedSession.renderFrame(
+                    preparedFrame.taskList,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+                ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                if (terminal.outcome != GPUFrameStructuralOutcome.Succeeded) {
+                    val failureReason = terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared-stroke-rect-frame-failed"
+                    return OffscreenRunReport.failed(
+                        sceneId,
+                        failureReason,
+                        diagnostics = listOf(failureReason) + preparedFrame.diagnostics,
+                    )
+                }
+                val pixels = (terminal.output as? GPUSceneFrameOutput.ReadbackRgba)?.bytes
+                    ?: return OffscreenRunReport.failed(
+                        sceneId,
+                        "prepared-stroke-rect-readback-missing",
+                        diagnostics = preparedFrame.diagnostics,
+                    )
+                val reference = preparedFrame.cpuReferenceRgba
+                var matchingPixels = 0
+                var maxChannelDelta = 0
+                pixels.indices.step(BYTES_PER_PIXEL).forEach { offset ->
+                    var pixelMaxDelta = 0
+                    repeat(BYTES_PER_PIXEL) { channel ->
+                        val actual = pixels[offset + channel].toInt() and 0xff
+                        val expected = reference[offset + channel].toInt() and 0xff
+                        pixelMaxDelta = maxOf(pixelMaxDelta, kotlin.math.abs(actual - expected))
+                    }
+                    if (pixelMaxDelta == 0) matchingPixels += 1
+                    maxChannelDelta = maxOf(maxChannelDelta, pixelMaxDelta)
+                }
+                val totalPixels = scene.dimensions.width * scene.dimensions.height
+                val counters = preparedSession.nativeCounters()
+                writePng(
+                    pixels,
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                    outputDir.resolve(RENDER_FILE_NAME),
+                )
+                writePng(
+                    reference,
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                    outputDir.resolve("reference.png"),
+                )
+                if (!pixels.contentEquals(reference)) {
+                    writePng(
+                        colorGlyphDiff(pixels, reference),
+                        scene.dimensions.width,
+                        scene.dimensions.height,
+                        outputDir.resolve("diff.png"),
+                    )
+                } else {
+                    outputDir.resolve("diff.png").toFile().delete()
+                }
+                return OffscreenRunReport.rendered(
+                    sceneId = sceneId,
+                    imagePath = RENDER_FILE_NAME,
+                    width = scene.dimensions.width,
+                    height = scene.dimensions.height,
+                    byteCount = pixels.size.toLong(),
+                    nonTransparentPixels = pixels.countNonTransparentPixels(),
+                    diagnostics = listOf(
+                        "rendered $sceneId via prepared WebGPU frame",
+                        "adapter=${session.adapterInfo?.summary ?: "unknown-adapter"}",
+                    ) + preparedFrame.diagnostics + listOf(
+                        "strokeRect:native encoders=${counters.encoders} " +
+                            "commandBuffers=${counters.commandBuffers} submits=${counters.submits} " +
+                            "readbacks=${counters.readbackCopies}",
+                        "strokeRect:cache creations=${counters.solidRectInvariantCreations} " +
+                            "reuses=${counters.solidRectInvariantReuses}",
+                        "strokeRect:pixelExact=$matchingPixels/$totalPixels maxChannelDelta=$maxChannelDelta",
+                    ) + session.runtimeTelemetryDumpLines,
+                )
+            }
+        }
+    }
+
+    private fun renderPreparedRegisteredUniformRectScene(
+        scene: GPURendererScene<SceneCommand>,
+        outputDir: Path,
+    ): OffscreenRunReport {
+        val sceneId = scene.sceneId.value
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+            ?: return OffscreenRunReport.failed(sceneId, "webgpu-context-unavailable")
+        runtime.use { session ->
+            val capabilities = session.capabilities
+                ?: return OffscreenRunReport.failed(
+                    sceneId,
+                    "prepared-registered-uniform-capabilities-unavailable",
+                )
+            val generation = session.deviceGeneration
+            val preparedFrame = when (
+                val result = PreparedRegisteredUniformRectSceneFrameRecorder().record(
+                    scene,
+                    capabilities,
+                    generation,
+                    frameOrdinal = 1L,
+                    withReadback = true,
+                )
+            ) {
+                is PreparedRegisteredUniformRectSceneFrameResult.Refused ->
+                    return OffscreenRunReport.failed(sceneId, result.reason)
+                is PreparedRegisteredUniformRectSceneFrameResult.Recorded -> result
+            }
+            val requestId = requireNotNull(preparedFrame.readbackRequestId)
+            session.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                ),
+            ).use { preparedSession ->
+                val terminal = preparedSession.renderFrame(
+                    preparedFrame.taskList,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+                ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                if (terminal.outcome != GPUFrameStructuralOutcome.Succeeded) {
+                    return OffscreenRunReport.failed(
+                        sceneId,
+                        terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                            ?: "prepared-registered-uniform-frame-failed",
+                        diagnostics = preparedFrame.diagnostics,
+                    )
+                }
+                val pixels = (terminal.output as? GPUSceneFrameOutput.ReadbackRgba)?.bytes
+                    ?: return OffscreenRunReport.failed(
+                        sceneId,
+                        "prepared-registered-uniform-readback-missing",
+                        diagnostics = preparedFrame.diagnostics,
+                    )
+                val counters = preparedSession.nativeCounters()
+                val reference = preparedFrame.cpuReferenceRgba
+                val matchingPixels = pixels.indices.step(BYTES_PER_PIXEL).count { offset ->
+                    pixels[offset] == reference[offset] &&
+                        pixels[offset + 1] == reference[offset + 1] &&
+                        pixels[offset + 2] == reference[offset + 2] &&
+                        pixels[offset + 3] == reference[offset + 3]
+                }
+                val totalPixels = scene.dimensions.width * scene.dimensions.height
+                var maxChannelDelta = 0
+                var withinOneLsbPixels = 0
+                pixels.indices.step(BYTES_PER_PIXEL).forEach { offset ->
+                    var pixelMaxDelta = 0
+                    repeat(BYTES_PER_PIXEL) { channel ->
+                        val actual = pixels[offset + channel].toInt() and 0xff
+                        val expected = reference[offset + channel].toInt() and 0xff
+                        pixelMaxDelta = maxOf(pixelMaxDelta, kotlin.math.abs(actual - expected))
+                    }
+                    maxChannelDelta = maxOf(maxChannelDelta, pixelMaxDelta)
+                    if (pixelMaxDelta <= 1) withinOneLsbPixels += 1
+                }
+                writePng(
+                    pixels,
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                    outputDir.resolve(RENDER_FILE_NAME),
+                )
+                writePng(
+                    reference,
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                    outputDir.resolve("reference.png"),
+                )
+                if (!pixels.contentEquals(reference)) {
+                    writePng(
+                        colorGlyphDiff(pixels, reference),
+                        scene.dimensions.width,
+                        scene.dimensions.height,
+                        outputDir.resolve("diff.png"),
+                    )
+                } else {
+                    outputDir.resolve("diff.png").toFile().delete()
+                }
+                return OffscreenRunReport.rendered(
+                    sceneId = sceneId,
+                    imagePath = RENDER_FILE_NAME,
+                    width = scene.dimensions.width,
+                    height = scene.dimensions.height,
+                    byteCount = pixels.size.toLong(),
+                    nonTransparentPixels = pixels.countNonTransparentPixels(),
+                    diagnostics = listOf(
+                        "rendered $sceneId via prepared WebGPU frame",
+                        "adapter=${session.adapterInfo?.summary ?: "unknown-adapter"}",
+                    ) + preparedFrame.diagnostics + listOf(
+                        "registeredUniform:native encoders=${counters.encoders} " +
+                            "commandBuffers=${counters.commandBuffers} submits=${counters.submits} " +
+                            "readbacks=${counters.readbackCopies}",
+                        "registeredUniform:cache creations=${counters.registeredUniformInvariantCreations} " +
+                            "reuses=${counters.registeredUniformInvariantReuses}",
+                        "registeredUniform:pixelExact=$matchingPixels/$totalPixels",
+                        "registeredUniform:withinOneLsb=$withinOneLsbPixels/$totalPixels " +
+                            "maxChannelDelta=$maxChannelDelta",
+                        "registeredUniform:reference=independent-cpu-premul-source-over",
+                    ) + session.runtimeTelemetryDumpLines,
+                )
+            }
+        }
+    }
+
+    private fun renderPreparedSeparableBlurRectScene(
+        scene: GPURendererScene<SceneCommand>,
+        outputDir: Path,
+    ): OffscreenRunReport {
+        val sceneId = scene.sceneId.value
+        val runtime = GPUBackendRuntimeFactory.createOrNull()
+            ?: return OffscreenRunReport.failed(sceneId, "webgpu-context-unavailable")
+        runtime.use { session ->
+            val capabilities = session.capabilities
+                ?: return OffscreenRunReport.failed(sceneId, "prepared-separable-blur-capabilities-unavailable")
+            val generation = session.deviceGeneration
+            val preparedFrame = when (
+                val result = PreparedSeparableBlurRectSceneFrameRecorder().record(
+                    scene,
+                    capabilities,
+                    generation,
+                    frameOrdinal = 1L,
+                    withReadback = true,
+                )
+            ) {
+                is PreparedSeparableBlurRectSceneFrameResult.Refused ->
+                    return OffscreenRunReport.failed(sceneId, result.reason)
+                is PreparedSeparableBlurRectSceneFrameResult.Recorded -> result
+            }
+            val requestId = requireNotNull(preparedFrame.readbackRequestId)
+            session.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(
+                    scene.dimensions.width,
+                    scene.dimensions.height,
+                ),
+            ).use { preparedSession ->
+                val terminal = preparedSession.renderFrame(
+                    preparedFrame.taskList,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+                ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+                if (terminal.outcome != GPUFrameStructuralOutcome.Succeeded) {
+                    val failureReason = terminal.diagnostic?.let { "${it.code.value}: ${it.message}" }
+                        ?: "prepared-separable-blur-frame-failed"
+                    return OffscreenRunReport.failed(
+                        sceneId,
+                        failureReason,
+                        diagnostics = listOf(failureReason) + preparedFrame.diagnostics,
+                    )
+                }
+                val pixels = (terminal.output as? GPUSceneFrameOutput.ReadbackRgba)?.bytes
+                    ?: return OffscreenRunReport.failed(
+                        sceneId,
+                        "prepared-separable-blur-readback-missing",
+                        diagnostics = listOf("prepared-separable-blur-readback-missing") +
+                            preparedFrame.diagnostics,
+                    )
+                val reference = preparedFrame.cpuReferenceRgba
+                var matchingPixels = 0
+                var withinOneLsbPixels = 0
+                var maxChannelDelta = 0
+                pixels.indices.step(BYTES_PER_PIXEL).forEach { offset ->
+                    var pixelMaxDelta = 0
+                    repeat(BYTES_PER_PIXEL) { channel ->
+                        val actual = pixels[offset + channel].toInt() and 0xff
+                        val expected = reference[offset + channel].toInt() and 0xff
+                        pixelMaxDelta = maxOf(pixelMaxDelta, kotlin.math.abs(actual - expected))
+                    }
+                    if (pixelMaxDelta == 0) matchingPixels += 1
+                    if (pixelMaxDelta <= 1) withinOneLsbPixels += 1
+                    maxChannelDelta = maxOf(maxChannelDelta, pixelMaxDelta)
+                }
+                val totalPixels = scene.dimensions.width * scene.dimensions.height
+                val counters = preparedSession.nativeCounters()
+                writePng(pixels, scene.dimensions.width, scene.dimensions.height, outputDir.resolve(RENDER_FILE_NAME))
+                writePng(reference, scene.dimensions.width, scene.dimensions.height, outputDir.resolve("reference.png"))
+                if (!pixels.contentEquals(reference)) {
+                    writePng(
+                        colorGlyphDiff(pixels, reference),
+                        scene.dimensions.width,
+                        scene.dimensions.height,
+                        outputDir.resolve("diff.png"),
+                    )
+                } else {
+                    outputDir.resolve("diff.png").toFile().delete()
+                }
+                return OffscreenRunReport.rendered(
+                    sceneId = sceneId,
+                    imagePath = RENDER_FILE_NAME,
+                    width = scene.dimensions.width,
+                    height = scene.dimensions.height,
+                    byteCount = pixels.size.toLong(),
+                    nonTransparentPixels = pixels.countNonTransparentPixels(),
+                    diagnostics = listOf(
+                        "rendered $sceneId via prepared WebGPU frame",
+                        "adapter=${session.adapterInfo?.summary ?: "unknown-adapter"}",
+                    ) + preparedFrame.diagnostics + listOf(
+                        "separableBlur:native encoders=${counters.encoders} " +
+                            "commandBuffers=${counters.commandBuffers} submits=${counters.submits} " +
+                            "readbacks=${counters.readbackCopies}",
+                        "separableBlur:cache invariants=${counters.separableBlurInvariantCreations}/" +
+                            "${counters.separableBlurInvariantReuses} intermediates=" +
+                            "${counters.separableBlurIntermediateCreations}/" +
+                            "${counters.separableBlurIntermediateReuses}",
+                        "separableBlur:pixelExact=$matchingPixels/$totalPixels",
+                        "separableBlur:withinOneLsb=$withinOneLsbPixels/$totalPixels " +
+                            "maxChannelDelta=$maxChannelDelta",
+                    ) + session.runtimeTelemetryDumpLines,
+                )
+            }
+        }
+    }
+
     internal fun renderToPixels(
         target: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget,
         drawPlan: RectOnlyDrawPlan,
@@ -200,6 +771,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     wgsl = SOLID_RECT_WGSL,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
                     draws = solidDraws,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                 )
             }
         }) {
@@ -262,6 +834,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                             scissorHeight = fill.scissorHeight,
                         )
                     },
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
                 )
             }
@@ -289,6 +862,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenRawUniformPass(
                     wgsl = BlurWgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     draws = blurFills.map { fill ->
                         val cx = (fill.left + fill.right) * 0.5f
                         val cy = (fill.top + fill.bottom) * 0.5f
@@ -310,6 +884,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenRawUniformPass(
                     wgsl = ColorMatrixWgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     draws = cmFills.map { fill ->
                         val kind = fill.paintOrder.toInt()
                         val bytes = UniformPacker.colorMatrixBytes(fill.startColor, kind)
@@ -329,6 +904,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenRawUniformPass(
                     wgsl = StrokeWgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     draws = strokeFills.map { fill ->
                         val cx = (fill.left + fill.right) * 0.5f
                         val cy = (fill.top + fill.bottom) * 0.5f
@@ -354,6 +930,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenTextureUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     textureRgba = decoded?.rgba ?: ByteArray(4),
                     textureWidth = decoded?.width ?: 1,
                     textureHeight = decoded?.height ?: 1,
@@ -380,6 +957,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     draws = reFills.map { fill ->
                         val bytes = UniformPacker.simpleRtBytes(fill.startColor)
                         GPUBackendRawUniformDraw(
@@ -400,6 +978,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     drawFullscreenRawUniformPass(
                         wgsl = composeCustomRuntimeEffectWgsl(wgsl),
                         colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                         draws = fills.map { fill ->
                             val bytes = UniformPacker.simpleRtBytes(fill.startColor)
                             GPUBackendRawUniformDraw(
@@ -422,6 +1001,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenTextureUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     textureRgba = atlas?.a8Bytes ?: ByteArray(1),
                     textureWidth = atlas?.width ?: 1,
                     textureHeight = atlas?.height ?: 1,
@@ -440,85 +1020,6 @@ class RectOnlyOffscreenRenderer internal constructor(
                         )
                     },
                 )
-            }
-
-            val colorTextFills = drawPlan.fills.filter { it.family == "color-text-run" }
-            if (colorTextFills.isNotEmpty()) {
-                val first = colorTextFills.first()
-                val glyphText = first.colorTextRunText ?: "AB"
-                val glyphFontSize = first.colorTextRunFontSize ?: 48f
-                val layerColors = first.colorTextRunLayerColors ?: listOf(
-                    SceneColor(1f, 0f, 0f, 1f),
-                    SceneColor(0f, 0f, 1f, 1f),
-                )
-
-                val atlasResult = GlyphAtlasTextureBuilder().build(glyphText, fontSize = glyphFontSize)
-                val built = atlasResult as? GlyphAtlasTextureResult.Built
-                val atlas = built?.atlas
-                if (atlas != null && atlas.placements.size >= 2) {
-                    val placements = atlas.placements
-                    val targetW = viewportWidth
-                    val targetH = viewportHeight
-                    val uniform = ByteBuffer.allocate(528).order(ByteOrder.LITTLE_ENDIAN)
-
-                    uniform.putFloat(targetW.toFloat())
-                    uniform.putFloat(targetH.toFloat())
-                    uniform.putInt(minOf(layerColors.size, 16))
-                    uniform.putInt(0)
-
-                    for (i in 0 until 16) {
-                        val c = if (i < layerColors.size) layerColors[i] else SceneColor(0f, 0f, 0f, 0f)
-                        uniform.putFloat(c.r * c.a)
-                        uniform.putFloat(c.g * c.a)
-                        uniform.putFloat(c.b * c.a)
-                        uniform.putFloat(c.a)
-                    }
-
-                    val aw = atlas.width.toFloat()
-                    val ah = atlas.height.toFloat()
-                    for (i in 0 until 16) {
-                        if (i < placements.size) {
-                            val p = placements[i]
-                            uniform.putFloat(p.region.x / aw)
-                            uniform.putFloat(p.region.y / ah)
-                            uniform.putFloat(p.region.width / aw)
-                            uniform.putFloat(p.region.height / ah)
-                        } else {
-                            uniform.putFloat(0f)
-                            uniform.putFloat(0f)
-                            uniform.putFloat(0f)
-                            uniform.putFloat(0f)
-                        }
-                    }
-
-                    val uniformBytes = uniform.array()
-
-                    val vertexData = floatArrayOf(
-                        0f, 0f, 0f, 0f,
-                        targetW.toFloat(), 0f, 1f, 0f,
-                        targetW.toFloat(), targetH.toFloat(), 1f, 1f,
-                        0f, targetH.toFloat(), 0f, 1f,
-                    )
-                    val indexData = intArrayOf(0, 1, 2, 0, 2, 3)
-
-                    drawColorGlyphPass(
-                        atlasRgba = atlas.a8Bytes,
-                        atlasWidth = atlas.width,
-                        atlasHeight = atlas.height,
-                        atlasFormat = "r8unorm",
-                        vertexData = vertexData,
-                        indexData = indexData,
-                        draws = listOf(
-                            GPUBackendRawUniformDraw(
-                                uniformBytes = uniformBytes,
-                                scissorX = 0,
-                                scissorY = 0,
-                                scissorWidth = targetW,
-                                scissorHeight = targetH,
-                            ),
-                        ),
-                    )
-                }
             }
 
             val gradientFills = drawPlan.fills.filter { it.family in gradientTypes }
@@ -545,6 +1046,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                 drawFullscreenRawUniformPass(
                     wgsl = wgsl,
                     colorFormat = OFFSCREEN_COLOR_FORMAT,
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     passBatchKind = if (family == "linear-gradient-rect") {
                         GPUBackendSimplePassBatchKind.SimpleGradient
                     } else {
@@ -626,6 +1128,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                                 scissorHeight = fill.scissorHeight,
                             ),
                         ),
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     )
                 }
             }
@@ -659,6 +1162,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     drawFullscreenStencilPass(
                         wgsl = gradientWgsl,
                         colorFormat = OFFSCREEN_COLOR_FORMAT,
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                         stencilMode = GPUBackendStencilMode.Test,
                         triangleData = null,
                         draws = listOf(
@@ -695,6 +1199,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     drawVertexColorIndexed(
                         vertexBufferLabel = bufferLabel,
                         indexCount = flatIndices.size,
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                         uniformDraw = GPUBackendRawUniformDraw(
                             // VERTEX_COLOR_WGSL multiplies per-vertex color by the uniform
                             // (`in.color * uniforms.color`). The fill color is already carried
@@ -727,6 +1232,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     drawVertexColorIndexed(
                         vertexBufferLabel = bufferLabel,
                         indexCount = indices.size,
+                        blendMode = SCENE_SRC_OVER_BLEND_STATE,
                         uniformDraw = GPUBackendRawUniformDraw(
                             uniformBytes = UniformPacker.bitmapTextureBytes(
                                 fill.startColor, fill.left, fill.top, rectWidth, rectHeight,
@@ -785,6 +1291,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                             scissorHeight = fill.scissorHeight,
                         )
                     },
+                    blendMode = SCENE_SRC_OVER_BLEND_STATE,
                     passBatchKind = GPUBackendSimplePassBatchKind.SolidFill,
                 )
             }
@@ -1010,6 +1517,21 @@ fn fs_main() -> @location(0) vec4f {
     }
 }
 
+private fun colorGlyphDiff(actual: ByteArray, expected: ByteArray): ByteArray {
+    require(actual.size == expected.size)
+    return ByteArray(actual.size).also { diff ->
+        for (offset in actual.indices step BYTES_PER_PIXEL) {
+            val changed = (0 until BYTES_PER_PIXEL).any { channel ->
+                actual[offset + channel] != expected[offset + channel]
+            }
+            if (changed) {
+                diff[offset] = 255.toByte()
+                diff[offset + 3] = 255.toByte()
+            }
+        }
+    }
+}
+
 internal fun composeSaveLayerCompositeWgsl(): String = """
 struct Uniforms { color: vec4f, params: vec4f };
 
@@ -1033,7 +1555,6 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
 internal fun composeSceneDestinationReadBlendWgsl(routeLabel: String): String {
     val blendExpression = when (routeLabel) {
-        "shader-blend:Screen" -> "src.rgb + dst.rgb - (src.rgb * dst.rgb)"
         "shader-blend:Multiply" -> "(src.rgb * dst.rgb) + (src.rgb * (1.0 - dst.a)) + (dst.rgb * (1.0 - src.a))"
         else -> error("unsupported destination-read blend route: $routeLabel")
     }
@@ -1189,9 +1710,6 @@ internal data class RectOnlyFillDraw(
     val shadowOffsetX: Float = 0f,
     val shadowOffsetY: Float = 0f,
     val groupAlpha: Float = 1f,
-    val colorTextRunText: String? = null,
-    val colorTextRunFontSize: Float? = null,
-    val colorTextRunLayerColors: List<SceneColor>? = null,
     val blendMode: SceneBlendMode = SceneBlendMode.SrcOver,
 )
 
@@ -1264,7 +1782,6 @@ internal fun prepareRectOnlyDrawPlan(
             val textRunCommand = command as? SceneCommand.TextRun
             val meshRibbonCommand = command as? SceneCommand.MeshRibbon
             val creCommand = command as? SceneCommand.CustomRuntimeEffectTile
-            val colorTextRunCommand = command as? SceneCommand.ColorTextRun
             val paintOrder = command.paintOrder()
             val mappedFamily = when {
                 command is SceneCommand.Stroke -> "stroke-rect"
@@ -1308,9 +1825,6 @@ internal fun prepareRectOnlyDrawPlan(
                 shadowOffsetX = saveLayerCommand?.shadowOffsetX ?: 0f,
                 shadowOffsetY = saveLayerCommand?.shadowOffsetY ?: 0f,
                 groupAlpha = saveLayerCommand?.groupAlpha ?: 1f,
-                colorTextRunText = colorTextRunCommand?.glyphText,
-                colorTextRunFontSize = colorTextRunCommand?.glyphFontSize,
-                colorTextRunLayerColors = colorTextRunCommand?.layerColors,
                 blendMode = (command as? SceneCommand.FillRect)?.blendMode ?: SceneBlendMode.SrcOver,
             )
         }
@@ -1632,14 +2146,14 @@ internal fun verticesWiringDiagnostics(): List<String> = buildList {
 }
 
 internal fun colorTextRunWiringDiagnostics(): List<String> = listOf(
-    "colorTextRun:route=colr-v0-composite",
+    "colorTextRun:route=prepared-colr-v0",
     "colorTextRun:shader=colorGlyphCompositeWgsl",
     "colorTextRun:maxLayers=16",
     "colorTextRun:atlasFormat=r8unorm",
     "colorTextRun:vertexLayout=pos+quad_uv",
-    "colorTextRun:uniformPack=528-byte-le",
-    "colorTextRun:realGpuOutput=true productActivation=true",
-    "colorTextRun:nonClaim=no-bezier-curve-glyph-no-arabic-shaping-no-emoji-no-colrv1",
+    "colorTextRun:uniformPack=784-byte-le",
+    "colorTextRun:source=real-colr-font-cpal-layers",
+    "colorTextRun:nonClaim=no-colrv1-no-shaping-no-emoji",
 )
 
 private fun rectOnlyFillDraw(
@@ -1674,9 +2188,6 @@ private fun rectOnlyFillDraw(
     shadowOffsetX: Float = 0f,
     shadowOffsetY: Float = 0f,
     groupAlpha: Float = 1f,
-    colorTextRunText: String? = null,
-    colorTextRunFontSize: Float? = null,
-    colorTextRunLayerColors: List<SceneColor>? = null,
     blendMode: SceneBlendMode = SceneBlendMode.SrcOver,
 ): RectOnlyFillDraw {
     requireInsideTarget(sceneId, label, rect, width, height, "fill shape")
@@ -1726,9 +2237,6 @@ private fun rectOnlyFillDraw(
         shadowOffsetX = shadowOffsetX,
         shadowOffsetY = shadowOffsetY,
         groupAlpha = groupAlpha,
-        colorTextRunText = colorTextRunText,
-        colorTextRunFontSize = colorTextRunFontSize,
-        colorTextRunLayerColors = colorTextRunLayerColors,
         blendMode = blendMode,
     )
 }

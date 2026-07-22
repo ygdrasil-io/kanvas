@@ -11,15 +11,49 @@ import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRoutePlan
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUFirstRoutePlanner
 import org.graphiks.kanvas.gpu.renderer.analysis.SortKey
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
+import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotGroupingResult
+import org.graphiks.kanvas.gpu.renderer.destination.CopyAsDrawMaterialization
+import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationSnapshotMaterialization
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
+import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
+import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUTextA8RoutePlanner
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnosticCodes
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextRouteDecision
+import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateIdentity
 
 /** Stable recording identifier. */
 @JvmInline
@@ -129,6 +163,7 @@ data class GPURecording(
     val taskList: GPUTaskList,
     val routeDiagnostics: List<String>,
     val featureAssumptions: List<String>,
+    val recordedCommands: List<NormalizedDrawCommand> = emptyList(),
 )
 
 /**
@@ -212,7 +247,9 @@ object GPURecordingOrder {
  */
 class GPURecorder(
     private val recordingId: GPURecordingID,
+    private val frameId: GPUFrameID,
     private val capabilities: GPUCapabilities = GPUProductFlagConfig.fromSystemProperties().buildCapabilities(),
+    private val deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(0),
     private val sharedScope: GPUSharedScope = GPUSharedScope("shared.default"),
     private val recorderScope: GPURecorderScope = GPURecorderScope("recorder.${recordingId.value}"),
     private val frameScope: GPUFrameScope = GPUFrameScope("frame.default"),
@@ -248,8 +285,15 @@ class GPURecorder(
             diagnostics = plans.flatMap { plan -> plan.analysisRecord.diagnostics },
         )
         val analysisDecisionDump = analysisDecisionDump(recordingId = recordingId, plans = plans)
-        val taskList = taskList(recordingId = recordingId, plans = plans)
         val compatibilityKey = compatibilityKey(commands = commands, capabilities = capabilities)
+        val taskList = taskList(
+            recordingId = recordingId,
+            frameId = frameId,
+            deviceGeneration = deviceGeneration,
+            compatibilityKey = compatibilityKey,
+            capabilities = capabilities,
+            plans = plans,
+        )
         val recording = GPURecording(
             recordingId = recordingId,
             compatibilityKey = compatibilityKey,
@@ -259,6 +303,7 @@ class GPURecorder(
             taskList = taskList,
             routeDiagnostics = plans.map { plan -> plan.routeDiagnostic() },
             featureAssumptions = capabilities.featureAssumptions(),
+            recordedCommands = commands.toList(),
         )
 
         closedRecording = recording
@@ -479,71 +524,352 @@ fun GPURecording.checkReplayCompatibility(
     }
 }
 
-/** Task emitted by recording and planning. */
+/** Stable phase classes used for deterministic topological tie-breaking. */
+enum class GPUTaskPhase {
+    Prepare,
+    Upload,
+    Compute,
+    Render,
+    Copy,
+    Transition,
+    Readback,
+    Output,
+    Refusal,
+}
+
+/** Exact relation between one Task 5 member and its canonical render packet. */
+data class GPUDestinationSnapshotConsumerRef(
+    val groupingCommandId: String,
+    val renderTaskId: GPUTaskID,
+    val packetId: GPUDrawPacketID,
+    val commandId: GPUDrawCommandID,
+) {
+    init {
+        require(groupingCommandId.isNotBlank()) {
+            "GPUDestinationSnapshotConsumerRef.groupingCommandId must not be blank"
+        }
+    }
+}
+
+/** Exact relation between one Task 5 refusal and its canonical refused task. */
+data class GPUDestinationSnapshotRefusalBinding(
+    val groupingCommandId: String,
+    val refusedTaskId: GPUTaskID,
+    val commandId: GPUDrawCommandID,
+) {
+    init {
+        require(groupingCommandId.isNotBlank()) {
+            "GPUDestinationSnapshotRefusalBinding.groupingCommandId must not be blank"
+        }
+    }
+}
+
+/** One normalized Task 5 materialization with its exact source and consumers. */
+sealed interface GPUDestinationSnapshotOperation {
+    val groupIndex: Int
+    val source: GPUFrameResourceRef
+    val sourceIntermediate: GPUIntermediateIdentity?
+    val snapshot: GPUFrameTextureRef
+    val logicalBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+    val consumers: List<GPUDestinationSnapshotConsumerRef>
+
+    class TextureCopy(
+        override val groupIndex: Int,
+        override val source: GPUFrameResourceRef,
+        override val snapshot: GPUFrameTextureRef,
+        override val logicalBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds,
+        val copyLayout: GPUTextureCopyLayout,
+        consumers: List<GPUDestinationSnapshotConsumerRef>,
+    ) : GPUDestinationSnapshotOperation {
+        override val sourceIntermediate: GPUIntermediateIdentity? = null
+        override val consumers: List<GPUDestinationSnapshotConsumerRef> = immutableList(consumers)
+    }
+
+    class CopyAsDraw(
+        override val groupIndex: Int,
+        override val source: GPUFrameResourceRef,
+        override val sourceIntermediate: GPUIntermediateIdentity,
+        override val snapshot: GPUFrameTextureRef,
+        override val logicalBounds: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds,
+        consumers: List<GPUDestinationSnapshotConsumerRef>,
+    ) : GPUDestinationSnapshotOperation {
+        override val consumers: List<GPUDestinationSnapshotConsumerRef> = immutableList(consumers)
+    }
+}
+
+/** Typed resources and exact associations needed to lower Task 5 grouping output. */
+class GPUDestinationSnapshotTaskPayload(
+    grouping: GPUDestinationSnapshotGroupingResult,
+    operations: List<GPUDestinationSnapshotOperation>,
+    refusalBindings: List<GPUDestinationSnapshotRefusalBinding> = emptyList(),
+) {
+    val grouping: GPUDestinationSnapshotGroupingResult = grouping.snapshotGrouping()
+    val operations: List<GPUDestinationSnapshotOperation> =
+        immutableList(operations.sortedBy(GPUDestinationSnapshotOperation::groupIndex))
+    val refusalBindings: List<GPUDestinationSnapshotRefusalBinding> = immutableList(refusalBindings)
+
+    init {
+        val expectedIndices = grouping.groups.indices.toSet()
+        val materializationIndices = grouping.materializations.map { it.groupIndex }
+        val operationIndices = operations.map { it.groupIndex }
+        require(materializationIndices.toSet() == expectedIndices &&
+            materializationIndices.distinct().size == materializationIndices.size
+        ) { "Task 5 materializations must cover every destination group exactly" }
+        require(operationIndices.toSet() == expectedIndices && operationIndices.distinct().size == operationIndices.size) {
+            "Destination snapshot operations must cover every Task 5 group exactly"
+        }
+
+        val materializations = grouping.materializations.associateBy { it.groupIndex }
+        val normalizedOperations = operations.associateBy { it.groupIndex }
+        grouping.groups.forEachIndexed { index, group ->
+            val materialization = materializations.getValue(index)
+            val operation = normalizedOperations.getValue(index)
+            require(operation.logicalBounds == group.logicalBounds &&
+                materialization.logicalBounds == group.logicalBounds
+            ) { "Destination snapshot bounds must match Task 5 grouping exactly" }
+            when (materialization) {
+                is GPUDestinationSnapshotMaterialization.TextureCopy -> require(
+                    operation is GPUDestinationSnapshotOperation.TextureCopy &&
+                        group.key.sourceIntermediate == null &&
+                        operation.source is GPUFrameTargetRef &&
+                        operation.source.value == group.key.target.value &&
+                        operation.source.value != operation.snapshot.value,
+                ) { "TextureCopy operation must match its Task 5 materialization and canonical source" }
+                is CopyAsDrawMaterialization -> require(
+                    operation is GPUDestinationSnapshotOperation.CopyAsDraw &&
+                        operation.source is GPUFrameTextureRef &&
+                        operation.source != operation.snapshot &&
+                        operation.sourceIntermediate == materialization.sourceIntermediate &&
+                        operation.sourceIntermediate == group.key.sourceIntermediate,
+                ) { "CopyAsDraw operation must preserve the exact Task 5 intermediate source" }
+            }
+        }
+    }
+}
+
+private fun GPUDestinationSnapshotGroupingResult.snapshotGrouping(): GPUDestinationSnapshotGroupingResult =
+    copy(
+        groups = immutableList(groups.map { group ->
+            group.copy(
+                members = immutableList(group.members),
+                decisionDump = immutableList(group.decisionDump),
+            )
+        }),
+        materializations = immutableList(materializations),
+        refusals = immutableList(refusals.map { refusal ->
+            refusal.copy(facts = immutableMap(refusal.facts))
+        }),
+        decisionDump = immutableList(decisionDump),
+    )
+
+/** Typed identity for one composite command and its draw-only child scope. */
+@JvmInline
+value class GPUCompositeScopeID(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUCompositeScopeID.value must not be blank" }
+    }
+}
+
+/** Child-owned proof that a render task belongs to one composite refusal scope. */
+data class GPUTaskCompositeMembership(
+    val scopeId: GPUCompositeScopeID,
+    val parentCommandId: GPUDrawCommandID,
+    val childOrdinal: Int,
+    val provenanceToken: GPUCompositeProvenanceToken,
+) {
+    init {
+        require(childOrdinal >= 0) { "GPUTaskCompositeMembership.childOrdinal must be non-negative" }
+    }
+}
+
+/** Handle-free stencil load authority kept separate from the color attachment load/store plan. */
+enum class GPUStencilLoadOperation { Clear, Load }
+
+sealed interface GPUDepthStencilLoadStorePlan {
+    data class WritableStencil(
+        val loadOperation: GPUStencilLoadOperation,
+        val storeOperation: GPUStorePlan,
+        val clearValue: UInt?,
+    ) : GPUDepthStencilLoadStorePlan {
+        init {
+            require(storeOperation == GPUStorePlan.Store || storeOperation == GPUStorePlan.Discard)
+            require((loadOperation == GPUStencilLoadOperation.Clear) == (clearValue != null))
+            require(clearValue == null || clearValue <= 0xffu)
+        }
+    }
+
+    data object ReadOnlyKeep : GPUDepthStencilLoadStorePlan
+}
+
+/** Task emitted by recording and planning with one typed semantic payload. */
 sealed interface GPUTask {
-    /** Stable task identifier inside one recording. */
-    val taskId: String
+    val taskId: GPUTaskID
+    val recordingId: GPURecordingID
+    val phase: GPUTaskPhase
+    val compositeMembership: GPUTaskCompositeMembership? get() = null
 
-    /**
-     * Pre-materialization render task for accepted draw work.
-     *
-     * The task references pass, analysis, render-step, and pipeline-key evidence
-     * only. `preMaterialization` must stay true for this first slice, and
-     * `materializedResourceLabels` must remain empty until resource preparation
-     * work lands.
-     */
-    data class Render(
-        override val taskId: String,
-        val passId: String,
-        val analysisRecordId: String,
-        val routeDecisionLabel: String,
-        val renderStepIds: List<String>,
-        val pipelineKeyHashes: List<String>,
-        val preMaterialization: Boolean,
-        val materializedResourceLabels: List<String>,
-    ) : GPUTask
+    /** Sole render authority; packets and blend decisions are supplied, never reconstructed. */
+    class Render(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        val target: GPUFrameTargetRef,
+        val loadStore: GPULoadStorePlan,
+        val samplePlan: GPUSamplePlan,
+        resourceUses: List<GPUFrameResourceUse> = emptyList(),
+        val provisionalSegmentKey: GPUProvisionalRenderSegmentKey = GPUProvisionalRenderSegmentKey(
+            "target.${target.value}.sample.${samplePlan.specializationKey}",
+        ),
+        drawPackets: List<GPUDrawPacket>,
+        batchEligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility>,
+        val sampleContinuationKey: GPUSampleContinuationKey? = null,
+        override val compositeMembership: GPUTaskCompositeMembership? = null,
+        val depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = null,
+    ) : GPUTask {
+        val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
+        val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
+        val blendPlans: List<GPUBlendPlan> = immutableList(drawPackets.map { packet ->
+            requireNotNull(packet.blendPlan) {
+                "GPUTask.Render packets must retain their canonical GPUBlendPlan"
+            }
+        })
+        val batchEligibilityByPacketId: Map<GPUDrawPacketID, GPUPassBatchEligibility> =
+            immutableMap(batchEligibilityByPacketId)
+        val frameProvenanceByPacketId: Map<GPUDrawPacketID, GPUFrameProvenance> =
+            immutableMap(drawPackets.associate { packet -> packet.packetId to packet.frameProvenance })
 
-    /** Resource preparation task. */
-    data class PrepareResources(
-        override val taskId: String,
-        val resourcePlanLabels: List<String>,
-    ) : GPUTask
+        init {
+            require(phase == GPUTaskPhase.Render) { "GPUTask.Render requires Render phase" }
+            require(drawPackets.isNotEmpty()) { "GPUTask.Render.drawPackets must not be empty" }
+            require(batchEligibilityByPacketId.keys == drawPackets.map { it.packetId }.toSet()) {
+                "GPUTask.Render batching eligibility must cover every packet exactly"
+            }
+        }
 
-    /** Draw pass task retained for package surface compatibility. */
-    data class DrawPass(
-        override val taskId: String,
-        val passLabel: String,
-    ) : GPUTask
+        val passId: String get() = drawPackets.first().passId
+        val analysisRecordId: String get() = drawPackets.first().analysisRecordId
+        val renderStepIds: List<String> get() = drawPackets.map { it.renderStepId.value }
+        val pipelineKeyHashes: List<String> get() = drawPackets.mapNotNull { it.renderPipelineKey?.value }
+        val preMaterialization: Boolean get() = true
+        val materializedResourceLabels: List<String> get() = emptyList()
+    }
 
-    /** Compute task. */
-    data class Compute(
-        override val taskId: String,
-        val programLabel: String,
-    ) : GPUTask
+    class PrepareResources(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        requests: List<GPUResourcePreparationRequest>,
+    ) : GPUTask {
+        val requests: List<GPUResourcePreparationRequest> = immutableList(requests)
+    }
 
-    /** Copy task. */
-    data class Copy(
-        override val taskId: String,
-        val copyLabel: String,
-    ) : GPUTask
+    class Compute(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        val target: GPUFrameTargetRef,
+        resourceUses: List<GPUFrameResourceUse>,
+        dispatches: List<GPUComputeDispatch>,
+    ) : GPUTask {
+        val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
+        val dispatches: List<GPUComputeDispatch> = immutableList(dispatches)
+    }
 
-    /** Upload task. */
+    class Copy(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        val source: GPUFrameResourceRef,
+        val destination: GPUFrameResourceRef,
+        regions: List<GPUResourceCopyRegion>,
+    ) : GPUTask {
+        val regions: List<GPUResourceCopyRegion> = immutableList(regions)
+    }
+
     data class Upload(
-        override val taskId: String,
-        val uploadLabel: String,
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        val staging: GPUFrameBufferRef,
+        val destination: GPUFrameResourceRef,
+        val layout: GPUUploadLayout,
     ) : GPUTask
 
-    /** Barrier task. */
-    data class Barrier(
-        override val taskId: String,
+    class Barrier(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        orderedUseTokens: List<GPUTaskUseToken>,
         val reasonCode: String,
+    ) : GPUTask {
+        val orderedUseTokens: List<GPUTaskUseToken> = immutableList(orderedUseTokens)
+    }
+
+    data class DestinationSnapshots(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        val payload: GPUDestinationSnapshotTaskPayload,
     ) : GPUTask
 
-    /** Refused task with terminal diagnostic evidence. */
-    data class Refused(
-        override val taskId: String,
-        val diagnostic: GPURecordingDiagnostic,
+    data class TargetTransition(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        val parent: GPUFrameTargetRef,
+        val child: GPUFrameTargetRef,
+        val transitionKind: GPUTargetTransitionKind,
     ) : GPUTask
+
+    data class Readback(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        val source: GPUFrameTargetRef,
+        val staging: GPUFrameBufferRef,
+        val request: GPUFrameReadbackRequest,
+    ) : GPUTask
+
+    data class Output(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        val scene: GPUFrameTargetRef,
+        val descriptor: GPUSurfaceOutputDescriptor,
+    ) : GPUTask
+
+    class Refused(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        val commandId: GPUDrawCommandID,
+        val scope: org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope,
+        val compositeScopeId: GPUCompositeScopeID? = null,
+        provenanceTokens: List<GPUCompositeProvenanceToken>,
+        consumedChildTaskIds: List<GPUTaskID>,
+        diagnostic: GPUDiagnostic,
+    ) : GPUTask {
+        val provenanceTokens: List<GPUCompositeProvenanceToken> = immutableList(provenanceTokens)
+        val consumedChildTaskIds: List<GPUTaskID> = immutableList(consumedChildTaskIds)
+        val diagnostic: GPUDiagnostic = diagnostic.copy(facts = immutableMap(diagnostic.facts))
+
+        init {
+            require(diagnostic.isTerminal) { "GPUTask.Refused requires a terminal diagnostic" }
+            when (scope) {
+                GPURefusalScope.RefusedLeafDrawStep -> require(
+                    compositeScopeId == null && provenanceTokens.isEmpty() && consumedChildTaskIds.isEmpty(),
+                ) { "Leaf refusal must not consume composite child provenance" }
+                GPURefusalScope.RefusedCompositeCommand -> require(
+                    compositeScopeId != null && provenanceTokens.isNotEmpty() &&
+                        provenanceTokens.size == consumedChildTaskIds.size &&
+                        consumedChildTaskIds.distinct().size == consumedChildTaskIds.size,
+                ) { "Composite refusal requires one provenance token per unique consumed child task" }
+                GPURefusalScope.AtomicFrameFailure -> require(compositeScopeId == null) {
+                    "Atomic frame refusal must not own a composite child scope"
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -554,12 +880,38 @@ sealed interface GPUTask {
  * refused tasks plus explicit ordering dependencies. Diagnostics are terminal
  * when a refused task blocks that command; they do not imply CPU fallback.
  */
-data class GPUTaskList(
-    val tasks: List<GPUTask>,
-    val dependencies: List<GPUTaskDependency>,
-    val phaseOrder: List<String>,
-    val diagnostics: List<GPURecordingDiagnostic> = emptyList(),
+class GPUTaskList(
+    val frameId: GPUFrameID,
+    val capabilitySeal: GPUFrameCapabilitySeal,
+    recordingSeals: List<GPURecordingSeal>,
+    val expectedReplayKeyHash: String,
+    tasks: List<GPUTask>,
+    dependencies: List<GPUTaskDependency>,
+    phaseOrder: List<GPUTaskPhase>,
+    memoryBudget: GPUFrameMemoryBudgetPlan,
+    diagnostics: List<GPUDiagnostic> = emptyList(),
 ) {
+    val recordingSeals: List<GPURecordingSeal> = immutableList(recordingSeals)
+    val tasks: List<GPUTask> = immutableList(tasks)
+    val dependencies: List<GPUTaskDependency> = immutableList(dependencies)
+    val phaseOrder: List<GPUTaskPhase> = immutableList(phaseOrder)
+    val memoryBudget: GPUFrameMemoryBudgetPlan = memoryBudget.snapshotForFramePlan()
+    val diagnostics: List<GPUDiagnostic> = immutableList(
+        diagnostics.map { it.copy(facts = immutableMap(it.facts)) },
+    )
+
+    init {
+        require(expectedReplayKeyHash.isNotBlank()) {
+            "GPUTaskList.expectedReplayKeyHash must not be blank"
+        }
+        require(phaseOrder.distinct().size == phaseOrder.size) {
+            "GPUTaskList.phaseOrder must not contain duplicates"
+        }
+        require(frameId == capabilitySeal.frameId) {
+            "GPUTaskList.frameId must match GPUFrameCapabilitySeal.frameId"
+        }
+    }
+
     /** Returns stable task and dependency lines for tests and evidence bundles. */
     fun dumpLines(): List<String> =
         tasks.map { task -> task.dumpLine() } +
@@ -574,12 +926,20 @@ data class GPUTaskList(
  * backend synchronization handles.
  */
 data class GPUTaskDependency(
-    val fromTaskId: String,
-    val toTaskId: String,
+    val fromTaskId: GPUTaskID,
+    val toTaskId: GPUTaskID,
     val dependencyKind: String,
-    val useTokenLabel: String? = null,
+    val useToken: GPUTaskUseToken? = null,
     val reasonCode: String,
+    val atomicGroupId: GPUTaskAtomicGroupID? = null,
 )
+
+@JvmInline
+value class GPUTaskAtomicGroupID(val value: String) {
+    init {
+        require(value.isNotBlank()) { "GPUTaskAtomicGroupID.value must not be blank" }
+    }
+}
 
 /**
  * Diagnostic emitted by recording.
@@ -591,7 +951,7 @@ data class GPUTaskDependency(
 data class GPURecordingDiagnostic(
     val code: String,
     val recordingId: GPURecordingID? = null,
-    val taskId: String? = null,
+    val taskId: GPUTaskID? = null,
     val terminal: Boolean,
 )
 
@@ -648,26 +1008,50 @@ private fun GPUDrawAnalysisDecision.dumpLine(): String =
 
 private fun taskList(
     recordingId: GPURecordingID,
+    frameId: GPUFrameID,
+    deviceGeneration: GPUDeviceGenerationID,
+    compatibilityKey: GPURecordingCompatibilityKey,
+    capabilities: GPUCapabilities,
     plans: List<GPUFirstRoutePlan>,
 ): GPUTaskList {
     val tasks = plans.map { plan -> plan.task(recordingId = recordingId) }
     val dependencies = tasks
-        .filterIsInstance<GPUTask.Render>()
         .zipWithNext()
         .mapIndexed { index, (from, to) ->
+            val renderPair = from is GPUTask.Render && to is GPUTask.Render
             GPUTaskDependency(
                 fromTaskId = from.taskId,
                 toTaskId = to.taskId,
-                dependencyKind = "render-order",
-                useTokenLabel = "recording.${recordingId.value}.render.$index->${index + 1}",
+                dependencyKind = if (renderPair) "render-order" else "task-order",
+                useToken = GPUTaskUseToken(
+                    "recording.${recordingId.value}.${if (renderPair) "render" else "task"}.$index->${index + 1}",
+                ),
                 reasonCode = "preserve.paint.order",
             )
         }
 
+    val capabilitySeal = GPUFrameCapabilitySeal.capture(
+        frameId = frameId,
+        deviceGeneration = deviceGeneration,
+        capabilities = capabilities,
+    )
     return GPUTaskList(
+        frameId = frameId,
+        capabilitySeal = capabilitySeal,
+        recordingSeals = listOf(
+            GPURecordingSeal(
+                recordingId = recordingId,
+                insertionOrder = 0L,
+                compatibilityKeyHash = compatibilityKey.keyHash,
+                replayKeyHash = compatibilityKey.keyHash,
+                capabilitySealHash = capabilitySeal.sealHash,
+            ),
+        ),
+        expectedReplayKeyHash = compatibilityKey.keyHash,
         tasks = tasks,
         dependencies = dependencies,
-        phaseOrder = listOf("analysis", "task-list"),
+        phaseOrder = GPUTaskPhase.entries,
+        memoryBudget = emptyFrameMemoryBudget(),
         diagnostics = tasks.filterIsInstance<GPUTask.Refused>().map { task -> task.diagnostic },
     )
 }
@@ -676,25 +1060,27 @@ private fun GPUFirstRoutePlan.task(recordingId: GPURecordingID): GPUTask =
     when (val decision = analysisDecision) {
         is GPUDrawAnalysisDecision.Candidate ->
             GPUTask.Render(
-                taskId = "task.render.${analysisRecord.commandIdValue}",
-                passId = pass.passId,
-                analysisRecordId = analysisRecord.recordId,
-                routeDecisionLabel = decision.routeDecisionLabel,
-                renderStepIds = pass.invocations.map { invocation -> invocation.renderStepId.value },
-                pipelineKeyHashes = pass.pipelineKeys,
-                preMaterialization = true,
-                materializedResourceLabels = emptyList(),
+                taskId = GPUTaskID("task.render.${analysisRecord.commandIdValue}"),
+                recordingId = recordingId,
+                phase = GPUTaskPhase.Render,
+                target = GPUFrameTargetRef("frame.scene"),
+                loadStore = GPULoadStorePlan(loadOp = "load", storePlan = GPUStorePlan.Store),
+                samplePlan = GPUSamplePlan.SingleSampleFrame,
+                provisionalSegmentKey = pass.provisionalSegmentKey,
+                drawPackets = pass.drawPackets,
+                batchEligibilityByPacketId = pass.batchEligibilityByPacketId,
             )
         is GPUDrawAnalysisDecision.Refuse -> {
-            val taskId = "task.refused.${analysisRecord.commandIdValue}"
+            val taskId = GPUTaskID("task.refused.${analysisRecord.commandIdValue}")
             GPUTask.Refused(
                 taskId = taskId,
-                diagnostic = GPURecordingDiagnostic(
-                    code = decision.diagnostic.code,
-                    recordingId = recordingId,
-                    taskId = taskId,
-                    terminal = decision.diagnostic.terminal,
-                ),
+                recordingId = recordingId,
+                phase = GPUTaskPhase.Refusal,
+                commandId = GPUDrawCommandID(analysisRecord.commandIdValue),
+                scope = GPURefusalScope.RefusedLeafDrawStep,
+                provenanceTokens = emptyList(),
+                consumedChildTaskIds = emptyList(),
+                diagnostic = decision.diagnostic.toCanonicalRecordingDiagnostic(),
             )
         }
         is GPUDrawAnalysisDecision.Cull ->
@@ -707,14 +1093,20 @@ private fun GPUDrawAnalysisRecord.nonExecutableTask(
     recordingId: GPURecordingID,
     code: String,
 ): GPUTask.Refused {
-    val taskId = "task.refused.$commandIdValue"
+    val taskId = GPUTaskID("task.refused.$commandIdValue")
     return GPUTask.Refused(
         taskId = taskId,
-        diagnostic = GPURecordingDiagnostic(
-            code = code,
-            recordingId = recordingId,
-            taskId = taskId,
-            terminal = true,
+        recordingId = recordingId,
+        phase = GPUTaskPhase.Refusal,
+        commandId = GPUDrawCommandID(commandIdValue),
+        scope = GPURefusalScope.RefusedLeafDrawStep,
+        provenanceTokens = emptyList(),
+        consumedChildTaskIds = emptyList(),
+        diagnostic = GPUDiagnostic(
+            code = GPUDiagnosticCode(code),
+            domain = GPUDiagnosticDomain.Recording,
+            severity = GPUDiagnosticSeverity.Error,
+            message = code,
         ),
     )
 }
@@ -722,19 +1114,55 @@ private fun GPUDrawAnalysisRecord.nonExecutableTask(
 private fun GPUTask.dumpLine(): String =
     when (this) {
         is GPUTask.Render ->
-            "task:render:$taskId:$passId:$analysisRecordId:" +
-                if (preMaterialization) "pre_materialization" else "materialized"
-        is GPUTask.PrepareResources -> "task:prepare:$taskId:${resourcePlanLabels.joinToString(",")}"
-        is GPUTask.DrawPass -> "task:draw-pass:$taskId:$passLabel"
-        is GPUTask.Compute -> "task:compute:$taskId:$programLabel"
-        is GPUTask.Copy -> "task:copy:$taskId:$copyLabel"
-        is GPUTask.Upload -> "task:upload:$taskId:$uploadLabel"
-        is GPUTask.Barrier -> "task:barrier:$taskId:$reasonCode"
-        is GPUTask.Refused -> "task:refused:$taskId:${diagnostic.code}"
+            "task:render:${taskId.value}:$passId:$analysisRecordId:" +
+                (if (preMaterialization) "pre_materialization" else "materialized") +
+                (sampleContinuationKey?.let { ":sampleContinuation=${it.stableLabel()}" } ?: "") +
+                (depthStencilLoadStore?.let { ":depthStencil=$it" } ?: "")
+        is GPUTask.PrepareResources ->
+            "task:prepare:${taskId.value}:${requests.joinToString(",") { it.resource.value }}"
+        is GPUTask.Compute ->
+            "task:compute:${taskId.value}:${dispatches.joinToString(",") { it.programKey.value }}"
+        is GPUTask.Copy -> "task:copy:${taskId.value}:${source.value}->${destination.value}"
+        is GPUTask.Upload -> "task:upload:${taskId.value}:${staging.value}->${destination.value}"
+        is GPUTask.Barrier -> "task:barrier:${taskId.value}:$reasonCode"
+        is GPUTask.DestinationSnapshots ->
+            "task:destination-snapshots:${taskId.value}:${payload.grouping.groups.size}"
+        is GPUTask.TargetTransition ->
+            "task:target-transition:${taskId.value}:${transitionKind.name}"
+        is GPUTask.Readback -> "task:readback:${taskId.value}:${request.requestId.value}"
+        is GPUTask.Output -> "task:output:${taskId.value}:${descriptor.output.value}"
+        is GPUTask.Refused -> "task:refused:${taskId.value}:${diagnostic.code.value}"
     }
 
+private fun GPUSampleContinuationKey.stableLabel(): String =
+    "${target.value}@${targetGeneration}:${deviceGeneration.value}:" +
+        "${colorFormat.value}:${colorInterpretation.value}:${samplePlan.specializationKey}:" +
+        "${attachmentAuthority.name}:" +
+        "${colorAttachment.value}:${depthStencilAttachment?.value ?: "none"}"
+
 private fun GPUTaskDependency.dumpLine(): String =
-    "dependency:$dependencyKind:$fromTaskId->$toTaskId:${useTokenLabel ?: "none"}"
+    "dependency:$dependencyKind:${fromTaskId.value}->${toTaskId.value}:${useToken?.value ?: "none"}" +
+        (atomicGroupId?.let { ":atomicGroup=${it.value}" } ?: "")
+
+private fun GPUAnalysisDiagnostic.toCanonicalRecordingDiagnostic(): GPUDiagnostic =
+    GPUDiagnostic(
+        code = GPUDiagnosticCode(code),
+        domain = GPUDiagnosticDomain.Recording,
+        severity = if (terminal) GPUDiagnosticSeverity.Error else GPUDiagnosticSeverity.Warning,
+        message = message ?: code,
+        facts = facts.toMap(),
+        isTerminal = terminal,
+    )
+
+private fun emptyFrameMemoryBudget(): GPUFrameMemoryBudgetPlan =
+    GPUFrameMemoryBudgetPlan(
+        peakFrameTransientBytes = 0L,
+        targetResidentBytes = 0L,
+        categoryTotals = GPUFrameMemoryCategory.entries.associateWith { 0L },
+        deviceLimitFacts = emptyList(),
+        configuredAggregateBudgetBytes = 1L,
+        diagnostic = null,
+    )
 
 private fun GPUFirstRoutePlan.routeDiagnostic(): String =
     when (val decision = routeDecision) {
