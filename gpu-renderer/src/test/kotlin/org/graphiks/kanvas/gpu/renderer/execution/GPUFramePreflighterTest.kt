@@ -3120,6 +3120,153 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `mixed path stencil AA 4x preflight accepts generalized ordered units on one D24S8`() {
+        data class Case(
+            val label: String,
+            val commandIds: List<Int>,
+            val pathCommandIds: Set<Int>,
+            val expectedUnitKinds: List<Class<out GPUCorePrimitiveNativeScopeRouteUnit>>,
+        )
+
+        val cases = listOf(
+            Case(
+                "path-direct",
+                listOf(72, 73),
+                setOf(72),
+                listOf(
+                    GPUCorePrimitiveNativeScopeRouteUnit.PathPair::class.java,
+                    GPUCorePrimitiveNativeScopeRouteUnit.Direct::class.java,
+                ),
+            ),
+            Case(
+                "direct-path",
+                listOf(71, 72),
+                setOf(72),
+                listOf(
+                    GPUCorePrimitiveNativeScopeRouteUnit.Direct::class.java,
+                    GPUCorePrimitiveNativeScopeRouteUnit.PathPair::class.java,
+                ),
+            ),
+            Case(
+                "multiple-directs",
+                listOf(71, 73, 72, 74),
+                setOf(72),
+                listOf(
+                    GPUCorePrimitiveNativeScopeRouteUnit.Direct::class.java,
+                    GPUCorePrimitiveNativeScopeRouteUnit.Direct::class.java,
+                    GPUCorePrimitiveNativeScopeRouteUnit.PathPair::class.java,
+                    GPUCorePrimitiveNativeScopeRouteUnit.Direct::class.java,
+                ),
+            ),
+            Case(
+                "two-path-pairs",
+                listOf(72, 73, 74),
+                setOf(72, 74),
+                listOf(
+                    GPUCorePrimitiveNativeScopeRouteUnit.PathPair::class.java,
+                    GPUCorePrimitiveNativeScopeRouteUnit.Direct::class.java,
+                    GPUCorePrimitiveNativeScopeRouteUnit.PathPair::class.java,
+                ),
+            ),
+        )
+
+        cases.forEach { case ->
+            val plan = preparedPathFramePlan(
+                commandIds = case.commandIds,
+                pathCommandIds = case.pathCommandIds,
+                samplePlan = GPUSamplePlan.MultisampleFrame(4),
+            )
+            val events = mutableListOf<String>()
+            val result = preflighter(
+                RecordingResourceProvider(events),
+                RecordingCompletionProvider(events),
+                RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                capabilities = pathMsaaCapabilities(),
+            ).preflight(plan)
+            val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+                result,
+                "${case.label}: $result",
+            ).frame
+            val render = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+            val scope = prepared.encoderPlan.scopes.single()
+            val direct = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+                scope.corePrimitiveDirectNativeRouteSeal,
+                case.label,
+            )
+            val path = assertIs<GPUCorePrimitivePathStencilNativeRouteSeal.Pairs>(
+                scope.corePrimitivePathStencilNativeRouteSeal,
+                case.label,
+            )
+            val unified = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
+                scope.corePrimitiveNativeScopeRouteSeal,
+                case.label,
+            )
+
+            assertEquals(
+                case.expectedUnitKinds,
+                unified.orderedUnits.map { it::class.java },
+                case.label,
+            )
+            assertEquals(render.drawPackets.map(GPUDrawPacket::packetId), unified.flattenedPacketIds, case.label)
+            assertEquals(case.commandIds.size - case.pathCommandIds.size, direct.routesByPacketId.size, case.label)
+            assertEquals(case.pathCommandIds.size * 2, path.flattenedPacketIds.size, case.label)
+            assertEquals(
+                1,
+                render.resourceUses.count { it.role == GPUFrameResourceRole.PathDepthStencil },
+                case.label,
+            )
+            assertEquals(
+                listOf(
+                    GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                    GPUPreparedNativeOperandRole.RenderResolveTarget,
+                    GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                ),
+                scope.nativeOperandKeys.take(3).map(GPUPreparedNativeOperandKey::role),
+                case.label,
+            )
+        }
+    }
+
+    @Test
+    fun `mixed path stencil AA 4x refuses non adjacent and unpaired path packets before side effects`() {
+        val valid = preparedPathFramePlan(
+            mixed = true,
+            samplePlan = GPUSamplePlan.MultisampleFrame(4),
+        )
+        val render = valid.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val directBefore = render.drawPackets[0]
+        val producer = render.drawPackets[1]
+        val cover = render.drawPackets[2]
+        val directAfter = render.drawPackets[3]
+        val cases = listOf(
+            "non-adjacent" to listOf(directBefore, producer, directAfter, cover),
+            "unpaired" to listOf(directBefore, producer, directAfter),
+        )
+
+        cases.forEach { (label, packets) ->
+            val plan = replaceRender(valid, renderWith(render, drawPackets = packets))
+            val events = mutableListOf<String>()
+            val resources = RecordingResourceProvider(events)
+            val result = preflighter(
+                resources,
+                RecordingCompletionProvider(events),
+                RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                capabilities = pathMsaaCapabilities(),
+            ).preflight(plan)
+
+            assertEquals(
+                "invalid.preflight.core_primitive_path_stencil_msaa_authority",
+                assertIs<GPUFramePreflightResult.Refused>(result, label).diagnostic.code.value,
+                label,
+            )
+            assertEquals(0, resources.beginFramePreparationCount, label)
+            assertTrue(events.isEmpty(), "$label escaped pure validation: $events")
+        }
+    }
+
+    @Test
     fun `path stencil AA 4x authority corruption refuses before provider side effects`() {
         val valid = preparedPathFramePlan(
             mixed = false,
@@ -6223,8 +6370,18 @@ class GPUFramePreflighterTest {
     private fun preparedPathFramePlan(
         mixed: Boolean,
         samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
+    ): GPUFramePlan = preparedPathFramePlan(
+        commandIds = if (mixed) listOf(71, 72, 73) else listOf(72),
+        pathCommandIds = setOf(72),
+        samplePlan = samplePlan,
+    )
+
+    private fun preparedPathFramePlan(
+        commandIds: List<Int>,
+        pathCommandIds: Set<Int>,
+        samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
     ): GPUFramePlan {
-        val commandIds = if (mixed) listOf(71, 72, 73) else listOf(72)
+        require(pathCommandIds.isNotEmpty() && pathCommandIds.all(commandIds::contains))
         val pathCapabilities = if (samplePlan == GPUSamplePlan.MultisampleFrame(4)) {
             pathMsaaCapabilities()
         } else {
@@ -6241,7 +6398,9 @@ class GPUFramePreflighterTest {
         }.close().taskList.withCoreClipPlans(commandIds.associateWith { GPUClipExecutionPlan.NoClip })
             .withCoreSamplePlan(samplePlan)
             .let { taskList ->
-                if (mixed && samplePlan == GPUSamplePlan.MultisampleFrame(4)) {
+                if (pathCommandIds.size < commandIds.size &&
+                    samplePlan == GPUSamplePlan.MultisampleFrame(4)
+                ) {
                     taskList.mergeCoreRenderTasks()
                 } else {
                     taskList
@@ -6249,8 +6408,9 @@ class GPUFramePreflighterTest {
             }
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
         val semantics = commandIds.associateWith { commandId ->
-            if (commandId == 72) {
+            if (commandId in pathCommandIds) {
                 pathCoreSemantic(
+                    commandIdValue = commandId,
                     coverageMode = if (samplePlan == GPUSamplePlan.MultisampleFrame(4)) {
                         GPUCorePrimitiveCoverageMode.StencilAA
                     } else {
@@ -7619,11 +7779,12 @@ class GPUFramePreflighterTest {
     }
 
     private fun pathCoreSemantic(
+        commandIdValue: Int = 72,
         clipExecutionPlan: GPUClipExecutionPlan = GPUClipExecutionPlan.NoClip,
         coverageMode: GPUCorePrimitiveCoverageMode = GPUCorePrimitiveCoverageMode.Stencil1x,
     ): GPUDrawSemanticPayload.CorePrimitive = coreSemantic(
         clipExecutionPlan = clipExecutionPlan,
-        commandIdValue = 72,
+        commandIdValue = commandIdValue,
         sourceFamily = GPUCorePrimitiveSourceFamily.Path,
         geometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
             vertices = listOf(

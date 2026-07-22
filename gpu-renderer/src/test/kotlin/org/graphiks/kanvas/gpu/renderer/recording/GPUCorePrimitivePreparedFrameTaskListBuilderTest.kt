@@ -430,6 +430,125 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `path stencil AA 4x preserves generalized direct and adjacent path pair order`() {
+        data class Case(
+            val label: String,
+            val commandIds: List<Int>,
+            val pathCommandIds: Set<Int>,
+            val expectedRoles: List<GPUDrawPacketRole>,
+        )
+
+        val cases = listOf(
+            Case(
+                "path-direct",
+                listOf(120, 121),
+                setOf(120),
+                listOf(
+                    GPUDrawPacketRole.PathStencilProducer,
+                    GPUDrawPacketRole.PathStencilCover,
+                    GPUDrawPacketRole.Shading,
+                ),
+            ),
+            Case(
+                "direct-path",
+                listOf(122, 123),
+                setOf(123),
+                listOf(
+                    GPUDrawPacketRole.Shading,
+                    GPUDrawPacketRole.PathStencilProducer,
+                    GPUDrawPacketRole.PathStencilCover,
+                ),
+            ),
+            Case(
+                "multiple-directs",
+                listOf(124, 125, 126, 127),
+                setOf(126),
+                listOf(
+                    GPUDrawPacketRole.Shading,
+                    GPUDrawPacketRole.Shading,
+                    GPUDrawPacketRole.PathStencilProducer,
+                    GPUDrawPacketRole.PathStencilCover,
+                    GPUDrawPacketRole.Shading,
+                ),
+            ),
+            Case(
+                "two-path-pairs",
+                listOf(128, 129, 130),
+                setOf(128, 130),
+                listOf(
+                    GPUDrawPacketRole.PathStencilProducer,
+                    GPUDrawPacketRole.PathStencilCover,
+                    GPUDrawPacketRole.Shading,
+                    GPUDrawPacketRole.PathStencilProducer,
+                    GPUDrawPacketRole.PathStencilCover,
+                ),
+            ),
+        )
+
+        cases.forEach { case ->
+            val base = recording(
+                *case.commandIds.mapIndexed { paintOrder, commandId ->
+                    command(commandId, paintOrder)
+                }.toTypedArray(),
+            ).taskList.withClipPlans(
+                case.commandIds.associateWith { GPUClipExecutionPlan.NoClip },
+            ).withSamplePlan(GPUSamplePlan.MultisampleFrame(4)).mergeRenderTasks()
+            val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets)
+            val semantics = packets.associate { packet ->
+                packet.commandIdValue to if (packet.commandIdValue in case.pathCommandIds) {
+                    semantic(
+                        packet,
+                        stencilGeometry(GPUPixelBounds(1, 1, 9, 10)),
+                        GPUCorePrimitiveCoverageMode.StencilAA,
+                    )
+                } else {
+                    semantic(packet)
+                }
+            }
+
+            val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(base, semantics).copy(capabilities = msaaCapabilities()),
+            )
+            val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+                result,
+                "${case.label}: $result",
+            ).taskList
+            val render = taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+            val pathUse = render.resourceUses.single { it.role == GPUFrameResourceRole.PathDepthStencil }
+
+            assertEquals(case.expectedRoles, render.drawPackets.map(GPUDrawPacket::role), case.label)
+            assertEquals(
+                case.commandIds.flatMap { commandId ->
+                    if (commandId in case.pathCommandIds) listOf(commandId, commandId) else listOf(commandId)
+                },
+                render.drawPackets.map(GPUDrawPacket::commandIdValue),
+                case.label,
+            )
+            assertEquals(1, render.drawPackets.map(GPUDrawPacket::passId).distinct().size, case.label)
+            assertEquals(
+                org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(pathUse.resource.value),
+                requireNotNull(render.sampleContinuationKey).depthStencilAttachment,
+                case.label,
+            )
+            assertEquals(
+                1,
+                taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+                    .flatMap(GPUTask.PrepareResources::requests)
+                    .count { it.role == GPUFrameResourceRole.PathDepthStencil },
+                case.label,
+            )
+            assertTrue(render.drawPackets.all { packet ->
+                val authority = requireNotNull(packet.corePrimitivePreparedAuthority)
+                authority.structuralPipelineKey.sampleCount == 4 &&
+                    authority.uniformSlabSeal ===
+                    render.drawPackets.first().corePrimitivePreparedAuthority?.uniformSlabSeal
+            }, case.label)
+            assertFalse(GPUFramePlanner.plan(taskList).atomicallyRefused, case.label)
+        }
+    }
+
+    @Test
     fun `path stencil AA 4x refuses retained color load and pass break atomically`() {
         val retainedBase = recording(command(106, 0)).taskList.withClipPlans(
             mapOf(106 to GPUClipExecutionPlan.NoClip),

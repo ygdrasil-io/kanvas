@@ -117,6 +117,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         AnalyticShape,
         PathOnly,
         Mixed,
+        PathThenDirect,
+        DirectThenPath,
+        MultipleDirects,
+        MixedTwoPathPairs,
         TwoPathPairs,
         ClipStencil,
         CoverageMask,
@@ -2518,6 +2522,84 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `mixed AA 4x materializes generalized direct and path pair orders on one attachment set`() {
+        data class Case(
+            val label: String,
+            val routeShape: RouteShape,
+            val expectedRoles: List<String>,
+            val expectedUniformOffsets: List<Long>,
+            val expectedSemanticCommands: List<Int>,
+            val expectedUniquePipelines: Int,
+        )
+
+        val cases = listOf(
+            Case(
+                "path-direct",
+                RouteShape.PathThenDirect,
+                listOf("producer", "cover", "direct"),
+                listOf(0L, 0L, 256L),
+                listOf(2, 2, 3),
+                3,
+            ),
+            Case(
+                "direct-path",
+                RouteShape.DirectThenPath,
+                listOf("direct", "producer", "cover"),
+                listOf(0L, 256L, 256L),
+                listOf(1, 2, 2),
+                3,
+            ),
+            Case(
+                "multiple-directs",
+                RouteShape.MultipleDirects,
+                listOf("direct", "direct", "producer", "cover", "direct"),
+                listOf(0L, 256L, 512L, 512L, 768L),
+                listOf(1, 3, 2, 2, 4),
+                3,
+            ),
+            Case(
+                "two-path-pairs",
+                RouteShape.MixedTwoPathPairs,
+                listOf("direct", "producer", "cover", "producer", "cover", "direct"),
+                listOf(0L, 256L, 256L, 512L, 512L, 768L),
+                listOf(1, 2, 2, 3, 3, 4),
+                5,
+            ),
+        )
+
+        cases.forEach { case ->
+            val fixture = fixture(
+                routeShape = case.routeShape,
+                useRealPreflight = true,
+                sampleCount = 4,
+            )
+            fixture.native.events.clear()
+
+            val materialized = fixture.materializeCore()
+            assertIndexedPathPayload(
+                fixture,
+                materialized,
+                expectedRoles = case.expectedRoles,
+                expectedUniformOffsets = case.expectedUniformOffsets,
+                expectedSemanticCommands = case.expectedSemanticCommands,
+                expectedUniquePipelines = case.expectedUniquePipelines,
+                expectedSampleCount = 4,
+            )
+            val render = materialized.draft.payload.scopeOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .single()
+            assertNotSame(render.pass.colorTarget.view, requireNotNull(render.pass.resolveTarget).view, case.label)
+            assertNotSame(
+                render.pass.colorTarget.view,
+                requireNotNull(render.pass.depthStencilTarget).view,
+                case.label,
+            )
+            assertTrue(materialized.draft.disposeBeforeRegistration(), case.label)
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `real preflight indexed keys feed the path materializer without manual route fixtures`() {
         val fixture = fixture(routeShape = RouteShape.PathOnly, useRealPreflight = true)
         fixture.native.events.clear()
@@ -3412,8 +3494,13 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             (payload as GPUDrawSemanticPayload.CorePrimitive).payloadRef.commandIdValue
         })
         assertEquals(expectedUniquePipelines, distinctIdentityCount(pipelines.map { it.pipeline.pipeline }))
-        if (expectedRoles.first() == "direct") {
-            assertSame(pipelines.first().pipeline.pipeline, pipelines.last().pipeline.pipeline)
+        val directPipelines = expectedRoles.zip(pipelines)
+            .filter { (role, _) -> role == "direct" }
+            .map { (_, pipeline) -> pipeline.pipeline.pipeline }
+        if (directPipelines.size > 1) {
+            directPipelines.drop(1).forEach { pipeline ->
+                assertSame(directPipelines.first(), pipeline)
+            }
         }
         assertEquals(1, distinctIdentityCount(bindGroups.map { it.bindGroup.bindGroup }))
         val routes = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
@@ -3522,9 +3609,25 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             RouteShape.AnalyticShape -> listOf(1, 2)
             RouteShape.PathOnly -> listOf(2)
             RouteShape.Mixed -> listOf(1, 2, 3)
+            RouteShape.PathThenDirect -> listOf(2, 3)
+            RouteShape.DirectThenPath -> listOf(1, 2)
+            RouteShape.MultipleDirects -> listOf(1, 3, 2, 4)
+            RouteShape.MixedTwoPathPairs -> listOf(1, 2, 3, 4)
             RouteShape.TwoPathPairs -> listOf(2, 3)
             RouteShape.ClipStencil -> listOf(1, 2)
             RouteShape.CoverageMask -> listOf(1, 2)
+        }
+        val pathCommandIds = when (routeShape) {
+            RouteShape.PathOnly,
+            RouteShape.Mixed,
+            RouteShape.PathThenDirect,
+            RouteShape.DirectThenPath,
+            RouteShape.MultipleDirects,
+            -> setOf(2)
+            RouteShape.TwoPathPairs,
+            RouteShape.MixedTwoPathPairs,
+            -> setOf(2, 3)
+            else -> emptySet()
         }
         val recorded = GPURecorder(GPURecordingID("recording.core.proxy"), frameId, capabilities, generation).apply {
             commandIds.forEachIndexed { order, commandId ->
@@ -3599,13 +3702,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         }
         val base = recorded.withClipPlans(clipPlans).withSampleCount(
             sampleCount,
-            canonicalClear = sampleCount == 4 && routeShape in setOf(
-                RouteShape.PathOnly,
-                RouteShape.Mixed,
-                RouteShape.TwoPathPairs,
-            ),
+            canonicalClear = sampleCount == 4 && pathCommandIds.isNotEmpty(),
         ).let { taskList ->
-            if (sampleCount == 4 && routeShape in setOf(RouteShape.Mixed, RouteShape.TwoPathPairs)) {
+            if (sampleCount == 4 && commandIds.size > 1 && pathCommandIds.isNotEmpty()) {
                 taskList.mergeRenderTasksForSingleScope()
             } else {
                 taskList
@@ -3613,11 +3712,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         }
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
         val semantics = packets.associate { packet ->
-            packet.commandIdValue to if (routeShape == RouteShape.TwoPathPairs ||
-            packet.commandIdValue == 2 && routeShape != RouteShape.Direct &&
-                routeShape != RouteShape.AnalyticShape &&
-                routeShape != RouteShape.ClipStencil && routeShape != RouteShape.CoverageMask
-            ) {
+            packet.commandIdValue to if (packet.commandIdValue in pathCommandIds) {
                 pathSemantic(
                     packet,
                     fillRule = if (packet.commandIdValue == 3) {
