@@ -52,13 +52,39 @@ class GPUBackendRuntimeContractsTest {
     @Suppress("DEPRECATION")
     @Test
     fun `legacy offscreen request wraps the string format without normalization`() {
-        val request = GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "bgra8unorm")
+        val request = GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "RGBA8Unorm")
 
-        assertEquals(GPUColorFormat.BGRA8Unorm, request.colorFormat)
+        assertEquals(GPUColorFormat("RGBA8Unorm"), request.colorFormat)
+        assertEquals("RGBA8Unorm", request.colorFormat.value)
         assertEquals(GPUColorInterpretation.EncodedPremulSrgb, request.colorInterpretation)
         assertFailsWith<IllegalArgumentException> {
             GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "")
         }
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `prepared validation refuses a mixed case legacy physical format`() {
+        val request = GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "RGBA8Unorm")
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "unit",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "legacy-string-no-normalization",
+        )
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            validatePreparedSceneTargetRequest(request, capabilities)
+        }
+
+        assertTrue(
+            failure.message.orEmpty().startsWith("unsupported.prepared-scene-session.target-format"),
+            failure.message,
+        )
     }
 
     @Test
