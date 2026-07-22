@@ -332,7 +332,7 @@ class GPUWgpu4kPreparedDepthStencilEncodingTest {
             }
 
             assertEquals(1, renderPasses, failurePoint.name)
-            assertEquals(1, draws, failurePoint.name)
+            assertEquals(0, draws, failurePoint.name)
             assertEquals(1, drawIndexed, failurePoint.name)
         }
     }

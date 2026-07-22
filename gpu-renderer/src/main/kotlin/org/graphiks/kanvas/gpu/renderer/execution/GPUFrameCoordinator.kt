@@ -304,7 +304,10 @@ internal fun interface GPUPreparedSceneCompatibilityValidator {
     fun validate(taskList: GPUTaskList): GPUDiagnostic?
 }
 
-/** Handle-free native-work counters; no backend object escapes through this evidence surface. */
+/**
+ * Handle-free native-work counters; no backend object escapes through this evidence surface.
+ * [draws] counts non-indexed calls and [drawIndexed] counts indexed calls, without overlap.
+ */
 data class GPUPreparedSceneNativeCounters(
     val encoders: Long = 0L,
     val commandBuffers: Long = 0L,
@@ -349,6 +352,7 @@ data class GPUPreparedSceneNativeCounters(
     val pipelineBinds: Long = 0L,
 )
 
+/** Render counters whose [draws] and [drawIndexed] values are disjoint native call counts. */
 internal data class GPUPreparedSceneRenderCounters(
     val renderPasses: Long = 0L,
     val draws: Long = 0L,
@@ -445,8 +449,12 @@ class GPUPreparedSceneFrameSession internal constructor(
                 mapOf("failureClass" to failure::class.simpleName.orEmpty()),
             )
         }
-        handle.completion.whenComplete { _, _ -> completeFrameState() }
-        return handle
+        val settledCompletion = handle.completion.whenComplete { _, _ -> completeFrameState() }
+        return GPUPreparedSceneFrameHandle(
+            attemptId = handle.attemptId,
+            immediateState = handle.immediateState,
+            completion = settledCompletion,
+        )
     }
 
     /** Handle-free structural evidence for the reusable prepared-session route. */

@@ -47,7 +47,12 @@ class GPUPreparedSurfaceFrameExecutorTest {
         val readback = GPUReadbackRequestID("readback")
         val completionSource = byteArrayOf(1, 2, 3, 4)
         val completion = GPUPreparedSurfaceCompletion(
-            attempt, GPUFrameStructuralOutcome.Succeeded, null, readback, completionSource,
+            attempt,
+            GPUFrameStructuralOutcome.Succeeded,
+            null,
+            GPUPreparedSurfaceOutputKind.ReadbackRgba,
+            readback,
+            completionSource,
         )
         completionSource[0] = 9
         val first = completion.rgba!!
@@ -118,6 +123,24 @@ class GPUPreparedSurfaceFrameExecutorTest {
     }
 
     @Test
+    fun `success captures runtime telemetry before closing the backend`() {
+        val backend = FakeBackend(
+            capabilities(),
+            FakeSession(),
+            rejectTelemetryAfterClose = true,
+        )
+
+        assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            GPUPreparedSurfaceFrameExecutor(
+                GPUPreparedSurfaceBackendPortFactory { backend },
+            ).execute(request()),
+        )
+
+        assertEquals(2, backend.telemetryReads)
+        assertEquals(1, backend.closeCalls)
+    }
+
+    @Test
     fun `two executions allocate distinct target recording frame and readback identities`() {
         val sessions = mutableListOf<FakeSession>()
         val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory {
@@ -161,7 +184,8 @@ class GPUPreparedSurfaceFrameExecutorTest {
                         attempt,
                         GPUFrameStructuralOutcome.Refused,
                         diagnostic("refused.test.completion"),
-                        readbackId,
+                        GPUPreparedSurfaceOutputKind.Absent,
+                        null,
                         null,
                     ),
                 ),
@@ -234,7 +258,14 @@ class GPUPreparedSurfaceFrameExecutorTest {
                     attempt,
                     immediate,
                     CompletableFuture.completedFuture(
-                        GPUPreparedSurfaceCompletion(attempt, outcome, expected, readbackId, null),
+                        GPUPreparedSurfaceCompletion(
+                            attempt,
+                            outcome,
+                            expected,
+                            GPUPreparedSurfaceOutputKind.Absent,
+                            null,
+                            null,
+                        ),
                     ),
                 )
             })
@@ -257,7 +288,14 @@ class GPUPreparedSurfaceFrameExecutorTest {
                 attempt,
                 GPUPreparedSurfaceImmediateState.Submitted,
                 CompletableFuture.completedFuture(
-                    GPUPreparedSurfaceCompletion(attempt, GPUFrameStructuralOutcome.Failed, null, readbackId, null),
+                    GPUPreparedSurfaceCompletion(
+                        attempt,
+                        GPUFrameStructuralOutcome.Failed,
+                        null,
+                        GPUPreparedSurfaceOutputKind.Absent,
+                        null,
+                        null,
+                    ),
                 ),
             )
         })
@@ -267,16 +305,46 @@ class GPUPreparedSurfaceFrameExecutorTest {
                 attempt,
                 GPUPreparedSurfaceImmediateState.Submitted,
                 CompletableFuture.completedFuture(
-                    GPUPreparedSurfaceCompletion(attempt, GPUFrameStructuralOutcome.Succeeded, null, null, null),
+                    GPUPreparedSurfaceCompletion(
+                        attempt,
+                        GPUFrameStructuralOutcome.Succeeded,
+                        null,
+                        GPUPreparedSurfaceOutputKind.Absent,
+                        null,
+                        null,
+                    ),
+                ),
+            )
+        })
+        val completionOnlyOutput = FakeSession(submissionFactory = { _ ->
+            val attempt = GPUFrameAttemptID("attempt-completion-only-output")
+            GPUPreparedSurfaceSubmission(
+                attempt,
+                GPUPreparedSurfaceImmediateState.Submitted,
+                CompletableFuture.completedFuture(
+                    GPUPreparedSurfaceCompletion(
+                        attempt,
+                        GPUFrameStructuralOutcome.Succeeded,
+                        null,
+                        GPUPreparedSurfaceOutputKind.CurrentFrameCompletionOnly,
+                        null,
+                        null,
+                    ),
                 ),
             )
         })
 
         val noDiagnostic = executeFailure(missingDiagnostic)
         val noOutput = executeFailure(missingOutput)
+        val completionOnly = executeFailure(completionOnlyOutput)
 
         assertEquals("invalid.surface.prepared.terminal-without-diagnostic", noDiagnostic.diagnostic.code.value)
         assertEquals("invalid.surface.prepared.readback-output", noOutput.diagnostic.code.value)
+        assertEquals("ReadbackRgba", noOutput.diagnostic.facts["expected"])
+        assertEquals("Absent", noOutput.diagnostic.facts["actual"])
+        assertEquals("invalid.surface.prepared.readback-output", completionOnly.diagnostic.code.value)
+        assertEquals("ReadbackRgba", completionOnly.diagnostic.facts["expected"])
+        assertEquals("CurrentFrameCompletionOnly", completionOnly.diagnostic.facts["actual"])
     }
 
     @Test
@@ -310,7 +378,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
                     CompletableFuture.completedFuture(
                         GPUPreparedSurfaceCompletion(
                             GPUFrameAttemptID("actual"), GPUFrameStructuralOutcome.Succeeded,
-                            null, readbackId, ByteArray(16),
+                            null, GPUPreparedSurfaceOutputKind.ReadbackRgba, readbackId, ByteArray(16),
                         ),
                     ),
                 )
@@ -460,7 +528,12 @@ class GPUPreparedSurfaceFrameExecutorTest {
             GPUPreparedSurfaceImmediateState.Submitted,
             CompletableFuture.completedFuture(
                 GPUPreparedSurfaceCompletion(
-                    attempt, GPUFrameStructuralOutcome.Succeeded, null, readbackId, bytes,
+                    attempt,
+                    GPUFrameStructuralOutcome.Succeeded,
+                    null,
+                    GPUPreparedSurfaceOutputKind.ReadbackRgba,
+                    readbackId,
+                    bytes,
                 ),
             ),
         )
@@ -476,12 +549,19 @@ class GPUPreparedSurfaceFrameExecutorTest {
         private val session: FakeSession,
         private val closeFailure: Throwable? = null,
         private val prepareFailure: Throwable? = null,
+        private val rejectTelemetryAfterClose: Boolean = false,
     ) : GPUPreparedSurfaceBackendPort {
         override val deviceGeneration = GPUDeviceGenerationID(91)
-        private var telemetryRead = 0
+        var telemetryReads = 0
+            private set
         override val runtimeTelemetry: GPUBackendRuntimeTelemetry
-            get() = GPUBackendRuntimeTelemetry(destinationReadbackSnapshots = 7L)
-                .also { telemetryRead++ }
+            get() {
+                if (rejectTelemetryAfterClose && closeCalls > 0) {
+                    error("runtime telemetry is unavailable after backend close")
+                }
+                telemetryReads++
+                return GPUBackendRuntimeTelemetry(destinationReadbackSnapshots = 7L)
+            }
         val preparedRequests = mutableListOf<GPUOffscreenTargetRequest>()
         var prepareCalls = 0
         var closeCalls = 0
@@ -528,6 +608,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
                             attempt,
                             GPUFrameStructuralOutcome.Succeeded,
                             null,
+                            GPUPreparedSurfaceOutputKind.ReadbackRgba,
                             readbackId,
                             ByteArray(16) { (it + 1).toByte() },
                         ),

@@ -10,7 +10,7 @@ import org.graphiks.kanvas.types.ColorSpace
  * properties [isClean] and [hasIssues] for quick health checks, and [assertClean]
  * for test assertions.
  *
- * @property pixels      flat row-major RGBA pixel data (4 bytes per pixel)
+ * @property pixels      flat row-major pixel data in [format] channel order (4 bytes per pixel)
  * @property width       image width in pixels
  * @property height      image height in pixels
  * @property format      pixel memory layout (RGBA8 or BGRA8)

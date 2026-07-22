@@ -89,7 +89,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertEquals(0L, evidence.destinationSnapshotCreations)
         assertEquals(0L, evidence.destinationReadbackSnapshots)
         assertEquals(1L, evidence.renderPasses)
-        assertEquals(3L, evidence.draws)
+        assertEquals(0L, evidence.draws)
         assertEquals(3L, evidence.drawIndexed)
         assertEquals(1L, evidence.pipelineBinds)
         assertEquals(0, evidence.activeNativePayloads)

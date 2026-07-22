@@ -2,8 +2,9 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskSampling
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
-import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
@@ -18,6 +19,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 
 internal data class GPUPreparedSurfaceFrameBuildRequest(
@@ -59,9 +62,6 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 config = request.candidate.config,
                 capabilities = request.capabilities,
             )
-            validateEncodedPremulSrgbMaterials(request, mapping)?.let {
-                return GPUPreparedSurfaceFrameBuildResult.Refused(it)
-            }
             val recorder = GPURecorder(
                 recordingId = request.recordingId,
                 frameId = request.frameId,
@@ -93,16 +93,21 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     readbackRequestId = request.readbackRequestId,
                 ),
             )) {
-                is GPUCorePrimitivePreparedFrameResult.Recorded -> GPUPreparedSurfaceFrameBuildResult.Ready(
-                    taskList = prepared.taskList,
-                    readbackRequestId = request.readbackRequestId,
-                    visualOperationCount = mapping.visualCommands.size,
-                    stateEventCount = mapping.stateEvents.count { event ->
-                        event.kind == GPUFramePathStateKind.Transform ||
-                            event.kind == GPUFramePathStateKind.Clip ||
-                            event.kind == GPUFramePathStateKind.Annotation
-                    },
-                )
+                is GPUCorePrimitivePreparedFrameResult.Recorded -> {
+                    validateEncodedPremulSrgbOutput(request, mapping, semantics)?.let {
+                        return GPUPreparedSurfaceFrameBuildResult.Refused(it)
+                    }
+                    GPUPreparedSurfaceFrameBuildResult.Ready(
+                        taskList = prepared.taskList,
+                        readbackRequestId = request.readbackRequestId,
+                        visualOperationCount = mapping.visualCommands.size,
+                        stateEventCount = mapping.stateEvents.count { event ->
+                            event.kind == GPUFramePathStateKind.Transform ||
+                                event.kind == GPUFramePathStateKind.Clip ||
+                                event.kind == GPUFramePathStateKind.Annotation
+                        },
+                    )
+                }
                 is GPUCorePrimitivePreparedFrameResult.Refused ->
                     GPUPreparedSurfaceFrameBuildResult.Refused(prepared.diagnostic)
             }
@@ -124,21 +129,63 @@ internal object GPUPreparedSurfaceFrameBuilder {
  * the legacy sRGB attachment. Translucent solids need the legacy attachment's
  * linear-premul-to-sRGB store conversion, which this lane cannot express yet.
  */
-private fun validateEncodedPremulSrgbMaterials(
+private fun validateEncodedPremulSrgbOutput(
     request: GPUPreparedSurfaceFrameBuildRequest,
     mapping: GPUOpMapping,
+    semantics: Map<Int, GPUDrawSemanticPayload.CorePrimitive>,
 ): GPUDiagnostic? {
     if (request.candidate.color.interpretation != GPUColorInterpretation.EncodedPremulSrgb) {
         return null
     }
-    val translucentSolid = mapping.visualCommands.firstOrNull { visual ->
-        (visual.normalized.material as? GPUMaterialDescriptor.SolidColor)?.let { it.a != 1f } == true
-    } ?: return null
-    return diagnostic(
-        code = "unsupported.surface.prepared.encoded-premul-srgb.translucent-solid",
-        message = "Prepared Surface requires an explicit sRGB store conversion for translucent solids.",
-        facts = mapOf("commandId" to translucentSolid.normalized.commandId.value.toString()),
-    )
+    mapping.visualCommands.forEach { visual ->
+        val commandId = visual.normalized.commandId.value
+        val semantic = semantics[commandId] ?: return@forEach
+        if (semantic.premultipliedRgba[3] != 1f) {
+            return diagnostic(
+                code = "unsupported.surface.prepared.encoded-premul-srgb.translucent-solid",
+                message = "Prepared Surface requires an explicit sRGB store conversion for translucent solids.",
+                facts = mapOf("commandId" to commandId.toString()),
+            )
+        }
+        val fractionalCoverageAuthority = semantic.fractionalCoverageAuthority(visual.clipExecutionPlan)
+            ?: return@forEach
+        return diagnostic(
+            code = "unsupported.surface.prepared.encoded-premul-srgb.fractional-coverage",
+            message = "Prepared Surface requires an explicit sRGB store conversion for fractional coverage.",
+            facts = mapOf(
+                "commandId" to commandId.toString(),
+                "authority" to fractionalCoverageAuthority,
+            ),
+        )
+    }
+    return null
+}
+
+private fun GPUDrawSemanticPayload.CorePrimitive.fractionalCoverageAuthority(
+    clipExecutionPlan: GPUClipExecutionPlan,
+): String? = when (coverageMode) {
+    GPUCorePrimitiveCoverageMode.ScalarAA -> "geometry.ScalarAA"
+    GPUCorePrimitiveCoverageMode.StencilAA -> "geometry.StencilAA"
+    GPUCorePrimitiveCoverageMode.FullOrScissor,
+    GPUCorePrimitiveCoverageMode.Stencil1x,
+    -> clipExecutionPlan.fractionalCoverageAuthority()
+}
+
+private fun GPUClipExecutionPlan.fractionalCoverageAuthority(): String? = when (this) {
+    GPUClipExecutionPlan.NoClip,
+    is GPUClipExecutionPlan.ScissorOnly,
+    is GPUClipExecutionPlan.Refused,
+    -> null
+    is GPUClipExecutionPlan.AnalyticCoverage -> "clip.AnalyticCoverage.aa".takeIf { antiAlias }
+    is GPUClipExecutionPlan.AnalyticIntersection ->
+        "clip.AnalyticIntersection.aa".takeIf { elements.any { element -> element.antiAlias } }
+    is GPUClipExecutionPlan.StencilCoverage -> "clip.StencilCoverage.msaa".takeIf { sampleCount > 1 }
+    is GPUClipExecutionPlan.CoverageMask -> when {
+        sampleCount > 1 -> "clip.CoverageMask.msaa"
+        producers.any { producer -> producer.antiAlias } -> "clip.CoverageMask.aa"
+        consumer.sampling != GPUClipMaskSampling.Nearest -> "clip.CoverageMask.filtered"
+        else -> null
+    }
 }
 
 private fun validateTargetBounds(request: GPUPreparedSurfaceFrameBuildRequest): GPUDiagnostic? =

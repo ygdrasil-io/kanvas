@@ -39,6 +39,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
+import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceFrameBuilderTest {
@@ -46,7 +47,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     fun `analytic antialiased rect semantic uses the recorded packet blend authority`() {
         val operation = DisplayOp.DrawRect(
             RECT,
-            Paint.fill(Color.RED),
+            Paint.fill(Color.RED).copy(antiAlias = false),
             Matrix33.identity(),
             ClipStack.WideOpen,
         )
@@ -60,6 +61,75 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload)
 
         assertEquals(requireNotNull(packet.blendPlan).canonicalIdentity(), semantic.blendPlanIdentity)
+    }
+
+    @Test
+    fun `encoded premul sRGB refuses exact fractional alpha authorities but admits hard coverage`() {
+        val nonPrimary = Color.fromArgb(a = 255, r = 40, g = 120, b = 208)
+        val fractionalCases = listOf(
+            Triple(
+                "material-alpha",
+                rect(color = Color.fromArgb(a = 160, r = 40, g = 120, b = 208)),
+                "unsupported.surface.prepared.encoded-premul-srgb.translucent-solid",
+            ),
+            Triple(
+                "rect-aa",
+                rect(color = nonPrimary).copy(paint = Paint.fill(nonPrimary).copy(antiAlias = true)),
+                "unsupported.surface.prepared.encoded-premul-srgb.fractional-coverage",
+            ),
+            Triple("rrect-aa", DisplayOp.DrawRRect(
+                RRect(RECT, radius = 2f),
+                Paint.fill(nonPrimary).copy(antiAlias = true),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ), "unsupported.surface.prepared.encoded-premul-srgb.fractional-coverage"),
+            Triple(
+                "clip-aa",
+                rect(color = nonPrimary).copy(
+                    clip = ClipStack.DeviceRect(Rect.fromLTRB(1.5f, 1.5f, 14.5f, 12.5f), antiAlias = true),
+                ),
+                "unsupported.surface.prepared.encoded-premul-srgb.fractional-coverage",
+            ),
+        )
+
+        fractionalCases.forEach { (label, operation, expectedCode) ->
+            val refusal = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+                GPUPreparedSurfaceFrameBuilder.build(request(listOf(operation))),
+                label,
+            )
+            assertEquals(expectedCode, refusal.diagnostic.code.value, label)
+            assertEquals("0", refusal.diagnostic.facts["commandId"], label)
+            if (label != "material-alpha") assertTrue(refusal.diagnostic.facts["authority"].orEmpty().isNotBlank())
+        }
+
+        assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(request(listOf(rect(color = nonPrimary)))),
+        )
+        assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                request(listOf(
+                    rect(color = nonPrimary).copy(
+                        clip = ClipStack.DeviceRect(Rect.fromLTRB(1f, 1f, 14f, 12f), antiAlias = false),
+                    ),
+                )),
+            ),
+        )
+        val unsupportedAaPath = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                request(listOf(
+                    DisplayOp.DrawPath(
+                        triangle(),
+                        Paint.fill(nonPrimary).copy(antiAlias = true),
+                        Matrix33.identity(),
+                        ClipStack.WideOpen,
+                    ),
+                )),
+            ),
+        )
+        assertEquals(
+            "invalid.core_primitive.coverage_sample.stencil_aa_requires_multisample",
+            unsupportedAaPath.diagnostic.code.value,
+        )
     }
 
     @Test

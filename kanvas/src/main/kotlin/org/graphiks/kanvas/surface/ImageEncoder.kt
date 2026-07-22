@@ -92,7 +92,7 @@ fun RenderResult.toWebP(quality: Int = 80): ByteArray {
 }
 
 /**
- * Convert this [RenderResult] into an [Image] with RGBA_8888 color type.
+ * Convert this [RenderResult] into an [Image] whose color type matches [RenderResult.format].
  *
  * The returned [Image] carries the pixel data from this render result,
  * making it suitable for subsequent [Canvas.drawImage] calls.

@@ -501,6 +501,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
                 assertEquals(1, counters.encoders)
                 assertEquals(3, counters.renderPasses)
                 assertEquals(3, counters.draws)
+                assertEquals(0, counters.drawIndexed)
                 assertEquals(0, counters.destinationCopies)
                 assertEquals(2, counters.resourceCopies)
                 assertEquals(1, counters.readbackCopies)
@@ -930,7 +931,17 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             val pixels = requireNotNull(terminal.readback).bytes
             assertContentEquals(expectedPremultipliedRect(), pixels)
             assertEquals(
-                GPUWgpu4kFrameEncodingCounters(1, 1, 1, 1, 1, 1, 0, pipelineBinds = 1),
+                GPUWgpu4kFrameEncodingCounters(
+                    encoders = 1,
+                    renderPasses = 1,
+                    draws = 1,
+                    readbackCopies = 1,
+                    finishes = 1,
+                    submits = 1,
+                    pendingCommandBuffers = 0,
+                    drawIndexed = 0,
+                    pipelineBinds = 1,
+                ),
                 backend.counters(),
             )
         } finally {

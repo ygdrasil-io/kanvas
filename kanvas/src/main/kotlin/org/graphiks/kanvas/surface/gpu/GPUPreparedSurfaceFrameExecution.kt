@@ -107,10 +107,18 @@ internal data class GPUPreparedSurfaceSubmission(
     val completion: CompletionStage<GPUPreparedSurfaceCompletion>,
 )
 
+/** Handle-free description of the closed scene-frame output algebra. */
+internal enum class GPUPreparedSurfaceOutputKind {
+    Absent,
+    CurrentFrameCompletionOnly,
+    ReadbackRgba,
+}
+
 internal class GPUPreparedSurfaceCompletion(
     val attemptId: GPUFrameAttemptID,
     val outcome: GPUFrameStructuralOutcome,
     val diagnostic: GPUDiagnostic?,
+    val outputKind: GPUPreparedSurfaceOutputKind,
     val readbackId: GPUReadbackRequestID?,
     rgba: ByteArray?,
 ) {
@@ -205,16 +213,6 @@ internal class GPUPreparedSurfaceFrameExecutor(
                     )
                 }
             }
-            try {
-                backend.close()
-            } catch (failure: Throwable) {
-                val existingCode = primaryCode(primary)
-                primary = terminal(
-                    "failed.surface.prepared.backend-close",
-                    "The prepared Surface backend port could not close cleanly.",
-                    closeFacts(failure, existingCode),
-                )
-            }
             if (primary == null && pendingSuccess != null) {
                 try {
                     postCloseTelemetry = backend.runtimeTelemetry
@@ -225,6 +223,16 @@ internal class GPUPreparedSurfaceFrameExecutor(
                         mapOf("failureClass" to failure.javaClass.name),
                     )
                 }
+            }
+            try {
+                backend.close()
+            } catch (failure: Throwable) {
+                val existingCode = primaryCode(primary)
+                primary = terminal(
+                    "failed.surface.prepared.backend-close",
+                    "The prepared Surface backend port could not close cleanly.",
+                    closeFacts(failure, existingCode),
+                )
             }
         }
 
@@ -325,6 +333,16 @@ internal class GPUPreparedSurfaceFrameExecutor(
                         "invalid.surface.prepared.terminal-without-diagnostic",
                         "Prepared Surface execution failed without a terminal diagnostic.",
                     ),
+            )
+        }
+        if (completion.outputKind != GPUPreparedSurfaceOutputKind.ReadbackRgba) {
+            return terminal(
+                "invalid.surface.prepared.readback-output",
+                "Prepared Surface completion did not provide the requested RGBA readback.",
+                mapOf(
+                    "expected" to GPUPreparedSurfaceOutputKind.ReadbackRgba.name,
+                    "actual" to completion.outputKind.name,
+                ),
             )
         }
         if (completion.readbackId != build.readbackRequestId) {
@@ -571,6 +589,12 @@ private class GPUPreparedSurfaceNativeSessionPort(
                     attemptId = completed.attemptId,
                     outcome = completed.outcome,
                     diagnostic = completed.diagnostic,
+                    outputKind = when (completed.output) {
+                        null -> GPUPreparedSurfaceOutputKind.Absent
+                        GPUSceneFrameOutput.CurrentFrameCompletionOnly ->
+                            GPUPreparedSurfaceOutputKind.CurrentFrameCompletionOnly
+                        is GPUSceneFrameOutput.ReadbackRgba -> GPUPreparedSurfaceOutputKind.ReadbackRgba
+                    },
                     readbackId = output?.requestId,
                     rgba = output?.bytes,
                 )

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -459,6 +460,65 @@ class GPUFrameCoordinatorTest {
         assertEquals(1, closes)
         session.close()
         assertEquals(1, closes)
+    }
+
+    @Test
+    fun `public completion waits for a requested close action to finish`() {
+        val attemptId = GPUFrameAttemptID("attempt.session.public-completion-close")
+        val pending = CompletableFuture<GPUFrameExecutionCompletedResult>()
+        val closeActionEntered = CountDownLatch(1)
+        val releaseCloseAction = CountDownLatch(1)
+        val publicCompletionReturned = CountDownLatch(1)
+        var closes = 0
+        val coordinator = GPUFrameCoordinator(
+            planner = GPUFramePlanningPort { GPUFrameCoreTestFixture.preparedFrame().semanticPlan },
+            preflighter = GPUFramePreflightPort {
+                GPUFramePreflightResult.Prepared(GPUFrameCoreTestFixture.preparedFrame())
+            },
+            executor = GPUFrameExecutionPort { frame, id, _ ->
+                GPUFrameExecutionHandle(
+                    attemptId = id,
+                    immediateState = GPUFrameImmediateState.Submitted(frame.completionTicket.ticketId),
+                    completion = pending,
+                )
+            },
+            attemptIdFactory = { attemptId },
+        )
+        val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
+            coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> coordinator },
+            closeAction = {
+                closeActionEntered.countDown()
+                releaseCloseAction.await(5, TimeUnit.SECONDS)
+                closes += 1
+            },
+        )
+        val handle = session.renderFrame(GPUFrameCoreTestFixture.taskList())
+        session.close()
+        val waitingThread = Thread {
+            handle.completion.toCompletableFuture().get(2, TimeUnit.SECONDS)
+            publicCompletionReturned.countDown()
+        }.also(Thread::start)
+        val completingThread = Thread {
+            pending.complete(successfulExecutionResult(attemptId))
+        }.also(Thread::start)
+
+        try {
+            assertTrue(closeActionEntered.await(2, TimeUnit.SECONDS))
+            assertFalse(publicCompletionReturned.await(100, TimeUnit.MILLISECONDS))
+
+            releaseCloseAction.countDown()
+            assertEquals(
+                GPUFrameStructuralOutcome.Succeeded,
+                handle.completion.toCompletableFuture().get(2, TimeUnit.SECONDS).outcome,
+            )
+            assertEquals(1, closes)
+        } finally {
+            releaseCloseAction.countDown()
+            waitingThread.join(2_000)
+            completingThread.join(2_000)
+            session.close()
+        }
     }
 
     @Test

@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicLong
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
 
+/** Frame encoder counters. [draws] and [drawIndexed] are disjoint native call counts. */
 internal data class GPUWgpu4kFrameEncodingCounters(
     val encoders: Long,
     val renderPasses: Long,
@@ -185,7 +186,6 @@ internal fun encodeWgpu4kRenderPass(
                 },
                 drawIndexed = { count, instances, firstIndex, baseVertex, firstInstance ->
                     drawIndexed(count, instances, firstIndex, baseVertex, firstInstance)
-                    onDrawEncoded()
                     onDrawIndexedEncoded()
                 },
             ),
