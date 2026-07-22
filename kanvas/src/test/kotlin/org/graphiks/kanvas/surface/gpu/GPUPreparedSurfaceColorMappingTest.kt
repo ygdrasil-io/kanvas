@@ -42,7 +42,7 @@ class GPUPreparedSurfaceColorMappingTest {
     }
 
     @Test
-    fun `surface render remains on the legacy renderer during E1b`() {
+    fun `surface keeps GPU route internals behind renderViaGpu after product cutover`() {
         val surfaceSource = File(
             "src/main/kotlin/org/graphiks/kanvas/surface/Surface.kt",
         ).readText()

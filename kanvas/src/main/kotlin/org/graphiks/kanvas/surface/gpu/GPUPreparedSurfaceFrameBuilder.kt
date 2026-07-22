@@ -2,6 +2,8 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
@@ -57,6 +59,9 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 config = request.candidate.config,
                 capabilities = request.capabilities,
             )
+            validateEncodedPremulSrgbMaterials(request, mapping)?.let {
+                return GPUPreparedSurfaceFrameBuildResult.Refused(it)
+            }
             val recorder = GPURecorder(
                 recordingId = request.recordingId,
                 frameId = request.frameId,
@@ -65,6 +70,9 @@ internal object GPUPreparedSurfaceFrameBuilder {
             )
             mapping.visualCommands.forEach { visual -> recorder.record(visual.normalized) }
             val recording = recorder.close()
+            recording.taskList.diagnostics.firstOrNull { diagnostic -> diagnostic.isTerminal }?.let {
+                return GPUPreparedSurfaceFrameBuildResult.Refused(it)
+            }
             val semantics = when (val gathered = GPUCorePrimitiveSemanticBuilder.gather(
                 visualCommands = mapping.visualCommands,
                 recording = recording,
@@ -108,6 +116,29 @@ internal object GPUPreparedSurfaceFrameBuilder {
             )
         }
     }
+}
+
+/**
+ * The prepared target is currently a physical UNORM texture carrying the named
+ * encoded-premul-sRGB convention. Opaque solids retain the same stored bytes as
+ * the legacy sRGB attachment. Translucent solids need the legacy attachment's
+ * linear-premul-to-sRGB store conversion, which this lane cannot express yet.
+ */
+private fun validateEncodedPremulSrgbMaterials(
+    request: GPUPreparedSurfaceFrameBuildRequest,
+    mapping: GPUOpMapping,
+): GPUDiagnostic? {
+    if (request.candidate.color.interpretation != GPUColorInterpretation.EncodedPremulSrgb) {
+        return null
+    }
+    val translucentSolid = mapping.visualCommands.firstOrNull { visual ->
+        (visual.normalized.material as? GPUMaterialDescriptor.SolidColor)?.let { it.a != 1f } == true
+    } ?: return null
+    return diagnostic(
+        code = "unsupported.surface.prepared.encoded-premul-srgb.translucent-solid",
+        message = "Prepared Surface requires an explicit sRGB store conversion for translucent solids.",
+        facts = mapOf("commandId" to translucentSolid.normalized.commandId.value.toString()),
+    )
 }
 
 private fun validateTargetBounds(request: GPUPreparedSurfaceFrameBuildRequest): GPUDiagnostic? =

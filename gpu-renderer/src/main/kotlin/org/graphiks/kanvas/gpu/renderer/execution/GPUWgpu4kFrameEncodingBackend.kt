@@ -32,6 +32,7 @@ internal data class GPUWgpu4kFrameEncodingCounters(
     val resourceCopies: Long = 0L,
     val msaaResolves: Long = 0L,
     val drawIndexed: Long = 0L,
+    val pipelineBinds: Long = 0L,
 )
 
 internal class GPUWgpu4kRenderCommandActions(
@@ -155,6 +156,7 @@ internal fun encodeWgpu4kRenderPass(
     onRenderPassBegan: () -> Unit = {},
     onDrawEncoded: () -> Unit = {},
     onDrawIndexedEncoded: () -> Unit = {},
+    onPipelineBound: () -> Unit = {},
 ): Int {
     var encodedDraws = 0
     encoder.beginRenderPass(buildWgpu4kRenderPassDescriptor(render.pass)) {
@@ -162,7 +164,10 @@ internal fun encodeWgpu4kRenderPass(
         encodedDraws = encodeWgpu4kRenderCommands(
             render.commands,
             GPUWgpu4kRenderCommandActions(
-                setPipeline = { pipeline -> setPipeline(pipeline) },
+                setPipeline = { pipeline ->
+                    setPipeline(pipeline)
+                    onPipelineBound()
+                },
                 setStencilReference = { reference -> setStencilReference(reference) },
                 setBindGroup = { index, bindGroup, dynamicOffsets ->
                     setBindGroup(index, bindGroup, dynamicOffsets)
@@ -209,6 +214,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
     private var renderPassCount = 0L
     private var drawCount = 0L
     private var drawIndexedCount = 0L
+    private var pipelineBindCount = 0L
     private var readbackCopyCount = 0L
     private var finishCount = 0L
     private var submitCount = 0L
@@ -275,6 +281,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
         destinationCopies = destinationCopyCount,
         resourceCopies = resourceCopyCount,
         msaaResolves = msaaResolveCount,
+        pipelineBinds = pipelineBindCount,
     )
 
     override fun close() {
@@ -404,6 +411,9 @@ internal class GPUWgpu4kFrameEncodingBackend(
                 onDrawIndexedEncoded = {
                     synchronized(this@GPUWgpu4kFrameEncodingBackend) { drawIndexedCount += 1 }
                 },
+                onPipelineBound = {
+                    synchronized(this@GPUWgpu4kFrameEncodingBackend) { pipelineBindCount += 1 }
+                },
             )
             if (pass.resolveTarget != null) {
                 synchronized(this@GPUWgpu4kFrameEncodingBackend) { msaaResolveCount += 1 }
@@ -451,6 +461,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
             synchronized(this@GPUWgpu4kFrameEncodingBackend) {
                 renderPassCount += 1
                 drawCount += 1
+                pipelineBindCount += 1
             }
         }
 

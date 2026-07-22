@@ -343,12 +343,17 @@ data class GPUPreparedSceneNativeCounters(
     val colorGlyphAtlasInvalidations: Long = 0L,
     val colorGlyphCurrentAtlasBytes: Long = 0L,
     val colorGlyphPeakAtlasBytes: Long = 0L,
+    val renderPasses: Long = 0L,
+    val draws: Long = 0L,
+    val drawIndexed: Long = 0L,
+    val pipelineBinds: Long = 0L,
 )
 
 internal data class GPUPreparedSceneRenderCounters(
     val renderPasses: Long = 0L,
     val draws: Long = 0L,
     val drawIndexed: Long = 0L,
+    val pipelineBinds: Long = 0L,
     val coverageMaskTextureCreations: Long = 0L,
     val coverageMaskSlotReuses: Long = 0L,
     val msaaColorTextureCreations: Long = 0L,

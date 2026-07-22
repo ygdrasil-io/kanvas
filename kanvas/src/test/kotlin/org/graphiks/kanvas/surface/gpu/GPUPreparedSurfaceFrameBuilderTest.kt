@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
@@ -41,6 +42,26 @@ import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceFrameBuilderTest {
+    @Test
+    fun `analytic antialiased rect semantic uses the recorded packet blend authority`() {
+        val operation = DisplayOp.DrawRect(
+            RECT,
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            ClipStack.WideOpen,
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(request(listOf(operation))),
+        )
+        val packet = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .single()
+        val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(packet.semanticPayload)
+
+        assertEquals(requireNotNull(packet.blendPlan).canonicalIdentity(), semantic.blendPlanIdentity)
+    }
+
     @Test
     fun `rect src over with state events preserves exact frame envelope ids provenance and counts`() {
         val operations = listOf(
@@ -159,10 +180,17 @@ class GPUPreparedSurfaceFrameBuilderTest {
             ),
         )
         val cases = listOf(
+            request(listOf(rect(color = Color.fromArgb(a = 160, r = 40, g = 120, b = 208)))) to
+                "unsupported.surface.prepared.encoded-premul-srgb.translucent-solid",
             request(listOf(rect().copy(paint = Paint.fill(Color.WHITE).copy(shader = gradient)))) to
                 "unsupported.core_primitive.material.non_solid",
             request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC)))) to
                 "unsupported.destination_read.required",
+            request(listOf(
+                rect(color = Color.BLUE),
+                rect(color = Color.RED).copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.CLEAR)),
+            )) to
+                "unsupported.native-core-primitive.blend",
             request(listOf(DisplayOp.DrawPoints(
                 PointMode.LINES,
                 listOf(Point(2f, 2f), Point(12f, 2f)),

@@ -31,6 +31,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveStrokeStyle
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
 
@@ -43,6 +44,14 @@ internal sealed interface GPUCorePrimitiveSemanticGatherResult {
         val message: String,
         val facts: Map<String, String>,
     ) : GPUCorePrimitiveSemanticGatherResult
+}
+
+internal enum class GPUCorePrimitiveBlendAuthorityPolicy {
+    /** Product work requires one exact blend authority from the recorded draw packet. */
+    Required,
+
+    /** Diagnostic inventory may lower mapper semantics even when recording was atomically refused. */
+    InventoryHarness,
 }
 
 data class GPUCorePrimitiveGeometryRefusal(
@@ -60,11 +69,17 @@ internal object GPUCorePrimitiveSemanticBuilder {
         visualCommands: List<GPUFramePathVisualCommand>,
         recording: GPURecording,
         targetBounds: GPUPixelBounds,
+        blendAuthorityPolicy: GPUCorePrimitiveBlendAuthorityPolicy =
+            GPUCorePrimitiveBlendAuthorityPolicy.Required,
     ): GPUCorePrimitiveSemanticGatherResult {
         val gatherer = GPUCorePrimitivePayloadGatherer()
         val semantics = linkedMapOf<Int, GPUDrawSemanticPayload.CorePrimitive>()
         val analysisRecordsByCommandId = recording.analysis.records
             .groupBy(GPUDrawAnalysisRecord::commandIdValue)
+        val recordingPacketsByCommandId = recording.taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .groupBy { packet -> packet.commandIdValue }
         visualCommands.forEach { visual ->
             visual.geometryRefusal?.let { refusal ->
                 return refusal.toGatherRefusal(visual)
@@ -80,6 +95,27 @@ internal object GPUCorePrimitiveSemanticBuilder {
                 ).toGatherRefusal(visual)
             }
             val analysisRecord = matchingAnalysisRecords.single()
+            val recordingBlendPlanIdentity = when (blendAuthorityPolicy) {
+                GPUCorePrimitiveBlendAuthorityPolicy.Required -> {
+                    val matchingRecordingPackets = recordingPacketsByCommandId[commandIdValue].orEmpty()
+                    if (matchingRecordingPackets.size != 1) {
+                        return GPUCorePrimitiveGeometryRefusal(
+                            code = "unsupported.core_primitive.recording_packet_bijection",
+                            refusalFacts = mapOf(
+                                "matchingPacketCount" to matchingRecordingPackets.size.toString(),
+                            ),
+                        ).toGatherRefusal(visual)
+                    }
+                    matchingRecordingPackets.single().blendPlan
+                        ?.canonicalIdentity()
+                        ?: return GPUCorePrimitiveGeometryRefusal(
+                            code = "unsupported.core_primitive.recording_blend_authority_missing",
+                            refusalFacts = mapOf("analysisRecordId" to analysisRecord.recordId),
+                        ).toGatherRefusal(visual)
+                }
+                GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness ->
+                    visual.blendPlan.canonicalIdentity()
+            }
             val expectedAnalysisFamily = visual.normalized.analysisCommandFamily()
             if (analysisRecord.commandFamily != expectedAnalysisFamily) {
                 return GPUCorePrimitiveGeometryRefusal(
@@ -102,7 +138,13 @@ internal object GPUCorePrimitiveSemanticBuilder {
                 ).toGatherRefusal(visual)
             }
             val semantic = try {
-                gatherer.gatherSemantic(visual.toCorePrimitiveInput(targetBounds, analysisRecord))
+                gatherer.gatherSemantic(
+                    visual.toCorePrimitiveInput(
+                        targetBounds = targetBounds,
+                        analysisRecord = analysisRecord,
+                        recordingBlendPlanIdentity = recordingBlendPlanIdentity,
+                    ),
+                )
             } catch (failure: GPUCorePrimitiveGeometryRefusalException) {
                 return failure.refusal.toGatherRefusal(visual)
             } catch (failure: IllegalArgumentException) {
@@ -134,6 +176,7 @@ private fun GPUCorePrimitiveGeometryRefusal.toGatherRefusal(
 private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     targetBounds: GPUPixelBounds,
     analysisRecord: GPUDrawAnalysisRecord,
+    recordingBlendPlanIdentity: String,
 ): GPUCorePrimitivePayloadInput {
     val material = normalized.material as? GPUMaterialDescriptor.SolidColor
         ?: refuseGeometry(
@@ -260,7 +303,7 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         targetBounds = targetBounds,
         scissorBounds = scissor,
         clipCoveragePlan = clipCoverage,
-        blendPlanIdentity = blendPlan.canonicalIdentity(),
+        blendPlanIdentity = recordingBlendPlanIdentity,
         frameProvenance = provenance,
         coverageMode = coverageMode(),
         analysisRecordId = analysisRecord.recordId.takeIf {

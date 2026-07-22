@@ -11,6 +11,10 @@ class GPUPreparedSceneNativeCountersTest {
             11L,
             12L,
             13L,
+            renderPasses = 17L,
+            draws = 19L,
+            drawIndexed = 23L,
+            pipelineBinds = 29L,
         )
 
         val (encoders, commandBuffers, targetCreations) = counters
@@ -20,10 +24,14 @@ class GPUPreparedSceneNativeCountersTest {
         assertEquals(13L, targetCreations)
 
         val type = GPUPreparedSceneNativeCounters::class.java
-        assertEquals(37, type.declaredMethods.count { it.name.matches(Regex("component\\d+")) })
-        assertEquals(37, type.declaredMethods.single { it.name == "copy" }.parameterCount)
+        assertEquals(17L, counters.renderPasses)
+        assertEquals(19L, counters.draws)
+        assertEquals(23L, counters.drawIndexed)
+        assertEquals(29L, counters.pipelineBinds)
+        assertEquals(41, type.declaredMethods.count { it.name.matches(Regex("component\\d+")) })
+        assertEquals(41, type.declaredMethods.single { it.name == "copy" }.parameterCount)
         assertEquals(
-            37,
+            41,
             type.declaredConstructors.filterNot { it.isSynthetic }.maxOf { it.parameterCount },
         )
     }
@@ -43,6 +51,7 @@ class GPUPreparedSceneNativeCountersTest {
                     renderPasses = 7L,
                     draws = 11L,
                     drawIndexed = 13L,
+                    pipelineBinds = 17L,
                     coverageMaskTextureCreations = 17L,
                     coverageMaskSlotReuses = 19L,
                     msaaColorTextureCreations = 23L,
@@ -57,6 +66,7 @@ class GPUPreparedSceneNativeCountersTest {
                 renderPasses = 7L,
                 draws = 11L,
                 drawIndexed = 13L,
+                pipelineBinds = 17L,
                 coverageMaskTextureCreations = 17L,
                 coverageMaskSlotReuses = 19L,
                 msaaColorTextureCreations = 23L,

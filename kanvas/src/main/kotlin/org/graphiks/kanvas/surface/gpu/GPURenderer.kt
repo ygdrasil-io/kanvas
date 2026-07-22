@@ -700,10 +700,42 @@ internal fun renderViaGpu(
     format: PixelFormat,
     config: RenderConfig,
     routeTrace: GPUClipRouteTrace? = null,
+    preparedRouteTrace: GPUPreparedSurfaceRouteTrace? = null,
+): RenderResult {
+    val operations = buffer.ops()
+    return GPUPreparedSurfaceProductEntry.render(
+        operations = operations,
+        width = width,
+        height = height,
+        format = format,
+        config = config,
+        executionPort = preparedSurfaceProductExecutionPort,
+        legacyPort = preparedSurfaceLegacyPort,
+        legacyRouteTrace = routeTrace,
+        trace = preparedRouteTrace,
+    )
+}
+
+private val preparedSurfaceProductExecutionPort: GPUPreparedSurfaceExecutionPort =
+    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory)
+
+private val preparedSurfaceLegacyPort =
+    GPUPreparedSurfaceLegacyPort { operations, width, height, format, config, routeTrace ->
+        renderViaGpuLegacy(operations, width, height, format, config, routeTrace)
+    }
+
+@OptIn(ExperimentalUnsignedTypes::class)
+private fun renderViaGpuLegacy(
+    operations: List<DisplayOp>,
+    width: Int,
+    height: Int,
+    format: PixelFormat,
+    config: RenderConfig,
+    routeTrace: GPUClipRouteTrace?,
 ): RenderResult {
     // Expand supported Pictures before the clip prepass. This ensures every captured child
     // (including advanced blends) reaches the normal per-operation S/G compositor in order.
-    val ops = buffer.ops().expandPicturesForGpuReplay()
+    val ops = operations.expandPicturesForGpuReplay()
     val diagnostics = Diagnostics()
     val dispatched = mutableListOf<String>()
     val targets = GPUTargetFacts(width = width, height = height, colorFormat = config.gpuColorFormat.gpuLabel)
@@ -3379,8 +3411,18 @@ internal fun renderViaGpu(
             }
 
             val rgba = t.readRgba()
+            val outputPixels = when (format) {
+                PixelFormat.RGBA8 -> rgba
+                PixelFormat.BGRA8 -> rgba.copyOf().also { bgra ->
+                    for (offset in bgra.indices step 4) {
+                        val red = bgra[offset]
+                        bgra[offset] = bgra[offset + 2]
+                        bgra[offset + 2] = red
+                    }
+                }
+            }
             return RenderResult(
-                pixels = rgba.toUByteArray(),
+                pixels = outputPixels.toUByteArray(),
                 width = width,
                 height = height,
                 format = format,

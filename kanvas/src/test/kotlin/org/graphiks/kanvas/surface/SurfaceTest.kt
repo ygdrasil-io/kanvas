@@ -18,6 +18,27 @@ class SurfaceTest {
 
     @Test fun `Surface dimensions`() { val s = Surface(320, 240); assertEquals(320, s.width); assertEquals(240, s.height); assertEquals(PixelFormat.RGBA8, s.format) }
     @Test fun `Surface BGRA8`() { assertEquals(PixelFormat.BGRA8, Surface(100, 100, PixelFormat.BGRA8).format) }
+    @Test
+    fun `BGRA render and snapshots preserve exact channel order and color type`() {
+        val surface = Surface(2, 1, PixelFormat.BGRA8)
+        surface.canvas { drawColor(Color.RED) }
+
+        val result = surface.render()
+        assertEquals(PixelFormat.BGRA8, result.format)
+        assertArrayEquals(
+            byteArrayOf(0, 0, -1, -1, 0, 0, -1, -1),
+            result.pixels.toByteArray(),
+        )
+
+        val whole = result.toImage()
+        assertEquals(ColorType.BGRA_8888, whole.colorType)
+        assertArrayEquals(byteArrayOf(0, 0, -1, -1, 0, 0, -1, -1), whole.pixels)
+
+        val subset = surface.makeImageSnapshot(Rect.fromLTRB(1f, 0f, 2f, 1f))
+        assertNotNull(subset)
+        assertEquals(ColorType.BGRA_8888, subset!!.colorType)
+        assertArrayEquals(byteArrayOf(0, 0, -1, -1), subset.pixels)
+    }
     @Test fun `Surface canvas DSL`() { val s = Surface(320, 240); s.canvas { drawRect(Rect.fromLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)) }; val r = s.render(); assertEquals(1, r.stats.opsDispatched) }
     @Test
     fun `readPixels copies correct region`() {

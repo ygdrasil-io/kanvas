@@ -155,5 +155,6 @@ object GPUFramePathApiInventory {
         visualCommands = inventory.visualCommands,
         recording = inventory.recording,
         targetBounds = targetBounds,
+        blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
     )
 }

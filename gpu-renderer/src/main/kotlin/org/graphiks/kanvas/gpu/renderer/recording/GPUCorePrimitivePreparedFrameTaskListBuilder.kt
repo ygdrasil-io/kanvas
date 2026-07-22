@@ -1902,6 +1902,31 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                 "Core primitive path stencil geometry byte size exceeds signed 64-bit arithmetic.",
             )
         }
+        basePackets.firstOrNull { packet ->
+            packet.commandIdValue !in geometryBytesByCommandId &&
+                packet.commandIdValue !in pathStencilPlansByCommandId &&
+                corePrimitiveDirectClipAuthority(
+                    requireNotNull(packet.clipExecutionPlan),
+                    request.targetBounds,
+                ) is GPUCorePrimitiveDirectClipAuthority.Accepted
+        }
+            ?.let { packet ->
+                val decision = classifyCorePrimitiveDirectNativeRoute(
+                    semantic = request.semanticsByCommandId.getValue(packet.commandIdValue),
+                    clipExecutionPlan = requireNotNull(packet.clipExecutionPlan),
+                    blendPlan = packet.blendPlan,
+                    samplePlan = baseRenders.single { render -> packet in render.drawPackets }.samplePlan,
+                    targetFormat = "rgba8unorm",
+                )
+                return when (decision) {
+                    is GPUCorePrimitiveDirectNativeRoute.Refused ->
+                        refused(decision.code, decision.message)
+                    is GPUCorePrimitiveDirectNativeRoute.Accepted -> refused(
+                        "invalid.recording.core_primitive_native_geometry_authority",
+                        "Accepted CorePrimitive native geometry must retain exact prepared bytes.",
+                    )
+                }
+            }
         val geometryVertexBytes = try {
             geometryBytesByCommandId.values.fold(
                 nativeClipStencilProducerFan?.vertices?.size?.let { count ->

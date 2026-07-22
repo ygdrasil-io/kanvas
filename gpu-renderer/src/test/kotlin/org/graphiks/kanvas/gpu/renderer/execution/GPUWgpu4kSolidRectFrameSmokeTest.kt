@@ -930,7 +930,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             val pixels = requireNotNull(terminal.readback).bytes
             assertContentEquals(expectedPremultipliedRect(), pixels)
             assertEquals(
-                GPUWgpu4kFrameEncodingCounters(1, 1, 1, 1, 1, 1, 0),
+                GPUWgpu4kFrameEncodingCounters(1, 1, 1, 1, 1, 1, 0, pipelineBinds = 1),
                 backend.counters(),
             )
         } finally {

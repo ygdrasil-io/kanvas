@@ -1431,6 +1431,7 @@ private class WgpuBackendSession(
                     renderPasses = encoding.renderPasses,
                     draws = encoding.draws,
                     drawIndexed = encoding.drawIndexed,
+                    pipelineBinds = encoding.pipelineBinds,
                     coverageMaskTextureCreations = corePrimitive.coverageMaskTextureCreations,
                     coverageMaskSlotReuses = corePrimitive.coverageMaskSlotReuses,
                     msaaColorTextureCreations = corePrimitive.msaaColorTextureCreations,
@@ -1492,6 +1493,10 @@ private class WgpuBackendSession(
                     colorGlyphAtlasInvalidations = colorGlyph.atlasInvalidations,
                     colorGlyphCurrentAtlasBytes = colorGlyph.currentAtlasBytes,
                     colorGlyphPeakAtlasBytes = colorGlyph.atlasPeakResidentBytes,
+                    renderPasses = encoding.renderPasses,
+                    draws = encoding.draws,
+                    drawIndexed = encoding.drawIndexed,
+                    pipelineBinds = encoding.pipelineBinds,
                 )
             },
         ).also { child ->

@@ -30,6 +30,7 @@ class GPUCorePrimitiveSemanticBuilderTest {
             visualCommands = inventory.visualCommands,
             recording = inventory.recording,
             targetBounds = targetBounds,
+            blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
         )
         val harness = GPUFramePathApiInventory.gatherCorePrimitiveSemantics(inventory, targetBounds)
 
@@ -72,6 +73,7 @@ class GPUCorePrimitiveSemanticBuilderTest {
             visualCommands = forged.visualCommands,
             recording = forged.recording,
             targetBounds = targetBounds,
+            blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
         )
         val harness = GPUFramePathApiInventory.gatherCorePrimitiveSemantics(forged, targetBounds)
 
