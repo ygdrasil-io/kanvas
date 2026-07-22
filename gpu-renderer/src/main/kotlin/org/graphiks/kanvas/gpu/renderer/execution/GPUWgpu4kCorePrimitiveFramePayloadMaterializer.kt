@@ -22,6 +22,9 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUnif
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleLoadTransition
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleResolveAction
@@ -53,6 +56,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.validateCorePrimitiveClipProdu
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
@@ -2241,6 +2245,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         val targetBounds = targetDescriptor.logicalBounds
         val route = producerSeal.route
+        val sampleCount = route.attachment.sampleCount
+        val isMsaa4x = sampleCount == 4
+        val expectedSamplePlan = if (isMsaa4x) {
+            GPUSamplePlan.MultisampleFrame(4)
+        } else {
+            GPUSamplePlan.SingleSampleFrame
+        }
         val arena = producerSeal.geometryArena
         val slab = producerSeal.slabAuthority
         val uniformSeal = slab.uniformSlabSeal
@@ -2258,7 +2269,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             ) || targetPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
             clipDepthStencilPreparation.resource != producerSeal.attachmentAuthority.resource ||
             clipDescriptor.logicalBounds != targetBounds ||
-            clipDescriptor.format.value != DEPTH24PLUS_STENCIL8 || clipDescriptor.sampleCount != 1 ||
+            clipDescriptor.format.value != DEPTH24PLUS_STENCIL8 ||
+            clipDescriptor.sampleCount != sampleCount || sampleCount !in setOf(1, 4) ||
             clipDepthStencilPreparation.usages != setOf(GPUFrameResourceUsage.RenderAttachment) ||
             clipDepthStencilPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
             vertexPreparation.resource != slab.vertexResource ||
@@ -2301,29 +2313,52 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         val expectedDepthBytes = try {
-            Math.multiplyExact(Math.multiplyExact(targetBounds.width.toLong(), targetBounds.height.toLong()), 4L)
+            Math.multiplyExact(
+                Math.multiplyExact(
+                    Math.multiplyExact(targetBounds.width.toLong(), targetBounds.height.toLong()),
+                    4L,
+                ),
+                sampleCount.toLong(),
+            )
         } catch (_: ArithmeticException) {
             return refused(
                 "invalid.native-core-primitive.clip-stencil-resource-contract",
                 "Prepared clip-stencil D24S8 byte sizing overflowed.",
             )
         }
+        val producerContinuation = producerEntry.render.sampleContinuation
         if (clipDepthStencilPreparation.byteSize != expectedDepthBytes ||
             producerEntry.render.loadStore != org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(
-                "load",
+                if (isMsaa4x) "clear" else "load",
                 GPUStorePlan.Store,
-            ) || producerEntry.render.depthStencilLoadStore !=
+            ) || producerEntry.render.samplePlan != expectedSamplePlan ||
+            producerEntry.render.depthStencilLoadStore !=
             org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil(
                 org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
                 GPUStorePlan.Store,
                 0u,
+            ) || !hasExactClipStencilContinuation(
+                producerEntry.render,
+                producerContinuation,
+                clipDepthStencilPreparation.resource,
+                generationSeal,
+                expectedLoad = if (isMsaa4x) GPUSampleLoadTransition.FreshClear else null,
             ) || orderedConsumers.withIndex().any { (index, pair) ->
                 pair.first.render.target != producerEntry.render.target ||
                     pair.first.render.loadStore != org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(
-                        if (index == 0) "clear" else "load",
+                        if (isMsaa4x) "load" else if (index == 0) "clear" else "load",
                         GPUStorePlan.Store,
-                    ) || pair.first.render.depthStencilLoadStore !=
+                    ) || pair.first.render.samplePlan != expectedSamplePlan ||
+                    pair.first.render.depthStencilLoadStore !=
                     org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.ReadOnlyKeep
+                    || !hasExactClipStencilContinuation(
+                        pair.first.render,
+                        pair.first.render.sampleContinuation,
+                        clipDepthStencilPreparation.resource,
+                        generationSeal,
+                        expectedLoad = if (isMsaa4x) GPUSampleLoadTransition.RetainedLoad else null,
+                        expectedKey = producerContinuation?.key,
+                    )
             }
         ) {
             return refused(
@@ -2370,23 +2405,50 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
 
-        val expectedProducerRoles = listOf(
-            GPUPreparedNativeOperandRole.RenderColorTarget,
-            GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
-            GPUPreparedNativeOperandRole.RenderPipeline,
-            GPUPreparedNativeOperandRole.RenderVertexBuffer,
-            GPUPreparedNativeOperandRole.RenderIndexBuffer,
-        )
-        val expectedProducerKinds = listOf(
-            GPUPreparedNativeOperandKind.TextureView,
-            GPUPreparedNativeOperandKind.TextureView,
-            GPUPreparedNativeOperandKind.RenderPipeline,
-            GPUPreparedNativeOperandKind.Buffer,
-            GPUPreparedNativeOperandKind.Buffer,
-        )
+        val expectedProducerRoles = buildList {
+            if (isMsaa4x) {
+                add(GPUPreparedNativeOperandRole.RenderMsaaColorTarget)
+                add(GPUPreparedNativeOperandRole.RenderResolveTarget)
+            } else {
+                add(GPUPreparedNativeOperandRole.RenderColorTarget)
+            }
+            add(GPUPreparedNativeOperandRole.RenderDepthStencilTarget)
+            add(GPUPreparedNativeOperandRole.RenderPipeline)
+            add(GPUPreparedNativeOperandRole.RenderVertexBuffer)
+            add(GPUPreparedNativeOperandRole.RenderIndexBuffer)
+        }
+        val expectedProducerKinds = expectedProducerRoles.map { role ->
+            when (role) {
+                GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                GPUPreparedNativeOperandRole.RenderResolveTarget,
+                GPUPreparedNativeOperandRole.RenderColorTarget,
+                GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+                -> GPUPreparedNativeOperandKind.TextureView
+                GPUPreparedNativeOperandRole.RenderPipeline ->
+                    GPUPreparedNativeOperandKind.RenderPipeline
+                GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                -> GPUPreparedNativeOperandKind.Buffer
+                else -> error("Unexpected prepared clip-stencil producer operand role")
+            }
+        }
         val expectedConsumerRoles = expectedProducerRoles +
             GPUPreparedNativeOperandRole.RenderBindGroup
         val expectedConsumerKinds = expectedProducerKinds + GPUPreparedNativeOperandKind.BindGroup
+        val exactMsaaAttachmentKeys = !isMsaa4x || renderEntries.all { entry ->
+            val keys = entry.scope.nativeOperandKeys
+            val continuation = requireNotNull(entry.render.sampleContinuation)
+            val targetGeneration = generationSeal.resourceGenerations[targetPreparation.resource]
+            val depthGeneration = generationSeal.resourceGenerations[clipDepthStencilPreparation.resource]
+            targetGeneration != null && depthGeneration != null &&
+                keys.getOrNull(0)?.bindingKey == gpuPreparedNativeBindingKey(
+                    "msaa:${continuation.key.colorAttachment.value}",
+                ) && keys.getOrNull(1)?.bindingKey == gpuPreparedNativeBindingKey(
+                    "GPUFrameTargetRef:${targetPreparation.resource.value}@$targetGeneration",
+                ) && keys.getOrNull(2)?.bindingKey == gpuPreparedNativeBindingKey(
+                    "GPUFrameTextureRef:${clipDepthStencilPreparation.resource.value}@$depthGeneration",
+                )
+        }
         if (producerEntry.scope.nativeOperandKeys.map { it.role } != expectedProducerRoles ||
             producerEntry.scope.nativeOperandKeys.map { it.kind } != expectedProducerKinds ||
             orderedConsumers.any { (entry, _) ->
@@ -2394,7 +2456,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     entry.scope.nativeOperandKeys.map { it.kind } != expectedConsumerKinds
             } || renderEntries.flatMap { it.scope.nativeOperandKeys }.any {
                 it.ownership != GPUPreparedNativeOperandOwnership.Borrowed
-            }
+            } || !exactMsaaAttachmentKeys
         ) {
             return refused(
                 "invalid.native-core-primitive.clip-stencil-native-keys",
@@ -2465,6 +2527,18 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         var frameLeaseTransferred = false
         return try {
             val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val msaaColorRequirement = if (isMsaa4x) {
+                GPUWgpu4kCorePrimitiveMsaaColorRequirement(
+                    target = producerEntry.render.target,
+                    colorAttachment = requireNotNull(producerContinuation).key.colorAttachment,
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    targetGeneration = generationSeal.targetGeneration,
+                    width = targetBounds.width,
+                    height = targetBounds.height,
+                )
+            } else {
+                null
+            }
             val acquiredByStructural = linkedMapOf<
                 GPUCorePrimitiveRenderPipelineStructuralKey,
                 GPUWgpu4kCorePrimitiveSessionCacheAcquire.Acquired
@@ -2483,8 +2557,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 targetBounds.width,
                 targetBounds.height,
                 GPUTextureFormat.Depth24PlusStencil8,
-                1,
+                sampleCount,
                 GPUTextureUsage.RenderAttachment,
+                target = producerEntry.render.target.takeIf { isMsaa4x },
+                depthStencilAttachment = producerContinuation?.key?.depthStencilAttachment,
+                deviceGeneration = generationSeal.deviceGeneration.takeIf { isMsaa4x },
+                targetGeneration = generationSeal.targetGeneration.takeIf { isMsaa4x },
             )
             frameLease = when (val checkout = sessionCache.acquireFrame(
                 GPUWgpu4kCorePrimitiveFramePoolRequirements(
@@ -2494,6 +2572,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     uniformBytes = uniformSeal.plan.totalBytes,
                     componentIdentity = PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
                     clipDepthStencil = clipRequirement,
+                    sampleCount = sampleCount,
+                    msaaColor = msaaColorRequirement,
                 ),
             )) {
                 is GPUWgpu4kCorePrimitiveFramePoolCheckout.Acquired -> checkout.lease
@@ -2504,8 +2584,13 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
             val pooled = requireNotNull(frameLease)
             val clipHandles = requireNotNull(pooled.handles.clipDepthStencil)
-            require(clipHandles.requirement == clipRequirement) {
-                "Pooled clip D24S8 attachment differs from its exact requirement"
+            require(
+                clipHandles.requirement == clipRequirement &&
+                    pooled.handles.sampleCount == sampleCount &&
+                    pooled.handles.msaaColor?.requirement == msaaColorRequirement &&
+                    (isMsaa4x == (pooled.handles.msaaColor != null))
+            ) {
+                "Pooled paired clip attachments differ from their exact requirements"
             }
             uploadExact(
                 pooled.handles.vertexBuffer,
@@ -2535,11 +2620,18 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     ),
                 ).tracked()
             }
-            val targetOperand = GPUPreparedNativeTextureViewOperand(
+            val canonicalTargetOperand = GPUPreparedNativeTextureViewOperand(
                 targetView,
                 generationSeal.deviceGeneration,
                 GPUPreparedNativeOperandOwnership.Borrowed,
             )
+            val colorTargetOperand = pooled.handles.msaaColor?.let { msaa ->
+                GPUPreparedNativeTextureViewOperand(
+                    msaa.view,
+                    generationSeal.deviceGeneration,
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                )
+            } ?: canonicalTargetOperand
             val clipOperand = GPUPreparedNativeTextureViewOperand(
                 clipHandles.view,
                 generationSeal.deviceGeneration,
@@ -2617,11 +2709,20 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             val producerOperand = GPUPreparedNativeScopeOperand.Render(
                 sourceStepIndex = producerEntry.scope.sourceStepIndex,
                 pass = GPUPreparedNativeRenderPassConfig(
-                    colorTarget = targetOperand,
+                    colorTarget = colorTargetOperand,
+                    resolveTarget = canonicalTargetOperand.takeIf { isMsaa4x },
                     depthStencilTarget = clipOperand,
-                    loadOperation = GPUPreparedNativeLoadOperation.Load,
+                    loadOperation = if (isMsaa4x) {
+                        GPUPreparedNativeLoadOperation.Clear
+                    } else {
+                        GPUPreparedNativeLoadOperation.Load
+                    },
                     storeOperation = GPUPreparedNativeStoreOperation.Store,
-                    clearColor = null,
+                    clearColor = if (isMsaa4x) {
+                        GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
+                    } else {
+                        null
+                    },
                     depthReadOnly = true,
                     stencilClearValue = 0u,
                     stencilLoadOperation = GPUPreparedNativeLoadOperation.Clear,
@@ -2641,15 +2742,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 GPUPreparedNativeScopeOperand.Render(
                     sourceStepIndex = entry.scope.sourceStepIndex,
                     pass = GPUPreparedNativeRenderPassConfig(
-                        colorTarget = targetOperand,
+                        colorTarget = colorTargetOperand,
+                        resolveTarget = canonicalTargetOperand.takeIf { isMsaa4x },
                         depthStencilTarget = clipOperand,
-                        loadOperation = if (index == 0) {
+                        loadOperation = if (!isMsaa4x && index == 0) {
                             GPUPreparedNativeLoadOperation.Clear
                         } else {
                             GPUPreparedNativeLoadOperation.Load
                         },
                         storeOperation = GPUPreparedNativeStoreOperation.Store,
-                        clearColor = if (index == 0) {
+                        clearColor = if (!isMsaa4x && index == 0) {
                             GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
                         } else {
                             null
@@ -2718,6 +2820,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 },
                 scopeOperandKeys = encoderPlan.scopes.map { it.nativeOperandKeys },
                 leaseLifecycle = GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(pooled),
+                clipDepthStencilViewAuthority =
+                    (listOf(producerOperand) + consumerOperands).associate { render ->
+                        render.sourceStepIndex to clipHandles.view
+                    },
             )
             val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
                 GPUPreparedNativeFrameDraft(payload),
@@ -2741,6 +2847,36 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
             )
         }
+    }
+
+    private fun hasExactClipStencilContinuation(
+        render: GPUFrameStep.RenderPassStep,
+        continuation: GPUSampleContinuationRequest?,
+        depthStencilResource: GPUFrameResourceRef,
+        generationSeal: GPUPreparedGenerationSeal,
+        expectedLoad: GPUSampleLoadTransition?,
+        expectedKey: GPUSampleContinuationKey? = null,
+    ): Boolean {
+        if (expectedLoad == null) {
+            return render.samplePlan == GPUSamplePlan.SingleSampleFrame && continuation == null
+        }
+        val exact = continuation ?: return false
+        val key = exact.key
+        return render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+            (expectedKey == null || key == expectedKey) &&
+            key.target.value == render.target.value &&
+            key.targetGeneration == generationSeal.targetGeneration &&
+            key.deviceGeneration == generationSeal.deviceGeneration &&
+            key.colorFormat.value == RGBA8_UNORM &&
+            key.colorInterpretation.value == "encoded-premul-srgb" &&
+            key.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+            key.attachmentAuthority == GPUSampleAttachmentAuthority.PreparedFramePayload &&
+            key.colorAttachment.value ==
+            "msaa-color:${render.target.value}:${generationSeal.targetGeneration}" &&
+            key.depthStencilAttachment?.value == depthStencilResource.value &&
+            exact.loadTransition == expectedLoad &&
+            exact.storeAction == GPUSampleStoreAction.Store &&
+            exact.resolveAction == GPUSampleResolveAction.ResolveCanonical
     }
 
     private fun materializeIndexedPathCore(

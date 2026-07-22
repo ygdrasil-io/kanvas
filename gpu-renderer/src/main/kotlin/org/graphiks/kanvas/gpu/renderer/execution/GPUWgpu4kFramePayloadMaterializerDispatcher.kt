@@ -82,6 +82,7 @@ internal fun decorateWgpu4kSurfaceBlitDraft(
             auxiliaryOwnedHandles = reusable.auxiliaryOwnedHandles,
             leaseLifecycle = reusable.leaseLifecycle,
             pathDepthStencilViewAuthority = reusable.pathDepthStencilViewAuthority,
+            clipDepthStencilViewAuthority = reusable.clipDepthStencilViewAuthority,
         ),
     )
     check(reusableDraft.transferOwnershipToDraft(decorated)) {

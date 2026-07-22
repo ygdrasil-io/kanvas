@@ -1381,6 +1381,9 @@ private class WgpuBackendSession(
                     pathDepthStencilTextureCreations =
                         corePrimitive.pathDepthStencilTextureCreations,
                     pathDepthStencilSlotReuses = corePrimitive.pathDepthStencilSlotReuses,
+                    clipDepthStencilTextureCreations =
+                        corePrimitive.clipDepthStencilTextureCreations,
+                    clipDepthStencilSlotReuses = corePrimitive.clipDepthStencilSlotReuses,
                 )
             },
             nativeCountersFactory = {

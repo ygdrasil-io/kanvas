@@ -38,6 +38,8 @@ internal data class GPUCorePrimitiveNativeCacheCounters(
     val msaaColorSlotReuses: Long = 0L,
     val pathDepthStencilTextureCreations: Long = 0L,
     val pathDepthStencilSlotReuses: Long = 0L,
+    val clipDepthStencilTextureCreations: Long = 0L,
+    val clipDepthStencilSlotReuses: Long = 0L,
 )
 
 internal const val CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES = 30
@@ -555,6 +557,8 @@ internal class GPUWgpu4kCorePrimitiveSessionCache(
             msaaColorSlotReuses = pool.msaaColorSlotReuses,
             pathDepthStencilTextureCreations = pool.pathDepthStencilTextureCreations,
             pathDepthStencilSlotReuses = pool.pathDepthStencilSlotReuses,
+            clipDepthStencilTextureCreations = pool.clipDepthStencilTextureCreations,
+            clipDepthStencilSlotReuses = pool.clipDepthStencilSlotReuses,
         )
     }
 

@@ -1113,14 +1113,15 @@ internal class GPUFrameExecutor(
                     "invalid.msaa.prepared_frame_resolve_authority",
                     "Prepared-frame MSAA resolve requires the exact prepared canonical scene target.",
                 )
-            val expectedDepthStencilBinding = when {
+            val expectedDepthStencilAuthority = when {
                 request.key.depthStencilAttachment == null && render.resourceUses.none {
-                    it.role == GPUFrameResourceRole.PathDepthStencil
+                    it.role == GPUFrameResourceRole.PathDepthStencil ||
+                        it.role == GPUFrameResourceRole.ClipDepthStencil
                 } -> null
-                else -> preparedPathDepthStencilBindingKey(frame, render, request)
+                else -> preparedDepthStencilAuthority(frame, render, request)
                     ?: return executionDiagnostic(
                         "invalid.msaa.prepared_frame_authority",
-                        "Prepared-frame path MSAA requires exact logical and prepared D24S8 authority.",
+                        "Prepared-frame MSAA requires exact logical and prepared D24S8 authority.",
                     )
             }
             if (key.target.value != sceneTarget.targetId ||
@@ -1167,19 +1168,19 @@ internal class GPUFrameExecutor(
                         operand.ownership == GPUPreparedNativeOperandOwnership.Borrowed &&
                         operand.bindingKey == expectedResolveBinding
                 } != true ||
-                if (expectedDepthStencilBinding == null) {
+                if (expectedDepthStencilAuthority == null) {
                     depthStencilKeys.isNotEmpty()
                 } else {
                     depthStencilKeys.singleOrNull()?.let { operand ->
                         operand.kind == GPUPreparedNativeOperandKind.TextureView &&
                             operand.ownership == GPUPreparedNativeOperandOwnership.Borrowed &&
-                            operand.bindingKey == expectedDepthStencilBinding
+                            operand.bindingKey == expectedDepthStencilAuthority.bindingKey
                     } != true
                 }
             ) {
                 return executionDiagnostic(
                     "invalid.msaa.prepared_frame_operand_keys",
-                    "Prepared-frame MSAA authority requires exact color, resolve, and optional path D24S8 keys.",
+                    "Prepared-frame MSAA authority requires exact color, resolve, and optional D24S8 keys.",
                 )
             }
         }
@@ -1205,6 +1206,7 @@ internal class GPUFrameExecutor(
         )
         val retainedViews = mutableMapOf<String, Any>()
         val canonicalResolveViews = mutableMapOf<String, Any>()
+        val retainedDepthStencilViews = mutableMapOf<String, Any>()
         indexedRequests.forEach { (stepIndex, render, request) ->
             val scopeIndex = frame.encoderPlan.scopes.indexOfFirst { it.sourceStepIndex == stepIndex }
             val operand = exactPayload.scopeOperands.getOrNull(scopeIndex) as?
@@ -1221,11 +1223,11 @@ internal class GPUFrameExecutor(
                     "invalid.msaa.prepared_frame_resolve_authority",
                     "Prepared-frame MSAA resolve requires the exact prepared canonical scene target.",
                 )
-            val expectedDepthStencilBinding = request.key.depthStencilAttachment?.let {
-                preparedPathDepthStencilBindingKey(frame, render, request)
+            val expectedDepthStencilAuthority = request.key.depthStencilAttachment?.let {
+                preparedDepthStencilAuthority(frame, render, request)
                     ?: return executionDiagnostic(
                         "invalid.msaa.prepared_frame_native_operands",
-                        "Prepared-frame path MSAA lost its exact prepared D24S8 authority.",
+                        "Prepared-frame MSAA lost its exact prepared D24S8 authority.",
                     )
             }
             val keyedOperands = operand.operands.zip(
@@ -1241,11 +1243,31 @@ internal class GPUFrameExecutor(
                 key.role == GPUPreparedNativeOperandRole.RenderDepthStencilTarget
             }
             val depthStencil = operand.pass.depthStencilTarget
-            val sealedPathDepthStencilView =
-                exactPayload.pathDepthStencilViewAuthority[stepIndex]
+            val sealedPathDepthStencilView = exactPayload.pathDepthStencilViewAuthority[stepIndex]
+            val sealedClipDepthStencilView = exactPayload.clipDepthStencilViewAuthority[stepIndex]
+            val sealedDepthStencilView = when (expectedDepthStencilAuthority?.role) {
+                GPUFrameResourceRole.PathDepthStencil -> sealedPathDepthStencilView
+                    .takeIf { sealedClipDepthStencilView == null }
+                GPUFrameResourceRole.ClipDepthStencil -> sealedClipDepthStencilView
+                    .takeIf { sealedPathDepthStencilView == null }
+                else -> null
+            }
             val expectedLoad = when (request.loadTransition) {
                 GPUSampleLoadTransition.FreshClear -> GPUPreparedNativeLoadOperation.Clear
                 GPUSampleLoadTransition.RetainedLoad -> GPUPreparedNativeLoadOperation.Load
+            }
+            if (expectedDepthStencilAuthority != null && depthStencil != null) {
+                val depthStencilAttachment = requireNotNull(request.key.depthStencilAttachment).value
+                val retainedDepthStencilView = retainedDepthStencilViews[depthStencilAttachment]
+                if (retainedDepthStencilView != null &&
+                    retainedDepthStencilView !== depthStencil.view
+                ) {
+                    return executionDiagnostic(
+                        "invalid.msaa.prepared_frame_depth_stencil_continuity",
+                        "Prepared-frame MSAA continuation changed its native D24S8 attachment view.",
+                    )
+                }
+                retainedDepthStencilViews[depthStencilAttachment] = depthStencil.view
             }
             if (operand.pass.colorTarget.view === resolve.view ||
                 operand.pass.colorTarget.deviceGeneration != frame.generationSeal.deviceGeneration ||
@@ -1262,17 +1284,24 @@ internal class GPUFrameExecutor(
                 keyedResolve?.let { (native, key) ->
                     native === resolve && key.bindingKey == expectedResolveBinding
                 } != true ||
-                if (expectedDepthStencilBinding == null) {
-                    depthStencil != null || keyedDepthStencil != null || sealedPathDepthStencilView != null
+                if (expectedDepthStencilAuthority == null) {
+                    depthStencil != null || keyedDepthStencil != null ||
+                        sealedPathDepthStencilView != null || sealedClipDepthStencilView != null
                 } else {
                     depthStencil == null ||
-                        sealedPathDepthStencilView !== depthStencil.view ||
+                        sealedDepthStencilView !== depthStencil.view ||
                         depthStencil.deviceGeneration != frame.generationSeal.deviceGeneration ||
                         depthStencil.ownership != GPUPreparedNativeOperandOwnership.Borrowed ||
                         depthStencil.view === operand.pass.colorTarget.view ||
                         depthStencil.view === resolve.view ||
+                        !hasExactPreparedDepthStencilPassAuthority(
+                            render,
+                            operand.pass,
+                            expectedDepthStencilAuthority.role,
+                        ) ||
                         keyedDepthStencil?.let { (native, key) ->
-                            native === depthStencil && key.bindingKey == expectedDepthStencilBinding
+                            native === depthStencil &&
+                                key.bindingKey == expectedDepthStencilAuthority.bindingKey
                         } != true
                 } ||
                 operand.pass.loadOperation != expectedLoad ||
@@ -1281,7 +1310,14 @@ internal class GPUFrameExecutor(
             ) {
                 return executionDiagnostic(
                     "invalid.msaa.prepared_frame_native_operands",
-                    "Prepared-frame MSAA native operands contradict resolve, generation, ownership, or load/store authority.",
+                    "Prepared-frame MSAA native operands contradict resolve, generation, ownership, or load/store authority " +
+                        "(canonical=${backend.isCanonicalSceneTargetView(sceneTarget, resolve)}, " +
+                        "depthSeal=${depthStencil != null && sealedDepthStencilView === depthStencil.view}, " +
+                        "depthPass=${expectedDepthStencilAuthority?.let { authority ->
+                            hasExactPreparedDepthStencilPassAuthority(render, operand.pass, authority.role)
+                        }}, colorKey=${keyedColor?.first === operand.pass.colorTarget}, " +
+                        "resolveKey=${keyedResolve?.first === resolve}, " +
+                        "depthKey=${depthStencil != null && keyedDepthStencil?.first === depthStencil}).",
                 )
             }
             val attachment = request.key.colorAttachment.value
@@ -1324,32 +1360,82 @@ internal class GPUFrameExecutor(
         )
     }
 
-    private fun preparedPathDepthStencilBindingKey(
+    private data class PreparedDepthStencilAuthority(
+        val bindingKey: String,
+        val role: GPUFrameResourceRole,
+    )
+
+    private fun preparedDepthStencilAuthority(
         frame: PreparedGPUFrame,
         render: GPUFrameStep.RenderPassStep,
         request: org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest,
-    ): String? {
-        val pathUse = render.resourceUses.singleOrNull { use ->
-            use.role == GPUFrameResourceRole.PathDepthStencil &&
-                use.usage == org.graphiks.kanvas.gpu.renderer.resources
-                    .GPUFrameResourceUsage.RenderAttachment &&
-                use.write
+    ): PreparedDepthStencilAuthority? {
+        val depthStencilUse = render.resourceUses.singleOrNull { use ->
+            use.role in setOf(
+                GPUFrameResourceRole.PathDepthStencil,
+                GPUFrameResourceRole.ClipDepthStencil,
+            ) && use.usage == org.graphiks.kanvas.gpu.renderer.resources
+                .GPUFrameResourceUsage.RenderAttachment
         } ?: return null
-        if (request.key.depthStencilAttachment?.value != pathUse.resource.value) return null
+        if (depthStencilUse.role == GPUFrameResourceRole.PathDepthStencil && !depthStencilUse.write) {
+            return null
+        }
+        if (request.key.depthStencilAttachment?.value != depthStencilUse.resource.value) return null
         val preparedDepthStencil = frame.resources.ordinaryResources.singleOrNull { evidence ->
-            evidence.logicalResource == pathUse.resource &&
-                evidence.role == GPUFrameResourceRole.PathDepthStencil
+            evidence.logicalResource == depthStencilUse.resource &&
+                evidence.role == depthStencilUse.role
         } ?: return null
         if (preparedDepthStencil.concreteResource !is GPUPreparedConcreteResourceRef.Texture ||
             preparedDepthStencil.deviceGeneration != frame.generationSeal.deviceGeneration ||
             preparedDepthStencil.resourceGeneration !=
-            frame.generationSeal.resourceGenerations[pathUse.resource]
+            frame.generationSeal.resourceGenerations[depthStencilUse.resource]
         ) {
             return null
         }
-        return gpuPreparedNativeBindingKey(
-            "GPUFrameTextureRef:${pathUse.resource.value}@${preparedDepthStencil.resourceGeneration}",
+        return PreparedDepthStencilAuthority(
+            gpuPreparedNativeBindingKey(
+                "GPUFrameTextureRef:${depthStencilUse.resource.value}@" +
+                    preparedDepthStencil.resourceGeneration,
+            ),
+            depthStencilUse.role,
         )
+    }
+
+    private fun hasExactPreparedDepthStencilPassAuthority(
+        render: GPUFrameStep.RenderPassStep,
+        native: GPUPreparedNativeRenderPassConfig,
+        role: GPUFrameResourceRole,
+    ): Boolean {
+        val use = render.resourceUses.singleOrNull { it.role == role } ?: return false
+        return when (role) {
+            GPUFrameResourceRole.PathDepthStencil ->
+                use.write &&
+                    render.depthStencilLoadStore is
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.WritableStencil &&
+                    !native.stencilReadOnly &&
+                    native.stencilLoadOperation != null && native.stencilStoreOperation != null
+            GPUFrameResourceRole.ClipDepthStencil -> if (use.write) {
+                render.depthStencilLoadStore ==
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan
+                        .WritableStencil(
+                            org.graphiks.kanvas.gpu.renderer.recording.GPUStencilLoadOperation.Clear,
+                            org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                            0u,
+                        ) &&
+                    !native.stencilReadOnly &&
+                    native.stencilClearValue == 0u &&
+                    native.stencilLoadOperation == GPUPreparedNativeLoadOperation.Clear &&
+                    native.stencilStoreOperation == GPUPreparedNativeStoreOperation.Store
+            } else {
+                render.depthStencilLoadStore ==
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.ReadOnlyKeep &&
+                    native.stencilReadOnly &&
+                    native.stencilClearValue == null &&
+                    native.stencilLoadOperation == null &&
+                    native.stencilStoreOperation == null
+            }
+            else -> false
+        }
     }
 }
 

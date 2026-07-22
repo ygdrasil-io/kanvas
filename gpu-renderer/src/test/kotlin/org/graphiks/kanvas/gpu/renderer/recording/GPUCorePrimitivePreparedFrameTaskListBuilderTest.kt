@@ -1338,6 +1338,113 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `native path clip AA 4x builds one atomic retained continuation and paired attachment budget`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding, sampleCount = 4)
+        val base = recording(command(350, 7), command(351, 9)).taskList.withClipPlans(
+            mapOf(350 to plan, 351 to plan),
+        ).withSamplePlan(GPUSamplePlan.MultisampleFrame(4))
+        val packets = base.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, packets.associate { it.commandIdValue to semantic(it) }).copy(
+                capabilities = msaaCapabilities(),
+            ),
+        )
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            result,
+            (result as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        ).taskList
+        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val producer = renders.single {
+            it.drawPackets.singleOrNull()?.role == GPUDrawPacketRole.StencilProducer
+        }
+        val consumers = renders.filter {
+            it.drawPackets.singleOrNull()?.role == GPUDrawPacketRole.Shading
+        }
+        val continuation = requireNotNull(producer.sampleContinuationKey)
+        val attachmentUse = producer.resourceUses.single {
+            it.role == GPUFrameResourceRole.ClipDepthStencil
+        }
+
+        assertEquals(2, consumers.size)
+        assertEquals(listOf("clear", "load", "load"), renders.map { it.loadStore.loadOp })
+        assertTrue(renders.all { it.loadStore.storePlan == GPUStorePlan.Store })
+        assertTrue(renders.all { it.samplePlan == GPUSamplePlan.MultisampleFrame(4) })
+        assertTrue(renders.all { it.sampleContinuationKey == continuation })
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(attachmentUse.resource.value),
+            continuation.depthStencilAttachment,
+        )
+        assertEquals(
+            GPUDepthStencilLoadStorePlan.WritableStencil(
+                GPUStencilLoadOperation.Clear,
+                GPUStorePlan.Store,
+                0u,
+            ),
+            producer.depthStencilLoadStore,
+        )
+        assertTrue(consumers.all {
+            it.depthStencilLoadStore == GPUDepthStencilLoadStorePlan.ReadOnlyKeep &&
+                it.resourceUses.single { use ->
+                    use.role == GPUFrameResourceRole.ClipDepthStencil
+                } == attachmentUse.copy(write = false)
+        })
+        val candidate = requireNotNull(
+            producer.drawPackets.single().corePrimitiveClipStencilPreparedCandidate,
+        )
+        assertEquals(4, candidate.attachmentSampleCount)
+        assertEquals(4, candidate.producerStructuralKey.sampleCount)
+        assertTrue(consumers.flatMap(GPUTask.Render::drawPackets).all {
+            requireNotNull(it.corePrimitivePreparedAuthority).structuralPipelineKey.sampleCount == 4
+        })
+
+        val preparation = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+            .single { it.role == GPUFrameResourceRole.ClipDepthStencil }
+        val descriptor = assertIs<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor>(
+            preparation.descriptor,
+        )
+        val pairedAttachmentBytes = targetBounds.width.toLong() * targetBounds.height * 4L * 4L
+        assertEquals(4, descriptor.sampleCount)
+        assertEquals(pairedAttachmentBytes, preparation.byteSize)
+        assertEquals(
+            pairedAttachmentBytes,
+            taskList.memoryBudget.categoryTotals.getValue(GPUFrameMemoryCategory.FrameLocalMsaaColor),
+        )
+        assertEquals(
+            pairedAttachmentBytes,
+            taskList.memoryBudget.categoryTotals.getValue(
+                GPUFrameMemoryCategory.FrameLocalMsaaDepthStencil,
+            ),
+        )
+        assertFalse(GPUFramePlanner.plan(taskList).atomicallyRefused)
+    }
+
+    @Test
+    fun `native path clip AA 4x refuses missing D24S8 capability before budget planning`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding, sampleCount = 4)
+        val base = recording(command(352, 7)).taskList.withClipPlans(
+            mapOf(352 to plan),
+        ).withSamplePlan(GPUSamplePlan.MultisampleFrame(4))
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+        val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+            request(base, mapOf(352 to semantic(packet))).copy(
+                capabilities = msaaColorOnlyCapabilities(),
+                configuredAggregateBudgetBytes = 1L,
+            ),
+        )
+
+        assertEquals(
+            "unsupported.recording.core_primitive_clip_stencil_msaa_depth_stencil_capability",
+            assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result).diagnostic.code.value,
+        )
+    }
+
+    @Test
     fun `native path clip refuses foreign geometry in its bounded shared arena`() {
         val plan = nativePathStencilPlan(GPUClipFillRule.Winding)
         val base = recording(command(340, 7), command(341, 9)).taskList.withClipPlans(
@@ -2724,10 +2831,11 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
 
     private fun nativePathStencilPlan(
         fillRule: GPUClipFillRule,
+        sampleCount: Int = 1,
     ) = GPUClipExecutionPlan.StencilCoverage(
         contentKey = "clip.native.path.${fillRule.name}",
         bounds = targetBounds,
-        sampleCount = 1,
+        sampleCount = sampleCount,
         atomicGroup = GPUClipAtomicGroupID("atomic.clip.native.path.${fillRule.name}"),
         orderingToken = GPUClipOrderingToken("token.clip.native.path.${fillRule.name}"),
         producer = GPUClipStencilProducerPlan(
@@ -2863,6 +2971,17 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 ),
                 GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(
                     renderAttachmentSampleCounts = setOf(1, 4),
+                ),
+            ),
+        ),
+    )
+
+    private fun msaaColorOnlyCapabilities() = capabilities().copy(
+        textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+            mapOf(
+                GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                    renderAttachmentSampleCounts = setOf(1, 4),
+                    resolveSourceSampleCounts = setOf(4),
                 ),
             ),
         ),

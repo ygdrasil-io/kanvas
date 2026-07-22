@@ -354,6 +354,8 @@ internal data class GPUPreparedSceneRenderCounters(
     val msaaColorSlotReuses: Long = 0L,
     val pathDepthStencilTextureCreations: Long = 0L,
     val pathDepthStencilSlotReuses: Long = 0L,
+    val clipDepthStencilTextureCreations: Long = 0L,
+    val clipDepthStencilSlotReuses: Long = 0L,
 )
 
 /** Reusable prepared session that owns target lifetime and serializes the sole coordinator route. */

@@ -246,7 +246,12 @@ class GPUFrameExecutorTest {
             retention = RecordingRetention(fixture.events),
         ).execute(fixture.preparedFrame)
 
-        assertIs<GPUFrameImmediateState.Submitted>(handle.immediateState)
+        assertIs<GPUFrameImmediateState.Submitted>(
+            handle.immediateState,
+            (handle.immediateState as? GPUFrameImmediateState.FailedBeforeSubmit)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}"
+            },
+        )
         completion.complete(
             GPUQueueCompletionOutcome.Success,
             fixture.preparedFrame.completionTicket.ticketId,
@@ -2948,6 +2953,15 @@ internal object GPUFrameCoreTestFixture {
                     } else {
                         null
                     },
+                    depthReadOnly = true,
+                    stencilClearValue = 0u.takeIf { pathDepthStencil },
+                    stencilLoadOperation = GPUPreparedNativeLoadOperation.Clear.takeIf {
+                        pathDepthStencil
+                    },
+                    stencilStoreOperation = GPUPreparedNativeStoreOperation.Discard.takeIf {
+                        pathDepthStencil
+                    },
+                    stencilReadOnly = false,
                 ),
                 commands = listOf(
                     GPUPreparedNativeRenderCommand.SetPipeline(pipeline),

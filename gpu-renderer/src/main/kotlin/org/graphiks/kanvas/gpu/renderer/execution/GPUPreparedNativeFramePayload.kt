@@ -1066,6 +1066,7 @@ internal class GPUPreparedNativeFramePayload(
     auxiliaryOwnedHandles: List<GPUPreparedNativeAuxiliaryHandle> = emptyList(),
     internal val leaseLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null,
     pathDepthStencilViewAuthority: Map<Int, GPUTextureView> = emptyMap(),
+    clipDepthStencilViewAuthority: Map<Int, GPUTextureView> = emptyMap(),
 ) {
     val scopeOperands: List<GPUPreparedNativeScopeOperand> = immutableList(scopeOperands)
     val scopeOperandKeys: List<List<GPUPreparedNativeOperandKey>> = immutableList(
@@ -1075,6 +1076,8 @@ internal class GPUPreparedNativeFramePayload(
         immutableList(auxiliaryOwnedHandles)
     internal val pathDepthStencilViewAuthority: Map<Int, GPUTextureView> =
         Collections.unmodifiableMap(pathDepthStencilViewAuthority.toMap())
+    internal val clipDepthStencilViewAuthority: Map<Int, GPUTextureView> =
+        Collections.unmodifiableMap(clipDepthStencilViewAuthority.toMap())
     private val ownershipByHandle = IdentityHashMap<AutoCloseable, GPUPreparedNativeOperandOwnership>()
 
     init {
@@ -1090,6 +1093,17 @@ internal class GPUPreparedNativeFramePayload(
                     operand is GPUPreparedNativeScopeOperand.Render
             }
         }) { "Path D24S8 native view authority must name an exact render scope" }
+        require(this.clipDepthStencilViewAuthority.keys.all { sourceStepIndex ->
+            this.scopeOperands.any { operand ->
+                operand.sourceStepIndex == sourceStepIndex &&
+                    operand is GPUPreparedNativeScopeOperand.Render
+            }
+        }) { "Clip D24S8 native view authority must name an exact render scope" }
+        require(
+            this.pathDepthStencilViewAuthority.keys.intersect(
+                this.clipDepthStencilViewAuthority.keys,
+            ).isEmpty(),
+        ) { "Path and clip D24S8 native view authority must remain disjoint" }
         require(this.scopeOperands.indices.all { index ->
             val operands = this.scopeOperands[index].declaredOperandDescriptors()
             val keys = this.scopeOperandKeys[index]

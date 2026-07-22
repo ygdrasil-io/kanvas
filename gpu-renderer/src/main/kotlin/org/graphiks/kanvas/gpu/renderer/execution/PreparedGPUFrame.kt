@@ -107,6 +107,7 @@ class GPUCommandEncoderScopePlan internal constructor(
         } else {
             GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing
         },
+    internal val targetResource: org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef? = null,
 ) {
     constructor(
         sourceStepIndex: Int,
@@ -432,6 +433,13 @@ class GPUCommandEncoderScopePlan internal constructor(
                 GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing,
                 -> error("Unreachable clip-stencil seal")
             }
+            val route = when (seal) {
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer -> seal.route
+                is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer -> seal.route
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty,
+                GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Missing,
+                -> error("Unreachable clip-stencil seal")
+            }
             fun resourceLabel(resource: GPUFrameResourceRef, generation: Long): String =
                 "${resource::class.simpleName}:${resource.value}@$generation"
             val expectedResourceLabels = buildList {
@@ -444,11 +452,29 @@ class GPUCommandEncoderScopePlan internal constructor(
                 add(resourceLabel(attachment.resource, attachment.resourceGeneration))
             }
             val expectedKeys = buildList {
-                add(GPUPreparedNativeOperandKey(
-                    GPUPreparedNativeOperandRole.RenderColorTarget,
-                    GPUPreparedNativeOperandKind.TextureView,
-                    gpuPreparedNativeBindingKey(resourceGenerationLabels.first()),
-                ))
+                if (route.attachment.sampleCount == 4) {
+                    val sceneTarget = requireNotNull(targetResource) {
+                        "Prepared clip-stencil MSAA scope requires its typed scene target"
+                    }
+                    add(GPUPreparedNativeOperandKey(
+                        GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                        GPUPreparedNativeOperandKind.TextureView,
+                        gpuPreparedNativeBindingKey(
+                            "msaa:msaa-color:${sceneTarget.value}:$targetGeneration",
+                        ),
+                    ))
+                    add(GPUPreparedNativeOperandKey(
+                        GPUPreparedNativeOperandRole.RenderResolveTarget,
+                        GPUPreparedNativeOperandKind.TextureView,
+                        gpuPreparedNativeBindingKey(resourceGenerationLabels.first()),
+                    ))
+                } else {
+                    add(GPUPreparedNativeOperandKey(
+                        GPUPreparedNativeOperandRole.RenderColorTarget,
+                        GPUPreparedNativeOperandKind.TextureView,
+                        gpuPreparedNativeBindingKey(resourceGenerationLabels.first()),
+                    ))
+                }
                 add(GPUPreparedNativeOperandKey(
                     GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
                     GPUPreparedNativeOperandKind.TextureView,

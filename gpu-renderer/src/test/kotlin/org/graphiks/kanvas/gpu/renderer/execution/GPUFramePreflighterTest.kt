@@ -575,6 +575,94 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `native path clip stencil AA 4x preflight accepts one exact retained continuation`() {
+        val plan = preparedNativeClipStencilFramePlan(sampleCount = 4)
+        val events = mutableListOf<String>()
+
+        val result = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+            capabilities = pathMsaaCapabilities(),
+        ).preflight(plan)
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(
+            result,
+            (result as? GPUFramePreflightResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message} ${it.facts}"
+            },
+        ).frame
+        val renderSteps = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val renderScopes = prepared.encoderPlan.scopes.filter {
+            it.operationKind == GPUEncoderOperationKind.Render
+        }
+
+        assertEquals(3, renderScopes.size)
+        assertEquals(listOf("clear", "load", "load"), renderSteps.map { it.loadStore.loadOp })
+        assertTrue(renderSteps.all { it.samplePlan == GPUSamplePlan.MultisampleFrame(4) })
+        assertTrue(renderSteps.all {
+            it.sampleContinuation?.key == renderSteps.first().sampleContinuation?.key
+        })
+        assertTrue(events.any { it.startsWith("resource:prepare:") })
+    }
+
+    @Test
+    fun `native path clip stencil AA 4x rejects foreign second scope and writable consumer before provider`() {
+        val valid = preparedNativeClipStencilFramePlan(sampleCount = 4)
+        val consumers = valid.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().filter {
+            it.drawPackets.single().role == GPUDrawPacketRole.Shading
+        }
+        val second = consumers[1]
+        val foreignSecondScope = valid.replacingRender(
+            second,
+            renderWith(
+                second,
+                sampleContinuation = requireNotNull(second.sampleContinuation).copy(
+                    key = second.sampleContinuation.key.copy(
+                        depthStencilAttachment = GPUTargetIdentity(
+                            "texture.core-primitive.clip-depth-stencil.foreign",
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val writableConsumer = valid.replacingRender(
+            consumers.first(),
+            renderWith(
+                consumers.first(),
+                depthStencilLoadStore = GPUDepthStencilLoadStorePlan.WritableStencil(
+                    GPUStencilLoadOperation.Load,
+                    GPUStorePlan.Store,
+                    null,
+                ),
+            ),
+        )
+
+        listOf(
+            "foreign-second-scope" to foreignSecondScope,
+            "writable-consumer" to writableConsumer,
+        ).forEach { (label, plan) ->
+            val events = mutableListOf<String>()
+            val resources = RecordingResourceProvider(events)
+            val result = preflighter(
+                resources = resources,
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                context = clipPreflightContext(plan),
+                capabilities = pathMsaaCapabilities(),
+            ).preflight(plan)
+
+            assertEquals(
+                "invalid.preflight.core_primitive_clip_producer_authority",
+                assertIs<GPUFramePreflightResult.Refused>(result, label).diagnostic.code.value,
+                label,
+            )
+            assertEquals(0, resources.beginFramePreparationCount, label)
+            assertTrue(events.isEmpty(), "$label produced provider side effects: $events")
+        }
+    }
+
+    @Test
     fun `native coverage mask preflight accepts the builder sealed frame`() {
         val plan = preparedCoverageMaskFramePlan()
         val events = mutableListOf<String>()
@@ -6111,10 +6199,15 @@ class GPUFramePreflighterTest {
         plans: Map<Int, GPUClipExecutionPlan>,
         geometries: Map<Int, GPUCorePrimitiveGeometryInput> = emptyMap(),
         coverageModes: Map<Int, GPUCorePrimitiveCoverageMode> = emptyMap(),
+        samplePlan: GPUSamplePlan = GPUSamplePlan.SingleSampleFrame,
     ): GPUFramePlan {
-        val analyticCapabilities = pathCapabilities(
-            includeRRect = geometries.values.any { it is GPUCorePrimitiveGeometryInput.RRect },
-        )
+        val analyticCapabilities = if (samplePlan == GPUSamplePlan.MultisampleFrame(4)) {
+            pathMsaaCapabilities()
+        } else {
+            pathCapabilities(
+                includeRRect = geometries.values.any { it is GPUCorePrimitiveGeometryInput.RRect },
+            )
+        }
         val commandIds = plans.keys.toList()
         val base = GPURecorder(
             GPURecordingID("recording.preflight.analytic"),
@@ -6130,7 +6223,7 @@ class GPUFramePreflighterTest {
                     },
                 )
             }
-        }.close().taskList.withCoreClipPlans(plans)
+        }.close().taskList.withCoreClipPlans(plans).withCoreSamplePlan(samplePlan)
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
         val semantics = packets.associate { packet ->
             val geometry = geometries[packet.commandIdValue]
@@ -6165,12 +6258,12 @@ class GPUFramePreflighterTest {
         return GPUFramePlanner.plan(taskList).also { plan -> check(!plan.atomicallyRefused) }
     }
 
-    private fun preparedNativeClipStencilFramePlan(): GPUFramePlan {
+    private fun preparedNativeClipStencilFramePlan(sampleCount: Int = 1): GPUFramePlan {
         val targetBounds = GPUPixelBounds(0, 0, 4, 4)
         val clipPlan = GPUClipExecutionPlan.StencilCoverage(
             contentKey = "clip.preflight.native.path",
             bounds = targetBounds,
-            sampleCount = 1,
+            sampleCount = sampleCount,
             atomicGroup = GPUClipAtomicGroupID("atomic.preflight.native.path"),
             orderingToken = GPUClipOrderingToken("token.preflight.native.path"),
             producer = GPUClipStencilProducerPlan(
@@ -6201,6 +6294,11 @@ class GPUFramePreflighterTest {
                 91 to clipPlan,
                 92 to clipPlan,
             ),
+            samplePlan = if (sampleCount == 4) {
+                GPUSamplePlan.MultisampleFrame(4)
+            } else {
+                GPUSamplePlan.SingleSampleFrame
+            },
         )
     }
 

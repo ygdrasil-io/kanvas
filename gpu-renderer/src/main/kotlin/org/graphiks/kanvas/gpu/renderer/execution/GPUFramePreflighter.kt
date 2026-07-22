@@ -1339,6 +1339,12 @@ internal class GPUFramePreflighter(
                 it.packet.clipExecutionPlan?.canonicalIdentity() != candidate.planCanonicalIdentity
             }
         ) return refuse("Prepared clip-stencil content or canonical plan identity was substituted.")
+        val attachmentSampleCount = candidate.attachmentSampleCount
+        val expectedSamplePlan = when (attachmentSampleCount) {
+            1 -> GPUSamplePlan.SingleSampleFrame
+            4 -> GPUSamplePlan.MultisampleFrame(4)
+            else -> return refuse("Prepared clip-stencil accepts only exact 1x or 4x attachment authority.")
+        }
 
         val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
@@ -1378,6 +1384,31 @@ internal class GPUFramePreflighter(
             ) || producerUses.size != 3 ||
             candidate.attachmentLogicalReference != depthStencilUse.resource.value
         ) return refuse("Prepared clip-stencil producer resource uses were substituted.")
+        val producerContinuation = producerLocation.render.sampleContinuation
+        if (producerLocation.render.samplePlan != expectedSamplePlan ||
+            producerLocation.render.loadStore != GPULoadStorePlan(
+                if (attachmentSampleCount == 4) "clear" else "load",
+                GPUStorePlan.Store,
+            ) ||
+            (attachmentSampleCount == 1 && producerContinuation != null) ||
+            (attachmentSampleCount == 4 &&
+                (producerContinuation == null ||
+                producerContinuation.key.target.value != producerLocation.render.target.value ||
+                producerContinuation.key.targetGeneration != context.targetGeneration ||
+                producerContinuation.key.deviceGeneration != context.deviceGeneration ||
+                producerContinuation.key.colorFormat.value != "rgba8unorm" ||
+                producerContinuation.key.colorInterpretation.value != "encoded-premul-srgb" ||
+                producerContinuation.key.samplePlan != expectedSamplePlan ||
+                producerContinuation.key.attachmentAuthority !=
+                org.graphiks.kanvas.gpu.renderer.passes
+                    .GPUSampleAttachmentAuthority.PreparedFramePayload ||
+                producerContinuation.key.colorAttachment.value !=
+                "msaa-color:${producerLocation.render.target.value}:${context.targetGeneration}" ||
+                producerContinuation.key.depthStencilAttachment?.value != depthStencilUse.resource.value ||
+                producerContinuation.loadTransition != GPUSampleLoadTransition.FreshClear ||
+                producerContinuation.storeAction != GPUSampleStoreAction.Store ||
+                producerContinuation.resolveAction != GPUSampleResolveAction.ResolveCanonical))
+        ) return refuse("Prepared clip-stencil producer sample continuation was substituted.")
 
         val uniformUses = mutableListOf<GPUFrameResourceUse>()
         consumerLocations.forEachIndexed { consumerIndex, location ->
@@ -1402,9 +1433,18 @@ internal class GPUFramePreflighter(
                 org.graphiks.kanvas.gpu.renderer.recording.GPUDepthStencilLoadStorePlan.ReadOnlyKeep ||
                 location.render.target != producerLocation.render.target ||
                 location.render.loadStore != GPULoadStorePlan(
-                    if (consumerIndex == 0) "clear" else "load",
+                    if (attachmentSampleCount == 4) "load" else if (consumerIndex == 0) "clear" else "load",
                     GPUStorePlan.Store,
-                )
+                ) ||
+                location.render.samplePlan != expectedSamplePlan ||
+                (attachmentSampleCount == 1 && location.render.sampleContinuation != null) ||
+                (attachmentSampleCount == 4 &&
+                    location.render.sampleContinuation?.let { continuation ->
+                        continuation.key == producerContinuation?.key &&
+                            continuation.loadTransition == GPUSampleLoadTransition.RetainedLoad &&
+                            continuation.storeAction == GPUSampleStoreAction.Store &&
+                            continuation.resolveAction == GPUSampleResolveAction.ResolveCanonical
+                    } != true)
             ) return refuse("Prepared clip-stencil consumer resource uses were substituted.")
             uniformUses += uniformUse
         }
@@ -1520,7 +1560,6 @@ internal class GPUFramePreflighter(
         if (targetBounds.left != 0 || targetBounds.top != 0 ||
             candidate.attachmentWidth != targetBounds.width ||
             candidate.attachmentHeight != targetBounds.height ||
-            candidate.attachmentSampleCount != 1 ||
             !isCanonicalCorePrimitiveTargetPreparation(
                 targetPreparation,
                 producerLocation.render.target,
@@ -1535,7 +1574,7 @@ internal class GPUFramePreflighter(
             GPUFrameTextureDescriptor
             ?: return refuse("Prepared clip-stencil D24S8 authority is not a texture.")
         val expectedDepthStencilBytes = try {
-            corePrimitiveDepthStencilByteSize(targetBounds, 1)
+            corePrimitiveDepthStencilByteSize(targetBounds, attachmentSampleCount)
         } catch (_: ArithmeticException) {
             return refuse("Prepared clip-stencil D24S8 byte size overflowed.")
         }
@@ -1544,7 +1583,7 @@ internal class GPUFramePreflighter(
             depthStencilPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
             depthStencilDescriptor.logicalBounds != targetBounds ||
             depthStencilDescriptor.format.value != "depth24plus-stencil8" ||
-            depthStencilDescriptor.sampleCount != 1 ||
+            depthStencilDescriptor.sampleCount != attachmentSampleCount ||
             depthStencilPreparation.byteSize != expectedDepthStencilBytes
         ) return refuse("Prepared clip-stencil D24S8 preparation was substituted.")
         val depthStencilGeneration = context.resourceGenerations[depthStencilUse.resource]
@@ -1556,7 +1595,7 @@ internal class GPUFramePreflighter(
             width = targetBounds.width,
             height = targetBounds.height,
             format = GPUCorePrimitiveClipStencilAttachmentFormat.Depth24PlusStencil8,
-            sampleCount = 1,
+            sampleCount = attachmentSampleCount,
             deviceGeneration = context.deviceGeneration,
             resourceGeneration = depthStencilGeneration,
         )
@@ -3563,10 +3602,33 @@ internal class GPUFramePreflighter(
                         packet.role == GPUDrawPacketRole.PathStencilProducer ||
                             packet.role == GPUDrawPacketRole.PathStencilCover
                     }
-                if (request.key.depthStencilAttachment != null && !exactPathDepthAuthority) {
+                val clipDepthUse = render.resourceUses.singleOrNull { use ->
+                    use.role == GPUFrameResourceRole.ClipDepthStencil
+                }
+                val clipPacket = render.drawPackets.singleOrNull()
+                val clipCandidate = clipPacket?.corePrimitiveClipStencilPreparedCandidate
+                val exactClipDepthAuthority =
+                    render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+                        clipDepthUse != null && clipCandidate?.attachmentSampleCount == 4 &&
+                        clipCandidate.attachmentLogicalReference == clipDepthUse.resource.value &&
+                        request.key.depthStencilAttachment?.value == clipDepthUse.resource.value &&
+                        when (clipPacket.role) {
+                            GPUDrawPacketRole.StencilProducer ->
+                                clipDepthUse.write && render.depthStencilLoadStore is
+                                    org.graphiks.kanvas.gpu.renderer.recording
+                                        .GPUDepthStencilLoadStorePlan.WritableStencil
+                            GPUDrawPacketRole.Shading ->
+                                !clipDepthUse.write && render.depthStencilLoadStore ==
+                                    org.graphiks.kanvas.gpu.renderer.recording
+                                        .GPUDepthStencilLoadStorePlan.ReadOnlyKeep
+                            else -> false
+                        }
+                if (request.key.depthStencilAttachment != null &&
+                    !exactPathDepthAuthority && !exactClipDepthAuthority
+                ) {
                     return diagnostic(
                         "unsupported.msaa.continuation_depth_stencil_unavailable",
-                        "A prepared MSAA depth/stencil continuation requires the exact sealed Path 4x scope.",
+                        "A prepared MSAA depth/stencil continuation requires an exact sealed Path or clip-stencil 4x scope.",
                     )
                 }
                 val expectedLoad = when (render.loadStore.loadOp) {
@@ -4794,6 +4856,7 @@ internal class GPUFramePreflighter(
                     },
                     resourceGenerationLabels = labels,
                     passCommandStream = stream,
+                    targetResource = step.target,
                     corePrimitiveDirectNativeRouteSeal = stepCorePrimitiveDirectRoutes,
                     corePrimitivePathStencilNativeRouteSeal = stepCorePrimitivePathStencilRoutes,
                     corePrimitiveNativeScopeRouteSeal = stepCorePrimitiveNativeScopeRoutes,
