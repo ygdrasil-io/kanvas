@@ -16,6 +16,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
@@ -184,6 +186,26 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
+    fun `readback capability refusal is propagated unchanged from the prepared planner`() {
+        val withoutReadback = capabilities(readback = false)
+
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                request(listOf(rect()), capabilities = withoutReadback),
+            ),
+        )
+
+        assertEquals("unsupported.readback.capability_unavailable", refused.diagnostic.code.value)
+        assertEquals(GPUDiagnosticDomain.Execution, refused.diagnostic.domain)
+        assertEquals(GPUDiagnosticSeverity.Error, refused.diagnostic.severity)
+        assertEquals(
+            "The selected capability snapshot does not expose renderer readback.",
+            refused.diagnostic.message,
+        )
+        assertEquals(mapOf("rendererFeatures" to "render-pass"), refused.diagnostic.facts)
+    }
+
+    @Test
     fun `target bounds format and ambiguous ids refuse before mapping`() {
         val base = request(listOf(rect()))
         val cases = listOf(
@@ -269,6 +291,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     private fun capabilities(
         fillRect: Boolean = true,
         boundedClip: Boolean = true,
+        readback: Boolean = true,
     ): GPUCapabilities {
         val base = GPUProductFlagConfig(boundedClipEnabled = boundedClip).buildCapabilities()
         val extra = buildList {
@@ -279,7 +302,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             implementation = base.implementation,
             facts = base.facts + extra,
             knownUnsupportedFacts = base.knownUnsupportedFacts,
-            snapshotId = "${base.snapshotId}:prepared-surface-builder-test:${fillRect}:${boundedClip}",
+            snapshotId = "${base.snapshotId}:prepared-surface-builder-test:$fillRect:$boundedClip:$readback",
             limits = GPULimits(
                 maxTextureDimension2D = 8192,
                 copyBytesPerRowAlignment = 256,
@@ -287,7 +310,10 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 maxBufferSize = 1L shl 30,
                 maxDynamicUniformBuffersPerPipelineLayout = 1,
             ),
-            rendererFeatures = setOf(GPURendererFeature.RenderPass, GPURendererFeature.Readback),
+            rendererFeatures = buildSet {
+                add(GPURendererFeature.RenderPass)
+                if (readback) add(GPURendererFeature.Readback)
+            },
         )
     }
 
