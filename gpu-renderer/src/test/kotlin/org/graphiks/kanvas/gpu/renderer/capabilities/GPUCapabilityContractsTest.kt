@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.capabilities
 
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -9,6 +10,70 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class GPUCapabilityContractsTest {
+    @Test
+    fun `first slice native capability names are canonical and exact`() {
+        assertEquals("first_slice.scissor.native", GPUFirstSliceCapabilityName.SCISSOR_NATIVE)
+        assertEquals("first_slice.bounded_clip.native", GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE)
+        assertEquals("first_slice.path_fill.stencil_cover", GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER)
+    }
+
+    @Test
+    fun `first slice capability literals are declared only by their authority`() {
+        val authority = File(
+            "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/capabilities/" +
+                "GPUFirstSliceCapabilities.kt",
+        ).readText()
+        val consumers = listOf(
+            File("src/main/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/AnalysisContracts.kt"),
+            File("src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt"),
+            File("src/main/kotlin/org/graphiks/kanvas/gpu/renderer/product/ProductFlags.kt"),
+            File("../kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt"),
+        )
+        val literals = listOf(
+            "first_slice.scissor.native",
+            "first_slice.bounded_clip.native",
+            "first_slice.path_fill.stencil_cover",
+        )
+
+        literals.forEach { literal ->
+            assertEquals(
+                1,
+                authority.windowed(literal.length).count { it == literal },
+                "Expected one canonical declaration for $literal",
+            )
+            consumers.forEach { consumer ->
+                assertFalse(
+                    consumer.readText().contains(literal),
+                    "$literal must not be redeclared in ${consumer.path}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `supported capability fact requires nonblank identity and emits validity evidence`() {
+        val fact = supportedGPUCapabilityFact(
+            name = GPUFirstSliceCapabilityName.SCISSOR_NATIVE,
+            source = "runtime",
+            evidenceLabel = "core-primitive-direct-native",
+        )
+
+        assertEquals(GPUFirstSliceCapabilityName.SCISSOR_NATIVE, fact.name)
+        assertEquals("runtime", fact.source)
+        assertEquals("supported", fact.value)
+        assertTrue(fact.affectsValidity)
+        assertEquals("core-primitive-direct-native", fact.evidenceLabel)
+        assertFailsWith<IllegalArgumentException> {
+            supportedGPUCapabilityFact("", "runtime", "evidence")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            supportedGPUCapabilityFact("name", " ", "evidence")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            supportedGPUCapabilityFact("name", "runtime", "\t")
+        }
+    }
+
     @Test
     fun `GPU abstraction labels dump to stable public strings`() {
         assertEquals("r16unorm", GPUTextureFormat.R16Unorm.dumpLabel())

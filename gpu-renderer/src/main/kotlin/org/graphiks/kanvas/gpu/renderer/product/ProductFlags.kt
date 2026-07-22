@@ -2,7 +2,9 @@ package org.graphiks.kanvas.gpu.renderer.product
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.capabilities.supportedGPUCapabilityFact
 
 /** Product flag configuration controlling GPU renderer feature enablement. */
 data class GPUProductFlagConfig(
@@ -52,11 +54,9 @@ data class GPUProductFlagConfig(
             )
         }
         if (scissorEnabled) {
-            facts += GPUCapabilityFact(
-                name = "first_slice.scissor.native",
+            facts += supportedGPUCapabilityFact(
+                name = GPUFirstSliceCapabilityName.SCISSOR_NATIVE,
                 source = "product-flags",
-                value = "supported",
-                affectsValidity = true,
                 evidenceLabel = "product-flag:scissor",
             )
         }
@@ -138,11 +138,9 @@ data class GPUProductFlagConfig(
             )
         }
         if (boundedClipEnabled) {
-            facts += GPUCapabilityFact(
-                name = "first_slice.bounded_clip.native",
+            facts += supportedGPUCapabilityFact(
+                name = GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE,
                 source = "product-flags",
-                value = "supported",
-                affectsValidity = true,
                 evidenceLabel = "product-flag:boundedClip",
             )
         }

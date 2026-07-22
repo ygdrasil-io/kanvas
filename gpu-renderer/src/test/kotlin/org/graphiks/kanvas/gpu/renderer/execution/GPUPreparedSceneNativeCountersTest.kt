@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 
 class GPUPreparedSceneNativeCountersTest {
     @Test
@@ -30,8 +31,12 @@ class GPUPreparedSceneNativeCountersTest {
     @Test
     fun `internal render counters use a dedicated defaultable factory`() {
         val coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> error("unused") }
-        val defaultSession = GPUPreparedSceneFrameSession(coordinatorFactory = coordinatorFactory)
+        val defaultSession = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
+            coordinatorFactory = coordinatorFactory,
+        )
         val instrumentedSession = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
             coordinatorFactory = coordinatorFactory,
             renderCountersFactory = {
                 GPUPreparedSceneRenderCounters(

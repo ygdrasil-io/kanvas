@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 
 class ProductFlagConfigTest {
 
@@ -27,10 +28,22 @@ class ProductFlagConfigTest {
         val factsByName = capabilities.facts.associateBy { it.name }
         assertTrue(factsByName.containsKey("first_slice.fill_rrect.native"))
         assertTrue(factsByName.containsKey("first_slice.linear_gradient.native"))
-        assertTrue(factsByName.containsKey("first_slice.scissor.native"))
+        assertTrue(factsByName.containsKey(GPUFirstSliceCapabilityName.SCISSOR_NATIVE))
         assertTrue(factsByName.containsKey("first_slice.radial_gradient.native"))
         assertTrue(factsByName.containsKey("first_slice.sweep_gradient.native"))
         assertTrue(factsByName.containsKey("first_slice.path_fill.native"))
+        assertEquals(
+            "product-flag:scissor",
+            factsByName.getValue(GPUFirstSliceCapabilityName.SCISSOR_NATIVE).evidenceLabel,
+        )
+        assertEquals(
+            "product-flags",
+            factsByName.getValue(GPUFirstSliceCapabilityName.SCISSOR_NATIVE).source,
+        )
+        assertEquals(
+            "product-flag:boundedClip",
+            factsByName.getValue(GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE).evidenceLabel,
+        )
         assertEquals("product-flags", capabilities.snapshotId)
     }
 

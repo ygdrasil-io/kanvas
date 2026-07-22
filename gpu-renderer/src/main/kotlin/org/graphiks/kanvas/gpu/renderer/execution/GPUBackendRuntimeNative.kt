@@ -87,11 +87,13 @@ import kotlinx.coroutines.runBlocking
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.supportedGPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
@@ -907,7 +909,7 @@ private class WgpuBackendSession(
     private val glfw: GLFWContext,
 ) : GPUBackendSession {
     private val sessionOrdinal = nextSessionOrdinal()
-    private val deviceGeneration = sessionDeviceGeneration(sessionOrdinal)
+    override val deviceGeneration = sessionDeviceGeneration(sessionOrdinal)
     private val executionCaches = WgpuExecutionCaches(deviceGeneration)
     private val telemetryRecorder = WgpuBackendRuntimeTelemetryRecorder()
     private val runtimeResourceAdapter = GPURuntimeResourceAdapter(requirePreparedResources = true)
@@ -1043,12 +1045,20 @@ private class WgpuBackendSession(
                     affectsValidity = true,
                     evidenceLabel = "core-primitive-direct-native",
                 ),
-                GPUCapabilityFact(
-                    name = "first_slice.scissor.native",
+                supportedGPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.SCISSOR_NATIVE,
                     source = "runtime",
-                    value = "supported",
-                    affectsValidity = true,
                     evidenceLabel = "core-primitive-direct-native",
+                ),
+                supportedGPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE,
+                    source = "runtime",
+                    evidenceLabel = "core-primitive-bounded-clip-native",
+                ),
+                supportedGPUCapabilityFact(
+                    name = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER,
+                    source = "runtime",
+                    evidenceLabel = "core-primitive-path-stencil-native",
                 ),
                 GPUCapabilityFact(
                     name = "first_slice.fill_rect.affine.native",
@@ -1220,6 +1230,7 @@ private class WgpuBackendSession(
         )
 
         GPUPreparedSceneFrameSession(
+            deviceGeneration = deviceGeneration,
             compatibilityValidator = GPUPreparedSceneCompatibilityValidator { taskList ->
                 when {
                     taskList.capabilitySeal.deviceGeneration != deviceGeneration -> executionDiagnostic(

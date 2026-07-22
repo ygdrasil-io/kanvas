@@ -21,7 +21,6 @@ import org.graphiks.kanvas.font.scaler.ColorLayerEntry
 import org.graphiks.kanvas.font.scaler.GlyphRepresentation
 import org.graphiks.kanvas.font.scaler.GlyphScaler
 import org.graphiks.kanvas.font.scaler.ScaledGlyph
-import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
@@ -107,7 +106,7 @@ class GPUColorGlyphTrueColrFixtureTest {
         assumeTrue(backend != null, "GPU backend unavailable in current environment")
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val deviceGeneration = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val deviceGeneration = backend.deviceGeneration
         val requestId = GPUReadbackRequestID("readback.color-glyph.true-colr-fixture")
         val preparedLayers = translatedLayers.zip(upload.placements) { layer, placement ->
             GPUPreparedColorGlyphTestLayer(

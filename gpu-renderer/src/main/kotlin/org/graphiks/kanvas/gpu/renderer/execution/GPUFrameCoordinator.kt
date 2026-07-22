@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import java.util.Collections
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
@@ -360,6 +361,7 @@ internal data class GPUPreparedSceneRenderCounters(
 
 /** Reusable prepared session that owns target lifetime and serializes the sole coordinator route. */
 class GPUPreparedSceneFrameSession internal constructor(
+    val deviceGeneration: GPUDeviceGenerationID,
     private val coordinatorFactory: GPUFrameCoordinatorFactory,
     private val compatibilityValidator: GPUPreparedSceneCompatibilityValidator =
         GPUPreparedSceneCompatibilityValidator { null },
@@ -375,7 +377,11 @@ class GPUPreparedSceneFrameSession internal constructor(
     private var closeActionInProgress = false
     private var closeActionComplete = false
 
-    internal constructor(coordinator: GPUFrameCoordinator) : this(
+    internal constructor(
+        deviceGeneration: GPUDeviceGenerationID,
+        coordinator: GPUFrameCoordinator,
+    ) : this(
+        deviceGeneration = deviceGeneration,
         coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> coordinator },
     )
 

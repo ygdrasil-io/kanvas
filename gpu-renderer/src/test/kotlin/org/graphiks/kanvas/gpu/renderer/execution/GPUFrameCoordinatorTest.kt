@@ -9,6 +9,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
@@ -365,12 +366,25 @@ class GPUFrameCoordinatorTest {
     }
 
     @Test
+    fun `prepared scene session exposes its explicit device generation unchanged`() {
+        val generation = GPUDeviceGenerationID(97L)
+        val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = generation,
+            coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> error("must not render") },
+        )
+
+        assertEquals(generation, session.deviceGeneration)
+        session.close()
+    }
+
+    @Test
     fun `prepared scene session refuses a concurrent frame before entering the coordinator`() {
         val executions = mutableListOf<GPUFrameAttemptID>()
         val pending = CompletableFuture<GPUFrameExecutionCompletedResult>()
         var nextAttempt = 0
         val session = GPUPreparedSceneFrameSession(
-            GPUFrameCoordinator(
+            deviceGeneration = GPUDeviceGenerationID(1L),
+            coordinator = GPUFrameCoordinator(
                 planner = GPUFramePlanningPort { GPUFrameCoreTestFixture.preparedFrame().semanticPlan },
                 preflighter = GPUFramePreflightPort {
                     GPUFramePreflightResult.Prepared(GPUFrameCoreTestFixture.preparedFrame())
@@ -420,6 +434,7 @@ class GPUFrameCoordinatorTest {
                 attemptIdFactory = { attemptId },
             )
         val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
             coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> coordinator },
             closeAction = { closes += 1 },
         )
@@ -450,6 +465,7 @@ class GPUFrameCoordinatorTest {
     fun `prepared scene session invokes close action exactly once across repeated close`() {
         var closes = 0
         val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
             coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> error("must not render") },
             closeAction = { closes += 1 },
         )
@@ -465,6 +481,7 @@ class GPUFrameCoordinatorTest {
         var closes = 0
         var failuresRemaining = 1
         val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
             coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> error("must not render") },
             closeAction = {
                 closes += 1
@@ -516,6 +533,7 @@ class GPUFrameCoordinatorTest {
                 },
             )
             val child = GPUPreparedSceneFrameSession(
+                deviceGeneration = GPUDeviceGenerationID(1L),
                 coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> error("must not render") },
                 closeAction = teardown::close,
             )
@@ -556,6 +574,7 @@ class GPUFrameCoordinatorTest {
         val registry = GPUPreparedSceneChildRegistry { events += "parent-teardown" }
         val lease = registry.reserve()
         val child = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
             coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> error("must not render") },
             closeAction = {
                 events += "child-close"
@@ -592,6 +611,7 @@ class GPUFrameCoordinatorTest {
         val registry = GPUPreparedSceneChildRegistry { events += "parent-teardown" }
         val lease = registry.reserve()
         val child = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
             coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> coordinator },
             closeAction = {
                 events += "child-close"

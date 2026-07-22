@@ -97,9 +97,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         assumeTrue(backendSession != null)
         backendSession!!
         val runtimeCapabilities = requireNotNull(backendSession.capabilities)
-        val generation = GPUDeviceGenerationID(
-            runtimeCapabilities.snapshotId.substringAfterLast('-').toLong(),
-        )
+        val generation = backendSession.deviceGeneration
         val requestId = GPUReadbackRequestID("readback.prepared.destination-twice")
         val tasks = destinationCopyTaskList(
             generation = generation,
@@ -171,9 +169,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         assumeTrue(backendSession != null)
         backendSession!!
         val runtimeCapabilities = requireNotNull(backendSession.capabilities)
-        val generation = GPUDeviceGenerationID(
-            runtimeCapabilities.snapshotId.substringAfterLast('-').toLong(),
-        )
+        val generation = backendSession.deviceGeneration
         val modes = GPUBlendMode.entries.filter { mode ->
             mode.ordinal >= GPUBlendMode.MULTIPLY.ordinal && mode != GPUBlendMode.SCREEN
         }
@@ -226,9 +222,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         assumeTrue(backendSession != null)
         backendSession!!
         val runtimeCapabilities = requireNotNull(backendSession.capabilities)
-        val generation = GPUDeviceGenerationID(
-            runtimeCapabilities.snapshotId.substringAfterLast('-').toLong(),
-        )
+        val generation = backendSession.deviceGeneration
         val requestId = GPUReadbackRequestID("readback.prepared.destination-copy")
         val tasks = destinationCopyTaskList(
             generation = generation,

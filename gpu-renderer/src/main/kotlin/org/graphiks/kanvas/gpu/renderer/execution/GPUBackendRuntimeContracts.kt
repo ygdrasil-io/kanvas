@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandK
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 
 /** Describes an offscreen surface allocation request for the low-level GPU backend runtime. */
 data class GPUOffscreenTargetRequest(
@@ -149,6 +150,9 @@ data class GPUBackendRuntimeTelemetry(
 /** Owns a GPU backend session that can allocate offscreen and window-backed targets. */
 interface GPUBackendSession : AutoCloseable {
     val adapterInfo: GPUBackendAdapterSummary?
+
+    /** Handle-free identity of the device generation that owns this session and its resources. */
+    val deviceGeneration: GPUDeviceGenerationID
 
     /** Reports the backend implementation and behavior-affecting limits when known. */
     val capabilities: GPUCapabilities?

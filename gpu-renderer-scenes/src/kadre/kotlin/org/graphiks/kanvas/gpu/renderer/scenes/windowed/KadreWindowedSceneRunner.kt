@@ -114,11 +114,7 @@ private class PreparedSceneKadreApp(
                 requestBlocked(eventLoop, "wgpu-capabilities-unavailable", "GPU backend capabilities are unavailable")
                 return
             }
-            val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
-                ?.let(::GPUDeviceGenerationID) ?: run {
-                requestBlocked(eventLoop, "wgpu-device-generation-unavailable", "GPU device generation is unavailable")
-                return
-            }
+            val generation = session.deviceGeneration
             preparedSession = session.prepareSceneFrameSession(
                 GPUOffscreenTargetRequest(
                     scene.dimensions.width,

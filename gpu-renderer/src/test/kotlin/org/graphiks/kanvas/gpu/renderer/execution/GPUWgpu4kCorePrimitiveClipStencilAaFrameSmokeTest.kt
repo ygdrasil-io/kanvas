@@ -80,7 +80,7 @@ class GPUWgpu4kCorePrimitiveClipStencilAaFrameSmokeTest {
                 depthSupport != null && 4 in depthSupport.renderAttachmentSampleCounts,
             "rgba8unorm resolve plus depth24plus-stencil8 4x unavailable; skipping clip stencil AA smoke",
         )
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val targetRef = GPUFrameTargetRef(TARGET_ID)
         val readbackId = GPUReadbackRequestID("readback.clip-stencil-aa-4x")
         val taskList = clipStencilAaTaskList(capabilities, generation, targetRef, readbackId)

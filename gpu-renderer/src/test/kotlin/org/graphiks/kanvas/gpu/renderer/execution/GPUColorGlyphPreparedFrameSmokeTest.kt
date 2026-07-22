@@ -82,7 +82,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
         assumeTrue(backend != null, "GPU backend unavailable in current environment")
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val requestId = GPUReadbackRequestID("readback.color-glyph.prepared")
         val tasks = colorGlyphTaskList(capabilities, generation, semantic, requestId)
         val session = backend.prepareSceneFrameSession(
@@ -135,7 +135,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
         assumeTrue(backend != null, "GPU backend unavailable in current environment")
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val tasks = colorGlyphTaskList(capabilities, generation, semantic, requestId = null)
         val session = backend.prepareSceneFrameSession(
             GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT, "rgba8unorm"),
@@ -173,7 +173,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
         assumeTrue(backend != null, "GPU backend unavailable in current environment")
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val tasks = colorGlyphTaskList(capabilities, generation, semantic, requestId = null)
         val session = backend.prepareSceneFrameSession(
             GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT, "rgba8unorm"),
@@ -213,7 +213,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
         assumeTrue(backend != null, "GPU backend unavailable in current environment")
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val semantics = listOf(
             canonicalSemantic(),
             canonicalSemantic(
@@ -262,7 +262,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
         assumeTrue(backend != null, "GPU backend unavailable in current environment")
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val tasks = colorGlyphTaskList(
             capabilities,
             generation,
@@ -296,7 +296,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
         assumeTrue(backend != null, "GPU backend unavailable in current environment")
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val cases = listOf(
             "render-pipeline" to colorGlyphTaskList(
                 capabilities,

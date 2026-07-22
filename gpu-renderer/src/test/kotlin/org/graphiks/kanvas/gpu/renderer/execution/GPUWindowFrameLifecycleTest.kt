@@ -274,6 +274,7 @@ class GPUWindowFrameLifecycleTest {
         var captured: org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList? = null
         val output = preparedOutput()
         val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
             coordinatorFactory = GPUFrameCoordinatorFactory { taskList, _ ->
                 captured = taskList
                 error("captured")
@@ -294,6 +295,7 @@ class GPUWindowFrameLifecycleTest {
         var coordinatorCreations = 0
         val output = GPUPreparedWindowOutput(RecordingWindowController(dependencyGated = true))
         val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
             coordinatorFactory = GPUFrameCoordinatorFactory { _, _ ->
                 coordinatorCreations += 1
                 error("must not create")
@@ -319,6 +321,7 @@ class GPUWindowFrameLifecycleTest {
         )
         val output = GPUPreparedWindowOutput(controller)
         val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
             coordinatorFactory = GPUFrameCoordinatorFactory { submittedTasks, outputRequest ->
                 val outputTask = assertIs<GPUTask.Output>(submittedTasks.tasks.single())
                 assertEquals(GPUSurfaceOutputRef("surface.main"), outputTask.descriptor.output)

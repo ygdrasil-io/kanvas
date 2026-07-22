@@ -63,7 +63,7 @@ class GPUWgpu4kCoverageMaskPreparedFrameSmokeTest {
         )
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val session = backend.prepareSceneFrameSession(
             GPUOffscreenTargetRequest(TARGET.width, TARGET.height, "rgba8unorm"),
         )

@@ -42,6 +42,9 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.SCISSOR_NATIVE
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAtomicGroupID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipAnalyticElement
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -453,7 +456,7 @@ private fun GPUClipCoveragePlan.toExecutionPlan(
 private fun GPUClipCoveragePlan.AnalyticIntersection.toAnalyticIntersectionExecutionPlan(
     capabilities: GPUCapabilities,
 ): GPUClipExecutionPlan {
-    if (!capabilities.supportsClipCapability(BOUNDED_CLIP_CAPABILITY)) {
+    if (!capabilities.supportsClipCapability(BOUNDED_CLIP_NATIVE)) {
         return clipExecutionRefusal(
             code = "unsupported.clip.analytic_unavailable",
             message = "Analytic rect/rrect clip execution requires bounded clip support.",
@@ -473,7 +476,7 @@ private fun GPUClipCoveragePlan.Scissor.toScissorExecutionPlan(
     capabilities: GPUCapabilities,
     target: GPUTargetFacts,
 ): GPUClipExecutionPlan {
-    if (!capabilities.supportsClipCapability(SCISSOR_CLIP_CAPABILITY)) {
+    if (!capabilities.supportsClipCapability(SCISSOR_NATIVE)) {
         return clipExecutionRefusal(
             code = "unsupported.clip.scissor_unavailable",
             message = "Integral device clip execution requires native scissor support.",
@@ -511,7 +514,7 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         !single.inverseFill &&
         single.kind != GPUClipCoverageElementKind.Path
     ) {
-        if (!capabilities.supportsClipCapability(BOUNDED_CLIP_CAPABILITY)) {
+        if (!capabilities.supportsClipCapability(BOUNDED_CLIP_NATIVE)) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.analytic_unavailable",
                 message = "Analytic rect/rrect clip execution requires bounded clip support.",
@@ -532,13 +535,13 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         single.kind == GPUClipCoverageElementKind.Path &&
         !single.antiAlias
     ) {
-        if (!capabilities.supportsClipCapability(STENCIL_CLIP_CAPABILITY)) {
+        if (!capabilities.supportsClipCapability(PATH_FILL_STENCIL_COVER)) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.stencil_unavailable",
                 message = "Path clip execution requires stencil-cover support.",
             )
         }
-        if (!capabilities.supportsClipCapability(BOUNDED_CLIP_CAPABILITY)) {
+        if (!capabilities.supportsClipCapability(BOUNDED_CLIP_NATIVE)) {
             return clipExecutionRefusal(
                 code = "unsupported.clip.mask_unavailable",
                 message = "Path clip execution requires bounded clip support.",
@@ -583,7 +586,7 @@ private fun GPUClipCoveragePlan.Mask.toMaskExecutionPlan(
         )
     }
 
-    if (!capabilities.supportsClipCapability(BOUNDED_CLIP_CAPABILITY)) {
+    if (!capabilities.supportsClipCapability(BOUNDED_CLIP_NATIVE)) {
         return clipExecutionRefusal(
             code = "unsupported.clip.mask_unavailable",
             message = "Ordered clip-mask execution requires bounded clip support.",
@@ -653,10 +656,6 @@ private fun GPUCapabilities.supportsClipCapability(name: String): Boolean =
         facts.any { fact ->
             fact.name == name && fact.value == "supported" && fact.affectsValidity
         }
-
-private const val BOUNDED_CLIP_CAPABILITY = "first_slice.bounded_clip.native"
-private const val SCISSOR_CLIP_CAPABILITY = "first_slice.scissor.native"
-private const val STENCIL_CLIP_CAPABILITY = "first_slice.path_fill.stencil_cover"
 
 private fun NormalizedDrawCommand.localBounds(): GPUBounds = when (this) {
     is NormalizedDrawCommand.FillRect -> GPUBounds(rect.left, rect.top, rect.right, rect.bottom)

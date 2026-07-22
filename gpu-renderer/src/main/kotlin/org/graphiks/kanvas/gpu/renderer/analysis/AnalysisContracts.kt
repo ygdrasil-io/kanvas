@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.analysis
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
@@ -1924,13 +1925,13 @@ class GPUFirstRoutePlanner(
         const val firstSweepGradientCapabilityName = "first_slice.sweep_gradient.native"
 
         /** Required capability fact for the scissor clip route. */
-        const val firstScissorCapabilityName = "first_slice.scissor.native"
+        const val firstScissorCapabilityName = GPUFirstSliceCapabilityName.SCISSOR_NATIVE
 
         /** Required capability fact for the path fill native route. */
         const val firstPathFillCapabilityName = "first_slice.path_fill.native"
 
         /** Required capability fact for the path fill stencil-cover native promotion. */
-        const val firstStencilCoverCapabilityName = "first_slice.path_fill.stencil_cover"
+        const val firstStencilCoverCapabilityName = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
 
         /** Transform classes supported by the first native FillRect route. */
         val acceptedTransformTypes = setOf(

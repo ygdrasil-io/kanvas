@@ -9,7 +9,6 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendSession
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
-import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.reports.json
 import org.graphiks.kanvas.gpu.renderer.telemetry.FrameGatePolicy
@@ -296,15 +295,7 @@ class PerFamilyBenchmark(
             measuredFrames,
             "unsupported: prepared SolidRect benchmark requires observed capabilities",
         )
-        val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
-            ?.let(::GPUDeviceGenerationID)
-            ?: return skippedResult(
-                family,
-                BenchmarkFamilyStatus.Unsupported,
-                warmupFrames,
-                measuredFrames,
-                "unsupported: prepared SolidRect benchmark requires device generation",
-            )
+        val generation = session.deviceGeneration
         return session.prepareSceneFrameSession(
             GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
         ).use { preparedSession ->
@@ -384,15 +375,7 @@ class PerFamilyBenchmark(
             measuredFrames,
             "unsupported: prepared registered uniform benchmark requires observed capabilities",
         )
-        val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
-            ?.let(::GPUDeviceGenerationID)
-            ?: return skippedResult(
-                family,
-                BenchmarkFamilyStatus.Unsupported,
-                warmupFrames,
-                measuredFrames,
-                "unsupported: prepared registered uniform benchmark requires device generation",
-            )
+        val generation = session.deviceGeneration
         return session.prepareSceneFrameSession(
             GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
         ).use { preparedSession ->
@@ -471,15 +454,7 @@ class PerFamilyBenchmark(
             measuredFrames,
             "unsupported: prepared stroke-rect benchmark requires observed capabilities",
         )
-        val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
-            ?.let(::GPUDeviceGenerationID)
-            ?: return skippedResult(
-                family,
-                BenchmarkFamilyStatus.Unsupported,
-                warmupFrames,
-                measuredFrames,
-                "unsupported: prepared stroke-rect benchmark requires device generation",
-            )
+        val generation = session.deviceGeneration
         return session.prepareSceneFrameSession(
             GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
         ).use { preparedSession ->
@@ -559,15 +534,7 @@ class PerFamilyBenchmark(
             measuredFrames,
             "unsupported: prepared separable blur benchmark requires observed capabilities",
         )
-        val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
-            ?.let(::GPUDeviceGenerationID)
-            ?: return skippedResult(
-                family,
-                BenchmarkFamilyStatus.Unsupported,
-                warmupFrames,
-                measuredFrames,
-                "unsupported: prepared separable blur benchmark requires device generation",
-            )
+        val generation = session.deviceGeneration
         return session.prepareSceneFrameSession(
             GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
         ).use { preparedSession ->

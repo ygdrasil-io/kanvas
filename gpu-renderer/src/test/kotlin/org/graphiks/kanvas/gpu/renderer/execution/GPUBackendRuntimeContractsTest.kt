@@ -5,6 +5,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
@@ -247,6 +250,15 @@ class GPUBackendRuntimeContractsTest {
     }
 
     @Test
+    fun `backend session exposes typed generation independently from opaque snapshot label`() {
+        val expectedGeneration = GPUDeviceGenerationID(73L)
+        val session = OpaqueSnapshotBackendSession(expectedGeneration)
+
+        assertEquals("opaque-runtime-label", session.capabilities.snapshotId)
+        assertEquals(expectedGeneration, session.deviceGeneration)
+    }
+
+    @Test
     fun `uniform payload draw requires provider materialized uniform and bind group bridge`() {
         val accepted = GPUBackendUniformPayloadDraw(
             uniformBytes = byteArrayOf(1, 2, 3, 4),
@@ -322,12 +334,37 @@ class GPUBackendRuntimeContractsTest {
 
     private class NoopBackendSession : GPUBackendSession {
         override val adapterInfo: GPUBackendAdapterSummary? = null
+        override val deviceGeneration = GPUDeviceGenerationID(11L)
 
         override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
             error("NoopBackendSession cannot create offscreen targets")
 
         override fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession =
             error("NoopBackendSession cannot prepare scene frame sessions")
+
+        override fun close() = Unit
+    }
+
+    private class OpaqueSnapshotBackendSession(
+        override val deviceGeneration: GPUDeviceGenerationID,
+    ) : GPUBackendSession {
+        override val adapterInfo: GPUBackendAdapterSummary? = null
+        override val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "GPU",
+                implementationName = "unit",
+                adapterName = "unit-adapter",
+                deviceName = "unit-device",
+            ),
+            facts = emptyList(),
+            snapshotId = "opaque-runtime-label",
+        )
+
+        override fun createOffscreenTarget(request: GPUOffscreenTargetRequest): GPUBackendOffscreenTarget =
+            error("OpaqueSnapshotBackendSession cannot create offscreen targets")
+
+        override fun prepareSceneFrameSession(request: GPUOffscreenTargetRequest): GPUPreparedSceneFrameSession =
+            error("OpaqueSnapshotBackendSession cannot prepare scene frame sessions")
 
         override fun close() = Unit
     }

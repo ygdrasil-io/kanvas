@@ -72,7 +72,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         assumeTrue(backend != null)
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val frameId = GPUFrameID(12_031L)
         val readbackId = GPUReadbackRequestID("readback.core-primitive.rect-affine")
         val targetBounds = GPUPixelBounds(0, 0, 32, 32)
@@ -210,7 +210,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
                 4 in sampleSupport.resolveSourceSampleCounts,
             "rgba8unorm 4x render+resolve unavailable; skipping hard-direct 4x pixel proof",
         )
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val frameId = GPUFrameID(12_032L)
         val readbackId = GPUReadbackRequestID("readback.core-primitive.hard-direct-4x")
         val target = GPUFrameTargetRef("target.core.smoke.hard-direct-4x")
@@ -357,7 +357,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
                 depthSupport != null && 4 in depthSupport.renderAttachmentSampleCounts,
             "rgba8unorm resolve plus depth24plus-stencil8 4x unavailable; skipping mixed AA smoke",
         )
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val draws = listOf(
             SmokeDraw.Direct(
                 GPURect(2f, 2f, 15f, 15f),
@@ -497,7 +497,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
                 depthSupport != null && 4 in depthSupport.renderAttachmentSampleCounts,
             "rgba8unorm resolve plus depth24plus-stencil8 4x unavailable; skipping path pixel proof",
         )
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val frameId = GPUFrameID(12_033L)
         val readbackId = GPUReadbackRequestID("readback.core-primitive.path-stencil-aa-4x")
         val targetRef = GPUFrameTargetRef("target.core.smoke")
@@ -732,7 +732,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         )
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
         try {
             val firstFrame = buildAnalyticShapeSmokeFrame(
@@ -928,7 +928,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         )
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
         val ellipseRadii = listOf(6f, 3f, 6f, 3f, 6f, 3f, 6f, 3f)
         try {
@@ -1066,7 +1066,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         )
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
         fun rect(
             left: Float,
@@ -1231,7 +1231,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         )
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val generation = backend.deviceGeneration
         val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
         try {
             val geometry = stencilFan(

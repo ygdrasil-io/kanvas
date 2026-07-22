@@ -7,7 +7,6 @@ import kotlin.test.assertIs
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
-import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
@@ -31,9 +30,7 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         assumeTrue(backend != null)
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
-        val generation = GPUDeviceGenerationID(
-            capabilities.snapshotId.substringAfterLast('-').toLong(),
-        )
+        val generation = backend.deviceGeneration
         val targetBounds = org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, 32, 32)
         val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.rect-affine")
         val halfRed = Color.fromRGBA(1f, 0f, 0f, 0.5f)

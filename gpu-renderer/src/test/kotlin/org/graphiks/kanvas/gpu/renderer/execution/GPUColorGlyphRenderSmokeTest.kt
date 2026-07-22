@@ -5,7 +5,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
@@ -30,7 +29,7 @@ class GPUColorGlyphRenderSmokeTest {
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
         runtime!!.use { session ->
             val capabilities = requireNotNull(session.capabilities)
-            val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+            val generation = session.deviceGeneration
             val requestId = GPUReadbackRequestID("readback.color-glyph.render-smoke")
             val taskList: GPUTaskList = buildPreparedColorGlyphTestTaskList(
                 capabilities = capabilities,

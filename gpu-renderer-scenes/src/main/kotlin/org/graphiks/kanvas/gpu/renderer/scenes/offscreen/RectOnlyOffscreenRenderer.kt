@@ -16,7 +16,6 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutput
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
-import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.LinearGradientEntryPoint
@@ -232,11 +231,7 @@ class RectOnlyOffscreenRenderer internal constructor(
         runtime.use { session ->
             val capabilities = session.capabilities
                 ?: return OffscreenRunReport.failed(sceneId, "prepared-color-glyph-capabilities-unavailable")
-            val generation = capabilities.deviceGenerationOrNull()
-                ?: return OffscreenRunReport.failed(
-                    sceneId,
-                    "prepared-color-glyph-device-generation-unavailable",
-                )
+            val generation = session.deviceGeneration
             val preparedFrame = when (
                 val result = PreparedColorGlyphSceneFrameRecorder().record(
                     scene = scene,
@@ -346,8 +341,7 @@ class RectOnlyOffscreenRenderer internal constructor(
         runtime.use { session ->
             val capabilities = session.capabilities
                 ?: return OffscreenRunReport.failed(sceneId, "prepared-solid-rect-capabilities-unavailable")
-            val generation = capabilities.deviceGenerationOrNull()
-                ?: return OffscreenRunReport.failed(sceneId, "prepared-solid-rect-device-generation-unavailable")
+            val generation = session.deviceGeneration
             val preparedFrame = when (
                 val result = PreparedSolidRectSceneFrameRecorder().record(
                     scene,
@@ -425,8 +419,7 @@ class RectOnlyOffscreenRenderer internal constructor(
         runtime.use { session ->
             val capabilities = session.capabilities
                 ?: return OffscreenRunReport.failed(sceneId, "prepared-stroke-rect-capabilities-unavailable")
-            val generation = capabilities.deviceGenerationOrNull()
-                ?: return OffscreenRunReport.failed(sceneId, "prepared-stroke-rect-device-generation-unavailable")
+            val generation = session.deviceGeneration
             val preparedFrame = when (
                 val result = PreparedStrokeRectSceneFrameRecorder().record(
                     scene,
@@ -540,11 +533,7 @@ class RectOnlyOffscreenRenderer internal constructor(
                     sceneId,
                     "prepared-registered-uniform-capabilities-unavailable",
                 )
-            val generation = capabilities.deviceGenerationOrNull()
-                ?: return OffscreenRunReport.failed(
-                    sceneId,
-                    "prepared-registered-uniform-device-generation-unavailable",
-                )
+            val generation = session.deviceGeneration
             val preparedFrame = when (
                 val result = PreparedRegisteredUniformRectSceneFrameRecorder().record(
                     scene,
@@ -663,8 +652,7 @@ class RectOnlyOffscreenRenderer internal constructor(
         runtime.use { session ->
             val capabilities = session.capabilities
                 ?: return OffscreenRunReport.failed(sceneId, "prepared-separable-blur-capabilities-unavailable")
-            val generation = capabilities.deviceGenerationOrNull()
-                ?: return OffscreenRunReport.failed(sceneId, "prepared-separable-blur-device-generation-unavailable")
+            val generation = session.deviceGeneration
             val preparedFrame = when (
                 val result = PreparedSeparableBlurRectSceneFrameRecorder().record(
                     scene,
@@ -1533,9 +1521,6 @@ fn fs_main() -> @location(0) vec4f {
         }
     }
 }
-
-private fun GPUCapabilities.deviceGenerationOrNull(): GPUDeviceGenerationID? =
-    snapshotId.substringAfterLast('-').toLongOrNull()?.let(::GPUDeviceGenerationID)
 
 private fun colorGlyphDiff(actual: ByteArray, expected: ByteArray): ByteArray {
     require(actual.size == expected.size)

@@ -249,9 +249,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
         assumeTrue(backendSession != null)
         backendSession!!
         val runtimeCapabilities = requireNotNull(backendSession.capabilities)
-        val generation = GPUDeviceGenerationID(
-            runtimeCapabilities.snapshotId.substringAfterLast('-').toLong(),
-        )
+        val generation = backendSession.deviceGeneration
         val firstTasks = solidRectTaskList(
             generation = generation,
             capabilities = runtimeCapabilities,
@@ -327,9 +325,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
         assumeTrue(backendSession != null)
         backendSession!!
         val runtimeCapabilities = requireNotNull(backendSession.capabilities)
-        val generation = GPUDeviceGenerationID(
-            runtimeCapabilities.snapshotId.substringAfterLast('-').toLong(),
-        )
+        val generation = backendSession.deviceGeneration
         val firstTasks = batchedSolidRectTaskList(
             generation = generation,
             capabilities = runtimeCapabilities,
@@ -393,9 +389,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
         assumeTrue(backendSession != null)
         backendSession!!
         val runtimeCapabilities = requireNotNull(backendSession.capabilities)
-        val generation = GPUDeviceGenerationID(
-            runtimeCapabilities.snapshotId.substringAfterLast('-').toLong(),
-        )
+        val generation = backendSession.deviceGeneration
         val session = backendSession.prepareSceneFrameSession(GPUOffscreenTargetRequest(4, 4))
         try {
             val stale = session.renderFrame(

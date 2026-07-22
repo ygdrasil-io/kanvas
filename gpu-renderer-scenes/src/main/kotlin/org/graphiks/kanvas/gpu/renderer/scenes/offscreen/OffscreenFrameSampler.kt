@@ -5,7 +5,6 @@ import java.util.concurrent.TimeUnit
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
-import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
@@ -36,12 +35,7 @@ class OffscreenFrameSampler {
                     sceneId,
                     "prepared-solid-rect-capabilities-unavailable",
                 ).also { it.writeTo(outputDir) }
-            val generation = capabilities.snapshotId.substringAfterLast('-').toLongOrNull()
-                ?.let(::GPUDeviceGenerationID)
-                ?: return@use OffscreenFrameSampleReport.failed(
-                    sceneId,
-                    "prepared-solid-rect-device-generation-unavailable",
-                ).also { it.writeTo(outputDir) }
+            val generation = session.deviceGeneration
             session.prepareSceneFrameSession(
                 GPUOffscreenTargetRequest(
                     scene.dimensions.width,

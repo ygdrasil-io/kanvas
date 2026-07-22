@@ -20,6 +20,8 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
@@ -1494,7 +1496,7 @@ class GPUFramePathApiInventoryTest {
                     RenderConfig.DEFAULT,
                     capabilitiesWith(
                         FILL_RECT_CAPABILITY,
-                        "first_slice.path_fill.stencil_cover",
+                        PATH_FILL_STENCIL_COVER,
                     ),
                 ).visualCommands.single().clipExecutionPlan,
             )
@@ -1582,6 +1584,129 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `canonical bounded clip and stencil cover facts cross only their exact capability gates`() {
+        val boundedClipCapabilities = org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig(
+            boundedClipEnabled = false,
+        ).buildCapabilities().withCapabilities(
+            FILL_RECT_CAPABILITY,
+            BOUNDED_CLIP_NATIVE,
+        )
+        val clippedRect = Surface(32, 32).also { surface ->
+            surface.canvas {
+                clipRRect(
+                    RRect(Rect.fromLTRB(2f, 3f, 28f, 29f), radius = 3f),
+                    ClipOp.INTERSECT,
+                    antiAlias = true,
+                )
+                drawRect(Rect.fromLTRB(0f, 0f, 30f, 30f), Paint.fill(Color.RED))
+            }
+        }
+        val boundedPlan = GPUFramePathApiInventory.plan(
+            clippedRect.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            boundedClipCapabilities,
+        )
+        assertIs<GPUClipExecutionPlan.AnalyticCoverage>(
+            boundedPlan.visualCommands.single().clipExecutionPlan,
+        )
+
+        val pathSurface = Surface(32, 32).also { surface ->
+            surface.canvas {
+                drawPath(triangle(), Paint.fill(Color.BLUE).copy(antiAlias = false))
+            }
+        }
+        val stencilCapabilityFacts = org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig()
+            .buildCapabilities()
+            .withCapabilities(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER)
+        val stencilCapabilities = GPUCapabilities(
+            implementation = stencilCapabilityFacts.implementation,
+            facts = stencilCapabilityFacts.facts,
+            knownUnsupportedFacts = stencilCapabilityFacts.knownUnsupportedFacts,
+            snapshotId = "${stencilCapabilityFacts.snapshotId}:observed-limits",
+            limits = GPULimits(
+                maxTextureDimension2D = 8192,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+                maxBufferSize = 1L shl 30,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+            ),
+        )
+        val pathPlan = GPUFramePathApiInventory.plan(
+            pathSurface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            stencilCapabilities,
+        )
+        assertEquals(
+            "native.path_fill.stencil_cover",
+            pathPlan.recording.analysis.records.single().routeDecisionLabel,
+        )
+        assertEquals(
+            listOf("route:native.path_fill.stencil_cover"),
+            pathPlan.recording.routeDiagnostics,
+        )
+        val preparedPath = GPUFramePathApiInventory.prepareNativeTaskList(
+            pathPlan,
+            stencilCapabilities,
+            GPUPixelBounds(0, 0, 32, 32),
+        )
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            preparedPath,
+            (preparedPath as? GPUCorePrimitivePreparedFrameResult.Refused)?.diagnostic?.let {
+                "${it.code.value}: ${it.message}; facts=${it.facts}"
+            },
+        )
+
+        val withoutStencilCover = GPUCapabilities(
+            implementation = stencilCapabilities.implementation,
+            facts = stencilCapabilities.facts.filterNot { it.name == PATH_FILL_STENCIL_COVER },
+            knownUnsupportedFacts = stencilCapabilities.knownUnsupportedFacts,
+            snapshotId = "${stencilCapabilities.snapshotId}:without-stencil-cover",
+            limits = stencilCapabilities.limits,
+        )
+        val preparedRoutePlan = GPUFramePathApiInventory.plan(
+            pathSurface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            withoutStencilCover,
+        )
+        assertEquals(
+            "prepared.path_fill.tessellated",
+            preparedRoutePlan.recording.analysis.records.single().routeDecisionLabel,
+        )
+        assertEquals(
+            listOf("route:coverage-mask.sample.path-fill"),
+            preparedRoutePlan.recording.routeDiagnostics,
+        )
+
+        val missingProductGateFacts = org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig(
+            pathFillEnabled = false,
+        ).buildCapabilities().withCapabilities(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER)
+        val missingProductGate = GPUCapabilities(
+            implementation = missingProductGateFacts.implementation,
+            facts = missingProductGateFacts.facts,
+            knownUnsupportedFacts = missingProductGateFacts.knownUnsupportedFacts,
+            snapshotId = "${missingProductGateFacts.snapshotId}:observed-limits",
+            limits = stencilCapabilities.limits,
+        )
+        val refusedPathPlan = GPUFramePathApiInventory.plan(
+            pathSurface.snapshotOps(),
+            target(),
+            RenderConfig.DEFAULT,
+            missingProductGate,
+        )
+        val refusal = assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(
+            GPUFramePathApiInventory.prepareNativeTaskList(
+                refusedPathPlan,
+                missingProductGate,
+                GPUPixelBounds(0, 0, 32, 32),
+            ),
+        )
+        assertEquals("unsupported.pipeline.capability_missing", refusal.diagnostic.code.value)
+    }
+
+    @Test
     fun `mapper selects one path clip as stencil only when stencil capability exists`() {
         val surface = Surface(32, 32)
         surface.canvas {
@@ -1599,7 +1724,7 @@ class GPUFramePathApiInventoryTest {
         }
         val capabilities = capabilitiesWith(
             FILL_RECT_CAPABILITY,
-            "first_slice.path_fill.stencil_cover",
+            PATH_FILL_STENCIL_COVER,
         )
 
         val plan = GPUFramePathApiInventory.plan(
@@ -1640,7 +1765,7 @@ class GPUFramePathApiInventoryTest {
             RenderConfig.DEFAULT,
             capabilitiesWith(
                 FILL_RECT_CAPABILITY,
-                "first_slice.path_fill.stencil_cover",
+                PATH_FILL_STENCIL_COVER,
             ),
         )
         val execution = assertIs<GPUClipExecutionPlan.CoverageMask>(
@@ -1673,7 +1798,7 @@ class GPUFramePathApiInventoryTest {
             boundedClipEnabled = false,
         ).buildCapabilities().withCapabilities(
             FILL_RECT_CAPABILITY,
-            "first_slice.path_fill.stencil_cover",
+            PATH_FILL_STENCIL_COVER,
         )
 
         val plan = GPUFramePathApiInventory.plan(
@@ -1712,7 +1837,7 @@ class GPUFramePathApiInventoryTest {
             RenderConfig.DEFAULT,
             capabilitiesWith(
                 FILL_RECT_CAPABILITY,
-                "first_slice.path_fill.stencil_cover",
+                PATH_FILL_STENCIL_COVER,
             ),
         )
         val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(
@@ -1747,7 +1872,7 @@ class GPUFramePathApiInventoryTest {
             RenderConfig.DEFAULT,
             capabilitiesWith(
                 FILL_RECT_CAPABILITY,
-                "first_slice.path_fill.stencil_cover",
+                PATH_FILL_STENCIL_COVER,
             ),
         )
         val execution = assertIs<GPUClipExecutionPlan.StencilCoverage>(

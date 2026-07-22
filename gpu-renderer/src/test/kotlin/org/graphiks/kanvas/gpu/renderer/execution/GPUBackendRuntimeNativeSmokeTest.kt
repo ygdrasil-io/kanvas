@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import io.ygdrasil.webgpu.glfwContextRenderer
 import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.URLClassLoader
@@ -786,6 +787,12 @@ class GPUBackendRuntimeNativeSmokeTest {
                 .filter { fact -> fact.name.startsWith("first_slice.") }
                 .associateBy { fact -> fact.name }
 
+            session.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+            ).use { prepared ->
+                assertEquals(session.deviceGeneration, prepared.deviceGeneration)
+            }
+
             assertEquals("GPU", capabilities.implementation.facadeName)
             assertEquals("native", capabilities.implementation.implementationName)
             assertEquals(8192L, limits.maxTextureDimension2D)
@@ -827,7 +834,9 @@ class GPUBackendRuntimeNativeSmokeTest {
                 setOf(
                     "first_slice.fill_rect.native",
                     "first_slice.fill_rrect.native",
-                    "first_slice.scissor.native",
+                    GPUFirstSliceCapabilityName.SCISSOR_NATIVE,
+                    GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE,
+                    GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER,
                     "first_slice.fill_rect.affine.native",
                 ),
                 nativeRouteFacts.keys,
@@ -837,9 +846,19 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertEquals("supported", rrect.value)
             assertTrue(rrect.affectsValidity)
             assertEquals("core-primitive-direct-native", rrect.evidenceLabel)
-            assertTrue(nativeRouteFacts.keys.none { name ->
-                name.contains("msaa") || name.contains("stencil")
-            })
+            val expectedNativeEvidence = mapOf(
+                GPUFirstSliceCapabilityName.SCISSOR_NATIVE to "core-primitive-direct-native",
+                GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE to "core-primitive-bounded-clip-native",
+                GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER to "core-primitive-path-stencil-native",
+            )
+            expectedNativeEvidence.forEach { (name, evidenceLabel) ->
+                val fact = nativeRouteFacts.getValue(name)
+                assertEquals("runtime", fact.source)
+                assertEquals("supported", fact.value)
+                assertTrue(fact.affectsValidity)
+                assertEquals(evidenceLabel, fact.evidenceLabel)
+            }
+            assertFalse("first_slice.path_fill.native" in nativeRouteFacts)
         }
     }
 
