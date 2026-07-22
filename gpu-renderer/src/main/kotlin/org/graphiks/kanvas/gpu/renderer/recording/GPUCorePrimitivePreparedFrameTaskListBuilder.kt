@@ -1405,19 +1405,25 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
         }
         val baseMultisampleContinuationKey = if (preparedSamplePlan is GPUSamplePlan.MultisampleFrame) {
             val keys = baseRenders.mapNotNull(GPUTask.Render::sampleContinuationKey).distinct()
-            if (keys.size != 1 || baseRenders.any { it.sampleContinuationKey == null } ||
-                keys.single().samplePlan != preparedSamplePlan ||
-                keys.single().target.value != request.target.value ||
-                keys.single().attachmentAuthority !=
+            val key = keys.singleOrNull()
+            if (key == null || baseRenders.any { it.sampleContinuationKey == null } ||
+                key.samplePlan != preparedSamplePlan ||
+                key.target.value != request.target.value ||
+                key.deviceGeneration != request.baseTaskList.capabilitySeal.deviceGeneration ||
+                key.colorFormat.value != "rgba8unorm" ||
+                key.colorInterpretation.value != "encoded-premul-srgb" ||
+                key.colorAttachment.value !=
+                "msaa-color:${request.target.value}:${key.targetGeneration}" ||
+                key.attachmentAuthority !=
                     org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority.PreparedFramePayload ||
-                keys.single().depthStencilAttachment != null
+                key.depthStencilAttachment != null
             ) {
                 return refused(
                     "invalid.recording.core_primitive_msaa_continuation",
                     "Color-only CorePrimitive MSAA requires one exact payload-owned depth-free continuation key.",
                 )
             }
-            keys.single()
+            key
         } else {
             null
         }

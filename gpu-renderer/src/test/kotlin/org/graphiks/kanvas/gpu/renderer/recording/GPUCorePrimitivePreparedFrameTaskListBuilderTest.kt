@@ -1424,6 +1424,61 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `native path clip AA 4x refuses foreign base continuation seals before budget planning`() {
+        val plan = nativePathStencilPlan(GPUClipFillRule.Winding, sampleCount = 4)
+        val base = recording(command(353, 7)).taskList.withClipPlans(
+            mapOf(353 to plan),
+        ).withSamplePlan(GPUSamplePlan.MultisampleFrame(4))
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+        val continuation = requireNotNull(
+            base.tasks.filterIsInstance<GPUTask.Render>().single().sampleContinuationKey,
+        )
+        val foreignTargetGeneration = continuation.targetGeneration + 1L
+        val mutations = listOf(
+            "device generation" to continuation.copy(
+                deviceGeneration = org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID(
+                    continuation.deviceGeneration.value + 1L,
+                ),
+            ),
+            "target generation" to continuation.copy(
+                targetGeneration = foreignTargetGeneration,
+            ),
+            "color format" to continuation.copy(
+                colorFormat = org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat("bgra8unorm"),
+            ),
+            "color interpretation" to continuation.copy(
+                colorInterpretation = org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation(
+                    "linear-premul",
+                ),
+            ),
+            "color attachment identity" to continuation.copy(
+                colorAttachment = org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity(
+                    "msaa-color:foreign-target:${continuation.targetGeneration}",
+                ),
+            ),
+        )
+
+        mutations.forEach { (label, mutation) ->
+            val result = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                request(
+                    base.withSampleContinuationKey(mutation),
+                    mapOf(353 to semantic(packet)),
+                ).copy(
+                    capabilities = msaaCapabilities(),
+                    configuredAggregateBudgetBytes = 1L,
+                ),
+            )
+
+            assertEquals(
+                "invalid.recording.core_primitive_msaa_continuation",
+                assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(result, label)
+                    .diagnostic.code.value,
+                label,
+            )
+        }
+    }
+
+    @Test
     fun `native path clip AA 4x refuses missing D24S8 capability before budget planning`() {
         val plan = nativePathStencilPlan(GPUClipFillRule.Winding, sampleCount = 4)
         val base = recording(command(352, 7)).taskList.withClipPlans(
@@ -2667,6 +2722,37 @@ class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
                 task.target,
                 task.loadStore,
                 samplePlan,
+                task.resourceUses,
+                task.provisionalSegmentKey,
+                task.drawPackets,
+                task.batchEligibilityByPacketId,
+                continuation,
+                task.compositeMembership,
+                task.depthStencilLoadStore,
+            )
+        },
+        dependencies = dependencies,
+        phaseOrder = phaseOrder,
+        memoryBudget = memoryBudget,
+        diagnostics = diagnostics,
+    )
+
+    private fun GPUTaskList.withSampleContinuationKey(
+        continuation: org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey,
+    ): GPUTaskList = GPUTaskList(
+        frameId = frameId,
+        capabilitySeal = capabilitySeal,
+        recordingSeals = recordingSeals,
+        expectedReplayKeyHash = expectedReplayKeyHash,
+        tasks = tasks.map { task ->
+            if (task !is GPUTask.Render) return@map task
+            GPUTask.Render(
+                task.taskId,
+                task.recordingId,
+                task.phase,
+                task.target,
+                task.loadStore,
+                task.samplePlan,
                 task.resourceUses,
                 task.provisionalSegmentKey,
                 task.drawPackets,
