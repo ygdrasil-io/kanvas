@@ -168,7 +168,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         val arena = packCorePrimitiveFrameGeometry(routes)
         assertTrue(arena.slices[1].baseVertex > 0)
         assertTrue(arena.slices[1].firstIndex > 0)
-        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32))
         try {
             val terminal = session.renderFrame(
                 taskList,
@@ -267,7 +267,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         )
         assertEquals(4, mapped.identity.sampleCount)
 
-        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32))
         try {
             val nativeBefore = session.nativeCounters()
             val renderBefore = session.renderCounters()
@@ -381,7 +381,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
                 SmokeColor(0, 0, 255, 128),
             ),
         )
-        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32))
         try {
             val nativeBefore = session.nativeCounters()
             val renderBefore = session.renderCounters()
@@ -577,7 +577,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
                 .GPUFrameTextureDescriptor).sampleCount,
         )
 
-        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32))
         try {
             val nativeBefore = session.nativeCounters()
             val renderBefore = session.renderCounters()
@@ -733,7 +733,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
         val generation = backend.deviceGeneration
-        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32))
         try {
             val firstFrame = buildAnalyticShapeSmokeFrame(
                 capabilities = capabilities,
@@ -929,7 +929,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
         val generation = backend.deviceGeneration
-        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32))
         val ellipseRadii = listOf(6f, 3f, 6f, 3f, 6f, 3f, 6f, 3f)
         try {
             val fractionalHard = renderAnalyticScenario(
@@ -1067,7 +1067,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
         val generation = backend.deviceGeneration
-        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32))
         fun rect(
             left: Float,
             top: Float,
@@ -1232,7 +1232,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
         backend!!
         val capabilities = requireNotNull(backend.capabilities)
         val generation = backend.deviceGeneration
-        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32))
         try {
             val geometry = stencilFan(
                 contours = listOf(

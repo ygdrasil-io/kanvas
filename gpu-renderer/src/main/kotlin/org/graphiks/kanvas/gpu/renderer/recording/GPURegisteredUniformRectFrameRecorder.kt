@@ -134,7 +134,7 @@ class GPURegisteredUniformRectFrameRecorder(
                 requestId,
                 request.targetBounds,
                 GPUReadbackPixelFormat.Rgba8Unorm,
-                GPUColorInterpretation("srgb-premul"),
+                GPUColorInterpretation.EncodedPremulSrgb,
             )
         }
         val readbackPlan = readbackRequest?.let { frameReadback ->

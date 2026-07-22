@@ -8,10 +8,13 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 
 class GPUBackendRuntimeContractsTest {
     @Test
@@ -31,21 +34,56 @@ class GPUBackendRuntimeContractsTest {
     }
 
     @Test
-    fun `offscreen request requires positive dimensions and nonblank format`() {
-        val request = GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "rgba8unorm")
+    fun `offscreen request defaults to the canonical prepared color pair and validates dimensions`() {
+        val request = GPUOffscreenTargetRequest(width = 320, height = 180)
 
         assertEquals(320, request.width)
         assertEquals(180, request.height)
-        assertEquals("rgba8unorm", request.colorFormat)
+        assertEquals(GPUColorFormat.RGBA8Unorm, request.colorFormat)
+        assertEquals(GPUColorInterpretation.EncodedPremulSrgb, request.colorInterpretation)
         assertFailsWith<IllegalArgumentException> {
-            GPUOffscreenTargetRequest(width = 0, height = 180, colorFormat = "rgba8unorm")
+            GPUOffscreenTargetRequest(width = 0, height = 180)
         }
         assertFailsWith<IllegalArgumentException> {
-            GPUOffscreenTargetRequest(width = 320, height = -1, colorFormat = "rgba8unorm")
+            GPUOffscreenTargetRequest(width = 320, height = -1)
         }
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `legacy offscreen request wraps the string format without normalization`() {
+        val request = GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "bgra8unorm")
+
+        assertEquals(GPUColorFormat.BGRA8Unorm, request.colorFormat)
+        assertEquals(GPUColorInterpretation.EncodedPremulSrgb, request.colorInterpretation)
         assertFailsWith<IllegalArgumentException> {
             GPUOffscreenTargetRequest(width = 320, height = 180, colorFormat = "")
         }
+    }
+
+    @Test
+    fun `prepared executor target retains the exact request color contract`() {
+        val request = GPUOffscreenTargetRequest(
+            width = 320,
+            height = 180,
+            colorFormat = GPUColorFormat.RGBA8Unorm,
+            colorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
+        )
+        val generation = GPUDeviceGenerationID(41L)
+
+        val target = preparedSceneExecutorTarget(
+            request = request,
+            target = GPUFrameTargetRef("prepared-target"),
+            deviceGeneration = generation,
+            targetGeneration = 7L,
+        )
+
+        assertEquals(request.width, target.width)
+        assertEquals(request.height, target.height)
+        assertEquals(request.colorFormat, target.format)
+        assertEquals(request.colorInterpretation, target.colorInterpretation)
+        assertEquals(generation, target.deviceGeneration)
+        assertEquals(7L, target.targetGeneration)
     }
 
     @Test

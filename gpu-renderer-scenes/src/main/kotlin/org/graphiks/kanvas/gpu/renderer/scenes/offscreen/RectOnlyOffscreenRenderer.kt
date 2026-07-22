@@ -250,7 +250,6 @@ class RectOnlyOffscreenRenderer internal constructor(
                 GPUOffscreenTargetRequest(
                     width = scene.dimensions.width,
                     height = scene.dimensions.height,
-                    colorFormat = OFFSCREEN_COLOR_FORMAT,
                 ),
             ).use { preparedSession ->
                 val terminal = preparedSession.renderFrame(
@@ -360,7 +359,6 @@ class RectOnlyOffscreenRenderer internal constructor(
                 GPUOffscreenTargetRequest(
                     scene.dimensions.width,
                     scene.dimensions.height,
-                    OFFSCREEN_COLOR_FORMAT,
                 ),
             ).use { preparedSession ->
                 val terminal = preparedSession.renderFrame(
@@ -438,7 +436,6 @@ class RectOnlyOffscreenRenderer internal constructor(
                 GPUOffscreenTargetRequest(
                     scene.dimensions.width,
                     scene.dimensions.height,
-                    OFFSCREEN_COLOR_FORMAT,
                 ),
             ).use { preparedSession ->
                 val terminal = preparedSession.renderFrame(
@@ -552,7 +549,6 @@ class RectOnlyOffscreenRenderer internal constructor(
                 GPUOffscreenTargetRequest(
                     scene.dimensions.width,
                     scene.dimensions.height,
-                    OFFSCREEN_COLOR_FORMAT,
                 ),
             ).use { preparedSession ->
                 val terminal = preparedSession.renderFrame(
@@ -671,7 +667,6 @@ class RectOnlyOffscreenRenderer internal constructor(
                 GPUOffscreenTargetRequest(
                     scene.dimensions.width,
                     scene.dimensions.height,
-                    OFFSCREEN_COLOR_FORMAT,
                 ),
             ).use { preparedSession ->
                 val terminal = preparedSession.renderFrame(

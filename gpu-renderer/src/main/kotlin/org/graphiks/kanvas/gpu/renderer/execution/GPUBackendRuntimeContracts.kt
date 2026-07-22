@@ -6,18 +6,28 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDeci
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 
 /** Describes an offscreen surface allocation request for the low-level GPU backend runtime. */
 data class GPUOffscreenTargetRequest(
     val width: Int,
     val height: Int,
-    val colorFormat: String = "rgba8unorm",
+    val colorFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+    val colorInterpretation: GPUColorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
 ) {
     init {
         require(width > 0) { "GPUOffscreenTargetRequest.width must be positive" }
         require(height > 0) { "GPUOffscreenTargetRequest.height must be positive" }
-        require(colorFormat.isNotBlank()) { "GPUOffscreenTargetRequest.colorFormat must not be blank" }
     }
+
+    @Deprecated("Use the typed color format and interpretation constructor")
+    constructor(width: Int, height: Int, colorFormat: String) : this(
+        width = width,
+        height = height,
+        colorFormat = GPUColorFormat(colorFormat),
+        colorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
+    )
 }
 
 /** Enumerates native surface platforms supported by the backend runtime bridge. */

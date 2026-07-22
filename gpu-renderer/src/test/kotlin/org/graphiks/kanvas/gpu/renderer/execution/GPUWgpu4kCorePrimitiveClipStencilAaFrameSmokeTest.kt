@@ -94,7 +94,7 @@ class GPUWgpu4kCorePrimitiveClipStencilAaFrameSmokeTest {
         assertTrue(renderSteps.all { requireNotNull(it.sampleContinuation).key.depthStencilAttachment != null })
 
         val session = backend.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(TARGET.width, TARGET.height, "rgba8unorm"),
+            GPUOffscreenTargetRequest(TARGET.width, TARGET.height),
         )
         try {
             val nativeBefore = session.nativeCounters()

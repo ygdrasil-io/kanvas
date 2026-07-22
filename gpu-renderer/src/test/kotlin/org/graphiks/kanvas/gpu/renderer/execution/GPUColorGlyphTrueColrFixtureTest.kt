@@ -128,7 +128,7 @@ class GPUColorGlyphTrueColrFixtureTest {
             requestId = requestId,
         )
         val session = backend.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(targetWidth, targetHeight, "rgba8unorm"),
+            GPUOffscreenTargetRequest(targetWidth, targetHeight),
         )
         try {
             val terminal = session.renderFrame(

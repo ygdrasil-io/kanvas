@@ -56,7 +56,7 @@ class GPUColorGlyphRenderSmokeTest {
             )
 
             session.prepareSceneFrameSession(
-                GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT, "rgba8unorm"),
+                GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT),
             ).use { prepared ->
                 val terminal = prepared.renderFrame(
                     taskList,

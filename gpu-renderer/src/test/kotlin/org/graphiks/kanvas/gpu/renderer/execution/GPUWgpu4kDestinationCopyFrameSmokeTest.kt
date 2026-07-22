@@ -107,7 +107,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             secondBlendMode = GPUBlendMode.DIFFERENCE,
         )
         val session = backendSession.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(4, 4, "rgba8unorm"),
+            GPUOffscreenTargetRequest(4, 4),
         )
         try {
             val terminal = session.renderFrame(
@@ -174,7 +174,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             mode.ordinal >= GPUBlendMode.MULTIPLY.ordinal && mode != GPUBlendMode.SCREEN
         }
         val session = backendSession.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(4, 4, "rgba8unorm"),
+            GPUOffscreenTargetRequest(4, 4),
         )
         try {
             modes.forEachIndexed { index, mode ->
@@ -231,7 +231,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
             readbackRequestId = requestId,
         )
         val session = backendSession.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(4, 4, "rgba8unorm"),
+            GPUOffscreenTargetRequest(4, 4),
         )
         var targetClosesAfterSessionClose = -1L
         try {

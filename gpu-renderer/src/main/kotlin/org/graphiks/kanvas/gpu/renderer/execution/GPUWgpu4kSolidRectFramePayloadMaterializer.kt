@@ -154,6 +154,7 @@ internal class GPUWgpu4kPreparedSceneTarget private constructor(
             device: GPUDevice,
             width: Int,
             height: Int,
+            format: GPUTextureFormat,
             deviceGeneration: GPUDeviceGenerationID,
             targetGeneration: Long,
             lifecycle: GPUWgpu4kPreparedSceneTargetLifecycle,
@@ -162,7 +163,7 @@ internal class GPUWgpu4kPreparedSceneTarget private constructor(
             val texture = setupTransaction.own(device.createTexture(
                 TextureDescriptor(
                     size = Extent3D(width.toUInt(), height.toUInt()),
-                    format = GPUTextureFormat.RGBA8Unorm,
+                    format = format,
                     usage = GPUTextureUsage.RenderAttachment or
                         GPUTextureUsage.CopySrc or
                         GPUTextureUsage.TextureBinding,

@@ -126,7 +126,7 @@ internal class GPUColorGlyphPreparedTaskListBuilder(
                 requestId = requestId,
                 sourceBounds = semantic.targetBounds,
                 pixelFormat = GPUReadbackPixelFormat.Rgba8Unorm,
-                outputColorInterpretation = GPUColorInterpretation("srgb-premul"),
+                outputColorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
             )
         }
         val readbackPlan = readbackRequest?.let { frameReadback ->

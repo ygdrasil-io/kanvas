@@ -4,6 +4,12 @@ import io.ygdrasil.webgpu.glfwContextRenderer
 import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.URLClassLoader
@@ -172,6 +178,109 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `prepared scene target request validation emits stable codes before native allocation`() {
+        val supported = GPUCapabilities(
+            implementation = GPUImplementationIdentity("GPU", "unit", "unit", "unit"),
+            facts = emptyList(),
+            snapshotId = "prepared-target-validation",
+            supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm),
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(
+                    GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1),
+                    ),
+                ),
+            ),
+        )
+        val cases = listOf(
+            Triple(
+                GPUOffscreenTargetRequest(4, 4, GPUColorFormat.BGRA8Unorm),
+                supported,
+                "unsupported.prepared-scene-session.target-format",
+            ),
+            Triple(
+                GPUOffscreenTargetRequest(
+                    4,
+                    4,
+                    GPUColorFormat.RGBA8Unorm,
+                    GPUColorInterpretation("linear-premul"),
+                ),
+                supported,
+                "unsupported.prepared-scene-session.color-interpretation",
+            ),
+            Triple(
+                GPUOffscreenTargetRequest(4, 4),
+                supported.copy(supportedTextureFormats = emptySet()),
+                "unsupported.prepared-scene-session.target-capability",
+            ),
+            Triple(
+                GPUOffscreenTargetRequest(4, 4),
+                supported.copy(
+                    textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                        mapOf(
+                            GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                                renderAttachmentSampleCounts = setOf(4),
+                            ),
+                        ),
+                    ),
+                ),
+                "unsupported.prepared-scene-session.target-capability",
+            ),
+        )
+
+        cases.forEach { (request, capabilities, expectedCode) ->
+            var allocationAttempts = 0
+            val failure = assertFailsWith<IllegalArgumentException> {
+                withValidatedPreparedSceneTargetRequest(request, capabilities) { nativeFormat ->
+                    allocationAttempts += 1
+                    nativeFormat
+                }
+            }
+            assertTrue(failure.message.orEmpty().startsWith(expectedCode), failure.message)
+            assertEquals(0, allocationAttempts)
+        }
+    }
+
+    @Test
+    fun `native prepared scene refusals do not allocate a target when backend is available`() {
+        val session = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(session != null)
+        session!!
+        val before = session.runtimeTelemetry.texturesCreated
+
+        try {
+            val formatFailure = assertFailsWith<IllegalArgumentException> {
+                session.prepareSceneFrameSession(
+                    GPUOffscreenTargetRequest(4, 4, GPUColorFormat.BGRA8Unorm),
+                )
+            }
+            assertTrue(
+                formatFailure.message.orEmpty()
+                    .startsWith("unsupported.prepared-scene-session.target-format"),
+            )
+            assertEquals(before, session.runtimeTelemetry.texturesCreated)
+
+            val interpretationFailure = assertFailsWith<IllegalArgumentException> {
+                session.prepareSceneFrameSession(
+                    GPUOffscreenTargetRequest(
+                        4,
+                        4,
+                        GPUColorFormat.RGBA8Unorm,
+                        GPUColorInterpretation("linear-premul"),
+                    ),
+                )
+            }
+            assertTrue(
+                interpretationFailure.message.orEmpty()
+                    .startsWith("unsupported.prepared-scene-session.color-interpretation"),
+            )
+            assertEquals(before, session.runtimeTelemetry.texturesCreated)
+        } finally {
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `backend session exposes only an opaque prepared window output binding`() {
         val factory = GPUBackendSession::class.java.methods.singleOrNull {
             it.name == "prepareWindowOutput"
@@ -198,6 +307,7 @@ class GPUBackendRuntimeNativeSmokeTest {
             device = context.wgpuContext.device,
             width = 4,
             height = 4,
+            format = GPUTextureFormat.RGBA8Unorm,
             deviceGeneration = GPUDeviceGenerationID(77),
             targetGeneration = 3,
             lifecycle = lifecycle,
@@ -767,7 +877,7 @@ class GPUBackendRuntimeNativeSmokeTest {
             offscreenTargetId(
                 sessionOrdinal = 3L,
                 offscreenTargetOrdinal = 6L,
-                request = request.copy(colorFormat = "RGBA8Unorm"),
+                request = request.copy(colorFormat = GPUColorFormat("RGBA8Unorm")),
             ),
         )
     }
@@ -788,7 +898,7 @@ class GPUBackendRuntimeNativeSmokeTest {
                 .associateBy { fact -> fact.name }
 
             session.prepareSceneFrameSession(
-                GPUOffscreenTargetRequest(width = 4, height = 4, colorFormat = "rgba8unorm"),
+                GPUOffscreenTargetRequest(width = 4, height = 4),
             ).use { prepared ->
                 assertEquals(session.deviceGeneration, prepared.deviceGeneration)
             }

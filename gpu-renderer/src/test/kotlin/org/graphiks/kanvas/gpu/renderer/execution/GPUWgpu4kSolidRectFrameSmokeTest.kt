@@ -5,7 +5,9 @@ import org.graphiks.kanvas.gpu.renderer.recording.canonicalSolidRectSrcOverBlend
 import io.ygdrasil.webgpu.glfwContextRenderer
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUTexture
+import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureView
+import io.ygdrasil.webgpu.TextureDescriptor
 import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -99,12 +101,14 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
                 device = fixture.device,
                 width = 4,
                 height = 4,
+                format = GPUTextureFormat.RGBA8Unorm,
                 deviceGeneration = GPUDeviceGenerationID(90),
                 targetGeneration = 3,
                 lifecycle = GPUWgpu4kPreparedSceneTargetLifecycle(),
                 setupTransaction = setup,
             )
         }
+        assertEquals(GPUTextureFormat.RGBA8Unorm, fixture.createdTextureFormat)
         assertEquals(1, setup.pendingResourceCount)
         assertFailsWith<IllegalStateException> { setup.close() }
         assertEquals(1, fixture.textureCloseAttempts)
@@ -130,6 +134,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
                 device = fixture.device,
                 width = 4,
                 height = 4,
+                format = GPUTextureFormat.RGBA8Unorm,
                 deviceGeneration = GPUDeviceGenerationID(91),
                 targetGeneration = 4,
                 lifecycle = lifecycle,
@@ -266,7 +271,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             readbackRequestId = secondRequestId,
         )
         val session = backendSession.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(4, 4, "rgba8unorm"),
+            GPUOffscreenTargetRequest(4, 4),
         )
         var targetClosesAfterSessionClose = -1L
         try {
@@ -342,7 +347,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             readbackRequestId = secondRequestId,
         )
         val session = backendSession.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(4, 4, "rgba8unorm"),
+            GPUOffscreenTargetRequest(4, 4),
         )
         try {
             val first = session.renderFrame(
@@ -1811,8 +1816,10 @@ private class FailingPreparedTargetNative(
     var viewCloseAttempts = 0
         private set
     private var textureCloseFailuresRemaining = 1
+    var createdTextureFormat: GPUTextureFormat? = null
+        private set
 
-    private val view: GPUTextureView = preparedTargetProxy(GPUTextureView::class.java) { methodName ->
+    private val view: GPUTextureView = preparedTargetProxy(GPUTextureView::class.java) { methodName, _ ->
         when (methodName) {
             "close" -> {
                 viewCloseAttempts += 1
@@ -1825,7 +1832,7 @@ private class FailingPreparedTargetNative(
         }
     }
 
-    private val texture: GPUTexture = preparedTargetProxy(GPUTexture::class.java) { methodName ->
+    private val texture: GPUTexture = preparedTargetProxy(GPUTexture::class.java) { methodName, _ ->
         when (methodName) {
             "createView" -> if (failCreateView) error("createView failed") else view
             "close" -> {
@@ -1843,9 +1850,12 @@ private class FailingPreparedTargetNative(
         }
     }
 
-    val device: GPUDevice = preparedTargetProxy(GPUDevice::class.java) { methodName ->
+    val device: GPUDevice = preparedTargetProxy(GPUDevice::class.java) { methodName, arguments ->
         when (methodName) {
-            "createTexture" -> texture
+            "createTexture" -> {
+                createdTextureFormat = (arguments?.singleOrNull() as TextureDescriptor).format
+                texture
+            }
             "toString" -> "CanonicalTargetDevice"
             else -> error("Unexpected device call: $methodName")
         }
@@ -1854,13 +1864,13 @@ private class FailingPreparedTargetNative(
 
 private fun <T : Any> preparedTargetProxy(
     type: Class<T>,
-    invocation: (String) -> Any?,
+    invocation: (String, Array<out Any?>?) -> Any?,
 ): T = type.cast(
     Proxy.newProxyInstance(type.classLoader, arrayOf(type)) { proxy, method, arguments ->
         when (method.name) {
             "equals" -> proxy === arguments?.singleOrNull()
             "hashCode" -> System.identityHashCode(proxy)
-            else -> invocation(method.name)
+            else -> invocation(method.name, arguments)
         }
     },
 )

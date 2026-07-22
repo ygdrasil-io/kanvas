@@ -3920,6 +3920,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             native.device,
             TARGET.width,
             TARGET.height,
+            GPUTextureFormat.RGBA8Unorm,
             generation,
             1L,
             GPUWgpu4kPreparedSceneTargetLifecycle(),

@@ -429,7 +429,7 @@ internal fun offscreenTargetId(
     require(sessionOrdinal > 0L) { "sessionOrdinal must be positive" }
     require(offscreenTargetOrdinal > 0L) { "offscreenTargetOrdinal must be positive" }
     return "gpu-offscreen-$sessionOrdinal-$offscreenTargetOrdinal-" +
-        "${request.width}x${request.height}-${request.colorFormat.normalizedColorFormat()}"
+        "${request.width}x${request.height}-${request.colorFormat.value.normalizedColorFormat()}"
 }
 
 /**
@@ -905,6 +905,62 @@ object GPUBackendRuntimeNativeFactory {
     }
 }
 
+internal fun validatePreparedSceneTargetRequest(
+    request: GPUOffscreenTargetRequest,
+    capabilities: GPUCapabilities,
+): GPUTextureFormat {
+    require(request.colorFormat == GPUColorFormat.RGBA8Unorm) {
+        "unsupported.prepared-scene-session.target-format: " +
+            "expected=${GPUColorFormat.RGBA8Unorm.value} actual=${request.colorFormat.value}"
+    }
+    require(request.colorInterpretation == GPUColorInterpretation.EncodedPremulSrgb) {
+        "unsupported.prepared-scene-session.color-interpretation: " +
+            "expected=${GPUColorInterpretation.EncodedPremulSrgb.value} " +
+            "actual=${request.colorInterpretation.value}"
+    }
+
+    val nativeFormat = GPUTextureFormat.RGBA8Unorm
+    val sampleSupport = capabilities.textureFormatSampleSupport[nativeFormat]
+    require(
+        nativeFormat in capabilities.supportedTextureFormats &&
+            sampleSupport != null &&
+            1 in sampleSupport.renderAttachmentSampleCounts,
+    ) {
+        "unsupported.prepared-scene-session.target-capability: " +
+            "format=${request.colorFormat.value} sampleCount=1 usage=render-attachment"
+    }
+    return nativeFormat
+}
+
+internal inline fun <T> withValidatedPreparedSceneTargetRequest(
+    request: GPUOffscreenTargetRequest,
+    capabilities: GPUCapabilities,
+    block: (GPUTextureFormat) -> T,
+): T = block(validatePreparedSceneTargetRequest(request, capabilities))
+
+internal fun preparedSceneExecutorTarget(
+    request: GPUOffscreenTargetRequest,
+    target: GPUFrameTargetRef,
+    deviceGeneration: GPUDeviceGenerationID,
+    targetGeneration: Long,
+): GPUSceneTarget = GPUSceneTarget(
+    targetId = target.value,
+    resolvedTexture = GPUTextureResourceRef("prepared:${target.value}"),
+    retainedMsaaAttachment = null,
+    width = request.width,
+    height = request.height,
+    format = request.colorFormat,
+    colorInterpretation = request.colorInterpretation,
+    usages = setOf(
+        GPUFrameResourceUsage.RenderAttachment,
+        GPUFrameResourceUsage.CopySource,
+        GPUFrameResourceUsage.TextureBinding,
+    ),
+    sampleCount = 1,
+    deviceGeneration = deviceGeneration,
+    targetGeneration = targetGeneration,
+)
+
 private class WgpuBackendSession(
     private val glfw: GLFWContext,
 ) : GPUBackendSession {
@@ -1140,19 +1196,20 @@ private class WgpuBackendSession(
 
     override fun prepareSceneFrameSession(
         request: GPUOffscreenTargetRequest,
-    ): GPUPreparedSceneFrameSession {
-        require(request.colorFormat.normalizedColorFormat() == "rgba8unorm") {
-            "Prepared scene sessions currently require rgba8unorm"
-        }
+    ): GPUPreparedSceneFrameSession = withValidatedPreparedSceneTargetRequest(
+        request = request,
+        capabilities = capabilities,
+    ) { nativeTargetFormat ->
         val childLease = preparedSceneChildren.reserve()
         val setupTransaction = GPUPreparedSceneSetupTransaction()
-        return try {
+        try {
         val targetGeneration = nextOffscreenTargetOrdinal()
         val targetLifecycle = GPUWgpu4kPreparedSceneTargetLifecycle()
         val preparedTarget = GPUWgpu4kPreparedSceneTarget.create(
             device = glfw.wgpuContext.device,
             width = request.width,
             height = request.height,
+            format = nativeTargetFormat,
             deviceGeneration = deviceGeneration,
             targetGeneration = targetGeneration,
             lifecycle = targetLifecycle,
@@ -1267,7 +1324,7 @@ private class WgpuBackendSession(
                             descriptor == null || descriptor.logicalBounds.left != 0 ||
                                 descriptor.logicalBounds.top != 0 || descriptor.logicalBounds.width != request.width ||
                                 descriptor.logicalBounds.height != request.height || descriptor.sampleCount != 1 ||
-                                descriptor.format.value != "rgba8unorm" -> executionDiagnostic(
+                                descriptor.format != request.colorFormat -> executionDiagnostic(
                                 "unsupported.prepared-scene-session.target-incompatible",
                                 "The frame target does not match the prepared session request.",
                             )
@@ -1352,20 +1409,9 @@ private class WgpuBackendSession(
                         }
                     },
                     executor = GPUFrameExecutor(
-                        sceneTarget = GPUSceneTarget(
-                            targetId = target.value,
-                            resolvedTexture = GPUTextureResourceRef("prepared:${target.value}"),
-                            retainedMsaaAttachment = null,
-                            width = request.width,
-                            height = request.height,
-                            format = GPUColorFormat("rgba8unorm"),
-                            colorInterpretation = GPUColorInterpretation("srgb-premul"),
-                            usages = setOf(
-                                GPUFrameResourceUsage.RenderAttachment,
-                                GPUFrameResourceUsage.CopySource,
-                                GPUFrameResourceUsage.TextureBinding,
-                            ),
-                            sampleCount = 1,
+                        sceneTarget = preparedSceneExecutorTarget(
+                            request = request,
+                            target = target,
                             deviceGeneration = deviceGeneration,
                             targetGeneration = targetGeneration,
                         ),
@@ -1760,7 +1806,7 @@ private class WgpuOffscreenTarget(
 
     private val safeWidth = request.width.coerceAtMost(MAX_TEXTURE_DIMENSION)
     private val safeHeight = request.height.coerceAtMost(MAX_TEXTURE_DIMENSION)
-    private val format = request.colorFormat.toWgpuTextureFormat()
+    private val format = request.colorFormat.value.toWgpuTextureFormat()
     private val bytesPerPixel = format.bytesPerPixel()
     private val tightBytesPerRow = safeWidth * bytesPerPixel
     private val paddedBytesPerRow = alignCopyBytesPerRow(tightBytesPerRow)
@@ -1813,7 +1859,7 @@ private class WgpuOffscreenTarget(
             descriptor = GPUSurfaceTargetDescriptor(
                 width = request.width,
                 height = request.height,
-                colorFormat = request.colorFormat.normalizedColorFormat(),
+                colorFormat = request.colorFormat.value.normalizedColorFormat(),
                 surfaceBacked = false,
                 targetGeneration = 0L,
                 usageLabels = setOf("render_attachment", "copy_src"),
@@ -2392,7 +2438,7 @@ private class WgpuOffscreenTarget(
         require(texture.width == destination.width && texture.height == destination.height) {
             "Primary-target GPU copy requires equal texture dimensions"
         }
-        require(request.colorFormat.toWgpuTextureFormat() == offscreenTextures.getValue(destinationTextureLabel).format) {
+        require(request.colorFormat.value.toWgpuTextureFormat() == offscreenTextures.getValue(destinationTextureLabel).format) {
             "Primary-target GPU copy requires equal texture formats"
         }
 
@@ -2439,7 +2485,7 @@ private class WgpuOffscreenTarget(
         ) {
             drawFullscreenTextureUniformPass(
                 wgsl = TARGET_SNAPSHOT_WGSL,
-                colorFormat = request.colorFormat,
+                colorFormat = request.colorFormat.value,
                 textureRgba = snapshot,
                 textureWidth = request.width,
                 textureHeight = request.height,

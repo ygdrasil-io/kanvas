@@ -119,7 +119,6 @@ private class PreparedSceneKadreApp(
                 GPUOffscreenTargetRequest(
                     scene.dimensions.width,
                     scene.dimensions.height,
-                    "rgba8unorm",
                 ),
             )
             preparedOutput = session.prepareWindowOutput(

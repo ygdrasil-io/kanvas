@@ -208,6 +208,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
             device = device,
             width = semantic.targetBounds.width,
             height = semantic.targetBounds.height,
+            format = GPUTextureFormat.RGBA8Unorm,
             deviceGeneration = generation,
             targetGeneration = 1L,
             lifecycle = GPUWgpu4kPreparedSceneTargetLifecycle(),

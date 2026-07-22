@@ -66,9 +66,17 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val framePlan = GPUFramePlanner.plan(prepared)
         val renderPass = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
         assertEquals(2, renderPass.drawPackets.size)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+        )
 
         val session = backend.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(32, 32, "rgba8unorm"),
+            GPUOffscreenTargetRequest(
+                width = 32,
+                height = 32,
+                colorFormat = colorMapping.physicalFormat,
+                colorInterpretation = colorMapping.interpretation,
+            ),
         )
         try {
             val completed = session.renderFrame(

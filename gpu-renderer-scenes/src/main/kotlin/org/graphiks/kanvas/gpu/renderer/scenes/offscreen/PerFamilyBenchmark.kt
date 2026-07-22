@@ -297,7 +297,7 @@ class PerFamilyBenchmark(
         )
         val generation = session.deviceGeneration
         return session.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height),
         ).use { preparedSession ->
             fun render(frameOrdinal: Long, withReadback: Boolean): Long {
                 val recorded = when (
@@ -377,7 +377,7 @@ class PerFamilyBenchmark(
         )
         val generation = session.deviceGeneration
         return session.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height),
         ).use { preparedSession ->
             fun render(frameOrdinal: Long, withReadback: Boolean): Long {
                 val recorded = when (
@@ -456,7 +456,7 @@ class PerFamilyBenchmark(
         )
         val generation = session.deviceGeneration
         return session.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height),
         ).use { preparedSession ->
             fun render(frameOrdinal: Long, withReadback: Boolean): Long {
                 val recorded = when (
@@ -536,7 +536,7 @@ class PerFamilyBenchmark(
         )
         val generation = session.deviceGeneration
         return session.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height, COLOR_FORMAT),
+            GPUOffscreenTargetRequest(scene.dimensions.width, scene.dimensions.height),
         ).use { preparedSession ->
             fun render(frameOrdinal: Long, withReadback: Boolean): Long {
                 val recorded = when (
@@ -619,7 +619,6 @@ class PerFamilyBenchmark(
         const val DEFAULT_WARMUP_FRAMES: Int = 10
         const val DEFAULT_MEASURED_FRAMES: Int = 90
         private const val BACKEND: String = "webgpu-offscreen"
-        private const val COLOR_FORMAT: String = "rgba8unorm"
         private const val HARDWARE_BASELINE: String = "Apple M-series"
 
         /** The ten wired draw families and their representative benchmark scenes. */

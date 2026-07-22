@@ -40,7 +40,6 @@ class OffscreenFrameSampler {
                 GPUOffscreenTargetRequest(
                     scene.dimensions.width,
                     scene.dimensions.height,
-                    OFFSCREEN_FRAME_SAMPLE_COLOR_FORMAT,
                 ),
             ).use { preparedSession ->
                 val samples = mutableListOf<Long>()
@@ -128,7 +127,6 @@ class OffscreenFrameSampler {
     }
 }
 
-private const val OFFSCREEN_FRAME_SAMPLE_COLOR_FORMAT: String = "rgba8unorm"
 
 private fun frameTimingWarmupFrames(sampleCount: Int): Int =
     if (sampleCount <= 1) 0 else minOf(3, sampleCount - 1)

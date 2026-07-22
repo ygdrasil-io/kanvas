@@ -86,7 +86,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
         val requestId = GPUReadbackRequestID("readback.color-glyph.prepared")
         val tasks = colorGlyphTaskList(capabilities, generation, semantic, requestId)
         val session = backend.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT, "rgba8unorm"),
+            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT),
         )
         try {
             val terminal = session.renderFrame(
@@ -138,7 +138,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
         val generation = backend.deviceGeneration
         val tasks = colorGlyphTaskList(capabilities, generation, semantic, requestId = null)
         val session = backend.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT, "rgba8unorm"),
+            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT),
         )
         try {
             val terminal = session.renderFrame(
@@ -176,7 +176,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
         val generation = backend.deviceGeneration
         val tasks = colorGlyphTaskList(capabilities, generation, semantic, requestId = null)
         val session = backend.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT, "rgba8unorm"),
+            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT),
         )
         try {
             repeat(2) { frame ->
@@ -222,7 +222,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
             ),
         )
         val session = backend.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT, "rgba8unorm"),
+            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT),
         )
         try {
             semantics.forEachIndexed { frame, semantic ->
@@ -271,7 +271,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
             packetResourceGeneration = PLAN_GENERATION + 1L,
         )
         val session = backend.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT, "rgba8unorm"),
+            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT),
         )
         try {
             val terminal = session.renderFrame(tasks).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
@@ -356,7 +356,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
             ),
         )
         val session = backend.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT, "rgba8unorm"),
+            GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT),
         )
         try {
             cases.forEach { (case, tasks) ->
