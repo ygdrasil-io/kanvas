@@ -2,12 +2,14 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -522,6 +524,71 @@ class GPUFrameCoordinatorTest {
     }
 
     @Test
+    fun `public completion preserves source success when requested close fails then explicit close retries`() {
+        val attemptId = GPUFrameAttemptID("attempt.session.success-close-failure")
+        val pending = CompletableFuture<GPUFrameExecutionCompletedResult>()
+        val sourceSuccess = successfulExecutionResult(attemptId)
+        var closeAttempts = 0
+        val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
+            coordinatorFactory = GPUFrameCoordinatorFactory { _, _ ->
+                coordinatorWithPendingCompletion(attemptId, pending)
+            },
+            closeAction = {
+                closeAttempts += 1
+                if (closeAttempts == 1) error("first close attempt failed")
+            },
+        )
+        val handle = session.renderFrame(GPUFrameCoreTestFixture.taskList())
+        session.close()
+
+        pending.complete(sourceSuccess)
+
+        val completed = handle.completion.toCompletableFuture().get(2, TimeUnit.SECONDS)
+        assertEquals(sourceSuccess.attemptId, completed.attemptId)
+        assertEquals(sourceSuccess.furthestPhase, completed.furthestPhase)
+        assertEquals(sourceSuccess.outcome, completed.outcome)
+        assertSame(sourceSuccess.diagnostic, completed.diagnostic)
+        assertSame(sourceSuccess.telemetry, completed.telemetry)
+        assertSame(GPUSceneFrameOutput.CurrentFrameCompletionOnly, completed.output)
+        assertEquals(1, closeAttempts)
+
+        session.close()
+        assertEquals(2, closeAttempts)
+    }
+
+    @Test
+    fun `public completion preserves source failure when requested close fails then explicit close retries`() {
+        val attemptId = GPUFrameAttemptID("attempt.session.failure-close-failure")
+        val pending = CompletableFuture<GPUFrameExecutionCompletedResult>()
+        val sourceFailure = IllegalArgumentException("source completion failed")
+        var closeAttempts = 0
+        val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
+            coordinatorFactory = GPUFrameCoordinatorFactory { _, _ ->
+                coordinatorWithPendingCompletion(attemptId, pending)
+            },
+            closeAction = {
+                closeAttempts += 1
+                if (closeAttempts == 1) error("first close attempt failed")
+            },
+        )
+        val handle = session.renderFrame(GPUFrameCoreTestFixture.taskList())
+        session.close()
+
+        pending.completeExceptionally(sourceFailure)
+
+        val publicFailure = assertFailsWith<ExecutionException> {
+            handle.completion.toCompletableFuture().get(2, TimeUnit.SECONDS)
+        }
+        assertSame(sourceFailure, publicFailure.cause)
+        assertEquals(1, closeAttempts)
+
+        session.close()
+        assertEquals(2, closeAttempts)
+    }
+
+    @Test
     fun `prepared scene session invokes close action exactly once across repeated close`() {
         var closes = 0
         val session = GPUPreparedSceneFrameSession(
@@ -705,6 +772,24 @@ class GPUFrameCoordinatorTest {
             telemetry = telemetry,
         )
     }
+
+    private fun coordinatorWithPendingCompletion(
+        attemptId: GPUFrameAttemptID,
+        pending: CompletableFuture<GPUFrameExecutionCompletedResult>,
+    ) = GPUFrameCoordinator(
+        planner = GPUFramePlanningPort { GPUFrameCoreTestFixture.preparedFrame().semanticPlan },
+        preflighter = GPUFramePreflightPort {
+            GPUFramePreflightResult.Prepared(GPUFrameCoreTestFixture.preparedFrame())
+        },
+        executor = GPUFrameExecutionPort { frame, id, _ ->
+            GPUFrameExecutionHandle(
+                attemptId = id,
+                immediateState = GPUFrameImmediateState.Submitted(frame.completionTicket.ticketId),
+                completion = pending,
+            )
+        },
+        attemptIdFactory = { attemptId },
+    )
 
     private class TierCloseProbe(
         private val label: String,

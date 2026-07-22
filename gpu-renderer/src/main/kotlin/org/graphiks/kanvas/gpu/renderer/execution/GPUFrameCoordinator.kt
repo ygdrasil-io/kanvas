@@ -449,12 +449,30 @@ class GPUPreparedSceneFrameSession internal constructor(
                 mapOf("failureClass" to failure::class.simpleName.orEmpty()),
             )
         }
-        val settledCompletion = handle.completion.whenComplete { _, _ -> completeFrameState() }
         return GPUPreparedSceneFrameHandle(
             attemptId = handle.attemptId,
             immediateState = handle.immediateState,
-            completion = settledCompletion,
+            completion = completionAfterFrameState(handle.completion),
         )
+    }
+
+    private fun completionAfterFrameState(
+        source: CompletionStage<GPUPreparedSceneCompletedFrameResult>,
+    ): CompletionStage<GPUPreparedSceneCompletedFrameResult> {
+        val publicCompletion = CompletableFuture<GPUPreparedSceneCompletedFrameResult>()
+        source.whenComplete { completed, sourceFailure ->
+            try {
+                completeFrameState()
+            } catch (_: Throwable) {
+                // Explicit close remains the reporting and retry boundary for close-action failures.
+            }
+            if (sourceFailure == null) {
+                publicCompletion.complete(completed)
+            } else {
+                publicCompletion.completeExceptionally(sourceFailure)
+            }
+        }
+        return publicCompletion
     }
 
     /** Handle-free structural evidence for the reusable prepared-session route. */
