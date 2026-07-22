@@ -336,6 +336,146 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
     }
 
     @Test
+    fun `native mixed direct path direct AA 4x preserves order and reuses paired attachments`() {
+        val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        assumeTrue(
+            backend != null,
+            "wgpu4k native adapter unavailable; skipping mixed direct path direct AA 4x smoke",
+        )
+        backend!!
+        val capabilities = requireNotNull(backend.capabilities)
+        val rgbaSupport = capabilities.textureFormatSampleSupport[
+            io.ygdrasil.webgpu.GPUTextureFormat.RGBA8Unorm
+        ]
+        val depthSupport = capabilities.textureFormatSampleSupport[
+            io.ygdrasil.webgpu.GPUTextureFormat.Depth24PlusStencil8
+        ]
+        assumeTrue(
+            rgbaSupport != null &&
+                4 in rgbaSupport.renderAttachmentSampleCounts &&
+                4 in rgbaSupport.resolveSourceSampleCounts &&
+                depthSupport != null && 4 in depthSupport.renderAttachmentSampleCounts,
+            "rgba8unorm resolve plus depth24plus-stencil8 4x unavailable; skipping mixed AA smoke",
+        )
+        val generation = GPUDeviceGenerationID(capabilities.snapshotId.substringAfterLast('-').toLong())
+        val draws = listOf(
+            SmokeDraw.Direct(
+                GPURect(2f, 2f, 15f, 15f),
+                SmokeColor(255, 0, 0),
+            ),
+            SmokeDraw.Path(
+                stencilFan(
+                    contours = listOf(
+                        listOf(
+                            8.25f to 5.25f,
+                            26.75f to 14.25f,
+                            8.25f to 25.75f,
+                        ),
+                    ),
+                    fillRule = GPUCorePrimitiveFillRule.Winding,
+                ),
+                SmokeColor(0, 255, 0),
+            ),
+            SmokeDraw.Direct(
+                GPURect(12f, 10f, 29f, 23f),
+                SmokeColor(0, 0, 255, 128),
+            ),
+        )
+        val session = backend.prepareSceneFrameSession(GPUOffscreenTargetRequest(32, 32, "rgba8unorm"))
+        try {
+            val nativeBefore = session.nativeCounters()
+            val renderBefore = session.renderCounters()
+            val firstPixels = renderScenario(
+                session = session,
+                capabilities = capabilities,
+                generation = generation,
+                frameValue = 12_036L,
+                scenarioId = "mixed-direct-path-direct-aa-4x-first",
+                draws = draws,
+                sampleCount = 4,
+            )
+            assertPixel(firstPixels, 32, 1, 1, 0, 0, 0, 0)
+            assertPixel(firstPixels, 32, 4, 4, 255, 0, 0, 255)
+            assertPixel(firstPixels, 32, 10, 18, 0, 255, 0, 255)
+            assertPixel(firstPixels, 32, 27, 20, 0, 0, 128, 128)
+            assertPixel(firstPixels, 32, 10, 8, 0, 255, 0, 255)
+            assertPixel(firstPixels, 32, 13, 12, 0, 127, 128, 255)
+            assertPixel(firstPixels, 32, 14, 18, 0, 127, 128, 255)
+            assertPartialPrimaryPixel(firstPixels, 32, 8, 18, channel = 1)
+
+            val nativeAfterFirst = session.nativeCounters()
+            val renderAfterFirst = session.renderCounters()
+            assertEquals(
+                1L,
+                renderAfterFirst.msaaColorTextureCreations - renderBefore.msaaColorTextureCreations,
+            )
+            assertEquals(
+                1L,
+                renderAfterFirst.pathDepthStencilTextureCreations -
+                    renderBefore.pathDepthStencilTextureCreations,
+            )
+            assertEquals(
+                3L,
+                nativeAfterFirst.corePrimitiveInvariantCreations -
+                    nativeBefore.corePrimitiveInvariantCreations,
+            )
+            assertEquals(0, nativeAfterFirst.quarantinedNativePayloads)
+
+            val secondPixels = renderScenario(
+                session = session,
+                capabilities = capabilities,
+                generation = generation,
+                frameValue = 12_036L,
+                scenarioId = "mixed-direct-path-direct-aa-4x-first",
+                draws = draws,
+                sampleCount = 4,
+            )
+            assertPixel(secondPixels, 32, 1, 1, 0, 0, 0, 0)
+            assertPixel(secondPixels, 32, 4, 4, 255, 0, 0, 255)
+            assertPixel(secondPixels, 32, 10, 18, 0, 255, 0, 255)
+            assertPixel(secondPixels, 32, 27, 20, 0, 0, 128, 128)
+            assertPixel(secondPixels, 32, 13, 12, 0, 127, 128, 255)
+            assertPartialPrimaryPixel(secondPixels, 32, 8, 18, channel = 1)
+
+            val nativeAfterSecond = session.nativeCounters()
+            val renderAfterSecond = session.renderCounters()
+            assertEquals(
+                0L,
+                renderAfterSecond.msaaColorTextureCreations -
+                    renderAfterFirst.msaaColorTextureCreations,
+            )
+            assertEquals(
+                1L,
+                renderAfterSecond.msaaColorSlotReuses - renderAfterFirst.msaaColorSlotReuses,
+            )
+            assertEquals(
+                0L,
+                renderAfterSecond.pathDepthStencilTextureCreations -
+                    renderAfterFirst.pathDepthStencilTextureCreations,
+            )
+            assertEquals(
+                1L,
+                renderAfterSecond.pathDepthStencilSlotReuses -
+                    renderAfterFirst.pathDepthStencilSlotReuses,
+            )
+            assertEquals(
+                0L,
+                nativeAfterSecond.corePrimitiveInvariantCreations -
+                    nativeAfterFirst.corePrimitiveInvariantCreations,
+            )
+            assertEquals(
+                3L,
+                nativeAfterSecond.corePrimitiveInvariantReuses -
+                    nativeAfterFirst.corePrimitiveInvariantReuses,
+            )
+            assertEquals(0, nativeAfterSecond.quarantinedNativePayloads)
+        } finally {
+            session.close()
+            GPUBackendRuntimeNativeFactory.dispose()
+        }
+    }
+
+    @Test
     fun `native path stencil AA 4x resolves fractional edges and reuses paired attachments`() {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         assumeTrue(
@@ -1862,7 +2002,7 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
             ),
             depthStencilAttachment = null,
         )
-        return GPUTaskList(
+        val multisampled = GPUTaskList(
             frameId = frameId,
             capabilitySeal = capabilitySeal,
             recordingSeals = recordingSeals,
@@ -1896,6 +2036,38 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
             phaseOrder = phaseOrder,
             memoryBudget = memoryBudget,
             diagnostics = diagnostics,
+        )
+        if (!canonicalClear) return multisampled
+        val renders = multisampled.tasks.filterIsInstance<GPUTask.Render>()
+        if (renders.size <= 1) return multisampled
+        val first = renders.first()
+        val packets = renders.flatMap(GPUTask.Render::drawPackets)
+        val merged = GPUTask.Render(
+            first.taskId,
+            first.recordingId,
+            first.phase,
+            first.target,
+            first.loadStore,
+            first.samplePlan,
+            renders.flatMap(GPUTask.Render::resourceUses).distinct(),
+            first.provisionalSegmentKey,
+            packets,
+            renders.flatMap { render -> render.batchEligibilityByPacketId.entries }
+                .associate { it.toPair() },
+            first.sampleContinuationKey,
+            first.compositeMembership,
+            first.depthStencilLoadStore,
+        )
+        return GPUTaskList(
+            frameId = multisampled.frameId,
+            capabilitySeal = multisampled.capabilitySeal,
+            recordingSeals = multisampled.recordingSeals,
+            expectedReplayKeyHash = multisampled.expectedReplayKeyHash,
+            tasks = listOf(merged),
+            dependencies = emptyList(),
+            phaseOrder = multisampled.phaseOrder,
+            memoryBudget = multisampled.memoryBudget,
+            diagnostics = multisampled.diagnostics,
         )
     }
 

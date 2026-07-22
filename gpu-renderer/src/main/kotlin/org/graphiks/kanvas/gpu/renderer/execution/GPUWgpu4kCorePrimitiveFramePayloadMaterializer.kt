@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUnif
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
@@ -2968,11 +2969,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         if (isMsaa4x) {
             val continuation = renderStep.sampleContinuation
-            val exactAuthority = directUnits.isEmpty() && pathDepthStencilUse != null &&
+            val exactAuthority = pathDepthStencilUse != null &&
                 renderStep.resourceUses.none { it.role == GPUFrameResourceRole.ClipDepthStencil } &&
                 renderStep.drawPackets.all {
                     it.role == GPUDrawPacketRole.PathStencilProducer ||
-                        it.role == GPUDrawPacketRole.PathStencilCover
+                        it.role == GPUDrawPacketRole.PathStencilCover ||
+                        it.role == GPUDrawPacketRole.Shading
+                } && directUnits.all { unit ->
+                    unit.structuralPipelineKey.sampleCount == 4 &&
+                        unit.structuralPipelineKey.depthStencil ==
+                        corePrimitiveDirectPathDepthStencilState()
                 } &&
                 continuation?.let { authority ->
                     authority.key.target.value == renderStep.target.value &&

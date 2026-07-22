@@ -140,8 +140,10 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry -> when {
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
                     !blend.isCanonicalPremulSrcOver() -> null
-                sampleCount == 4 && (clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None ||
-                    depthStencil != GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None) -> null
+                sampleCount == 4 && clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None -> null
+                sampleCount == 4 &&
+                    depthStencil != GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None &&
+                    depthStencil != corePrimitiveDirectPathDepthStencilState() -> null
                 clip is GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic &&
                     depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None ->
                     clip.nativeAnalyticProgramOrNull()
@@ -404,6 +406,7 @@ internal fun isSupportedCorePrimitiveRenderPipelineIdentity(
 
 private fun GPUWgpu4kCorePrimitivePipelineProgram.supportsFourSamples(): Boolean = when (this) {
     GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
+    GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd,
     GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,

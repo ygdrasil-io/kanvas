@@ -1627,15 +1627,6 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
             }
         }
         if (preparedSamplePlan == GPUSamplePlan.MultisampleFrame(4) &&
-            pathStencilPlansByCommandId.isNotEmpty() &&
-            pathStencilPlansByCommandId.size != basePackets.size
-        ) {
-            return refused(
-                "unsupported.recording.core_primitive_path_stencil_msaa_mixed_direct",
-                "Path stencil MSAA 4x requires one path-only render scope and refuses direct packets.",
-            )
-        }
-        if (preparedSamplePlan == GPUSamplePlan.MultisampleFrame(4) &&
             pathStencilPlansByCommandId.isNotEmpty()
         ) {
             if (baseRenders.size != 1) {

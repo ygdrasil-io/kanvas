@@ -2093,22 +2093,33 @@ internal class GPUFramePreflighter(
         }
         if (pathMsaaRenders.isEmpty()) return null
         if (renderSteps.size != 1 || coreRenders.size != 1 || pathMsaaRenders.size != 1) {
-            return refused("Path stencil MSAA authority requires one unique all-path render scope.")
+            return refused("Path stencil MSAA authority requires one unique path-bearing render scope.")
         }
         val render = pathMsaaRenders.single()
         if (render.drawPackets.any { packet ->
-                packet.semanticPayload !is GPUDrawSemanticPayload.CorePrimitive ||
-                    packet.role != GPUDrawPacketRole.PathStencilProducer &&
-                    packet.role != GPUDrawPacketRole.PathStencilCover
-            } || render.drawPackets.size % 2 != 0 ||
-            render.drawPackets.chunked(2).any { pair ->
-                pair.size != 2 ||
-                    pair[0].role != GPUDrawPacketRole.PathStencilProducer ||
-                    pair[1].role != GPUDrawPacketRole.PathStencilCover ||
-                    pair[0].commandIdValue != pair[1].commandIdValue
+                packet.semanticPayload !is GPUDrawSemanticPayload.CorePrimitive
             }
         ) {
-            return refused("Path stencil MSAA authority requires exact producer/cover pairs only.")
+            return refused("Path stencil MSAA authority requires one all-CorePrimitive render scope.")
+        }
+        var packetIndex = 0
+        while (packetIndex < render.drawPackets.size) {
+            val packet = render.drawPackets[packetIndex]
+            when (packet.role) {
+                GPUDrawPacketRole.Shading -> packetIndex += 1
+                GPUDrawPacketRole.PathStencilProducer -> {
+                    val cover = render.drawPackets.getOrNull(packetIndex + 1)
+                    if (cover?.role != GPUDrawPacketRole.PathStencilCover ||
+                        cover.commandIdValue != packet.commandIdValue
+                    ) {
+                        return refused("Path stencil MSAA authority requires exact producer/cover pairs in order.")
+                    }
+                    packetIndex += 2
+                }
+                GPUDrawPacketRole.PathStencilCover ->
+                    return refused("Path stencil MSAA authority refuses an unpaired cover packet.")
+                else -> return refused("Path stencil MSAA authority contains an unsupported packet role.")
+            }
         }
         val semantics = render.drawPackets.map { packet ->
             packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
@@ -2116,10 +2127,13 @@ internal class GPUFramePreflighter(
         val targetBounds = semantics.map(GPUDrawSemanticPayload.CorePrimitive::targetBounds)
             .distinct().singleOrNull()
             ?: return refused("Path stencil MSAA semantics require one exact target extent.")
-        if (semantics.any { semantic ->
+        if (render.drawPackets.zip(semantics).any { (packet, semantic) ->
+                packet.role != GPUDrawPacketRole.Shading &&
+                    (
                 semantic.coverageMode != GPUCorePrimitiveCoverageMode.StencilAA ||
                     (semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath)
                         ?.geometryMode != GPUCorePrimitiveGeometryMode.StencilEdgeFan
+                    )
             }
         ) {
             return refused("Path stencil MSAA semantics require StencilAA edge-fan authority.")
@@ -2194,21 +2208,36 @@ internal class GPUFramePreflighter(
         }
         render.drawPackets.forEach { packet ->
             val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
-            val structuralRole = when (packet.role) {
-                GPUDrawPacketRole.PathStencilProducer ->
-                    GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer
-                GPUDrawPacketRole.PathStencilCover ->
-                    GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover
-                else -> error("Validated above")
-            }
+            val clip = packet.clipExecutionPlan
+                ?: return refused("Path stencil MSAA clip authority is missing.")
+            val blend = packet.blendPlan
+                ?: return refused("Path stencil MSAA blend authority is missing.")
             val structural = try {
-                corePrimitivePathStencilRenderPipelineStructuralKey(
-                    semantic,
-                    structuralRole,
-                    packet.clipExecutionPlan ?: return refused("Path stencil MSAA clip authority is missing."),
-                    packet.blendPlan ?: return refused("Path stencil MSAA blend authority is missing."),
-                    4,
-                )
+                when (packet.role) {
+                    GPUDrawPacketRole.Shading -> corePrimitiveRenderPipelineStructuralKey(
+                        semantic,
+                        clip,
+                        blend,
+                        4,
+                    ).copy(depthStencil = corePrimitiveDirectPathDepthStencilState())
+                    GPUDrawPacketRole.PathStencilProducer ->
+                        corePrimitivePathStencilRenderPipelineStructuralKey(
+                            semantic,
+                            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+                            clip,
+                            blend,
+                            4,
+                        )
+                    GPUDrawPacketRole.PathStencilCover ->
+                        corePrimitivePathStencilRenderPipelineStructuralKey(
+                            semantic,
+                            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover,
+                            clip,
+                            blend,
+                            4,
+                        )
+                    else -> error("Validated above")
+                }
             } catch (_: IllegalArgumentException) {
                 return refused("Path stencil MSAA structural pipeline authority is invalid.")
             }
@@ -3600,7 +3629,12 @@ internal class GPUFramePreflighter(
                     request.key.depthStencilAttachment?.value == pathDepthUse.resource.value &&
                     render.drawPackets.all { packet ->
                         packet.role == GPUDrawPacketRole.PathStencilProducer ||
-                            packet.role == GPUDrawPacketRole.PathStencilCover
+                            packet.role == GPUDrawPacketRole.PathStencilCover ||
+                            packet.role == GPUDrawPacketRole.Shading &&
+                            packet.corePrimitivePreparedAuthority?.structuralPipelineKey?.let { structural ->
+                                structural.sampleCount == 4 &&
+                                    structural.depthStencil == corePrimitiveDirectPathDepthStencilState()
+                            } == true
                     }
                 val clipDepthUse = render.resourceUses.singleOrNull { use ->
                     use.role == GPUFrameResourceRole.ClipDepthStencil

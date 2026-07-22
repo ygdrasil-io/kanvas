@@ -56,10 +56,26 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
         assertEquals(4, mapped.identity.sampleCount)
         assertEquals(4u, descriptor.multisample.count)
         assertNull(descriptor.depthStencil)
-        assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Refused>(
-            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
-                key.copy(depthStencil = directWithPathDepthStencilKey().depthStencil),
-            ),
+        val withPathAttachment = directWithPathDepthStencilKey().copy(sampleCount = 4)
+        val attachedMapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(withPathAttachment),
+        )
+        val attachedDescriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(
+            attachedMapped.identity,
+            shader,
+            pipelineLayout,
+        )
+        assertEquals(
+            GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil,
+            attachedMapped.identity.program,
+        )
+        assertEquals(4u, attachedDescriptor.multisample.count)
+        assertDepthStencil(
+            attachedDescriptor,
+            front = face(pass = GPUStencilOperation.Keep),
+            back = face(pass = GPUStencilOperation.Keep),
+            readMask = 0u,
+            writeMask = 0u,
         )
     }
 

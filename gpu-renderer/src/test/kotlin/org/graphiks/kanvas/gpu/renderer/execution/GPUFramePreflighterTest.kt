@@ -3044,6 +3044,82 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `mixed direct path direct AA 4x preflight keeps one ordered scope and exact paired operands`() {
+        val plan = preparedPathFramePlan(
+            mixed = true,
+            samplePlan = GPUSamplePlan.MultisampleFrame(4),
+        )
+        val events = mutableListOf<String>()
+        val result = preflighter(
+            RecordingResourceProvider(events),
+            RecordingCompletionProvider(events),
+            RecordingSurfaceProvider(events),
+            context = clipPreflightContext(plan),
+            capabilities = pathMsaaCapabilities(),
+        ).preflight(plan)
+        val prepared = assertIs<GPUFramePreflightResult.Prepared>(result, result.toString()).frame
+        val render = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val continuation = requireNotNull(render.sampleContinuation)
+        val depthUse = render.resourceUses.single { it.role == GPUFrameResourceRole.PathDepthStencil }
+        val scope = prepared.encoderPlan.scopes.single()
+        val direct = assertIs<GPUCorePrimitiveDirectNativeRouteSeal.Routes>(
+            scope.corePrimitiveDirectNativeRouteSeal,
+        )
+        val path = assertIs<GPUCorePrimitivePathStencilNativeRouteSeal.Pairs>(
+            scope.corePrimitivePathStencilNativeRouteSeal,
+        )
+        val unified = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
+            scope.corePrimitiveNativeScopeRouteSeal,
+        )
+
+        assertEquals(
+            listOf(
+                GPUDrawPacketRole.Shading,
+                GPUDrawPacketRole.PathStencilProducer,
+                GPUDrawPacketRole.PathStencilCover,
+                GPUDrawPacketRole.Shading,
+            ),
+            render.drawPackets.map(GPUDrawPacket::role),
+        )
+        assertEquals(
+            listOf(render.drawPackets[0].packetId, render.drawPackets[3].packetId),
+            direct.routesByPacketId.keys.toList(),
+        )
+        assertEquals(
+            listOf(render.drawPackets[1].packetId, render.drawPackets[2].packetId),
+            path.flattenedPacketIds,
+        )
+        assertEquals(render.drawPackets.map(GPUDrawPacket::packetId), unified.flattenedPacketIds)
+        assertEquals(
+            listOf(
+                GPUCorePrimitiveNativeScopeRouteUnit.Direct::class,
+                GPUCorePrimitiveNativeScopeRouteUnit.PathPair::class,
+                GPUCorePrimitiveNativeScopeRouteUnit.Direct::class,
+            ),
+            unified.orderedUnits.map { it::class },
+        )
+        assertEquals(
+            listOf(
+                GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                GPUPreparedNativeOperandRole.RenderResolveTarget,
+                GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+            ),
+            scope.nativeOperandKeys.take(3).map(GPUPreparedNativeOperandKey::role),
+        )
+        assertEquals(
+            listOf(
+                gpuPreparedNativeBindingKey("msaa:${continuation.key.colorAttachment.value}"),
+                gpuPreparedNativeBindingKey("GPUFrameTargetRef:${render.target.value}@1"),
+                gpuPreparedNativeBindingKey(
+                    "GPUFrameTextureRef:${depthUse.resource.value}@" +
+                        prepared.generationSeal.resourceGenerations.getValue(depthUse.resource),
+                ),
+            ),
+            scope.nativeOperandKeys.take(3).map(GPUPreparedNativeOperandKey::bindingKey),
+        )
+    }
+
+    @Test
     fun `path stencil AA 4x authority corruption refuses before provider side effects`() {
         val valid = preparedPathFramePlan(
             mixed = false,
@@ -6164,6 +6240,13 @@ class GPUFramePreflighterTest {
             }
         }.close().taskList.withCoreClipPlans(commandIds.associateWith { GPUClipExecutionPlan.NoClip })
             .withCoreSamplePlan(samplePlan)
+            .let { taskList ->
+                if (mixed && samplePlan == GPUSamplePlan.MultisampleFrame(4)) {
+                    taskList.mergeCoreRenderTasks()
+                } else {
+                    taskList
+                }
+            }
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
         val semantics = commandIds.associateWith { commandId ->
             if (commandId == 72) {
@@ -6501,6 +6584,40 @@ class GPUFramePreflighterTest {
         memoryBudget = memoryBudget,
         diagnostics = diagnostics,
     )
+
+    private fun GPUTaskList.mergeCoreRenderTasks(): GPUTaskList {
+        val renders = tasks.filterIsInstance<GPUTask.Render>()
+        require(renders.isNotEmpty() && renders.size == tasks.size)
+        val first = renders.first()
+        val packets = renders.flatMap(GPUTask.Render::drawPackets)
+        val merged = GPUTask.Render(
+            first.taskId,
+            first.recordingId,
+            first.phase,
+            first.target,
+            GPULoadStorePlan("clear", GPUStorePlan.Store),
+            first.samplePlan,
+            renders.flatMap(GPUTask.Render::resourceUses).distinct(),
+            first.provisionalSegmentKey,
+            packets,
+            renders.flatMap { render -> render.batchEligibilityByPacketId.entries }
+                .associate { it.toPair() },
+            first.sampleContinuationKey,
+            first.compositeMembership,
+            first.depthStencilLoadStore,
+        )
+        return GPUTaskList(
+            frameId = frameId,
+            capabilitySeal = capabilitySeal,
+            recordingSeals = recordingSeals,
+            expectedReplayKeyHash = expectedReplayKeyHash,
+            tasks = listOf(merged),
+            dependencies = emptyList(),
+            phaseOrder = phaseOrder,
+            memoryBudget = memoryBudget,
+            diagnostics = diagnostics,
+        )
+    }
 
     private fun renderWith(
         source: GPUFrameStep.RenderPassStep,

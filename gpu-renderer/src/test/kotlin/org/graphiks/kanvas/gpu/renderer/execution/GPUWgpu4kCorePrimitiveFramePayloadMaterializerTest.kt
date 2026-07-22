@@ -2477,6 +2477,47 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `mixed AA 4x materializes one paired native scope with four ordered draws`() {
+        val fixture = fixture(
+            routeShape = RouteShape.Mixed,
+            useRealPreflight = true,
+            sampleCount = 4,
+        )
+        fixture.native.events.clear()
+        val scope = fixture.encoderPlan.scopes.single()
+
+        assertEquals(
+            listOf(
+                GPUPreparedNativeOperandRole.RenderMsaaColorTarget,
+                GPUPreparedNativeOperandRole.RenderResolveTarget,
+                GPUPreparedNativeOperandRole.RenderDepthStencilTarget,
+            ),
+            scope.nativeOperandKeys.take(3).map(GPUPreparedNativeOperandKey::role),
+        )
+        val materialized = fixture.materializeCore()
+        assertIndexedPathPayload(
+            fixture,
+            materialized,
+            expectedRoles = listOf("direct", "producer", "cover", "direct"),
+            expectedUniformOffsets = listOf(0L, 256L, 256L, 512L),
+            expectedSemanticCommands = listOf(1, 2, 2, 3),
+            expectedUniquePipelines = 3,
+            expectedSampleCount = 4,
+        )
+        val render = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        val resolve = requireNotNull(render.pass.resolveTarget)
+        val depthStencil = requireNotNull(render.pass.depthStencilTarget)
+        assertNotSame(render.pass.colorTarget.view, resolve.view)
+        assertNotSame(render.pass.colorTarget.view, depthStencil.view)
+        assertNotSame(resolve.view, depthStencil.view)
+        assertTrue(fixture.native.renderPipelineDescriptors.all { it.multisample.count == 4u })
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
     fun `real preflight indexed keys feed the path materializer without manual route fixtures`() {
         val fixture = fixture(routeShape = RouteShape.PathOnly, useRealPreflight = true)
         fixture.native.events.clear()
@@ -3323,6 +3364,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         expectedUniformOffsets: List<Long>,
         expectedSemanticCommands: List<Int>,
         expectedUniquePipelines: Int,
+        expectedSampleCount: Int = 1,
     ) {
         val render = materialized.draft.payload.scopeOperands
             .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
@@ -3434,12 +3476,16 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         assertEquals(TARGET.width.toUInt(), depthDescriptor.size.width)
         assertEquals(TARGET.height.toUInt(), depthDescriptor.size.height)
         assertEquals(GPUTextureFormat.Depth24PlusStencil8, depthDescriptor.format)
-        assertEquals(1u, depthDescriptor.sampleCount)
+        assertEquals(expectedSampleCount.toUInt(), depthDescriptor.sampleCount)
         assertEquals(GPUTextureUsage.RenderAttachment, depthDescriptor.usage)
         assertEquals(expectedUniquePipelines, fixture.native.events.count { it == "createRenderPipeline" })
         val expectedKeyRoles = fixture.encoderPlan.scopes.single().nativeOperandKeys.map { it.role }
         assertEquals(expectedKeyRoles.size, render.operands.size)
-        assertEquals(2 + expectedUniquePipelines + 2 + expectedRoles.size, render.operands.size)
+        val attachmentOperandCount = if (expectedSampleCount == 4) 3 else 2
+        assertEquals(
+            attachmentOperandCount + expectedUniquePipelines + 2 + expectedRoles.size,
+            render.operands.size,
+        )
     }
 
     private fun distinctIdentityCount(values: List<Any>): Int =
@@ -3553,8 +3599,18 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         }
         val base = recorded.withClipPlans(clipPlans).withSampleCount(
             sampleCount,
-            canonicalClear = sampleCount == 4 && routeShape == RouteShape.PathOnly,
-        )
+            canonicalClear = sampleCount == 4 && routeShape in setOf(
+                RouteShape.PathOnly,
+                RouteShape.Mixed,
+                RouteShape.TwoPathPairs,
+            ),
+        ).let { taskList ->
+            if (sampleCount == 4 && routeShape in setOf(RouteShape.Mixed, RouteShape.TwoPathPairs)) {
+                taskList.mergeRenderTasksForSingleScope()
+            } else {
+                taskList
+            }
+        }
         val packets = base.tasks.filterIsInstance<GPUTask.Render>().flatMap(GPUTask.Render::drawPackets)
         val semantics = packets.associate { packet ->
             packet.commandIdValue to if (routeShape == RouteShape.TwoPathPairs ||
@@ -4283,6 +4339,43 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 )
             },
             dependencies,
+            phaseOrder,
+            memoryBudget,
+            diagnostics,
+        )
+    }
+
+    private fun GPUTaskList.mergeRenderTasksForSingleScope(): GPUTaskList {
+        val renders = tasks.filterIsInstance<GPUTask.Render>()
+        require(renders.isNotEmpty() && renders.size == tasks.size)
+        val first = renders.first()
+        val packets = renders.flatMap(GPUTask.Render::drawPackets)
+        val merged = GPUTask.Render(
+            first.taskId,
+            first.recordingId,
+            first.phase,
+            first.target,
+            org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(
+                "clear",
+                org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+            ),
+            first.samplePlan,
+            renders.flatMap(GPUTask.Render::resourceUses).distinct(),
+            first.provisionalSegmentKey,
+            packets,
+            renders.flatMap { render -> render.batchEligibilityByPacketId.entries }
+                .associate { it.toPair() },
+            first.sampleContinuationKey,
+            first.compositeMembership,
+            first.depthStencilLoadStore,
+        )
+        return GPUTaskList(
+            frameId,
+            capabilitySeal,
+            recordingSeals,
+            expectedReplayKeyHash,
+            listOf(merged),
+            emptyList(),
             phaseOrder,
             memoryBudget,
             diagnostics,
