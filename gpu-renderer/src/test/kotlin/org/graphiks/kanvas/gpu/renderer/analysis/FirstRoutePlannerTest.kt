@@ -1148,6 +1148,48 @@ class FirstRoutePlannerTest {
         assertEquals("native.path_fill.stencil_cover", plan.analysisRecord.routeDecisionLabel)
     }
 
+    @Test
+    fun `stencil cover capability alone does not promote stroke or mask prepared paths`() {
+        val base = GPUFillPathCommandBuilder.build(
+            commandId = GPUDrawCommandID(122),
+            pathKey = "path:triangle:stencil-authority",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "path:triangle:stencil-authority",
+                verbCount = 4,
+                pointCount = 3,
+                fillRule = "NonZero",
+                inverseFill = false,
+                finiteProof = "finite",
+                volatility = "immutable",
+                transformClass = "identity",
+                edgeCount = 3,
+            ),
+            tessellatedVertices = listOf(0f, 0f, 16f, 0f, 8f, 16f),
+            contourStarts = listOf(0),
+            edgeCount = 3,
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.SolidColor(r = 1f, g = 0.25f, b = 0.5f, a = 1f),
+        )
+        val variants = listOf(
+            base.copy(stroke = true),
+            base.copy(
+                maskFilter = NormalizedMaskFilter.Blur(
+                    style = NormalizedBlurStyle.NORMAL,
+                    sigma = 2f,
+                ),
+            ),
+        )
+
+        variants.forEach { command ->
+            val plan = GPUFirstRoutePlanner(
+                capabilities = firstSlicePathFillStencilCoverCapabilities(),
+            ).plan(command)
+
+            assertIs<GPURouteDecision.Refused>(plan.routeDecision)
+            assertEquals("unsupported.pipeline.capability_missing", plan.pass.diagnostics.single().code)
+        }
+    }
+
     /** FillPath with empty vertices is now accepted (empty non-inverse paths draw nothing). */
     @Test
     fun `fill path with empty vertices accepted as empty draw`() {
@@ -2131,13 +2173,13 @@ class FirstRoutePlannerTest {
     /** Capability snapshot that enables FillPath with stencil-cover promotion. */
     private fun firstSlicePathFillStencilCoverCapabilities(): GPUCapabilities =
         firstSlicePathFillCapabilities().copy(
-            facts = firstSlicePathFillCapabilities().facts + GPUCapabilityFact(
+            facts = listOf(GPUCapabilityFact(
                 name = "first_slice.path_fill.stencil_cover",
                 source = "unit-test",
                 value = "supported",
                 affectsValidity = true,
                 evidenceLabel = "stencil-cover-fixture",
-            ),
+            )),
             snapshotId = "path-fill-stencil-cover-test",
         )
 

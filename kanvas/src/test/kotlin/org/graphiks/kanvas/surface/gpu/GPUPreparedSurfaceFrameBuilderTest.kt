@@ -182,7 +182,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `path stencil with scissor preserves two packet roles and exact requested target`() {
+    fun `runtime-only path stencil with scissor preserves two packet roles and exact requested target`() {
         val path = triangle()
         val clippedPath = DisplayOp.DrawPath(
             path,
@@ -190,7 +190,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             Matrix33.identity(),
             ClipStack.DeviceRect(Rect.fromLTRB(2f, 3f, 20f, 18f), antiAlias = false),
         )
-        val request = request(listOf(clippedPath))
+        val request = request(listOf(clippedPath), capabilities = capabilities(pathPrepared = false))
 
         val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
             GPUPreparedSurfaceFrameBuilder.build(request),
@@ -390,17 +390,23 @@ class GPUPreparedSurfaceFrameBuilderTest {
         fillRect: Boolean = true,
         boundedClip: Boolean = true,
         readback: Boolean = true,
+        pathPrepared: Boolean = true,
     ): GPUCapabilities {
         val base = GPUProductFlagConfig(boundedClipEnabled = boundedClip).buildCapabilities()
+        val baseFacts = base.facts.filterNot { fact ->
+            !pathPrepared && fact.name == "first_slice.path_fill.native"
+        }
         val extra = buildList {
             if (fillRect) add(capability("first_slice.fill_rect.native"))
             add(capability(PATH_FILL_STENCIL_COVER))
         }
         return GPUCapabilities(
             implementation = base.implementation,
-            facts = base.facts + extra,
+            facts = baseFacts + extra,
             knownUnsupportedFacts = base.knownUnsupportedFacts,
-            snapshotId = "${base.snapshotId}:prepared-surface-builder-test:$fillRect:$boundedClip:$readback",
+            snapshotId =
+                "${base.snapshotId}:prepared-surface-builder-test:" +
+                    "$fillRect:$boundedClip:$readback:$pathPrepared",
             limits = GPULimits(
                 maxTextureDimension2D = 8192,
                 copyBytesPerRowAlignment = 256,

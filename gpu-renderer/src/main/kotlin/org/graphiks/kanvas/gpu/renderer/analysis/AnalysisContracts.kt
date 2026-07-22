@@ -1639,6 +1639,9 @@ class GPUFirstRoutePlanner(
                 shapeDesc.strokeRefusalCode()
                     ?: pathDesc.strokePathRefusalCode()
                     ?: strokeDesc.refusalCode(maxEdges = 128)
+                    ?: "unsupported.pipeline.capability_missing".takeUnless {
+                        capabilities.hasFact(firstPreparedPathFillCapabilityName)
+                    }
             }
             pathDescriptor.edgeCount < 0 -> "unsupported.geometry.path_invalid_edges"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
@@ -1661,7 +1664,9 @@ class GPUFirstRoutePlanner(
             layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
             layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
-            !capabilities.hasFact(firstPathFillCapabilityName) -> "unsupported.pipeline.capability_missing"
+            !capabilities.hasFact(firstPreparedPathFillCapabilityName) &&
+                (maskFilter != null || !capabilities.hasFact(firstStencilCoverCapabilityName)) ->
+                "unsupported.pipeline.capability_missing"
             else -> null
         }
 
@@ -1927,8 +1932,8 @@ class GPUFirstRoutePlanner(
         /** Required capability fact for the scissor clip route. */
         const val firstScissorCapabilityName = GPUFirstSliceCapabilityName.SCISSOR_NATIVE
 
-        /** Required capability fact for the path fill native route. */
-        const val firstPathFillCapabilityName = "first_slice.path_fill.native"
+        /** Historical capability fact authorizing CPU-prepared/tessellated path routes. */
+        const val firstPreparedPathFillCapabilityName = "first_slice.path_fill.native"
 
         /** Required capability fact for the path fill stencil-cover native promotion. */
         const val firstStencilCoverCapabilityName = GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER

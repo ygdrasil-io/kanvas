@@ -7,6 +7,7 @@ import kotlin.test.assertIs
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.PixelFormat
@@ -47,13 +48,13 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
-    fun `mixed direct affine direct frame uses the prepared product route with exact native evidence`() {
+    fun `mixed direct path direct frame uses the prepared product route with exact native evidence`() {
         val operations = listOf(
             rect(Rect.fromLTRB(1f, 1f, 7f, 7f), Color.RED),
-            DisplayOp.DrawRect(
-                Rect.fromLTRB(10f, 2f, 19f, 11f),
+            DisplayOp.DrawPath(
+                triangle(),
                 Paint.fill(Color.GREEN).copy(antiAlias = false),
-                Matrix33.skew(0.25f, 0f),
+                Matrix33.identity(),
                 ClipStack.WideOpen,
             ),
             rect(Rect.fromLTRB(22f, 18f, 30f, 26f), Color.BLUE),
@@ -75,7 +76,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             decisions.single().toString(),
         ).evidence
         assertPixel(result.pixels.toByteArray(), 32, 3, 3, listOf(255, 0, 0, 255))
-        assertPixel(result.pixels.toByteArray(), 32, 14, 4, listOf(0, 255, 0, 255))
+        assertPixel(result.pixels.toByteArray(), 32, 14, 5, listOf(0, 255, 0, 255))
         assertPixel(result.pixels.toByteArray(), 32, 25, 21, listOf(0, 0, 255, 255))
         assertPixel(result.pixels.toByteArray(), 32, 31, 31, listOf(0, 0, 0, 0))
 
@@ -90,8 +91,8 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertEquals(0L, evidence.destinationReadbackSnapshots)
         assertEquals(1L, evidence.renderPasses)
         assertEquals(0L, evidence.draws)
-        assertEquals(3L, evidence.drawIndexed)
-        assertEquals(1L, evidence.pipelineBinds)
+        assertEquals(4L, evidence.drawIndexed)
+        assertEquals(4L, evidence.pipelineBinds)
         assertEquals(0, evidence.activeNativePayloads)
         assertEquals(0, evidence.outputOwnedNativePayloads)
         assertEquals(0, evidence.quarantinedNativePayloads)
@@ -112,6 +113,13 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         Matrix33.identity(),
         ClipStack.WideOpen,
     )
+
+    private fun triangle(): Path = Path().apply {
+        moveTo(10f, 2f)
+        lineTo(19f, 2f)
+        lineTo(14f, 11f)
+        close()
+    }
 
     private fun assertPixel(
         bytes: ByteArray,

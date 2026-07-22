@@ -1680,30 +1680,34 @@ class GPUFramePathApiInventoryTest {
             preparedRoutePlan.recording.routeDiagnostics,
         )
 
-        val missingProductGateFacts = org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig(
+        val runtimeStencilOnlyFacts = org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig(
             pathFillEnabled = false,
         ).buildCapabilities().withCapabilities(FILL_RECT_CAPABILITY, PATH_FILL_STENCIL_COVER)
-        val missingProductGate = GPUCapabilities(
-            implementation = missingProductGateFacts.implementation,
-            facts = missingProductGateFacts.facts,
-            knownUnsupportedFacts = missingProductGateFacts.knownUnsupportedFacts,
-            snapshotId = "${missingProductGateFacts.snapshotId}:observed-limits",
+        assertFalse(runtimeStencilOnlyFacts.facts.any { it.name == "first_slice.path_fill.native" })
+        val runtimeStencilOnly = GPUCapabilities(
+            implementation = runtimeStencilOnlyFacts.implementation,
+            facts = runtimeStencilOnlyFacts.facts,
+            knownUnsupportedFacts = runtimeStencilOnlyFacts.knownUnsupportedFacts,
+            snapshotId = "${runtimeStencilOnlyFacts.snapshotId}:observed-limits",
             limits = stencilCapabilities.limits,
         )
-        val refusedPathPlan = GPUFramePathApiInventory.plan(
+        val runtimeStencilPlan = GPUFramePathApiInventory.plan(
             pathSurface.snapshotOps(),
             target(),
             RenderConfig.DEFAULT,
-            missingProductGate,
+            runtimeStencilOnly,
         )
-        val refusal = assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(
+        assertEquals(
+            "native.path_fill.stencil_cover",
+            runtimeStencilPlan.recording.analysis.records.single().routeDecisionLabel,
+        )
+        assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
             GPUFramePathApiInventory.prepareNativeTaskList(
-                refusedPathPlan,
-                missingProductGate,
+                runtimeStencilPlan,
+                runtimeStencilOnly,
                 GPUPixelBounds(0, 0, 32, 32),
             ),
         )
-        assertEquals("unsupported.pipeline.capability_missing", refusal.diagnostic.code.value)
     }
 
     @Test
