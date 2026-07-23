@@ -13,6 +13,9 @@ val pureKotlinCodecProjects = setOf(
     "codec:test-fixtures",
     "codec:png",
     "codec:jpeg",
+    "codec:jpeg-ls",
+    "codec:jpeg2000",
+    "codec:jpegxl",
     "codec:gif",
     "codec:bmp",
     "codec:wbmp",
@@ -1859,7 +1862,8 @@ tasks.register("checkSupportedCodecsDoc") {
             "| WBMP |",
             "| ICO / CUR |",
             "| WebP |",
-            "| AVIF / JPEG XL / RAW / video |",
+            "| JPEG XL |",
+            "| AVIF / RAW / video |",
             "| GIF |",
             "| ICO / CUR |",
             "| AVIF / HEIF / JPEG XL / RAW / video |",
@@ -2303,6 +2307,9 @@ tasks.register("checkCodecKotlinSwitchCriteria") {
         "checkImageEncodeTestsNoAwt",
         ":codec:test",
         ":codec:jar",
+        ":codec:jpeg-ls:test",
+        ":codec:jpeg2000:test",
+        ":codec:jpegxl:test",
     )
 }
 
@@ -2320,6 +2327,22 @@ tasks.register("checkCodecImageComplete") {
         ":codec:wbmp:test",
         ":codec:ico:test",
         ":codec:webp:test",
+    )
+}
+
+tasks.register("checkJpegClassicComplete") {
+    group = "verification"
+    description = "Runs the portable static JPEG conformance matrix and codec guardrails without native oracles."
+
+    dependsOn(
+        ":codec:jpeg:test",
+        ":codec:jpeg:jpegPerformanceEvidence",
+        "checkSupportedCodecsDoc",
+        "checkRealImageFixtureDocumentation",
+        "checkProductionCodecRuntimeNoAwt",
+        "checkPureKotlinCodecNoAwt",
+        "checkProductionImageEncodeNoAwt",
+        "checkImageEncodeTestsNoAwt",
     )
 }
 

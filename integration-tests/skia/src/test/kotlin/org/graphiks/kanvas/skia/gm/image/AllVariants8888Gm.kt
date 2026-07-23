@@ -17,9 +17,8 @@ import org.graphiks.kanvas.types.Rect
  *
  * Draws an 8 × 2 grid of 128×128 discs covering the cross-product of
  * colour type (RGBA_8888, BGRA_8888) and alpha usage (premul, unpremul)
- * over a checkerboard background. Both colour types use the same
- * byte-storage in the new Bitmap API, so the two unpremul columns render
- * identically (both red).
+ * over a checkerboard background. The formats have distinct native byte
+ * storage but the same logical colors after decoding/upload.
  * @see https://github.com/google/skia/blob/main/gm/all_bitmap_configs.cpp
  */
 class AllVariants8888Gm : SkiaGm {

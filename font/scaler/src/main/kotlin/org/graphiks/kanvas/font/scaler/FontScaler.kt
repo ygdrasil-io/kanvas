@@ -5755,6 +5755,17 @@ private fun readCFFDictNumber(
                 nextOffset = offsetAfterFirstByte + 4,
             )
         }
+        255 -> {
+            requireCFFDictAvailable(data, offsetAfterFirstByte, 4, section, baseOffset, objectIndex)
+            // CFF DICT 255 is a signed 16.16 fixed-point number. The offsets and sizes
+            // consumed by this parser are integral; fractional values such as FontMatrix
+            // coefficients are retained only as non-routing evidence, so round them at
+            // the integer boundary used by CFFDictEntry.
+            CFFDictNumberReadResult(
+                value = round(readInt32(data, offsetAfterFirstByte) / 65_536.0).toInt(),
+                nextOffset = offsetAfterFirstByte + 4,
+            )
+        }
         in 32..246 -> CFFDictNumberReadResult(
             value = firstByte - 139,
             nextOffset = offsetAfterFirstByte,
@@ -6856,17 +6867,36 @@ private fun drawHVCurves(
     glyphId: UInt,
     operatorOffset: Int,
 ) {
-    if (operands.size != 4) {
+    if (operands.size < 4 || operands.size % 4 !in 0..1) {
         malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
     }
-    state.curveBy(
-        dx1 = operands[0],
-        dy1 = 0.0,
-        dx2 = operands[1],
-        dy2 = operands[2],
-        dx3 = 0.0,
-        dy3 = operands[3],
-    )
+    var index = 0
+    var horizontalCurve = true
+    while (index < operands.size) {
+        val remaining = operands.size - index
+        val hasFinalDelta = remaining == 5
+        if (horizontalCurve) {
+            state.curveBy(
+                dx1 = operands[index],
+                dy1 = 0.0,
+                dx2 = operands[index + 1],
+                dy2 = operands[index + 2],
+                dx3 = if (hasFinalDelta) operands[index + 4] else 0.0,
+                dy3 = operands[index + 3],
+            )
+        } else {
+            state.curveBy(
+                dx1 = 0.0,
+                dy1 = operands[index],
+                dx2 = operands[index + 1],
+                dy2 = operands[index + 2],
+                dx3 = operands[index + 3],
+                dy3 = if (hasFinalDelta) operands[index + 4] else 0.0,
+            )
+        }
+        index += if (hasFinalDelta) 5 else 4
+        horizontalCurve = !horizontalCurve
+    }
 }
 
 private fun drawVHCurves(
@@ -6875,17 +6905,36 @@ private fun drawVHCurves(
     glyphId: UInt,
     operatorOffset: Int,
 ) {
-    if (operands.size != 4) {
+    if (operands.size < 4 || operands.size % 4 !in 0..1) {
         malformedCFFStack(glyphId, "cff.stack-underflow", operatorOffset)
     }
-    state.curveBy(
-        dx1 = 0.0,
-        dy1 = operands[0],
-        dx2 = operands[1],
-        dy2 = operands[2],
-        dx3 = operands[3],
-        dy3 = 0.0,
-    )
+    var index = 0
+    var verticalCurve = true
+    while (index < operands.size) {
+        val remaining = operands.size - index
+        val hasFinalDelta = remaining == 5
+        if (verticalCurve) {
+            state.curveBy(
+                dx1 = 0.0,
+                dy1 = operands[index],
+                dx2 = operands[index + 1],
+                dy2 = operands[index + 2],
+                dx3 = operands[index + 3],
+                dy3 = if (hasFinalDelta) operands[index + 4] else 0.0,
+            )
+        } else {
+            state.curveBy(
+                dx1 = operands[index],
+                dy1 = 0.0,
+                dx2 = operands[index + 1],
+                dy2 = operands[index + 2],
+                dx3 = if (hasFinalDelta) operands[index + 4] else 0.0,
+                dy3 = operands[index + 3],
+            )
+        }
+        index += if (hasFinalDelta) 5 else 4
+        verticalCurve = !verticalCurve
+    }
 }
 
 private fun drawFlex(

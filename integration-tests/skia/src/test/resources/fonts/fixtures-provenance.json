@@ -1,0 +1,22 @@
+{
+  "source": "https://github.com/google/skia/tree/main/resources/fonts",
+  "license": "BSD-3-Clause; see Skia's LICENSE file",
+  "fixtures": [
+    {
+      "path": "Stroking.ttf",
+      "sha256": "c5566e2adf1bf087048acf28d239c7988ebcdc339208b29993e70f307c467090"
+    },
+    {
+      "path": "Stroking.otf",
+      "sha256": "55c8502113cc315eb4b0f1a843ae7d6cfff13c6688b4914403fad1e46a3c2973"
+    },
+    {
+      "path": "Variable.ttf",
+      "sha256": "d9437a0f2ecef4fca3eb1567d21cd8b21c557ac23e47da8642105f14c94519d9"
+    },
+    {
+      "path": "hintgasp.ttf",
+      "sha256": "a30be3842192f8d76fd8009e5fdbfe4bbcee3fd014211bec151d665c8952875b"
+    }
+  ]
+}

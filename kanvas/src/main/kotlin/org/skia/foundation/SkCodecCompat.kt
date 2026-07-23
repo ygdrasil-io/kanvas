@@ -71,6 +71,7 @@ public enum class SkEncodedImageFormat {
     kGIF,
     kICO,
     kJPEG,
+    kJPEG2000,
     kPNG,
     kWBMP,
     kWEBP,

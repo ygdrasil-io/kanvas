@@ -91,7 +91,6 @@ org.graphiks.kanvas.skia.gm.clip.StrictConstraintNoRedAllowedGm
 org.graphiks.kanvas.skia.gm.clip.StrictConstraintNoRedAllowedManualGm
 org.graphiks.kanvas.skia.gm.clip.WindowRectanglesGm
 org.graphiks.kanvas.skia.gm.color.ColorGm
-org.graphiks.kanvas.skia.gm.color.ConstColorProcessorGm
 org.graphiks.kanvas.skia.gm.color.FilterGm
 org.graphiks.kanvas.skia.gm.color.OrientationGm
 org.graphiks.kanvas.skia.gm.color.P3OvalsGm
@@ -270,14 +269,12 @@ org.graphiks.kanvas.skia.gm.image.AlphaImageShaderRTGm
 org.graphiks.kanvas.skia.gm.image.AnimCodecPlayerExifGm
 org.graphiks.kanvas.skia.gm.image.AnimatedGifGm
 org.graphiks.kanvas.skia.gm.image.AnisoMipsGm
-org.graphiks.kanvas.skia.gm.image.AnisotropicGm
 org.graphiks.kanvas.skia.gm.image.AnisotropicImageScaleAnisoGm
 org.graphiks.kanvas.skia.gm.image.AnisotropicImageScaleLinearGm
 org.graphiks.kanvas.skia.gm.image.AnisotropicImageScaleMipGm
 org.graphiks.kanvas.skia.gm.image.AsyncRescaleAndReadAlphaTypeGm
 org.graphiks.kanvas.skia.gm.image.AsyncRescaleAndReadGridGm
 org.graphiks.kanvas.skia.gm.image.AsyncRescaleAndReadNoBleedGm
-org.graphiks.kanvas.skia.gm.image.AttributesGm
 org.graphiks.kanvas.skia.gm.image.AyncYUVNoScaleGm
 org.graphiks.kanvas.skia.gm.image.Bc1TransparencyGm
 org.graphiks.kanvas.skia.gm.image.BicubicGm
@@ -392,7 +389,6 @@ org.graphiks.kanvas.skia.gm.image.PosterCircleGm
 org.graphiks.kanvas.skia.gm.image.RawImageShaderNormalsRTGm
 org.graphiks.kanvas.skia.gm.image.ReadPixelsCodecGm
 org.graphiks.kanvas.skia.gm.image.ReadPixelsPictureGm
-org.graphiks.kanvas.skia.gm.image.RectangleTextureGm
 org.graphiks.kanvas.skia.gm.image.ReinterpretColorSpaceGm
 org.graphiks.kanvas.skia.gm.image.RepeatedBitmapGm
 org.graphiks.kanvas.skia.gm.image.RepeatedBitmapJpgGm
@@ -439,7 +435,6 @@ org.graphiks.kanvas.skia.gm.mesh.VerticesBatchingGm
 org.graphiks.kanvas.skia.gm.mesh.VerticesCollapsedGm
 org.graphiks.kanvas.skia.gm.mesh.VerticesGm
 org.graphiks.kanvas.skia.gm.mesh.VerticesPerspectiveGm
-org.graphiks.kanvas.skia.gm.path.AaRectEffectGm
 org.graphiks.kanvas.skia.gm.path.BezierConicEffectsGm
 org.graphiks.kanvas.skia.gm.path.BezierQuadEffectsGm
 org.graphiks.kanvas.skia.gm.path.Bug41422450Gm
@@ -451,7 +446,6 @@ org.graphiks.kanvas.skia.gm.path.ConicPathsGm
 org.graphiks.kanvas.skia.gm.path.ConvexLineOnlyPathsGm
 org.graphiks.kanvas.skia.gm.path.ConvexLineOnlyPathsStrokeAndFillGm
 org.graphiks.kanvas.skia.gm.path.ConvexPathsGm
-org.graphiks.kanvas.skia.gm.path.ConvexPolyEffectGm
 org.graphiks.kanvas.skia.gm.path.ConvexPolygonInsetGm
 org.graphiks.kanvas.skia.gm.path.Crbug640176Gm
 org.graphiks.kanvas.skia.gm.path.Crbug691386Gm

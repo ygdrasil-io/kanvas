@@ -56,6 +56,17 @@ in `codec/real-image-tests/THIRD_PARTY_FIXTURE_NOTICES.md`.
 These statuses are intentionally conservative. They prevent the checklist from
 claiming tool-family coverage that the repository cannot audit.
 
+## JPEG release-evidence inputs
+
+`JpegPerformanceEvidenceTest` reuses the indexed Skia JPEG fixtures
+`codec-real-images/jpeg/dog.jpg` (photo) and
+`codec-real-images/jpeg/color_wheel_420.jpg` (graphic). Their source and Skia
+license are therefore the existing rows below; this release-evidence test adds
+no third-party binary fixture. Its CMYK and large-image inputs are generated
+in memory by the test, while its 12-bit arithmetic JPEG is a separately
+provenanced static codec fixture documented in
+`codec/jpeg/src/test/resources/jpeg-arithmetic/README.md`.
+
 ## Fixture Index
 
 | Fixture | Family | Source URL/path | License | Transformation | Notes |

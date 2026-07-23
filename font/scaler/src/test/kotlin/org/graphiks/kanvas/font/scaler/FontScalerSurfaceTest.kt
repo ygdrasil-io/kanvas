@@ -2416,6 +2416,49 @@ class FontScalerSurfaceTest {
     }
 
     @Test
+    fun cffType2InterpreterSupportsAlternatingHvAndVhCurvesWithFinalDelta() {
+        val evidence = CFFType2CharStringInterpreter().interpretEvidence(
+            charString = type2CharString(
+                type2Number(0),
+                type2Number(0),
+                type2Operator(21),
+                // hvcurveto: horizontal then vertical curve; its final dy is explicit.
+                type2Number(10),
+                type2Number(20),
+                type2Number(30),
+                type2Number(40),
+                type2Number(50),
+                type2Number(60),
+                type2Number(70),
+                type2Number(80),
+                type2Number(90),
+                type2Operator(31),
+                // vhcurveto: a final dy is supplied for the last vertical curve.
+                type2Number(10),
+                type2Number(20),
+                type2Number(30),
+                type2Number(40),
+                type2Number(50),
+                type2Operator(30),
+                type2Operator(14),
+            ),
+            glyphId = 9u,
+            format = "cff",
+        )
+
+        assertEquals(
+            listOf(
+                "M 0.0 0.0",
+                "C 10.0 0.0 30.0 30.0 30.0 70.0",
+                "C 30.0 120.0 90.0 190.0 170.0 280.0",
+                "C 170.0 290.0 190.0 320.0 230.0 370.0",
+                "Z",
+            ),
+            evidence.outlineCommands,
+        )
+    }
+
+    @Test
     fun cffType2FixtureInterpreterTracesLocalAndGlobalSubroutines() {
         val interpreter = CFFType2CharStringInterpreter(
             localSubroutines = listOf(

@@ -5,6 +5,7 @@ enum class EncodedImageFormat {
     GIF,
     ICO,
     JPEG,
+    JPEG2000,
     PNG,
     WBMP,
     WEBP,

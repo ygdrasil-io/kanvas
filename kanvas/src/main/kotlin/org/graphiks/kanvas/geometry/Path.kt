@@ -201,6 +201,42 @@ class Path internal constructor() {
 
     fun isEmpty(): Boolean = verbs.isEmpty()
 
+    /**
+     * Returns a conservative axis-aligned bound for the path's drawable
+     * geometry, or `null` when it has no points. Bézier control points are
+     * included, so the result contains the ink even when it is not tight.
+     */
+    fun computeBounds(): Rect? {
+        var pointIndex = 0
+        var minX = Float.POSITIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+        fun include(point: Point) {
+            minX = minOf(minX, point.x)
+            minY = minOf(minY, point.y)
+            maxX = maxOf(maxX, point.x)
+            maxY = maxOf(maxY, point.y)
+        }
+        for (verb in verbs) {
+            when (verb) {
+                PathVerb.MOVE, PathVerb.LINE -> include(points[pointIndex++])
+                PathVerb.QUAD -> {
+                    include(points[pointIndex++])
+                    include(points[pointIndex++])
+                }
+                PathVerb.CUBIC -> repeat(3) { include(points[pointIndex++]) }
+                // Arc metadata is not a drawable point; include its endpoint.
+                PathVerb.ARC_TO -> {
+                    pointIndex += 3
+                    include(points[pointIndex++])
+                }
+                PathVerb.CLOSE -> Unit
+            }
+        }
+        return if (minX.isFinite()) Rect.fromLTRB(minX, minY, maxX, maxY) else null
+    }
+
     fun isRect(rect: Rect? = null): Boolean {
         val v = verbs
         if (v.size < 5) return false

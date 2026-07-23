@@ -232,11 +232,20 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
 /**
  * Expands non-RGBA image pixels to RGBA for GPU upload.
  * ALPHA_8 (1 byte/pixel) → RGBA (4 bytes/pixel, R=G=B=0, A=alpha).
- * RGBA formats pass through unchanged.
+ * RGBA passes through unchanged; BGRA is swizzled to RGBA.
  */
 private fun org.graphiks.kanvas.image.Image.expandToRgba(): ByteArray {
     val pixels = this.pixels ?: return byteArrayOf()
-    if (colorType == ColorType.RGBA_8888 || colorType == ColorType.BGRA_8888) return pixels
+    if (colorType == ColorType.RGBA_8888) return pixels
+    if (colorType == ColorType.BGRA_8888) {
+        return pixels.copyOf().also { rgba ->
+            for (offset in rgba.indices step 4) {
+                val blue = rgba[offset]
+                rgba[offset] = rgba[offset + 2]
+                rgba[offset + 2] = blue
+            }
+        }
+    }
     if (colorType == ColorType.ALPHA_8) {
         val rgba = ByteArray(width * height * 4)
         for (i in 0 until width * height) {

@@ -88,6 +88,7 @@ public fun SkEncodedImageFormat.toKanvasEncodedImageFormat(): EncodedImageFormat
     SkEncodedImageFormat.kGIF -> EncodedImageFormat.GIF
     SkEncodedImageFormat.kICO -> EncodedImageFormat.ICO
     SkEncodedImageFormat.kJPEG -> EncodedImageFormat.JPEG
+    SkEncodedImageFormat.kJPEG2000 -> EncodedImageFormat.JPEG2000
     SkEncodedImageFormat.kPNG -> EncodedImageFormat.PNG
     SkEncodedImageFormat.kWBMP -> EncodedImageFormat.WBMP
     SkEncodedImageFormat.kWEBP -> EncodedImageFormat.WEBP

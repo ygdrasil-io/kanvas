@@ -186,7 +186,13 @@ class Picture internal constructor(
                     is DisplayOp.DrawPoints -> canvas.drawPoints(op.mode, op.points, op.paint)
                     is DisplayOp.DrawImage -> canvas.drawImage(op.image, op.dst, op.paint)
                     is DisplayOp.DrawImageNine -> canvas.drawImageNine(op.image, op.center, op.dst, op.paint)
-                    is DisplayOp.DrawImageLattice -> canvas.drawImageLattice(op.image, op.lattice, op.dst, op.paint)
+                    is DisplayOp.DrawImageLattice -> canvas.drawImageLattice(
+                        op.image,
+                        op.lattice,
+                        op.dst,
+                        op.paint,
+                        op.sampling,
+                    )
                     is DisplayOp.DrawText -> canvas.drawText(op.blob, op.x, op.y, op.paint)
                     is DisplayOp.DrawPicture -> canvas.drawPicture(op.picture, op.paint)
                     is DisplayOp.DrawVertices -> canvas.drawVertices(op.vertices, op.paint)
@@ -244,7 +250,7 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 3
+private const val FORMAT_VERSION = 4
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -286,6 +292,13 @@ private class Writer {
     fun point(p: Point) { float(p.x); float(p.y) }
     fun size(s: Size) { float(s.width); float(s.height) }
     fun color(c: Color) { int(c.packed.toInt()) }
+    fun samplingOptions(sampling: SamplingOptions) {
+        when (sampling) {
+            SamplingOptions.NEAREST -> byte(0)
+            SamplingOptions.LINEAR -> byte(1)
+            is SamplingOptions.Cubic -> { byte(2); float(sampling.B); float(sampling.C) }
+        }
+    }
     fun cornerRadii(c: CornerRadii) { float(c.x); float(c.y) }
 
     fun matrix33(m: Matrix33) {
@@ -691,7 +704,7 @@ private class Writer {
             is DisplayOp.DrawImageLattice -> {
                 byte(OP_DRAW_IMAGE_LATTICE); image(op.image); lattice(op.lattice); rect(op.dst)
                 if (op.paint != null) { bool(true); paint(op.paint) } else bool(false)
-                matrix33(op.transform); clipStack(op.clip)
+                matrix33(op.transform); clipStack(op.clip); samplingOptions(op.sampling)
             }
             is DisplayOp.DrawText -> {
                 byte(OP_DRAW_TEXT); textBlob(op.blob); float(op.x); float(op.y); paint(op.paint)
@@ -779,6 +792,12 @@ private class Reader(private val data: ByteArray) {
     fun point(): Point = Point(float(), float())
     fun size(): Size = Size(float(), float())
     fun color(): Color = Color(int().toUInt())
+    fun samplingOptions(): SamplingOptions = when (byte().toInt()) {
+        0 -> SamplingOptions.NEAREST
+        1 -> SamplingOptions.LINEAR
+        2 -> SamplingOptions.Cubic(float(), float())
+        else -> { valid = false; SamplingOptions.LINEAR }
+    }
     fun cornerRadii(): CornerRadii = CornerRadii(float(), float())
 
     fun matrix33(): Matrix33 {
@@ -1153,7 +1172,10 @@ private class Reader(private val data: ByteArray) {
             OP_DRAW_IMAGE_LATTICE.toInt() -> {
                 val img = image(); val lat = lattice(); val dst = rect()
                 val p = if (bool()) paint() else null
-                DisplayOp.DrawImageLattice(img, lat, dst, p, matrix33(), clipStack())
+                val transform = matrix33()
+                val clip = clipStack()
+                val sampling = if (formatVersion >= 4) samplingOptions() else SamplingOptions.LINEAR
+                DisplayOp.DrawImageLattice(img, lat, dst, p, transform, clip, sampling)
             }
             OP_DRAW_TEXT.toInt() -> DisplayOp.DrawText(textBlob(), float(), float(), paint(), matrix33(), clipStack())
             OP_DRAW_PICTURE.toInt() -> {

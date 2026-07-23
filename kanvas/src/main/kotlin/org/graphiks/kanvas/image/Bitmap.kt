@@ -27,7 +27,14 @@ class Bitmap(
         if (x !in 0 until width || y !in 0 until height) throw IndexOutOfBoundsException("($x, $y) outside ${width}x$height")
         val index = (y * width + x) * colorType.bytesPerPixel
         return when (colorType) {
-            ColorType.RGBA_8888, ColorType.BGRA_8888 -> {
+            ColorType.RGBA_8888 -> {
+                val r = pixels[index].toInt() and 0xFF
+                val g = pixels[index + 1].toInt() and 0xFF
+                val b = pixels[index + 2].toInt() and 0xFF
+                val a = pixels[index + 3].toInt() and 0xFF
+                Color.fromRGBA(r / 255f, g / 255f, b / 255f, a / 255f)
+            }
+            ColorType.BGRA_8888 -> {
                 val b = pixels[index].toInt() and 0xFF
                 val g = pixels[index + 1].toInt() and 0xFF
                 val r = pixels[index + 2].toInt() and 0xFF
@@ -94,7 +101,13 @@ class Bitmap(
         val index = (y * width + x) * colorType.bytesPerPixel
         val r = color.r; val g = color.g; val b = color.b; val a = color.a
         when (colorType) {
-            ColorType.RGBA_8888, ColorType.BGRA_8888 -> {
+            ColorType.RGBA_8888 -> {
+                pixels[index] = (r * 255f).toInt().coerceIn(0, 255).toByte()
+                pixels[index + 1] = (g * 255f).toInt().coerceIn(0, 255).toByte()
+                pixels[index + 2] = (b * 255f).toInt().coerceIn(0, 255).toByte()
+                pixels[index + 3] = (a * 255f).toInt().coerceIn(0, 255).toByte()
+            }
+            ColorType.BGRA_8888 -> {
                 pixels[index] = (b * 255f).toInt().coerceIn(0, 255).toByte()
                 pixels[index + 1] = (g * 255f).toInt().coerceIn(0, 255).toByte()
                 pixels[index + 2] = (r * 255f).toInt().coerceIn(0, 255).toByte()
@@ -154,7 +167,18 @@ class Bitmap(
     fun eraseColor(color: Color) {
         val r = color.r; val g = color.g; val b = color.b; val a = color.a
         when (colorType) {
-            ColorType.RGBA_8888, ColorType.BGRA_8888 -> {
+            ColorType.RGBA_8888 -> {
+                val ri = (r * 255f).toInt().coerceIn(0, 255).toByte()
+                val gi = (g * 255f).toInt().coerceIn(0, 255).toByte()
+                val bi = (b * 255f).toInt().coerceIn(0, 255).toByte()
+                val ai = (a * 255f).toInt().coerceIn(0, 255).toByte()
+                var i = 0; val n = pixels.size
+                while (i < n) {
+                    pixels[i] = ri; pixels[i + 1] = gi; pixels[i + 2] = bi; pixels[i + 3] = ai
+                    i += 4
+                }
+            }
+            ColorType.BGRA_8888 -> {
                 val bi = (b * 255f).toInt().coerceIn(0, 255).toByte()
                 val gi = (g * 255f).toInt().coerceIn(0, 255).toByte()
                 val ri = (r * 255f).toInt().coerceIn(0, 255).toByte()
