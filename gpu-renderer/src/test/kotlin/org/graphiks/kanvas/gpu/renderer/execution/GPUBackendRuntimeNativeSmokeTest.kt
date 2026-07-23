@@ -883,7 +883,7 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
-    fun `backend runtime exposes adapter backed GPU capabilities when backend is available`() {
+    fun `backend runtime exposes device backed GPU capabilities when backend is available`() {
         val runtime = GPUBackendRuntimeFactory.createOrNull()
         assumeTrue(runtime != null, "GPU backend unavailable in current environment")
 
@@ -909,7 +909,8 @@ class GPUBackendRuntimeNativeSmokeTest {
             assertEquals(256L, limits.copyBytesPerRowAlignment)
             assertEquals(256L, limits.minUniformBufferOffsetAlignment)
             assertTrue((limits.maxBufferSize ?: 0L) > 0L)
-            assertEquals("adapter.limits", limits.source)
+            assertEquals("device.limits", limits.source)
+            assertEquals(setOf("device.limits"), facts.map { fact -> fact.source }.toSet())
             assertFalse(GPUTextureFormat.Depth24PlusStencil8 in capabilities.supportedTextureFormats)
             assertEquals(
                 setOf(1, 4),

@@ -1058,21 +1058,21 @@ private class WgpuBackendSession(
         )
     }
     private val adapterSummary = adapterSummary(glfw)
-    private val backendLimits = GPULimits(
-        maxTextureDimension2D = minOf(
-            glfw.wgpuContext.adapter.limits.maxTextureDimension2D.toLong(),
-            MAX_TEXTURE_DIMENSION.toLong(),
-        ),
-        copyBytesPerRowAlignment = COPY_BYTES_PER_ROW_ALIGNMENT.toLong(),
-        minUniformBufferOffsetAlignment = glfw.wgpuContext.adapter.limits
-            .minUniformBufferOffsetAlignment
-            .toLong(),
-        maxBufferSize = observedMaxBufferSize(glfw.wgpuContext.adapter.limits.maxBufferSize),
-        maxDynamicUniformBuffersPerPipelineLayout = glfw.wgpuContext.adapter.limits
-            .maxDynamicUniformBuffersPerPipelineLayout
-            .toLong(),
-        source = "adapter.limits",
-    )
+    private val backendLimits = glfw.wgpuContext.device.limits.let { deviceLimits ->
+        GPULimits(
+            maxTextureDimension2D = minOf(
+                deviceLimits.maxTextureDimension2D.toLong(),
+                MAX_TEXTURE_DIMENSION.toLong(),
+            ),
+            copyBytesPerRowAlignment = COPY_BYTES_PER_ROW_ALIGNMENT.toLong(),
+            minUniformBufferOffsetAlignment =
+                deviceLimits.minUniformBufferOffsetAlignment.toLong(),
+            maxBufferSize = observedMaxBufferSize(deviceLimits.maxBufferSize),
+            maxDynamicUniformBuffersPerPipelineLayout =
+                deviceLimits.maxDynamicUniformBuffersPerPipelineLayout.toLong(),
+            source = "device.limits",
+        )
+    }
     private var offscreenTargetOrdinalCounter = 0L
 
     override val adapterInfo: GPUBackendAdapterSummary? =
