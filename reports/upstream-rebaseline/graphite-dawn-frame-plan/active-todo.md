@@ -15,16 +15,24 @@ Status values: `pending`, `in_progress`, `blocked`, `completed`.
 
 ### FP-01 — Effective WebGPU uniform alignment on Windows
 
-Status: `in_progress`
+Status: `completed`
 
 Goal: ensure every planned dynamic uniform offset satisfies the effective
 limits of the created WebGPU device.
 
-Current evidence:
+Resolution evidence:
 
-- the runtime reports adapter alignment `64`;
-- the native device validates against `256`;
-- prepared frames using offset `64` terminate the test process.
+- `61224a8a9 fix(gpu): validate uniform alignment limits` and `b323c80a2
+  fix(gpu): use created device limits` source execution limits from
+  `GPUDevice.limits`;
+- the native capability smoke reports `source=device.limits`, effective uniform
+  alignment `256`; the three-packet analytic frame uses offsets `[0, 256, 512]`,
+  and the two-packet Kanvas inventory frame completes without a native
+  alignment panic;
+- `.\gradlew.bat :gpu-renderer:test :gpu-renderer-scenes:test :kanvas:test
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks`
+  reaches the Gradle summary with no `min_uniform_buffer_offset_alignment`;
+  remaining red evidence is independently assigned to FP-03 and FP-09.
 
 Acceptance:
 
@@ -38,7 +46,7 @@ Acceptance:
 
 ### FP-02 — Integrate current origin/master
 
-Status: `pending`
+Status: `in_progress`
 
 Goal: integrate the four upstream commits currently missing from the branch
 without losing branch or user changes.
@@ -55,12 +63,47 @@ Acceptance:
 Status: `pending`
 
 Goal: remove host-only failures from Gradle subprocess tests, textual goldens,
-and platform-sensitive pixel assertions.
+diagnostic assertions, and platform-sensitive pixel assertions.
+
+Current evidence:
+
+- suite:
+  `org.graphiks.kanvas.gpu.renderer.execution.GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest`;
+  test `direct core materializer integrity gate performs no canonical hash work`;
+  first message `uniform80 materialization must not create a second payload
+  snapshot per draw`; owner=`lf-normalization`; LF-only source delimiter misses
+  the CRLF checkout delimiter and extends the inspected slice into later code.
+- suite:
+  `org.graphiks.kanvas.gpu.renderer.scenes.GPURendererScenesModuleBoundaryTest`;
+  test `check task graph does not include opt in render tasks`; first message
+  `Cannot run program "./gradlew"`; owner=`platform-wrapper`.
+- suite:
+  `org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneOffscreenMainTest`;
+  test `solid frame sampler measures completion only and performs one final
+  readback`; first message `Expected the collection to contain the element`;
+  owner=`diagnostic-assertion`; the assertion searches for one whole collection
+  element instead of comparing semantic diagnostic fields.
+- suite:
+  `org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneOffscreenMainTest`;
+  test `color matrix uses one prepared submit and matches the independent
+  row-major reference`; first message `Expected the collection to contain the
+  element`; owner=`pixel-policy`.
+- suite:
+  `org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneOffscreenMainTest`;
+  test `gaussian blur photo uses three prepared passes in one submit`; first
+  message `Expected the collection to contain the element`; owner=`pixel-policy`.
+- suite:
+  `org.graphiks.kanvas.gpu.renderer.scenes.offscreen.RenderGpuRendererSceneOffscreenMainTest`;
+  test `registered runtime effect uses the generic prepared submit without
+  source in the frame plan`; first message `Expected the collection to contain
+  the element`; owner=`pixel-policy`.
 
 Acceptance:
 
 - Gradle subprocess tests use the platform wrapper;
 - font golden tests compare semantic LF-normalized content;
+- diagnostic assertions compare semantic facts independently, not as one
+  complete collection string;
 - exact and one-LSB pixel policies are explicit and independently tested;
 - the previously failing Windows suites pass or expose only failures assigned
   to later functional items.
@@ -145,6 +188,27 @@ Status: `pending`
 
 Goal: reuse backend, target, invariant pipelines, and frame-local pools across
 compatible Surface frames.
+
+Current evidence:
+
+- full `:kanvas:test` reproduces an `EXCEPTION_ACCESS_VIOLATION` in
+  `wgpu_native.dll` through `Queue.writeBuffer` and
+  `WgpuRenderRecorder.materializeFullscreenUniformSlab`;
+- class-only `GPUAllApiBlendSurfaceTest` passes all 1,858 tests; the ordered
+  reproduction `.\gradlew.bat :kanvas:test --tests
+  "org.graphiks.kanvas.surface.SurfaceTest" --tests
+  "org.graphiks.kanvas.surface.gpu.GPUAllApiBlendSurfaceTest"
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks`
+  passes `SurfaceTest` 10/10, then the blend worker crashes in
+  `Queue.writeBuffer`;
+- `SurfaceTest.@AfterEach` repeatedly calls the process-global
+  `GPUBackendRuntimeFactory.dispose()`; teardown/recreation is a sufficient
+  predecessor trigger;
+- the FP-01 device-limit change is causally excluded: focused created-device
+  alignment tests pass and none of the three crash dumps contains the former
+  alignment validation panic;
+- the future minimal TDD reproduction is repeated runtime dispose/recreate
+  followed by fullscreen uniform slab writes in one JVM.
 
 Acceptance:
 
