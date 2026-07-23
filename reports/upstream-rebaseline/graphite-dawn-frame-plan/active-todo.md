@@ -22,9 +22,10 @@ limits of the created WebGPU device.
 
 Resolution evidence:
 
-- `61224a8a9 fix(gpu): validate uniform alignment limits` and `b323c80a2
-  fix(gpu): use created device limits` source execution limits from
-  `GPUDevice.limits`;
+- `61224a8a9 fix(gpu): validate uniform alignment limits` enforces positive
+  power-of-two `GPULimits` uniform alignment;
+- `b323c80a2 fix(gpu): use created device limits` sources execution limits
+  from `GPUDevice.limits`;
 - the native capability smoke reports `source=device.limits`, effective uniform
   alignment `256`; the three-packet analytic frame uses offsets `[0, 256, 512]`,
   and the two-packet Kanvas inventory frame completes without a native
