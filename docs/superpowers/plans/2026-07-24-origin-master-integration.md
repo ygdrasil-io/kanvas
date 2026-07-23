@@ -265,19 +265,40 @@ Run:
 .\gradlew.bat :codec:api:test :codec:jpeg:test :codec:jpeg-ls:test :codec:jpeg2000:test :codec:jpegxl:test --dependency-verification=off --no-daemon --console=plain --rerun-tasks
 ```
 
-Expected: `BUILD SUCCESSFUL` and all five test tasks pass.
+Expected on a checkout whose fixture bytes are preserved: `BUILD SUCCESSFUL`
+and all five test tasks pass. On the current Windows checkout, the only
+accepted interim failures are the five raw-PGM SHA-256 assertions whose
+expected values match the Git blobs and whose working-tree bytes were changed
+from LF to CRLF by `core.autocrlf=true`. Record those exact failures under
+FP-03; any codec compile, decode, or additional test failure blocks FP-02.
 
-- [ ] **Step 4: Run the focused upstream font and GM suites**
+- [ ] **Step 4: Run the focused upstream font suite**
 
 Run:
 
 ```powershell
-.\gradlew.bat :font:scaler:test :integration-tests:skia:test --tests "org.graphiks.kanvas.skia.SkiaGmRegistryTest" --tests "org.graphiks.kanvas.skia.gm.path.ZeroLengthPathLayoutTest" --tests "org.graphiks.kanvas.skia.gm.text.CffTypefaceBridgeTest" --tests "org.graphiks.kanvas.skia.gm.text.SkiaFontFixtureContractTest" --tests "org.graphiks.kanvas.skia.gm.text.VariableFontRenderingTest" --dependency-verification=off --no-daemon --console=plain --rerun-tasks
+.\gradlew.bat :font:scaler:test --dependency-verification=off --no-daemon --console=plain --rerun-tasks
 ```
 
-Expected: `BUILD SUCCESSFUL`; font-surface, GM registry, zero-length layout, CFF bridge, fixture-contract, and variable-font coverage pass.
+Expected on an LF checkout: `BUILD SUCCESSFUL`. On the current Windows
+checkout, the only accepted interim failures are the nine exact
+`FontScalerSurfaceTest` golden comparisons whose checked-in JSON uses CRLF and
+whose generated JSON uses LF. Record them under FP-03; any compile or semantic
+font failure blocks FP-02.
 
-- [ ] **Step 5: Run the frame-plan regressions touched by the conflict resolution**
+- [ ] **Step 5: Run the focused upstream GM suites independently**
+
+Run:
+
+```powershell
+.\gradlew.bat :integration-tests:skia:test --tests "org.graphiks.kanvas.skia.SkiaGmRegistryTest" --tests "org.graphiks.kanvas.skia.gm.path.ZeroLengthPathLayoutTest" --tests "org.graphiks.kanvas.skia.gm.text.CffTypefaceBridgeTest" --tests "org.graphiks.kanvas.skia.gm.text.SkiaFontFixtureContractTest" --tests "org.graphiks.kanvas.skia.gm.text.VariableFontRenderingTest" --dependency-verification=off --no-daemon --console=plain --rerun-tasks
+```
+
+Expected: `BUILD SUCCESSFUL`; GM registry, zero-length layout, CFF bridge,
+fixture-contract, and variable-font coverage pass independently of the FP-03
+font-golden failures.
+
+- [ ] **Step 6: Run the frame-plan regressions touched by the conflict resolution**
 
 Run:
 

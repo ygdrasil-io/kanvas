@@ -47,7 +47,7 @@ Acceptance:
 
 ### FP-02 — Integrate current origin/master
 
-Status: `in_progress`
+Status: `completed`
 
 Goal: integrate the four upstream commits currently missing from the branch
 without losing branch or user changes.
@@ -59,9 +59,23 @@ Acceptance:
 - compile and focused frame-plan suites reach their normal validation stage;
 - the resulting integration commit is recorded here.
 
+Resolution evidence:
+
+- `41e05b682` is the Task 1 two-parent merge commit (`efe9b4470` and
+  `958687305`) that integrates `origin/master@958687305`, including upstream
+  commits `bbd07f790`, `ce46015e2`, `7f66913aa`, and `958687305`;
+- the three semantic overlaps auto-merged as a semantic union, preserving the
+  prepared WebGPU frame route while adding the JPEG-LS/JPEG 2000/JPEG XL
+  projects and faithful lattice sampling/fixed-color behavior;
+- Temurin 25 `projects` and `assemble` compile every included project locally
+  with dependency verification disabled per scope;
+- focused codec and font validation reached only the 14 Windows line-ending
+  portability failures assigned below to FP-03; the 16-GM, lattice,
+  device-limit, and prepared-frame selections passed.
+
 ### FP-03 — Windows test portability
 
-Status: `pending`
+Status: `in_progress`
 
 Goal: remove host-only failures from Gradle subprocess tests, textual goldens,
 diagnostic assertions, and platform-sensitive pixel assertions.
@@ -98,6 +112,50 @@ Current evidence:
   test `registered runtime effect uses the generic prepared submit without
   source in the frame plan`; first message `Expected the collection to contain
   the element`; owner=`pixel-policy`.
+
+Additional portability evidence:
+
+- `JpegXlModularDecodeTest`: raw-PGM SHA-256 fixture
+  `flower-510x532-8bit-lossless.pgm` differs because `core.autocrlf=true`
+  converts its LF bytes to CRLF; owner=`line-endings`.
+- `Jpeg2000DocumentTest`: raw-PGM SHA-256 fixture `source.pgm` differs because
+  `core.autocrlf=true` converts its LF bytes to CRLF; owner=`line-endings`.
+- `Jpeg2000DocumentTest`: raw-PGM SHA-256 fixture
+  `source-two-codeblocks-96x17.pgm` differs because `core.autocrlf=true`
+  converts its LF bytes to CRLF; owner=`line-endings`.
+- `Jpeg2000DocumentTest`: raw-PGM SHA-256 fixture `source-ndecomp2-8x8.pgm`
+  differs because `core.autocrlf=true` converts its LF bytes to CRLF;
+  owner=`line-endings`.
+- `Jpeg2000DocumentTest`: raw-PGM SHA-256 fixture
+  `source-ndecomp2-5x5-random.pgm` differs because `core.autocrlf=true`
+  converts its LF bytes to CRLF; owner=`line-endings`.
+- `FontScalerSurfaceTest.cff2VariationTraceGoldenMatchesGeneratedEvidence`:
+  checked-in golden JSON is CRLF while generated evidence is LF;
+  owner=`line-endings`.
+- `FontScalerSurfaceTest.cffSubroutineTraceGoldenMatchesGeneratedEvidence`:
+  checked-in golden JSON is CRLF while generated evidence is LF;
+  owner=`line-endings`.
+- `FontScalerSurfaceTest.truetypeMalformedGlyfIsolationGoldenMatchesGeneratedEvidence`:
+  checked-in golden JSON is CRLF while generated evidence is LF;
+  owner=`line-endings`.
+- `FontScalerSurfaceTest.cffCharStringTraceGoldenMatchesGeneratedEvidence`:
+  checked-in golden JSON is CRLF while generated evidence is LF;
+  owner=`line-endings`.
+- `FontScalerSurfaceTest.truetypeCompositeGlyphReadinessGoldenMatchesGeneratedEvidence`:
+  checked-in golden JSON is CRLF while generated evidence is LF;
+  owner=`line-endings`.
+- `FontScalerSurfaceTest.truetypeGvarIupGoldenMatchesGeneratedEvidence`:
+  checked-in golden JSON is CRLF while generated evidence is LF;
+  owner=`line-endings`.
+- `FontScalerSurfaceTest.truetypeVerticalMetricsGoldenMatchesGeneratedEvidence`:
+  checked-in golden JSON is CRLF while generated evidence is LF;
+  owner=`line-endings`.
+- `FontScalerSurfaceTest.cffIndexDictGoldenMatchesGeneratedEvidence`:
+  checked-in golden JSON is CRLF while generated evidence is LF;
+  owner=`line-endings`.
+- `FontScalerSurfaceTest.cffScalerPathOutputGoldenMatchesGeneratedEvidence`:
+  checked-in golden JSON is CRLF while generated evidence is LF;
+  owner=`line-endings`.
 
 Acceptance:
 
