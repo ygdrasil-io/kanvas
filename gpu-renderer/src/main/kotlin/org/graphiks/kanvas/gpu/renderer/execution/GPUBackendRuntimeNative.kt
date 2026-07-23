@@ -1583,10 +1583,11 @@ private class PreparedSceneRetentionObserver : GPUFrameResourceRetention {
 }
 
 private const val MAX_TEXTURE_DIMENSION: Int = 8192
-private const val DEFAULT_UNIFORM_BUFFER_OFFSET_ALIGNMENT: Int = 256
 
-private fun GPUCapabilities.uniformBufferOffsetAlignment(): Long =
-    limits?.minUniformBufferOffsetAlignment ?: DEFAULT_UNIFORM_BUFFER_OFFSET_ALIGNMENT.toLong()
+internal fun GPUCapabilities.requiredUniformBufferOffsetAlignment(): Long =
+    checkNotNull(limits) {
+        "GPUCapabilities.limits are required for native uniform buffer alignment"
+    }.minUniformBufferOffsetAlignment
 
 private class WgpuBackendRuntimeTelemetryRecorder {
     private var renderPasses = 0L
@@ -3030,6 +3031,8 @@ private class WgpuRenderRecorder(
     private var dualUVVertexBindGroupLayout: GPUBindGroupLayout? = null
     private var dualUVVertexTextureBindGroupLayout: GPUBindGroupLayout? = null
     private val payloadTargetId = fullscreenPayloadTargetId(targetId)
+    private val uniformBufferOffsetAlignment =
+        capabilities.requiredUniformBufferOffsetAlignment()
     private val temporaryOffscreenTextures = mutableMapOf<String, GPUTexture>()
 
     private fun offscreenTexture(label: String): GPUTexture? =
@@ -4836,7 +4839,7 @@ private class WgpuRenderRecorder(
             reflectedBindingLayoutHash = "fullscreen-uniform-layout-v1",
             deviceGeneration = deviceGeneration.value,
             payloadGeneration = 0L,
-            alignmentBytes = capabilities.uniformBufferOffsetAlignment(),
+            alignmentBytes = uniformBufferOffsetAlignment,
             uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
             uploadCapabilityAvailable = true,
             maxDynamicOffsets = 1,
@@ -4869,7 +4872,7 @@ private class WgpuRenderRecorder(
                 frameId = frameId,
                 sourceLabel = sourceLabel,
                 deviceGeneration = deviceGeneration.value,
-                alignmentBytes = capabilities.uniformBufferOffsetAlignment(),
+                alignmentBytes = uniformBufferOffsetAlignment,
                 uploadBudgetBytes = FULLSCREEN_UNIFORM_SLAB_UPLOAD_BUDGET_BYTES,
                 payloadRequests = payloadRequests,
             ),
@@ -4913,7 +4916,7 @@ private class WgpuRenderRecorder(
                     deviceGeneration = deviceGeneration.value,
                     descriptorHash = uniformSlabDescriptorHash,
                     totalBytes = plan.uniformSlabPlan.totalBytes,
-                    alignmentBytes = capabilities.uniformBufferOffsetAlignment(),
+                    alignmentBytes = uniformBufferOffsetAlignment,
                     releasePolicy = "submission-complete",
                     payloadCount = plan.slotBindings.size,
                 )

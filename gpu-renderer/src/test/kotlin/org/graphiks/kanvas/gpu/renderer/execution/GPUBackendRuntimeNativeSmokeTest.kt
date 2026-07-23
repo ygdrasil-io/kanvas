@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
@@ -175,6 +176,35 @@ class GPUBackendRuntimeNativeSmokeTest {
         assertNotNull(factory)
         assertContentEquals(arrayOf(GPUOffscreenTargetRequest::class.java), factory.parameterTypes)
         assertEquals(GPUPreparedSceneFrameSession::class.java, factory.returnType)
+    }
+
+    @Test
+    fun `fullscreen uniform alignment requires device limits and preserves stricter alignment`() {
+        val capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity("GPU", "unit", "unit", "unit"),
+            facts = emptyList(),
+            snapshotId = "fullscreen-uniform-alignment",
+        )
+
+        val missing = assertFailsWith<IllegalStateException> {
+            capabilities.requiredUniformBufferOffsetAlignment()
+        }
+
+        assertEquals(
+            "GPUCapabilities.limits are required for native uniform buffer alignment",
+            missing.message,
+        )
+        assertEquals(
+            512L,
+            capabilities.copy(
+                limits = GPULimits(
+                    maxTextureDimension2D = 8192L,
+                    copyBytesPerRowAlignment = 256L,
+                    minUniformBufferOffsetAlignment = 512L,
+                    source = "device.limits",
+                ),
+            ).requiredUniformBufferOffsetAlignment(),
+        )
     }
 
     @Test
