@@ -110,7 +110,7 @@ class GPUCapabilityContractsTest {
     }
 
     @Test
-    fun `GPU limits validate positive values and nonblank source`() {
+    fun `GPU limits validate positive power of two values and nonblank source`() {
         val limits = GPULimits(
             maxTextureDimension2D = 8192L,
             copyBytesPerRowAlignment = 256L,
@@ -122,6 +122,19 @@ class GPUCapabilityContractsTest {
         assertEquals(256L, limits.copyBytesPerRowAlignment)
         assertEquals(256L, limits.minUniformBufferOffsetAlignment)
         assertEquals("device.limits", limits.source)
+        assertEquals(
+            512L,
+            limits.copy(minUniformBufferOffsetAlignment = 512L)
+                .minUniformBufferOffsetAlignment,
+        )
+        assertFailsWith<IllegalArgumentException> {
+            GPULimits(
+                maxTextureDimension2D = 8192L,
+                copyBytesPerRowAlignment = 256L,
+                minUniformBufferOffsetAlignment = 96L,
+                source = "device.limits",
+            )
+        }
         assertFailsWith<IllegalArgumentException> {
             GPULimits(
                 maxTextureDimension2D = 0L,

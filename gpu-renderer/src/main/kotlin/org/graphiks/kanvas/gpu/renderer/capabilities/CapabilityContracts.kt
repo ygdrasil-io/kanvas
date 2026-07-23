@@ -233,8 +233,12 @@ data class GPULimits(
     init {
         require(maxTextureDimension2D > 0L) { "GPULimits.maxTextureDimension2D must be positive" }
         require(copyBytesPerRowAlignment > 0L) { "GPULimits.copyBytesPerRowAlignment must be positive" }
-        require(minUniformBufferOffsetAlignment > 0L) {
-            "GPULimits.minUniformBufferOffsetAlignment must be positive"
+        require(
+            minUniformBufferOffsetAlignment > 0L &&
+                (minUniformBufferOffsetAlignment and
+                    (minUniformBufferOffsetAlignment - 1L)) == 0L,
+        ) {
+            "GPULimits.minUniformBufferOffsetAlignment must be a positive power of two"
         }
         require(maxBufferSize == null || maxBufferSize > 0L) {
             "GPULimits.maxBufferSize must be positive when observed"
