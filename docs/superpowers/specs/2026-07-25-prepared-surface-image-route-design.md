@@ -1,7 +1,7 @@
 # Route image préparée pour `Surface` — conception FP-04
 
 **Date :** 2026-07-25
-**Statut :** approuvé pour planification
+**Statut :** révision d'autorité corrigée, à valider avant planification
 
 ## Objectif
 
@@ -39,18 +39,92 @@ La route immédiate existante sert de source de comportement et de contre-preuve
 pour les défauts connus. Elle n'est ni appelée depuis la frame préparée, ni
 enveloppée dans un nouveau nom, ni utilisée comme fallback.
 
-## Autorités et frontières d'architecture
+## Hiérarchie des autorités et références
 
-La conception respecte :
+Les documents cités n'ont pas tous la même autorité ni la même fraîcheur.
+FP-04 résout les ambiguïtés dans l'ordre suivant.
 
-- `.upstream/target/high-performance-wgsl-pipeline-target.md` ;
-- `.upstream/target/skia-like-realtime-renderer-target.md` ;
-- `.upstream/specs/skia-like-realtime/README.md` ;
-- `.upstream/specs/gpu-renderer/18-texture-image-ownership.md` ;
-- `.upstream/specs/gpu-renderer/22-image-bitmap-codec-pipeline.md` ;
-- `.upstream/specs/gpu-renderer/29-color-management-pipeline.md` ;
-- `.upstream/specs/gpu-renderer/31-material-source-paint-pipeline.md` ;
-- `reports/upstream-rebaseline/graphite-dawn-frame-plan/active-todo.md`.
+### Règles et cibles d'architecture actives
+
+- `AGENTS.md` fixe les décisions du dépôt et interdit d'utiliser les anciens
+  checklists, phases ou backlogs comme critères actifs ;
+- `.upstream/target/high-performance-wgsl-pipeline-target.md` contraint
+  l'architecture pipeline, shader et convergence CPU/GPU ;
+- `.upstream/target/skia-like-realtime-renderer-target.md` et
+  `.upstream/specs/skia-like-realtime/README.md` contraignent l'expansion du
+  renderer temps réel.
+
+Ces sources priment sur une affirmation contraire contenue dans une spec
+`Draft`. En particulier, l'affirmation de
+`.upstream/specs/gpu-renderer/29-color-management-pipeline.md` selon laquelle
+la cible high-performance serait « older » n'est pas applicable : `AGENTS.md`
+désigne cette cible comme contrainte actuelle.
+
+### Acceptance active de FP-04
+
+`reports/upstream-rebaseline/graphite-dawn-frame-plan/active-todo.md` définit
+le périmètre et les critères de fermeture de FP-04 : les quatre opérations
+image, leur ownership texture/sampler, l'exécution native testée, les preuves
+pixels/alpha, la disparition de `legacy.surface.prepared.family.images` et le
+retrait de l'allowlist `Images`.
+
+Cette acceptance n'active pas implicitement les matrices cibles complètes des
+specs image, couleur ou paint.
+
+### État d'implémentation vérifiable
+
+Le source et les tests courants attestent seulement ce qui existe réellement ;
+ils ne constituent pas une autorité d'architecture et ne réduisent pas la
+cible. Leur comportement doit être soit préservé, soit migré par une décision
+explicite accompagnée de preuves. Inversement, une spec `Draft` ne prouve pas
+l'activation d'une capacité absente. Pour FP-04, cette conception choisit
+explicitement de préserver le contrat couleur préparé attesté par
+`GPUPreparedSurfaceColorMapping.kt` et ses tests.
+
+### Specs `Draft` utilisées comme références techniques bornées
+
+Les specs gpu-renderer ci-dessous sont des références de vocabulaire et
+d'invariants, pas un backlog, une acceptance ou une preuve d'activation :
+
+- `.upstream/specs/gpu-renderer/18-texture-image-ownership.md` : ownership du
+  provider, artefact uploadé, séparation clé/payload, lifetime et ordre
+  upload-avant-échantillonnage ;
+- `.upstream/specs/gpu-renderer/22-image-bitmap-codec-pipeline.md` : pixels CPU
+  déjà décodés, snapshot, alpha/orientation, identité d'artefact, bridge
+  d'ownership et vocabulaire de refus ;
+- `.upstream/specs/gpu-renderer/29-color-management-pipeline.md` : provenance
+  SDR connue, prémultiplication, alpha et refus couleur bornés ;
+- `.upstream/specs/gpu-renderer/30-coordinate-transform-bounds-policy.md` :
+  espaces source/texture/atlas, classification des transforms affines, bounds
+  finis et conservateurs, et refus d'une route affine-only ;
+- `.upstream/specs/gpu-renderer/31-material-source-paint-pipeline.md` :
+  séparation clé/payload, ordre d'évaluation du paint, subset/domaine,
+  coordonnées, sampling, alpha-only, binding texture/view/sampler et dépendance
+  d'ownership.
+
+Sont explicitement exclus de l'autorité FP-04 :
+
+- les politiques de séquencement `First Slice` des specs 18, 29, 30 et 31,
+  qui ne sont ni le séquencement ni l'acceptance de FP-04 ; leurs invariants
+  techniques compatibles restent applicables lorsqu'ils sont sélectionnés
+  ci-dessus ;
+- la matrice codec cible complète de la spec 22 ;
+- l'activation générale des pipelines couleur, image-shader et paint décrits
+  par les specs 29 et 31 ;
+- la section `Initial SDR Implementation — sRGB Output Format` de la spec 29,
+  dont l'attachment physique `RGBA8UnormSrgb` contredit le mapping préparé
+  courant ;
+- toute lecture de `GPUImageShaderPlan` qui ferait du pipeline
+  material/image-shader complet un préalable à `Surface.DrawImage` ; FP-04
+  réutilise seulement ses invariants sélectionnés de source, coordonnées,
+  sampling, alpha-only, binding et ownership.
+
+En cas de divergence, les règles et cibles actives contraignent la conception,
+l'acceptance FP-04 en fixe le périmètre, le code et les tests attestent l'état
+réel, et les specs `Draft` ne fournissent que les invariants bornés listés
+ci-dessus.
+
+## Frontières d'architecture
 
 Les invariants sont :
 
@@ -131,7 +205,20 @@ génération logique peuvent partager un artefact d'upload. Un changement de
 contenu, format, dimensions, row-bytes ou génération force une identité
 différente.
 
-L'ABI physique FP-04 est RGBA8 prémultiplié :
+L'upload image physique FP-04 est `RGBA8Unorm` prémultiplié et ses valeurs
+sources restent dans le domaine sémantique `EncodedPremulSrgb`. Le format et
+l'interprétation de la cible préparée restent la responsabilité de
+`mapPreparedGpuColorConfig()` ; FP-04 ne change ni l'attachment de la route
+préparée ni sa politique d'encodage.
+
+En particulier, la section d'implémentation `Draft`
+`Initial SDR Implementation — sRGB Output Format` de la spec 29 n'est pas
+applicable à FP-04 : il ne
+remplace pas le mapping canonique courant par `RGBA8UnormSrgb` et ne linéarise
+pas globalement les octets source. Une telle migration exigerait une décision
+et des preuves couleur séparées.
+
+La conversion d'upload est :
 
 - RGBA8 est copié sans réordonnancement ;
 - BGRA8 est converti en RGBA8 au boundary de préparation ;
@@ -462,10 +549,12 @@ seulement les attributions conditionnelles suivantes :
 - FP-11 régit les preuves visuelles et performance de la candidate finale.
 
 Codecs/animations, HDR/YUV et textures importées ne sont attribués à aucun item
-de la TODO FP-04…FP-11. Ils restent régis par les specs image, couleur,
-ownership et ABI, avec refus stables, jusqu'à ce qu'une future décision active
-les planifie. Les anciens noms de milestone ou tickets ne doivent pas servir de
-date, de backlog actif ou de promesse implicite.
+de la TODO FP-04…FP-11. Les specs `Draft` image, couleur, ownership et ABI
+restent seulement des références techniques bornées selon la hiérarchie
+ci-dessus ; elles ne planifient pas ces capacités. Les refus restent stables
+jusqu'à ce qu'une future décision active les attribue. Les anciens noms de
+milestone ou tickets ne doivent pas servir de date, de backlog actif ou de
+promesse implicite.
 
 ## Alternatives rejetées
 
