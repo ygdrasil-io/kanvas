@@ -1924,15 +1924,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         assertFalse(source.contains("SHA-256"))
         assertFalse(source.contains("step !in renderEntries.map(RenderEntry::render)"))
         assertTrue(source.contains("retainedCoverageMaskRenderSteps"))
-        val analyticShapeValidation = source
-            .substringAfter(
-                "if (uniformLayout == " +
-                    "GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1)",
-            )
-            .substringBefore(
-                "if (uniformLayout ==\n            " +
-                    "GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticClipUniform160V1",
-            )
+        val analyticShapeValidation = source.balancedBlockAfter(
+            anchor = "val acceptedGeometries = semanticPackets.mapIndexed",
+            blockCondition = "if (uniformLayout == " +
+                "GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1)",
+        )
         assertFalse(
             analyticShapeValidation.contains("ByteArray(sealedUniformPlan.totalBytes.toInt())"),
             "uniform80 materialization must validate the borrowed packed slab in place",
@@ -3437,6 +3433,26 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         )
         materializer.close()
         fixture.close()
+    }
+
+    private fun String.balancedBlockAfter(anchor: String, blockCondition: String): String {
+        val anchorIndex = indexOf(anchor)
+        check(anchorIndex >= 0) { "Source anchor not found: $anchor" }
+        val conditionIndex = indexOf(blockCondition, startIndex = anchorIndex)
+        check(conditionIndex >= 0) { "Source block condition not found after anchor: $blockCondition" }
+        val openingBraceIndex = indexOf('{', startIndex = conditionIndex + blockCondition.length)
+        check(openingBraceIndex >= 0) { "Source block opening brace not found: $blockCondition" }
+        var depth = 0
+        for (index in openingBraceIndex until length) {
+            when (this[index]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return substring(conditionIndex, index + 1)
+                }
+            }
+        }
+        error("Source block closing brace not found: $blockCondition")
     }
 
     private fun assertIndexedPathPayload(
