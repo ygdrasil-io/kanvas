@@ -100,7 +100,7 @@ git -c safe.directory=C:/Users/Shadow/IdeaProjects/kanvas ls-files --eol -- code
 Get-FileHash -Algorithm SHA256 codec/jpeg2000/src/test/resources/jpeg2000-openjpeg/source.pgm,codec/jpeg2000/src/test/resources/jpeg2000-openjpeg/source-two-codeblocks-96x17.pgm,codec/jpeg2000/src/test/resources/jpeg2000-openjpeg/source-ndecomp2-8x8.pgm,codec/jpeg2000/src/test/resources/jpeg2000-openjpeg/source-ndecomp2-5x5-random.pgm,codec/jpegxl/src/test/resources/jpegxl-modular/flower-510x532-8bit-lossless.pgm
 ```
 
-Expected: each path reports `text: unset`, `attr/-text`, and `w/lf`; hashes are, in command order, `2BDF5504B54D408477487911B94A077D29E9B6B2DE159FCCB2E3144B50FBD702`, `8EA8D1147B4A3DC25A2B20D4F28CA911A5BA8C2E755444AFCE9FDB189A9EAECA`, `776F58EF519598BC34837231297169BDC5D6CFF27CF74C4EC1DD68B136601ED9`, `6E2EE7CEA5438782570B17874495A53DB23DA1D4921858F47B5B2F28A5C8B612`, and `4580F75490C0BC38159A381615571E2A341FC0ADDE99B4B3B0ED5BBEA97DA1FC`.
+Expected: each path reports `text: unset`, `attr/-text`, and `w/lf`; hashes are, in command order, `2BDF55049E85C305EB510DF45D10CE0150D92BAC8663CF55E8E8D8B550FBD702`, `8EA8D1148129457247B37C889415D3F5EDBFDE4DFF929C09280618899A9EAECA`, `776F58EFB28E49ED6656BD5D331757C8546B99FDA4754F8D3CA7E3EE36601ED9`, `6E2EE7CE0880C67527F1A1DD6FED83703DE8B66943DD9D623D1EFB0BA5C8B612`, and `4580F75490C0BC38159A381615571E2A341FC0ADDE99B4B3B0ED5BBEA97DA1FC`.
 
 - [ ] **Step 6: Prove codec GREEN**
 
