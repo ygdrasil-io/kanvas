@@ -42,11 +42,13 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 
@@ -740,6 +742,12 @@ private class CanonicalHashSink(rootTag: String) {
         output.writeBoolean(value)
     }
 
+    fun byteArray(name: String, value: ByteArray): CanonicalHashSink = apply {
+        field(9, name)
+        output.writeInt(value.size)
+        output.write(value)
+    }
+
     fun <T> list(
         name: String,
         values: List<T>,
@@ -891,6 +899,14 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
                 list("packets", batch.packets) { packet(it) }
             }
             list("drawPackets", value.drawPackets) { packet(it) }
+            list(
+                "preparedImageBindings",
+                value.drawPackets
+                    .filter { packet -> packet.semanticPayload is GPUDrawSemanticPayload.SampledImage }
+                    .map { packet ->
+                        value.preparedImageBindingsByPacketId.getValue(packet.packetId)
+                    },
+            ) { preparedImageBinding(it) }
         }
         is GPUFrameStep.ComputePassStep -> {
             resourceRef("target", value.target)
@@ -906,6 +922,7 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
             long("bytesPerRow", value.layout.bytesPerRow)
             int("rowsPerImage", value.layout.rowsPerImage)
             long("byteSize", value.layout.byteSize)
+            nullable("preparedImagePlan", value.preparedImagePlan) { preparedImagePlan(it) }
         }
         is GPUFrameStep.CopyResourceStep -> {
             resourceRef("source", value.source)
@@ -968,6 +985,78 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
             list("provenanceTokens", value.provenanceTokens) { string("token", it.value) }
             diagnostic("diagnostic", value.diagnostic)
         }
+    }
+}
+
+private fun CanonicalHashSink.preparedImagePlan(value: GPUPreparedImageFrameResourcePlan) {
+    tag("GPUPreparedImageFrameResourcePlan")
+    string("stagingRef", value.stagingRef.value)
+    string("textureRef", value.textureRef.value)
+    string("frameTextureRef", value.frameTextureRef.value)
+    string("uniformRef", value.uniformRef.value)
+    textureDescriptor("textureDescriptor", value.textureDescriptor)
+    tag("GPUPreparedImageUploadLayout")
+    long("logicalBytesPerRow", value.uploadLayout.logicalBytesPerRow)
+    long("bytesPerRow", value.uploadLayout.bytesPerRow)
+    int("rowsPerImage", value.uploadLayout.rowsPerImage)
+    int("width", value.uploadLayout.width)
+    int("height", value.uploadLayout.height)
+    byteArray("payloadBytes", value.uploadLayout.bytesForUpload())
+    tag("GPUUploadLayout")
+    long("sourceOffsetBytes", value.uploadTaskLayout.sourceOffsetBytes)
+    long("bytesPerRow", value.uploadTaskLayout.bytesPerRow)
+    int("rowsPerImage", value.uploadTaskLayout.rowsPerImage)
+    long("byteSize", value.uploadTaskLayout.byteSize)
+    list("bindingRequests", value.bindingRequests) { preparedImageBinding(it) }
+    list("preparationRequests", value.preparationRequests) { preparationRequest(it) }
+    list("memoryAllocations", value.memoryAllocations) { memoryAllocation(it) }
+    string("uploadTaskId", value.uploadTaskId.value)
+}
+
+private fun CanonicalHashSink.preparedImageBinding(value: GPUPreparedImageBindingRequest) {
+    tag("GPUPreparedImageBindingRequest")
+    string("packetId", value.packetId)
+    string("artifactKey", value.artifactKey.value)
+    textureDescriptor("texture", value.texture)
+    tag("GPUTextureViewDescriptor")
+    string("textureDescriptorHash", value.view.textureDescriptorHash)
+    string("viewDimension", value.view.viewDimension)
+    int("mipRangeFirst", value.view.mipRange.first)
+    int("mipRangeLast", value.view.mipRange.last)
+    int("arrayLayerRangeFirst", value.view.arrayLayerRange.first)
+    int("arrayLayerRangeLast", value.view.arrayLayerRange.last)
+    samplerDescriptor("sampler", value.sampler)
+    string("bindingLayoutHash", value.bindingLayoutHash)
+    tag("GPUPreparedImageUniformAllocation")
+    string("uniformPacketId", value.uniformAllocation.packetId)
+    long("uniformOffset", value.uniformAllocation.offset)
+    long("uniformSize", value.uniformAllocation.size)
+}
+
+private fun CanonicalHashSink.textureDescriptor(name: String, value: GPUTextureDescriptor) {
+    tag(name)
+    tag("GPUTextureDescriptor")
+    int("width", value.width)
+    int("height", value.height)
+    string("format", value.format)
+    list("usageLabels", value.usageLabels.sorted()) { string("usage", it) }
+    int("sampleCount", value.sampleCount)
+}
+
+private fun CanonicalHashSink.samplerDescriptor(name: String, value: GPUSamplerDescriptor) {
+    tag(name)
+    tag("GPUSamplerDescriptor")
+    string("addressModeU", value.addressModeU)
+    string("addressModeV", value.addressModeV)
+    string("magFilter", value.magFilter)
+    string("minFilter", value.minFilter)
+    string("mipmapFilter", value.mipmapFilter)
+    string("lodMinClamp", value.lodMinClamp)
+    string("lodMaxClamp", value.lodMaxClamp)
+    string("compareMode", value.compareMode)
+    int("maxAnisotropy", value.maxAnisotropy)
+    list("capabilityRequirements", value.capabilityRequirements.sorted()) {
+        string("requirement", it)
     }
 }
 
@@ -1443,7 +1532,12 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
                 } ?: "none"} " +
                 "batches=${batches.joinToString(";") { batch ->
                     "${batch.batchId}:${batch.kind.name}:${batch.packets.joinToString(",") { it.packetId.value }}"
-                }} packets=${drawPackets.joinToString(";") { packet -> packet.stableDump() }}"
+                }} packets=${drawPackets.joinToString(";") { packet -> packet.stableDump() }} " +
+                "preparedImageBindings=${drawPackets
+                    .filter { packet -> packet.semanticPayload is GPUDrawSemanticPayload.SampledImage }
+                    .joinToString(";") { packet ->
+                        preparedImageBindingsByPacketId.getValue(packet.packetId).stableDump()
+                    }.ifEmpty { "none" }}"
         is GPUFrameStep.ComputePassStep ->
             "compute target=${target.value} uses=${resourceUses.joinToString(";") { it.stableDump() }} " +
                 "dispatches=${dispatches.joinToString(";") { it.stableDump() }}"
@@ -1452,7 +1546,8 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
         is GPUFrameStep.UploadResourceStep ->
             "upload staging=${staging.value} destination=${destination.value} " +
                 "offset=${layout.sourceOffsetBytes} bytesPerRow=${layout.bytesPerRow} " +
-                "rowsPerImage=${layout.rowsPerImage} bytes=${layout.byteSize}"
+                "rowsPerImage=${layout.rowsPerImage} bytes=${layout.byteSize} " +
+                "preparedImagePlan=${preparedImagePlan?.stableDump() ?: "none"}"
         is GPUFrameStep.CopyResourceStep ->
             "copy source=${source.value} destination=${destination.value} " +
                 "regions=${regions.joinToString(";") { it.stableDump() }}"
@@ -1488,6 +1583,52 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
     }
     return "step index=$index kind=${executionKind.name} tasks=$tasks $body"
 }
+
+private fun GPUPreparedImageFrameResourcePlan.stableDump(): String =
+    "{staging=${stagingRef.value},texture=${textureRef.value},frameTexture=${frameTextureRef.value}," +
+        "uniform=${uniformRef.value},textureDescriptor=${textureDescriptor.stableDump()}," +
+        "upload={logicalBytesPerRow=${uploadLayout.logicalBytesPerRow}," +
+        "bytesPerRow=${uploadLayout.bytesPerRow},rowsPerImage=${uploadLayout.rowsPerImage}," +
+        "size=${uploadLayout.width}x${uploadLayout.height}," +
+        "payloadByteSize=${uploadLayout.bytesForUpload().size}," +
+        "payloadSha256=${uploadLayout.bytesForUpload().sha256()}}," +
+        "taskLayout={offset=${uploadTaskLayout.sourceOffsetBytes}," +
+        "bytesPerRow=${uploadTaskLayout.bytesPerRow},rowsPerImage=${uploadTaskLayout.rowsPerImage}," +
+        "byteSize=${uploadTaskLayout.byteSize}}," +
+        "bindings=${bindingRequests.mapIndexed { index, binding ->
+            "$index:${binding.stableDump()}"
+        }.joinToString(";").ifEmpty { "none" }}," +
+        "preparations=${preparationRequests.mapIndexed { index, request ->
+            "$index:${request.stableDump()}"
+        }.joinToString(";").ifEmpty { "none" }}," +
+        "allocations=${memoryAllocations.mapIndexed { index, allocation ->
+            "$index:{label=${allocation.label},category=${allocation.category.name}," +
+                "bytes=${allocation.bytes},kind=${allocation.resourceKind.name}," +
+                "extent=${allocation.extent ?: "none"}}"
+        }.joinToString(";").ifEmpty { "none" }},uploadTask=${uploadTaskId.value}}"
+
+private fun GPUPreparedImageBindingRequest.stableDump(): String =
+    "{packet=$packetId,artifact=${artifactKey.value},texture=${texture.stableDump()}," +
+        "view={descriptorHash=${view.textureDescriptorHash},dimension=${view.viewDimension}," +
+        "mips=${view.mipRange.first}..${view.mipRange.last}," +
+        "layers=${view.arrayLayerRange.first}..${view.arrayLayerRange.last}}," +
+        "sampler=${sampler.stableDump()},bindingLayout=$bindingLayoutHash," +
+        "uniform={packet=${uniformAllocation.packetId},offset=${uniformAllocation.offset}," +
+        "size=${uniformAllocation.size}}}"
+
+private fun GPUTextureDescriptor.stableDump(): String =
+    "{width=$width,height=$height,format=$format," +
+        "usages=${usageLabels.sorted().joinToString(",")},sampleCount=$sampleCount}"
+
+private fun GPUSamplerDescriptor.stableDump(): String =
+    "{addressU=$addressModeU,addressV=$addressModeV,mag=$magFilter,min=$minFilter," +
+        "mipmap=$mipmapFilter,lodMin=$lodMinClamp,lodMax=$lodMaxClamp,compare=$compareMode," +
+        "anisotropy=$maxAnisotropy," +
+        "requirements=${capabilityRequirements.sorted().joinToString(",")}}"
+
+private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
+    .digest(this)
+    .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
 private fun GPUFrameMemoryBudgetPlan.dumpLine(): String =
     "memory peakTransient=$peakFrameTransientBytes targetResident=$targetResidentBytes " +

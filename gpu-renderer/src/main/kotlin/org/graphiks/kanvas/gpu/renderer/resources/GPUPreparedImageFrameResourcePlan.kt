@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
+import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
@@ -31,6 +32,30 @@ class GPUPreparedImageUploadLayout internal constructor(
         height = height,
         paddedUploadBytes = uploadBytes,
     )
+
+    override fun equals(other: Any?): Boolean =
+        other is GPUPreparedImageUploadLayout &&
+            logicalBytesPerRow == other.logicalBytesPerRow &&
+            bytesPerRow == other.bytesPerRow &&
+            rowsPerImage == other.rowsPerImage &&
+            width == other.width &&
+            height == other.height &&
+            uploadBytes.contentEquals(other.uploadBytes)
+
+    override fun hashCode(): Int {
+        var result = logicalBytesPerRow.hashCode()
+        result = 31 * result + bytesPerRow.hashCode()
+        result = 31 * result + rowsPerImage
+        result = 31 * result + width
+        result = 31 * result + height
+        result = 31 * result + uploadBytes.contentHashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "GPUPreparedImageUploadLayout(logicalBytesPerRow=$logicalBytesPerRow, " +
+            "bytesPerRow=$bytesPerRow, rowsPerImage=$rowsPerImage, width=$width, height=$height, " +
+            "payloadByteSize=${uploadBytes.size}, payloadSha256=${uploadBytes.sha256()})"
 }
 
 data class GPUPreparedImageUniformAllocation(
@@ -54,30 +79,104 @@ data class GPUPreparedImageBindingRequest(
     val uniformAllocation: GPUPreparedImageUniformAllocation,
 )
 
-class GPUPreparedImageFrameResourcePlan(
+private object GPUPreparedImageFrameResourcePlanSnapshot
+
+data class GPUPreparedImageFrameResourcePlan private constructor(
     val stagingRef: GPUFrameBufferRef,
     val textureRef: GPUTextureResourceRef,
     val frameTextureRef: GPUFrameTextureRef,
     val uniformRef: GPUFrameBufferRef,
-    textureDescriptor: GPUTextureDescriptor,
-    uploadLayout: GPUPreparedImageUploadLayout,
+    val textureDescriptor: GPUTextureDescriptor,
+    val uploadLayout: GPUPreparedImageUploadLayout,
     val uploadTaskLayout: GPUUploadLayout,
-    bindingRequests: List<GPUPreparedImageBindingRequest>,
-    preparationRequests: List<GPUResourcePreparationRequest>,
-    memoryAllocations: List<GPUFrameMemoryAllocation>,
+    val bindingRequests: List<GPUPreparedImageBindingRequest>,
+    val preparationRequests: List<GPUResourcePreparationRequest>,
+    val memoryAllocations: List<GPUFrameMemoryAllocation>,
     val uploadTaskId: GPUTaskID,
+    private val snapshotMarker: GPUPreparedImageFrameResourcePlanSnapshot,
 ) {
-    val textureDescriptor: GPUTextureDescriptor = textureDescriptor.snapshot()
-    val uploadLayout: GPUPreparedImageUploadLayout = uploadLayout.snapshot()
-    val bindingRequests: List<GPUPreparedImageBindingRequest> = immutableList(
-        bindingRequests.map(GPUPreparedImageBindingRequest::snapshot),
+    constructor(
+        stagingRef: GPUFrameBufferRef,
+        textureRef: GPUTextureResourceRef,
+        frameTextureRef: GPUFrameTextureRef,
+        uniformRef: GPUFrameBufferRef,
+        textureDescriptor: GPUTextureDescriptor,
+        uploadLayout: GPUPreparedImageUploadLayout,
+        uploadTaskLayout: GPUUploadLayout,
+        bindingRequests: List<GPUPreparedImageBindingRequest>,
+        preparationRequests: List<GPUResourcePreparationRequest>,
+        memoryAllocations: List<GPUFrameMemoryAllocation>,
+        uploadTaskId: GPUTaskID,
+    ) : this(
+        stagingRef = stagingRef,
+        textureRef = textureRef,
+        frameTextureRef = frameTextureRef,
+        uniformRef = uniformRef,
+        textureDescriptor = textureDescriptor.snapshot(),
+        uploadLayout = uploadLayout.snapshot(),
+        uploadTaskLayout = uploadTaskLayout.copy(),
+        bindingRequests = bindingRequests.snapshotPreparedImageBindings(),
+        preparationRequests = preparationRequests.snapshotPreparedImagePreparations(),
+        memoryAllocations = memoryAllocations.snapshotPreparedImageAllocations(),
+        uploadTaskId = uploadTaskId,
+        snapshotMarker = GPUPreparedImageFrameResourcePlanSnapshot,
     )
-    val preparationRequests: List<GPUResourcePreparationRequest> = immutableList(
-        preparationRequests.map(GPUResourcePreparationRequest::snapshotForPreparedImage),
+
+    @Suppress("DataClassPrivateConstructor")
+    fun copy(
+        stagingRef: GPUFrameBufferRef = this.stagingRef,
+        textureRef: GPUTextureResourceRef = this.textureRef,
+        frameTextureRef: GPUFrameTextureRef = this.frameTextureRef,
+        uniformRef: GPUFrameBufferRef = this.uniformRef,
+        textureDescriptor: GPUTextureDescriptor = this.textureDescriptor,
+        uploadLayout: GPUPreparedImageUploadLayout = this.uploadLayout,
+        uploadTaskLayout: GPUUploadLayout = this.uploadTaskLayout,
+        bindingRequests: List<GPUPreparedImageBindingRequest> = this.bindingRequests,
+        preparationRequests: List<GPUResourcePreparationRequest> = this.preparationRequests,
+        memoryAllocations: List<GPUFrameMemoryAllocation> = this.memoryAllocations,
+        uploadTaskId: GPUTaskID = this.uploadTaskId,
+    ): GPUPreparedImageFrameResourcePlan = GPUPreparedImageFrameResourcePlan(
+        stagingRef = stagingRef,
+        textureRef = textureRef,
+        frameTextureRef = frameTextureRef,
+        uniformRef = uniformRef,
+        textureDescriptor = if (textureDescriptor === this.textureDescriptor) {
+            textureDescriptor
+        } else {
+            textureDescriptor.snapshot()
+        },
+        uploadLayout = if (uploadLayout === this.uploadLayout) uploadLayout else uploadLayout.snapshot(),
+        uploadTaskLayout = if (uploadTaskLayout === this.uploadTaskLayout) {
+            uploadTaskLayout
+        } else {
+            uploadTaskLayout.copy()
+        },
+        bindingRequests = if (bindingRequests === this.bindingRequests) {
+            bindingRequests
+        } else {
+            bindingRequests.snapshotPreparedImageBindings()
+        },
+        preparationRequests = if (preparationRequests === this.preparationRequests) {
+            preparationRequests
+        } else {
+            preparationRequests.snapshotPreparedImagePreparations()
+        },
+        memoryAllocations = if (memoryAllocations === this.memoryAllocations) {
+            memoryAllocations
+        } else {
+            memoryAllocations.snapshotPreparedImageAllocations()
+        },
+        uploadTaskId = uploadTaskId,
+        snapshotMarker = GPUPreparedImageFrameResourcePlanSnapshot,
     )
-    val memoryAllocations: List<GPUFrameMemoryAllocation> = immutableList(
-        memoryAllocations.map { allocation -> allocation.copy() },
-    )
+
+    override fun toString(): String =
+        "GPUPreparedImageFrameResourcePlan(stagingRef=$stagingRef, textureRef=$textureRef, " +
+            "frameTextureRef=$frameTextureRef, uniformRef=$uniformRef, " +
+            "textureDescriptor=$textureDescriptor, uploadLayout=$uploadLayout, " +
+            "uploadTaskLayout=$uploadTaskLayout, bindingRequests=$bindingRequests, " +
+            "preparationRequests=$preparationRequests, memoryAllocations=$memoryAllocations, " +
+            "uploadTaskId=$uploadTaskId)"
 }
 
 internal fun buildPreparedImageFrameResourcePlanFromBindings(
@@ -320,6 +419,21 @@ private fun GPUPreparedImageBindingRequest.snapshot(): GPUPreparedImageBindingRe
     uniformAllocation = uniformAllocation.copy(),
 )
 
+private fun List<GPUPreparedImageBindingRequest>.snapshotPreparedImageBindings():
+    List<GPUPreparedImageBindingRequest> = immutableList(
+        map(GPUPreparedImageBindingRequest::snapshot),
+    )
+
+private fun List<GPUResourcePreparationRequest>.snapshotPreparedImagePreparations():
+    List<GPUResourcePreparationRequest> = immutableList(
+        map(GPUResourcePreparationRequest::snapshotForPreparedImage),
+    )
+
+private fun List<GPUFrameMemoryAllocation>.snapshotPreparedImageAllocations():
+    List<GPUFrameMemoryAllocation> = immutableList(
+        map(GPUFrameMemoryAllocation::copy),
+    )
+
 private fun GPUResourcePreparationRequest.snapshotForPreparedImage():
     GPUResourcePreparationRequest = GPUResourcePreparationRequest(
     resource = resource,
@@ -333,3 +447,7 @@ private fun GPUResourcePreparationRequest.snapshotForPreparedImage():
     byteSize = byteSize,
     diagnosticLabel = diagnosticLabel,
 )
+
+private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
+    .digest(this)
+    .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }

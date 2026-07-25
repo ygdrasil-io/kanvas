@@ -53,6 +53,9 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUploadLayout
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUPreparedSurfaceFrameTaskListBuilderTest {
@@ -331,6 +334,123 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `prepared image sampler uniform descriptor and payload participate in frame identity`() {
+        val base = recording(imageCommand(0, 0)).taskList
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(request(base, semantics(base))),
+        ).taskList
+        val framePlan = GPUFramePlanner.plan(taskList)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val upload = framePlan.steps.filterIsInstance<GPUFrameStep.UploadResourceStep>().single()
+        val packetId = render.drawPackets.single().packetId
+        val binding = render.preparedImageBindingsByPacketId.getValue(packetId)
+        val resourcePlan = requireNotNull(upload.preparedImagePlan)
+        val uploadBytes = resourcePlan.uploadLayout.bytesForUpload()
+        val changedUploadBytes = uploadBytes.copyOf().also { bytes ->
+            bytes[0] = (bytes[0].toInt() xor 0x7f).toByte()
+        }
+        val variants = linkedMapOf(
+            "sampler" to framePlan.replacingStep(
+                render,
+                render.rebuilt(
+                    mapOf(
+                        packetId to binding.copy(
+                            sampler = binding.sampler.copy(
+                                magFilter = if (binding.sampler.magFilter == "nearest") "linear" else "nearest",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            "uniform" to framePlan.replacingStep(
+                render,
+                render.rebuilt(
+                    mapOf(
+                        packetId to binding.copy(
+                            uniformAllocation = binding.uniformAllocation.copy(
+                                offset = binding.uniformAllocation.offset + 256L,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            "descriptor" to framePlan.replacingStep(
+                upload,
+                upload.rebuilt(
+                    resourcePlan.rebuilt(
+                        textureDescriptor = resourcePlan.textureDescriptor.copy(
+                            sampleCount = resourcePlan.textureDescriptor.sampleCount + 1,
+                        ),
+                    ),
+                ),
+            ),
+            "payload" to framePlan.replacingStep(
+                upload,
+                upload.rebuilt(
+                    resourcePlan.rebuilt(
+                        uploadLayout = GPUPreparedImageUploadLayout(
+                            logicalBytesPerRow = resourcePlan.uploadLayout.logicalBytesPerRow,
+                            bytesPerRow = resourcePlan.uploadLayout.bytesPerRow,
+                            rowsPerImage = resourcePlan.uploadLayout.rowsPerImage,
+                            width = resourcePlan.uploadLayout.width,
+                            height = resourcePlan.uploadLayout.height,
+                            paddedUploadBytes = changedUploadBytes,
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val baseDump = framePlan.dumpLines().joinToString("\n")
+        val identityCollisions = variants.flatMap { (authority, variant) ->
+            buildList {
+                if (framePlan.stableHash() == variant.stableHash()) add("$authority:hash")
+                if (baseDump == variant.dumpLines().joinToString("\n")) add("$authority:dump")
+            }
+        }
+
+        assertEquals(emptyList(), identityCollisions)
+        assertTrue(baseDump.contains("payloadSha256="), baseDump)
+        assertFalse(baseDump.contains(uploadBytes.contentToString()), baseDump)
+    }
+
+    @Test
+    fun `prepared image binding insertion order does not change canonical frame identity`() {
+        val base = recording(imageCommand(0, 0)).taskList
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(request(base, semantics(base))),
+        ).taskList
+        val framePlan = GPUFramePlanner.plan(taskList)
+        val render = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val firstPacket = render.drawPackets.single()
+        val secondPacket = firstPacket.rebuilt(
+            packetId = GPUDrawPacketID("packet.image.synthetic-second"),
+        )
+        val firstBinding = render.preparedImageBindingsByPacketId.getValue(firstPacket.packetId)
+        val secondBinding = firstBinding.copy(packetId = secondPacket.packetId.value)
+        val orderedEntries = listOf(
+            firstPacket.packetId to firstBinding,
+            secondPacket.packetId to secondBinding,
+        )
+        val forward = framePlan.replacingStep(
+            render,
+            render.rebuilt(
+                drawPackets = listOf(firstPacket, secondPacket),
+                preparedImageBindingsByPacketId = linkedMapOf(*orderedEntries.toTypedArray()),
+            ),
+        )
+        val reversed = framePlan.replacingStep(
+            render,
+            render.rebuilt(
+                drawPackets = listOf(firstPacket, secondPacket),
+                preparedImageBindingsByPacketId = linkedMapOf(*orderedEntries.reversed().toTypedArray()),
+            ),
+        )
+
+        assertEquals(forward.stableHash(), reversed.stableHash())
+        assertEquals(forward.dumpLines(), reversed.dumpLines())
+    }
+
+    @Test
     fun `render requires exact prepared image binding coverage`() {
         val base = recording(imageCommand(0, 0)).taskList
         val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
@@ -555,7 +675,67 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         preparedImageBindingsByPacketId = preparedImageBindingsByPacketId,
     )
 
+    private fun GPUFrameStep.RenderPassStep.rebuilt(
+        preparedImageBindingsByPacketId: Map<GPUDrawPacketID, GPUPreparedImageBindingRequest>,
+        drawPackets: List<GPUDrawPacket> = this.drawPackets,
+    ) = GPUFrameStep.RenderPassStep(
+        target = target,
+        loadStore = loadStore,
+        samplePlan = samplePlan,
+        resourceUses = resourceUses,
+        drawPackets = drawPackets,
+        sourceTaskIds = sourceTaskIds,
+        sampleContinuation = sampleContinuation,
+        depthStencilLoadStore = depthStencilLoadStore,
+        preparedImageBindingsByPacketId = preparedImageBindingsByPacketId,
+    )
+
+    private fun GPUFrameStep.UploadResourceStep.rebuilt(
+        preparedImagePlan: GPUPreparedImageFrameResourcePlan,
+    ) = GPUFrameStep.UploadResourceStep(
+        staging = staging,
+        destination = destination,
+        layout = layout,
+        sourceTaskIds = sourceTaskIds,
+        preparedImagePlan = preparedImagePlan,
+    )
+
+    private fun GPUPreparedImageFrameResourcePlan.rebuilt(
+        textureDescriptor:
+            org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor = this.textureDescriptor,
+        uploadLayout: GPUPreparedImageUploadLayout = this.uploadLayout,
+    ) = GPUPreparedImageFrameResourcePlan(
+        stagingRef = stagingRef,
+        textureRef = textureRef,
+        frameTextureRef = frameTextureRef,
+        uniformRef = uniformRef,
+        textureDescriptor = textureDescriptor,
+        uploadLayout = uploadLayout,
+        uploadTaskLayout = uploadTaskLayout,
+        bindingRequests = bindingRequests,
+        preparationRequests = preparationRequests,
+        memoryAllocations = memoryAllocations,
+        uploadTaskId = uploadTaskId,
+    )
+
+    private fun GPUFramePlan.replacingStep(
+        original: GPUFrameStep,
+        replacement: GPUFrameStep,
+    ) = GPUFramePlan(
+        frameId = frameId,
+        capabilitySeal = capabilitySeal,
+        recordingSeals = recordingSeals,
+        steps = steps.map { step -> if (step === original) replacement else step },
+        memoryBudget = memoryBudget,
+        diagnostics = diagnostics,
+        dependencies = dependencies,
+        phaseOrder = phaseOrder,
+        elidedNoOpDraws = elidedNoOpDraws,
+        atomicallyRefused = atomicallyRefused,
+    )
+
     private fun GPUDrawPacket.rebuilt(
+        packetId: GPUDrawPacketID = this.packetId,
         renderStepId: GPURenderStepID = this.renderStepId,
         renderPipelineKey: GPURenderPipelineKey? = this.renderPipelineKey,
         clipCoveragePlan: GPUClipCoveragePlan? = this.clipCoveragePlan,

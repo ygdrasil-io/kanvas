@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
+import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
@@ -125,6 +126,133 @@ class GPUPreparedImageFrameResourcePlanTest {
             (plan.memoryAllocations as MutableList<GPUFrameMemoryAllocation>)[0] =
                 plan.memoryAllocations.first().copy(label = "mutated")
         }
+    }
+
+    @Test
+    fun `resource plan retains data class structure across copy and caller mutation`() {
+        val template = buildPreparedImageFrameResourcePlan(
+            artifact = artifact(
+                format = GPUPreparedImageSourceFormat.A8,
+                sourceRowBytes = 3,
+                bytes = byteArrayOf(1, 2, 3, 4, 5, 6),
+            ),
+            packetIds = listOf("packet.image"),
+            bindingLayoutHash = "texture-sampler-tint.v1",
+            capabilities = capabilities(),
+            frameIdentity = "frame-data-class",
+            uploadTaskId = GPUTaskID("task.image.upload"),
+        )
+        val descriptorUsage = template.textureDescriptor.usageLabels.toMutableSet()
+        val samplerRequirements = mutableSetOf("sampler.requirement")
+        val preparationUsages = template.preparationRequests.first().usages.toMutableSet()
+        val callerBytes = template.uploadLayout.bytesForUpload()
+        val callerBindings = template.bindingRequests.map { binding ->
+            binding.copy(
+                texture = binding.texture.copy(usageLabels = descriptorUsage),
+                sampler = binding.sampler.copy(capabilityRequirements = samplerRequirements),
+            )
+        }.toMutableList()
+        val callerPreparations = template.preparationRequests.mapIndexed { index, request ->
+            if (index == 0) {
+                GPUResourcePreparationRequest(
+                    resource = request.resource,
+                    descriptor = request.descriptor,
+                    role = request.role,
+                    usages = preparationUsages,
+                    lifetime = request.lifetime,
+                    byteSize = request.byteSize,
+                    diagnosticLabel = request.diagnosticLabel,
+                )
+            } else {
+                request
+            }
+        }.toMutableList()
+        val callerAllocations = template.memoryAllocations.toMutableList()
+        val plan = GPUPreparedImageFrameResourcePlan(
+            stagingRef = template.stagingRef,
+            textureRef = template.textureRef,
+            frameTextureRef = template.frameTextureRef,
+            uniformRef = template.uniformRef,
+            textureDescriptor = template.textureDescriptor.copy(usageLabels = descriptorUsage),
+            uploadLayout = GPUPreparedImageUploadLayout(
+                logicalBytesPerRow = template.uploadLayout.logicalBytesPerRow,
+                bytesPerRow = template.uploadLayout.bytesPerRow,
+                rowsPerImage = template.uploadLayout.rowsPerImage,
+                width = template.uploadLayout.width,
+                height = template.uploadLayout.height,
+                paddedUploadBytes = callerBytes,
+            ),
+            uploadTaskLayout = template.uploadTaskLayout,
+            bindingRequests = callerBindings,
+            preparationRequests = callerPreparations,
+            memoryAllocations = callerAllocations,
+            uploadTaskId = template.uploadTaskId,
+        )
+        val copied = plan.copy()
+        val (
+            componentStagingRef,
+            componentTextureRef,
+            componentFrameTextureRef,
+            componentUniformRef,
+            componentTextureDescriptor,
+            componentUploadLayout,
+            componentUploadTaskLayout,
+            componentBindingRequests,
+            componentPreparationRequests,
+            componentMemoryAllocations,
+            componentUploadTaskId,
+        ) = plan
+
+        assertEquals(plan, copied)
+        assertEquals(plan.hashCode(), copied.hashCode())
+        assertNotSame(plan, copied)
+        assertTrue(plan.toString().startsWith("GPUPreparedImageFrameResourcePlan("))
+        assertEquals(
+            listOf(
+                plan.stagingRef,
+                plan.textureRef,
+                plan.frameTextureRef,
+                plan.uniformRef,
+                plan.textureDescriptor,
+                plan.uploadLayout,
+                plan.uploadTaskLayout,
+                plan.bindingRequests,
+                plan.preparationRequests,
+                plan.memoryAllocations,
+                plan.uploadTaskId,
+            ),
+            listOf(
+                componentStagingRef,
+                componentTextureRef,
+                componentFrameTextureRef,
+                componentUniformRef,
+                componentTextureDescriptor,
+                componentUploadLayout,
+                componentUploadTaskLayout,
+                componentBindingRequests,
+                componentPreparationRequests,
+                componentMemoryAllocations,
+                componentUploadTaskId,
+            ),
+        )
+
+        descriptorUsage += "storage_binding"
+        samplerRequirements += "sampler.mutated"
+        preparationUsages += GPUFrameResourceUsage.StorageBinding
+        callerBytes[0] = 99
+        callerBindings.clear()
+        callerPreparations.clear()
+        callerAllocations.clear()
+
+        assertEquals(setOf("copy_dst", "texture_binding"), plan.textureDescriptor.usageLabels)
+        assertEquals(setOf("sampler.requirement"), plan.bindingRequests.single().sampler.capabilityRequirements)
+        assertTrue(
+            GPUFrameResourceUsage.StorageBinding !in plan.preparationRequests.first().usages,
+        )
+        assertTrue(plan.uploadLayout.bytesForUpload()[0] != 99.toByte())
+        assertEquals(1, plan.bindingRequests.size)
+        assertEquals(3, plan.preparationRequests.size)
+        assertEquals(3, plan.memoryAllocations.size)
     }
 
     private fun artifact(
