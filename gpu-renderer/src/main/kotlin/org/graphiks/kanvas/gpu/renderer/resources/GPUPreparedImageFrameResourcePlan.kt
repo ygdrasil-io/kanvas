@@ -23,7 +23,48 @@ class GPUPreparedImageUploadLayout internal constructor(
 ) {
     private val uploadBytes = paddedUploadBytes.copyOf()
 
+    init {
+        require(sourceBytesPerRow > 0L) { "Prepared-image source row stride must be positive" }
+        require(logicalBytesPerRow > 0L && logicalBytesPerRow <= bytesPerRow) {
+            "Prepared-image logical row stride must fit the native row stride"
+        }
+        require(bytesPerRow <= Int.MAX_VALUE) { "Prepared-image native row stride exceeds JVM indexing" }
+        require(width > 0 && height > 0 && rowsPerImage == height) {
+            "Prepared-image upload dimensions and rows-per-image must agree"
+        }
+        require(uploadBytes.size.toLong() == Math.multiplyExact(bytesPerRow, height.toLong())) {
+            "Prepared-image native payload size must match its padded row layout"
+        }
+        repeat(height) { row ->
+            val paddingStart = Math.addExact(
+                Math.multiplyExact(row.toLong(), bytesPerRow),
+                logicalBytesPerRow,
+            ).toInt()
+            val rowEnd = Math.multiplyExact(row.toLong() + 1L, bytesPerRow).toInt()
+            require((paddingStart until rowEnd).all { index -> uploadBytes[index] == 0.toByte() }) {
+                "Prepared-image native row padding must be zero"
+            }
+        }
+    }
+
     fun bytesForUpload(): ByteArray = uploadBytes.copyOf()
+
+    internal fun logicalBytesForHash(): ByteArray {
+        val logicalSize = Math.multiplyExact(logicalBytesPerRow, height.toLong())
+        require(logicalSize <= Int.MAX_VALUE) { "Prepared-image logical payload exceeds JVM indexing" }
+        return ByteArray(logicalSize.toInt()).also { logical ->
+            repeat(height) { row ->
+                val sourceOffset = Math.multiplyExact(row.toLong(), bytesPerRow).toInt()
+                val targetOffset = Math.multiplyExact(row.toLong(), logicalBytesPerRow).toInt()
+                uploadBytes.copyInto(
+                    destination = logical,
+                    destinationOffset = targetOffset,
+                    startIndex = sourceOffset,
+                    endIndex = sourceOffset + logicalBytesPerRow.toInt(),
+                )
+            }
+        }
+    }
 
     internal fun snapshot(): GPUPreparedImageUploadLayout = GPUPreparedImageUploadLayout(
         sourceBytesPerRow = sourceBytesPerRow,
@@ -60,7 +101,9 @@ class GPUPreparedImageUploadLayout internal constructor(
         "GPUPreparedImageUploadLayout(sourceBytesPerRow=$sourceBytesPerRow, " +
             "logicalBytesPerRow=$logicalBytesPerRow, " +
             "bytesPerRow=$bytesPerRow, rowsPerImage=$rowsPerImage, width=$width, height=$height, " +
-            "payloadByteSize=${uploadBytes.size}, payloadSha256=${uploadBytes.sha256()})"
+            "nativePayloadByteSize=${uploadBytes.size}, " +
+            "payloadByteSize=${logicalBytesForHash().size}, " +
+            "payloadSha256=${logicalBytesForHash().sha256()})"
 }
 
 data class GPUPreparedImageUniformAllocation(

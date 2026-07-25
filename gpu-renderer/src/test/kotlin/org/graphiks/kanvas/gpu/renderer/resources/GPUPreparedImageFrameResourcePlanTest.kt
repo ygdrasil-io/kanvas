@@ -22,6 +22,39 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 
 class GPUPreparedImageFrameResourcePlanTest {
     @Test
+    fun `upload layout exposes only logical row bytes for hashing and rejects nonzero padding`() {
+        val padded = byteArrayOf(
+            1, 2, 3, 4, 0, 0, 0, 0,
+            5, 6, 7, 8, 0, 0, 0, 0,
+        )
+        val layout = GPUPreparedImageUploadLayout(
+            sourceBytesPerRow = 4,
+            logicalBytesPerRow = 4,
+            bytesPerRow = 8,
+            rowsPerImage = 2,
+            width = 1,
+            height = 2,
+            paddedUploadBytes = padded,
+        )
+
+        assertContentEquals(
+            byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
+            layout.logicalBytesForHash(),
+        )
+        assertFails {
+            GPUPreparedImageUploadLayout(
+                sourceBytesPerRow = 4,
+                logicalBytesPerRow = 4,
+                bytesPerRow = 8,
+                rowsPerImage = 2,
+                width = 1,
+                height = 2,
+                paddedUploadBytes = padded.copyOf().also { it[6] = 9 },
+            )
+        }
+    }
+
+    @Test
     fun `width three A8 upload keeps logical RGBA8 stride and zeroes aligned padding`() {
         val artifact = artifact(
             format = GPUPreparedImageSourceFormat.A8,

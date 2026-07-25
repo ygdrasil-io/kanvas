@@ -1002,12 +1002,13 @@ private fun CanonicalHashSink.preparedImagePlan(value: GPUPreparedImageFrameReso
     string("uniformRef", value.uniformRef.value)
     textureDescriptor("textureDescriptor", value.textureDescriptor)
     tag("GPUPreparedImageUploadLayout")
+    long("sourceBytesPerRow", value.uploadLayout.sourceBytesPerRow)
     long("logicalBytesPerRow", value.uploadLayout.logicalBytesPerRow)
     long("bytesPerRow", value.uploadLayout.bytesPerRow)
     int("rowsPerImage", value.uploadLayout.rowsPerImage)
     int("width", value.uploadLayout.width)
     int("height", value.uploadLayout.height)
-    byteArray("payloadBytes", value.uploadLayout.bytesForUpload())
+    byteArray("logicalPayloadBytes", value.uploadLayout.logicalBytesForHash())
     tag("GPUUploadLayout")
     long("sourceOffsetBytes", value.uploadTaskLayout.sourceOffsetBytes)
     long("bytesPerRow", value.uploadTaskLayout.bytesPerRow)
@@ -1593,11 +1594,13 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
 private fun GPUPreparedImageFrameResourcePlan.stableDump(): String =
     "{staging=${stagingRef.value},texture=${textureRef.value},frameTexture=${frameTextureRef.value}," +
         "uniform=${uniformRef.value},textureDescriptor=${textureDescriptor.stableDump()}," +
-        "upload={logicalBytesPerRow=${uploadLayout.logicalBytesPerRow}," +
+        "upload={sourceBytesPerRow=${uploadLayout.sourceBytesPerRow}," +
+        "logicalBytesPerRow=${uploadLayout.logicalBytesPerRow}," +
         "bytesPerRow=${uploadLayout.bytesPerRow},rowsPerImage=${uploadLayout.rowsPerImage}," +
         "size=${uploadLayout.width}x${uploadLayout.height}," +
-        "payloadByteSize=${uploadLayout.bytesForUpload().size}," +
-        "payloadSha256=${uploadLayout.bytesForUpload().sha256()}}," +
+        "nativePayloadByteSize=${uploadLayout.bytesForUpload().size}," +
+        "payloadByteSize=${uploadLayout.logicalBytesForHash().size}," +
+        "payloadSha256=${uploadLayout.logicalBytesForHash().sha256()}}," +
         "taskLayout={offset=${uploadTaskLayout.sourceOffsetBytes}," +
         "bytesPerRow=${uploadTaskLayout.bytesPerRow},rowsPerImage=${uploadTaskLayout.rowsPerImage}," +
         "byteSize=${uploadTaskLayout.byteSize}}," +

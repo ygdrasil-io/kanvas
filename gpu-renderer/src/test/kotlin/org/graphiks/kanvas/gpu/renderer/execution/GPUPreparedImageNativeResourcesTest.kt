@@ -28,10 +28,16 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingInput
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.resources.buildPreparedImageFrameResourcePlanFromBindings
 
 class GPUPreparedImageNativeResourcesTest {
@@ -138,6 +144,107 @@ class GPUPreparedImageNativeResourcesTest {
     }
 
     @Test
+    fun `seal refuses incoherent staging uniform limits and upload layout`() {
+        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val staging = fixture.plan.preparationRequests.single { it.resource == fixture.plan.stagingRef }
+        val uniform = fixture.plan.preparationRequests.single { it.resource == fixture.plan.uniformRef }
+        fun planWithPreparation(replacement: GPUResourcePreparationRequest) = fixture.plan.copy(
+            preparationRequests = fixture.plan.preparationRequests.map { request ->
+                if (request.resource == replacement.resource) replacement else request
+            },
+        )
+        val oversizedUniformBytes = (1L shl 30) + 1L
+        val cases = listOf(
+            "unsupported.prepared_image.staging_preparation" to planWithPreparation(
+                staging.rebuilt(usages = setOf(GPUFrameResourceUsage.CopyDestination)),
+            ),
+            "unsupported.prepared_image.staging_preparation" to planWithPreparation(
+                staging.rebuilt(
+                    descriptor = GPUFrameBufferDescriptor(
+                        byteSize = staging.byteSize - 1L,
+                        alignmentBytes = 4,
+                    ),
+                    byteSize = staging.byteSize - 1L,
+                ),
+            ),
+            "unsupported.prepared_image.uniform_preparation" to planWithPreparation(
+                uniform.rebuilt(usages = setOf(GPUFrameResourceUsage.CopyDestination)),
+            ),
+            "unsupported.prepared_image.device_limit" to planWithPreparation(
+                uniform.rebuilt(
+                    descriptor = GPUFrameBufferDescriptor(
+                        byteSize = oversizedUniformBytes,
+                        alignmentBytes = 256,
+                    ),
+                    byteSize = oversizedUniformBytes,
+                ),
+            ),
+            "unsupported.prepared_image.upload_layout" to fixture.plan.copy(
+                uploadTaskLayout = fixture.plan.uploadTaskLayout.copy(
+                    bytesPerRow = fixture.plan.uploadTaskLayout.bytesPerRow + 256L,
+                ),
+            ),
+            "unsupported.prepared_image.upload_layout" to fixture.plan.copy(
+                uploadTaskLayout = GPUUploadLayout(
+                    sourceOffsetBytes = 1,
+                    bytesPerRow = fixture.plan.uploadTaskLayout.bytesPerRow,
+                    rowsPerImage = fixture.plan.uploadTaskLayout.rowsPerImage,
+                    byteSize = fixture.plan.uploadTaskLayout.byteSize,
+                ),
+            ),
+        )
+
+        cases.forEach { (reason, plan) ->
+            val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+                GPUPreparedImageNativeResourcePreflighter.preflight(
+                    fixture.request.copy(resourcePlan = plan),
+                ),
+            )
+            assertEquals(reason, refused.reasonCode)
+        }
+    }
+
+    @Test
+    fun `seal revalidates zero padding after adversarial payload corruption`() {
+        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val uploadBytesField = fixture.plan.uploadLayout.javaClass.getDeclaredField("uploadBytes")
+        uploadBytesField.isAccessible = true
+        val privateUploadBytes = uploadBytesField.get(fixture.plan.uploadLayout) as ByteArray
+        privateUploadBytes[fixture.plan.uploadLayout.logicalBytesPerRow.toInt()] = 1
+
+        val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
+        )
+
+        assertEquals("unsupported.prepared_image.upload_layout", refused.reasonCode)
+    }
+
+    @Test
+    fun `seal refuses bindings whose texture views disagree`() {
+        val fixture = fixture(
+            listOf(
+                GPUPreparedImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+            ),
+        )
+        val changedBindings = fixture.plan.bindingRequests.mapIndexed { index, binding ->
+            if (index == 0) binding else binding.copy(
+                view = binding.view.copy(mipRange = 1..1),
+            )
+        }
+
+        val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(
+                fixture.request.copy(
+                    resourcePlan = fixture.plan.copy(bindingRequests = changedBindings),
+                ),
+            ),
+        )
+
+        assertEquals("unsupported.prepared_image.view_identity", refused.reasonCode)
+    }
+
+    @Test
     fun `partial factory failure closes every created handle once in reverse order`() {
         val fixture = fixture(
             listOf(
@@ -157,6 +264,33 @@ class GPUPreparedImageNativeResourcesTest {
             events,
         )
         assertEquals(events.size, events.toSet().size)
+    }
+
+    @Test
+    fun `close failures aggregate in reverse order and a second close never retries handles`() {
+        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
+        )
+        val events = mutableListOf<String>()
+        val factory = RecordingFactory(
+            closeEvents = events,
+            failCloseLabels = setOf("bind-group.nearest", "sampler.nearest"),
+        )
+        val resources = seal.materialize(factory)
+
+        val failure = assertFailsWith<IllegalStateException> { resources.close() }
+        val firstCloseEvents = factory.createdLabels.asReversed()
+        assertEquals(firstCloseEvents, events)
+        assertEquals("close failure bind-group.nearest", failure.message)
+        assertEquals(
+            listOf("close failure sampler.nearest"),
+            failure.suppressed.map { suppressed -> suppressed.message },
+        )
+
+        resources.close()
+        assertEquals(firstCloseEvents, events)
+        assertFailsWith<IllegalStateException> { resources.texture(fixture.artifactKey) }
     }
 
     private fun fixture(bindings: List<GPUPreparedImageBindingInput>): Fixture {
@@ -224,6 +358,7 @@ class GPUPreparedImageNativeResourcesTest {
     private class RecordingFactory(
         private val closeEvents: MutableList<String> = mutableListOf(),
         private val failOnSecondBindGroup: Boolean = false,
+        private val failCloseLabels: Set<String> = emptySet(),
     ) : GPUPreparedImageNativeHandleFactory {
         var createCalls = 0
         var bindGroupCreates = 0
@@ -260,7 +395,7 @@ class GPUPreparedImageNativeResourcesTest {
                 when (method.name) {
                     "close" -> {
                         closeEvents += label
-                        Unit
+                        if (label in failCloseLabels) error("close failure $label")
                     }
                     "toString" -> label
                     "hashCode" -> System.identityHashCode(proxy)
@@ -271,3 +406,18 @@ class GPUPreparedImageNativeResourcesTest {
         }
     }
 }
+
+private fun GPUResourcePreparationRequest.rebuilt(
+    descriptor: GPUFrameResourceDescriptor = this.descriptor,
+    role: GPUFrameResourceRole = this.role,
+    usages: Set<GPUFrameResourceUsage> = this.usages,
+    byteSize: Long = this.byteSize,
+): GPUResourcePreparationRequest = GPUResourcePreparationRequest(
+    resource = resource,
+    descriptor = descriptor,
+    role = role,
+    usages = usages,
+    lifetime = lifetime,
+    byteSize = byteSize,
+    diagnosticLabel = diagnosticLabel,
+)

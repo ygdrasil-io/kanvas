@@ -4,11 +4,13 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -31,6 +33,15 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.images.AlphaType
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactFactory
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageOrientation
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProfile
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProvenance
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
@@ -80,6 +91,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUploadLayout
+import org.graphiks.kanvas.gpu.renderer.resources.buildPreparedImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
@@ -1078,6 +1091,70 @@ class GPUFramePlanIntegrityTest {
         }
     }
 
+    @Test
+    fun `prepared image source stride changes canonical hash and dump while padding is excluded from payload digest`() {
+        val logicalPixels = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+        val artifact = assertIs<GPUPreparedImageArtifactResult.Ready>(
+            GPUPreparedImageArtifactFactory.prepare(
+                GPUPreparedImageSourceInput(
+                    sourceClass = GPUPreparedImageSourceClass.DecodedCpu,
+                    sourceId = "frame-plan-integrity",
+                    width = 1,
+                    height = 2,
+                    sourceFormat = GPUPreparedImageSourceFormat.Rgba8,
+                    alphaType = AlphaType.PREMUL,
+                    sourceRowBytes = 4,
+                    profile = GPUPreparedImageProfile.Srgb,
+                    orientation = GPUPreparedImageOrientation.AppliedIdentity,
+                    provenance = GPUPreparedImageProvenance.CallerPixels,
+                    sourceGeneration = 1,
+                    pixelBytes = logicalPixels,
+                ),
+            ),
+        ).artifact
+        val prepared = buildPreparedImageFrameResourcePlan(
+            artifact = artifact,
+            packetIds = listOf("packet.image"),
+            bindingLayoutHash = "layout.image",
+            capabilities = integrityCapabilities(),
+            frameIdentity = "frame.integrity",
+            uploadTaskId = GPUTaskID("task.upload.image"),
+        )
+        val changedSourceStride = prepared.copy(
+            uploadLayout = GPUPreparedImageUploadLayout(
+                sourceBytesPerRow = 8,
+                logicalBytesPerRow = prepared.uploadLayout.logicalBytesPerRow,
+                bytesPerRow = prepared.uploadLayout.bytesPerRow,
+                rowsPerImage = prepared.uploadLayout.rowsPerImage,
+                width = prepared.uploadLayout.width,
+                height = prepared.uploadLayout.height,
+                paddedUploadBytes = prepared.uploadLayout.bytesForUpload(),
+            ),
+        )
+        fun plan(resourcePlan: org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan) =
+            framePlan(
+                GPUFrameStep.UploadResourceStep(
+                    staging = resourcePlan.stagingRef,
+                    destination = resourcePlan.frameTextureRef,
+                    layout = resourcePlan.uploadTaskLayout,
+                    sourceTaskIds = listOf(resourcePlan.uploadTaskId),
+                    preparedImagePlan = resourcePlan,
+                ),
+            )
+
+        val baseline = plan(prepared)
+        val changed = plan(changedSourceStride)
+        val dump = baseline.dumpLines().joinToString("\n")
+        val logicalHash = logicalPixels.sha256ForIntegrityTest()
+        val paddedHash = prepared.uploadLayout.bytesForUpload().sha256ForIntegrityTest()
+
+        assertNotEquals(baseline.stableHash(), changed.stableHash())
+        assertNotEquals(baseline.dumpLines(), changed.dumpLines())
+        assertTrue(dump.contains("sourceBytesPerRow=4"), dump)
+        assertTrue(dump.contains("payloadSha256=$logicalHash"), dump)
+        assertFalse(dump.contains("payloadSha256=$paddedHash"), dump)
+    }
+
     private fun renderPlan(
         packet: GPUDrawPacket,
         resourceUses: List<GPUFrameResourceUse> = emptyList(),
@@ -1661,3 +1738,8 @@ class GPUFramePlanIntegrityTest {
         )
     }
 }
+
+private fun ByteArray.sha256ForIntegrityTest(): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(this)
+        .joinToString("") { "%02x".format(it) }
