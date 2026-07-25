@@ -245,6 +245,79 @@ class GPUPreparedImageNativeResourcesTest {
     }
 
     @Test
+    fun `seal refuses a negative aligned dynamic uniform offset`() {
+        val fixture = fixture(
+            listOf(
+                GPUPreparedImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+            ),
+        )
+        val changedBindings = fixture.plan.bindingRequests.mapIndexed { index, binding ->
+            if (index != 0) binding else binding.copy(
+                uniformAllocation = binding.uniformAllocation.copy(offset = -256L),
+            )
+        }
+
+        val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(
+                fixture.request.copy(
+                    resourcePlan = fixture.plan.copy(bindingRequests = changedBindings),
+                ),
+            ),
+        )
+
+        assertEquals("unsupported.prepared_image.uniform_allocation", refused.reasonCode)
+    }
+
+    @Test
+    fun `seal converts dynamic uniform range overflow into stable refusal`() {
+        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val overflowBinding = fixture.plan.bindingRequests.single().let { binding ->
+            binding.copy(
+                uniformAllocation = binding.uniformAllocation.copy(
+                    offset = Long.MAX_VALUE,
+                    size = 1L,
+                ),
+            )
+        }
+
+        val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(
+                fixture.request.copy(
+                    resourcePlan = fixture.plan.copy(bindingRequests = listOf(overflowBinding)),
+                ),
+            ),
+        )
+
+        assertEquals("unsupported.prepared_image.uniform_allocation", refused.reasonCode)
+    }
+
+    @Test
+    fun `seal refuses a common view whose texture descriptor hash is foreign`() {
+        val fixture = fixture(
+            listOf(
+                GPUPreparedImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+            ),
+        )
+        val changedBindings = fixture.plan.bindingRequests.map { binding ->
+            binding.copy(
+                view = binding.view.copy(textureDescriptorHash = "foreign-texture-descriptor"),
+            )
+        }
+
+        val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(
+                fixture.request.copy(
+                    resourcePlan = fixture.plan.copy(bindingRequests = changedBindings),
+                ),
+            ),
+        )
+
+        assertEquals("unsupported.prepared_image.view_identity", refused.reasonCode)
+    }
+
+    @Test
     fun `partial factory failure closes every created handle once in reverse order`() {
         val fixture = fixture(
             listOf(

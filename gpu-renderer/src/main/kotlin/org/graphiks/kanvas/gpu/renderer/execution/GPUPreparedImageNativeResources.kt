@@ -18,8 +18,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
-import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureViewDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.preparedImageDescriptorHash
 
 data class GPUPreparedImageUploadKey(
     val artifactKey: GPUImageUploadArtifactKey,
@@ -145,12 +145,31 @@ internal object GPUPreparedImageNativeResourcePreflighter {
         if (request.expectedResourceGeneration != request.actualResourceGeneration) {
             return "unsupported.prepared_image.resource_generation"
         }
+        if (plan.bindingRequests.isEmpty() ||
+            plan.bindingRequests.any { it.artifactKey != request.artifactKey } ||
+            plan.bindingRequests.map { it.packetId }.distinct().size != plan.bindingRequests.size
+        ) {
+            return "unsupported.prepared_image.artifact_identity"
+        }
+        val expectedUniformBufferSize =
+            plan.expectedUniformBufferSizeOrNull()
+                ?: return "unsupported.prepared_image.uniform_allocation"
+        if (plan.bindingRequests.any { binding ->
+                binding.uniformAllocation.offset < 0L ||
+                    binding.uniformAllocation.size <= 0L
+            }
+        ) {
+            return "unsupported.prepared_image.uniform_allocation"
+        }
+        val expectedTextureByteSize =
+            plan.expectedTextureByteSizeOrNull()
+                ?: return "unsupported.prepared_image.device_limit"
         val limits = request.capabilities.limits ?: return "unsupported.prepared_image.device_limit"
         if (plan.textureDescriptor.width.toLong() > limits.maxTextureDimension2D ||
             plan.textureDescriptor.height.toLong() > limits.maxTextureDimension2D ||
             limits.maxBufferSize?.let { limit ->
                 plan.uploadTaskLayout.byteSize > limit ||
-                    plan.expectedUniformBufferSize() > limit ||
+                    expectedUniformBufferSize > limit ||
                     plan.preparationRequests.any { preparation -> preparation.byteSize > limit }
             } == true ||
             limits.maxDynamicUniformBuffersPerPipelineLayout?.let { it < 1L } == true ||
@@ -158,14 +177,9 @@ internal object GPUPreparedImageNativeResourcePreflighter {
         ) {
             return "unsupported.prepared_image.device_limit"
         }
-        if (plan.bindingRequests.isEmpty() ||
-            plan.bindingRequests.any { it.artifactKey != request.artifactKey } ||
-            plan.bindingRequests.map { it.packetId }.distinct().size != plan.bindingRequests.size
-        ) {
-            return "unsupported.prepared_image.artifact_identity"
-        }
         val commonView = plan.bindingRequests.first().view
         if (plan.bindingRequests.any { binding -> binding.view != commonView } ||
+            commonView.textureDescriptorHash != plan.textureDescriptor.preparedImageDescriptorHash() ||
             commonView.viewDimension != "2d" ||
             commonView.mipRange != 0..0 ||
             commonView.arrayLayerRange != 0..0
@@ -179,11 +193,17 @@ internal object GPUPreparedImageNativeResourcePreflighter {
             plan.bindingRequests.any {
                 it.texture != plan.textureDescriptor ||
                     it.uniformAllocation.packetId != it.packetId ||
-                    it.uniformAllocation.size <= 0L ||
                     it.uniformAllocation.offset % limits.minUniformBufferOffsetAlignment != 0L
             }
         ) {
-            return "unsupported.prepared_image.plan_identity"
+            return if (plan.bindingRequests.any {
+                    it.uniformAllocation.offset % limits.minUniformBufferOffsetAlignment != 0L
+                }
+            ) {
+                "unsupported.prepared_image.uniform_allocation"
+            } else {
+                "unsupported.prepared_image.plan_identity"
+            }
         }
         if (!plan.hasExactStagingPreparation()) {
             return "unsupported.prepared_image.staging_preparation"
@@ -199,12 +219,16 @@ internal object GPUPreparedImageNativeResourcePreflighter {
                     GPUFrameResourceUsage.TextureBinding,
                 ) ||
             texturePreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
-            texturePreparation.byteSize != plan.expectedTextureByteSize() ||
+            texturePreparation.byteSize != expectedTextureByteSize ||
             (texturePreparation.descriptor as? GPUFrameTextureDescriptor)?.matches(plan) != true
         ) {
             return "unsupported.prepared_image.texture_usage"
         }
-        if (!plan.hasExactUniformPreparation(limits.minUniformBufferOffsetAlignment)) {
+        if (!plan.hasExactUniformPreparation(
+                requiredAlignment = limits.minUniformBufferOffsetAlignment,
+                expectedSize = expectedUniformBufferSize,
+            )
+        ) {
             return "unsupported.prepared_image.uniform_preparation"
         }
         if (plan.preparationRequests.size != 3 ||
@@ -233,8 +257,8 @@ private fun materializePreparedImageNativeResources(
                 factory.createSampler(binding.sampler).also(created::add)
             }
         }
-        val uniformSize = plan.bindingRequests.maxOf {
-            Math.addExact(it.uniformAllocation.offset, it.uniformAllocation.size)
+        val uniformSize = checkNotNull(plan.expectedUniformBufferSizeOrNull()) {
+            "Sealed prepared-image uniform ranges must remain exact"
         }
         val uniformBuffer = factory.createUniformBuffer(uniformSize).also(created::add)
         val bindGroupsByKey = linkedMapOf<GPUPreparedImageBindingKey, GPUBindGroup>()
@@ -324,30 +348,29 @@ private class GPUPreparedImageNativeResourceSetImpl(
 }
 
 private fun GPUPreparedImageFrameResourcePlan.hasExactUploadLayout(): Boolean {
-    val expectedLogicalBytesPerRow = runCatching {
-        Math.multiplyExact(textureDescriptor.width.toLong(), 4L)
-    }.getOrNull() ?: return false
-    val expectedUploadBytes = runCatching {
-        Math.multiplyExact(uploadLayout.bytesPerRow, textureDescriptor.height.toLong())
-    }.getOrNull() ?: return false
+    val expectedLogicalBytesPerRow =
+        exactMultiplyOrNull(textureDescriptor.width.toLong(), 4L) ?: return false
+    val expectedUploadBytes =
+        exactMultiplyOrNull(uploadLayout.bytesPerRow, textureDescriptor.height.toLong()) ?: return false
+    val expectedLogicalBytes =
+        exactMultiplyOrNull(expectedLogicalBytesPerRow, textureDescriptor.height.toLong()) ?: return false
     if (uploadLayout.logicalBytesPerRow != expectedLogicalBytesPerRow ||
         uploadLayout.bytesPerRow < uploadLayout.logicalBytesPerRow ||
         uploadLayout.rowsPerImage != textureDescriptor.height ||
         uploadLayout.width != textureDescriptor.width ||
         uploadLayout.height != textureDescriptor.height ||
         uploadLayout.bytesForUpload().size.toLong() != expectedUploadBytes ||
-        uploadLayout.logicalBytesForHash().size.toLong() !=
-        Math.multiplyExact(expectedLogicalBytesPerRow, textureDescriptor.height.toLong())
+        uploadLayout.logicalBytesForHash().size.toLong() != expectedLogicalBytes
     ) {
         return false
     }
     val bytes = uploadLayout.bytesForUpload()
     repeat(uploadLayout.height) { row ->
-        val paddingStart = Math.addExact(
-            Math.multiplyExact(row.toLong(), uploadLayout.bytesPerRow),
-            uploadLayout.logicalBytesPerRow,
-        ).toInt()
-        val rowEnd = Math.multiplyExact(row.toLong() + 1L, uploadLayout.bytesPerRow).toInt()
+        val rowStart = exactMultiplyOrNull(row.toLong(), uploadLayout.bytesPerRow) ?: return false
+        val paddingStart =
+            exactAddOrNull(rowStart, uploadLayout.logicalBytesPerRow)?.toInt() ?: return false
+        val rowEnd =
+            exactMultiplyOrNull(row.toLong() + 1L, uploadLayout.bytesPerRow)?.toInt() ?: return false
         if ((paddingStart until rowEnd).any { index -> bytes[index] != 0.toByte() }) return false
     }
     return uploadTaskLayout.sourceOffsetBytes == 0L &&
@@ -369,10 +392,10 @@ private fun GPUPreparedImageFrameResourcePlan.hasExactStagingPreparation(): Bool
 
 private fun GPUPreparedImageFrameResourcePlan.hasExactUniformPreparation(
     requiredAlignment: Long,
+    expectedSize: Long,
 ): Boolean {
     val uniform = preparationRequests.singleOrNull { it.resource == uniformRef } ?: return false
     val descriptor = uniform.descriptor as? GPUFrameBufferDescriptor ?: return false
-    val expectedSize = expectedUniformBufferSize()
     return uniform.role == GPUFrameResourceRole.UniformData &&
         uniform.usages == setOf(
             GPUFrameResourceUsage.CopyDestination,
@@ -394,16 +417,38 @@ private fun GPUFrameTextureDescriptor.matches(
         format.value.equals(plan.textureDescriptor.format, ignoreCase = true) &&
         sampleCount == plan.textureDescriptor.sampleCount
 
-private fun GPUPreparedImageFrameResourcePlan.expectedUniformBufferSize(): Long =
-    bindingRequests.maxOfOrNull { binding ->
-        Math.addExact(binding.uniformAllocation.offset, binding.uniformAllocation.size)
-    } ?: 0L
+private fun GPUPreparedImageFrameResourcePlan.expectedUniformBufferSizeOrNull(): Long? {
+    var maximum = 0L
+    bindingRequests.forEach { binding ->
+        val end = exactAddOrNull(
+            binding.uniformAllocation.offset,
+            binding.uniformAllocation.size,
+        ) ?: return null
+        maximum = maxOf(maximum, end)
+    }
+    return maximum
+}
 
-private fun GPUPreparedImageFrameResourcePlan.expectedTextureByteSize(): Long =
-    Math.multiplyExact(
-        Math.multiplyExact(textureDescriptor.width.toLong(), textureDescriptor.height.toLong()),
-        4L,
-    )
+private fun GPUPreparedImageFrameResourcePlan.expectedTextureByteSizeOrNull(): Long? {
+    val pixels =
+        exactMultiplyOrNull(textureDescriptor.width.toLong(), textureDescriptor.height.toLong())
+            ?: return null
+    return exactMultiplyOrNull(pixels, 4L)
+}
+
+private fun exactAddOrNull(left: Long, right: Long): Long? =
+    try {
+        Math.addExact(left, right)
+    } catch (_: ArithmeticException) {
+        null
+    }
+
+private fun exactMultiplyOrNull(left: Long, right: Long): Long? =
+    try {
+        Math.multiplyExact(left, right)
+    } catch (_: ArithmeticException) {
+        null
+    }
 
 private fun closePreparedImageHandles(
     handles: List<AutoCloseable>,
@@ -428,15 +473,6 @@ private fun closePreparedImageHandles(
     }
     if (primaryFailure == null) closeFailure?.let { throw it }
 }
-
-private fun GPUTextureDescriptor.preparedImageDescriptorHash(): String = preparedImageHash(
-    "texture",
-    width.toString(),
-    height.toString(),
-    format,
-    sampleCount.toString(),
-    usageLabels.sorted().joinToString("+"),
-)
 
 private fun GPUTextureViewDescriptor.preparedImageViewHash(): String = preparedImageHash(
     "view",

@@ -282,15 +282,8 @@ internal fun buildPreparedImageFrameResourcePlanFromBindings(
         format = "RGBA8Unorm",
         usageLabels = setOf("copy_dst", "texture_binding"),
     )
-    val descriptorIdentity = listOf(
-        artifact.key.value,
-        artifact.contentHash,
-        artifact.width,
-        artifact.height,
-        textureDescriptor.format,
-    ).joinToString(":")
     val view = GPUTextureViewDescriptor(
-        textureDescriptorHash = descriptorIdentity,
+        textureDescriptorHash = textureDescriptor.preparedImageDescriptorHash(),
         viewDimension = "2d",
         mipRange = 0..0,
         arrayLayerRange = 0..0,
@@ -501,3 +494,17 @@ private fun GPUResourcePreparationRequest.snapshotForPreparedImage():
 private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
     .digest(this)
     .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+internal fun GPUTextureDescriptor.preparedImageDescriptorHash(): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(
+            listOf(
+                "texture",
+                width.toString(),
+                height.toString(),
+                format,
+                sampleCount.toString(),
+                usageLabels.sorted().joinToString("+"),
+            ).joinToString("\u0000").encodeToByteArray(),
+        )
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
