@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import java.security.MessageDigest
 
 enum class AlphaType { OPAQUE, PREMUL, UNPREMUL, UNKNOWN }
@@ -125,7 +126,7 @@ object GPUPreparedImageArtifactFactory {
             listOf("prepared-image-v1", hash, input.width, input.height, input.sourceRowBytes, normalizedRowBytes, input.sourceFormat, input.alphaType, input.profile, input.orientation, input.provenance, input.sourceGeneration).joinToString("|"),
         )
         return GPUPreparedImageArtifactResult.Ready(
-            GPUPreparedImageUploadArtifact(key, input.width, input.height, layout, input.sourceGeneration, hash, input.sourceFormat == GPUPreparedImageSourceFormat.A8, "srgb-premul-rgba8", normalized),
+            GPUPreparedImageUploadArtifact(key, input.width, input.height, layout, input.sourceGeneration, hash, input.sourceFormat == GPUPreparedImageSourceFormat.A8, GPUColorInterpretation.EncodedPremulSrgb.value, normalized),
         )
     }
 

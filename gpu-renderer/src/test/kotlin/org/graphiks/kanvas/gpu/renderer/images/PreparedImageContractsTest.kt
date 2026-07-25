@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -10,18 +11,18 @@ class PreparedImageContractsTest {
     @Test
     fun `factory snapshots A8 bytes and expands tight premultiplied upload bytes`() {
         val callerBytes = byteArrayOf(1, 2, 3)
-        val artifact = ready(
-            GPUPreparedImageSourceInput(
-                GPUPreparedImageSourceClass.DecodedCpu, "ignored", 3, 1,
-                GPUPreparedImageSourceFormat.A8, AlphaType.PREMUL, 3,
-                GPUPreparedImageProfile.Srgb, GPUPreparedImageOrientation.AppliedIdentity,
-                GPUPreparedImageProvenance.CallerPixels, 7, callerBytes,
-            ),
+        val input = GPUPreparedImageSourceInput(
+            GPUPreparedImageSourceClass.DecodedCpu, "ignored", 3, 1,
+            GPUPreparedImageSourceFormat.A8, AlphaType.PREMUL, 3,
+            GPUPreparedImageProfile.Srgb, GPUPreparedImageOrientation.AppliedIdentity,
+            GPUPreparedImageProvenance.CallerPixels, 7, callerBytes,
         )
         callerBytes[0] = 99
+        val artifact = ready(input)
 
         assertEquals(3L, artifact.pixelLayout.sourceRowBytes)
         assertEquals(12L, artifact.pixelLayout.normalizedRgba8RowBytes)
+        assertEquals(GPUColorInterpretation.EncodedPremulSrgb.value, artifact.colorInterpretation)
         assertContentEquals(
             byteArrayOf(1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3),
             artifact.tightRgba8BytesForUpload(),
