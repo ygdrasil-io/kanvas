@@ -32,7 +32,9 @@ class PictureTest {
         for (alpha in listOf(AlphaType.PREMUL, AlphaType.OPAQUE, AlphaType.UNPREMUL)) {
             val picture = pictureWithImageAlpha(alpha)
             val restored = requireNotNull(Picture.fromByteArray(picture.toByteArray()))
-            val restoredImage = mutableListOf<Image>().also(restored::walkImages).single()
+            val images = mutableListOf<Image>()
+            restored.walkImages(images::add)
+            val restoredImage = images.single()
 
             assertEquals(alpha, restoredImage.alphaType)
         }
@@ -45,8 +47,17 @@ class PictureTest {
         val sourceIndex = v5.indexOfSubArray(sourceId)
         assertTrue(sourceIndex >= 0)
         val afterSource = sourceIndex + sourceId.size
-        val colorSpaceNameLength = ((v5[afterSource + 1].toInt() and 0xFF) shl 8) or (v5[afterSource + 2].toInt() and 0xFF)
-        val alphaIndex = afterSource + 3 + colorSpaceNameLength + 2
+        val colorSpaceStart = if (v5[afterSource].toInt() == 0) {
+            afterSource + 1
+        } else {
+            val pixelLength = ((v5[afterSource + 1].toInt() and 0xFF) shl 24) or
+                ((v5[afterSource + 2].toInt() and 0xFF) shl 16) or
+                ((v5[afterSource + 3].toInt() and 0xFF) shl 8) or
+                (v5[afterSource + 4].toInt() and 0xFF)
+            afterSource + 5 + pixelLength
+        }
+        val colorSpaceNameLength = ((v5[colorSpaceStart].toInt() and 0xFF) shl 8) or (v5[colorSpaceStart + 1].toInt() and 0xFF)
+        val alphaIndex = colorSpaceStart + 2 + colorSpaceNameLength + 2
         val legacy = v5.copyInto(ByteArray(v5.size - 1), 0, 0, alphaIndex).also { target ->
             v5.copyInto(target, alphaIndex, alphaIndex + 1, v5.size)
         }
@@ -56,7 +67,9 @@ class PictureTest {
             legacy[6] = 0
             legacy[7] = version.toByte()
             val restored = requireNotNull(Picture.fromByteArray(legacy))
-            assertEquals(AlphaType.UNPREMUL, mutableListOf<Image>().also(restored::walkImages).single().alphaType)
+            val images = mutableListOf<Image>()
+            restored.walkImages(images::add)
+            assertEquals(AlphaType.UNPREMUL, images.single().alphaType)
         }
     }
 
