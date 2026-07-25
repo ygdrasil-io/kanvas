@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
@@ -32,11 +33,13 @@ class SurfaceTest {
 
         val whole = result.toImage()
         assertEquals(ColorType.BGRA_8888, whole.colorType)
+        assertEquals(AlphaType.PREMUL, whole.alphaType)
         assertArrayEquals(byteArrayOf(0, 0, -1, -1, 0, 0, -1, -1), whole.pixels)
 
         val subset = surface.makeImageSnapshot(Rect.fromLTRB(1f, 0f, 2f, 1f))
         assertNotNull(subset)
         assertEquals(ColorType.BGRA_8888, subset!!.colorType)
+        assertEquals(AlphaType.PREMUL, subset.alphaType)
         assertArrayEquals(byteArrayOf(0, 0, -1, -1), subset.pixels)
     }
     @Test fun `Surface canvas DSL`() { val s = Surface(320, 240); s.canvas { drawRect(Rect.fromLTRB(0f,0f,100f,80f), Paint.fill(Color.RED)) }; val r = s.render(); assertEquals(1, r.stats.opsDispatched) }

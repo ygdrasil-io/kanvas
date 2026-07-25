@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface
 
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.types.ColorSpace
 
 /**
@@ -107,6 +108,7 @@ fun RenderResult.toImage(sourceId: String = "render-result"): Image =
         },
         sourceId,
         pixels = pixels.toByteArray(),
+        alphaType = AlphaType.PREMUL,
     )
 
 private fun RenderResult.pixelLayout(): ImageEncoder.PixelLayout = when (format) {

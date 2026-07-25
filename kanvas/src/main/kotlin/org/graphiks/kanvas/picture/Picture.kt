@@ -12,6 +12,7 @@ import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
 import kotlin.math.ceil
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.MeshChild
 import org.graphiks.kanvas.paint.ShaderChild
@@ -250,7 +251,7 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 4
+private const val FORMAT_VERSION = 5
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -334,6 +335,7 @@ private class Writer {
             bool(false)
         }
         colorSpace(img.colorSpace)
+        byte(img.alphaType.ordinal.toByte())
     }
 
     fun colorSpace(cs: ColorSpace) {
@@ -830,7 +832,8 @@ private class Reader(private val data: ByteArray) {
         val hasPixels = bool()
         val px = if (hasPixels) { val len = int(); bytes(len) } else null
         val cs = readColorSpace()
-        return Image(w, h, ct, srcId, px, cs)
+        val alphaType = if (formatVersion >= 5) AlphaType.entries[byte().toInt()] else AlphaType.UNPREMUL
+        return Image(w, h, ct, srcId, px, cs, alphaType)
     }
 
     fun readColorSpace(): ColorSpace {

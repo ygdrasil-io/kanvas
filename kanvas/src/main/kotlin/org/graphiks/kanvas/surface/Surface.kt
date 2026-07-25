@@ -5,6 +5,7 @@ import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.surface.gpu.renderViaGpu
 import org.graphiks.kanvas.types.Rect
 
@@ -87,7 +88,7 @@ class Surface(
             PixelFormat.RGBA8 -> ColorType.RGBA_8888
             PixelFormat.BGRA8 -> ColorType.BGRA_8888
         }
-        return Image(sw, sh, colorType, "surface-snapshot-subset", pixels)
+        return Image(sw, sh, colorType, "surface-snapshot-subset", pixels, alphaType = AlphaType.PREMUL)
     }
 
     /**

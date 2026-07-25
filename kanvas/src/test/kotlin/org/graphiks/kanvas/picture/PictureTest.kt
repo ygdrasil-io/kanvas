@@ -7,6 +7,7 @@ import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.image.ColorType
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.ImageFilter
@@ -26,6 +27,39 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PictureTest {
+    @Test
+    fun `format 5 round trip preserves each explicit image alpha authority`() {
+        for (alpha in listOf(AlphaType.PREMUL, AlphaType.OPAQUE, AlphaType.UNPREMUL)) {
+            val picture = pictureWithImageAlpha(alpha)
+            val restored = requireNotNull(Picture.fromByteArray(picture.toByteArray()))
+            val restoredImage = mutableListOf<Image>().also(restored::walkImages).single()
+
+            assertEquals(alpha, restoredImage.alphaType)
+        }
+    }
+
+    @Test
+    fun `formats one through four decode legacy images as conservative unpremultiplied`() {
+        val v5 = pictureWithImageAlpha(AlphaType.PREMUL).toByteArray()
+        val sourceId = "legacy-alpha".encodeToByteArray()
+        val sourceIndex = v5.indexOfSubArray(sourceId)
+        assertTrue(sourceIndex >= 0)
+        val afterSource = sourceIndex + sourceId.size
+        val colorSpaceNameLength = ((v5[afterSource + 1].toInt() and 0xFF) shl 8) or (v5[afterSource + 2].toInt() and 0xFF)
+        val alphaIndex = afterSource + 3 + colorSpaceNameLength + 2
+        val legacy = v5.copyInto(ByteArray(v5.size - 1), 0, 0, alphaIndex).also { target ->
+            v5.copyInto(target, alphaIndex, alphaIndex + 1, v5.size)
+        }
+        for (version in 1..4) {
+            legacy[4] = 0
+            legacy[5] = 0
+            legacy[6] = 0
+            legacy[7] = version.toByte()
+            val restored = requireNotNull(Picture.fromByteArray(legacy))
+            assertEquals(AlphaType.UNPREMUL, mutableListOf<Image>().also(restored::walkImages).single().alphaType)
+        }
+    }
+
     @Test
     fun `PictureRecorder records and produces Picture`() {
         val recorder = PictureRecorder()
@@ -322,6 +356,18 @@ class PictureTest {
         assertTrue(collected.any { it is DisplayOp.DrawPicture })
     }
 }
+
+private fun pictureWithImageAlpha(alphaType: AlphaType): Picture {
+    val recorder = PictureRecorder()
+    recorder.beginRecording(Rect.fromLTRB(0f, 0f, 2f, 2f)).drawImage(
+        Image(1, 1, ColorType.RGBA_8888, "legacy-alpha", byteArrayOf(1, 2, 3, 4), alphaType = alphaType),
+        Rect.fromLTRB(0f, 0f, 1f, 1f),
+    )
+    return recorder.finishRecordingAsPicture()
+}
+
+private fun ByteArray.indexOfSubArray(needle: ByteArray): Int =
+    indices.firstOrNull { index -> index + needle.size <= size && needle.indices.all { offset -> this[index + offset] == needle[offset] } } ?: -1
 
 private val V1_LAYER_PICTURE_FIXTURE = byteArrayOf(
     0x4B, 0x50, 0x49, 0x43, // KPIC

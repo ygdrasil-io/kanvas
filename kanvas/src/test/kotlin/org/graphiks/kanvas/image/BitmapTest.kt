@@ -103,6 +103,7 @@ class BitmapTest {
         val img = bmp.toImage()
         bmp.setPixel(0, 0, Color.BLUE)
         assertEquals(Color.RED, Color.fromRGBA(1f, 0f, 0f, 1f))
+        assertEquals(AlphaType.UNPREMUL, img.alphaType)
     }
 
     @Test

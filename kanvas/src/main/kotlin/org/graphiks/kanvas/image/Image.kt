@@ -22,6 +22,7 @@ data class Image(
     val sourceId: String,
     val pixels: ByteArray? = null,
     val colorSpace: ColorSpace = ColorSpace.SRGB,
+    val alphaType: AlphaType = AlphaType.UNPREMUL,
 ) {
     companion object {
         fun decode(bytes: ByteArray, mimeType: String? = null): Image {
@@ -40,7 +41,8 @@ data class Image(
             pixels: ByteArray,
             colorType: ColorType = ColorType.RGBA_8888,
             sourceId: String = "pixels",
-        ): Image = Image(width, height, colorType, sourceId, pixels)
+            alphaType: AlphaType = AlphaType.UNPREMUL,
+        ): Image = Image(width, height, colorType, sourceId, pixels, alphaType = alphaType)
 
         fun placeholder(width: Int, height: Int): Image =
             Image(width, height, ColorType.RGBA_8888, "placeholder:${width}x${height}")
@@ -59,13 +61,13 @@ data class Image(
      * `SkImage::reinterpretColorSpace`).
      */
     fun reinterpretColorSpace(newColorSpace: ColorSpace): Image =
-        Image(width, height, colorType, sourceId, pixels, newColorSpace)
+        Image(width, height, colorType, sourceId, pixels, newColorSpace, alphaType)
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is Image) return false
         return width == other.width && height == other.height &&
-            colorType == other.colorType && colorSpace == other.colorSpace &&
+            colorType == other.colorType && colorSpace == other.colorSpace && alphaType == other.alphaType &&
             sourceId == other.sourceId
     }
 
@@ -74,6 +76,7 @@ data class Image(
         result = 31 * result + height
         result = 31 * result + colorType.hashCode()
         result = 31 * result + colorSpace.hashCode()
+        result = 31 * result + alphaType.hashCode()
         result = 31 * result + sourceId.hashCode()
         return result
     }

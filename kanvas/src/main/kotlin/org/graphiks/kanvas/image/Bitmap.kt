@@ -274,7 +274,7 @@ class Bitmap(
     }
 
     fun toImage(): Image =
-        Image(width, height, colorType, "bitmap", pixels.copyOf(), colorSpace)
+        Image(width, height, colorType, "bitmap", pixels.copyOf(), colorSpace, AlphaType.UNPREMUL)
 
     fun makeShader(
         tileX: TileMode = TileMode.CLAMP,

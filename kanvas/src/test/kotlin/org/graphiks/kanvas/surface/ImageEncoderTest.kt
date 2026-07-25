@@ -55,6 +55,7 @@ class ImageEncoderTest {
         try {
             val image = result.toImage()
             assertEquals(org.graphiks.kanvas.image.ColorType.BGRA_8888, image.colorType)
+            assertEquals(org.graphiks.kanvas.image.AlphaType.PREMUL, image.alphaType)
             assertArrayEquals(byteArrayOf(3, 2, 1, 4), image.pixels)
             result.toPng()
             result.toJpeg()
