@@ -1,9 +1,12 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.images.GPUImageUploadArtifactKey
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 
 class GPUPreparedImageUploadLayout internal constructor(
@@ -25,6 +28,11 @@ data class GPUPreparedImageUniformAllocation(
     val size: Long,
 )
 
+data class GPUPreparedImageBindingInput(
+    val packetId: String,
+    val sampling: GPUPreparedImageSampling,
+)
+
 data class GPUPreparedImageBindingRequest(
     val packetId: String,
     val artifactKey: GPUImageUploadArtifactKey,
@@ -38,21 +46,28 @@ data class GPUPreparedImageBindingRequest(
 data class GPUPreparedImageFrameResourcePlan(
     val stagingRef: GPUFrameBufferRef,
     val textureRef: GPUTextureResourceRef,
+    val frameTextureRef: GPUFrameTextureRef,
+    val uniformRef: GPUFrameBufferRef,
     val textureDescriptor: GPUTextureDescriptor,
     val uploadLayout: GPUPreparedImageUploadLayout,
+    val uploadTaskLayout: GPUUploadLayout,
     val bindingRequests: List<GPUPreparedImageBindingRequest>,
+    val preparationRequests: List<GPUResourcePreparationRequest>,
+    val memoryAllocations: List<GPUFrameMemoryAllocation>,
     val uploadTaskId: GPUTaskID,
 )
 
-internal fun buildPreparedImageFrameResourcePlan(
+internal fun buildPreparedImageFrameResourcePlanFromBindings(
     artifact: GPUPreparedImageUploadArtifact,
-    packetIds: List<String>,
+    bindingInputs: List<GPUPreparedImageBindingInput>,
     bindingLayoutHash: String,
     capabilities: GPUCapabilities,
     frameIdentity: String,
     uploadTaskId: GPUTaskID,
 ): GPUPreparedImageFrameResourcePlan {
-    require(packetIds.isNotEmpty() && packetIds.distinct().size == packetIds.size) {
+    require(bindingInputs.isNotEmpty() &&
+        bindingInputs.map(GPUPreparedImageBindingInput::packetId).distinct().size == bindingInputs.size
+    ) {
         "Prepared-image packet IDs must be non-empty and unique"
     }
     require(bindingLayoutHash.isNotBlank()) { "bindingLayoutHash must not be blank" }
@@ -110,33 +125,92 @@ internal fun buildPreparedImageFrameResourcePlan(
         mipRange = 0..0,
         arrayLayerRange = 0..0,
     )
-    val sampler = GPUSamplerDescriptor(
-        addressModeU = "clamp-to-edge",
-        addressModeV = "clamp-to-edge",
-        magFilter = "nearest",
-        minFilter = "nearest",
-        mipmapFilter = "none",
-    )
     val uniformSize = 48L
     val uniformStride = alignUp(uniformSize, limits.minUniformBufferOffsetAlignment)
-    val bindingRequests = packetIds.mapIndexed { index, packetId ->
+    val bindingRequests = bindingInputs.mapIndexed { index, bindingInput ->
+        val filter = when (bindingInput.sampling) {
+            GPUPreparedImageSampling.Nearest -> "nearest"
+            GPUPreparedImageSampling.Linear -> "linear"
+        }
         GPUPreparedImageBindingRequest(
-            packetId = packetId,
+            packetId = bindingInput.packetId,
             artifactKey = artifact.key,
             texture = textureDescriptor,
             view = view,
-            sampler = sampler,
+            sampler = GPUSamplerDescriptor(
+                addressModeU = "clamp-to-edge",
+                addressModeV = "clamp-to-edge",
+                magFilter = filter,
+                minFilter = filter,
+                mipmapFilter = "none",
+            ),
             bindingLayoutHash = bindingLayoutHash,
             uniformAllocation = GPUPreparedImageUniformAllocation(
-                packetId = packetId,
+                packetId = bindingInput.packetId,
                 offset = Math.multiplyExact(index.toLong(), uniformStride),
                 size = uniformSize,
             ),
         )
     }
+    val stagingRef = GPUFrameBufferRef("prepared-image-staging:$frameIdentity:${artifact.key.value}")
+    val textureRef = GPUTextureResourceRef("prepared-image-texture:$frameIdentity:${artifact.key.value}")
+    val frameTextureRef = GPUFrameTextureRef(textureRef.value)
+    val uniformRef = GPUFrameBufferRef("prepared-image-uniforms:${textureRef.value}")
+    val textureBytes = Math.multiplyExact(
+        Math.multiplyExact(artifact.width.toLong(), artifact.height.toLong()),
+        4L,
+    )
+    val uniformBytes = bindingRequests.maxOf { binding ->
+        binding.uniformAllocation.offset + binding.uniformAllocation.size
+    }
+    val imageBounds = GPUPixelBounds(0, 0, artifact.width, artifact.height)
+    val preparationRequests = listOf(
+        GPUResourcePreparationRequest(
+            resource = stagingRef,
+            descriptor = GPUFrameBufferDescriptor(uploadByteSize, 4L),
+            role = GPUFrameResourceRole.UploadStaging,
+            usages = setOf(GPUFrameResourceUsage.CopySource),
+            lifetime = GPUFrameResourceLifetime.FrameLocal,
+            byteSize = uploadByteSize,
+            diagnosticLabel = "prepared-image.upload-staging.${textureRef.value}",
+        ),
+        GPUResourcePreparationRequest(
+            resource = frameTextureRef,
+            descriptor = GPUFrameTextureDescriptor(
+                logicalBounds = imageBounds,
+                format = GPUColorFormat("rgba8unorm"),
+                sampleCount = 1,
+            ),
+            role = GPUFrameResourceRole.StorageData,
+            usages = setOf(
+                GPUFrameResourceUsage.CopyDestination,
+                GPUFrameResourceUsage.TextureBinding,
+            ),
+            lifetime = GPUFrameResourceLifetime.FrameLocal,
+            byteSize = textureBytes,
+            diagnosticLabel = "prepared-image.texture.${textureRef.value}",
+        ),
+        GPUResourcePreparationRequest(
+            resource = uniformRef,
+            descriptor = GPUFrameBufferDescriptor(
+                byteSize = uniformBytes,
+                alignmentBytes = limits.minUniformBufferOffsetAlignment,
+            ),
+            role = GPUFrameResourceRole.UniformData,
+            usages = setOf(
+                GPUFrameResourceUsage.CopyDestination,
+                GPUFrameResourceUsage.Uniform,
+            ),
+            lifetime = GPUFrameResourceLifetime.FrameLocal,
+            byteSize = uniformBytes,
+            diagnosticLabel = "prepared-image.uniforms.${textureRef.value}",
+        ),
+    )
     return GPUPreparedImageFrameResourcePlan(
-        stagingRef = GPUFrameBufferRef("prepared-image-staging:$frameIdentity:${artifact.key.value}"),
-        textureRef = GPUTextureResourceRef("prepared-image-texture:$frameIdentity:${artifact.key.value}"),
+        stagingRef = stagingRef,
+        textureRef = textureRef,
+        frameTextureRef = frameTextureRef,
+        uniformRef = uniformRef,
         textureDescriptor = textureDescriptor,
         uploadLayout = GPUPreparedImageUploadLayout(
             logicalBytesPerRow = logicalBytesPerRow,
@@ -146,10 +220,58 @@ internal fun buildPreparedImageFrameResourcePlan(
             height = artifact.height,
             paddedUploadBytes = paddedBytes,
         ),
+        uploadTaskLayout = GPUUploadLayout(
+            sourceOffsetBytes = 0L,
+            bytesPerRow = bytesPerRow,
+            rowsPerImage = artifact.height,
+            byteSize = uploadByteSize,
+        ),
         bindingRequests = bindingRequests,
+        preparationRequests = preparationRequests,
+        memoryAllocations = listOf(
+            GPUFrameMemoryAllocation(
+                label = "prepared-image.staging.${artifact.key.value}",
+                category = GPUFrameMemoryCategory.ReusableScratch,
+                bytes = uploadByteSize,
+                resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                extent = null,
+            ),
+            GPUFrameMemoryAllocation(
+                label = "prepared-image.texture.${artifact.key.value}",
+                category = GPUFrameMemoryCategory.ReusableScratch,
+                bytes = textureBytes,
+                resourceKind = GPUFrameMemoryResourceKind.Texture2D,
+                extent = imageBounds,
+            ),
+            GPUFrameMemoryAllocation(
+                label = "prepared-image.uniforms.${artifact.key.value}",
+                category = GPUFrameMemoryCategory.ReusableScratch,
+                bytes = uniformBytes,
+                resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                extent = null,
+            ),
+        ),
         uploadTaskId = uploadTaskId,
     )
 }
+
+internal fun buildPreparedImageFrameResourcePlan(
+    artifact: GPUPreparedImageUploadArtifact,
+    packetIds: List<String>,
+    bindingLayoutHash: String,
+    capabilities: GPUCapabilities,
+    frameIdentity: String,
+    uploadTaskId: GPUTaskID,
+): GPUPreparedImageFrameResourcePlan = buildPreparedImageFrameResourcePlanFromBindings(
+    artifact = artifact,
+    bindingInputs = packetIds.map { packetId ->
+        GPUPreparedImageBindingInput(packetId, GPUPreparedImageSampling.Nearest)
+    },
+    bindingLayoutHash = bindingLayoutHash,
+    capabilities = capabilities,
+    frameIdentity = frameIdentity,
+    uploadTaskId = uploadTaskId,
+)
 
 private fun alignUp(value: Long, alignment: Long): Long {
     require(value >= 0L && alignment > 0L)

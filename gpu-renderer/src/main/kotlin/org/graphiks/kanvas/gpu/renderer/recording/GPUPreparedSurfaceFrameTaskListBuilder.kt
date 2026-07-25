@@ -17,6 +17,12 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
@@ -25,9 +31,10 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingInput
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
-import org.graphiks.kanvas.gpu.renderer.resources.buildPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.buildPreparedImageFrameResourcePlanFromBindings
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
@@ -154,6 +161,34 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     GPUPreparedSurfaceFrameResult.Refused(core.diagnostic)
             }
         }
+        val invalidRoutePacket = packets.firstOrNull { packet ->
+            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
+            semantic is GPUDrawSemanticPayload.SampledImage &&
+                (packet.renderStepId.value != semantic.payloadRef.renderStepIdentity ||
+                    semantic.payloadRef.renderStepIdentity != "image.draw.texture_upload")
+        }
+        if (invalidRoutePacket != null) {
+            return refused(
+                "invalid.recording.prepared_surface_route_identity",
+                "Prepared-surface packets and semantics must retain one identical closed render route.",
+            )
+        }
+        val invalidCoreAuthority = packets.firstOrNull { packet ->
+            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
+                GPUDrawSemanticPayload.CorePrimitive ?: return@firstOrNull false
+            val coverage = packet.clipCoveragePlan
+            val execution = packet.clipExecutionPlan
+            coverage == null || execution == null ||
+                coverage != semantic.clipCoveragePlan ||
+                semantic.clipExecutionPlanIdentity == null ||
+                execution.canonicalIdentity() != semantic.clipExecutionPlanIdentity
+        }
+        if (invalidCoreAuthority != null) {
+            return refused(
+                "invalid.recording.prepared_surface_core_authority",
+                "Mixed prepared surfaces require exact packet clip coverage and execution authorities.",
+            )
+        }
 
         val imagePackets = packets.filter { packet ->
             request.semanticsByCommandId.getValue(packet.commandIdValue) is
@@ -176,10 +211,13 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         "One prepared-image artifact key must identify one exact immutable byte artifact.",
                     )
                 }
-                buildPreparedImageFrameResourcePlan(
+                buildPreparedImageFrameResourcePlanFromBindings(
                     artifact = artifact,
-                    packetIds = semantics.map { semantic ->
-                        packetForSemantic(packets, semantic).packetId.value
+                    bindingInputs = semantics.map { semantic ->
+                        GPUPreparedImageBindingInput(
+                            packetId = packetForSemantic(packets, semantic).packetId.value,
+                            sampling = semantic.sampling,
+                        )
                     },
                     bindingLayoutHash = PREPARED_IMAGE_BINDING_LAYOUT_HASH,
                     capabilities = request.capabilities,
@@ -208,6 +246,39 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     return GPUPreparedSurfaceFrameResult.Refused(plan.diagnostic)
             }
         }
+        val enclosingAllocations = buildList {
+            imagePlans.forEach { plan -> addAll(plan.memoryAllocations) }
+            readbackPlan?.let { plan ->
+                add(
+                    GPUFrameMemoryAllocation(
+                        label = "prepared-surface.readback",
+                        category = GPUFrameMemoryCategory.ReadbackStaging,
+                        bytes = plan.stagingDescriptor.minimumBufferBytes,
+                        resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                        extent = null,
+                    ),
+                )
+            }
+        }
+        val conflictingEnclosingAllocation = enclosingAllocations
+            .groupBy(GPUFrameMemoryAllocation::label)
+            .values.firstOrNull { sameLabel -> sameLabel.distinct().size > 1 }
+        if (conflictingEnclosingAllocation != null) {
+            return refused(
+                "invalid.recording.prepared_surface_resource_identity",
+                "Prepared-surface memory allocation identities must be exact and unique.",
+            )
+        }
+        val coreAssembly = prepareMixedCoreAuthority(
+            request = request,
+            packets = packets,
+            configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
+            additionalMemoryAllocations = enclosingAllocations.distinct(),
+        )
+        if (coreAssembly is MixedCoreAssembly.Refused) {
+            return GPUPreparedSurfaceFrameResult.Refused(coreAssembly.diagnostic)
+        }
+        coreAssembly as MixedCoreAssembly.Prepared
         val targetBytes = try {
             Math.multiplyExact(
                 Math.multiplyExact(request.targetBounds.width.toLong(), request.targetBounds.height.toLong()),
@@ -219,99 +290,31 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 "Prepared-surface target byte size overflowed.",
             )
         }
-        val imageBytes = imagePlans.sumOf { plan ->
-            plan.uploadLayout.bytesForUpload().size.toLong() +
-                plan.textureDescriptor.width.toLong() * plan.textureDescriptor.height.toLong() * 4L +
-                plan.bindingRequests.maxOf { binding ->
-                    binding.uniformAllocation.offset + binding.uniformAllocation.size
-                }
-        }
-        val aggregateBytes = try {
-            Math.addExact(
-                Math.addExact(targetBytes, imageBytes),
-                readbackPlan?.stagingDescriptor?.minimumBufferBytes ?: 0L,
-            )
-        } catch (_: ArithmeticException) {
-            return refused(
-                "invalid.recording.prepared_surface_budget",
-                "Prepared-surface aggregate byte size overflowed.",
-            )
-        }
-        if (aggregateBytes > configuredAggregateBudgetBytes) {
-            return refused(
-                "invalid.recording.prepared_surface_budget",
-                "Prepared-surface resources exceed the configured aggregate budget.",
-            )
-        }
-
-        val coreAssembly = prepareMixedCoreAuthority(
-            request = request,
-            packets = packets,
-            configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
+        val memoryBudget = coreAssembly.memoryBudget ?: GPUFrameMemoryBudgetPlanner.plan(
+            GPUFrameMemoryBudgetRequest(
+                allocations = listOf(
+                    GPUFrameMemoryAllocation(
+                        label = "prepared-surface.scene-target",
+                        category = GPUFrameMemoryCategory.CanonicalTarget,
+                        bytes = targetBytes,
+                        resourceKind = GPUFrameMemoryResourceKind.Texture2D,
+                        extent = request.targetBounds,
+                    ),
+                ) + enclosingAllocations,
+                configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
+                deviceLimits = requireNotNull(request.capabilities.limits),
+            ),
         )
-        if (coreAssembly is MixedCoreAssembly.Refused) {
-            return GPUPreparedSurfaceFrameResult.Refused(coreAssembly.diagnostic)
+        memoryBudget.diagnostic?.let { diagnostic ->
+            return GPUPreparedSurfaceFrameResult.Refused(diagnostic)
         }
-        coreAssembly as MixedCoreAssembly.Prepared
 
         val preparations = mutableListOf<GPUResourcePreparationRequest>()
         preparations += coreAssembly.preparations
             .filterNot { preparation -> preparation.resource == request.target }
         preparations += corePrimitiveTargetPreparation(request.target, request.targetBounds)
         imagePlans.forEach { plan ->
-            val logicalTexture = plan.logicalTextureRef()
-            preparations += GPUResourcePreparationRequest(
-                resource = plan.stagingRef,
-                descriptor = GPUFrameBufferDescriptor(
-                    plan.uploadLayout.bytesForUpload().size.toLong(),
-                    4L,
-                ),
-                role = GPUFrameResourceRole.UploadStaging,
-                usages = setOf(GPUFrameResourceUsage.CopySource),
-                lifetime = GPUFrameResourceLifetime.FrameLocal,
-                byteSize = plan.uploadLayout.bytesForUpload().size.toLong(),
-                diagnosticLabel = "prepared-image.upload-staging.${plan.textureRef.value}",
-            )
-            preparations += GPUResourcePreparationRequest(
-                resource = logicalTexture,
-                descriptor = GPUFrameTextureDescriptor(
-                    logicalBounds = GPUPixelBounds(
-                        0,
-                        0,
-                        plan.textureDescriptor.width,
-                        plan.textureDescriptor.height,
-                    ),
-                    format = GPUColorFormat("rgba8unorm"),
-                    sampleCount = 1,
-                ),
-                role = GPUFrameResourceRole.StorageData,
-                usages = setOf(
-                    GPUFrameResourceUsage.CopyDestination,
-                    GPUFrameResourceUsage.TextureBinding,
-                ),
-                lifetime = GPUFrameResourceLifetime.FrameLocal,
-                byteSize = plan.textureDescriptor.width.toLong() *
-                    plan.textureDescriptor.height.toLong() * 4L,
-                diagnosticLabel = "prepared-image.texture.${plan.textureRef.value}",
-            )
-            val uniformBytes = plan.bindingRequests.maxOf { binding ->
-                binding.uniformAllocation.offset + binding.uniformAllocation.size
-            }
-            preparations += GPUResourcePreparationRequest(
-                resource = plan.uniformRef(),
-                descriptor = GPUFrameBufferDescriptor(
-                    uniformBytes,
-                    requireNotNull(request.capabilities.limits).minUniformBufferOffsetAlignment,
-                ),
-                role = GPUFrameResourceRole.UniformData,
-                usages = setOf(
-                    GPUFrameResourceUsage.CopyDestination,
-                    GPUFrameResourceUsage.Uniform,
-                ),
-                lifetime = GPUFrameResourceLifetime.FrameLocal,
-                byteSize = uniformBytes,
-                diagnosticLabel = "prepared-image.uniforms.${plan.textureRef.value}",
-            )
+            preparations += plan.preparationRequests
         }
         val readbackStaging = readbackPlan?.let {
             GPUFrameBufferRef("buffer.prepared-surface.readback.${request.baseTaskList.frameId.value}")
@@ -355,13 +358,9 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 recordingId = recordingId,
                 phase = GPUTaskPhase.Upload,
                 staging = plan.stagingRef,
-                destination = plan.logicalTextureRef(),
-                layout = GPUUploadLayout(
-                    sourceOffsetBytes = 0L,
-                    bytesPerRow = plan.uploadLayout.bytesPerRow,
-                    rowsPerImage = plan.uploadLayout.rowsPerImage,
-                    byteSize = plan.uploadLayout.bytesForUpload().size.toLong(),
-                ),
+                destination = plan.frameTextureRef,
+                layout = plan.uploadTaskLayout,
+                preparedImagePlan = plan,
             )
         }
         val baseRenderByPacketId = baseRenders.flatMap { render ->
@@ -375,7 +374,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 packet.withSemantic(semantic)
             }
         }
-        val routeRuns = orderedPreparedPackets.contiguousRouteRuns()
+        val routeRuns = orderedPreparedPackets.contiguousRouteRuns(baseRenderByPacketId)
         val renders = routeRuns.mapIndexed { index, run ->
             val original = baseRenderByPacketId.getValue(run.first().packetId)
             val uses = if (run.first().semanticPayload is GPUDrawSemanticPayload.SampledImage) {
@@ -384,14 +383,14 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     val plan = imagePlanByArtifactKey.getValue(semantic.artifact.key)
                     listOf(
                         GPUFrameResourceUse(
-                            plan.logicalTextureRef(),
+                            plan.frameTextureRef,
                             GPUFrameResourceRole.StorageData,
                             GPUFrameResourceUsage.TextureBinding,
                             GPUFrameResourceLifetime.FrameLocal,
                             write = false,
                         ),
                         GPUFrameResourceUse(
-                            plan.uniformRef(),
+                            plan.uniformRef,
                             GPUFrameResourceRole.UniformData,
                             GPUFrameResourceUsage.Uniform,
                             GPUFrameResourceLifetime.FrameLocal,
@@ -426,6 +425,15 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 },
                 sampleContinuationKey = original.sampleContinuationKey,
                 depthStencilLoadStore = original.depthStencilLoadStore,
+                preparedImageBindingsByPacketId = run.mapNotNull { packet ->
+                    val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.SampledImage
+                        ?: return@mapNotNull null
+                    val binding = imagePlanByArtifactKey.getValue(semantic.artifact.key)
+                        .bindingRequests.single { request ->
+                            request.packetId == packet.packetId.value
+                        }
+                    packet.packetId to binding
+                }.toMap(),
             )
         }
 
@@ -512,7 +520,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 tasks = tasks,
                 dependencies = dependencies.distinct(),
                 phaseOrder = request.baseTaskList.phaseOrder,
-                memoryBudget = request.baseTaskList.memoryBudget,
+                memoryBudget = memoryBudget,
                 diagnostics = request.baseTaskList.diagnostics + colorDiagnostic,
             ),
         )
@@ -522,21 +530,15 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         request: GPUPreparedSurfaceFrameRequest,
         packets: List<GPUDrawPacket>,
         configuredAggregateBudgetBytes: Long,
+        additionalMemoryAllocations: List<GPUFrameMemoryAllocation>,
     ): MixedCoreAssembly {
         val corePackets = packets.mapNotNull { packet ->
             val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
                 GPUDrawSemanticPayload.CorePrimitive ?: return@mapNotNull null
-            packet.withSemantic(
-                semantic = semantic,
-                clipCoverageOverride = packet.clipCoveragePlan ?: semantic.clipCoveragePlan,
-                clipExecutionOverride = packet.clipExecutionPlan ?: when (semantic.clipCoveragePlan) {
-                    GPUClipCoveragePlan.NoClip -> GPUClipExecutionPlan.NoClip
-                    else -> null
-                },
-            )
+            packet.withSemantic(semantic)
         }
         if (corePackets.isEmpty()) {
-            return MixedCoreAssembly.Prepared(emptyMap(), emptyMap(), emptyList())
+            return MixedCoreAssembly.Prepared(emptyMap(), emptyMap(), emptyList(), null)
         }
         val baseRenderByPacketId = request.baseTaskList.tasks.filterIsInstance<GPUTask.Render>()
             .flatMap { render -> render.drawPackets.map { packet -> packet.packetId to render } }
@@ -585,6 +587,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     readbackRequestId = null,
                     configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
                 ),
+                additionalMemoryAllocations = additionalMemoryAllocations,
             )
         ) {
             is GPUCorePrimitivePreparedFrameResult.Refused ->
@@ -620,6 +623,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         preparations = result.taskList.tasks
                             .filterIsInstance<GPUTask.PrepareResources>()
                             .flatMap(GPUTask.PrepareResources::requests),
+                        memoryBudget = result.taskList.memoryBudget,
                     )
                 }
             }
@@ -635,6 +639,7 @@ private sealed interface MixedCoreAssembly {
         val packetByCommandId: Map<Int, GPUDrawPacket>,
         val resourceUsesByCommandId: Map<Int, List<GPUFrameResourceUse>>,
         val preparations: List<GPUResourcePreparationRequest>,
+        val memoryBudget: GPUFrameMemoryBudgetPlan?,
     ) : MixedCoreAssembly
 
     data class Refused(val diagnostic: GPUDiagnostic) : MixedCoreAssembly
@@ -660,20 +665,59 @@ private fun packetForSemantic(
     it.commandIdValue == semantic.payloadRef.commandIdValue
 }
 
-private fun GPUPreparedImageFrameResourcePlan.logicalTextureRef() =
-    GPUFrameTextureRef(textureRef.value)
+private data class PreparedRouteRunKey(
+    val semanticKind: String,
+    val renderStepId: String,
+    val renderStepVersion: Int,
+    val renderPipelineKey: String?,
+    val bindingLayoutHash: String,
+    val samplePlanKey: String,
+    val target: String,
+    val targetStateHash: String,
+    val continuationKey: String?,
+)
 
-private fun GPUPreparedImageFrameResourcePlan.uniformRef() =
-    GPUFrameBufferRef("prepared-image-uniforms:${textureRef.value}")
-
-private fun List<GPUDrawPacket>.contiguousRouteRuns(): List<List<GPUDrawPacket>> {
+private fun List<GPUDrawPacket>.contiguousRouteRuns(
+    baseRenderByPacketId: Map<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID, GPUTask.Render>,
+): List<List<GPUDrawPacket>> {
     val runs = mutableListOf<MutableList<GPUDrawPacket>>()
     forEach { packet ->
-        val image = packet.semanticPayload is GPUDrawSemanticPayload.SampledImage
+        val render = baseRenderByPacketId.getValue(packet.packetId)
+        val key = PreparedRouteRunKey(
+            semanticKind = when (packet.semanticPayload) {
+                is GPUDrawSemanticPayload.SampledImage -> "sampled-image"
+                is GPUDrawSemanticPayload.CorePrimitive -> "core-primitive"
+                else -> "unsupported"
+            },
+            renderStepId = packet.renderStepId.value,
+            renderStepVersion = packet.renderStepVersion,
+            renderPipelineKey = packet.renderPipelineKey?.value,
+            bindingLayoutHash = packet.bindingLayoutHash,
+            samplePlanKey = render.samplePlan.specializationKey,
+            target = render.target.value,
+            targetStateHash = packet.targetStateHash,
+            continuationKey = render.sampleContinuationKey?.toString(),
+        )
         val current = runs.lastOrNull()
-        if (current == null ||
-            (current.first().semanticPayload is GPUDrawSemanticPayload.SampledImage) != image
-        ) {
+        val currentKey = current?.firstOrNull()?.let { first ->
+            val firstRender = baseRenderByPacketId.getValue(first.packetId)
+            PreparedRouteRunKey(
+                semanticKind = when (first.semanticPayload) {
+                    is GPUDrawSemanticPayload.SampledImage -> "sampled-image"
+                    is GPUDrawSemanticPayload.CorePrimitive -> "core-primitive"
+                    else -> "unsupported"
+                },
+                renderStepId = first.renderStepId.value,
+                renderStepVersion = first.renderStepVersion,
+                renderPipelineKey = first.renderPipelineKey?.value,
+                bindingLayoutHash = first.bindingLayoutHash,
+                samplePlanKey = firstRender.samplePlan.specializationKey,
+                target = firstRender.target.value,
+                targetStateHash = first.targetStateHash,
+                continuationKey = firstRender.sampleContinuationKey?.toString(),
+            )
+        }
+        if (current == null || currentKey != key) {
             runs += mutableListOf(packet)
         } else {
             current += packet

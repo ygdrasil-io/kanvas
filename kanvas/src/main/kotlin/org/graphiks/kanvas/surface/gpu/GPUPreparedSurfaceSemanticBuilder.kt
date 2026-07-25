@@ -51,11 +51,15 @@ internal object GPUPreparedSurfaceSemanticBuilder {
         val packetsByCommandId = recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
             .flatMap(GPUTask.Render::drawPackets)
             .groupBy(GPUDrawPacket::commandIdValue)
+        val analysisByCommandId = recording.analysis.records.groupBy { it.commandIdValue }
+        val visualIdSet = visualIds.toSet()
         if (visualIds.distinct().size != visualIds.size ||
             imageArtifactsByCommandId.keys != imageIds ||
-            recording.analysis.records.groupBy { it.commandIdValue }.let { records ->
-                visualIds.any { commandId -> records[commandId].orEmpty().size != 1 }
-            } ||
+            analysisByCommandId.keys != visualIdSet ||
+            packetsByCommandId.keys != visualIdSet ||
+            analysisByCommandId.size != visualIds.size ||
+            packetsByCommandId.size != visualIds.size ||
+            visualIds.any { commandId -> analysisByCommandId[commandId].orEmpty().size != 1 } ||
             visualIds.any { commandId -> packetsByCommandId[commandId].orEmpty().size != 1 }
         ) {
             return refused(
@@ -109,10 +113,7 @@ internal object GPUPreparedSurfaceSemanticBuilder {
                 continue
             }
             val packet = packetsByCommandId.getValue(commandId).single()
-            if (packet.renderStepId.value !in setOf(
-                    "image.draw.texture_upload",
-                    "image.draw.bitmap_shader",
-                ) ||
+            if (packet.renderStepId.value != "image.draw.texture_upload" ||
                 packet.blendPlan == null ||
                 command.pixelsFormat != "RGBA8Unorm"
             ) {

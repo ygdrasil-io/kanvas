@@ -72,6 +72,7 @@ data class GPUFrameMemoryBudgetPlan(
     val deviceLimitFacts: List<GPUCapabilityFact>,
     val configuredAggregateBudgetBytes: Long,
     val diagnostic: GPUDiagnostic?,
+    val allocations: List<GPUFrameMemoryAllocation> = emptyList(),
 )
 
 /** Pure checked planner for complete per-frame memory accounting. */
@@ -122,6 +123,7 @@ object GPUFrameMemoryBudgetPlanner {
             deviceLimitFacts = request.deviceLimits.capabilityFacts("frame-memory-budget"),
             configuredAggregateBudgetBytes = request.configuredAggregateBudgetBytes,
             diagnostic = diagnostic,
+            allocations = request.allocations.toList(),
         )
     }
 }

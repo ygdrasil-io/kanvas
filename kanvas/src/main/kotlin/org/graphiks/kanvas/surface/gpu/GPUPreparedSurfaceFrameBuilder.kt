@@ -149,6 +149,18 @@ private fun prepareImageVisuals(
 ): PreparedImageVisuals {
     val imagesBySourceId = operations.filterIsInstance<DisplayOp.DrawImage>()
         .groupBy { operation -> operation.image.sourceId }
+    imagesBySourceId.entries.firstOrNull { (_, sources) -> sources.size != 1 }?.let {
+        return PreparedImageVisuals.Refused(
+            diagnostic(
+                code = "invalid.surface.prepared.image-source-bijection",
+                message = "Prepared image source identities must map to one exact Surface image.",
+                facts = mapOf(
+                    "imageSourceId" to it.key,
+                    "sourceCount" to it.value.size.toString(),
+                ),
+            ),
+        )
+    }
     val artifacts = linkedMapOf<Int, GPUPreparedImageUploadArtifact>()
     val visuals = mutableListOf<GPUFramePathVisualCommand>()
     for (visual in mapping.visualCommands) {

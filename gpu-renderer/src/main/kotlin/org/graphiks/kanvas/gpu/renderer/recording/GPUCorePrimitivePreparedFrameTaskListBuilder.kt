@@ -1348,7 +1348,10 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
 internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
 ) {
-    fun build(request: GPUCorePrimitivePreparedFrameRequest): GPUCorePrimitivePreparedFrameResult {
+    fun build(
+        request: GPUCorePrimitivePreparedFrameRequest,
+        additionalMemoryAllocations: List<GPUFrameMemoryAllocation> = emptyList(),
+    ): GPUCorePrimitivePreparedFrameResult {
         request.baseTaskList.tasks.filterIsInstance<GPUTask.Refused>().firstOrNull()?.let {
             return GPUCorePrimitivePreparedFrameResult.Refused(it.diagnostic)
         }
@@ -2588,8 +2591,21 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 null,
             )
         }
+        val mergedAllocations = allocations + additionalMemoryAllocations
+        val conflictingAllocation = mergedAllocations.groupBy(GPUFrameMemoryAllocation::label)
+            .values.firstOrNull { sameLabel -> sameLabel.distinct().size > 1 }
+        if (conflictingAllocation != null) {
+            return refused(
+                "invalid.core_primitive.frame_memory_allocation_identity",
+                "Core and enclosing frame memory allocations must retain unique exact labels.",
+            )
+        }
         val memoryBudget = GPUFrameMemoryBudgetPlanner.plan(
-            GPUFrameMemoryBudgetRequest(allocations, request.configuredAggregateBudgetBytes, limits),
+            GPUFrameMemoryBudgetRequest(
+                mergedAllocations.distinct(),
+                request.configuredAggregateBudgetBytes,
+                limits,
+            ),
         )
         memoryBudget.diagnostic?.let { return GPUCorePrimitivePreparedFrameResult.Refused(it) }
 

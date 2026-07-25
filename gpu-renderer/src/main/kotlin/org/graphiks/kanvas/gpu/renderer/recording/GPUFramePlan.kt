@@ -564,6 +564,7 @@ private fun GPUFrameElidedNoOpDraw.dumpLine(index: Int): String =
 
 internal fun GPUFrameMemoryBudgetPlan.snapshotForFramePlan(): GPUFrameMemoryBudgetPlan =
     copy(
+        allocations = immutableList(allocations),
         categoryTotals = immutableMap(categoryTotals),
         deviceLimitFacts = immutableList(deviceLimitFacts),
         diagnostic = diagnostic?.snapshot(),

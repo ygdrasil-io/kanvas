@@ -41,6 +41,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
@@ -725,6 +727,8 @@ sealed interface GPUTask {
         val sampleContinuationKey: GPUSampleContinuationKey? = null,
         override val compositeMembership: GPUTaskCompositeMembership? = null,
         val depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = null,
+        preparedImageBindingsByPacketId:
+            Map<GPUDrawPacketID, GPUPreparedImageBindingRequest> = emptyMap(),
     ) : GPUTask {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -737,12 +741,22 @@ sealed interface GPUTask {
             immutableMap(batchEligibilityByPacketId)
         val frameProvenanceByPacketId: Map<GPUDrawPacketID, GPUFrameProvenance> =
             immutableMap(drawPackets.associate { packet -> packet.packetId to packet.frameProvenance })
+        val preparedImageBindingsByPacketId:
+            Map<GPUDrawPacketID, GPUPreparedImageBindingRequest> =
+            immutableMap(preparedImageBindingsByPacketId)
 
         init {
             require(phase == GPUTaskPhase.Render) { "GPUTask.Render requires Render phase" }
             require(drawPackets.isNotEmpty()) { "GPUTask.Render.drawPackets must not be empty" }
             require(batchEligibilityByPacketId.keys == drawPackets.map { it.packetId }.toSet()) {
                 "GPUTask.Render batching eligibility must cover every packet exactly"
+            }
+            require(preparedImageBindingsByPacketId.keys.all { packetId ->
+                drawPackets.any { packet -> packet.packetId == packetId }
+            } && preparedImageBindingsByPacketId.all { (packetId, binding) ->
+                packetId.value == binding.packetId
+            }) {
+                "Prepared-image bindings must retain exact packet identities from this render"
             }
         }
 
@@ -793,7 +807,19 @@ sealed interface GPUTask {
         val staging: GPUFrameBufferRef,
         val destination: GPUFrameResourceRef,
         val layout: GPUUploadLayout,
-    ) : GPUTask
+        val preparedImagePlan: GPUPreparedImageFrameResourcePlan? = null,
+    ) : GPUTask {
+        init {
+            preparedImagePlan?.let { plan ->
+                require(staging == plan.stagingRef &&
+                    destination == plan.frameTextureRef &&
+                    layout == plan.uploadTaskLayout
+                ) {
+                    "Prepared-image upload must retain the exact planned staging, destination, and layout"
+                }
+            }
+        }
+    }
 
     class Barrier(
         override val taskId: GPUTaskID,

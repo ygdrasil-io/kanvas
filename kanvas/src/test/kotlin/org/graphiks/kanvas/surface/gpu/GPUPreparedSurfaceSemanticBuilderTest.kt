@@ -70,7 +70,41 @@ class GPUPreparedSurfaceSemanticBuilderTest {
         assertEquals("invalid.surface.prepared.semantic-command-bijection", refused.diagnostic.code.value)
     }
 
-    private fun mixedFixture(): MixedFixture {
+    @Test
+    fun `extra recording command identities refuse the semantic bijection`() {
+        val fixture = mixedFixture()
+
+        val refused = assertIs<GPUPreparedSurfaceSemanticGatherResult.Refused>(
+            GPUPreparedSurfaceSemanticBuilder.gather(
+                visualCommands = fixture.visuals.dropLast(1),
+                recording = fixture.recording,
+                targetBounds = bounds,
+                imageArtifactsByCommandId = mapOf(1 to fixture.artifact),
+                blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+            ),
+        )
+
+        assertEquals("invalid.surface.prepared.semantic-command-bijection", refused.diagnostic.code.value)
+    }
+
+    @Test
+    fun `native bitmap image step is refused until it has its own prepared semantic route`() {
+        val fixture = mixedFixture(nativeImage = true)
+
+        val refused = assertIs<GPUPreparedSurfaceSemanticGatherResult.Refused>(
+            GPUPreparedSurfaceSemanticBuilder.gather(
+                visualCommands = fixture.visuals,
+                recording = fixture.recording,
+                targetBounds = bounds,
+                imageArtifactsByCommandId = mapOf(1 to fixture.artifact),
+                blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+            ),
+        )
+
+        assertEquals("invalid.surface.prepared.image-recording-authority", refused.diagnostic.code.value)
+    }
+
+    private fun mixedFixture(nativeImage: Boolean = false): MixedFixture {
         val image = Image(
             width = 3,
             height = 1,
@@ -94,7 +128,7 @@ class GPUPreparedSurfaceSemanticBuilderTest {
             operations,
             GPUTargetFacts(32, 24, "rgba8unorm"),
             RenderConfig.DEFAULT,
-            capabilities(),
+            capabilities(nativeImage),
         )
         val artifact = (
             GPUPreparedSurfaceImageSource.prepare(image) as GPUPreparedImageArtifactResult.Ready
@@ -131,7 +165,7 @@ class GPUPreparedSurfaceSemanticBuilderTest {
         val recorder = GPURecorder(
             GPURecordingID("prepared-surface-semantics"),
             GPUFrameID(23),
-            capabilities(),
+            capabilities(nativeImage),
         )
         visuals.forEach { recorder.record(it.normalized) }
         return MixedFixture(visuals, recorder.close(), artifact)
@@ -144,11 +178,13 @@ class GPUPreparedSurfaceSemanticBuilderTest {
         ClipStack.WideOpen,
     )
 
-    private fun capabilities(): GPUCapabilities {
+    private fun capabilities(nativeImage: Boolean = false): GPUCapabilities {
         val base = GPUProductFlagConfig().buildCapabilities()
         return GPUCapabilities(
             implementation = base.implementation,
-            facts = base.facts + listOf(
+            facts = base.facts.filterNot { fact ->
+                !nativeImage && fact.name == "first_slice.bitmap_rect.native"
+            } + listOf(
                 GPUCapabilityFact(
                     "first_slice.fill_rect.native",
                     "test",

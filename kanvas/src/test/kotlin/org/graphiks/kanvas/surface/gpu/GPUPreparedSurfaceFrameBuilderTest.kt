@@ -28,6 +28,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
@@ -323,6 +325,54 @@ class GPUPreparedSurfaceFrameBuilderTest {
             )
             assertEquals(expectedCode, refused.diagnostic.code.value)
         }
+    }
+
+    @Test
+    fun `same image source id with distinct immutable content refuses before artifact selection`() {
+        val first = Image(
+            width = 2,
+            height = 1,
+            sourceId = "ambiguous-source",
+            pixels = byteArrayOf(1, 2, 3, -1, 4, 5, 6, -1),
+            alphaType = AlphaType.PREMUL,
+        )
+        val second = Image(
+            width = 1,
+            height = 2,
+            sourceId = "ambiguous-source",
+            pixels = byteArrayOf(7, 8, 9, -1, 10, 11, 12, -1),
+            alphaType = AlphaType.PREMUL,
+        )
+        val operations = listOf(
+            DisplayOp.DrawImage(
+                first,
+                Rect.fromLTRB(0f, 0f, 2f, 1f),
+                Rect.fromLTRB(1f, 1f, 5f, 3f),
+                null,
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawImage(
+                second,
+                Rect.fromLTRB(0f, 0f, 1f, 2f),
+                Rect.fromLTRB(6f, 1f, 8f, 5f),
+                null,
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+        )
+        val base = request(listOf(rect()))
+        val candidate = GPUPreparedSurfaceEligibility.Candidate(
+            operations = operations,
+            config = base.candidate.config,
+            color = base.candidate.color,
+        )
+
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+            GPUPreparedSurfaceFrameBuilder.build(base.copy(candidate = candidate)),
+        )
+
+        assertEquals("invalid.surface.prepared.image-source-bijection", refused.diagnostic.code.value)
     }
 
     @Test
