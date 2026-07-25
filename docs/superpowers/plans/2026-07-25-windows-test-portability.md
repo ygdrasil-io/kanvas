@@ -143,7 +143,7 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 .\gradlew.bat :font:scaler:test --tests "org.graphiks.kanvas.font.scaler.FontScalerSurfaceTest" --dependency-verification=off --no-daemon --console=plain --rerun-tasks
 ```
 
-Expected: exactly nine methods ending in `GoldenMatchesGeneratedEvidence` fail because expected embedded CRLF differs from generated LF; the other 100 tests pass.
+Expected: exactly nine methods ending in `GoldenMatchesGeneratedEvidence` fail because expected embedded CRLF differs from generated LF; the other 96 tests pass.
 
 - [ ] **Step 2: Add the narrow canonical-line assertion**
 
@@ -194,7 +194,7 @@ where `actual` is the existing dump call or local value. Do not change any expec
 
 Rerun Step 1's command.
 
-Expected: all 109 tests pass.
+Expected: all 105 tests pass.
 
 - [ ] **Step 5: Commit the semantic golden comparison**
 
@@ -514,7 +514,7 @@ In FP-03:
 
 - set `Status: completed`;
 - retain the original six plus added fourteen failure bullets as historical resolution inputs;
-- add a `Resolution evidence` block listing the five implementation commits, the two full verification commands, zero failing tests, the five `attr/-text w/lf` PGM contracts, all 109 font tests, the EOL-independent materializer inspection, native wrapper dry run, semantic prepared-cache facts, and strict full-coverage `maxChannelDelta <= 1` policy.
+- add a `Resolution evidence` block listing the five implementation commits, the two full verification commands, zero failing tests, the five `attr/-text w/lf` PGM contracts, all 105 font tests, the EOL-independent materializer inspection, native wrapper dry run, semantic prepared-cache facts, and strict full-coverage `maxChannelDelta <= 1` policy.
 
 In FP-04 set `Status: in_progress`. Leave FP-09 and all later goals unchanged.
 
