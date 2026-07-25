@@ -403,7 +403,7 @@ private fun assertWithinOneLsb(
     assertContains(
         diagnostic,
         "withinOneLsb=$expectedPixels/$expectedPixels",
-        "One-LSB coverage must include every pixel",
+        message = "One-LSB coverage must include every pixel",
     )
     val maxChannelDelta = Regex("""(?:^|\s)maxChannelDelta=(\d+)(?:\s|$)""")
         .find(diagnostic)
