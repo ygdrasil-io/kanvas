@@ -75,7 +75,7 @@ Resolution evidence:
 
 ### FP-03 — Windows test portability
 
-Status: `in_progress`
+Status: `completed`
 
 Goal: remove host-only failures from Gradle subprocess tests, textual goldens,
 diagnostic assertions, and platform-sensitive pixel assertions.
@@ -157,6 +157,48 @@ Additional portability evidence:
   checked-in golden JSON is CRLF while generated evidence is LF;
   owner=`line-endings`.
 
+Resolution evidence:
+
+- `4ad100504 test(codec): preserve raw PGM fixture bytes` adds narrow `-text`
+  contracts for the JPEG 2000 and JPEG XL PGM fixture directories; all five
+  affected resources remain `attr/-text w/lf`, retain their original SHA-256
+  assertions, and pass without decoder or loader changes;
+- `78606a8f8 test(font): normalize golden line endings` canonicalizes only
+  CRLF/CR line terminators in the nine semantic JSON comparisons; the complete
+  `FontScalerSurfaceTest` passes all 105 tests without changing any golden or
+  generator;
+- `776b986d2 test(gpu): make source inspection EOL independent` replaces the
+  LF-only source slice with an anchored, brace-balanced test-local extractor;
+  `GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest` passes 55/55;
+- `7422bf235 test(scenes): use the native Gradle wrapper` resolves and launches
+  the repository wrapper by OS without a shell; the complete module-boundary
+  suite passes 5/5, including the dry-run task-graph assertion;
+- `a177df27b test(scenes): enforce portable diagnostic policies` compares the
+  prepared-cache facts `solid=1/3` and `registered=0/0` semantically and
+  requires full `withinOneLsb=64000/64000` coverage with
+  `maxChannelDelta <= 1`; the complete offscreen suite passes 28/28;
+- `9a2d8edca test(gpu): allow one-LSB UNORM quantization` applies the same
+  strict one-LSB limit only to half-UNORM native smoke assertions while
+  keeping all unrelated pixels exact; the three affected methods pass 3/3,
+  the complete core smoke class passes 8/8, and the complete solid-rectangle
+  smoke class passes 17/17 in isolated single-worker runs;
+- `.\gradlew.bat :codec:jpeg2000:test :codec:jpegxl:test :font:scaler:test
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks`
+  completed successfully under Temurin 25: JPEG 2000 98 tests with 0 failures
+  and 8 skipped, JPEG XL 22 with 0 failures and 1 skipped, and font scaler 109
+  with 0 failures;
+- `.\gradlew.bat :gpu-renderer:test :gpu-renderer-scenes:test
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks`
+  completed the scenes module 274/274 and all then-existing FP-03 target suites
+  green, but the GPU worker ended non-green after two half-UNORM assertions
+  and an independent native NVIDIA/wgpu access violation; the assertions are
+  resolved by `9a2d8edca`, and the request-device lifetime/recreation crash is
+  explicitly assigned to FP-09 below rather than represented as a green full
+  GPU aggregate;
+- zero FP-03 portability assertion remains failing; no renderer, WGSL, codec,
+  font-scaler, CPU-reference, or normal Gradle task-graph production behavior
+  changed.
+
 Acceptance:
 
 - Gradle subprocess tests use the platform wrapper;
@@ -169,7 +211,7 @@ Acceptance:
 
 ### FP-04 — Prepared image route
 
-Status: `pending`
+Status: `in_progress`
 
 Goal: migrate image, image-nine, lattice, and atlas Surface operations to the
 common prepared frame route, including texture and sampler ownership.
@@ -266,6 +308,14 @@ Current evidence:
 - the FP-01 device-limit change is causally excluded: focused created-device
   alignment tests pass and none of the three crash dumps contains the former
   alignment validation panic;
+- the FP-03 full GPU aggregate produced
+  `gpu-renderer/hs_err_pid18980.log`: an `EXCEPTION_ACCESS_VIOLATION` through
+  `nvoglv64.dll`, Vulkan, and `wgpu_native.dll` while
+  `GPUWgpu4kSolidRectFrameSmokeTest` called `Adapter.requestDevice` after
+  earlier native session/resource teardown in the same worker; the isolated
+  complete solid-rectangle class later passed 17/17 without a crash, so this
+  is a new trigger location in the existing lifetime/recreation failure class,
+  not evidence that the FP-03 assertion changes caused the crash;
 - the future minimal TDD reproduction is repeated runtime dispose/recreate
   followed by fullscreen uniform slab writes in one JVM.
 
