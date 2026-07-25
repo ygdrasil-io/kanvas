@@ -46,6 +46,10 @@ internal sealed interface GPUCorePrimitiveSemanticGatherResult {
     ) : GPUCorePrimitiveSemanticGatherResult
 }
 
+/** Lossless bridge used by heterogeneous surface gathering without rebuilding core semantics. */
+internal fun GPUCorePrimitiveSemanticGatherResult.Gathered.asPreparedSurfaceSemanticMap():
+    Map<Int, GPUDrawSemanticPayload> = semantics
+
 internal enum class GPUCorePrimitiveBlendAuthorityPolicy {
     /** Product work requires one exact blend authority from the recorded draw packet. */
     Required,

@@ -1319,8 +1319,33 @@ sealed interface GPUCorePrimitivePreparedFrameResult {
     data class Refused(val diagnostic: GPUDiagnostic) : GPUCorePrimitivePreparedFrameResult
 }
 
-/** Adds the canonical target/readback envelope without re-planning blend, geometry, or clip routing. */
+/** Source-compatible core-only facade over the shared prepared-surface task assembly. */
 class GPUCorePrimitivePreparedFrameTaskListBuilder(
+    private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
+) {
+    fun build(request: GPUCorePrimitivePreparedFrameRequest): GPUCorePrimitivePreparedFrameResult =
+        when (
+            val result = GPUPreparedSurfaceFrameTaskListBuilder(readbackLayoutPlanner).build(
+                GPUPreparedSurfaceFrameRequest(
+                    baseTaskList = request.baseTaskList,
+                    capabilities = request.capabilities,
+                    target = request.target,
+                    targetBounds = request.targetBounds,
+                    semanticsByCommandId = request.semanticsByCommandId,
+                    readbackRequestId = request.readbackRequestId,
+                ),
+                configuredAggregateBudgetBytes = request.configuredAggregateBudgetBytes,
+            )
+        ) {
+            is GPUPreparedSurfaceFrameResult.Recorded ->
+                GPUCorePrimitivePreparedFrameResult.Recorded(result.taskList)
+            is GPUPreparedSurfaceFrameResult.Refused ->
+                GPUCorePrimitivePreparedFrameResult.Refused(result.diagnostic)
+        }
+}
+
+/** Adds the canonical target/readback envelope without re-planning blend, geometry, or clip routing. */
+internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
 ) {
     fun build(request: GPUCorePrimitivePreparedFrameRequest): GPUCorePrimitivePreparedFrameResult {

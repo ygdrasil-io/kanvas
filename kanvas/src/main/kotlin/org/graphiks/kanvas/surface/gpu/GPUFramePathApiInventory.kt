@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.surface.RenderConfig
 
 const val GPU_FRAME_PROVENANCE_ANNOTATION_KEY: String = "kanvas.frame.provenance"
@@ -155,6 +156,19 @@ object GPUFramePathApiInventory {
         visualCommands = inventory.visualCommands,
         recording = inventory.recording,
         targetBounds = targetBounds,
+        blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+    )
+
+    /** Read-only heterogeneous semantic evidence; this does not open the Surface product gate. */
+    internal fun gatherPreparedSurfaceSemantics(
+        inventory: GPUFramePathInventoryPlan,
+        targetBounds: GPUPixelBounds,
+        imageArtifactsByCommandId: Map<Int, GPUPreparedImageUploadArtifact>,
+    ): GPUPreparedSurfaceSemanticGatherResult = GPUPreparedSurfaceSemanticBuilder.gather(
+        visualCommands = inventory.visualCommands,
+        recording = inventory.recording,
+        targetBounds = targetBounds,
+        imageArtifactsByCommandId = imageArtifactsByCommandId,
         blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
     )
 }

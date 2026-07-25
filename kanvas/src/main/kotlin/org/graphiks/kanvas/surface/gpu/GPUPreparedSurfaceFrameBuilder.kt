@@ -6,14 +6,16 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskSampling
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
-import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameRequest
-import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
-import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameTaskListBuilder
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameTaskListBuilder
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
@@ -22,6 +24,9 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
+import org.graphiks.kanvas.canvas.DisplayOp
 
 internal data class GPUPreparedSurfaceFrameBuildRequest(
     val candidate: GPUPreparedSurfaceEligibility.Candidate,
@@ -62,29 +67,35 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 config = request.candidate.config,
                 capabilities = request.capabilities,
             )
+            val preparedImages = prepareImageVisuals(mapping, request.candidate.operations)
+            if (preparedImages is PreparedImageVisuals.Refused) {
+                return GPUPreparedSurfaceFrameBuildResult.Refused(preparedImages.diagnostic)
+            }
+            preparedImages as PreparedImageVisuals.Ready
+            val preparedMapping = mapping.copy(visualCommands = preparedImages.visualCommands)
             val recorder = GPURecorder(
                 recordingId = request.recordingId,
                 frameId = request.frameId,
                 capabilities = request.capabilities,
                 deviceGeneration = request.deviceGeneration,
             )
-            mapping.visualCommands.forEach { visual -> recorder.record(visual.normalized) }
+            preparedMapping.visualCommands.forEach { visual -> recorder.record(visual.normalized) }
             val recording = recorder.close()
             recording.taskList.diagnostics.firstOrNull { diagnostic -> diagnostic.isTerminal }?.let {
                 return GPUPreparedSurfaceFrameBuildResult.Refused(it)
             }
-            val semantics = when (val gathered = GPUCorePrimitiveSemanticBuilder.gather(
-                visualCommands = mapping.visualCommands,
+            val semantics = when (val gathered = GPUPreparedSurfaceSemanticBuilder.gather(
+                visualCommands = preparedMapping.visualCommands,
                 recording = recording,
                 targetBounds = request.targetBounds,
+                imageArtifactsByCommandId = preparedImages.artifactsByCommandId,
             )) {
-                is GPUCorePrimitiveSemanticGatherResult.Gathered -> gathered.semantics
-                is GPUCorePrimitiveSemanticGatherResult.Refused -> {
-                    return GPUPreparedSurfaceFrameBuildResult.Refused(gathered.toDiagnostic())
-                }
+                is GPUPreparedSurfaceSemanticGatherResult.Gathered -> gathered.semanticsByCommandId
+                is GPUPreparedSurfaceSemanticGatherResult.Refused ->
+                    return GPUPreparedSurfaceFrameBuildResult.Refused(gathered.diagnostic)
             }
-            when (val prepared = GPUCorePrimitivePreparedFrameTaskListBuilder().build(
-                GPUCorePrimitivePreparedFrameRequest(
+            when (val prepared = GPUPreparedSurfaceFrameTaskListBuilder().build(
+                GPUPreparedSurfaceFrameRequest(
                     baseTaskList = recording.taskList,
                     capabilities = request.capabilities,
                     target = request.target,
@@ -93,14 +104,14 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     readbackRequestId = request.readbackRequestId,
                 ),
             )) {
-                is GPUCorePrimitivePreparedFrameResult.Recorded -> {
-                    validateEncodedPremulSrgbOutput(request, mapping, semantics)?.let {
+                is GPUPreparedSurfaceFrameResult.Recorded -> {
+                    validateEncodedPremulSrgbOutput(request, preparedMapping, semantics)?.let {
                         return GPUPreparedSurfaceFrameBuildResult.Refused(it)
                     }
                     GPUPreparedSurfaceFrameBuildResult.Ready(
                         taskList = prepared.taskList,
                         readbackRequestId = request.readbackRequestId,
-                        visualOperationCount = mapping.visualCommands.size,
+                        visualOperationCount = preparedMapping.visualCommands.size,
                         stateEventCount = mapping.stateEvents.count { event ->
                             event.kind == GPUFramePathStateKind.Transform ||
                                 event.kind == GPUFramePathStateKind.Clip ||
@@ -108,7 +119,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         },
                     )
                 }
-                is GPUCorePrimitivePreparedFrameResult.Refused ->
+                is GPUPreparedSurfaceFrameResult.Refused ->
                     GPUPreparedSurfaceFrameBuildResult.Refused(prepared.diagnostic)
             }
         } catch (failure: Exception) {
@@ -123,6 +134,72 @@ internal object GPUPreparedSurfaceFrameBuilder {
     }
 }
 
+private sealed interface PreparedImageVisuals {
+    data class Ready(
+        val visualCommands: List<GPUFramePathVisualCommand>,
+        val artifactsByCommandId: Map<Int, GPUPreparedImageUploadArtifact>,
+    ) : PreparedImageVisuals
+
+    data class Refused(val diagnostic: GPUDiagnostic) : PreparedImageVisuals
+}
+
+private fun prepareImageVisuals(
+    mapping: GPUOpMapping,
+    operations: List<DisplayOp>,
+): PreparedImageVisuals {
+    val imagesBySourceId = operations.filterIsInstance<DisplayOp.DrawImage>()
+        .groupBy { operation -> operation.image.sourceId }
+    val artifacts = linkedMapOf<Int, GPUPreparedImageUploadArtifact>()
+    val visuals = mutableListOf<GPUFramePathVisualCommand>()
+    for (visual in mapping.visualCommands) {
+        val command = visual.normalized as? NormalizedDrawCommand.DrawImageRect
+        if (command == null) {
+            visuals += visual
+            continue
+        }
+        val source = imagesBySourceId[command.imageSourceId]?.firstOrNull()
+            ?: return PreparedImageVisuals.Refused(
+                diagnostic(
+                    code = "invalid.surface.prepared.image-source-bijection",
+                    message = "Prepared image command requires one exact Surface image source.",
+                    facts = mapOf("imageSourceId" to command.imageSourceId),
+                ),
+            )
+        val artifact = when (val prepared = GPUPreparedSurfaceImageSource.prepare(source.image)) {
+            is GPUPreparedImageArtifactResult.Ready -> prepared.artifact
+            is GPUPreparedImageArtifactResult.Refused -> return PreparedImageVisuals.Refused(
+                diagnostic(
+                    code = "unsupported.surface.prepared.image-source.${prepared.code}",
+                    message = "Surface image source could not produce an exact prepared artifact.",
+                    facts = prepared.facts,
+                ),
+            )
+        }
+        val material = command.material as? GPUMaterialDescriptor.ImageDraw
+            ?: return PreparedImageVisuals.Refused(
+                diagnostic(
+                    code = "invalid.surface.prepared.image-material",
+                    message = "Prepared Surface image command lost its image material descriptor.",
+                ),
+            )
+        val commandId = command.commandId.value
+        artifacts[commandId] = artifact
+        visuals += visual.copy(
+            normalized = command.copy(
+                material = material.copy(rgbaPixels = artifact.tightRgba8BytesForUpload()),
+                pixelsWidth = artifact.width,
+                pixelsHeight = artifact.height,
+                pixelsFormat = "RGBA8Unorm",
+                pixelsRowBytes = artifact.pixelLayout.normalizedRgba8RowBytes,
+                pixelsGeneration = artifact.sourceGeneration,
+                pixelsContentHash = artifact.contentHash,
+                pixelsProvenance = "prepared-surface-artifact",
+            ),
+        )
+    }
+    return PreparedImageVisuals.Ready(visuals, artifacts)
+}
+
 /**
  * The prepared target is currently a physical UNORM texture carrying the named
  * encoded-premul-sRGB convention. Opaque solids retain the same stored bytes as
@@ -132,14 +209,14 @@ internal object GPUPreparedSurfaceFrameBuilder {
 private fun validateEncodedPremulSrgbOutput(
     request: GPUPreparedSurfaceFrameBuildRequest,
     mapping: GPUOpMapping,
-    semantics: Map<Int, GPUDrawSemanticPayload.CorePrimitive>,
+    semantics: Map<Int, GPUDrawSemanticPayload>,
 ): GPUDiagnostic? {
     if (request.candidate.color.interpretation != GPUColorInterpretation.EncodedPremulSrgb) {
         return null
     }
     mapping.visualCommands.forEach { visual ->
         val commandId = visual.normalized.commandId.value
-        val semantic = semantics[commandId] ?: return@forEach
+        val semantic = semantics[commandId] as? GPUDrawSemanticPayload.CorePrimitive ?: return@forEach
         if (semantic.premultipliedRgba[3] != 1f) {
             return diagnostic(
                 code = "unsupported.surface.prepared.encoded-premul-srgb.translucent-solid",
