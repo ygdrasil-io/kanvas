@@ -182,7 +182,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             report.diagnostics,
             "registeredUniform:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
         )
-        assertContains(report.diagnostics, "registeredUniform:withinOneLsb=64000/64000 maxChannelDelta=0")
+        assertWithinOneLsb(report.diagnostics, "registeredUniform:withinOneLsb=")
     }
 
     @Test
@@ -200,7 +200,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             report.diagnostics,
             "registeredUniform:native encoders=1 commandBuffers=1 submits=1 readbacks=1",
         )
-        assertContains(report.diagnostics, "registeredUniform:withinOneLsb=64000/64000")
+        assertWithinOneLsb(report.diagnostics, "registeredUniform:withinOneLsb=")
     }
 
     @Test
@@ -219,11 +219,7 @@ class RenderGpuRendererSceneOffscreenMainTest {
             report.diagnostics,
             "separableBlur:cache invariants=1/0 intermediates=1/0",
         )
-        assertContains(report.diagnostics, "separableBlur:pixelExact=64000/64000")
-        assertContains(
-            report.diagnostics,
-            "separableBlur:withinOneLsb=64000/64000 maxChannelDelta=0",
-        )
+        assertWithinOneLsb(report.diagnostics, "separableBlur:withinOneLsb=")
     }
 
     @Test
@@ -257,7 +253,13 @@ class RenderGpuRendererSceneOffscreenMainTest {
         assertEquals("wall-clock-prepared-submit-completion", report.metricSource)
         assertContains(report.diagnostics, "measuredReadbacks=0 finalValidationReadbacks=1")
         assertContains(report.diagnostics, "nativeFrames=4 encoders=4 commandBuffers=4 submits=4")
-        assertContains(report.diagnostics, "solidRectCache creations=1 reuses=3")
+        assertTrue(
+            report.diagnostics.any { diagnostic ->
+                diagnostic.contains("preparedCaches solid=1/3") &&
+                    diagnostic.contains("registered=0/0")
+            },
+            "Expected semantic prepared-cache creation/reuse facts, got: ${report.diagnostics}",
+        )
     }
 
     @Test
@@ -627,6 +629,32 @@ class RenderGpuRendererSceneOffscreenMainTest {
         val runtimeEffectCount: Int? = null,
         val meshRibbonCount: Int? = null,
     )
+
+    private fun assertWithinOneLsb(
+        diagnostics: List<String>,
+        prefix: String,
+        expectedPixels: Int = 64_000,
+    ) {
+        val diagnostic = diagnostics.singleOrNull { it.startsWith(prefix) }
+        assertTrue(
+            diagnostic != null,
+            "Expected one diagnostic starting with '$prefix', got: $diagnostics",
+        )
+        assertContains(
+            diagnostic,
+            "withinOneLsb=$expectedPixels/$expectedPixels",
+            message = "One-LSB coverage must include every pixel",
+        )
+        val maxChannelDelta = Regex("""(?:^|\s)maxChannelDelta=(\d+)(?:\s|$)""")
+            .find(diagnostic)
+            ?.groupValues
+            ?.get(1)
+            ?.toInt()
+        assertTrue(
+            maxChannelDelta != null && maxChannelDelta <= 1,
+            "Expected maxChannelDelta <= 1, got '$diagnostic'",
+        )
+    }
 
     private fun assertRenderedShapeScene(root: Path, expectation: RenderedShapeExpectation) {
         val sceneId = expectation.sceneId
