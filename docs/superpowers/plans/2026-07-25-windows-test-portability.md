@@ -651,13 +651,18 @@ Confirm:
 - canonical JSON comparison changes only line terminators;
 - source inspection is anchored and brace-balanced;
 - the wrapper is selected by OS and invoked without a shell;
-- all three prepared comparisons require full one-LSB coverage and `maxChannelDelta <= 1`;
+- all three offscreen prepared comparisons require full one-LSB coverage and
+  `maxChannelDelta <= 1`, while the two native smoke helpers restrict only the
+  half-UNORM paths to per-channel deltas of at most one;
 - no renderer/WGSL/CPU reference/codec/font production code changed;
 - protected user files remain unstaged.
 
 - [ ] **Step 2: Audit tests and claims**
 
-Confirm every RED was observed before its GREEN change, both complete commands pass, FP-03 is `completed`, FP-04 is the sole `in_progress` item, and no claim expands beyond Windows portability.
+Confirm every RED was observed before its GREEN change, the complete-command
+outcomes are reported honestly, no FP-03 assertion remains failing, the
+independent native crash is assigned to FP-09, FP-03 is `completed`, FP-04 is
+the sole `in_progress` item, and no claim expands beyond Windows portability.
 
 - [ ] **Step 3: Produce the final verdict**
 
