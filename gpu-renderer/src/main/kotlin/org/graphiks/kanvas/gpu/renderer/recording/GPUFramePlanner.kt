@@ -777,6 +777,7 @@ object GPUFramePlanner {
                     task.destination,
                     task.layout,
                     listOf(task.taskId),
+                    task.preparedImagePlan,
                 )
                 is GPUTask.Barrier -> steps += GPUFrameStep.DependencyBarrierStep(
                     task.orderedUseTokens,
@@ -862,6 +863,9 @@ object GPUFramePlanner {
                 sourceTaskIds = batch.packets.map { packetOwner.getValue(it.packetId) }.distinct(),
             )
         }
+        val preparedImageBindingsByPacketId = slices
+            .flatMap { slice -> slice.task.preparedImageBindingsByPacketId.entries }
+            .associate { entry -> entry.toPair() }
         val loadStore = if (continuesStoredTarget) {
             first.loadStore.copy(loadOp = "load", clearColorLabel = null)
         } else {
@@ -890,6 +894,7 @@ object GPUFramePlanner {
                     )
                 },
             depthStencilLoadStore = first.depthStencilLoadStore,
+            preparedImageBindingsByPacketId = preparedImageBindingsByPacketId,
         )
     }
 

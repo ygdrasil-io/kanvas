@@ -34,6 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
@@ -41,6 +42,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
@@ -257,6 +260,8 @@ sealed interface GPUFrameStep {
         ),
         val sampleContinuation: GPUSampleContinuationRequest? = null,
         val depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = null,
+        preparedImageBindingsByPacketId:
+            Map<GPUDrawPacketID, GPUPreparedImageBindingRequest> = emptyMap(),
     ) : GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -264,6 +269,9 @@ sealed interface GPUFrameStep {
         val frameProvenanceByPacketId: Map<GPUDrawPacketID, GPUFrameProvenance> = immutableMap(
             drawPackets.associate { packet -> packet.packetId to packet.frameProvenance },
         )
+        val preparedImageBindingsByPacketId:
+            Map<GPUDrawPacketID, GPUPreparedImageBindingRequest> =
+            immutableMap(preparedImageBindingsByPacketId)
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
 
@@ -297,6 +305,17 @@ sealed interface GPUFrameStep {
             require(sampleContinuation == null || sampleContinuation.key.samplePlan == samplePlan) {
                 "GPUFrameStep.RenderPassStep sample continuation must match the render sample plan"
             }
+            val preparedImagePacketIds = drawPackets
+                .filter { packet -> packet.semanticPayload is GPUDrawSemanticPayload.SampledImage }
+                .map(GPUDrawPacket::packetId)
+                .toSet()
+            require(preparedImageBindingsByPacketId.keys == preparedImagePacketIds &&
+                preparedImageBindingsByPacketId.all { (packetId, binding) ->
+                    packetId.value == binding.packetId
+                }
+            ) {
+                "GPUFrameStep.RenderPassStep prepared-image bindings must exactly cover image packets"
+            }
         }
     }
 
@@ -326,9 +345,21 @@ sealed interface GPUFrameStep {
         val destination: GPUFrameResourceRef,
         val layout: GPUUploadLayout,
         sourceTaskIds: List<GPUTaskID>,
+        val preparedImagePlan: GPUPreparedImageFrameResourcePlan? = null,
     ) : GPUFrameStep {
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
+
+        init {
+            preparedImagePlan?.let { plan ->
+                require(staging == plan.stagingRef &&
+                    destination == plan.frameTextureRef &&
+                    layout == plan.uploadTaskLayout
+                ) {
+                    "Prepared-image frame upload must retain its exact plan authority"
+                }
+            }
+        }
     }
 
     class CopyResourceStep(
@@ -804,6 +835,16 @@ private fun CanonicalHashSink.memoryBudget(name: String, value: GPUFrameMemoryBu
     list("deviceLimitFacts", value.deviceLimitFacts) { fact(it) }
     long("configuredAggregateBudgetBytes", value.configuredAggregateBudgetBytes)
     nullable("diagnostic", value.diagnostic) { diagnostic("value", it) }
+    list("allocations", value.allocations) { memoryAllocation(it) }
+}
+
+private fun CanonicalHashSink.memoryAllocation(value: GPUFrameMemoryAllocation) {
+    tag("GPUFrameMemoryAllocation")
+    string("label", value.label)
+    string("category", value.category.name)
+    long("bytes", value.bytes)
+    string("resourceKind", value.resourceKind.name)
+    nullable("extent", value.extent) { bounds("value", it) }
 }
 
 private fun CanonicalHashSink.step(value: GPUFrameStep) {
@@ -1454,7 +1495,12 @@ private fun GPUFrameMemoryBudgetPlan.dumpLine(): String =
             "${category.name}:${categoryTotals[category] ?: 0L}"
         }} limits=${deviceLimitFacts.joinToString(";") { fact ->
             "${fact.name}|${fact.source}|${fact.value}|${fact.affectsValidity}|${fact.evidenceLabel}"
-        }} budgetDiagnostic=${diagnostic?.dumpLine("budget") ?: "none"}"
+        }} allocations=${allocations.mapIndexed { index, allocation ->
+            "$index:{label=${allocation.label},category=${allocation.category.name}," +
+                "bytes=${allocation.bytes},kind=${allocation.resourceKind.name}," +
+                "extent=${allocation.extent ?: "none"}}"
+        }.joinToString(";").ifEmpty { "none" }} " +
+        "budgetDiagnostic=${diagnostic?.dumpLine("budget") ?: "none"}"
 
 private fun GPUDepthStencilLoadStorePlan?.stableDump(): String = when (this) {
     null -> "none"

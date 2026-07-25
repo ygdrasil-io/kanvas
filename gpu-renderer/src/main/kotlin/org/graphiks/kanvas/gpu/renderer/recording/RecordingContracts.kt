@@ -34,6 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
@@ -751,12 +752,16 @@ sealed interface GPUTask {
             require(batchEligibilityByPacketId.keys == drawPackets.map { it.packetId }.toSet()) {
                 "GPUTask.Render batching eligibility must cover every packet exactly"
             }
-            require(preparedImageBindingsByPacketId.keys.all { packetId ->
-                drawPackets.any { packet -> packet.packetId == packetId }
-            } && preparedImageBindingsByPacketId.all { (packetId, binding) ->
-                packetId.value == binding.packetId
-            }) {
-                "Prepared-image bindings must retain exact packet identities from this render"
+            val preparedImagePacketIds = drawPackets
+                .filter { packet -> packet.semanticPayload is GPUDrawSemanticPayload.SampledImage }
+                .map(GPUDrawPacket::packetId)
+                .toSet()
+            require(preparedImageBindingsByPacketId.keys == preparedImagePacketIds &&
+                preparedImageBindingsByPacketId.all { (packetId, binding) ->
+                    packetId.value == binding.packetId
+                }
+            ) {
+                "Prepared-image bindings must exactly cover every and only sampled-image packet"
             }
         }
 

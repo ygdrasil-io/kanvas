@@ -673,6 +673,10 @@ private data class PreparedRouteRunKey(
     val bindingLayoutHash: String,
     val samplePlanKey: String,
     val target: String,
+    val loadStore: GPULoadStorePlan,
+    val provisionalSegmentKey:
+        org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey,
+    val depthStencilLoadStore: GPUDepthStencilLoadStorePlan?,
     val targetStateHash: String,
     val continuationKey: String?,
 )
@@ -695,6 +699,9 @@ private fun List<GPUDrawPacket>.contiguousRouteRuns(
             bindingLayoutHash = packet.bindingLayoutHash,
             samplePlanKey = render.samplePlan.specializationKey,
             target = render.target.value,
+            loadStore = render.loadStore,
+            provisionalSegmentKey = render.provisionalSegmentKey,
+            depthStencilLoadStore = render.depthStencilLoadStore,
             targetStateHash = packet.targetStateHash,
             continuationKey = render.sampleContinuationKey?.toString(),
         )
@@ -713,6 +720,9 @@ private fun List<GPUDrawPacket>.contiguousRouteRuns(
                 bindingLayoutHash = first.bindingLayoutHash,
                 samplePlanKey = firstRender.samplePlan.specializationKey,
                 target = firstRender.target.value,
+                loadStore = firstRender.loadStore,
+                provisionalSegmentKey = firstRender.provisionalSegmentKey,
+                depthStencilLoadStore = firstRender.depthStencilLoadStore,
                 targetStateHash = first.targetStateHash,
                 continuationKey = firstRender.sampleContinuationKey?.toString(),
             )

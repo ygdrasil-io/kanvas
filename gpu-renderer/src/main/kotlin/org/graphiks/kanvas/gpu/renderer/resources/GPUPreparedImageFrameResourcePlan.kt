@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -20,6 +22,15 @@ class GPUPreparedImageUploadLayout internal constructor(
     private val uploadBytes = paddedUploadBytes.copyOf()
 
     fun bytesForUpload(): ByteArray = uploadBytes.copyOf()
+
+    internal fun snapshot(): GPUPreparedImageUploadLayout = GPUPreparedImageUploadLayout(
+        logicalBytesPerRow = logicalBytesPerRow,
+        bytesPerRow = bytesPerRow,
+        rowsPerImage = rowsPerImage,
+        width = width,
+        height = height,
+        paddedUploadBytes = uploadBytes,
+    )
 }
 
 data class GPUPreparedImageUniformAllocation(
@@ -43,19 +54,31 @@ data class GPUPreparedImageBindingRequest(
     val uniformAllocation: GPUPreparedImageUniformAllocation,
 )
 
-data class GPUPreparedImageFrameResourcePlan(
+class GPUPreparedImageFrameResourcePlan(
     val stagingRef: GPUFrameBufferRef,
     val textureRef: GPUTextureResourceRef,
     val frameTextureRef: GPUFrameTextureRef,
     val uniformRef: GPUFrameBufferRef,
-    val textureDescriptor: GPUTextureDescriptor,
-    val uploadLayout: GPUPreparedImageUploadLayout,
+    textureDescriptor: GPUTextureDescriptor,
+    uploadLayout: GPUPreparedImageUploadLayout,
     val uploadTaskLayout: GPUUploadLayout,
-    val bindingRequests: List<GPUPreparedImageBindingRequest>,
-    val preparationRequests: List<GPUResourcePreparationRequest>,
-    val memoryAllocations: List<GPUFrameMemoryAllocation>,
+    bindingRequests: List<GPUPreparedImageBindingRequest>,
+    preparationRequests: List<GPUResourcePreparationRequest>,
+    memoryAllocations: List<GPUFrameMemoryAllocation>,
     val uploadTaskId: GPUTaskID,
-)
+) {
+    val textureDescriptor: GPUTextureDescriptor = textureDescriptor.snapshot()
+    val uploadLayout: GPUPreparedImageUploadLayout = uploadLayout.snapshot()
+    val bindingRequests: List<GPUPreparedImageBindingRequest> = immutableList(
+        bindingRequests.map(GPUPreparedImageBindingRequest::snapshot),
+    )
+    val preparationRequests: List<GPUResourcePreparationRequest> = immutableList(
+        preparationRequests.map(GPUResourcePreparationRequest::snapshotForPreparedImage),
+    )
+    val memoryAllocations: List<GPUFrameMemoryAllocation> = immutableList(
+        memoryAllocations.map { allocation -> allocation.copy() },
+    )
+}
 
 internal fun buildPreparedImageFrameResourcePlanFromBindings(
     artifact: GPUPreparedImageUploadArtifact,
@@ -278,3 +301,35 @@ private fun alignUp(value: Long, alignment: Long): Long {
     val remainder = value % alignment
     return if (remainder == 0L) value else Math.addExact(value, alignment - remainder)
 }
+
+private fun GPUTextureDescriptor.snapshot(): GPUTextureDescriptor = copy(
+    usageLabels = immutableSet(usageLabels),
+)
+
+private fun GPUSamplerDescriptor.snapshot(): GPUSamplerDescriptor = copy(
+    capabilityRequirements = immutableSet(capabilityRequirements),
+)
+
+private fun GPUPreparedImageBindingRequest.snapshot(): GPUPreparedImageBindingRequest = copy(
+    texture = texture.snapshot(),
+    view = view.copy(
+        mipRange = view.mipRange.first..view.mipRange.last,
+        arrayLayerRange = view.arrayLayerRange.first..view.arrayLayerRange.last,
+    ),
+    sampler = sampler.snapshot(),
+    uniformAllocation = uniformAllocation.copy(),
+)
+
+private fun GPUResourcePreparationRequest.snapshotForPreparedImage():
+    GPUResourcePreparationRequest = GPUResourcePreparationRequest(
+    resource = resource,
+    descriptor = when (val value = descriptor) {
+        is GPUFrameBufferDescriptor -> value.copy()
+        is GPUFrameTextureDescriptor -> value.copy()
+    },
+    role = role,
+    usages = immutableSet(usages),
+    lifetime = lifetime,
+    byteSize = byteSize,
+    diagnosticLabel = diagnosticLabel,
+)

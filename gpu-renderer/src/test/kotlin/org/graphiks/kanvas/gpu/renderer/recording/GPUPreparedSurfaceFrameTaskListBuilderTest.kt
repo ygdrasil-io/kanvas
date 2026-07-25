@@ -2,9 +2,11 @@ package org.graphiks.kanvas.gpu.renderer.recording
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
@@ -30,6 +32,8 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
@@ -258,6 +262,94 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         assertEquals(2, taskList.tasks.filterIsInstance<GPUTask.Render>().size)
     }
 
+    @Test
+    fun `adjacent image packets with distinct provisional segment keys form distinct route runs`() {
+        val original = recording(imageCommand(0, 0), imageCommand(1, 1)).taskList
+        val base = original.splitRenders(
+            provisionalKeyFor = { packet ->
+                GPUProvisionalRenderSegmentKey("segment.${packet.commandIdValue}")
+            },
+        )
+        val shared = imageSemantic(base, 0)
+        val semanticMap = linkedMapOf<Int, GPUDrawSemanticPayload>(
+            0 to shared,
+            1 to imageSemantic(base, 1, artifactOverride = shared),
+        )
+
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(request(base, semanticMap)),
+        ).taskList
+
+        assertEquals(2, taskList.tasks.filterIsInstance<GPUTask.Render>().size)
+    }
+
+    @Test
+    fun `adjacent image packets with distinct depth stencil authorities form distinct route runs`() {
+        val original = recording(imageCommand(0, 0), imageCommand(1, 1)).taskList
+        val base = original.splitRenders(
+            depthStencilFor = { packet ->
+                if (packet.commandIdValue == 0) null else GPUDepthStencilLoadStorePlan.ReadOnlyKeep
+            },
+        )
+        val shared = imageSemantic(base, 0)
+        val semanticMap = linkedMapOf<Int, GPUDrawSemanticPayload>(
+            0 to shared,
+            1 to imageSemantic(base, 1, artifactOverride = shared),
+        )
+
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(request(base, semanticMap)),
+        ).taskList
+
+        assertEquals(2, taskList.tasks.filterIsInstance<GPUTask.Render>().size)
+    }
+
+    @Test
+    fun `frame plan linearization retains exact prepared image upload and binding authority`() {
+        val base = recording(imageCommand(0, 0)).taskList
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(request(base, semantics(base))),
+        ).taskList
+        val uploadTask = taskList.tasks.filterIsInstance<GPUTask.Upload>().single()
+        val renderTask = taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+
+        val framePlan = GPUFramePlanner.plan(taskList)
+        val uploadStep = framePlan.steps.filterIsInstance<GPUFrameStep.UploadResourceStep>().single()
+        val uploadPlanField = uploadStep.javaClass.declaredFields.singleOrNull {
+            it.name == "preparedImagePlan"
+        }
+        assertNotNull(uploadPlanField, "Frame upload step must retain its prepared-image plan")
+        uploadPlanField.isAccessible = true
+        assertSame(uploadTask.preparedImagePlan, uploadPlanField.get(uploadStep))
+        val renderStep = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val bindingsField = renderStep.javaClass.declaredFields.singleOrNull {
+            it.name == "preparedImageBindingsByPacketId"
+        }
+        assertNotNull(bindingsField, "Frame render step must retain prepared-image bindings")
+        bindingsField.isAccessible = true
+        assertEquals(renderTask.preparedImageBindingsByPacketId, bindingsField.get(renderStep))
+    }
+
+    @Test
+    fun `render requires exact prepared image binding coverage`() {
+        val base = recording(imageCommand(0, 0)).taskList
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(request(base, semantics(base))),
+        ).taskList
+        val render = taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+
+        assertFailsWith<IllegalArgumentException> {
+            render.rebuilt(preparedImageBindingsByPacketId = emptyMap())
+        }
+        val binding = render.preparedImageBindingsByPacketId.values.single()
+        assertFailsWith<IllegalArgumentException> {
+            render.rebuilt(
+                preparedImageBindingsByPacketId = render.preparedImageBindingsByPacketId +
+                    (GPUDrawPacketID("packet.extra") to binding.copy(packetId = "packet.extra")),
+            )
+        }
+    }
+
     private fun request(
         base: GPUTaskList,
         semantics: Map<Int, GPUDrawSemanticPayload>,
@@ -396,6 +488,71 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         phaseOrder = phaseOrder,
         memoryBudget = memoryBudget,
         diagnostics = diagnostics,
+    )
+
+    private fun GPUTaskList.splitRenders(
+        provisionalKeyFor: (GPUDrawPacket) -> GPUProvisionalRenderSegmentKey = {
+            tasks.filterIsInstance<GPUTask.Render>().first().provisionalSegmentKey
+        },
+        depthStencilFor: (GPUDrawPacket) -> GPUDepthStencilLoadStorePlan? = {
+            tasks.filterIsInstance<GPUTask.Render>().first().depthStencilLoadStore
+        },
+    ): GPUTaskList {
+        val template = tasks.filterIsInstance<GPUTask.Render>().first()
+        val packets = tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .sortedBy(GPUDrawPacket::originalPaintOrder)
+        val eligibility = tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap { render -> render.batchEligibilityByPacketId.entries }
+            .associate { it.toPair() }
+        return GPUTaskList(
+            frameId = frameId,
+            capabilitySeal = capabilitySeal,
+            recordingSeals = recordingSeals,
+            expectedReplayKeyHash = expectedReplayKeyHash,
+            tasks = packets.map { packet ->
+                GPUTask.Render(
+                    taskId = GPUTaskID("task.split.${packet.commandIdValue}"),
+                    recordingId = template.recordingId,
+                    phase = template.phase,
+                    target = template.target,
+                    loadStore = template.loadStore,
+                    samplePlan = template.samplePlan,
+                    resourceUses = template.resourceUses,
+                    provisionalSegmentKey = provisionalKeyFor(packet),
+                    drawPackets = listOf(packet),
+                    batchEligibilityByPacketId = mapOf(
+                        packet.packetId to eligibility.getValue(packet.packetId),
+                    ),
+                    sampleContinuationKey = template.sampleContinuationKey,
+                    depthStencilLoadStore = depthStencilFor(packet),
+                )
+            },
+            dependencies = emptyList(),
+            phaseOrder = phaseOrder,
+            memoryBudget = memoryBudget,
+            diagnostics = diagnostics,
+        )
+    }
+
+    private fun GPUTask.Render.rebuilt(
+        preparedImageBindingsByPacketId:
+            Map<GPUDrawPacketID, org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest>,
+    ) = GPUTask.Render(
+        taskId = taskId,
+        recordingId = recordingId,
+        phase = phase,
+        target = target,
+        loadStore = loadStore,
+        samplePlan = samplePlan,
+        resourceUses = resourceUses,
+        provisionalSegmentKey = provisionalSegmentKey,
+        drawPackets = drawPackets,
+        batchEligibilityByPacketId = batchEligibilityByPacketId,
+        sampleContinuationKey = sampleContinuationKey,
+        compositeMembership = compositeMembership,
+        depthStencilLoadStore = depthStencilLoadStore,
+        preparedImageBindingsByPacketId = preparedImageBindingsByPacketId,
     )
 
     private fun GPUDrawPacket.rebuilt(

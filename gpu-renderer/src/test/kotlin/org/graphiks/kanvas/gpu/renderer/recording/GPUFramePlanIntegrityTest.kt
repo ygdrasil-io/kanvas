@@ -64,8 +64,10 @@ import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -209,6 +211,57 @@ class GPUFramePlanIntegrityTest {
         assertJvmImmutable(plan.memoryBudget.categoryTotals, GPUFrameMemoryCategory.DestinationSnapshot, 999L)
         assertJvmImmutable(plan.memoryBudget.deviceLimitFacts, capabilityFact("limit.c", "3"))
         assertJvmImmutable(plan.diagnostics.first().facts, "mutated", "true")
+    }
+
+    @Test
+    fun `allocation ledger order and fields participate in frame hash and dump`() {
+        val firstAllocation = GPUFrameMemoryAllocation(
+            label = "allocation.first",
+            category = GPUFrameMemoryCategory.ReusableScratch,
+            bytes = 32,
+            resourceKind = GPUFrameMemoryResourceKind.Buffer,
+            extent = null,
+        )
+        val secondAllocation = GPUFrameMemoryAllocation(
+            label = "allocation.second",
+            category = GPUFrameMemoryCategory.ReusableScratch,
+            bytes = 32,
+            resourceKind = GPUFrameMemoryResourceKind.Buffer,
+            extent = null,
+        )
+        fun plan(allocations: List<GPUFrameMemoryAllocation>): GPUFramePlan {
+            val frameId = GPUFrameID(90)
+            val capabilitySeal = capabilitySeal(frameId)
+            return GPUFramePlan(
+                frameId = frameId,
+                capabilitySeal = capabilitySeal,
+                recordingSeals = listOf(seal("recording.a", 0, capabilitySeal.sealHash)),
+                steps = emptyList(),
+                memoryBudget = GPUFrameMemoryBudgetPlan(
+                    peakFrameTransientBytes = 64,
+                    targetResidentBytes = 0,
+                    categoryTotals = GPUFrameMemoryCategory.entries.associateWith { category ->
+                        if (category == GPUFrameMemoryCategory.ReusableScratch) 64L else 0L
+                    },
+                    deviceLimitFacts = emptyList(),
+                    configuredAggregateBudgetBytes = 128,
+                    diagnostic = null,
+                    allocations = allocations,
+                ),
+                diagnostics = emptyList(),
+            )
+        }
+
+        val ordered = plan(listOf(firstAllocation, secondAllocation))
+        val reversed = plan(listOf(secondAllocation, firstAllocation))
+        val dump = ordered.dumpLines().joinToString("\n")
+
+        assertNotEquals(ordered.stableHash(), reversed.stableHash())
+        assertNotEquals(dump, reversed.dumpLines().joinToString("\n"))
+        assertTrue(dump.contains("label=allocation.first"), dump)
+        assertTrue(dump.contains("category=ReusableScratch"), dump)
+        assertTrue(dump.contains("kind=Buffer"), dump)
+        assertTrue(dump.indexOf("label=allocation.first") < dump.indexOf("label=allocation.second"), dump)
     }
 
     @Test

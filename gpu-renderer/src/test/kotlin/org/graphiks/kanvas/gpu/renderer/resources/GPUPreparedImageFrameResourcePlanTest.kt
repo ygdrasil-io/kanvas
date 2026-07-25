@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.resources
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFails
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
@@ -88,6 +89,42 @@ class GPUPreparedImageFrameResourcePlanTest {
             plan.uploadLayout.bytesForUpload().copyOfRange(0, 12),
         )
         assertTrue(plan.uploadLayout.bytesForUpload().copyOfRange(12, 256).all { it == 0.toByte() })
+    }
+
+    @Test
+    fun `resource plan collections and upload bytes are defensively immutable`() {
+        val plan = buildPreparedImageFrameResourcePlan(
+            artifact = artifact(
+                format = GPUPreparedImageSourceFormat.A8,
+                sourceRowBytes = 3,
+                bytes = byteArrayOf(1, 2, 3, 4, 5, 6),
+            ),
+            packetIds = listOf("packet.image"),
+            bindingLayoutHash = "texture-sampler-tint.v1",
+            capabilities = capabilities(),
+            frameIdentity = "frame-immutable",
+            uploadTaskId = GPUTaskID("task.image.upload"),
+        )
+        val originalBytes = plan.uploadLayout.bytesForUpload()
+        val callerBytes = plan.uploadLayout.bytesForUpload().also { it[0] = 99 }
+
+        assertTrue(callerBytes[0] != plan.uploadLayout.bytesForUpload()[0])
+        assertContentEquals(originalBytes, plan.uploadLayout.bytesForUpload())
+        assertFails {
+            @Suppress("UNCHECKED_CAST")
+            (plan.bindingRequests as MutableList<GPUPreparedImageBindingRequest>)[0] =
+                plan.bindingRequests.single().copy(packetId = "mutated")
+        }
+        assertFails {
+            @Suppress("UNCHECKED_CAST")
+            (plan.preparationRequests as MutableList<GPUResourcePreparationRequest>)[0] =
+                plan.preparationRequests[1]
+        }
+        assertFails {
+            @Suppress("UNCHECKED_CAST")
+            (plan.memoryAllocations as MutableList<GPUFrameMemoryAllocation>)[0] =
+                plan.memoryAllocations.first().copy(label = "mutated")
+        }
     }
 
     private fun artifact(
