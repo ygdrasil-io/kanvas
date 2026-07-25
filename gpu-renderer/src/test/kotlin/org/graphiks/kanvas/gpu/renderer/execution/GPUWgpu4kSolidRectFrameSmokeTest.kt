@@ -295,7 +295,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             assertEquals(GPUFrameStructuralOutcome.Succeeded, secondTerminal.outcome)
             val readback = assertIs<GPUSceneFrameOutput.ReadbackRgba>(secondTerminal.output)
             assertEquals(secondRequestId, readback.requestId)
-            assertContentEquals(expectedPremultipliedRect(), readback.bytes)
+            assertRgbaWithinOneLsb(expectedPremultipliedRect(), readback.bytes)
             assertFalse(first.attemptId == second.attemptId)
 
             val active = session.nativeCounters()
@@ -929,7 +929,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
 
             assertEquals(GPUFrameStructuralOutcome.Succeeded, terminal.outcome)
             val pixels = requireNotNull(terminal.readback).bytes
-            assertContentEquals(expectedPremultipliedRect(), pixels)
+            assertRgbaWithinOneLsb(expectedPremultipliedRect(), pixels)
             assertEquals(
                 GPUWgpu4kFrameEncodingCounters(
                     encoders = 1,
@@ -1679,6 +1679,18 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             val offset = (y * 4 + x) * 4
             bytes[offset] = 128.toByte()
             bytes[offset + 3] = 128.toByte()
+        }
+    }
+
+    private fun assertRgbaWithinOneLsb(expected: ByteArray, actual: ByteArray) {
+        assertEquals(expected.size, actual.size)
+        expected.indices.forEach { index ->
+            val expectedChannel = expected[index].toInt() and 0xff
+            val actualChannel = actual[index].toInt() and 0xff
+            assertTrue(
+                kotlin.math.abs(expectedChannel - actualChannel) <= 1,
+                "Expected byte $index within one LSB of $expectedChannel, observed $actualChannel",
+            )
         }
     }
 

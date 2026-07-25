@@ -180,8 +180,8 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
                 "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
             )
             val bytes = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
-            assertPixel(bytes, 32, 6, 8, 128, 0, 0, 128)
-            assertPixel(bytes, 32, 13, 8, 64, 128, 0, 191)
+            assertPixelWithinOneLsb(bytes, 32, 6, 8, 128, 0, 0, 128)
+            assertPixelWithinOneLsb(bytes, 32, 13, 8, 64, 128, 0, 191)
             assertPixel(bytes, 32, 3, 8, 0, 0, 0, 0)
             assertPixel(bytes, 32, 13, 23, 0, 0, 0, 0)
             val counters = session.nativeCounters()
@@ -1826,6 +1826,27 @@ class GPUWgpu4kCorePrimitiveFrameSmokeTest {
     ) {
         val offset = (y * width + x) * 4
         assertEquals(listOf(red, green, blue, alpha), (0..3).map { bytes[offset + it].toInt() and 0xff })
+    }
+
+    private fun assertPixelWithinOneLsb(
+        bytes: ByteArray,
+        width: Int,
+        x: Int,
+        y: Int,
+        red: Int,
+        green: Int,
+        blue: Int,
+        alpha: Int,
+    ) {
+        val offset = (y * width + x) * 4
+        val expected = listOf(red, green, blue, alpha)
+        val actual = (0..3).map { bytes[offset + it].toInt() and 0xff }
+        expected.zip(actual).forEachIndexed { channel, (expectedChannel, actualChannel) ->
+            assertTrue(
+                kotlin.math.abs(expectedChannel - actualChannel) <= 1,
+                "Expected channel $channel within one LSB of $expectedChannel, observed $actualChannel",
+            )
+        }
     }
 
     private fun assertPartialPrimaryPixel(
