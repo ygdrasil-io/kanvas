@@ -470,6 +470,83 @@ git -c safe.directory=C:/Users/Shadow/IdeaProjects/kanvas add -- gpu-renderer-sc
 git -c safe.directory=C:/Users/Shadow/IdeaProjects/kanvas -c user.name=ygdrasil-io -c user.email=alexandre.mommers@gmail.com commit -m "test(scenes): enforce portable diagnostic policies"
 ```
 
+### Task 5A: Apply the one-LSB policy to half-UNORM native smoke assertions
+
+**Files:**
+
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFrameSmokeTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kSolidRectFrameSmokeTest.kt`
+
+**Interfaces:**
+
+- Consumes: native `rgba8unorm` readbacks whose logical half-alpha components
+  may quantize to either `127` or `128`.
+- Produces: test-local one-LSB pixel/byte assertions restricted to the two
+  half-alpha smoke paths.
+
+- [ ] **Step 1: Preserve the completed RED evidence**
+
+The complete GPU validation recorded:
+
+- `GPUWgpu4kCorePrimitiveFrameSmokeTest.native real rect and affine fill share
+  one pass submit and readback`: expected `[128, 0, 0, 128]`, observed
+  `[127, 0, 0, 127]`;
+- `GPUWgpu4kSolidRectFrameSmokeTest.prepared scene session reuses one native
+  target across completion and readback frames`: expected unsigned `128`,
+  observed `127` in the red and alpha channels of the half-alpha rectangle.
+
+Expected: these are the only concrete FP-03 assertion failures in the
+completed GPU XML; the separate native executor crash is assigned to FP-09.
+
+- [ ] **Step 2: Add narrow test-local one-LSB helpers**
+
+In `GPUWgpu4kCorePrimitiveFrameSmokeTest`, add a helper that reads the four
+unsigned channels at one pixel and asserts each expected/actual channel delta
+is at most one.
+
+In `GPUWgpu4kSolidRectFrameSmokeTest`, add a helper that first requires equal
+array sizes, then compares every unsigned expected/actual channel with a delta
+of at most one.
+
+Do not change logical expected values, WGSL, blend state, renderer code, or
+driver configuration.
+
+- [ ] **Step 3: Route only half-UNORM assertions through the helpers**
+
+- use the pixel helper for the two quantized assertions in
+  `native real rect and affine fill share one pass submit and readback`;
+- use the byte-array helper for both `expectedPremultipliedRect()`
+  comparisons;
+- keep zero, full-coverage, geometry, batching, and all unrelated pixel
+  assertions exact.
+
+- [ ] **Step 4: Prove the three affected methods GREEN**
+
+Run:
+
+```powershell
+.\gradlew.bat :gpu-renderer:test --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUWgpu4kCorePrimitiveFrameSmokeTest.native real rect and affine fill share one pass submit and readback" --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUWgpu4kSolidRectFrameSmokeTest.prepared scene session reuses one native target across completion and readback frames" --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUWgpu4kSolidRectFrameSmokeTest.one native submission renders canonical premultiplied solid rect and maps final rgba" --dependency-verification=off --no-daemon --console=plain --rerun-tasks --max-workers=1
+```
+
+Expected: all three pass; any channel delta greater than one remains red.
+
+- [ ] **Step 5: Prove both smoke classes GREEN in isolated workers**
+
+Run the two class filters serially with the same options and
+`--max-workers=1`.
+
+Expected: both classes pass or expose only a native lifetime/recreation crash
+that is recorded under FP-09; no pixel assertion remains red.
+
+- [ ] **Step 6: Commit the narrow smoke-test policy**
+
+Controller-only run:
+
+```powershell
+git -c safe.directory=C:/Users/Shadow/IdeaProjects/kanvas add -- gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFrameSmokeTest.kt gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kSolidRectFrameSmokeTest.kt
+git -c safe.directory=C:/Users/Shadow/IdeaProjects/kanvas -c user.name=ygdrasil-io -c user.email=alexandre.mommers@gmail.com commit -m "test(gpu): allow one-LSB UNORM quantization"
+```
+
 ### Task 6: Verify FP-03 and advance the ordered backlog
 
 **Files:**
@@ -483,7 +560,7 @@ git -c safe.directory=C:/Users/Shadow/IdeaProjects/kanvas -c user.name=ygdrasil-
 
 **Interfaces:**
 
-- Consumes: the five reviewed portability commits and their focused evidence.
+- Consumes: the six reviewed portability commits and their focused evidence.
 - Produces: FP-03 `completed`, FP-04 `in_progress`, and a factual Windows validation record.
 
 - [ ] **Step 1: Run the complete affected validation serially**
@@ -495,7 +572,11 @@ Run these commands one at a time:
 .\gradlew.bat :gpu-renderer:test :gpu-renderer-scenes:test --dependency-verification=off --no-daemon --console=plain --rerun-tasks
 ```
 
-Expected: both commands end `BUILD SUCCESSFUL`; no test failure remains from the twenty FP-03 cases.
+Expected: the codec/font command ends `BUILD SUCCESSFUL`. Preserve the
+completed GPU/scenes command as non-green evidence if the independently
+assigned FP-09 native lifetime crash recurs; after Task 5A, no FP-03 assertion
+may remain red. Do not repeat a known crashing full native aggregate merely to
+obtain a green summary.
 
 - [ ] **Step 2: Verify scope and protected files**
 
@@ -514,7 +595,13 @@ In FP-03:
 
 - set `Status: completed`;
 - retain the original six plus added fourteen failure bullets as historical resolution inputs;
-- add a `Resolution evidence` block listing the five implementation commits, the two full verification commands, zero failing tests, the five `attr/-text w/lf` PGM contracts, all 105 font tests, the EOL-independent materializer inspection, native wrapper dry run, semantic prepared-cache facts, and strict full-coverage `maxChannelDelta <= 1` policy.
+- add a `Resolution evidence` block listing the six implementation commits,
+  the two full verification commands and their honest outcomes, zero remaining
+  FP-03 assertion failures, the five `attr/-text w/lf` PGM contracts, all 105
+  `FontScalerSurfaceTest` tests, the EOL-independent materializer inspection,
+  native wrapper dry run, semantic prepared-cache facts, strict full-coverage
+  `maxChannelDelta <= 1` policy, the native smoke one-LSB policy, and the
+  independently assigned FP-09 crash evidence.
 
 In FP-04 set `Status: in_progress`. Leave FP-09 and all later goals unchanged.
 
