@@ -1153,6 +1153,20 @@ class GPUFirstRoutePlanner(
                 "unsupported.image.dst_rect"
             pixelsWidth <= 0 || pixelsHeight <= 0 ->
                 "unsupported.image.pixels_descriptor_invalid"
+            samplingTileModeX != "clamp" || samplingTileModeY != "clamp" ->
+                "unsupported.image.sampling_tile_mode"
+            samplingFilterMode !in acceptedDrawImageSamplingFilters ->
+                "unsupported.image.sampling_filter"
+            samplingMipmapMode != "none" -> "unsupported.image.sampling_mipmap"
+            pixelsFormat != "RGBA8Unorm" -> "unsupported.image.pixels_format"
+            pixelsRowBytes < pixelsWidth.toLong() * 4L -> "unsupported.image.pixels_descriptor_invalid"
+            pixelsAlphaType != "Premul" -> "unsupported.image.alpha_type"
+            pixelsColorProfileLabel.lowercase() != "srgb" -> "unsupported.image.color_profile"
+            pixelsOrientationState != "Applied" -> "unsupported.image.orientation"
+            pixelsContentHash.isBlank() -> "unsupported.image.pixel_facts_missing"
+            src.left < 0f || src.top < 0f || src.right <= src.left || src.bottom <= src.top ||
+                src.right > pixelsWidth.toFloat() || src.bottom > pixelsHeight.toFloat() -> "unsupported.image.src_bounds"
+            dst.right <= dst.left || dst.bottom <= dst.top -> "unsupported.image.dst_bounds"
             material.kind != GPUMaterialKind.ImageDraw -> "unsupported.material.source_unimplemented"
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
@@ -1981,7 +1995,15 @@ class GPUFirstRoutePlanner(
         const val imageDrawRenderStep = "image.draw.texture_upload"
 
         /** Transform classes accepted by the DrawImageRect route. */
-        val acceptedDrawImageRectTransformTypes = setOf(GPUTransformType.Identity, GPUTransformType.Translate)
+        val acceptedDrawImageRectTransformTypes = setOf(
+            GPUTransformType.Identity,
+            GPUTransformType.Translate,
+            GPUTransformType.Scale,
+            GPUTransformType.Affine,
+        )
+
+        /** Closed sampler filters represented by the prepared sampled-image semantic. */
+        val acceptedDrawImageSamplingFilters = setOf("nearest", "linear")
 
         /** Required capability fact for the native DrawLayer promotion route. */
         const val firstDrawLayerNativeCapabilityName = "first_slice.draw_layer.native_isolation"

@@ -1110,6 +1110,29 @@ sealed interface GPUDrawSemanticPayload {
         }
     }
 
+    /** Closed sampled-image semantic, retained without native texture or sampler handles. */
+    class SampledImage internal constructor(input: GPUPreparedImagePayloadInput) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "SampledImage"
+        override val payloadRef: GPUDrawPayloadRef = input.payloadRef.deepSnapshot()
+        val artifact = input.artifact
+        val geometry = input.geometry
+        val sampling = input.sampling
+        val tintPremultipliedRgba: List<Float> = immutableList(input.tintPremultipliedRgba)
+        val atlasColorPremultipliedRgba: List<Float>? = input.atlasColorPremultipliedRgba?.let(::immutableList)
+        val atlasSourceBlend = input.atlasSourceBlend
+        val targetBounds = input.targetBounds
+        val scissorBounds = input.scissorBounds
+        val blendPlanIdentity = input.blendPlanIdentity
+        val frameProvenance = input.frameProvenance
+        val pipelineKey: GPUPreparedImagePipelineKey = input.pipelineKey()
+        val canonicalHash: String = input.copy(payloadRef = payloadRef).canonicalHash()
+
+        fun stableDumpLine(): String = input.copy(payloadRef = payloadRef).stableDumpLine(canonicalHash)
+
+        fun hasCanonicalHashIntegrity(): Boolean =
+            canonicalHash == input.copy(payloadRef = payloadRef).canonicalHash()
+    }
+
     /** Exact immutable COLRv0 atlas, layer, indexed-geometry, and uniform payload. */
     class ColorGlyph internal constructor(
         payloadRef: GPUDrawPayloadRef,

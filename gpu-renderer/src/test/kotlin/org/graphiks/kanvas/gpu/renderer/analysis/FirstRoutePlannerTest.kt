@@ -55,6 +55,38 @@ import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 
 /** Verifies the first native FillRect analysis, route, and pass builder. */
 class FirstRoutePlannerTest {
+    /** Unsupported image sampling facts stay refused until the prepared semantic can represent them. */
+    @Test
+    fun `draw image rect rejects unsupported sampling facts before route selection`() {
+        val command = GPUDrawImageRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(70),
+            imageSourceId = IMAGE_DRAW_SOURCE_ID,
+            src = GPURect(left = 0f, top = 0f, right = 2f, bottom = 2f),
+            dst = GPURect(left = 2f, top = 3f, right = 18f, bottom = 21f),
+            target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            material = GPUMaterialDescriptor.ImageDraw(imageSourceId = IMAGE_DRAW_SOURCE_ID, imageWidth = 2, imageHeight = 2),
+            samplingTileModeX = "repeat",
+            samplingTileModeY = IMAGE_DRAW_SAMPLING_TILE_MODE_Y,
+            samplingFilterMode = "cubic",
+            samplingMipmapMode = "linear",
+            pixelsWidth = IMAGE_DRAW_PIXELS_WIDTH,
+            pixelsHeight = IMAGE_DRAW_PIXELS_HEIGHT,
+            pixelsFormat = IMAGE_DRAW_PIXELS_FORMAT,
+            pixelsRowBytes = IMAGE_DRAW_PIXELS_ROW_BYTES,
+            pixelsAlphaType = IMAGE_DRAW_PIXELS_ALPHA,
+            pixelsColorProfileLabel = IMAGE_DRAW_PIXELS_COLOR_PROFILE,
+            pixelsOrientationState = IMAGE_DRAW_PIXELS_ORIENTATION,
+            pixelsGeneration = IMAGE_DRAW_PIXELS_GENERATION,
+            pixelsContentHash = IMAGE_DRAW_PIXELS_CONTENT_HASH,
+            pixelsProvenance = IMAGE_DRAW_PIXELS_PROVENANCE,
+        )
+
+        val plan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command)
+
+        assertIs<GPURouteDecision.Refused>(plan.routeDecision)
+        assertEquals("unsupported.image.sampling_tile_mode", plan.pass.diagnostics.single().code)
+    }
+
     /** Accepted solid FillRect produces pre-materialization analysis, native route, and pass records only. */
     @Test
     fun `solid fill rect builds native route and draw pass without materialized resources`() {

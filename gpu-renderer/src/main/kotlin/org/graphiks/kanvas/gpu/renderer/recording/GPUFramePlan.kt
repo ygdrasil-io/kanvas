@@ -1142,6 +1142,32 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
             }
             list("weights", value.weights) { weight -> int("weightBits", weight.toRawBits()) }
         }
+        is GPUDrawSemanticPayload.SampledImage -> {
+            string("canonicalHash", value.canonicalHash)
+            string("artifactKey", value.artifact.key.value)
+            string("artifactContentHash", value.artifact.contentHash)
+            int("artifactWidth", value.artifact.width)
+            int("artifactHeight", value.artifact.height)
+            bool("artifactAlphaOnly", value.artifact.alphaOnly)
+            string("sampling", value.sampling.name)
+            string("geometryClass", value.geometry.geometryClass.name)
+            list("vertices", value.geometry.vertices) { vertex ->
+                int("xBits", vertex.x.toRawBits())
+                int("yBits", vertex.y.toRawBits())
+                int("uBits", vertex.u.toRawBits())
+                int("vBits", vertex.v.toRawBits())
+            }
+            list("indices", value.geometry.indices) { index -> int("index", index) }
+            list("tintPremultipliedRgba", value.tintPremultipliedRgba) { channel -> int("channelBits", channel.toRawBits()) }
+            nullable("atlasColorPremultipliedRgba", value.atlasColorPremultipliedRgba) { color ->
+                list("channels", color) { channel -> int("channelBits", channel.toRawBits()) }
+            }
+            nullableString("atlasSourceBlend", value.atlasSourceBlend?.name)
+            string("blendPlanIdentity", value.blendPlanIdentity)
+            string("frameProvenance", value.frameProvenance.annotationValue)
+            bounds("targetBounds", value.targetBounds)
+            bounds("scissorBounds", value.scissorBounds)
+        }
         is GPUDrawSemanticPayload.ColorGlyph -> {
             string("canonicalHash", value.canonicalHash)
             string("planArtifactId", value.planArtifactKey.artifactID.value.toString())
@@ -1480,6 +1506,8 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
                 "sigma=$effectiveSigma,taps=$tapCount,weights=${weights.joinToString(",")}," +
                 "sourcePremul=${sourcePremultipliedRgba.joinToString(",")}," +
                 "clearPremul=${clearPremultipliedRgba.joinToString(",")})"
+        is GPUDrawSemanticPayload.SampledImage ->
+            "$common,${stableDumpLine()})"
         is GPUDrawSemanticPayload.ColorGlyph ->
             "$common,colorGlyphHash=$canonicalHash," +
                 "plan=${planArtifactKey.artifactID.value}@${planArtifactKey.generation.value}/" +
