@@ -24,13 +24,16 @@ ne produit `legacy.surface.prepared.family.images` et `Images` n'appartient plus
 La route est livrée verticalement par tranches fermées :
 
 1. contrat sémantique image sans handle ;
-2. plan de ressource et préflight ;
-3. matérialiseur WebGPU/WGSL natif ;
-4. admission de `DrawImage` ;
-5. expansion transactionnelle de `DrawImageNine` puis
+2. frame préparée hétérogène et ordonnée, capable de combiner payloads solid
+   et image ;
+3. plan de ressource et préflight ;
+4. matérialiseur WebGPU/WGSL natif ;
+5. préparation complète de `DrawImage` ;
+6. expansion transactionnelle de `DrawImageNine` puis
    `DrawImageLattice` ;
-6. payload de quad texturé et migration affine complète de `DrawAtlas` ;
-7. retrait de la famille legacy `Images`.
+7. payload de quad texturé et migration affine complète de `DrawAtlas` ;
+8. admission produit atomique des quatre opérations et retrait de la famille
+   legacy `Images`.
 
 La route immédiate existante sert de source de comportement et de contre-preuve
 pour les défauts connus. Elle n'est ni appelée depuis la frame préparée, ni
@@ -45,6 +48,7 @@ La conception respecte :
 - `.upstream/specs/skia-like-realtime/README.md` ;
 - `.upstream/specs/gpu-renderer/18-texture-image-ownership.md` ;
 - `.upstream/specs/gpu-renderer/22-image-bitmap-codec-pipeline.md` ;
+- `.upstream/specs/gpu-renderer/29-color-management-pipeline.md` ;
 - `.upstream/specs/gpu-renderer/31-material-source-paint-pipeline.md` ;
 - `reports/upstream-rebaseline/graphite-dawn-frame-plan/active-todo.md`.
 
@@ -69,6 +73,13 @@ Les invariants sont :
 ouverte, `GPUOpMapper`, le builder sémantique et le dispatcher natif ne
 pourraient construire que les payloads `CorePrimitive`.
 
+Le dispatcher actuel sélectionne aussi une unique classe sémantique pour toute
+la frame et refuse `mixed-semantic-shape`. Or une frame normale peut alterner
+rectangles et images, et une seule lattice peut produire à la fois des cellules
+solid `FIXED_COLOR` et des cellules image. FP-04 doit donc généraliser la frame
+préparée à une suite hétérogène ordonnée ; ajouter seulement une branche image
+au dispatcher ne suffirait pas.
+
 Le code existant offre néanmoins des briques réutilisables :
 
 - `DrawImage` peut déjà être normalisé en `DrawImageRect` ;
@@ -91,20 +102,44 @@ native. Les noms définitifs suivront les conventions du paquet, mais le contrat
 doit contenir au minimum :
 
 - dimensions finies et non vides ;
-- format logique accepté : RGBA8 prémultiplié ou A8 alpha-only ;
+- format logique accepté : RGBA8 prémultiplié, BGRA8 prémultiplié ou A8
+  alpha-only ;
+- espace couleur source exactement `ColorSpace.SRGB` et orientation déjà
+  résolue à l'identité ;
 - row-bytes validé et taille de contenu bornée ;
 - snapshot immuable des octets nécessaires à l'upload ;
 - hash de contenu, génération et provenance ;
-- origine, swizzle et politique alpha explicites ;
+- origine, swizzle, orientation, espace couleur SDR et politique alpha
+  explicites ;
 - sous-rectangle source et domaine d'échantillonnage ;
 - classe d'échantillonnage `Nearest` ou `Linear` ;
 - transform, clip, paint, blend et ordre de draw capturés ;
 - clé d'artefact d'upload distincte de toute clé de pipeline.
 
 Le snapshot doit isoler la frame de toute mutation ultérieure de l'objet
-`Image`. Deux commandes qui désignent exactement le même contenu et la même
-génération peuvent partager un artefact d'upload. Un changement de contenu,
-format, dimensions, row-bytes ou génération force une identité différente.
+`Image`. Puisque `Image.pixels` est un `ByteArray` mutable et qu'`Image`
+n'expose pas aujourd'hui de génération, l'ordre est obligatoire :
+
+1. copie défensive des octets ;
+2. validation des dimensions, du row-bytes et de la longueur de la copie ;
+3. conversion physique acceptée ;
+4. hash de la copie convertie ;
+5. construction de l'identité d'artefact.
+
+Deux commandes qui désignent exactement le même contenu converti et la même
+génération logique peuvent partager un artefact d'upload. Un changement de
+contenu, format, dimensions, row-bytes ou génération force une identité
+différente.
+
+L'ABI physique FP-04 est RGBA8 prémultiplié :
+
+- RGBA8 est copié sans réordonnancement ;
+- BGRA8 est converti en RGBA8 au boundary de préparation ;
+- A8 est développé en RGBA8 en répliquant la couverture dans les quatre
+  canaux, tandis que le payload conserve `alphaOnly=true` pour la colorisation.
+
+Cette conversion est une préparation de pixels source, pas un rendu CPU de
+compatibilité.
 
 Les sources encodées peuvent alimenter ce contrat seulement après un décodage
 accepté par le propriétaire codec. FP-04 ne choisit pas un codec et ne masque
@@ -116,22 +151,27 @@ La somme fermée des payloads préparés gagne deux formes image :
 
 ### Rectangle image échantillonné
 
-Le payload porte quatre positions de destination rectangulaire, le domaine UV,
-le binding logique de la source, l'échantillonnage, le paint/blend et les faits
-de clip. Il sert à `DrawImage` et aux cellules image de nine/lattice.
+Le payload porte le rectangle destination local, le domaine UV, le transform
+affine, le binding logique de la source, l'échantillonnage, le paint/blend et
+les faits de clip. Il sert à `DrawImage` et aux cellules image de nine/lattice.
+Avant l'exécution, ses quatre coins sont transformés sans réduction à un
+rectangle englobant. Le chemin rect peut rester une optimisation exacte pour
+identité/translation/échelle alignée ; rotation, réflexion et skew utilisent le
+même quad texturé que l'atlas.
 
 ### Quad image échantillonné
 
 Le payload porte quatre positions de destination indépendantes, quatre
 coordonnées UV et deux triangles à winding déterministe. Il sert à
-`DrawAtlas`.
+`DrawAtlas` et à toute image rect/nine/lattice dont le transform affine ne
+préserve pas un rectangle aligné.
 
 Pour chaque sprite atlas, les quatre coins de `texRect` sont transformés par
 `op.transform * op.transforms[index]`. Toute matrice affine finie est acceptée :
 translation, échelle, rotation, réflexion et skew. Les positions transformées
 ne sont jamais remplacées par leur rectangle englobant. Les matrices avec
-perspective ne sont pas affines et produisent un refus typé tant qu'une route
-perspective indépendante n'est pas acceptée.
+perspective ne sont pas affines et produisent un refus typé pour les quatre
+opérations tant qu'une route perspective indépendante n'est pas acceptée.
 
 Les tableaux atlas ont un contrat strict :
 
@@ -145,6 +185,27 @@ Les couleurs par sprite, le paint optionnel, `blendMode`, le clip et l'ordre
 original sont conservés. Tous les sprites d'une opération partagent la même
 source image et le même sampler logique.
 
+La composition atlas est définie en prémultiplié :
+
+```text
+sample = sampleRgba(texel)
+       | colorizeA8(texel.a, paint.rgb)
+sprite = colors == null
+       ? sample
+       : blend(mode = DrawAtlas.blendMode, src = colors[index], dst = sample)
+source = applyPaintAlphaExactlyOnce(sprite, paint)
+output = blendToDestination(
+    mode = paint?.blendMode ?: SrcOver,
+    src = source,
+    dst = framebuffer
+)
+```
+
+Un color filter, image filter ou autre composant de paint non encore admis par
+la route préparée produit un refus typé ; il ne modifie pas silencieusement
+cette formule. Chaque blend mode accepté doit utiliser l'autorité blend
+commune. Un mode absent est refusé, jamais remplacé par `SrcOver`.
+
 ## Expansion image-nine et lattice
 
 L'expansion d'une opération logique est transactionnelle : la source, les
@@ -152,8 +213,10 @@ dimensions, les cellules, l'échantillonnage, les ressources et les limites sont
 validés avant toute mutation du builder.
 
 `DrawImageNine` réutilise la décomposition 3×3 existante. Chaque cellule image
-hérite du paint, du blend, du transform, du clip et du sampler de l'opération.
-Toutes les cellules partagent un artefact d'upload et une vue.
+hérite du paint, du blend, du transform et du clip de l'opération. L'API
+actuelle ne porte pas de sampling explicite ; son défaut normalisé FP-04 est
+`Linear`. Toutes les cellules partagent un artefact d'upload, une vue et ce
+sampler.
 
 `DrawImageLattice` conserve :
 
@@ -193,10 +256,23 @@ Le plan enregistre :
 - rétention jusqu'à la complétion de la soumission ;
 - politique de libération déterministe.
 
+Les clés de ressource sont séparées :
+
+- `UploadArtifactKey` identifie les octets physiques, le format, la taille et
+  la génération de la texture/view ;
+- `SamplerDescriptorKey` identifie uniquement filter/address/LOD/capacités du
+  sampler et permet son partage entre images compatibles ;
+- `BindingKey` identifie le layout, les slots et les ressources logiques liées
+  pour une consommation donnée.
+
+Le provider actuel qui agrège texture, vue, sampler, owner et binding dans une
+seule clé doit être adapté ; le partage de sampler ne peut pas rester une
+assertion documentaire.
+
 Dans FP-04, la durée garantie est celle de la soumission de frame. La route
-n'invente pas de cache inter-frame. FP-09 pourra réutiliser la texture et le
-sampler seulement avec une génération, un budget, une invalidation et une
-télémétrie explicites.
+n'invente pas de cache inter-frame. Toute promotion future de la réutilisation
+texture/sampler relève des règles FP-09 et exige génération, budget,
+invalidation et télémétrie explicites.
 
 Une même frame partage :
 
@@ -206,6 +282,25 @@ Une même frame partage :
 
 Les ressources de cellules nine/lattice et de sprites atlas ne sont jamais
 réuploadées par draw.
+
+## Frame hétérogène et ordre d'exécution
+
+Le builder produit une seule task list fermée dont chaque draw conserve son
+index d'ordre et sa forme sémantique. Le préflight valide l'ensemble de la
+frame et matérialise ses ressources globales avant l'encodage du premier draw.
+Le dispatcher choisit ensuite le matérialiseur par tâche, sans regrouper ni
+réordonner les draws par type.
+
+Une transition de pipeline solid ↔ image rect ↔ image quad est permise dans le
+même render pass lorsque target, clip, blend et attachment le permettent.
+Lorsqu'une frontière exige un autre pass, la task list porte explicitement la
+dépendance et conserve l'ordre observable. Les ressources image restent
+partageables entre les tâches.
+
+Le refus historique `mixed-semantic-shape` est retiré uniquement pour les
+combinaisons dont tous les payloads sont acceptés. Une combinaison contenant
+une forme inconnue ou incompatible refuse toute la frame avant allocation et
+avant encodage partiel.
 
 ## Matérialisation WebGPU et WGSL
 
@@ -226,7 +321,9 @@ native ; un label Kotlin non consommé n'est pas une preuve.
 Le shader traite :
 
 - RGBA8 prémultiplié ;
-- A8 alpha-only colorisé par le paint/tint ;
+- BGRA8 converti au boundary en RGBA8 ;
+- A8 développé physiquement en RGBA8 puis colorisé par le paint/tint grâce au
+  fait logique `alphaOnly` ;
 - alpha du paint ;
 - couleur par sprite atlas ;
 - UV rectangulaires ou quadrilatéraux ;
@@ -240,24 +337,56 @@ la géométrie affine et les UV corrects.
 
 ## Admission, refus et retrait legacy
 
-L'admission progresse seulement après preuve de la tranche correspondante.
-Pendant le développement, la gate peut rester fermée pour les tranches non
-achevées. Une fois une opération admise, ses cas non supportés ne reviennent
-jamais à `GPULegacyImmediatePathAdapter` : ils produisent une issue préparée
-stable.
+Le produit route aujourd'hui la frame entière : une seule opération legacy
+envoie aussi les opérations autrement préparables vers le renderer immédiat.
+Pour éviter cette régression, FP-04 ne fait aucune admission produit partielle.
+Les tranches sont testées sous la gate via leurs builders, task lists,
+préflighters et matérialiseurs dédiés. La gate des images reste fermée jusqu'à
+ce que les quatre opérations et les frames mixtes soient prêtes.
+
+La bascule produit est atomique : dans le même changement, les quatre
+opérations deviennent prepared-or-refused et `Images` quitte l'allowlist. Dès
+cette bascule, aucun cas image non supporté ne revient à
+`GPULegacyImmediatePathAdapter`.
 
 Les refus minimaux couvrent :
 
 - pixels absents ou snapshot impossible ;
 - dimensions, row-bytes, format ou contenu invalides ;
+- color space autre que SDR sRGB, profil ICC/CICP non résolu ou orientation
+  non appliquée ;
+- source YUV/YUVA, HDR, gainmap, codec/animation non préparée ou texture
+  importée sans contrat accepté ;
 - budget d'upload ou limite texture dépassés ;
 - génération de device/target incompatible ;
 - usage, owner, lifetime ou binding incomplet ;
 - sampling cubic, anisotrope ou mipmap non accepté ;
-- matrice perspective atlas ;
+- matrice perspective pour image, nine, lattice ou atlas ;
 - longueurs atlas incohérentes ;
 - géométrie nine/lattice invalide ;
 - capacité native ou validation WGSL absente.
+
+FP-04 réutilise les codes autoritatifs lorsqu'ils existent, notamment :
+
+- `unsupported.image.pixel.format`,
+  `unsupported.image.pixel.row_stride` et
+  `unsupported.image.upload.budget_exceeded` ;
+- `unsupported.color.gamut_transform`,
+  `unsupported.color.image_profile_conversion` et
+  `unsupported.image.orientation` ;
+- `unsupported.color.yuv_conversion`,
+  `unsupported.color.hdr_transfer` et `unsupported.color.gainmap` ;
+- `unsupported.image.codec.unregistered` et
+  `unsupported.image.animation.not_requested` ;
+- `unsupported.texture.import_unvalidated` ;
+- `unsupported.image.mip_required`,
+  `unsupported.image.sampling_cubic`,
+  `unsupported.image.sampling_anisotropic` et
+  `unsupported.image.perspective_sampling`.
+
+Les nouvelles erreurs propres à l'expansion logique, comme une longueur atlas
+incohérente, reçoivent un code `unsupported.image.*` stable testé par valeur
+exacte.
 
 Le retrait final est atomique :
 
@@ -274,9 +403,13 @@ La preuve FP-04 combine tests de contrats, route et pixels.
 
 ### Contrats et plan
 
+- ordre copie défensive → validation → conversion → hash ;
 - snapshot immuable et identité générationnelle ;
+- RGBA8, BGRA8→RGBA8 et A8→RGBA8 avec tag alpha-only ;
+- SDR sRGB accepté et profils/orientations/HDR/YUV refusés explicitement ;
 - hash et dump déterministes ;
 - absence de pixels, handles et identité de ressource dans `PipelineKey` ;
+- clés distinctes upload/sampler/binding ;
 - upload placé avant tous ses consommateurs ;
 - partage texture/view/sampler ;
 - absence d'upload pour les cellules lattice fixed-color ;
@@ -286,6 +419,8 @@ La preuve FP-04 combine tests de contrats, route et pixels.
 ### Route préparée
 
 - mapper → payload → task list → préflight → dispatcher natif ;
+- frames mixtes `solid + image` et alternance rect/quad sans réordonnancement ;
+- lattice mixed-payload fixed-color + sampled-image ;
 - sélection nearest/linear observable ;
 - bind group texture/sampler conforme à l'ABI ;
 - aucune invocation legacy après admission ;
@@ -297,8 +432,9 @@ La preuve FP-04 combine tests de contrats, route et pixels.
 - A8 tint, paint alpha et blend ;
 - image-nine normale et dégénérée acceptée/refusée selon contrat ;
 - lattice sampled/fixed-color/transparent ;
+- transforms affines image/nine/lattice sans rectangle englobant ;
 - atlas identité, translation, échelle, rotation, réflexion et skew ;
-- atlas colors + blend, clip et ordre ;
+- atlas colors × texel, paint alpha, destination blend, clip et ordre ;
 - comparaison CPU/référence/GPU avec diff et statistiques explicites.
 
 Les preuves pixels doivent également enregistrer la route préparée pour éviter
@@ -312,22 +448,24 @@ toolchain JDK 25 et `--dependency-verification=off`, conformément au périmètr
 de branche. Le crash natif de recréation de device/session déjà affecté à
 FP-09 reste une classe d'échec distincte.
 
-## Travail ultérieur explicitement attribué
+## Suivi ultérieur et non-attributions
 
-FP-04 ne réduit pas la cible image finale. Les extensions sont réparties ainsi :
+FP-04 ne réduit pas la cible image finale. Les autorités actives permettent
+seulement les attributions conditionnelles suivantes :
 
-- FP-09 : session réutilisable et cache image/sampler inter-frame borné ;
-- FP-10 : mipmaps, cubic/anisotrope et activation des modes image-shader
-  Repeat/Mirror/Decal non consommés par FP-04 ;
-- FP-11 : preuves visuelles et performance de la candidate finale ;
-- pipeline codec/image : décodage et animation selon les dépendances réelles ;
-- M35/M36 : activation HDR/YUV après preuves produit ;
-- future spécification de façade : textures importées et synchronisation
-  externe.
+- FP-09 régit session, génération, réutilisation et compteurs de cache ; un
+  cache image/sampler inter-frame ne peut être promu que dans ce cadre avec
+  budget, invalidation et télémétrie ;
+- FP-10 régit toute expansion acceptée des gaps natifs retenus ; mipmaps,
+  cubic/anisotrope et activation des modes image-shader Repeat/Mirror/Decal
+  sont des candidats, pas des promesses déjà ajoutées à son acceptance ;
+- FP-11 régit les preuves visuelles et performance de la candidate finale.
 
-Les codecs/animations, HDR/YUV et textures importées ne possèdent pas
-actuellement d'échéance dans la TODO FP-04…FP-11. Cette absence doit rester
-visible ; elle ne doit pas être transformée en promesse implicite.
+Codecs/animations, HDR/YUV et textures importées ne sont attribués à aucun item
+de la TODO FP-04…FP-11. Ils restent régis par les specs image, couleur,
+ownership et ABI, avec refus stables, jusqu'à ce qu'une future décision active
+les planifie. Les anciens noms de milestone ou tickets ne doivent pas servir de
+date, de backlog actif ou de promesse implicite.
 
 ## Alternatives rejetées
 
@@ -343,7 +481,7 @@ legacy, sans ownership préparé ni upload-before-sample vérifiable.
 
 ### Limiter atlas à translation/échelle
 
-Rejeté après décision utilisateur : FP-04 inclut un vrai quad texturé pour toute
+Rejeté par cette conception : FP-04 inclut un vrai quad texturé pour toute
 matrice affine finie. Le rectangle englobant legacy n'est pas une
 implémentation acceptable de rotation/skew.
 
