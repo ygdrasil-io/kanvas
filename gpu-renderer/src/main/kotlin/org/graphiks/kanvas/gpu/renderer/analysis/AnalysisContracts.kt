@@ -1155,15 +1155,18 @@ class GPUFirstRoutePlanner(
                 "unsupported.image.pixels_descriptor_invalid"
             samplingTileModeX != "clamp" || samplingTileModeY != "clamp" ->
                 "unsupported.image.sampling_tile_mode"
+            samplingFilterMode == "cubic" -> "unsupported.image.sampling_cubic"
             samplingFilterMode !in acceptedDrawImageSamplingFilters ->
                 "unsupported.image.sampling_filter"
             samplingMipmapMode != "none" -> "unsupported.image.sampling_mipmap"
+            samplingAnisotropy != 1 -> "unsupported.image.sampling_anisotropy"
             pixelsFormat != "RGBA8Unorm" -> "unsupported.image.pixels_format"
             pixelsRowBytes < pixelsWidth.toLong() * 4L -> "unsupported.image.pixels_descriptor_invalid"
             pixelsAlphaType != "Premul" -> "unsupported.image.alpha_type"
             pixelsColorProfileLabel.lowercase() != "srgb" -> "unsupported.image.color_profile"
             pixelsOrientationState != "Applied" -> "unsupported.image.orientation"
-            pixelsContentHash.isBlank() -> "unsupported.image.pixel_facts_missing"
+            pixelsContentHash.isBlank() || pixelsProvenance.isBlank() || pixelsGeneration < 0L ->
+                "unsupported.image.pixel_facts_missing"
             src.left < 0f || src.top < 0f || src.right <= src.left || src.bottom <= src.top ||
                 src.right > pixelsWidth.toFloat() || src.bottom > pixelsHeight.toFloat() -> "unsupported.image.src_bounds"
             dst.right <= dst.left || dst.bottom <= dst.top -> "unsupported.image.dst_bounds"

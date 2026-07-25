@@ -87,6 +87,29 @@ class FirstRoutePlannerTest {
         assertEquals("unsupported.image.sampling_tile_mode", plan.pass.diagnostics.single().code)
     }
 
+    /** Cubic, mipmap, and anisotropic sampling remain explicit refusals in the prepared lane. */
+    @Test
+    fun `draw image rect uses dedicated unsupported sampler refusal codes`() {
+        val base = GPUDrawImageRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(71), imageSourceId = IMAGE_DRAW_SOURCE_ID,
+            src = GPURect(0f, 0f, 2f, 2f), dst = GPURect(2f, 3f, 18f, 21f),
+            target = GPUTargetFacts(64, 64, "rgba8unorm"),
+            material = GPUMaterialDescriptor.ImageDraw(IMAGE_DRAW_SOURCE_ID, 2, 2),
+            pixelsWidth = IMAGE_DRAW_PIXELS_WIDTH, pixelsHeight = IMAGE_DRAW_PIXELS_HEIGHT,
+            pixelsFormat = IMAGE_DRAW_PIXELS_FORMAT, pixelsRowBytes = IMAGE_DRAW_PIXELS_ROW_BYTES,
+            pixelsAlphaType = IMAGE_DRAW_PIXELS_ALPHA, pixelsColorProfileLabel = IMAGE_DRAW_PIXELS_COLOR_PROFILE,
+            pixelsOrientationState = IMAGE_DRAW_PIXELS_ORIENTATION, pixelsGeneration = IMAGE_DRAW_PIXELS_GENERATION,
+            pixelsContentHash = IMAGE_DRAW_PIXELS_CONTENT_HASH, pixelsProvenance = IMAGE_DRAW_PIXELS_PROVENANCE,
+        )
+        fun refusal(command: NormalizedDrawCommand.DrawImageRect) =
+            GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command).pass.diagnostics.single().code
+
+        assertEquals("unsupported.image.sampling_cubic", refusal(base.copy(samplingFilterMode = "cubic")))
+        assertEquals("unsupported.image.sampling_mipmap", refusal(base.copy(samplingMipmapMode = "linear")))
+        assertEquals("unsupported.image.sampling_anisotropy", refusal(base.copy(samplingAnisotropy = 2)))
+        assertEquals("unsupported.image.pixel_facts_missing", refusal(base.copy(pixelsProvenance = "")))
+    }
+
     /** Accepted solid FillRect produces pre-materialization analysis, native route, and pass records only. */
     @Test
     fun `solid fill rect builds native route and draw pass without materialized resources`() {

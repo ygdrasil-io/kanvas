@@ -3860,6 +3860,10 @@ internal class GPUFramePreflighter(
                 validateRegisteredUniformRectSemanticPayload(render, packet, semantic)
             is GPUDrawSemanticPayload.SeparableBlurRect ->
                 validateSeparableBlurRectSemanticPayload(packet, semantic)
+            is GPUDrawSemanticPayload.SampledImage -> diagnostic(
+                "unsupported.preflight.sampled_image_unmaterialized",
+                "Prepared sampled-image semantics have no executable native materialization route.",
+            )
             is GPUDrawSemanticPayload.ColorGlyph ->
                 validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
         }

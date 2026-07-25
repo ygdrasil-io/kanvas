@@ -68,6 +68,35 @@ data class GPUPreparedImagePayloadInput(
     val frameProvenance: GPUFrameProvenance,
 )
 
+/** Complete immutable snapshot retained by the semantic after the caller's mutable input is released. */
+internal class GPUPreparedImagePayloadSnapshot(input: GPUPreparedImagePayloadInput) {
+    val payloadRef: GPUDrawPayloadRef = input.payloadRef
+    val artifact: GPUPreparedImageUploadArtifact = input.artifact
+    val geometry: GPUPreparedImageGeometry = input.geometry
+    val sampling: GPUPreparedImageSampling = input.sampling
+    val tintPremultipliedRgba: List<Float> = immutableList(input.tintPremultipliedRgba)
+    val atlasColorPremultipliedRgba: List<Float>? = input.atlasColorPremultipliedRgba?.let(::immutableList)
+    val atlasSourceBlend: GPUPreparedAtlasSourceBlend? = input.atlasSourceBlend
+    val targetBounds: GPUPixelBounds = input.targetBounds
+    val scissorBounds: GPUPixelBounds = input.scissorBounds
+    val blendPlanIdentity: String = input.blendPlanIdentity
+    val frameProvenance: GPUFrameProvenance = input.frameProvenance
+
+    fun toInput(): GPUPreparedImagePayloadInput = GPUPreparedImagePayloadInput(
+        payloadRef = payloadRef,
+        artifact = artifact,
+        geometry = geometry,
+        sampling = sampling,
+        tintPremultipliedRgba = tintPremultipliedRgba,
+        atlasColorPremultipliedRgba = atlasColorPremultipliedRgba,
+        atlasSourceBlend = atlasSourceBlend,
+        targetBounds = targetBounds,
+        scissorBounds = scissorBounds,
+        blendPlanIdentity = blendPlanIdentity,
+        frameProvenance = frameProvenance,
+    )
+}
+
 /** Produces the closed sampled-image semantic without inspecting or creating a native handle. */
 class GPUPreparedImagePayloadGatherer {
     fun gatherSemantic(input: GPUPreparedImagePayloadInput): GPUDrawSemanticPayload.SampledImage {
@@ -146,8 +175,17 @@ internal fun GPUPreparedImagePayloadInput.canonicalHash(): String = preparedImag
 
 internal fun GPUPreparedImagePayloadInput.stableDumpLine(canonicalHash: String): String =
     "payload.sampled-image hash=$canonicalHash artifact=${artifact.key.value} content=${artifact.contentHash} " +
-        "geometry=${geometry.geometryClass.name} vertices=${geometry.vertices.size} indices=${geometry.indices.joinToString(",")} " +
-        "sampling=${sampling.name} alphaOnly=${artifact.alphaOnly} atlasBlend=${atlasSourceBlend?.name ?: "none"} " +
+        "artifactDimensions=${artifact.width}x${artifact.height} artifactGeneration=${artifact.sourceGeneration} " +
+        "artifactFormat=$GPU_PREPARED_IMAGE_TARGET_FORMAT artifactLayout=${artifact.pixelLayout.sourceRowBytes}," +
+        "${artifact.pixelLayout.normalizedRgba8RowBytes},${artifact.pixelLayout.rowCount} " +
+        "artifactAlphaOnly=${artifact.alphaOnly} artifactInterpretation=${artifact.colorInterpretation} " +
+        "geometry=${geometry.geometryClass.name} " +
+        geometry.vertices.mapIndexed { index, vertex ->
+            "vertex$index=${vertex.x.toRawBits()},${vertex.y.toRawBits()},${vertex.u.toRawBits()},${vertex.v.toRawBits()}"
+        }.joinToString(" ") + " indices=${geometry.indices.joinToString(",")} " +
+        "sampling=${sampling.name} tint=${tintPremultipliedRgba.joinToString(",") { it.toRawBits().toString() }} " +
+        "atlasColor=${atlasColorPremultipliedRgba?.joinToString(",") { it.toRawBits().toString() } ?: "none"} " +
+        "atlasBlend=${atlasSourceBlend?.name ?: "none"} " +
         "blend=$blendPlanIdentity target=$targetBounds scissor=$scissorBounds provenance=${frameProvenance.annotationValue}"
 
 private fun List<Float>.isFinitePremultipliedRgba(): Boolean =

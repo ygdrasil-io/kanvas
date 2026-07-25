@@ -58,6 +58,8 @@ class GPUPreparedImagePayloadTest {
         color[0] = 0f
 
         assertEquals(0.25f, semantic.tintPremultipliedRgba[0])
+        assertTrue(semantic.hasCanonicalHashIntegrity())
+        assertContains(semantic.stableDumpLine(), "tint=${0.25f.toRawBits()}")
         assertFailsWith<IllegalArgumentException> { payload(tint = listOf(1f, 0f, 0f, 0.5f)) }
         assertFailsWith<IllegalArgumentException> { payload(tint = listOf(Float.NaN, 0f, 0f, 1f)) }
     }
@@ -69,6 +71,10 @@ class GPUPreparedImagePayloadTest {
 
         assertContains(dump, semantic.artifact.key.value)
         assertContains(dump, semantic.artifact.contentHash)
+        assertContains(dump, "artifactGeneration=2")
+        assertContains(dump, "artifactLayout=4,4,1")
+        assertContains(dump, "vertex0=0,0,0,0")
+        assertContains(dump, "tint=${1f.toRawBits()}")
         assertContains(dump, "sampling=Nearest")
         assertTrue(!dump.contains("8, 7, 6, 5"))
     }

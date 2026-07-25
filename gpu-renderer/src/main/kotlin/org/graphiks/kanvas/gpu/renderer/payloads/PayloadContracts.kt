@@ -1114,23 +1114,24 @@ sealed interface GPUDrawSemanticPayload {
     class SampledImage internal constructor(input: GPUPreparedImagePayloadInput) : GPUDrawSemanticPayload {
         override val canonicalType: String = "SampledImage"
         override val payloadRef: GPUDrawPayloadRef = input.payloadRef.deepSnapshot()
-        val artifact = input.artifact
-        val geometry = input.geometry
-        val sampling = input.sampling
-        val tintPremultipliedRgba: List<Float> = immutableList(input.tintPremultipliedRgba)
-        val atlasColorPremultipliedRgba: List<Float>? = input.atlasColorPremultipliedRgba?.let(::immutableList)
-        val atlasSourceBlend = input.atlasSourceBlend
-        val targetBounds = input.targetBounds
-        val scissorBounds = input.scissorBounds
-        val blendPlanIdentity = input.blendPlanIdentity
-        val frameProvenance = input.frameProvenance
-        val pipelineKey: GPUPreparedImagePipelineKey = input.pipelineKey()
-        val canonicalHash: String = input.copy(payloadRef = payloadRef).canonicalHash()
+        private val snapshot = GPUPreparedImagePayloadSnapshot(input.copy(payloadRef = payloadRef))
+        val artifact = snapshot.artifact
+        val geometry = snapshot.geometry
+        val sampling = snapshot.sampling
+        val tintPremultipliedRgba: List<Float> = snapshot.tintPremultipliedRgba
+        val atlasColorPremultipliedRgba: List<Float>? = snapshot.atlasColorPremultipliedRgba
+        val atlasSourceBlend = snapshot.atlasSourceBlend
+        val targetBounds = snapshot.targetBounds
+        val scissorBounds = snapshot.scissorBounds
+        val blendPlanIdentity = snapshot.blendPlanIdentity
+        val frameProvenance = snapshot.frameProvenance
+        val pipelineKey: GPUPreparedImagePipelineKey = snapshot.toInput().pipelineKey()
+        val canonicalHash: String = snapshot.toInput().canonicalHash()
 
-        fun stableDumpLine(): String = input.copy(payloadRef = payloadRef).stableDumpLine(canonicalHash)
+        fun stableDumpLine(): String = snapshot.toInput().stableDumpLine(canonicalHash)
 
         fun hasCanonicalHashIntegrity(): Boolean =
-            canonicalHash == input.copy(payloadRef = payloadRef).canonicalHash()
+            canonicalHash == snapshot.toInput().canonicalHash()
     }
 
     /** Exact immutable COLRv0 atlas, layer, indexed-geometry, and uniform payload. */
