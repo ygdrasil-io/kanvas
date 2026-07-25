@@ -1,6 +1,6 @@
 # Graphite/Dawn Frame Plan Active TODO
 
-Last updated: 2026-07-23
+Last updated: 2026-07-25
 
 This is the active, branch-specific backlog for
 `codex/graphite-dawn-frame-plan-design`. Items are processed strictly in the
