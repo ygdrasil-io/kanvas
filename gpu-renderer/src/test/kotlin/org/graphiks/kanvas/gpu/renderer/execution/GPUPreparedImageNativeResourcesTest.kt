@@ -1,0 +1,273 @@
+package org.graphiks.kanvas.gpu.renderer.execution
+
+import io.ygdrasil.webgpu.GPUBindGroup
+import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUSampler
+import io.ygdrasil.webgpu.GPUTexture
+import io.ygdrasil.webgpu.GPUTextureView
+import java.lang.reflect.Proxy
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.images.AlphaType
+import org.graphiks.kanvas.gpu.renderer.images.GPUImageUploadArtifactKey
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactFactory
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageOrientation
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProfile
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProvenance
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingInput
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.buildPreparedImageFrameResourcePlanFromBindings
+
+class GPUPreparedImageNativeResourcesTest {
+    @Test
+    fun `native keys split upload sampler binding and uniform offsets`() {
+        val fixture = fixture(
+            listOf(
+                GPUPreparedImageBindingInput("packet.nearest", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
+            ),
+        )
+        val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
+        )
+
+        assertEquals(1, seal.uploadKeys.toSet().size)
+        assertEquals(2, seal.samplerKeysByPacketId.values.toSet().size)
+        assertEquals(2, seal.bindingKeysByPacketId.values.toSet().size)
+        assertTrue(seal.uploadKeys.all { it.deviceGeneration == 7L })
+        assertTrue(seal.samplerKeysByPacketId.values.all { it.deviceGeneration == 7L })
+
+        val resources = seal.materialize(RecordingFactory())
+        assertEquals(seal.uploadKeys.single(), resources.uploadKey(fixture.artifactKey))
+        assertSame(resources.texture(fixture.artifactKey), resources.texture(fixture.artifactKey))
+        assertEquals(0L, resources.dynamicUniformOffset("packet.nearest"))
+        assertEquals(256L, resources.dynamicUniformOffset("packet.linear"))
+        resources.close()
+    }
+
+    @Test
+    fun `same sampler shares binding key while uniforms keep distinct aligned offsets`() {
+        val fixture = fixture(
+            listOf(
+                GPUPreparedImageBindingInput("packet.tint.a", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.tint.b", GPUPreparedImageSampling.Nearest),
+            ),
+        )
+        val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
+        )
+
+        assertEquals(1, seal.bindingKeysByPacketId.values.toSet().size)
+        val factory = RecordingFactory()
+        val resources = seal.materialize(factory)
+        assertSame(resources.binding("packet.tint.a"), resources.binding("packet.tint.b"))
+        assertEquals(listOf(0L, 256L), listOf(
+            resources.dynamicUniformOffset("packet.tint.a"),
+            resources.dynamicUniformOffset("packet.tint.b"),
+        ))
+        assertEquals(1, factory.bindGroupCreates)
+        resources.close()
+    }
+
+    @Test
+    fun `device generation changes upload sampler and binding keys`() {
+        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val first = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
+        )
+        val next = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(
+                fixture.request.copy(expectedDeviceGeneration = 8, actualDeviceGeneration = 8),
+            ),
+        )
+
+        assertNotEquals(first.uploadKeys.single(), next.uploadKeys.single())
+        assertNotEquals(
+            first.samplerKeysByPacketId.getValue("packet.image"),
+            next.samplerKeysByPacketId.getValue("packet.image"),
+        )
+        assertNotEquals(
+            first.bindingKeysByPacketId.getValue("packet.image"),
+            next.bindingKeysByPacketId.getValue("packet.image"),
+        )
+    }
+
+    @Test
+    fun `all attachment usage limit owner and generation mismatches refuse before factory`() {
+        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val badUsage = fixture.plan.copy(
+            textureDescriptor = fixture.plan.textureDescriptor.copy(usageLabels = setOf("copy_dst")),
+        )
+        val cases = listOf(
+            "unsupported.prepared_image.active_attachment" to fixture.request.copy(
+                activeAttachment = fixture.plan.frameTextureRef,
+            ),
+            "unsupported.prepared_image.texture_usage" to fixture.request.copy(resourcePlan = badUsage),
+            "unsupported.prepared_image.device_limit" to fixture.request.copy(
+                capabilities = capabilities(maxTextureDimension2D = 1),
+            ),
+            "unsupported.prepared_image.owner_mismatch" to fixture.request.copy(actualOwner = "foreign-owner"),
+            "unsupported.prepared_image.device_generation" to fixture.request.copy(actualDeviceGeneration = 8),
+            "unsupported.prepared_image.resource_generation" to fixture.request.copy(actualResourceGeneration = 4),
+        )
+        val factory = RecordingFactory()
+
+        cases.forEach { (reason, request) ->
+            val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
+                GPUPreparedImageNativeResourcePreflighter.preflight(request),
+            )
+            assertEquals(reason, refused.reasonCode)
+        }
+        assertEquals(0, factory.createCalls)
+    }
+
+    @Test
+    fun `partial factory failure closes every created handle once in reverse order`() {
+        val fixture = fixture(
+            listOf(
+                GPUPreparedImageBindingInput("packet.nearest", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
+            ),
+        )
+        val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
+            GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
+        )
+        val events = mutableListOf<String>()
+        val factory = RecordingFactory(events, failOnSecondBindGroup = true)
+
+        assertFailsWith<IllegalStateException> { seal.materialize(factory) }
+        assertEquals(
+            factory.createdLabels.asReversed(),
+            events,
+        )
+        assertEquals(events.size, events.toSet().size)
+    }
+
+    private fun fixture(bindings: List<GPUPreparedImageBindingInput>): Fixture {
+        val artifact = (GPUPreparedImageArtifactFactory.prepare(
+            GPUPreparedImageSourceInput(
+                sourceClass = GPUPreparedImageSourceClass.DecodedCpu,
+                sourceId = "native-resources",
+                width = 2,
+                height = 2,
+                sourceFormat = GPUPreparedImageSourceFormat.Rgba8,
+                alphaType = AlphaType.PREMUL,
+                sourceRowBytes = 8,
+                profile = GPUPreparedImageProfile.Srgb,
+                orientation = GPUPreparedImageOrientation.AppliedIdentity,
+                provenance = GPUPreparedImageProvenance.CallerPixels,
+                sourceGeneration = 3,
+                pixelBytes = ByteArray(16) { it.toByte() },
+            ),
+        ) as GPUPreparedImageArtifactResult.Ready).artifact
+        val caps = capabilities()
+        val plan = buildPreparedImageFrameResourcePlanFromBindings(
+            artifact = artifact,
+            bindingInputs = bindings,
+            bindingLayoutHash = "layout.image",
+            capabilities = caps,
+            frameIdentity = "frame.native-resources",
+            uploadTaskId = GPUTaskID("task.upload.image"),
+        )
+        return Fixture(
+            artifact.key,
+            plan,
+            GPUPreparedImageNativePreflightRequest(
+                resourcePlan = plan,
+                artifactKey = artifact.key,
+                capabilities = caps,
+                expectedDeviceGeneration = 7,
+                actualDeviceGeneration = 7,
+                expectedResourceGeneration = 3,
+                actualResourceGeneration = 3,
+                expectedOwner = "prepared-image-frame",
+                actualOwner = "prepared-image-frame",
+            ),
+        )
+    }
+
+    private fun capabilities(maxTextureDimension2D: Long = 8192) = GPUCapabilities(
+        implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),
+        facts = emptyList(),
+        snapshotId = "prepared-image-native-resources",
+        limits = GPULimits(
+            maxTextureDimension2D = maxTextureDimension2D,
+            copyBytesPerRowAlignment = 256,
+            minUniformBufferOffsetAlignment = 256,
+            maxBufferSize = 1L shl 30,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+        ),
+    )
+
+    private data class Fixture(
+        val artifactKey: GPUImageUploadArtifactKey,
+        val plan: GPUPreparedImageFrameResourcePlan,
+        val request: GPUPreparedImageNativePreflightRequest,
+    )
+
+    private class RecordingFactory(
+        private val closeEvents: MutableList<String> = mutableListOf(),
+        private val failOnSecondBindGroup: Boolean = false,
+    ) : GPUPreparedImageNativeHandleFactory {
+        var createCalls = 0
+        var bindGroupCreates = 0
+        val createdLabels = mutableListOf<String>()
+
+        override fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture =
+            handle("texture")
+
+        override fun createTextureView(
+            texture: GPUTexture,
+            request: GPUPreparedImageFrameResourcePlan,
+        ): GPUTextureView = handle("texture-view")
+
+        override fun createSampler(descriptor: GPUSamplerDescriptor): GPUSampler =
+            handle("sampler.${descriptor.magFilter}")
+
+        override fun createUniformBuffer(size: Long): GPUBuffer = handle("uniform-buffer")
+
+        override fun createBindGroup(
+            request: GPUPreparedImageBindingRequest,
+            uniformBuffer: GPUBuffer,
+            textureView: GPUTextureView,
+            sampler: GPUSampler,
+        ): GPUBindGroup {
+            bindGroupCreates += 1
+            if (failOnSecondBindGroup && bindGroupCreates == 2) error("bind-group failure")
+            return handle("bind-group.${request.sampler.magFilter}")
+        }
+
+        private inline fun <reified T> handle(label: String): T {
+            createCalls += 1
+            createdLabels += label
+            return Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { proxy, method, args ->
+                when (method.name) {
+                    "close" -> {
+                        closeEvents += label
+                        Unit
+                    }
+                    "toString" -> label
+                    "hashCode" -> System.identityHashCode(proxy)
+                    "equals" -> proxy === args?.singleOrNull()
+                    else -> null
+                }
+            } as T
+        }
+    }
+}

@@ -187,7 +187,9 @@ class GPUConcreteResourceProvider(
     private val nullBufferKeys = linkedSetOf<String>()
     private val uniformSlabLeases = linkedMapOf<GPUUniformSlabLeaseCacheKey, GPUResourceLease>()
     private val bindGroupLeases = linkedMapOf<GPUBindGroupLeaseCacheKey, GPUResourceLease>()
-    private val textureSamplerLeaseKeys = linkedSetOf<GPUTextureSamplerLeaseCacheKey>()
+    private val preparedImageUploadLeaseKeys = linkedSetOf<GPUPreparedImageUploadLeaseCacheKey>()
+    private val preparedImageSamplerLeaseKeys = linkedSetOf<GPUPreparedImageSamplerLeaseCacheKey>()
+    private val preparedImageBindingLeaseKeys = linkedSetOf<GPUPreparedImageBindingLeaseCacheKey>()
     private val intermediateTextureLeases = linkedMapOf<GPUIntermediateTextureLeaseCacheKey, GPUResourceLease>()
     private var mutableTelemetry = GPUConcreteResourceProviderTelemetry()
 
@@ -932,8 +934,24 @@ class GPUConcreteResourceProvider(
         val decision = textureSamplerProvider.materializeTextureSamplerBinding(request, context)
         return when (decision) {
             is GPUResourceMaterializationDecision.Materialized -> {
-                val cacheKey = GPUTextureSamplerLeaseCacheKey.from(request)
-                val cacheResult = if (textureSamplerLeaseKeys.add(cacheKey)) {
+                val uploadKey = GPUPreparedImageUploadLeaseCacheKey.from(request)
+                val samplerKey = GPUPreparedImageSamplerLeaseCacheKey.from(request)
+                val bindingKey = GPUPreparedImageBindingLeaseCacheKey(
+                    request.bindingLayoutHash,
+                    uploadKey,
+                    samplerKey,
+                )
+                val uploadCacheResult = if (preparedImageUploadLeaseKeys.add(uploadKey)) {
+                    GPUResourceLeaseCacheResult.Create
+                } else {
+                    GPUResourceLeaseCacheResult.Reuse
+                }
+                val samplerCacheResult = if (preparedImageSamplerLeaseKeys.add(samplerKey)) {
+                    GPUResourceLeaseCacheResult.Create
+                } else {
+                    GPUResourceLeaseCacheResult.Reuse
+                }
+                val bindingCacheResult = if (preparedImageBindingLeaseKeys.add(bindingKey)) {
                     GPUResourceLeaseCacheResult.Create
                 } else {
                     GPUResourceLeaseCacheResult.Reuse
@@ -947,7 +965,7 @@ class GPUConcreteResourceProvider(
                         ownerScope = request.ownership.ownerLabel,
                         usageLabels = request.requiredTextureUsageLabelsForProvider(),
                         releasePolicy = request.ownership.releasePolicy,
-                        cacheResult = cacheResult,
+                        cacheResult = uploadCacheResult,
                     ),
                     GPUResourceLease(
                         leaseId = "texture-view:${request.binding.bindingLabel}",
@@ -957,7 +975,7 @@ class GPUConcreteResourceProvider(
                         ownerScope = request.ownership.ownerLabel,
                         usageLabels = listOf("texture_binding"),
                         releasePolicy = request.ownership.releasePolicy,
-                        cacheResult = cacheResult,
+                        cacheResult = uploadCacheResult,
                     ),
                     GPUResourceLease(
                         leaseId = "sampler:${request.binding.bindingLabel}",
@@ -967,13 +985,25 @@ class GPUConcreteResourceProvider(
                         ownerScope = "sampler-cache",
                         usageLabels = listOf("sampler"),
                         releasePolicy = "descriptor-cache",
-                        cacheResult = cacheResult,
+                        cacheResult = samplerCacheResult,
                     ),
                 )
                 record(
-                    lane = "texture-sampler",
-                    result = cacheResult.dumpToken,
-                    keyHash = cacheKey.dumpToken(),
+                    lane = "prepared-image-upload",
+                    result = uploadCacheResult.dumpToken,
+                    keyHash = uploadKey.dumpToken(),
+                    subjectHash = request.binding.bindingLabel,
+                )
+                record(
+                    lane = "prepared-image-sampler",
+                    result = samplerCacheResult.dumpToken,
+                    keyHash = samplerKey.dumpToken(),
+                    subjectHash = request.binding.bindingLabel,
+                )
+                record(
+                    lane = "prepared-image-binding",
+                    result = bindingCacheResult.dumpToken,
+                    keyHash = bindingKey.dumpToken(),
                     subjectHash = request.binding.bindingLabel,
                 )
                 decision.withResourceLeases(leases)
@@ -1174,85 +1204,58 @@ private data class GPUUniformSlabLeaseCacheKey(
     }
 }
 
-private data class GPUTextureSamplerLeaseCacheKey(
+private data class GPUPreparedImageUploadLeaseCacheKey(
     val targetId: String,
-    val bindingLayoutHash: String,
-    val bindingLabel: String,
     val ownerLabel: String,
-    val lifetimeClass: String,
-    val releasePolicy: String,
-    val canAliasScratch: Boolean,
-    val textureWidth: Int,
-    val textureHeight: Int,
-    val textureFormat: String,
-    val textureSampleCount: Int,
-    val textureUsageLabels: List<String>,
-    val viewTextureDescriptorHash: String,
-    val viewDimension: String,
-    val viewMipRangeFirst: Int,
-    val viewMipRangeLast: Int,
-    val viewArrayLayerRangeFirst: Int,
-    val viewArrayLayerRangeLast: Int,
-    val samplerAddressModeU: String,
-    val samplerAddressModeV: String,
-    val samplerMagFilter: String,
-    val samplerMinFilter: String,
-    val samplerMipmapFilter: String,
-    val samplerLodMinClamp: String,
-    val samplerLodMaxClamp: String,
-    val samplerCompareMode: String,
-    val samplerMaxAnisotropy: Int,
-    val samplerCapabilityRequirements: List<String>,
+    val artifactKey: String,
+    val textureDescriptorHash: String,
+    val viewDescriptorHash: String,
     val deviceGeneration: Long,
     val actualResourceGeneration: Long,
 ) {
     fun dumpToken(): String =
-        "target=$targetId;layout=$bindingLayoutHash;binding=$bindingLabel;owner=$ownerLabel;" +
-            "lifetime=$lifetimeClass;release=$releasePolicy;canAliasScratch=$canAliasScratch;" +
-            "texture=${textureWidth}x$textureHeight:$textureFormat:" +
-            "samples=$textureSampleCount:usage=${textureUsageLabels.joinToString("+")};" +
-            "view=$viewTextureDescriptorHash:$viewDimension:$viewMipRangeFirst..$viewMipRangeLast:" +
-            "$viewArrayLayerRangeFirst..$viewArrayLayerRangeLast;" +
-            "sampler=$samplerAddressModeU:$samplerAddressModeV:$samplerMagFilter:$samplerMinFilter:" +
-            "$samplerMipmapFilter:$samplerLodMinClamp:$samplerLodMaxClamp:$samplerCompareMode:" +
-            "$samplerMaxAnisotropy:${samplerCapabilityRequirements.joinToString("+")};" +
+        "target=$targetId;owner=$ownerLabel;artifact=$artifactKey;" +
+            "texture=$textureDescriptorHash;view=$viewDescriptorHash;" +
             "deviceGeneration=$deviceGeneration;resourceGeneration=$actualResourceGeneration"
 
     companion object {
-        fun from(request: GPUTextureSamplerMaterializationRequest): GPUTextureSamplerLeaseCacheKey =
-            GPUTextureSamplerLeaseCacheKey(
+        fun from(request: GPUTextureSamplerMaterializationRequest): GPUPreparedImageUploadLeaseCacheKey =
+            GPUPreparedImageUploadLeaseCacheKey(
                 targetId = request.targetId,
-                bindingLayoutHash = request.bindingLayoutHash,
-                bindingLabel = request.binding.bindingLabel,
                 ownerLabel = request.ownership.ownerLabel,
-                lifetimeClass = request.ownership.lifetimeClass,
-                releasePolicy = request.ownership.releasePolicy,
-                canAliasScratch = request.ownership.canAliasScratch,
-                textureWidth = request.textureDescriptor.width,
-                textureHeight = request.textureDescriptor.height,
-                textureFormat = request.textureDescriptor.format,
-                textureSampleCount = request.textureDescriptor.sampleCount,
-                textureUsageLabels = request.textureDescriptor.usageLabels.sorted(),
-                viewTextureDescriptorHash = request.viewDescriptor.textureDescriptorHash,
-                viewDimension = request.viewDescriptor.viewDimension,
-                viewMipRangeFirst = request.viewDescriptor.mipRange.first,
-                viewMipRangeLast = request.viewDescriptor.mipRange.last,
-                viewArrayLayerRangeFirst = request.viewDescriptor.arrayLayerRange.first,
-                viewArrayLayerRangeLast = request.viewDescriptor.arrayLayerRange.last,
-                samplerAddressModeU = request.samplerDescriptor.addressModeU,
-                samplerAddressModeV = request.samplerDescriptor.addressModeV,
-                samplerMagFilter = request.samplerDescriptor.magFilter,
-                samplerMinFilter = request.samplerDescriptor.minFilter,
-                samplerMipmapFilter = request.samplerDescriptor.mipmapFilter,
-                samplerLodMinClamp = request.samplerDescriptor.lodMinClamp,
-                samplerLodMaxClamp = request.samplerDescriptor.lodMaxClamp,
-                samplerCompareMode = request.samplerDescriptor.compareMode,
-                samplerMaxAnisotropy = request.samplerDescriptor.maxAnisotropy,
-                samplerCapabilityRequirements = request.samplerDescriptor.capabilityRequirements.sorted(),
+                artifactKey = (request.allocation as? GPUTextureAllocationPlan.UploadFromArtifact)
+                    ?.artifactKey ?: request.ownership.ownerLabel,
+                textureDescriptorHash = request.textureDescriptor.materializationDescriptorHashForProvider(),
+                viewDescriptorHash = request.viewDescriptorHashForProvider(),
                 deviceGeneration = request.deviceGeneration,
                 actualResourceGeneration = request.actualResourceGeneration,
             )
     }
+}
+
+private data class GPUPreparedImageSamplerLeaseCacheKey(
+    val deviceGeneration: Long,
+    val descriptorHash: String,
+) {
+    fun dumpToken(): String =
+        "deviceGeneration=$deviceGeneration;descriptor=$descriptorHash"
+
+    companion object {
+        fun from(request: GPUTextureSamplerMaterializationRequest) =
+            GPUPreparedImageSamplerLeaseCacheKey(
+                deviceGeneration = request.deviceGeneration,
+                descriptorHash = request.samplerDescriptorHashForProvider(),
+            )
+    }
+}
+
+private data class GPUPreparedImageBindingLeaseCacheKey(
+    val bindingLayoutHash: String,
+    val uploadKey: GPUPreparedImageUploadLeaseCacheKey,
+    val samplerKey: GPUPreparedImageSamplerLeaseCacheKey,
+) {
+    fun dumpToken(): String =
+        "layout=$bindingLayoutHash;upload=${uploadKey.dumpToken()};sampler=${samplerKey.dumpToken()}"
 }
 
 private fun GPUResourceLease.snapshotForUniformSlabCache(): GPUResourceLease =

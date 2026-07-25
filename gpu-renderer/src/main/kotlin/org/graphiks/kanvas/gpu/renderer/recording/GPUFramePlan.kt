@@ -348,11 +348,16 @@ sealed interface GPUFrameStep {
         val layout: GPUUploadLayout,
         sourceTaskIds: List<GPUTaskID>,
         val preparedImagePlan: GPUPreparedImageFrameResourcePlan? = null,
+        val destinationKind: GPUUploadDestinationKind =
+            if (preparedImagePlan == null) GPUUploadDestinationKind.Buffer else GPUUploadDestinationKind.Texture,
     ) : GPUFrameStep {
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
 
         init {
+            require((preparedImagePlan != null) == (destinationKind == GPUUploadDestinationKind.Texture)) {
+                "Texture frame uploads require an exact prepared-image plan; buffer uploads forbid one"
+            }
             preparedImagePlan?.let { plan ->
                 require(staging == plan.stagingRef &&
                     destination == plan.frameTextureRef &&
@@ -918,6 +923,7 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
         is GPUFrameStep.UploadResourceStep -> {
             resourceRef("staging", value.staging)
             resourceRef("destination", value.destination)
+            string("destinationKind", value.destinationKind.name)
             long("sourceOffsetBytes", value.layout.sourceOffsetBytes)
             long("bytesPerRow", value.layout.bytesPerRow)
             int("rowsPerImage", value.layout.rowsPerImage)
@@ -1544,7 +1550,7 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
         is GPUFrameStep.PrepareResourcesStep ->
             "prepare resources=${requests.joinToString(";") { it.stableDump() }}"
         is GPUFrameStep.UploadResourceStep ->
-            "upload staging=${staging.value} destination=${destination.value} " +
+            "upload kind=${destinationKind.name} staging=${staging.value} destination=${destination.value} " +
                 "offset=${layout.sourceOffsetBytes} bytesPerRow=${layout.bytesPerRow} " +
                 "rowsPerImage=${layout.rowsPerImage} bytes=${layout.byteSize} " +
                 "preparedImagePlan=${preparedImagePlan?.stableDump() ?: "none"}"

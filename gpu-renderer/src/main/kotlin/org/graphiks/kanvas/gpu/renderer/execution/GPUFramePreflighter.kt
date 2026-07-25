@@ -4915,7 +4915,19 @@ internal class GPUFramePreflighter(
                 )
             }
             is GPUFrameStep.ComputePassStep -> scope(index, GPUEncoderOperationKind.Compute, step.sourceTaskIds, listOf("beginComputePass") + List(step.dispatches.size) { "dispatchWorkgroups" } + "endComputePass", labels, nativeOperandKeys(step, labels))
-            is GPUFrameStep.UploadResourceStep -> scope(index, GPUEncoderOperationKind.Upload, step.sourceTaskIds, listOf("writeBufferOrCopyBuffer"), labels, nativeOperandKeys(step, labels))
+            is GPUFrameStep.UploadResourceStep -> scope(
+                index,
+                GPUEncoderOperationKind.Upload,
+                step.sourceTaskIds,
+                when (step.destinationKind) {
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUUploadDestinationKind.Buffer ->
+                        listOf("writeBufferOrCopyBuffer")
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUUploadDestinationKind.Texture ->
+                        listOf("writeTexture")
+                },
+                labels,
+                nativeOperandKeys(step, labels),
+            )
             is GPUFrameStep.CopyResourceStep -> scope(index, GPUEncoderOperationKind.Copy, step.sourceTaskIds, List(step.regions.size) { "copyResource" }, labels, nativeOperandKeys(step, labels))
             is GPUFrameStep.CopyDestinationStep -> scope(index, GPUEncoderOperationKind.CopyDestination, step.sourceTaskIds, listOf("copyTextureToTexture"), labels, nativeOperandKeys(step, labels))
             is GPUFrameStep.CopyAsDrawMaterializationStep -> scope(index, GPUEncoderOperationKind.CopyAsDraw, step.sourceTaskIds, listOf("beginRenderPass", "copyAsDraw", "endRenderPass"), labels, nativeOperandKeys(step, labels))
@@ -5185,10 +5197,24 @@ internal class GPUFramePreflighter(
             is GPUFrameStep.ComputePassStep -> step.dispatches.mapIndexed { index, dispatch ->
                 key(GPUPreparedNativeOperandRole.ComputePipeline, GPUPreparedNativeOperandKind.ComputePipeline, "dispatch.$index:${dispatch.programKey.value}")
             }
-            is GPUFrameStep.UploadResourceStep -> listOf(
-                key(GPUPreparedNativeOperandRole.UploadSource, GPUPreparedNativeOperandKind.Buffer, resources[0]),
-                key(GPUPreparedNativeOperandRole.UploadDestination, GPUPreparedNativeOperandKind.Buffer, resources[1]),
-            )
+            is GPUFrameStep.UploadResourceStep -> when (step.destinationKind) {
+                org.graphiks.kanvas.gpu.renderer.recording.GPUUploadDestinationKind.Buffer -> listOf(
+                    key(GPUPreparedNativeOperandRole.UploadSource, GPUPreparedNativeOperandKind.Buffer, resources[0]),
+                    key(GPUPreparedNativeOperandRole.UploadDestination, GPUPreparedNativeOperandKind.Buffer, resources[1]),
+                )
+                org.graphiks.kanvas.gpu.renderer.recording.GPUUploadDestinationKind.Texture -> listOf(
+                    key(
+                        GPUPreparedNativeOperandRole.UploadSource,
+                        GPUPreparedNativeOperandKind.Buffer,
+                        "prepared-image-upload-data:${step.staging.value}",
+                    ),
+                    key(
+                        GPUPreparedNativeOperandRole.UploadDestination,
+                        GPUPreparedNativeOperandKind.Texture,
+                        resources[1],
+                    ),
+                )
+            }
             is GPUFrameStep.CopyResourceStep,
             is GPUFrameStep.CopyDestinationStep -> listOf(
                 key(GPUPreparedNativeOperandRole.CopySource, GPUPreparedNativeOperandKind.Texture, resources[0]),

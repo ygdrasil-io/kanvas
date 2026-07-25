@@ -4980,6 +4980,14 @@ class GPUFramePreflighterTest {
         assertEquals(listOf(4), prepared.dependencyEvidence.map { evidence -> evidence.sourceStepIndex })
         assertEquals(listOf("beginRenderPass", "setRenderPipeline", "setBindGroup", "draw", "endRenderPass"),
             prepared.encoderPlan.scopes.first().facadeOperationClasses)
+        val uploadScope = prepared.encoderPlan.scopes.single {
+            it.operationKind == GPUEncoderOperationKind.Upload
+        }
+        assertEquals(listOf("writeBufferOrCopyBuffer"), uploadScope.facadeOperationClasses)
+        assertEquals(
+            listOf(GPUPreparedNativeOperandKind.Buffer, GPUPreparedNativeOperandKind.Buffer),
+            uploadScope.nativeOperandKeys.map(GPUPreparedNativeOperandKey::kind),
+        )
     }
 
     @Test

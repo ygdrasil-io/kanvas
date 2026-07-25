@@ -38,6 +38,7 @@ class GPUPreparedImageFrameResourcePlanTest {
             uploadTaskId = GPUTaskID("task.image.upload"),
         )
 
+        assertEquals(3, plan.uploadLayout.sourceBytesPerRow)
         assertEquals(12, plan.uploadLayout.logicalBytesPerRow)
         assertEquals(256, plan.uploadLayout.bytesPerRow)
         assertEquals(2, plan.uploadLayout.rowsPerImage)
@@ -85,6 +86,8 @@ class GPUPreparedImageFrameResourcePlanTest {
             uploadTaskId = GPUTaskID("task.image.upload"),
         )
 
+        assertEquals(12, plan.uploadLayout.sourceBytesPerRow)
+        assertEquals(12, plan.uploadLayout.logicalBytesPerRow)
         assertContentEquals(
             byteArrayOf(1, 2, 3, -1, 4, 5, 6, -1, 7, 8, 9, -1),
             plan.uploadLayout.bytesForUpload().copyOfRange(0, 12),
@@ -175,6 +178,7 @@ class GPUPreparedImageFrameResourcePlanTest {
             uniformRef = template.uniformRef,
             textureDescriptor = template.textureDescriptor.copy(usageLabels = descriptorUsage),
             uploadLayout = GPUPreparedImageUploadLayout(
+                sourceBytesPerRow = template.uploadLayout.sourceBytesPerRow,
                 logicalBytesPerRow = template.uploadLayout.logicalBytesPerRow,
                 bytesPerRow = template.uploadLayout.bytesPerRow,
                 rowsPerImage = template.uploadLayout.rowsPerImage,

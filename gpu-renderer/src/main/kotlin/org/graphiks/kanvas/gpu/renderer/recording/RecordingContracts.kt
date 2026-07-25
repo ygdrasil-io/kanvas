@@ -704,6 +704,12 @@ sealed interface GPUDepthStencilLoadStorePlan {
     data object ReadOnlyKeep : GPUDepthStencilLoadStorePlan
 }
 
+/** Closed handle-free upload destination identity retained through preflight. */
+enum class GPUUploadDestinationKind {
+    Buffer,
+    Texture,
+}
+
 /** Task emitted by recording and planning with one typed semantic payload. */
 sealed interface GPUTask {
     val taskId: GPUTaskID
@@ -813,8 +819,13 @@ sealed interface GPUTask {
         val destination: GPUFrameResourceRef,
         val layout: GPUUploadLayout,
         val preparedImagePlan: GPUPreparedImageFrameResourcePlan? = null,
+        val destinationKind: GPUUploadDestinationKind =
+            if (preparedImagePlan == null) GPUUploadDestinationKind.Buffer else GPUUploadDestinationKind.Texture,
     ) : GPUTask {
         init {
+            require((preparedImagePlan != null) == (destinationKind == GPUUploadDestinationKind.Texture)) {
+                "Texture uploads require an exact prepared-image plan; buffer uploads forbid one"
+            }
             preparedImagePlan?.let { plan ->
                 require(staging == plan.stagingRef &&
                     destination == plan.frameTextureRef &&

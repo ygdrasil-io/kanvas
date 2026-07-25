@@ -126,6 +126,60 @@ class GPUTextureSamplerMaterializationProviderTest {
         }
     }
 
+    @Test
+    fun `concrete provider reuses upload while sampler and binding keys remain independent`() {
+        val imagePlan = decodedImagePlan()
+        val ownershipGate = GPUUploadedTextureArtifactOwnershipGate().plan(uploadedTextureRequest(imagePlan))
+        val provider = GPUConcreteResourceProvider()
+
+        val first = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeTextureSamplerBinding(
+                textureSamplerRequest(
+                    imagePlan,
+                    ownershipGate,
+                    bindingLabel = "sampled-texture.linear",
+                ),
+                targetPreparationContext(),
+            ),
+        )
+        val nearest = imagePlan.samplerDescriptor.copy(
+            magFilter = "nearest",
+            minFilter = "nearest",
+        )
+        val second = assertIs<GPUResourceMaterializationDecision.Materialized>(
+            provider.materializeTextureSamplerBinding(
+                textureSamplerRequest(
+                    imagePlan,
+                    ownershipGate,
+                    samplerDescriptor = nearest,
+                    bindingLabel = "sampled-texture.nearest",
+                ),
+                targetPreparationContext(),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                GPUResourceLeaseCacheResult.Create,
+                GPUResourceLeaseCacheResult.Create,
+                GPUResourceLeaseCacheResult.Create,
+            ),
+            first.dumpResourceLeaseSnapshot.map(GPUResourceLease::cacheResult),
+        )
+        assertEquals(
+            listOf(
+                GPUResourceLeaseCacheResult.Reuse,
+                GPUResourceLeaseCacheResult.Reuse,
+                GPUResourceLeaseCacheResult.Create,
+            ),
+            second.dumpResourceLeaseSnapshot.map(GPUResourceLease::cacheResult),
+        )
+        val telemetry = provider.telemetry.dumpLines().joinToString("\n")
+        assertContains(telemetry, "lane=prepared-image-upload result=reuse")
+        assertContains(telemetry, "lane=prepared-image-sampler result=create")
+        assertContains(telemetry, "lane=prepared-image-binding result=create")
+    }
+
     /** Upload artifact keys are dump facts and must reject handle-like evidence before refusal dumps. */
     @Test
     fun `texture sampler request rejects handle like upload artifact keys`() {
@@ -213,6 +267,8 @@ private fun textureSamplerRequest(
     unsupportedSamplingReason: String? = null,
     uploadFailedReason: String? = null,
     activeAttachmentSampled: Boolean = false,
+    samplerDescriptor: GPUSamplerDescriptor = imagePlan.samplerDescriptor,
+    bindingLabel: String = imagePlan.binding.bindingLabel,
 ): GPUTextureSamplerMaterializationRequest =
     GPUTextureSamplerMaterializationRequest(
         targetId = "root-target",
@@ -223,8 +279,11 @@ private fun textureSamplerRequest(
         ownership = ownershipGate.ownership,
         textureDescriptor = textureDescriptor,
         viewDescriptor = imagePlan.viewDescriptor,
-        samplerDescriptor = imagePlan.samplerDescriptor,
-        binding = imagePlan.binding,
+        samplerDescriptor = samplerDescriptor,
+        binding = imagePlan.binding.copy(
+            bindingLabel = bindingLabel,
+            sampler = samplerDescriptor,
+        ),
         bindingLayoutHash = "layout-image-sampler-v1",
         deviceGeneration = deviceGeneration,
         expectedResourceGeneration = imagePlan.artifact.generation,

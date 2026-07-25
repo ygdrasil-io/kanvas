@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 
 class GPUPreparedImageUploadLayout internal constructor(
     val logicalBytesPerRow: Long,
+    val sourceBytesPerRow: Long = logicalBytesPerRow,
     val bytesPerRow: Long,
     val rowsPerImage: Int,
     val width: Int,
@@ -25,6 +26,7 @@ class GPUPreparedImageUploadLayout internal constructor(
     fun bytesForUpload(): ByteArray = uploadBytes.copyOf()
 
     internal fun snapshot(): GPUPreparedImageUploadLayout = GPUPreparedImageUploadLayout(
+        sourceBytesPerRow = sourceBytesPerRow,
         logicalBytesPerRow = logicalBytesPerRow,
         bytesPerRow = bytesPerRow,
         rowsPerImage = rowsPerImage,
@@ -35,6 +37,7 @@ class GPUPreparedImageUploadLayout internal constructor(
 
     override fun equals(other: Any?): Boolean =
         other is GPUPreparedImageUploadLayout &&
+            sourceBytesPerRow == other.sourceBytesPerRow &&
             logicalBytesPerRow == other.logicalBytesPerRow &&
             bytesPerRow == other.bytesPerRow &&
             rowsPerImage == other.rowsPerImage &&
@@ -43,7 +46,8 @@ class GPUPreparedImageUploadLayout internal constructor(
             uploadBytes.contentEquals(other.uploadBytes)
 
     override fun hashCode(): Int {
-        var result = logicalBytesPerRow.hashCode()
+        var result = sourceBytesPerRow.hashCode()
+        result = 31 * result + logicalBytesPerRow.hashCode()
         result = 31 * result + bytesPerRow.hashCode()
         result = 31 * result + rowsPerImage
         result = 31 * result + width
@@ -53,7 +57,8 @@ class GPUPreparedImageUploadLayout internal constructor(
     }
 
     override fun toString(): String =
-        "GPUPreparedImageUploadLayout(logicalBytesPerRow=$logicalBytesPerRow, " +
+        "GPUPreparedImageUploadLayout(sourceBytesPerRow=$sourceBytesPerRow, " +
+            "logicalBytesPerRow=$logicalBytesPerRow, " +
             "bytesPerRow=$bytesPerRow, rowsPerImage=$rowsPerImage, width=$width, height=$height, " +
             "payloadByteSize=${uploadBytes.size}, payloadSha256=${uploadBytes.sha256()})"
 }
@@ -274,8 +279,9 @@ internal fun buildPreparedImageFrameResourcePlanFromBindings(
             ),
         )
     }
-    val stagingRef = GPUFrameBufferRef("prepared-image-staging:$frameIdentity:${artifact.key.value}")
-    val textureRef = GPUTextureResourceRef("prepared-image-texture:$frameIdentity:${artifact.key.value}")
+    val frameResourceIdentity = "$frameIdentity|${artifact.key.value}".encodeToByteArray().sha256()
+    val stagingRef = GPUFrameBufferRef("prepared-image-staging:$frameResourceIdentity")
+    val textureRef = GPUTextureResourceRef("prepared-image-texture:$frameResourceIdentity")
     val frameTextureRef = GPUFrameTextureRef(textureRef.value)
     val uniformRef = GPUFrameBufferRef("prepared-image-uniforms:${textureRef.value}")
     val textureBytes = Math.multiplyExact(
@@ -335,6 +341,7 @@ internal fun buildPreparedImageFrameResourcePlanFromBindings(
         uniformRef = uniformRef,
         textureDescriptor = textureDescriptor,
         uploadLayout = GPUPreparedImageUploadLayout(
+            sourceBytesPerRow = artifact.pixelLayout.sourceRowBytes,
             logicalBytesPerRow = logicalBytesPerRow,
             bytesPerRow = bytesPerRow,
             rowsPerImage = artifact.height,

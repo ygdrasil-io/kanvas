@@ -773,11 +773,12 @@ object GPUFramePlanner {
                     listOf(task.taskId),
                 )
                 is GPUTask.Upload -> steps += GPUFrameStep.UploadResourceStep(
-                    task.staging,
-                    task.destination,
-                    task.layout,
-                    listOf(task.taskId),
-                    task.preparedImagePlan,
+                    staging = task.staging,
+                    destination = task.destination,
+                    layout = task.layout,
+                    sourceTaskIds = listOf(task.taskId),
+                    preparedImagePlan = task.preparedImagePlan,
+                    destinationKind = task.destinationKind,
                 )
                 is GPUTask.Barrier -> steps += GPUFrameStep.DependencyBarrierStep(
                     task.orderedUseTokens,

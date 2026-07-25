@@ -1727,7 +1727,13 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFaca
         }
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.ComputePassStep ->
             listOf("beginComputePass") + List(dispatches.size) { "dispatchWorkgroups" } + "endComputePass"
-        is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.UploadResourceStep -> listOf("writeBufferOrCopyBuffer")
+        is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.UploadResourceStep ->
+            when (destinationKind) {
+                org.graphiks.kanvas.gpu.renderer.recording.GPUUploadDestinationKind.Buffer ->
+                    listOf("writeBufferOrCopyBuffer")
+                org.graphiks.kanvas.gpu.renderer.recording.GPUUploadDestinationKind.Texture ->
+                    listOf("writeTexture")
+            }
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.CopyResourceStep ->
             List(regions.size) { "copyResource" }
         is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.CopyDestinationStep -> listOf("copyTextureToTexture")
