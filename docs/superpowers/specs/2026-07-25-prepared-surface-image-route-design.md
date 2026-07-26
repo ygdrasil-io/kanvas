@@ -1,7 +1,8 @@
 # Route image préparée pour `Surface` — conception FP-04
 
 **Date :** 2026-07-25
-**Statut :** révision d'autorité corrigée, à valider avant planification
+**Révision :** 2026-07-26
+**Statut :** conception approuvée, révisée après audit indépendant des Tasks 1 à 5
 
 ## Objectif
 
@@ -21,18 +22,26 @@ ne produit `legacy.surface.prepared.family.images` et `Images` n'appartient plus
 
 ## Décision
 
-La route est livrée verticalement par tranches fermées :
+La route est livrée verticalement par tranches fermées. L'audit du
+2026-07-26 conserve les Tasks 1 à 4, mais considère la Task 5 comme
+implémentée et non encore acceptée. L'ordre devient :
 
 1. contrat sémantique image sans handle ;
 2. frame préparée hétérogène et ordonnée, capable de combiner payloads solid
    et image ;
 3. plan de ressource et préflight ;
 4. matérialiseur WebGPU/WGSL natif ;
-5. préparation complète de `DrawImage` ;
-6. expansion transactionnelle de `DrawImageNine` puis
+5. consolidation obligatoire de l'ABI, du partage de ressources, du mapping
+   draw→source, des générations, des diagnostics et des `PipelineKey` ;
+6. preuve puis correction de la chaîne sRGB préparée, avant toute preuve pixel
+   d'admission ;
+7. matérialiseur de frame mixte globalement préflighté avec un seul
+   propriétaire et sans snapshot CPU de destination ;
+8. préparation complète de `DrawImage` ;
+9. expansion transactionnelle de `DrawImageNine` puis
    `DrawImageLattice` ;
-7. payload de quad texturé et migration affine complète de `DrawAtlas` ;
-8. admission produit atomique des quatre opérations et retrait de la famille
+10. payload de quad texturé et migration affine complète de `DrawAtlas` ;
+11. admission produit atomique des quatre opérations et retrait de la famille
    legacy `Images`.
 
 La route immédiate existante sert de source de comportement et de contre-preuve
@@ -77,9 +86,17 @@ Le source et les tests courants attestent seulement ce qui existe réellement ;
 ils ne constituent pas une autorité d'architecture et ne réduisent pas la
 cible. Leur comportement doit être soit préservé, soit migré par une décision
 explicite accompagnée de preuves. Inversement, une spec `Draft` ne prouve pas
-l'activation d'une capacité absente. Pour FP-04, cette conception choisit
-explicitement de préserver le contrat couleur préparé attesté par
-`GPUPreparedSurfaceColorMapping.kt` et ses tests.
+l'activation d'une capacité absente.
+
+L'audit a établi que le mapping courant `RGBA8Unorm +
+EncodedPremulSrgb` ne suffit pas comme preuve de fidélité pour les couleurs
+translucides. La route ne doit donc plus préserver ce mapping par principe.
+Elle doit le comparer à un oracle indépendant et au store sRGB natif, puis
+retenir la représentation qui reproduit les octets de référence. La direction
+attendue est une texture source sRGB, des calculs shader en
+`linear-premultiplied RGBA` (RGBA linéaire prémultiplié) et un attachment
+`RGBA8UnormSrgb`, mais la décision finale reste subordonnée au test natif
+minimal et à la réflexion des capacités WebGPU.
 
 ### Specs `Draft` utilisées comme références techniques bornées
 
@@ -111,9 +128,9 @@ Sont explicitement exclus de l'autorité FP-04 :
 - la matrice codec cible complète de la spec 22 ;
 - l'activation générale des pipelines couleur, image-shader et paint décrits
   par les specs 29 et 31 ;
-- la section `Initial SDR Implementation — sRGB Output Format` de la spec 29,
-  dont l'attachment physique `RGBA8UnormSrgb` contredit le mapping préparé
-  courant ;
+- toute adoption sans preuve de la section `Initial SDR Implementation — sRGB
+  Output Format` de la spec 29. FP-04 réutilise son vocabulaire, mais tranche
+  son mapping par un test natif minimal et un oracle indépendant ;
 - toute lecture de `GPUImageShaderPlan` qui ferait du pipeline
   material/image-shader complet un préalable à `Surface.DrawImage` ; FP-04
   réutilise seulement ses invariants sélectionnés de source, coordonnées,
@@ -123,6 +140,67 @@ En cas de divergence, les règles et cibles actives contraignent la conception,
 l'acceptance FP-04 en fixe le périmètre, le code et les tests attestent l'état
 réel, et les specs `Draft` ne fournissent que les invariants bornés listés
 ci-dessus.
+
+## Consolidation obligatoire après audit des Tasks 1 à 5
+
+La Task 5 ne peut pas servir de fondation à la frame mixte tant que les six
+écarts suivants ne sont pas corrigés.
+
+### ABI image canonique
+
+Une seule valeur réfléchie et versionnée définit le groupe 0 :
+
+- binding 0 : uniform buffer dynamique de 112 octets ;
+- binding 1 : texture 2D filtrable ;
+- binding 2 : sampler filtrant ;
+- identité et hash de layout dérivés de cette topologie.
+
+Le builder, le preflight, le shader, la session cache et le matérialiseur
+consomment ce même contrat. Aucun composant ne peut substituer une autre
+identité pour faire accepter un plan incohérent.
+
+### Mapping draw→source et partage
+
+Le `sourceId` est une provenance, pas une clé d'unicité de draw. Chaque
+commande image conserve l'opération source exacte qui l'a produite. Plusieurs
+draws de la même image sont valides et peuvent partager l'artefact, la
+texture/view, le sampler et le bind group lorsque leurs clés canoniques sont
+identiques. Leur géométrie, tint, clip et allocation uniforme restent propres
+à chaque draw.
+
+### Autorité de ressource unique
+
+La Task 5 réutilise le provider et les clés de la Task 4 :
+
+- texture/view par `UploadArtifactKey` ;
+- sampler par `SamplerDescriptorKey` ;
+- bind group par `BindingKey` ;
+- allocation dynamique uniforme par commande.
+
+Une boucle locale qui recrée un bind group par requête n'est pas conforme.
+
+### Génération native
+
+Une session cache est scellée sur un `GPUDevice` et une génération exacts. Une
+requête d'une autre génération est refusée ; le propriétaire runtime ferme le
+cache et en construit un nouveau avec le nouveau device. Un cache ne change
+jamais sa génération tout en conservant le même device.
+
+### Diagnostics canoniques
+
+Chaque refus transporte directement le code stable de la table FP-04. Les
+couches Surface, recording, preflight et native peuvent enrichir `facts` et
+`message`, mais ne préfixent ni ne renomment le code. Un même fait produit le
+même code à toutes les frontières.
+
+### Spécialisation mesurée
+
+Chaque axe de `GPUPreparedImagePipelineKey` est classé
+`LayoutAffecting`, `CodeAffecting`, `PipelineStateAffecting` ou `UniformOnly`.
+Seules les trois premières classes restent dans la clé. Un axe uniform-only
+ne peut être spécialisé qu'avec des mesures de nombre de shaders/pipelines,
+cache hits/misses, créations après warmup, octets uniformes et nombre de
+draws.
 
 ## Frontières d'architecture
 
@@ -134,6 +212,9 @@ Les invariants sont :
   de compatibilité ;
 - le plan de frame reste sans handle natif ;
 - les handles sont créés tardivement par le provider de ressources ;
+- le snapshot immuable des pixels source reste autorisé, mais aucun snapshot
+  CPU de la destination ni réupload de continuation ne fait partie de la route
+  principale FP-04 ;
 - l'identité de ressource, les pixels et les handles ne font jamais partie
   d'une `PipelineKey` ;
 - toute capacité absente produit un diagnostic stable avant allocation native,
@@ -205,28 +286,45 @@ génération logique peuvent partager un artefact d'upload. Un changement de
 contenu, format, dimensions, row-bytes ou génération force une identité
 différente.
 
-L'upload image physique FP-04 est `RGBA8Unorm` prémultiplié et ses valeurs
-sources restent dans le domaine sémantique `EncodedPremulSrgb`. Le format et
-l'interprétation de la cible préparée restent la responsabilité de
-`mapPreparedGpuColorConfig()` ; FP-04 ne change ni l'attachment de la route
-préparée ni sa politique d'encodage.
+Les octets décodés sRGB sont d'abord snapshottés en RGBA8 prémultiplié au
+boundary CPU. L'artefact physique d'échantillonnage peut appliquer une
+conversion explicitement identifiée et hashée. Son contrat est déterminé par
+une gate couleur dédiée :
 
-En particulier, la section d'implémentation `Draft`
-`Initial SDR Implementation — sRGB Output Format` de la spec 29 n'est pas
-applicable à FP-04 : il ne
-remplace pas le mapping canonique courant par `RGBA8UnormSrgb` et ne linéarise
-pas globalement les octets source. Une telle migration exigerait une décision
-et des preuves couleur séparées.
+1. une texture `RGBA8Unorm` avec interprétation manuelle courante ;
+2. une texture source sRGB recevant directement les octets prémultipliés ;
+3. une texture source sRGB recevant des octets straight sRGB obtenus par
+   unpremultiply borné au boundary, puis re-premultiply en linéaire dans le
+   shader ;
+4. un attachment `RGBA8UnormSrgb` avec encodage matériel au store.
 
-La conversion d'upload est :
+Le test compare ces chemins à un oracle indépendant pour des couleurs opaques
+et translucides. La troisième représentation est la candidate attendue :
+hardware sRGB decode produit une couleur straight linéaire et le shader la
+prémultiplie par l'alpha avant tint/blend. La couverture A8 reste une texture
+linéaire `RGBA8Unorm` et n'est jamais sRGB-décodée. La route n'accepte cette
+candidate que si elle reproduit l'oracle sans correction CPU de destination.
+Le résultat devient l'autorité de
+`mapPreparedGpuColorConfig()`, des clés de target, de la réflexion pipeline et
+des attentes readback. Si WebGPU ou wgpu4k ne peut pas exprimer le contrat
+retenu, la route reste fermée avec un diagnostic stable et un ticket wgpu4k
+minimal ; aucun workaround caché n'est admis.
+
+La normalisation canonique initiale est :
 
 - RGBA8 est copié sans réordonnancement ;
 - BGRA8 est converti en RGBA8 au boundary de préparation ;
 - A8 est développé en RGBA8 en répliquant la couverture dans les quatre
-  canaux, tandis que le payload conserve `alphaOnly=true` pour la colorisation.
+  canaux, tandis que le payload conserve `alphaOnly=true` pour la colorisation
+  et interdit une vue sRGB qui appliquerait une fonction de transfert à la
+  couverture.
 
-Cette conversion est une préparation de pixels source, pas un rendu CPU de
-compatibilité.
+Pour une source couleur translucide, l'artefact natif dérivé convertit ensuite
+chaque canal premul encodé vers straight encodé avec
+`round(channel * 255 / alpha)`, borné à `0..255`, et conserve l'alpha. Pour
+alpha zéro, les canaux couleur deviennent zéro. La clé d'upload inclut le type
+de conversion et le hash des octets physiques. Cette conversion est une
+préparation de pixels source, pas un rendu CPU de compatibilité.
 
 Les sources encodées peuvent alimenter ce contrat seulement après un décodage
 accepté par le propriétaire codec. FP-04 ne choisit pas un codec et ne masque
@@ -365,6 +463,7 @@ Une même frame partage :
 
 - la texture/view pour une même identité d'artefact ;
 - le sampler pour un même descripteur accepté ;
+- le bind group pour une même identité de binding ;
 - un seul upload par artefact avant sa première consommation.
 
 Les ressources de cellules nine/lattice et de sprites atlas ne sont jamais
@@ -396,14 +495,16 @@ Le dispatcher de payloads obtient une route image fermée. Elle :
 1. valide le contrat et les capacités avant création native ;
 2. matérialise l'upload, la texture, la vue et le sampler via le provider ;
 3. crée un bind group conforme à l'ABI réfléchie ;
-4. sélectionne le pipeline rect ou quad ;
+4. sélectionne le pipeline par la clé structurelle minimale ; le WGSL courant
+   partage le même pipeline rect/quad car géométrie et UV sont des uniformes ;
 5. encode les draws dans l'ordre du plan ;
 6. conserve les ressources jusqu'à la complétion ;
 7. publie les diagnostics et compteurs d'ownership.
 
-Le WGSL est parser-validé par wgsl4k et possède une ABI réfléchie stable. Les
-samplers nearest et linear sont réellement distincts dans la matérialisation
-native ; un label Kotlin non consommé n'est pas une preuve.
+Le WGSL est parser-validé par wgsl4k et possède une ABI réfléchie stable. Cette
+réflexion est l'unique autorité du layout groupe 0 et de l'ABI uniforme de
+112 octets. Les samplers nearest et linear sont réellement distincts dans la
+matérialisation native ; un label Kotlin non consommé n'est pas une preuve.
 
 Le shader traite :
 
@@ -493,12 +594,21 @@ La preuve FP-04 combine tests de contrats, route et pixels.
 - ordre copie défensive → validation → conversion → hash ;
 - snapshot immuable et identité générationnelle ;
 - RGBA8, BGRA8→RGBA8 et A8→RGBA8 avec tag alpha-only ;
+- conversion couleur premul-encoded → straight-encoded explicitement hashée,
+  re-premultiplication WGSL après sRGB decode, et couverture A8 non décodée ;
 - SDR sRGB accepté et profils/orientations/HDR/YUV refusés explicitement ;
 - hash et dump déterministes ;
 - absence de pixels, handles et identité de ressource dans `PipelineKey` ;
+- classification explicite de chaque axe de `PipelineKey` et absence d'axe
+  uniform-only non mesuré ;
 - clés distinctes upload/sampler/binding ;
 - upload placé avant tous ses consommateurs ;
-- partage texture/view/sampler ;
+- partage texture/view/sampler/bind-group ;
+- plusieurs draws de la même source avec artefact partagé et uniformes
+  distincts ;
+- une identité ABI112 unique du builder jusqu'au bind group natif ;
+- refus d'une génération différente sans mutation du cache existant ;
+- même code de diagnostic stable à chaque frontière ;
 - absence d'upload pour les cellules lattice fixed-color ;
 - rétention et libération sur succès, refus et exception ;
 - refus avant allocation native.
@@ -510,12 +620,16 @@ La preuve FP-04 combine tests de contrats, route et pixels.
 - lattice mixed-payload fixed-color + sampled-image ;
 - sélection nearest/linear observable ;
 - bind group texture/sampler conforme à l'ABI ;
+- aucun snapshot CPU de destination ni réupload de continuation dans la route
+  image principale ;
 - aucune invocation legacy après admission ;
 - diagnostics distincts pour refus before-entry et échec terminal.
 
 ### Pixels
 
 - RGBA8 nearest et linear ;
+- opaque et translucide comparés entre oracle, source sRGB, shader linéaire et
+  store sRGB natif ;
 - A8 tint, paint alpha et blend ;
 - image-nine normale et dégénérée acceptée/refusée selon contrat ;
 - lattice sampled/fixed-color/transparent ;
@@ -526,6 +640,12 @@ La preuve FP-04 combine tests de contrats, route et pixels.
 
 Les preuves pixels doivent également enregistrer la route préparée pour éviter
 qu'une sortie correcte du renderer legacy soit prise pour une réussite FP-04.
+
+La consolidation des Tasks 1 à 5 est acceptée seulement après une review
+indépendante ne laissant aucun problème bloquant ou important non attribué.
+Les 289 tests ciblés établis lors de l'audit sont rerun avec les nouveaux tests
+ABI, répétition de source, partage, génération, diagnostics, pipeline key et
+couleur ; leur ancien résultat ne vaut pas preuve après modification.
 
 ### Validation agrégée
 
@@ -579,3 +699,21 @@ implémentation acceptable de rotation/skew.
 Rejeté : codec, animation, HDR/YUV, textures importées, mipmaps et sampling
 avancé ont des propriétaires et dépendances distincts. FP-04 établit la route
 produit nécessaire sans produire de faux support transversal.
+
+### Continuer directement avec la Task 6
+
+Rejeté après audit : cela figerait deux identités de binding contradictoires,
+le refus des draws répétés, la recréation des bind groups et une mutation de
+génération invalide dans la future autorité de frame mixte.
+
+### Préserver le mapping couleur courant sans preuve
+
+Rejeté : le résultat translucide préparé déjà observé diverge de l'oracle
+legacy. La correction sRGB doit précéder les preuves pixels et l'admission,
+sans snapshot CPU de destination.
+
+### Recommencer les Tasks 1 à 5
+
+Rejeté : les contrats alpha, artefacts immuables, sémantiques handle-free,
+task lists et préflight existants sont réutilisables. Une consolidation
+ciblée apporte la preuve manquante sans jeter le travail valide.

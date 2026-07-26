@@ -4,7 +4,7 @@
 
 **Goal:** Migrate `DrawImage`, `DrawImageNine`, `DrawImageLattice`, and `DrawAtlas` to one handle-free prepared Surface frame route with native WebGPU texture/sampler ownership, exact mixed-draw order, affine atlas geometry, and route-tagged pixel/alpha evidence.
 
-**Architecture:** First make decoded image alpha, color, orientation, provenance, and pixel layout explicit, then snapshot them into an immutable tight premultiplied-RGBA8 artifact. Build one closed sampled-image semantic and one heterogeneous task/resource plan. Pure preflight validates the complete core/image frame, reflected WGSL ABI, uploads, bindings, generation, and target before any native factory is called. A single mixed-frame materializer then owns the target, readback, late surface, resource ledger, and final draft; internal core/image run materializers produce operands only. Product routing remains closed until `DrawImage`, nine/lattice, and affine atlas have all passed native pixel evidence, then all four operations are admitted atomically and `Images` is removed from the legacy allowlist.
+**Architecture:** First make decoded image alpha, color, orientation, provenance, and pixel layout explicit, then snapshot them into an immutable tight premultiplied-RGBA8 artifact. Build one closed sampled-image semantic and one heterogeneous task/resource plan. Before mixed-frame work, consolidate Tasks 1-5 around one reflected ABI112 identity, command-exact source mapping, Task-4 resource sharing, immutable device-generation ownership, canonical diagnostics, and measured pipeline specialization. Prove the sRGB source/sample/store contract against an independent oracle and remove destination CPU snapshot/upload from the main route. Pure preflight then validates the complete core/image frame before any native factory call; one mixed-frame materializer owns target, readback, late surface, resource ledger, and final draft. Product routing remains closed until `DrawImage`, nine/lattice, and affine atlas have all passed native pixel evidence, then all four operations are admitted atomically and `Images` is removed from the legacy allowlist.
 
 **Tech Stack:** Kotlin/JVM, JUnit 5 and `kotlin.test`, Gradle 9.2 wrapper, Eclipse Temurin JDK 25, wgsl4k parser/reflection, wgpu4k/WebGPU.
 
@@ -18,7 +18,7 @@
 - Keep WebGPU as the GPU backend. CPU code may snapshot/convert decoded pixels and provide an oracle, but may not rasterize an unsupported draw into a compatibility texture.
 - Keep the frame plan handle-free. No `GPUTexture`, view, sampler, buffer, bind group, or pipeline is created until the complete mixed frame passes pure native preflight.
 - Use exactly one `GPUPreparedNativeFrameDraft` and one completion owner for a mixed frame. Internal route helpers may return run operands/resources, never child drafts.
-- The physical upload and target format remains `RGBA8Unorm` with `EncodedPremulSrgb`. Do not use `RGBA8UnormSrgb` and do not add implicit global linearization.
+- Decoded source bytes are first snapshotted as immutable premultiplied RGBA8. Task 5.4 derives a separately keyed physical sampling artifact. The expected color candidate unpremultiplies to straight encoded sRGB bytes, uses sRGB source sampling, re-premultiplies in linear shader space, and stores through `RGBA8UnormSrgb`; A8 coverage stays linear `RGBA8Unorm`. Do not preserve `RGBA8Unorm + EncodedPremulSrgb` without oracle evidence.
 - Accept only decoded SDR sRGB `RGBA_8888`, `BGRA_8888`, and `ALPHA_8` with explicit `AlphaType.PREMUL` or `AlphaType.OPAQUE` authority. Never infer premultiplication from `ColorType`.
 - Keep source stride, normalized tight RGBA8 stride, and native upload stride distinct. Padding bytes are never pixels and never enter the content hash.
 - Accept clamp sampling with `NEAREST` and `LINEAR`. Refuse cubic, anisotropic, mipmapped, repeat, mirror, decal, perspective, HDR/YUV, imported textures, unresolved orientation/profile conversion, and unproved alpha with stable codes.
@@ -26,11 +26,17 @@
 - Keep pixels, source IDs, hashes, artifact keys, generations, and native handles out of pipeline keys. Serialize every canonical hash field explicitly; never use a Kotlin `toString()` as a protocol.
 - Keep upload-artifact, sampler-descriptor, binding, uniform-allocation, pipeline, and native-generation identities separate.
 - Share a texture/view per artifact, a sampler per descriptor, and a bind group per binding identity within one frame. Use aligned dynamic uniform offsets so different geometry/tints never alias.
+- Treat `sourceId` as provenance, never as a one-draw uniqueness constraint. Map each prepared command to its exact source operation and share only by immutable artifact/binding keys.
+- Use one reflected group-0 image binding authority: dynamic uniform binding 0 with 112-byte minimum size, sampled texture binding 1, and sampler binding 2. Builder, preflight, shader, cache, and materializer must consume its exact identity.
+- A native session cache is immutable with respect to its `GPUDevice` and generation. A stale generation refuses; the runtime closes and reconstructs the cache for the new device.
+- Preserve the stable FP-04 code through Surface, recording, preflight, and native layers. Add context in diagnostic facts; never prefix or rename the code.
+- Classify every image pipeline-key axis as layout-, code-, pipeline-state-affecting, or uniform-only. Uniform-only axes remain out of the key unless a recorded measurement justifies specialization.
 - Do not add an inter-frame image texture/view/sampler cache. A session cache may retain only WGSL modules, pipeline layouts, and pipelines and must close/invalidate them on device-generation loss.
-- Keep the gate closed through Tasks 1-9. Task 10 admits all four image operations and removes legacy `Images` in one cutover.
-- Preserve and never stage `buildSrc/build.gradle.kts`, `gradle/verification-metadata.xml`, and `gpu-renderer/hs_err_pid18980.log`.
+- The immutable CPU snapshot of decoded source pixels is allowed. A CPU snapshot of the destination followed by a compatibility upload is forbidden on the FP-04 main route.
+- Keep the gate closed through Tasks 1-5, 5.1-5.4, and 6-9. Task 10 admits all four image operations and removes legacy `Images` in one cutover.
+- Preserve and never stage user-local `buildSrc/build.gradle.kts`, `gradle/verification-metadata.xml`, or `hs_err_pid*.log` files when present.
 - Dependency-verification metadata and reproducible-build policy are outside FP-04. Every Gradle command uses `--dependency-verification=off`.
-- Every Gradle block explicitly selects `C:\Users\Shadow\.jdks\temurin-25.0.3`, runs serially, uses `--max-workers=1`, and uses a fresh no-daemon JVM for native checks.
+- Every Gradle block uses the repository wrapper for the current host, the JDK 25 toolchain, `--max-workers=1`, and a fresh no-daemon JVM for native checks.
 - Git commits use command-scoped `user.name=ygdrasil-io` and `user.email=alexandre.mommers@gmail.com`.
 
 ## Stable FP-04 Refusal Table
@@ -470,7 +476,7 @@ Expected: heterogeneous builders are unresolved.
 
 - [ ] **Step 3: Implement ordered heterogeneous assembly**
 
-Keep `GPUCorePrimitivePreparedFrameTaskListBuilder` as a compatibility wrapper around shared task assembly. Validate the complete semantic map and budget first; only then create ordered resource preparation, upload, render, readback, and output tasks. Group only contiguous packets of the same route. Preserve core clip/blend/coverage authorities and `validateEncodedPremulSrgbOutput()`. For images, require artifact interpretation `EncodedPremulSrgb`, physical `RGBA8Unorm`, and no `RGBA8UnormSrgb` conversion.
+Keep `GPUCorePrimitivePreparedFrameTaskListBuilder` as a compatibility wrapper around shared task assembly. Validate the complete semantic map and budget first; only then create ordered resource preparation, upload, render, readback, and output tasks. Group only contiguous packets of the same route. Preserve core clip/blend/coverage authorities and the then-current `validateEncodedPremulSrgbOutput()`. Task 3 records the baseline image interpretation `EncodedPremulSrgb` and physical `RGBA8Unorm`; Task 5.4 must replace these facts everywhere with the oracle-proven sRGB contract before any native pixel or admission claim.
 
 Construct `GPUPreparedImageFrameResourcePlan` before emitting image tasks.
 `GPUTask.Upload` consumes its exact staging/texture/layout authority; later
@@ -478,6 +484,8 @@ tasks may not reconstruct labels, strides, usages, binding slots, or uniform
 offsets independently.
 
 Add stable dump facts:
+
+Task-3 baseline dump, explicitly superseded by Task 5.4:
 
 ```text
 image.upload.format=RGBA8Unorm
@@ -830,6 +838,524 @@ Expected: approved image runs can produce typed native operands; no mixed frame 
 
 ---
 
+### Task 5.1: Canonicalize ABI112 and binding reuse
+
+**Files:**
+
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageShader.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUPreparedSurfaceFrameTaskListBuilder.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResources.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializer.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageShaderTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResourcesTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializerTest.kt`
+
+**Interfaces:**
+
+```kotlin
+internal data class GPUPreparedImageBindingLayoutContract(
+    val identity: String,
+    val reflectedBindingsHash: String,
+    val uniformMinBindingSize: Long,
+    val group: Int,
+    val uniformBinding: Int,
+    val textureBinding: Int,
+    val samplerBinding: Int,
+)
+
+internal fun preparedImageBindingLayoutContract(): GPUPreparedImageBindingLayoutContract
+```
+
+`preparedImageBindingLayoutContract()` is the only authority for the image
+binding layout. It is derived from parser-backed reflection and must report
+group `0`, bindings `0/1/2`, and uniform minimum binding size `112`.
+
+- [ ] **Step 1: Write failing identity tests**
+
+In `GPUPreparedImageShaderTest`, assert:
+
+```kotlin
+val contract = preparedImageBindingLayoutContract()
+assertEquals(0, contract.group)
+assertEquals(0, contract.uniformBinding)
+assertEquals(1, contract.textureBinding)
+assertEquals(2, contract.samplerBinding)
+assertEquals(112L, contract.uniformMinBindingSize)
+assertEquals(contract.identity, preparedImageShaderContract().bindingLayoutHash)
+```
+
+Build a task list with a different layout identity and assert pure refusal
+`unsupported.image.native_binding`. Assert the fake handle factory count stays
+zero. Delete every test that expects the materializer to repair a mismatched
+key.
+
+- [ ] **Step 2: Write failing bind-group reuse tests**
+
+Create three packets:
+
+- packets 1 and 2 use the same artifact, sampler and binding key but different
+  uniform offsets;
+- packet 3 uses the same artifact with `Linear` instead of `Nearest`.
+
+Assert one texture/view, two samplers, two bind groups and three dynamic
+uniform offsets. Assert two byte-identical binding keys produce the same
+`GPUBindGroup` object, while different sampler keys do not.
+
+- [ ] **Step 3: Run RED**
+
+```bash
+./gradlew :gpu-renderer:test \
+  --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedImageShaderTest" \
+  --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedImageNativeResourcesTest" \
+  --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUWgpu4kPreparedImageRenderRunMaterializerTest" \
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks --max-workers=1
+```
+
+Expected: the two current layout strings disagree and Task 5 creates one bind
+group per request.
+
+- [ ] **Step 4: Implement one reflected layout authority**
+
+Replace both `PREPARED_IMAGE_BINDING_LAYOUT_HASH` constants with
+`preparedImageBindingLayoutContract().identity`. The task-list builder
+serializes that exact identity. The run materializer compares the incoming key
+to it and refuses mismatch; it must not call `packet.pipelineKey.copy(...)` to
+substitute the value.
+
+Move native texture/view/sampler/bind-group acquisition behind the Task-4
+`GPUPreparedImageBindingKey` authority. Keep one uniform buffer slab per
+resource plan and bind it once; dynamic offsets select per-draw uniform data.
+
+- [ ] **Step 5: Run GREEN and exact regressions**
+
+Rerun Step 3, then:
+
+```bash
+./gradlew :gpu-renderer:test \
+  --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUFramePreflighterTest" \
+  --tests "org.graphiks.kanvas.gpu.renderer.execution.GPURuntimeResourceAdapterTest" \
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks --max-workers=1
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -- \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageShader.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUPreparedSurfaceFrameTaskListBuilder.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResources.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializer.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageShaderTest.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResourcesTest.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializerTest.kt
+git -c user.name=ygdrasil-io -c user.email=alexandre.mommers@gmail.com \
+  commit -m "fix(gpu): canonicalize prepared image bindings"
+```
+
+Expected: ABI112 and binding reuse have one tested authority; product gate
+unchanged.
+
+---
+
+### Task 5.2: Preserve command-exact image sources and canonical refusals
+
+**Files:**
+
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameBuilder.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameBuilderTest.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/images/PreparedImageContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/AnalysisContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUPreparedSurfaceFrameTaskListBuilder.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResources.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializer.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/images/PreparedImageContractsTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/FirstRoutePlannerTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResourcesTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializerTest.kt`
+
+**Interfaces:**
+
+```kotlin
+internal data class GPUPreparedImageCommandSource(
+    val commandId: Int,
+    val operationIndex: Int,
+    val operation: DisplayOp.DrawImage,
+)
+
+object GPUPreparedImageRefusalCodes {
+    const val PIXELS_MISSING = "unsupported.image.pixels_missing"
+    const val PIXEL_FORMAT = "unsupported.image.pixel.format"
+    const val ALPHA_INTERPRETATION = "unsupported.image.alpha_interpretation"
+    const val NATIVE_BINDING = "unsupported.image.native_binding"
+}
+```
+
+The complete object contains every row of the stable FP-04 refusal table.
+Surface diagnostics retain the exact code and add `boundary=surface` in
+`facts`.
+
+- [ ] **Step 1: Write failing repeated-source tests**
+
+Record two `DrawImage` operations using the same `Image` object and `sourceId`
+but different destination rectangles. Assert:
+
+```kotlin
+assertIs<GPUPreparedSurfaceFrameBuildResult.Prepared>(result)
+assertEquals(2, result.framePlan.drawPackets.size)
+assertEquals(1, result.preparedResources.imageArtifacts.size)
+assertNotEquals(
+    result.framePlan.drawPackets[0].canonicalHash,
+    result.framePlan.drawPackets[1].canonicalHash,
+)
+```
+
+Also create two distinct images with an equal `sourceId` and different bytes;
+assert two artifact keys and exact per-command association. No test may expect
+`invalid.surface.prepared.image-source-bijection`.
+
+- [ ] **Step 2: Write failing refusal propagation tests**
+
+For missing pixels, unsupported format, unpremultiplied alpha, invalid stride,
+stale generation and missing binding, assert the exact stable code at artifact,
+Surface, recording and preflight boundaries. Assert no value starts with
+`unsupported.surface.prepared.image-source.`.
+
+- [ ] **Step 3: Run RED**
+
+```bash
+./gradlew :kanvas:test \
+  --tests "org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceFrameBuilderTest" \
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks --max-workers=1
+./gradlew :gpu-renderer:test \
+  --tests "org.graphiks.kanvas.gpu.renderer.images.PreparedImageContractsTest" \
+  --tests "org.graphiks.kanvas.gpu.renderer.analysis.FirstRoutePlannerTest" \
+  --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedImageNativeResourcesTest" \
+  --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUWgpu4kPreparedImageRenderRunMaterializerTest" \
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks --max-workers=1
+```
+
+Expected: repeated `sourceId` refuses and codes differ by boundary.
+
+- [ ] **Step 4: Implement command-exact association**
+
+Build `GPUPreparedImageCommandSource` values while walking operations in paint
+order. Associate them with normalized commands by `commandId` and
+`operationIndex`; do not call `groupBy(sourceId)`. Prepare one artifact per
+exact source operation, then deduplicate physical resources only by
+`GPUImageUploadArtifactKey`.
+
+Replace boundary-specific strings with `GPUPreparedImageRefusalCodes`.
+Propagate `code` unchanged and merge context into `facts`.
+
+- [ ] **Step 5: Run GREEN**
+
+Rerun Step 3 and the focused 73 Kanvas contract tests listed in the Task-5
+audit.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -- \
+  kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameBuilder.kt \
+  kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceFrameBuilderTest.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/images/PreparedImageContracts.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/AnalysisContracts.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/GPUPreparedSurfaceFrameTaskListBuilder.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResources.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializer.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/images/PreparedImageContractsTest.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/analysis/FirstRoutePlannerTest.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResourcesTest.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializerTest.kt
+git -c user.name=ygdrasil-io -c user.email=alexandre.mommers@gmail.com \
+  commit -m "fix(surface): preserve exact prepared image sources"
+```
+
+Expected: repeated images are valid, physical resources share by immutable
+key, and refusal values are stable end-to-end.
+
+---
+
+### Task 5.3: Seal cache generation and minimize pipeline specialization
+
+**Files:**
+
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageSessionCache.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPUPreparedImagePayload.kt`
+- Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageSessionCacheTest.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPUPreparedImagePayloadTest.kt`
+- Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImagePipelineSpecializationTest.kt`
+
+**Interfaces:**
+
+```kotlin
+data class GPUPreparedImagePipelineKey(
+    val destinationBlendState: String,
+    val targetFormat: String,
+    val bindingLayoutHash: String,
+)
+
+internal sealed interface GPUPreparedImageCacheAcquire {
+    data class Ready(val pipeline: GPUPreparedImageCachedPipeline) :
+        GPUPreparedImageCacheAcquire
+    data class Refused(val code: String, val message: String) :
+        GPUPreparedImageCacheAcquire
+}
+```
+
+Geometry class, `alphaOnly`, atlas color/blend and scissor class remain
+uniform/dynamic state. The current WGSL uses the same four-vertex/six-index
+entry points for Rect and Quad, so geometry class is not a pipeline axis.
+
+- [ ] **Step 1: Write failing generation tests**
+
+Create a cache for generation 7 and acquire a pipeline successfully. Request
+generation 8 and assert `unsupported.image.native_generation`, zero new
+handles, unchanged `cache.deviceGeneration == 7`, and no mutation of the
+generation-7 handle set. Close once and assert all owned handles close once.
+
+Then close generation 7 and construct a separate cache with the replacement
+device and generation 8. Runtime wiring of this close→construct transition is
+an explicit Task-6 acceptance test.
+
+- [ ] **Step 2: Write failing specialization tests**
+
+Generate otherwise-identical payloads that vary only:
+
+- `alphaOnly`;
+- atlas color presence and source blend;
+- full-target versus dynamic scissor.
+
+Assert equal `GPUPreparedImagePipelineKey` values and different canonical
+semantic hashes. Assert Rect and Quad also share the key because they use the
+same reflected shader, vertex inputs and primitive state. Vary destination
+blend, target format and binding layout and assert different keys.
+
+- [ ] **Step 3: Add the measurement evidence**
+
+Run a deterministic 100-draw fixture with alternating alpha/atlas/clip facts.
+Record:
+
+```text
+draws=100
+shaderModules=<value>
+pipelines=<value>
+pipelineCreatesAfterWarmup=<value>
+cacheHits=<value>
+cacheMisses=<value>
+uniformUploadBytes=<value>
+```
+
+The test requires `pipelineCreatesAfterWarmup=0` and fewer pipelines than the
+pre-change key. Store the exact report under
+`reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-04-pipeline-key.txt`.
+
+- [ ] **Step 4: Run RED**
+
+```bash
+./gradlew :gpu-renderer:test \
+  --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedImageSessionCacheTest" \
+  --tests "org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadTest" \
+  --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedImagePipelineSpecializationTest" \
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks --max-workers=1
+```
+
+- [ ] **Step 5: Implement immutable generation and minimal key**
+
+Make `deviceGeneration` a constructor `val`; remove any reassignment. Cache
+acquisition compares the request generation before lookup or creation. The
+cache exposes close-only invalidation; Task 6 makes
+`GPUBackendRuntimeNative` reconstruct it after the old cache has closed.
+
+Remove every uniform-only field from `GPUPreparedImagePipelineKey`; keep those
+values in `GPUPreparedImageUniformInput`, canonical semantic hashing and
+dynamic scissor state.
+
+- [ ] **Step 6: Run GREEN and commit**
+
+Rerun Step 4, then:
+
+```bash
+git add -- \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageSessionCache.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPUPreparedImagePayload.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageSessionCacheTest.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPUPreparedImagePayloadTest.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImagePipelineSpecializationTest.kt \
+  reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-04-pipeline-key.txt
+git -c user.name=ygdrasil-io -c user.email=alexandre.mommers@gmail.com \
+  commit -m "fix(gpu): seal prepared image pipeline cache"
+```
+
+Expected: device generation is immutable and uniform-only facts no longer
+fragment pipeline caching.
+
+---
+
+### Task 5.4: Prove and correct the native sRGB source/store contract
+
+**Files:**
+
+- Modify: `kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceColorMapping.kt`
+- Modify: `kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceColorMappingTest.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/color/ColorContracts.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/images/PreparedImageContracts.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/images/PreparedImageContractsTest.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPUPreparedImagePayload.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUPreparedImageFrameResourcePlan.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageSessionCache.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageShader.kt`
+- Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageSrgbNativeProbeTest.kt`
+- Create: `reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-04-srgb-store.md`
+- Create: `reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-04-task-5-review.md`
+
+**Interfaces:**
+
+```kotlin
+internal data class GPUPreparedSdrColorContract(
+    val colorSourceTextureFormat: GPUTextureFormat,
+    val coverageSourceTextureFormat: GPUTextureFormat,
+    val colorUploadEncoding: GPUPreparedColorUploadEncoding,
+    val targetTextureFormat: GPUTextureFormat,
+    val shaderInterpretation: GPUColorInterpretation,
+    val readbackInterpretation: GPUColorInterpretation,
+)
+
+internal enum class GPUPreparedColorUploadEncoding {
+    StraightEncodedSrgb,
+}
+
+internal fun preparedSdrColorContract(): GPUPreparedSdrColorContract
+```
+
+The expected accepted contract uses an sRGB RGBA/BGRA source view,
+`RGBA8Unorm` for A8 coverage, linear-premultiplied shader values and
+`GPUTextureFormat.RGBA8UnormSrgb` target store. The native probe, not the
+expectation, is the acceptance authority.
+Add `GPUColorFormat.RGBA8UnormSrgb =
+GPUColorFormat("rgba8unorm-srgb")` and
+`GPUColorInterpretation.LinearPremul =
+GPUColorInterpretation("linear-premul")`; use these exact values in the
+accepted contract and dumps.
+Add `GPUColorInterpretation.StraightEncodedSrgb =
+GPUColorInterpretation("straight-encoded-srgb")` for color upload artifacts.
+
+- [ ] **Step 1: Record the bounded Graphite+Dawn reference**
+
+Against Skia checkout
+`/Users/chaos/workspace/kanvas-forge/skia-main@defc3a5a92966c32cb2a6a901e2fa3036a13bb8a`,
+record these exact reference points in `fp-04-srgb-store.md`:
+
+- `src/core/SkColorSpaceXformSteps.cpp:137-140,202-260` for ordered
+  unpremul→transfer→premul color conversion;
+- `src/gpu/graphite/KeyHelpers.cpp:1015-1051` for Graphite's encoded
+  premul/unpremul shader flags;
+- `src/gpu/graphite/TextureFormat.h:90,96` for linear versus sRGB RGBA8;
+- `src/gpu/graphite/dawn/DawnGraphiteUtils.cpp:327-350` for Dawn format
+  mapping;
+- `src/gpu/graphite/dawn/DawnGraphicsPipeline.cpp:428` for render-target
+  format selection.
+
+Extract invariants only. Do not port Graphite classes, key systems or shader
+generation.
+
+- [ ] **Step 2: Write the independent oracle**
+
+Use exact IEC 61966-2-1 piecewise transfer functions in test code. Use
+premultiplied source RGBA `[25, 75, 132, 160]`, whose bounded straight recovery
+is `[40, 120, 210, 160]`, paint alpha `0.75`, transparent background and one
+opaque fixture. Compute expected straight sRGB decode, linear premultiplication
+and sRGB store. Add A8 coverage `128` and prove it remains approximately
+`0.50196` before tint rather than being sRGB-decoded. Do not call production
+color helpers.
+
+- [ ] **Step 3: Write the failing native probe**
+
+Render the fixtures through:
+
+1. current `RGBA8Unorm + EncodedPremulSrgb`;
+2. direct premultiplied bytes sampled from `RGBA8UnormSrgb`;
+3. straight encoded bytes sampled from `RGBA8UnormSrgb`, followed by
+   `vec4(sampled.rgb * sampled.a, sampled.a)` before tint/blend;
+4. the legacy reference route, only as comparative evidence.
+
+Read back once after GPU completion. Assert the selected candidate matches the
+independent oracle exactly or within one declared LSB per channel. Assert the
+current translucent mismatch is reproduced before changing production
+mapping.
+
+- [ ] **Step 4: Run RED**
+
+```bash
+./gradlew :gpu-renderer:test \
+  --tests "org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedImageSrgbNativeProbeTest" \
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks --max-workers=1
+./gradlew :kanvas:test \
+  --tests "org.graphiks.kanvas.surface.gpu.GPUPreparedSurfaceColorMappingTest" \
+  --dependency-verification=off --no-daemon --console=plain --rerun-tasks --max-workers=1
+```
+
+Expected: the prepared translucent candidate does not match the oracle.
+
+- [ ] **Step 5: Implement the proven contract**
+
+Make `preparedSdrColorContract()` the source of the color upload encoding,
+color upload-view format, coverage upload-view format, target format, shader
+interpretation, readback interpretation and pipeline target key. For each
+RGBA/BGRA pixel with alpha byte `a`, produce straight encoded channels
+`a == 0 ? 0 : round(channel * 255 / a).coerceIn(0, 255)` and retain `a`.
+Include `StraightEncodedSrgb` and the converted-byte hash in
+`GPUImageUploadArtifactKey`. The WGSL re-premultiplies sampled color before
+tint/blend. `alphaOnly` artifacts keep the existing replicated bytes and use
+the coverage source format. Use hardware sRGB decode/store rather than CPU
+destination conversion. Refuse unsupported format/view capability with
+`unsupported.color.image_profile_conversion`.
+
+If wgpu4k cannot create the required sRGB view/target while WebGPU exposes it,
+stop this step, minimize the failing call in the probe, and record the exact
+wgpu4k issue URL in `fp-04-srgb-store.md`. Do not add an alternate hidden path.
+
+- [ ] **Step 6: Run GREEN and record evidence**
+
+Rerun Step 4. Write formats, input bytes, oracle bytes, native bytes,
+per-channel deltas, adapter/backend, route marker and verdict to
+`fp-04-srgb-store.md`. Assert no destination CPU snapshot/upload operand exists
+in the accepted image route.
+
+- [ ] **Step 7: Run the Task-5 acceptance set**
+
+Run the 289 focused tests from the 2026-07-26 audit plus the new Task
+5.1-5.4 tests. Record exact counts and commands in
+`reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-04-task-5-review.md`.
+
+- [ ] **Step 8: Commit and independent review**
+
+```bash
+git add -- \
+  kanvas/src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceColorMapping.kt \
+  kanvas/src/test/kotlin/org/graphiks/kanvas/surface/gpu/GPUPreparedSurfaceColorMappingTest.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/color/ColorContracts.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/images/PreparedImageContracts.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/images/PreparedImageContractsTest.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/payloads/GPUPreparedImagePayload.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/resources/GPUPreparedImageFrameResourcePlan.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageSessionCache.kt \
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageShader.kt \
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageSrgbNativeProbeTest.kt \
+  reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-04-srgb-store.md \
+  reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-04-task-5-review.md
+git -c user.name=ygdrasil-io -c user.email=alexandre.mommers@gmail.com \
+  commit -m "fix(gpu): prove prepared sRGB image storage"
+```
+
+Request an independent review of Tasks 5.1-5.4. Resolve every legitimate
+blocking or important finding and rerun the affected tests before Task 6.
+
+Expected: Task 5 is formally accepted; color and ownership foundations are
+ready for the mixed-frame materializer.
+
+---
+
 ### Task 6: Build one globally preflighted mixed-frame materializer and one draft
 
 **Files:**
@@ -904,6 +1430,8 @@ Unknown semantic mixes, destination-copy splits, broken clip/coverage chains, st
 Also assert the specialized preflight returns only run/scope seals, retains
 the exact input resource identities, and creates no prepared frame, ticket, or
 rollback owner.
+Assert the accepted image route contains no destination CPU snapshot,
+CPU-raster continuation, or compatibility texture upload.
 
 - [ ] **Step 2: Write failing single-owner materialization tests**
 
@@ -921,6 +1449,10 @@ assertEquals(
 ```
 
 Assert upload precedes every consumer, target/readback/surface are created once, late binding occurs once, and completion closes the single ownership ledger once.
+Simulate a runtime device-generation transition and assert the generation-7
+image cache closes before a generation-8 cache is constructed with the
+replacement `GPUDevice`; no handle or pipeline from generation 7 is returned
+after the transition.
 
 - [ ] **Step 3: Run RED**
 
@@ -1041,6 +1573,10 @@ Add `preparedImage: GPUPreparedImageDrawFacts?` to `GPUFramePathVisualCommand`. 
 Assert:
 
 - source pixels are snapshotted before caller mutation;
+- two draws of the same `Image` share one artifact/upload while retaining
+  distinct geometry, uniform bytes, scissor and dynamic offsets;
+- two distinct images with equal `sourceId` retain distinct command-exact
+  source associations;
 - source rect/UV clamp is exact;
 - identity/translation/scale become exact rect or quad geometry;
 - rotation/reflection/skew retain four transformed corners;
@@ -1274,16 +1810,18 @@ Use deterministic fixtures:
 
 Every native pixel case must assert a prepared route marker and reject the legacy marker. Nearest comparisons are exact; linear UNORM comparisons use `maxChannelDelta <= 1`.
 
-Parameterize the complete stable refusal table. For source classes not constructible through `Image`, test `GPUPreparedImageSourceInput` directly and prove classification before allocation. For each refusal, assert zero fake-native handles and no route fallback.
+Parameterize the complete stable refusal table. For source classes not constructible through `Image`, test `GPUPreparedImageSourceInput` directly and prove classification before allocation. For each refusal, assert zero fake-native handles and no route fallback. Assert each code is identical at source, Surface, recording and preflight boundaries; boundary context belongs in diagnostic facts, not in a renamed code.
 
 Also assert/dump:
 
 ```text
-upload=RGBA8Unorm
-target=RGBA8Unorm
-interpretation=EncodedPremulSrgb
-attachmentSrgbConversion=false
-implicitLinearization=false
+source.color=RGBA8UnormSrgb
+source.coverage=RGBA8Unorm
+source.colorUploadEncoding=StraightEncodedSrgb
+target=RGBA8UnormSrgb
+shaderInterpretation=linear-premul
+attachmentSrgbConversion=true
+oracleMaxChannelDelta<=1
 ```
 
 - [ ] **Step 3: Run RED**
@@ -1505,18 +2043,26 @@ Expected: FP-04 completed; FP-05 remains the next pending item.
 
 ## Plan Self-Review Checklist
 
-- [ ] The vertical order matches the approved design: semantic -> heterogeneous frame -> resource/preflight -> native route -> DrawImage -> nine/lattice -> affine atlas -> atomic cutover.
+- [ ] The vertical order matches the approved design: semantic -> heterogeneous frame -> resource/preflight -> native run -> Task-5 consolidation -> sRGB proof -> mixed-frame materializer -> DrawImage -> nine/lattice -> affine atlas -> atomic cutover.
 - [ ] `Image.alphaType` is authoritative; no code derives premultiplication from `ColorType`.
 - [ ] Source stride, tight normalized stride, and native upload stride remain distinct and width-3 A8/BGRA tests cover padding.
+- [ ] Builder, preflight, shader, cache and materializer use one reflected group-0 ABI112 identity.
+- [ ] Repeated draws of one image are command-exact, share artifact resources, and retain distinct uniform allocations.
+- [ ] Texture/view, sampler and bind group reuse are keyed by their distinct Task-4 identities.
+- [ ] A prepared-image cache never changes generation while retaining the same device.
+- [ ] Every refusal retains the exact stable FP-04 code through all layers.
+- [ ] Every pipeline-key axis has a specialization class and no unmeasured uniform-only axis remains.
+- [ ] The sRGB source/sample/store contract matches an independent translucent oracle within the declared one-LSB policy.
+- [ ] The accepted image route contains no destination CPU snapshot or compatibility reupload.
 - [ ] The complete mixed frame passes pure preflight before the first native factory call.
 - [ ] Exactly one target/readback/surface owner and one `GPUPreparedNativeFrameDraft` exist per mixed frame.
 - [ ] Upload scope keys and `TextureUpload` operand keys match the full encoder plan.
 - [ ] Dynamic uniform offsets prevent same-image/sampler draws with different geometry/tint from aliasing.
 - [ ] All canonical hashes serialize explicit fields and never use `toString()`.
-- [ ] The physical upload/target and `EncodedPremulSrgb` interpretation are asserted in dumps and native evidence.
+- [ ] The proven source/target formats and `linear-premul` shader interpretation are asserted in dumps and native evidence.
 - [ ] All stable refusal rows are tested with zero allocation/fallback.
 - [ ] Product admission stays closed through Task 9 and changes once in Task 10.
-- [ ] Every Gradle block selects JDK 25 and disables dependency verification.
+- [ ] Every Gradle block runs with the JDK 25 toolchain, one worker, no daemon, and dependency verification disabled.
 - [ ] Every task contains RED, implementation, GREEN, exact staging, and commit steps.
 - [ ] Protected Gradle files and the native crash log remain unstaged.
 - [ ] No unspecified implementation work remains.

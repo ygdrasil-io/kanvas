@@ -216,6 +216,25 @@ Status: `in_progress`
 Goal: migrate image, image-nine, lattice, and atlas Surface operations to the
 common prepared frame route, including texture and sampler ownership.
 
+Current state:
+
+- Tasks 1-4 and the first implementation of Task 5 are present through
+  `a037a7c463d84d8ceb99eabeb0d01d426769d8b3`;
+- the 2026-07-26 audit reran 289 focused tests with zero failure, but this
+  evidence does not accept Task 5 because the fake native seams do not validate
+  the complete binding-layout and sharing contract;
+- Task 5 must be consolidated before Task 6:
+  - one reflected ABI112/layout identity from builder to native bind group;
+  - command-exact image-source mapping allowing repeated draws;
+  - Task-4 texture/view/sampler/bind-group sharing reused by Task 5;
+  - immutable cache device generation;
+  - stable refusal codes propagated unchanged;
+  - measured removal of uniform-only pipeline-key axes;
+- the native sRGB source/sample/store contract must then match an independent
+  translucent oracle without a destination CPU snapshot/upload;
+- Task 6 and product routing remain unopened until these gates pass an
+  independent review.
+
 Acceptance:
 
 - image operations no longer produce
