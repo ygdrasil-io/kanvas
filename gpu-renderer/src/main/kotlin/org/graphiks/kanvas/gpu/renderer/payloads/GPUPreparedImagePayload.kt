@@ -140,7 +140,7 @@ internal fun GPUPreparedImagePayloadInput.pipelineKey(): GPUPreparedImagePipelin
     destinationBlendState = blendPlanIdentity,
     clipClass = if (scissorBounds == targetBounds) "full-target" else "scissor",
     targetFormat = GPU_PREPARED_IMAGE_TARGET_FORMAT,
-    bindingLayoutHash = if (atlasColorPremultipliedRgba == null) "texture-sampler-tint.v1" else "texture-sampler-tint-atlas-color.v1",
+    bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
 )
 
 internal fun GPUPreparedImagePayloadInput.canonicalHash(): String = preparedImageSha256Hex(

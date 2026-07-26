@@ -11,6 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -45,7 +46,8 @@ class GPUPreparedImageNativeResourcesTest {
     fun `native keys split upload sampler binding and uniform offsets`() {
         val fixture = fixture(
             listOf(
-                GPUPreparedImageBindingInput("packet.nearest", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.nearest.a", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.nearest.b", GPUPreparedImageSampling.Nearest),
                 GPUPreparedImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
             ),
         )
@@ -56,14 +58,36 @@ class GPUPreparedImageNativeResourcesTest {
         assertEquals(1, seal.uploadKeys.toSet().size)
         assertEquals(2, seal.samplerKeysByPacketId.values.toSet().size)
         assertEquals(2, seal.bindingKeysByPacketId.values.toSet().size)
+        assertEquals(
+            seal.bindingKeysByPacketId.getValue("packet.nearest.a"),
+            seal.bindingKeysByPacketId.getValue("packet.nearest.b"),
+        )
+        assertNotEquals(
+            seal.bindingKeysByPacketId.getValue("packet.nearest.a"),
+            seal.bindingKeysByPacketId.getValue("packet.linear"),
+        )
         assertTrue(seal.uploadKeys.all { it.deviceGeneration == 7L })
         assertTrue(seal.samplerKeysByPacketId.values.all { it.deviceGeneration == 7L })
 
-        val resources = seal.materialize(RecordingFactory())
+        val factory = RecordingFactory()
+        val resources = seal.materialize(factory)
         assertEquals(seal.uploadKeys.single(), resources.uploadKey(fixture.artifactKey))
         assertSame(resources.texture(fixture.artifactKey), resources.texture(fixture.artifactKey))
-        assertEquals(0L, resources.dynamicUniformOffset("packet.nearest"))
-        assertEquals(256L, resources.dynamicUniformOffset("packet.linear"))
+        assertSame(resources.binding("packet.nearest.a"), resources.binding("packet.nearest.b"))
+        assertNotSame(resources.binding("packet.nearest.a"), resources.binding("packet.linear"))
+        assertEquals(
+            listOf(0L, 256L, 512L),
+            listOf(
+                resources.dynamicUniformOffset("packet.nearest.a"),
+                resources.dynamicUniformOffset("packet.nearest.b"),
+                resources.dynamicUniformOffset("packet.linear"),
+            ),
+        )
+        assertEquals(1, factory.textureCreates)
+        assertEquals(1, factory.textureViewCreates)
+        assertEquals(2, factory.samplerCreates)
+        assertEquals(1, factory.uniformBufferCreates)
+        assertEquals(2, factory.bindGroupCreates)
         resources.close()
     }
 
@@ -434,21 +458,35 @@ class GPUPreparedImageNativeResourcesTest {
         private val failCloseLabels: Set<String> = emptySet(),
     ) : GPUPreparedImageNativeHandleFactory {
         var createCalls = 0
+        var textureCreates = 0
+        var textureViewCreates = 0
+        var samplerCreates = 0
+        var uniformBufferCreates = 0
         var bindGroupCreates = 0
         val createdLabels = mutableListOf<String>()
 
-        override fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture =
-            handle("texture")
+        override fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture {
+            textureCreates += 1
+            return handle("texture")
+        }
 
         override fun createTextureView(
             texture: GPUTexture,
             request: GPUPreparedImageFrameResourcePlan,
-        ): GPUTextureView = handle("texture-view")
+        ): GPUTextureView {
+            textureViewCreates += 1
+            return handle("texture-view")
+        }
 
-        override fun createSampler(descriptor: GPUSamplerDescriptor): GPUSampler =
-            handle("sampler.${descriptor.magFilter}")
+        override fun createSampler(descriptor: GPUSamplerDescriptor): GPUSampler {
+            samplerCreates += 1
+            return handle("sampler.${descriptor.magFilter}")
+        }
 
-        override fun createUniformBuffer(size: Long): GPUBuffer = handle("uniform-buffer")
+        override fun createUniformBuffer(size: Long): GPUBuffer {
+            uniformBufferCreates += 1
+            return handle("uniform-buffer")
+        }
 
         override fun createBindGroup(
             request: GPUPreparedImageBindingRequest,

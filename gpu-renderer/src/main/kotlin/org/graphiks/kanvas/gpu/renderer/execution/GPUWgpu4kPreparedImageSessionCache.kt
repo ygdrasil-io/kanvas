@@ -135,22 +135,26 @@ internal class GPUWgpu4kPreparedImageSessionCache(
         if (shader != null) return
         val created = mutableListOf<AutoCloseable>()
         try {
+            val bindingLayoutContract = preparedImageBindingLayoutContract()
             val shaderContract = preparedImageShaderContract()
             val reflectedLayout = device.createBindGroupLayout(
                 BindGroupLayoutDescriptor(
-                    label = "Kanvas.session.preparedImage.bindGroupLayout0",
+                    label =
+                        "Kanvas.session.preparedImage.bindGroupLayout" +
+                            bindingLayoutContract.group,
                     entries = listOf(
                         BindGroupLayoutEntry(
-                            binding = 0u,
+                            binding = bindingLayoutContract.uniformBinding.toUInt(),
                             visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
                             buffer = BufferBindingLayout(
                                 type = GPUBufferBindingType.Uniform,
                                 hasDynamicOffset = true,
-                                minBindingSize = GPUPreparedImageUniformAbi.BYTE_SIZE.toULong(),
+                                minBindingSize =
+                                    bindingLayoutContract.uniformMinBindingSize.toULong(),
                             ),
                         ),
                         BindGroupLayoutEntry(
-                            binding = 1u,
+                            binding = bindingLayoutContract.textureBinding.toUInt(),
                             visibility = GPUShaderStage.Fragment,
                             texture = TextureBindingLayout(
                                 sampleType = GPUTextureSampleType.Float,
@@ -159,7 +163,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
                             ),
                         ),
                         BindGroupLayoutEntry(
-                            binding = 2u,
+                            binding = bindingLayoutContract.samplerBinding.toUInt(),
                             visibility = GPUShaderStage.Fragment,
                             sampler = SamplerBindingLayout(GPUSamplerBindingType.Filtering),
                         ),
@@ -190,7 +194,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
     }
 
     private fun validateKey(key: GPUPreparedImagePipelineKey) {
-        require(key.bindingLayoutHash == PREPARED_IMAGE_BINDING_LAYOUT_HASH)
+        require(key.bindingLayoutHash == preparedImageBindingLayoutContract().identity)
         require(key.targetFormat.equals("rgba8unorm", ignoreCase = true))
         require(key.destinationBlendState.equals("SrcOver", ignoreCase = true) ||
             key.destinationBlendState.equals("src_over", ignoreCase = true)

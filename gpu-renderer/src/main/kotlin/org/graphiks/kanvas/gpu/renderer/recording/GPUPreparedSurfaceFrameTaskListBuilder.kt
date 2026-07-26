@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -219,7 +220,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             sampling = semantic.sampling,
                         )
                     },
-                    bindingLayoutHash = PREPARED_IMAGE_BINDING_LAYOUT_HASH,
+                    bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
                     capabilities = request.capabilities,
                     frameIdentity = request.baseTaskList.frameId.value.toString(),
                     uploadTaskId = GPUTaskID(
@@ -644,9 +645,6 @@ private sealed interface MixedCoreAssembly {
 
     data class Refused(val diagnostic: GPUDiagnostic) : MixedCoreAssembly
 }
-
-private const val PREPARED_IMAGE_BINDING_LAYOUT_HASH =
-    "layout.prepared-image.texture-sampler-dynamic-uniform48-v1"
 
 /** Public module boundary for the validated four-corner prepared-image geometry value. */
 fun buildPreparedImageGeometry(

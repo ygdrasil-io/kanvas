@@ -4,17 +4,25 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasWGSLReflectionProvider
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasWGSLValidator
-
-internal const val PREPARED_IMAGE_BINDING_LAYOUT_HASH =
-    "prepared-image.group0.dynamic-uniform-texture-sampler.v1"
 
 internal data class GPUPreparedImageShaderContract(
     val sourceHash: String,
     val bindingLayoutHash: String,
     val reflectedBindingsHash: String,
+)
+
+internal data class GPUPreparedImageBindingLayoutContract(
+    val identity: String,
+    val reflectedBindingsHash: String,
+    val uniformMinBindingSize: Long,
+    val group: Int,
+    val uniformBinding: Int,
+    val textureBinding: Int,
+    val samplerBinding: Int,
 )
 
 internal data class GPUPreparedImageUniformInput(
@@ -27,7 +35,8 @@ internal data class GPUPreparedImageUniformInput(
 )
 
 internal object GPUPreparedImageUniformAbi {
-    const val BYTE_SIZE: Int = 112
+    const val BYTE_SIZE: Int =
+        GPUPreparedImageBindingLayoutTopology.UNIFORM_MIN_BINDING_SIZE_BYTES
 
     fun pack(input: GPUPreparedImageUniformInput): ByteArray {
         require(input.positions.size == 4 && input.uvs.size == 4) {
@@ -100,6 +109,18 @@ internal fun preparedImageA8AtlasOracle(
 }
 
 internal fun preparedImageShaderContract(): GPUPreparedImageShaderContract {
+    val bindingLayout = preparedImageBindingLayoutContract()
+    return GPUPreparedImageShaderContract(
+        sourceHash = sha256(GPU_PREPARED_IMAGE_WGSL.encodeToByteArray()),
+        bindingLayoutHash = bindingLayout.identity,
+        reflectedBindingsHash = bindingLayout.reflectedBindingsHash,
+    )
+}
+
+internal fun preparedImageBindingLayoutContract(): GPUPreparedImageBindingLayoutContract =
+    PREPARED_IMAGE_BINDING_LAYOUT_CONTRACT
+
+private val PREPARED_IMAGE_BINDING_LAYOUT_CONTRACT: GPUPreparedImageBindingLayoutContract by lazy {
     val parsed = KanvasWGSLValidator().parse(GPU_PREPARED_IMAGE_WGSL)
     require(parsed.syntaxErrors.isEmpty()) {
         "Prepared-image WGSL parser validation failed: ${parsed.syntaxErrors.joinToString()}"
@@ -108,23 +129,44 @@ internal fun preparedImageShaderContract(): GPUPreparedImageShaderContract {
         "Prepared-image WGSL requires parser-backed reflection"
     }
     val expected = listOf(
-        Triple(0, 0, "uniformBuffer"),
-        Triple(0, 1, "sampledTexture"),
-        Triple(0, 2, "sampler"),
+        Triple(
+            GPUPreparedImageBindingLayoutTopology.GROUP,
+            GPUPreparedImageBindingLayoutTopology.UNIFORM_BINDING,
+            "uniformBuffer",
+        ),
+        Triple(
+            GPUPreparedImageBindingLayoutTopology.GROUP,
+            GPUPreparedImageBindingLayoutTopology.TEXTURE_BINDING,
+            "sampledTexture",
+        ),
+        Triple(
+            GPUPreparedImageBindingLayoutTopology.GROUP,
+            GPUPreparedImageBindingLayoutTopology.SAMPLER_BINDING,
+            "sampler",
+        ),
     )
     require(reflected.bindings.map { Triple(it.group, it.binding, it.resourceKind) } == expected) {
         "Prepared-image WGSL reflected bindings do not match the closed group-0 ABI"
     }
-    require(reflected.bindings.first().minBindingSize == GPUPreparedImageUniformAbi.BYTE_SIZE) {
+    val uniformMinBindingSize =
+        requireNotNull(reflected.bindings.first().minBindingSize).toLong()
+    require(
+        uniformMinBindingSize ==
+            GPUPreparedImageBindingLayoutTopology.UNIFORM_MIN_BINDING_SIZE_BYTES.toLong(),
+    ) {
         "Prepared-image WGSL reflected uniform size does not match ABI112"
     }
     val bindingDump = reflected.bindings.joinToString(";") {
         "${it.group}:${it.binding}:${it.name}:${it.resourceKind}:${it.minBindingSize ?: 0}"
     }
-    return GPUPreparedImageShaderContract(
-        sourceHash = sha256(GPU_PREPARED_IMAGE_WGSL.encodeToByteArray()),
-        bindingLayoutHash = PREPARED_IMAGE_BINDING_LAYOUT_HASH,
+    return@lazy GPUPreparedImageBindingLayoutContract(
+        identity = GPUPreparedImageBindingLayoutTopology.IDENTITY,
         reflectedBindingsHash = sha256(bindingDump.encodeToByteArray()),
+        uniformMinBindingSize = uniformMinBindingSize,
+        group = GPUPreparedImageBindingLayoutTopology.GROUP,
+        uniformBinding = GPUPreparedImageBindingLayoutTopology.UNIFORM_BINDING,
+        textureBinding = GPUPreparedImageBindingLayoutTopology.TEXTURE_BINDING,
+        samplerBinding = GPUPreparedImageBindingLayoutTopology.SAMPLER_BINDING,
     )
 }
 

@@ -164,18 +164,30 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                     destinationOffset = 0L,
                     consumerSourceStepIndices = listOf(renderScopeIndex),
                 )
-                val samplers = linkedMapOf<Any, io.ygdrasil.webgpu.GPUSampler>()
+                val bindingKeys = resource.preparedImageNativeBindingKeys(
+                    deviceGeneration = sessionCache.deviceGeneration.value,
+                )
+                val samplers =
+                    linkedMapOf<GPUPreparedImageSamplerKey, io.ygdrasil.webgpu.GPUSampler>()
+                val bindGroups =
+                    linkedMapOf<GPUPreparedImageBindingKey, io.ygdrasil.webgpu.GPUBindGroup>()
                 resource.bindingRequests.forEach { request ->
                     val allocation = request.uniformAllocation
-                    val sampler = samplers.getOrPut(request.sampler) {
+                    val samplerKey =
+                        bindingKeys.samplerKeysByPacketId.getValue(request.packetId)
+                    val sampler = samplers.getOrPut(samplerKey) {
                         handleFactory.createSampler(request.sampler).track(created)
                     }
-                    val bindGroup = handleFactory.createBindGroup(
-                        request,
-                        uniformBuffer,
-                        view,
-                        sampler,
-                    ).track(created)
+                    val bindingKey =
+                        bindingKeys.bindingKeysByPacketId.getValue(request.packetId)
+                    val bindGroup = bindGroups.getOrPut(bindingKey) {
+                        handleFactory.createBindGroup(
+                            request,
+                            uniformBuffer,
+                            view,
+                            sampler,
+                        ).track(created)
+                    }
                     check(bindingByPacketId.put(
                         request.packetId,
                         MaterializedBinding(bindGroup, allocation),
@@ -205,10 +217,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                 val allocation = plan.uniformAllocations[index]
                 val binding = requireNotNull(bindingByPacketId[allocation.packetId])
                 check(binding.allocation == allocation)
-                val cacheKey = packet.pipelineKey.copy(
-                    bindingLayoutHash = PREPARED_IMAGE_BINDING_LAYOUT_HASH,
-                )
-                val pipeline = sessionCache.acquire(cacheKey)
+                val pipeline = sessionCache.acquire(packet.pipelineKey)
                 val uniformBytes = uniformBytesByPacketId.getValue(allocation.packetId)
                 GPUPreparedNativeScopeOperand.PreparedImageDrawEntry(
                     pipeline = GPUPreparedNativeRenderPipelineOperand(
@@ -249,6 +258,19 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
     private fun validatePlan(
         plan: GPUPreparedImageRenderRunPlan,
     ): Pair<String, String>? {
+        val bindingLayoutIdentity = preparedImageBindingLayoutContract().identity
+        if (plan.packets.any { packet ->
+                packet.pipelineKey.bindingLayoutHash != bindingLayoutIdentity
+            } ||
+            plan.resources.any { resource ->
+                resource.bindingRequests.any { request ->
+                    request.bindingLayoutHash != bindingLayoutIdentity
+                }
+            }
+        ) {
+            return "unsupported.image.native_binding" to
+                "Prepared-image runs require the canonical reflected ABI112 binding identity."
+        }
         val uploadScopeKeys = plan.exactScopeKeys.take(plan.resources.size)
         if (uploadScopeKeys.any { scope ->
                 scope.operandKeys.map { key -> key.role to key.kind } != listOf(

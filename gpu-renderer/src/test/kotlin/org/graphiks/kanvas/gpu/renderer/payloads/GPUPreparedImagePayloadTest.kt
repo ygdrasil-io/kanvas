@@ -21,6 +21,14 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 /** Verifies the closed, handle-free semantic contract for prepared sampled images. */
 class GPUPreparedImagePayloadTest {
     @Test
+    fun `pipeline key serializes the canonical prepared image binding identity`() {
+        assertEquals(
+            "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
+            payload().pipelineKey.bindingLayoutHash,
+        )
+    }
+
+    @Test
     fun `content and sampling affect semantic identity but not structural pipeline key`() {
         val first = payload(bytes = byteArrayOf(1, 2, 3, 4), sampling = GPUPreparedImageSampling.Nearest)
         val changedContent = payload(bytes = byteArrayOf(4, 3, 2, 1), sampling = GPUPreparedImageSampling.Nearest)

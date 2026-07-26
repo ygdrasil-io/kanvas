@@ -15,6 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -111,7 +112,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
     }
 
     @Test
-    fun `accepted run uploads once and keeps sampler and uniform axes out of the pipeline cache`() {
+    fun `accepted run reuses binding keys while dynamic offsets select three uniform records`() {
         val nativeDevice = RecordingPreparedImageDevice()
         val cache = GPUWgpu4kPreparedImageSessionCache(
             nativeDevice.device,
@@ -122,17 +123,20 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val resource = buildPreparedImageFrameResourcePlanFromBindings(
             artifact = artifact,
             bindingInputs = listOf(
-                GPUPreparedImageBindingInput("packet.nearest", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.nearest.a", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.nearest.b", GPUPreparedImageSampling.Nearest),
                 GPUPreparedImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
             ),
-            bindingLayoutHash = PREPARED_IMAGE_BINDING_LAYOUT_HASH,
+            bindingLayoutHash =
+                "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
             capabilities = preparedImageCapabilities(),
             frameIdentity = "frame.task5",
             uploadTaskId = GPUTaskID("task.upload.image"),
         )
         val allocations = listOf(
-            GPUPreparedImageUniformAllocation("packet.nearest", 0L, 112L),
-            GPUPreparedImageUniformAllocation("packet.linear", 256L, 112L),
+            GPUPreparedImageUniformAllocation("packet.nearest.a", 0L, 112L),
+            GPUPreparedImageUniformAllocation("packet.nearest.b", 256L, 112L),
+            GPUPreparedImageUniformAllocation("packet.linear", 512L, 112L),
         )
         val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
             .materializeAcceptedRun(
@@ -140,6 +144,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                     sourceScopeIndices = listOf(1, 2),
                     packets = listOf(
                         preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
+                        preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 5f),
                         preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
                     ),
                     resources = listOf(resource),
@@ -181,15 +186,28 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             drawEntries[1].uniformBytes(),
             uniformUpload.data.bytes().copyOfRange(256, 368),
         )
+        assertContentEquals(
+            drawEntries[2].uniformBytes(),
+            uniformUpload.data.bytes().copyOfRange(512, 624),
+        )
         assertTrue(upload.sourceStepIndex < renders.single().sourceStepIndex)
-        assertEquals(listOf(0L, 256L), drawEntries.map { it.dynamicUniformOffset })
+        assertEquals(listOf(0L, 256L, 512L), drawEntries.map { it.dynamicUniformOffset })
         assertNotEquals(
             drawEntries[0].uniformBytes().toList(),
             drawEntries[1].uniformBytes().toList(),
         )
-        assertSame(drawEntries[0].pipeline.pipeline, drawEntries[1].pipeline.pipeline)
+        assertSame(drawEntries[0].bindGroup.bindGroup, drawEntries[1].bindGroup.bindGroup)
+        assertNotSame(drawEntries[0].bindGroup.bindGroup, drawEntries[2].bindGroup.bindGroup)
+        assertTrue(drawEntries.drop(1).all {
+            it.pipeline.pipeline === drawEntries.first().pipeline.pipeline
+        })
         assertEquals(1, nativeDevice.pipelineCreates)
         assertEquals(listOf("nearest", "linear"), factory.samplerFilters)
+        assertEquals(1, factory.textureCreates)
+        assertEquals(1, factory.textureViewCreates)
+        assertEquals(2, factory.samplerCreates)
+        assertEquals(1, factory.uniformBufferCreates)
+        assertEquals(2, factory.bindGroupCreates)
 
         result.ownedResources.single().close()
         result.ownedResources.single().close()
@@ -199,6 +217,94 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         assertTrue(nativeDevice.closeCounts.values.all { it == 1 })
         cache.close()
         assertTrue(nativeDevice.closeCounts.values.all { it == 1 })
+    }
+
+    @Test
+    fun `mismatched native binding identity refuses before any handle creation`() {
+        val nativeDevice = RecordingPreparedImageDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            nativeDevice.device,
+            GPUDeviceGenerationID(18),
+        )
+        val factory = RecordingPreparedImageHandleFactory()
+        val artifact = preparedImageArtifact(pixelSeed = 2)
+        val resource = preparedImageResource(artifact, "packet.foreign").let { plan ->
+            plan.copy(
+                bindingRequests = plan.bindingRequests.map { request ->
+                    request.copy(bindingLayoutHash = "foreign.prepared-image.binding-layout")
+                },
+            )
+        }
+
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+            .materializeAcceptedRun(
+                preparedImageRenderRunPlan(
+                    sourceScopeIndices = listOf(1, 2),
+                    packets = listOf(
+                        preparedImageSemantic(
+                            artifact,
+                            GPUPreparedImageSampling.Nearest,
+                            1f,
+                        ),
+                    ),
+                    resources = listOf(resource),
+                    uniformAllocations =
+                        resource.bindingRequests.map { it.uniformAllocation },
+                ),
+            )
+
+        assertEquals(
+            "unsupported.image.native_binding",
+            assertIs<GPUPreparedRenderRunMaterialization.Refused>(result).code,
+        )
+        assertEquals(0, factory.handleCreates)
+        assertEquals(0, nativeDevice.pipelineCreates)
+        cache.close()
+    }
+
+    @Test
+    fun `mismatched packet pipeline binding identity refuses instead of repairing the key`() {
+        val nativeDevice = RecordingPreparedImageDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            nativeDevice.device,
+            GPUDeviceGenerationID(181),
+        )
+        val factory = RecordingPreparedImageHandleFactory()
+        val artifact = preparedImageArtifact(pixelSeed = 12)
+        val packet = preparedImageSemantic(
+            artifact,
+            GPUPreparedImageSampling.Nearest,
+            1f,
+        )
+        packet.javaClass.getDeclaredField("pipelineKey").apply {
+            isAccessible = true
+            set(
+                packet,
+                packet.pipelineKey.copy(
+                    bindingLayoutHash = "foreign.prepared-image.pipeline-layout",
+                ),
+            )
+        }
+        val resource = preparedImageResource(artifact, "packet.foreign-pipeline")
+
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+            .materializeAcceptedRun(
+                preparedImageRenderRunPlan(
+                    sourceScopeIndices = listOf(1, 2),
+                    packets = listOf(packet),
+                    resources = listOf(resource),
+                    uniformAllocations =
+                        resource.bindingRequests.map { it.uniformAllocation },
+                ),
+            )
+
+        assertEquals(
+            "unsupported.image.native_binding",
+            assertIs<GPUPreparedRenderRunMaterialization.Refused>(result).code,
+        )
+        assertEquals(0, factory.handleCreates)
+        assertEquals(0, nativeDevice.pipelineCreates)
+        cache.close()
     }
 
     @Test
@@ -477,7 +583,8 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 GPUPreparedImageBindingInput("packet.first", GPUPreparedImageSampling.Nearest),
                 GPUPreparedImageBindingInput("packet.second", GPUPreparedImageSampling.Linear),
             ),
-            bindingLayoutHash = PREPARED_IMAGE_BINDING_LAYOUT_HASH,
+            bindingLayoutHash =
+                "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
             capabilities = preparedImageCapabilities(),
             frameIdentity = "frame.overlap",
             uploadTaskId = GPUTaskID("task.upload.overlap"),
@@ -649,7 +756,7 @@ private fun preparedImageResource(
 ): GPUPreparedImageFrameResourcePlan = buildPreparedImageFrameResourcePlanFromBindings(
     artifact = artifact,
     bindingInputs = listOf(GPUPreparedImageBindingInput(packetId, sampling)),
-    bindingLayoutHash = PREPARED_IMAGE_BINDING_LAYOUT_HASH,
+    bindingLayoutHash = "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
     capabilities = preparedImageCapabilities(),
     frameIdentity = "frame.$packetId",
     uploadTaskId = GPUTaskID("task.upload.$packetId"),
@@ -835,24 +942,37 @@ internal class RecordingPreparedImageHandleFactory : GPUPreparedImageNativeHandl
     val samplerFilters = mutableListOf<String>()
     val uniformBuffers = mutableListOf<GPUBuffer>()
     val bindGroupUniformBuffers = mutableListOf<GPUBuffer>()
+    var textureCreates = 0
+    var textureViewCreates = 0
+    var samplerCreates = 0
+    var uniformBufferCreates = 0
+    var bindGroupCreates = 0
     var handleCreates = 0
     private var ordinal = 0
 
-    override fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture =
-        handle("texture")
+    override fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture {
+        textureCreates += 1
+        return handle("texture")
+    }
 
     override fun createTextureView(
         texture: GPUTexture,
         request: GPUPreparedImageFrameResourcePlan,
-    ): GPUTextureView = handle("view")
+    ): GPUTextureView {
+        textureViewCreates += 1
+        return handle("view")
+    }
 
     override fun createSampler(descriptor: GPUSamplerDescriptor): GPUSampler {
+        samplerCreates += 1
         samplerFilters += descriptor.magFilter
         return handle("sampler.${descriptor.magFilter}")
     }
 
-    override fun createUniformBuffer(size: Long): GPUBuffer =
-        handle<GPUBuffer>("uniform").also(uniformBuffers::add)
+    override fun createUniformBuffer(size: Long): GPUBuffer {
+        uniformBufferCreates += 1
+        return handle<GPUBuffer>("uniform").also(uniformBuffers::add)
+    }
 
     override fun createBindGroup(
         request: GPUPreparedImageBindingRequest,
@@ -860,6 +980,7 @@ internal class RecordingPreparedImageHandleFactory : GPUPreparedImageNativeHandl
         textureView: GPUTextureView,
         sampler: GPUSampler,
     ): GPUBindGroup {
+        bindGroupCreates += 1
         bindGroupUniformBuffers += uniformBuffer
         return handle("bind.${request.packetId}")
     }

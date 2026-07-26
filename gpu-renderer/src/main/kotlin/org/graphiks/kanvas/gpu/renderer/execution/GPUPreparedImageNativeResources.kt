@@ -39,6 +39,12 @@ data class GPUPreparedImageBindingKey(
     val samplerKey: GPUPreparedImageSamplerKey,
 )
 
+internal data class GPUPreparedImageNativeBindingKeys(
+    val uploadKey: GPUPreparedImageUploadKey,
+    val samplerKeysByPacketId: Map<String, GPUPreparedImageSamplerKey>,
+    val bindingKeysByPacketId: Map<String, GPUPreparedImageBindingKey>,
+)
+
 internal interface GPUPreparedImageNativeHandleFactory {
     fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture
     fun createTextureView(texture: GPUTexture, request: GPUPreparedImageFrameResourcePlan): GPUTextureView
@@ -100,31 +106,14 @@ internal object GPUPreparedImageNativeResourcePreflighter {
     fun preflight(request: GPUPreparedImageNativePreflightRequest): GPUPreparedImageNativePreflightResult {
         refusalReason(request)?.let { return GPUPreparedImageNativePreflightResult.Refused(it) }
 
-        val plan = request.resourcePlan
-        val uploadKey = GPUPreparedImageUploadKey(
-            artifactKey = request.artifactKey,
+        val keys = request.resourcePlan.preparedImageNativeBindingKeys(
             deviceGeneration = request.actualDeviceGeneration,
-            textureDescriptorHash = plan.textureDescriptor.preparedImageDescriptorHash(),
-            viewDescriptorHash = plan.bindingRequests.first().view.preparedImageViewHash(),
         )
-        val samplerKeys = plan.bindingRequests.associate { binding ->
-            binding.packetId to GPUPreparedImageSamplerKey(
-                deviceGeneration = request.actualDeviceGeneration,
-                descriptorHash = binding.sampler.preparedImageSamplerHash(),
-            )
-        }
-        val bindingKeys = plan.bindingRequests.associate { binding ->
-            binding.packetId to GPUPreparedImageBindingKey(
-                layoutHash = binding.bindingLayoutHash,
-                uploadKey = uploadKey,
-                samplerKey = samplerKeys.getValue(binding.packetId),
-            )
-        }
         return GPUPreparedImageNativePreflightResult.Sealed(
             request = request,
-            uploadKeys = listOf(uploadKey),
-            samplerKeysByPacketId = samplerKeys.toMap(),
-            bindingKeysByPacketId = bindingKeys.toMap(),
+            uploadKeys = listOf(keys.uploadKey),
+            samplerKeysByPacketId = keys.samplerKeysByPacketId,
+            bindingKeysByPacketId = keys.bindingKeysByPacketId,
         )
     }
 
@@ -238,6 +227,36 @@ internal object GPUPreparedImageNativeResourcePreflighter {
         }
         return null
     }
+}
+
+internal fun GPUPreparedImageFrameResourcePlan.preparedImageNativeBindingKeys(
+    deviceGeneration: Long,
+): GPUPreparedImageNativeBindingKeys {
+    require(deviceGeneration >= 0L)
+    val uploadKey = GPUPreparedImageUploadKey(
+        artifactKey = artifactKey,
+        deviceGeneration = deviceGeneration,
+        textureDescriptorHash = textureDescriptor.preparedImageDescriptorHash(),
+        viewDescriptorHash = bindingRequests.first().view.preparedImageViewHash(),
+    )
+    val samplerKeys = bindingRequests.associate { binding ->
+        binding.packetId to GPUPreparedImageSamplerKey(
+            deviceGeneration = deviceGeneration,
+            descriptorHash = binding.sampler.preparedImageSamplerHash(),
+        )
+    }
+    val bindingKeys = bindingRequests.associate { binding ->
+        binding.packetId to GPUPreparedImageBindingKey(
+            layoutHash = binding.bindingLayoutHash,
+            uploadKey = uploadKey,
+            samplerKey = samplerKeys.getValue(binding.packetId),
+        )
+    }
+    return GPUPreparedImageNativeBindingKeys(
+        uploadKey = uploadKey,
+        samplerKeysByPacketId = samplerKeys.toMap(),
+        bindingKeysByPacketId = bindingKeys.toMap(),
+    )
 }
 
 private fun materializePreparedImageNativeResources(
