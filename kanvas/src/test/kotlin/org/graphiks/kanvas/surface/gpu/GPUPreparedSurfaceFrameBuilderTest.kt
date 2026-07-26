@@ -3,7 +3,9 @@ package org.graphiks.kanvas.surface.gpu
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertContentEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -18,6 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
@@ -29,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.GradientStop
@@ -328,51 +332,120 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `same image source id with distinct immutable content refuses before artifact selection`() {
-        val first = Image(
+    fun `same image object with repeated source id keeps two command packets and one immutable artifact`() {
+        val image = Image(
             width = 2,
             height = 1,
-            sourceId = "ambiguous-source",
+            sourceId = "repeated-source",
             pixels = byteArrayOf(1, 2, 3, -1, 4, 5, 6, -1),
+            alphaType = AlphaType.PREMUL,
+        )
+        val operations = listOf(
+            drawImage(image, Rect.fromLTRB(1f, 1f, 5f, 3f)),
+            drawImage(image, Rect.fromLTRB(7f, 2f, 15f, 6f)),
+        )
+
+        val buildResult = GPUPreparedSurfaceFrameBuilder.build(imageRequest(operations))
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            buildResult,
+            buildResult.toString(),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val artifacts = ready.taskList.tasks.filterIsInstance<GPUTask.Upload>()
+            .mapNotNull(GPUTask.Upload::preparedImagePlan)
+
+        assertEquals(2, packets.size)
+        assertEquals(1, artifacts.size)
+        assertNotEquals(
+            assertIs<GPUDrawSemanticPayload.SampledImage>(packets[0].semanticPayload).canonicalHash,
+            assertIs<GPUDrawSemanticPayload.SampledImage>(packets[1].semanticPayload).canonicalHash,
+        )
+    }
+
+    @Test
+    fun `distinct images with equal source id keep two artifact keys and exact command association`() {
+        val first = Image(
+            width = 1,
+            height = 1,
+            sourceId = "shared-provenance",
+            pixels = byteArrayOf(1, 2, 3, -1),
             alphaType = AlphaType.PREMUL,
         )
         val second = Image(
             width = 1,
-            height = 2,
-            sourceId = "ambiguous-source",
-            pixels = byteArrayOf(7, 8, 9, -1, 10, 11, 12, -1),
+            height = 1,
+            sourceId = "shared-provenance",
+            pixels = byteArrayOf(7, 8, 9, -1),
             alphaType = AlphaType.PREMUL,
         )
         val operations = listOf(
-            DisplayOp.DrawImage(
-                first,
-                Rect.fromLTRB(0f, 0f, 2f, 1f),
-                Rect.fromLTRB(1f, 1f, 5f, 3f),
-                null,
-                Matrix33.identity(),
-                ClipStack.WideOpen,
-            ),
-            DisplayOp.DrawImage(
-                second,
-                Rect.fromLTRB(0f, 0f, 1f, 2f),
-                Rect.fromLTRB(6f, 1f, 8f, 5f),
-                null,
-                Matrix33.identity(),
-                ClipStack.WideOpen,
-            ),
-        )
-        val base = request(listOf(rect()))
-        val candidate = GPUPreparedSurfaceEligibility.Candidate(
-            operations = operations,
-            config = base.candidate.config,
-            color = base.candidate.color,
+            drawImage(first, Rect.fromLTRB(1f, 1f, 5f, 3f)),
+            drawImage(second, Rect.fromLTRB(6f, 1f, 8f, 5f)),
         )
 
-        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
-            GPUPreparedSurfaceFrameBuilder.build(base.copy(candidate = candidate)),
+        val buildResult = GPUPreparedSurfaceFrameBuilder.build(imageRequest(operations))
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            buildResult,
+            buildResult.toString(),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val semantics = packets.map { packet ->
+            assertIs<GPUDrawSemanticPayload.SampledImage>(packet.semanticPayload)
+        }
+        val artifacts = ready.taskList.tasks.filterIsInstance<GPUTask.Upload>()
+            .mapNotNull(GPUTask.Upload::preparedImagePlan)
+            .map { plan -> plan.bindingRequests.single().artifactKey }
+
+        assertEquals(2, packets.size)
+        assertEquals(2, artifacts.toSet().size)
+        assertContentEquals(first.pixels, semantics[0].artifact.tightRgba8BytesForUpload())
+        assertContentEquals(second.pixels, semantics[1].artifact.tightRgba8BytesForUpload())
+    }
+
+    @Test
+    fun `surface propagates canonical image refusal codes and adds only boundary facts`() {
+        val cases = listOf(
+            Image(
+                1,
+                1,
+                ColorType.RGBA_8888,
+                "missing-pixels",
+                pixels = null,
+                alphaType = AlphaType.PREMUL,
+            ) to GPUPreparedImageRefusalCodes.PIXELS_MISSING,
+            Image(
+                1,
+                1,
+                ColorType.GRAY_8,
+                "unsupported-format",
+                byteArrayOf(1),
+                alphaType = AlphaType.PREMUL,
+            ) to GPUPreparedImageRefusalCodes.PIXEL_FORMAT,
+            Image(
+                1,
+                1,
+                ColorType.RGBA_8888,
+                "unpremultiplied",
+                byteArrayOf(1, 2, 3, 4),
+                alphaType = AlphaType.UNPREMUL,
+            ) to GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
         )
 
-        assertEquals("invalid.surface.prepared.image-source-bijection", refused.diagnostic.code.value)
+        cases.forEach { (image, expectedCode) ->
+            val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+                GPUPreparedSurfaceFrameBuilder.build(
+                    imageRequest(listOf(drawImage(image, Rect.fromLTRB(1f, 1f, 5f, 5f)))),
+                ),
+            )
+
+            assertEquals(expectedCode, refused.diagnostic.code.value)
+            assertEquals("surface", refused.diagnostic.facts["boundary"])
+            assertEquals("0", refused.diagnostic.facts["commandId"])
+            assertEquals("0", refused.diagnostic.facts["operationIndex"])
+            assertTrue(!refused.diagnostic.code.value.startsWith("unsupported.surface.prepared.image-source."))
+        }
     }
 
     @Test
@@ -435,6 +508,38 @@ class GPUPreparedSurfaceFrameBuilderTest {
             readbackRequestId = GPUReadbackRequestID("surface-frame-readback"),
         )
     }
+
+    private fun imageRequest(operations: List<DisplayOp.DrawImage>): GPUPreparedSurfaceFrameBuildRequest {
+        val base = request(listOf(rect()))
+        return base.copy(
+            candidate = GPUPreparedSurfaceEligibility.Candidate(
+                operations = operations,
+                config = base.candidate.config,
+                color = base.candidate.color,
+            ),
+            capabilities = GPUCapabilities(
+                implementation = base.capabilities.implementation,
+                facts = base.capabilities.facts.filterNot { fact ->
+                    fact.name == "first_slice.bitmap_rect.native"
+                },
+                knownUnsupportedFacts = base.capabilities.knownUnsupportedFacts,
+                snapshotId = "${base.capabilities.snapshotId}:prepared-image",
+                limits = base.capabilities.limits,
+                textureFormatSampleSupport = base.capabilities.textureFormatSampleSupport,
+                rendererFeatures = base.capabilities.rendererFeatures,
+                copyAsDrawCapability = base.capabilities.copyAsDrawCapability,
+            ),
+        )
+    }
+
+    private fun drawImage(image: Image, dst: Rect): DisplayOp.DrawImage = DisplayOp.DrawImage(
+        image = image,
+        src = Rect.fromLTRB(0f, 0f, image.width.toFloat(), image.height.toFloat()),
+        dst = dst,
+        paint = null,
+        transform = Matrix33.identity(),
+        clip = ClipStack.WideOpen,
+    )
 
     private fun capabilities(
         fillRect: Boolean = true,

@@ -51,6 +51,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 
 /** Verifies the first native FillRect analysis, route, and pass builder. */
@@ -84,7 +85,7 @@ class FirstRoutePlannerTest {
         val plan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command)
 
         assertIs<GPURouteDecision.Refused>(plan.routeDecision)
-        assertEquals("unsupported.image.sampling_tile_mode", plan.pass.diagnostics.single().code)
+        assertEquals(GPUPreparedImageRefusalCodes.TILE_MODE, plan.pass.diagnostics.single().code)
     }
 
     /** Cubic, mipmap, and anisotropic sampling remain explicit refusals in the prepared lane. */
@@ -105,9 +106,57 @@ class FirstRoutePlannerTest {
             GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command).pass.diagnostics.single().code
 
         assertEquals("unsupported.image.sampling_cubic", refusal(base.copy(samplingFilterMode = "cubic")))
-        assertEquals("unsupported.image.sampling_mipmap", refusal(base.copy(samplingMipmapMode = "linear")))
-        assertEquals("unsupported.image.sampling_anisotropy", refusal(base.copy(samplingAnisotropy = 2)))
-        assertEquals("unsupported.image.pixel_facts_missing", refusal(base.copy(pixelsProvenance = "")))
+        assertEquals(GPUPreparedImageRefusalCodes.MIP_REQUIRED, refusal(base.copy(samplingMipmapMode = "linear")))
+        assertEquals(
+            GPUPreparedImageRefusalCodes.SAMPLING_ANISOTROPIC,
+            refusal(base.copy(samplingAnisotropy = 2)),
+        )
+        assertEquals(
+            GPUPreparedImageRefusalCodes.PIXELS_MISSING,
+            refusal(base.copy(pixelsProvenance = "")),
+        )
+    }
+
+    @Test
+    fun `draw image recording preserves canonical prepared refusal codes with boundary facts`() {
+        val base = GPUDrawImageRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(72),
+            imageSourceId = IMAGE_DRAW_SOURCE_ID,
+            src = GPURect(0f, 0f, 2f, 2f),
+            dst = GPURect(2f, 3f, 18f, 21f),
+            target = GPUTargetFacts(64, 64, "rgba8unorm"),
+            material = GPUMaterialDescriptor.ImageDraw(IMAGE_DRAW_SOURCE_ID, 2, 2),
+            pixelsWidth = IMAGE_DRAW_PIXELS_WIDTH,
+            pixelsHeight = IMAGE_DRAW_PIXELS_HEIGHT,
+            pixelsFormat = IMAGE_DRAW_PIXELS_FORMAT,
+            pixelsRowBytes = IMAGE_DRAW_PIXELS_ROW_BYTES,
+            pixelsAlphaType = IMAGE_DRAW_PIXELS_ALPHA,
+            pixelsColorProfileLabel = IMAGE_DRAW_PIXELS_COLOR_PROFILE,
+            pixelsOrientationState = IMAGE_DRAW_PIXELS_ORIENTATION,
+            pixelsGeneration = IMAGE_DRAW_PIXELS_GENERATION,
+            pixelsContentHash = IMAGE_DRAW_PIXELS_CONTENT_HASH,
+            pixelsProvenance = IMAGE_DRAW_PIXELS_PROVENANCE,
+        )
+        val cases = listOf(
+            GPUPreparedImageRefusalCodes.PIXELS_MISSING to base.copy(pixelsContentHash = ""),
+            GPUPreparedImageRefusalCodes.PIXEL_FORMAT to base.copy(pixelsFormat = "Gray8"),
+            GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION to
+                base.copy(pixelsAlphaType = "Unpremul"),
+            GPUPreparedImageRefusalCodes.PIXEL_ROW_STRIDE to base.copy(pixelsRowBytes = 3),
+            GPUPreparedImageRefusalCodes.NATIVE_GENERATION to base.copy(pixelsGeneration = -1),
+        )
+
+        cases.forEach { (expectedCode, command) ->
+            val diagnostic = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities())
+                .plan(command)
+                .analysisRecord
+                .diagnostics
+                .single()
+
+            assertEquals(expectedCode, diagnostic.code)
+            assertEquals("recording", diagnostic.facts["boundary"])
+            assertFalse(diagnostic.code.startsWith("unsupported.surface.prepared.image-source."))
+        }
     }
 
     /** Accepted solid FillRect produces pre-materialization analysis, native route, and pass records only. */
@@ -1679,7 +1728,7 @@ class FirstRoutePlannerTest {
 
         val plan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command)
         assertIs<GPURouteDecision.Refused>(plan.routeDecision)
-        assertEquals("unsupported.image.source_id_empty", plan.pass.diagnostics.single().code)
+        assertEquals(GPUPreparedImageRefusalCodes.PIXELS_MISSING, plan.pass.diagnostics.single().code)
     }
 
     /** DrawImageRect with NaN source rect refuses diagnostically. */
@@ -1787,7 +1836,7 @@ class FirstRoutePlannerTest {
 
         val plan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command)
         assertIs<GPURouteDecision.Refused>(plan.routeDecision)
-        assertEquals("unsupported.image.pixels_descriptor_invalid", plan.pass.diagnostics.single().code)
+        assertEquals(GPUPreparedImageRefusalCodes.DIMENSIONS, plan.pass.diagnostics.single().code)
     }
 
     /** DrawImageRect with stroke refuses diagnostically. */

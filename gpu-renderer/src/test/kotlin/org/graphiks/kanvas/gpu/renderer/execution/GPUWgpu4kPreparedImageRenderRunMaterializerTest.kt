@@ -28,6 +28,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageOrientation
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProfile
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProvenance
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
@@ -308,10 +309,9 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 ),
             )
 
-        assertEquals(
-            "unsupported.image.native_binding",
-            assertIs<GPUPreparedRenderRunMaterialization.Refused>(result).code,
-        )
+        val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(result)
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.code)
+        assertEquals("native", refused.facts["boundary"])
         assertEquals(0, factory.handleCreates)
         assertEquals(0, nativeDevice.pipelineCreates)
         cache.close()
@@ -353,12 +353,60 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 ),
             )
 
-        assertEquals(
-            "unsupported.image.native_binding",
-            assertIs<GPUPreparedRenderRunMaterialization.Refused>(result).code,
-        )
+        val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(result)
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.code)
+        assertEquals("native", refused.facts["boundary"])
         assertEquals(0, factory.handleCreates)
         assertEquals(0, nativeDevice.pipelineCreates)
+        cache.close()
+    }
+
+    @Test
+    fun `missing packet binding preserves canonical refusal through native boundary`() {
+        val artifact = preparedImageArtifact(pixelSeed = 19)
+        val completeResource = buildPreparedImageFrameResourcePlanFromBindings(
+            artifact = artifact,
+            bindingInputs = listOf(
+                GPUPreparedImageBindingInput("packet.one", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.two", GPUPreparedImageSampling.Nearest),
+            ),
+            bindingLayoutHash = "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
+            capabilities = preparedImageCapabilities(),
+            frameIdentity = "frame.missing-binding",
+            uploadTaskId = GPUTaskID("task.upload.missing-binding"),
+        )
+        val resource = completeResource.copy(
+            bindingRequests = completeResource.bindingRequests.take(1),
+        )
+        val allocations = listOf(
+            GPUPreparedImageUniformAllocation("packet.one", 0L, 112L),
+            GPUPreparedImageUniformAllocation("packet.two", 256L, 112L),
+        )
+        val nativeDevice = RecordingPreparedImageDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            nativeDevice.device,
+            GPUDeviceGenerationID(182),
+        )
+
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            RecordingPreparedImageHandleFactory(),
+        ).materializeAcceptedRun(
+            preparedImageRenderRunPlan(
+                sourceScopeIndices = listOf(1, 2),
+                packets = listOf(
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 2f),
+                ),
+                resources = listOf(resource),
+                uniformAllocations = allocations,
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(result)
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.code)
+        assertEquals("native", refused.facts["boundary"])
+        assertFalse(refused.code.startsWith("unsupported.surface.prepared.image-source."))
         cache.close()
     }
 

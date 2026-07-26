@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import java.security.MessageDigest
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -85,7 +86,11 @@ internal sealed interface GPUPreparedRenderRunMaterialization {
         val ownedResources: List<AutoCloseable>,
     ) : GPUPreparedRenderRunMaterialization
 
-    data class Refused(val code: String, val message: String) :
+    data class Refused(
+        val code: String,
+        val message: String,
+        val facts: Map<String, String> = emptyMap(),
+    ) :
         GPUPreparedRenderRunMaterialization {
         init {
             require(code.isNotBlank() && message.isNotBlank())
@@ -105,7 +110,11 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
         plan: GPUPreparedImageRenderRunPlan,
     ): GPUPreparedRenderRunMaterialization {
         validatePlan(plan)?.let {
-            return GPUPreparedRenderRunMaterialization.Refused(it.first, it.second)
+            return GPUPreparedRenderRunMaterialization.Refused(
+                code = it.first,
+                message = it.second,
+                facts = mapOf("boundary" to "native"),
+            )
         }
         val created = mutableListOf<AutoCloseable>()
         return try {
@@ -268,7 +277,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                 }
             }
         ) {
-            return "unsupported.image.native_binding" to
+            return GPUPreparedImageRefusalCodes.NATIVE_BINDING to
                 "Prepared-image runs require the canonical reflected ABI112 binding identity."
         }
         val uploadScopeKeys = plan.exactScopeKeys.take(plan.resources.size)
@@ -325,7 +334,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
         if (bindingPacketIds.size != plan.packets.size ||
             bindingPacketIds.toSet() != allocationPacketIds.toSet()
         ) {
-            return "unsupported.prepared_image.binding_identity" to
+            return GPUPreparedImageRefusalCodes.NATIVE_BINDING to
                 "Prepared-image run bindings must exactly cover uniform packet identities."
         }
         val packetById = plan.uniformAllocations.mapIndexed { index, allocation ->

@@ -24,6 +24,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageOrientation
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProfile
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProvenance
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
@@ -149,12 +150,14 @@ class GPUPreparedImageNativeResourcesTest {
                 activeAttachment = fixture.plan.frameTextureRef,
             ),
             "unsupported.prepared_image.texture_usage" to fixture.request.copy(resourcePlan = badUsage),
-            "unsupported.prepared_image.device_limit" to fixture.request.copy(
+            GPUPreparedImageRefusalCodes.TEXTURE_LIMIT to fixture.request.copy(
                 capabilities = capabilities(maxTextureDimension2D = 1),
             ),
             "unsupported.prepared_image.owner_mismatch" to fixture.request.copy(actualOwner = "foreign-owner"),
-            "unsupported.prepared_image.device_generation" to fixture.request.copy(actualDeviceGeneration = 8),
-            "unsupported.prepared_image.resource_generation" to fixture.request.copy(actualResourceGeneration = 4),
+            GPUPreparedImageRefusalCodes.NATIVE_GENERATION to
+                fixture.request.copy(actualDeviceGeneration = 8),
+            GPUPreparedImageRefusalCodes.NATIVE_GENERATION to
+                fixture.request.copy(actualResourceGeneration = 4),
         )
         val factory = RecordingFactory()
 
@@ -163,6 +166,13 @@ class GPUPreparedImageNativeResourcesTest {
                 GPUPreparedImageNativeResourcePreflighter.preflight(request),
             )
             assertEquals(reason, refused.reasonCode)
+            if (reason in setOf(
+                    GPUPreparedImageRefusalCodes.NATIVE_GENERATION,
+                    GPUPreparedImageRefusalCodes.TEXTURE_LIMIT,
+                )
+            ) {
+                assertEquals("preflight", refused.facts["boundary"])
+            }
         }
         assertEquals(0, factory.createCalls)
     }
@@ -185,10 +195,27 @@ class GPUPreparedImageNativeResourcesTest {
         }
 
         assertEquals(0, factory.createCalls)
-        assertEquals(
-            "unsupported.image.native_binding",
-            assertIs<GPUPreparedImageNativePreflightResult.Refused>(result).reasonCode,
+        val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(result)
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.reasonCode)
+        assertEquals("preflight", refused.facts["boundary"])
+    }
+
+    @Test
+    fun `missing binding preserves canonical refusal through preflight`() {
+        val fixture = fixture(
+            listOf(GPUPreparedImageBindingInput("packet.missing", GPUPreparedImageSampling.Nearest)),
         )
+
+        val result = GPUPreparedImageNativeResourcePreflighter.preflight(
+            fixture.request.copy(
+                resourcePlan = fixture.plan.copy(bindingRequests = emptyList()),
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(result)
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.reasonCode)
+        assertEquals("preflight", refused.facts["boundary"])
+        assertTrue(!refused.reasonCode.startsWith("unsupported.surface.prepared.image-source."))
     }
 
     @Test
@@ -218,7 +245,7 @@ class GPUPreparedImageNativeResourcesTest {
             "unsupported.prepared_image.uniform_preparation" to planWithPreparation(
                 uniform.rebuilt(usages = setOf(GPUFrameResourceUsage.CopyDestination)),
             ),
-            "unsupported.prepared_image.device_limit" to planWithPreparation(
+            GPUPreparedImageRefusalCodes.UPLOAD_BUDGET_EXCEEDED to planWithPreparation(
                 uniform.rebuilt(
                     descriptor = GPUFrameBufferDescriptor(
                         byteSize = oversizedUniformBytes,
@@ -249,6 +276,9 @@ class GPUPreparedImageNativeResourcesTest {
                 ),
             )
             assertEquals(reason, refused.reasonCode)
+            if (reason in GPUPreparedImageRefusalCodes.ALL) {
+                assertEquals("preflight", refused.facts["boundary"])
+            }
         }
     }
 

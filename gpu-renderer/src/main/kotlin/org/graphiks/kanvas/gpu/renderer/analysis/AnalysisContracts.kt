@@ -35,6 +35,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImagePixelsDescriptor
 import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageShaderPreparedPlanner
 import org.graphiks.kanvas.gpu.renderer.images.GPUImageDecodePlanner
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -1110,6 +1111,10 @@ class GPUFirstRoutePlanner(
             recordId = recordId,
             decisionId = "refused.draw_image_rect.${command.commandId.value}",
             terminal = true,
+            facts = mapOf(
+                "boundary" to "recording",
+                "commandId" to command.commandId.value.toString(),
+            ),
         )
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
@@ -1142,7 +1147,7 @@ class GPUFirstRoutePlanner(
     private fun NormalizedDrawCommand.DrawImageRect.refusalCode(): String? =
         coordinateRefusalCode() ?: when {
             stroke -> "unsupported.stroke.unimplemented"
-            imageSourceId.isBlank() -> "unsupported.image.source_id_empty"
+            imageSourceId.isBlank() -> GPUPreparedImageRefusalCodes.PIXELS_MISSING
             src.left.isNaN() || src.top.isNaN() || src.right.isNaN() || src.bottom.isNaN() ->
                 "unsupported.image.src_rect_nan"
             dst.left.isNaN() || dst.top.isNaN() || dst.right.isNaN() || dst.bottom.isNaN() ->
@@ -1152,21 +1157,23 @@ class GPUFirstRoutePlanner(
             !dst.left.isFinite() || !dst.top.isFinite() || !dst.right.isFinite() || !dst.bottom.isFinite() ->
                 "unsupported.image.dst_rect"
             pixelsWidth <= 0 || pixelsHeight <= 0 ->
-                "unsupported.image.pixels_descriptor_invalid"
+                GPUPreparedImageRefusalCodes.DIMENSIONS
             samplingTileModeX != "clamp" || samplingTileModeY != "clamp" ->
-                "unsupported.image.sampling_tile_mode"
-            samplingFilterMode == "cubic" -> "unsupported.image.sampling_cubic"
+                GPUPreparedImageRefusalCodes.TILE_MODE
+            samplingFilterMode == "cubic" -> GPUPreparedImageRefusalCodes.SAMPLING_CUBIC
             samplingFilterMode !in acceptedDrawImageSamplingFilters ->
                 "unsupported.image.sampling_filter"
-            samplingMipmapMode != "none" -> "unsupported.image.sampling_mipmap"
-            samplingAnisotropy != 1 -> "unsupported.image.sampling_anisotropy"
-            pixelsFormat != "RGBA8Unorm" -> "unsupported.image.pixels_format"
-            pixelsRowBytes < pixelsWidth.toLong() * 4L -> "unsupported.image.pixels_descriptor_invalid"
-            pixelsAlphaType != "Premul" -> "unsupported.image.alpha_type"
-            pixelsColorProfileLabel.lowercase() != "srgb" -> "unsupported.image.color_profile"
-            pixelsOrientationState != "Applied" -> "unsupported.image.orientation"
-            pixelsContentHash.isBlank() || pixelsProvenance.isBlank() || pixelsGeneration < 0L ->
-                "unsupported.image.pixel_facts_missing"
+            samplingMipmapMode != "none" -> GPUPreparedImageRefusalCodes.MIP_REQUIRED
+            samplingAnisotropy != 1 -> GPUPreparedImageRefusalCodes.SAMPLING_ANISOTROPIC
+            pixelsFormat != "RGBA8Unorm" -> GPUPreparedImageRefusalCodes.PIXEL_FORMAT
+            pixelsRowBytes < pixelsWidth.toLong() * 4L -> GPUPreparedImageRefusalCodes.PIXEL_ROW_STRIDE
+            pixelsAlphaType != "Premul" -> GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION
+            pixelsColorProfileLabel.lowercase() != "srgb" ->
+                GPUPreparedImageRefusalCodes.IMAGE_PROFILE_CONVERSION
+            pixelsOrientationState != "Applied" -> GPUPreparedImageRefusalCodes.ORIENTATION
+            pixelsContentHash.isBlank() || pixelsProvenance.isBlank() ->
+                GPUPreparedImageRefusalCodes.PIXELS_MISSING
+            pixelsGeneration < 0L -> GPUPreparedImageRefusalCodes.NATIVE_GENERATION
             src.left < 0f || src.top < 0f || src.right <= src.left || src.bottom <= src.top ||
                 src.right > pixelsWidth.toFloat() || src.bottom > pixelsHeight.toFloat() -> "unsupported.image.src_bounds"
             dst.right <= dst.left || dst.bottom <= dst.top -> "unsupported.image.dst_bounds"

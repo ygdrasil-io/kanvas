@@ -10,6 +10,7 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
@@ -66,10 +67,10 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         configuredAggregateBudgetBytes: Long = 1L shl 30,
     ): GPUPreparedSurfaceFrameResult {
         request.baseTaskList.tasks.filterIsInstance<GPUTask.Refused>().firstOrNull()?.let {
-            return GPUPreparedSurfaceFrameResult.Refused(it.diagnostic)
+            return GPUPreparedSurfaceFrameResult.Refused(it.diagnostic.atRecordingBoundary())
         }
         request.baseTaskList.diagnostics.firstOrNull(GPUDiagnostic::isTerminal)?.let {
-            return GPUPreparedSurfaceFrameResult.Refused(it)
+            return GPUPreparedSurfaceFrameResult.Refused(it.atRecordingBoundary())
         }
         val baseRenders = request.baseTaskList.tasks.filterIsInstance<GPUTask.Render>()
         if (baseRenders.isEmpty() || request.baseTaskList.tasks.any { it !is GPUTask.Render }) {
@@ -790,3 +791,10 @@ private fun diagnostic(code: String, message: String) = GPUDiagnostic(
     severity = GPUDiagnosticSeverity.Error,
     message = message,
 )
+
+private fun GPUDiagnostic.atRecordingBoundary(): GPUDiagnostic =
+    if (code.value in GPUPreparedImageRefusalCodes.ALL) {
+        copy(facts = facts + ("boundary" to "recording"))
+    } else {
+        this
+    }

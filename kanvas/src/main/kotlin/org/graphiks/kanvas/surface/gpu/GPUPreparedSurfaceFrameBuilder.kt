@@ -6,6 +6,8 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskSampling
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -23,8 +25,10 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.canvas.DisplayOp
 
@@ -67,7 +71,11 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 config = request.candidate.config,
                 capabilities = request.capabilities,
             )
-            val preparedImages = prepareImageVisuals(mapping, request.candidate.operations)
+            val preparedImages = prepareImageVisuals(
+                mapping = mapping,
+                operations = request.candidate.operations,
+                target = request.targetFacts,
+            )
             if (preparedImages is PreparedImageVisuals.Refused) {
                 return GPUPreparedSurfaceFrameBuildResult.Refused(preparedImages.diagnostic)
             }
@@ -82,7 +90,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
             preparedMapping.visualCommands.forEach { visual -> recorder.record(visual.normalized) }
             val recording = recorder.close()
             recording.taskList.diagnostics.firstOrNull { diagnostic -> diagnostic.isTerminal }?.let {
-                return GPUPreparedSurfaceFrameBuildResult.Refused(it)
+                return GPUPreparedSurfaceFrameBuildResult.Refused(it.atSurfaceBoundary())
             }
             val semantics = when (val gathered = GPUPreparedSurfaceSemanticBuilder.gather(
                 visualCommands = preparedMapping.visualCommands,
@@ -120,7 +128,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     )
                 }
                 is GPUPreparedSurfaceFrameResult.Refused ->
-                    GPUPreparedSurfaceFrameBuildResult.Refused(prepared.diagnostic)
+                    GPUPreparedSurfaceFrameBuildResult.Refused(prepared.diagnostic.atSurfaceBoundary())
             }
         } catch (failure: Exception) {
             GPUPreparedSurfaceFrameBuildResult.Refused(
@@ -143,47 +151,147 @@ private sealed interface PreparedImageVisuals {
     data class Refused(val diagnostic: GPUDiagnostic) : PreparedImageVisuals
 }
 
+internal data class GPUPreparedImageCommandSource(
+    val commandId: Int,
+    val operationIndex: Int,
+    val operation: DisplayOp.DrawImage,
+)
+
 private fun prepareImageVisuals(
     mapping: GPUOpMapping,
     operations: List<DisplayOp>,
+    target: GPUTargetFacts,
 ): PreparedImageVisuals {
-    val imagesBySourceId = operations.filterIsInstance<DisplayOp.DrawImage>()
-        .groupBy { operation -> operation.image.sourceId }
-    imagesBySourceId.entries.firstOrNull { (_, sources) -> sources.size != 1 }?.let {
+    val orderedVisuals = mutableListOf<GPUFramePathVisualCommand>()
+    val sourcesByCommandId = linkedMapOf<Int, GPUPreparedImageCommandSource>()
+    val mappedCoreVisuals = mapping.visualCommands.iterator()
+    var provenance = GPUFrameProvenance.None
+    operations.forEachIndexed { operationIndex, operation ->
+        when (operation) {
+            is DisplayOp.Annotation -> {
+                if (operation.key == GPU_FRAME_PROVENANCE_ANNOTATION_KEY) {
+                    GPUFrameProvenance.fromAnnotationValue(operation.value)?.let { provenance = it }
+                }
+            }
+            is DisplayOp.SetTransform,
+            is DisplayOp.SetClip,
+            is DisplayOp.FlushAndSnapshot,
+            -> Unit
+            is DisplayOp.DrawImage -> {
+                val commandId = orderedVisuals.size
+                val rawNormalized = operation.toImageRectCommand(
+                    cmdId = GPUDrawCommandID(commandId),
+                    target = target,
+                )
+                val normalized = rawNormalized.copy(
+                    ordering = rawNormalized.ordering.copy(paintOrder = commandId),
+                    source = rawNormalized.source.copy(frameProvenance = provenance),
+                )
+                val clipCoverage = if (normalized.clip.coverageRequest == null) {
+                    org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.NoClip
+                } else {
+                    org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused(
+                        "unsupported.clip.prepared_image_execution_unclassified",
+                    )
+                }
+                val clipExecution = if (clipCoverage ==
+                    org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.NoClip
+                ) {
+                    GPUClipExecutionPlan.NoClip
+                } else {
+                    GPUClipExecutionPlan.Refused(
+                        code = "unsupported.clip.prepared_image_execution_unclassified",
+                        message = "Prepared image clip execution must be classified before recording.",
+                    )
+                }
+                orderedVisuals += GPUFramePathVisualCommand(
+                    normalized = normalized,
+                    targetSpaceBounds = normalized.bounds,
+                    geometryCoverage = GPUCoverageConsumption.FullOrScissor,
+                    clipCoverage = clipCoverage,
+                    clipExecutionPlan = clipExecution,
+                    blendPlan = normalized.blend.canonicalBlendPlan(),
+                    provenance = provenance,
+                )
+                sourcesByCommandId[commandId] = GPUPreparedImageCommandSource(
+                    commandId = commandId,
+                    operationIndex = operationIndex,
+                    operation = operation,
+                )
+            }
+            is DisplayOp.DrawColor,
+            is DisplayOp.Clear,
+            is DisplayOp.DrawPoint,
+            is DisplayOp.DrawPoints,
+            is DisplayOp.DrawRect,
+            is DisplayOp.DrawRRect,
+            is DisplayOp.DrawDRRect,
+            is DisplayOp.DrawPath,
+            -> {
+                if (!mappedCoreVisuals.hasNext()) {
+                    return PreparedImageVisuals.Refused(
+                        imageCommandSourceDiagnostic(
+                            message = "Prepared Surface operation lost its normalized visual command.",
+                            facts = mapOf("operationIndex" to operationIndex.toString()),
+                        ),
+                    )
+                }
+                orderedVisuals += mappedCoreVisuals.next().withPreparedCommandIdentity(
+                    commandId = orderedVisuals.size,
+                    provenance = provenance,
+                )
+            }
+            else -> Unit
+        }
+    }
+    if (mappedCoreVisuals.hasNext()) {
         return PreparedImageVisuals.Refused(
-            diagnostic(
-                code = "invalid.surface.prepared.image-source-bijection",
-                message = "Prepared image source identities must map to one exact Surface image.",
-                facts = mapOf(
-                    "imageSourceId" to it.key,
-                    "sourceCount" to it.value.size.toString(),
-                ),
+            imageCommandSourceDiagnostic(
+                message = "Prepared Surface mapping retained an unassociated visual command.",
             ),
         )
     }
     val artifacts = linkedMapOf<Int, GPUPreparedImageUploadArtifact>()
     val visuals = mutableListOf<GPUFramePathVisualCommand>()
-    for (visual in mapping.visualCommands) {
+    for (visual in orderedVisuals) {
         val command = visual.normalized as? NormalizedDrawCommand.DrawImageRect
         if (command == null) {
             visuals += visual
             continue
         }
-        val source = imagesBySourceId[command.imageSourceId]?.firstOrNull()
+        val source = sourcesByCommandId[command.commandId.value]
             ?: return PreparedImageVisuals.Refused(
                 diagnostic(
-                    code = "invalid.surface.prepared.image-source-bijection",
+                    code = "invalid.surface.prepared.image-command-source",
                     message = "Prepared image command requires one exact Surface image source.",
-                    facts = mapOf("imageSourceId" to command.imageSourceId),
+                    facts = mapOf("commandId" to command.commandId.value.toString()),
                 ),
             )
-        val artifact = when (val prepared = GPUPreparedSurfaceImageSource.prepare(source.image)) {
+        if (source.operation.image.sourceId != command.imageSourceId) {
+            return PreparedImageVisuals.Refused(
+                diagnostic(
+                    code = "invalid.surface.prepared.image-command-source",
+                    message = "Prepared image command source identity diverged from its Surface operation.",
+                    facts = mapOf(
+                        "commandId" to command.commandId.value.toString(),
+                        "operationIndex" to source.operationIndex.toString(),
+                        "commandImageSourceId" to command.imageSourceId,
+                        "operationImageSourceId" to source.operation.image.sourceId,
+                    ),
+                ),
+            )
+        }
+        val artifact = when (val prepared = GPUPreparedSurfaceImageSource.prepare(source.operation.image)) {
             is GPUPreparedImageArtifactResult.Ready -> prepared.artifact
             is GPUPreparedImageArtifactResult.Refused -> return PreparedImageVisuals.Refused(
                 diagnostic(
-                    code = "unsupported.surface.prepared.image-source.${prepared.code}",
+                    code = prepared.code,
                     message = "Surface image source could not produce an exact prepared artifact.",
-                    facts = prepared.facts,
+                    facts = prepared.facts + mapOf(
+                        "boundary" to "surface",
+                        "commandId" to command.commandId.value.toString(),
+                        "operationIndex" to source.operationIndex.toString(),
+                    ),
                 ),
             )
         }
@@ -211,6 +319,48 @@ private fun prepareImageVisuals(
     }
     return PreparedImageVisuals.Ready(visuals, artifacts)
 }
+
+private fun GPUFramePathVisualCommand.withPreparedCommandIdentity(
+    commandId: Int,
+    provenance: GPUFrameProvenance,
+): GPUFramePathVisualCommand {
+    val identity = GPUDrawCommandID(commandId)
+    val command = when (val current = normalized) {
+        is NormalizedDrawCommand.FillRect -> current.copy(
+            commandId = identity,
+            ordering = current.ordering.copy(paintOrder = commandId),
+            source = current.source.copy(frameProvenance = provenance),
+        )
+        is NormalizedDrawCommand.FillRRect -> current.copy(
+            commandId = identity,
+            ordering = current.ordering.copy(paintOrder = commandId),
+            source = current.source.copy(frameProvenance = provenance),
+        )
+        is NormalizedDrawCommand.FillPath -> current.copy(
+            commandId = identity,
+            ordering = current.ordering.copy(paintOrder = commandId),
+            source = current.source.copy(frameProvenance = provenance),
+        )
+        else -> error("Prepared Surface core mapping produced an unsupported command family.")
+    }
+    return copy(normalized = command, provenance = provenance)
+}
+
+private fun imageCommandSourceDiagnostic(
+    message: String,
+    facts: Map<String, String> = emptyMap(),
+): GPUDiagnostic = diagnostic(
+    code = "invalid.surface.prepared.image-command-source",
+    message = message,
+    facts = facts,
+)
+
+private fun GPUDiagnostic.atSurfaceBoundary(): GPUDiagnostic =
+    if (code.value in GPUPreparedImageRefusalCodes.ALL) {
+        copy(facts = facts + ("boundary" to "surface"))
+    } else {
+        this
+    }
 
 /**
  * The prepared target is currently a physical UNORM texture carrying the named

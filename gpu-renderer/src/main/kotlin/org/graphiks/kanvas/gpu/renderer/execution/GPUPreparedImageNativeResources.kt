@@ -9,6 +9,7 @@ import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.images.GPUImageUploadArtifactKey
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
@@ -85,7 +86,10 @@ internal data class GPUPreparedImageNativePreflightRequest(
 }
 
 internal sealed interface GPUPreparedImageNativePreflightResult {
-    data class Refused(val reasonCode: String) : GPUPreparedImageNativePreflightResult {
+    data class Refused(
+        val reasonCode: String,
+        val facts: Map<String, String> = emptyMap(),
+    ) : GPUPreparedImageNativePreflightResult {
         init {
             require(reasonCode.isNotBlank())
         }
@@ -104,7 +108,12 @@ internal sealed interface GPUPreparedImageNativePreflightResult {
 
 internal object GPUPreparedImageNativeResourcePreflighter {
     fun preflight(request: GPUPreparedImageNativePreflightRequest): GPUPreparedImageNativePreflightResult {
-        refusalReason(request)?.let { return GPUPreparedImageNativePreflightResult.Refused(it) }
+        refusalReason(request)?.let {
+            return GPUPreparedImageNativePreflightResult.Refused(
+                reasonCode = it,
+                facts = mapOf("boundary" to "preflight"),
+            )
+        }
 
         val keys = request.resourcePlan.preparedImageNativeBindingKeys(
             deviceGeneration = request.actualDeviceGeneration,
@@ -124,7 +133,7 @@ internal object GPUPreparedImageNativeResourcePreflighter {
                 binding.bindingLayoutHash != bindingLayoutIdentity
             }
         ) {
-            return "unsupported.image.native_binding"
+            return GPUPreparedImageRefusalCodes.NATIVE_BINDING
         }
         if (request.activeAttachment == plan.frameTextureRef) {
             return "unsupported.prepared_image.active_attachment"
@@ -136,13 +145,15 @@ internal object GPUPreparedImageNativeResourcePreflighter {
             return "unsupported.prepared_image.owner_mismatch"
         }
         if (request.expectedDeviceGeneration != request.actualDeviceGeneration) {
-            return "unsupported.prepared_image.device_generation"
+            return GPUPreparedImageRefusalCodes.NATIVE_GENERATION
         }
         if (request.expectedResourceGeneration != request.actualResourceGeneration) {
-            return "unsupported.prepared_image.resource_generation"
+            return GPUPreparedImageRefusalCodes.NATIVE_GENERATION
         }
-        if (plan.bindingRequests.isEmpty() ||
-            plan.bindingRequests.any { it.artifactKey != request.artifactKey } ||
+        if (plan.bindingRequests.isEmpty()) {
+            return GPUPreparedImageRefusalCodes.NATIVE_BINDING
+        }
+        if (plan.bindingRequests.any { it.artifactKey != request.artifactKey } ||
             plan.bindingRequests.map { it.packetId }.distinct().size != plan.bindingRequests.size
         ) {
             return "unsupported.prepared_image.artifact_identity"
@@ -159,19 +170,26 @@ internal object GPUPreparedImageNativeResourcePreflighter {
         }
         val expectedTextureByteSize =
             plan.expectedTextureByteSizeOrNull()
-                ?: return "unsupported.prepared_image.device_limit"
-        val limits = request.capabilities.limits ?: return "unsupported.prepared_image.device_limit"
+                ?: return GPUPreparedImageRefusalCodes.TEXTURE_LIMIT
+        val limits = request.capabilities.limits ?: return GPUPreparedImageRefusalCodes.TEXTURE_LIMIT
         if (plan.textureDescriptor.width.toLong() > limits.maxTextureDimension2D ||
-            plan.textureDescriptor.height.toLong() > limits.maxTextureDimension2D ||
-            limits.maxBufferSize?.let { limit ->
+            plan.textureDescriptor.height.toLong() > limits.maxTextureDimension2D
+        ) {
+            return GPUPreparedImageRefusalCodes.TEXTURE_LIMIT
+        }
+        if (limits.maxBufferSize?.let { limit ->
                 plan.uploadTaskLayout.byteSize > limit ||
                     expectedUniformBufferSize > limit ||
                     plan.preparationRequests.any { preparation -> preparation.byteSize > limit }
-            } == true ||
-            limits.maxDynamicUniformBuffersPerPipelineLayout?.let { it < 1L } == true ||
-            plan.uploadTaskLayout.bytesPerRow % limits.copyBytesPerRowAlignment != 0L
+            } == true
         ) {
-            return "unsupported.prepared_image.device_limit"
+            return GPUPreparedImageRefusalCodes.UPLOAD_BUDGET_EXCEEDED
+        }
+        if (limits.maxDynamicUniformBuffersPerPipelineLayout?.let { it < 1L } == true) {
+            return GPUPreparedImageRefusalCodes.NATIVE_BINDING
+        }
+        if (plan.uploadTaskLayout.bytesPerRow % limits.copyBytesPerRowAlignment != 0L) {
+            return GPUPreparedImageRefusalCodes.PIXEL_ROW_STRIDE
         }
         val commonView = plan.bindingRequests.first().view
         if (plan.bindingRequests.any { binding -> binding.view != commonView } ||
