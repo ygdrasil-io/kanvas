@@ -137,7 +137,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
             .materializeAcceptedRun(
                 preparedImageRenderRunPlan(
-                    sourceScopeIndices = listOf(1, 2, 3),
+                    sourceScopeIndices = listOf(1, 2),
                     packets = listOf(
                         preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
                         preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
@@ -154,13 +154,12 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             GPUPreparedNativeScopeOperand.PreparedImageRenderRun
         >()
         assertEquals(
-            listOf(1, 2, 3),
+            listOf(1, 2),
             result.scopeOperands.map { it.sourceStepIndex },
         )
         assertEquals(
             listOf(
                 GPUEncoderOperationKind.Upload,
-                GPUEncoderOperationKind.Render,
                 GPUEncoderOperationKind.Render,
             ),
             result.scopeOperands.map { it.operationKind },
@@ -172,19 +171,23 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             it === uniformUpload.destination.buffer
         })
         assertEquals(0L, uniformUpload.destinationOffset)
-        assertEquals(listOf(2, 3), uniformUpload.consumerSourceStepIndices)
+        assertEquals(listOf(2), uniformUpload.consumerSourceStepIndices)
+        val drawEntries = renders.single().drawEntries
         assertContentEquals(
-            renders[0].uniformBytes(),
+            drawEntries[0].uniformBytes(),
             uniformUpload.data.bytes().copyOfRange(0, 112),
         )
         assertContentEquals(
-            renders[1].uniformBytes(),
+            drawEntries[1].uniformBytes(),
             uniformUpload.data.bytes().copyOfRange(256, 368),
         )
-        assertTrue(upload.sourceStepIndex < renders.first().sourceStepIndex)
-        assertEquals(listOf(0L, 256L), renders.map { it.dynamicUniformOffset })
-        assertNotEquals(renders[0].uniformBytes().toList(), renders[1].uniformBytes().toList())
-        assertSame(renders[0].pipeline.pipeline, renders[1].pipeline.pipeline)
+        assertTrue(upload.sourceStepIndex < renders.single().sourceStepIndex)
+        assertEquals(listOf(0L, 256L), drawEntries.map { it.dynamicUniformOffset })
+        assertNotEquals(
+            drawEntries[0].uniformBytes().toList(),
+            drawEntries[1].uniformBytes().toList(),
+        )
+        assertSame(drawEntries[0].pipeline.pipeline, drawEntries[1].pipeline.pipeline)
         assertEquals(1, nativeDevice.pipelineCreates)
         assertEquals(listOf("nearest", "linear"), factory.samplerFilters)
 
@@ -234,7 +237,8 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val render = result.scopeOperands.filterIsInstance<
             GPUPreparedNativeScopeOperand.PreparedImageRenderRun
         >().single()
-        assertEquals(listOf(render.pipeline, render.bindGroup), render.operands)
+        val draw = render.drawEntries.single()
+        assertEquals(listOf(draw.pipeline, draw.bindGroup), render.operands)
         assertEquals(
             GPUPreparedNativeOperandRole.RenderColorTarget,
             render.exactOperandKeys.first().role,
@@ -293,6 +297,97 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             ),
             "unsupported.prepared_image.artifact_identity",
         )
+    }
+
+    @Test
+    fun `plan refuses copied upload bytes from a different same-sized artifact before handles`() {
+        val artifactA = preparedImageArtifact(pixelSeed = 22)
+        val artifactB = preparedImageArtifact(pixelSeed = 23)
+        val resourceA = preparedImageResource(artifactA, "packet.a")
+        val resourceB = preparedImageResource(artifactB, "packet.b")
+        val swapped = resourceB.copy(uploadLayout = resourceA.uploadLayout)
+        val nativeDevice = RecordingPreparedImageDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            nativeDevice.device,
+            GPUDeviceGenerationID(29),
+        )
+        val factory = RecordingPreparedImageHandleFactory()
+
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+            .materializeAcceptedRun(
+                preparedImageRenderRunPlan(
+                    sourceScopeIndices = listOf(1, 2),
+                    packets = listOf(
+                        preparedImageSemantic(
+                            artifactB,
+                            GPUPreparedImageSampling.Nearest,
+                            1f,
+                        ),
+                    ),
+                    resources = listOf(swapped),
+                    uniformAllocations = swapped.bindingRequests.map { it.uniformAllocation },
+                ),
+            )
+
+        assertEquals(
+            "unsupported.prepared_image.upload_provenance",
+            assertIs<GPUPreparedRenderRunMaterialization.Refused>(result).code,
+        )
+        assertEquals(0, factory.handleCreates)
+        assertEquals(0, nativeDevice.pipelineCreates)
+        cache.close()
+    }
+
+    @Test
+    fun `plan refuses constructor-forged upload bytes before handles`() {
+        val artifactA = preparedImageArtifact(pixelSeed = 24)
+        val artifactB = preparedImageArtifact(pixelSeed = 25)
+        val resourceA = preparedImageResource(artifactA, "packet.a")
+        val resourceB = preparedImageResource(artifactB, "packet.b")
+        val forged = GPUPreparedImageFrameResourcePlan(
+            stagingRef = resourceB.stagingRef,
+            textureRef = resourceB.textureRef,
+            frameTextureRef = resourceB.frameTextureRef,
+            uniformRef = resourceB.uniformRef,
+            textureDescriptor = resourceB.textureDescriptor,
+            uploadLayout = resourceA.uploadLayout,
+            uploadTaskLayout = resourceB.uploadTaskLayout,
+            bindingRequests = resourceB.bindingRequests,
+            preparationRequests = resourceB.preparationRequests,
+            memoryAllocations = resourceB.memoryAllocations,
+            uploadTaskId = resourceB.uploadTaskId,
+            artifact = artifactB,
+        )
+        val nativeDevice = RecordingPreparedImageDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            nativeDevice.device,
+            GPUDeviceGenerationID(29),
+        )
+        val factory = RecordingPreparedImageHandleFactory()
+
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+            .materializeAcceptedRun(
+                preparedImageRenderRunPlan(
+                    sourceScopeIndices = listOf(1, 2),
+                    packets = listOf(
+                        preparedImageSemantic(
+                            artifactB,
+                            GPUPreparedImageSampling.Nearest,
+                            1f,
+                        ),
+                    ),
+                    resources = listOf(forged),
+                    uniformAllocations = forged.bindingRequests.map { it.uniformAllocation },
+                ),
+            )
+
+        assertEquals(
+            "unsupported.prepared_image.upload_provenance",
+            assertIs<GPUPreparedRenderRunMaterialization.Refused>(result).code,
+        )
+        assertEquals(0, factory.handleCreates)
+        assertEquals(0, nativeDevice.pipelineCreates)
+        cache.close()
     }
 
     @Test
@@ -402,7 +497,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
 
         assertPreparedImageRefusal(
             preparedImageRenderRunPlan(
-                sourceScopeIndices = listOf(1, 2, 3),
+                sourceScopeIndices = listOf(1, 2),
                 packets = listOf(
                     preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
                     preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
@@ -420,7 +515,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
 
         assertPreparedImageRefusal(
             preparedImageRenderRunPlan(
-                sourceScopeIndices = listOf(1, 2, 3, 4),
+                sourceScopeIndices = listOf(1, 2, 3),
                 packets = listOf(
                     preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
                     preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
@@ -445,7 +540,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
 
         assertPreparedImageRefusal(
             preparedImageRenderRunPlan(
-                sourceScopeIndices = listOf(5, 1, 2, 6),
+                sourceScopeIndices = listOf(5, 1, 2),
                 packets = listOf(
                     preparedImageSemantic(firstArtifact, GPUPreparedImageSampling.Nearest, 1f),
                     preparedImageSemantic(secondArtifact, GPUPreparedImageSampling.Nearest, 9f),
@@ -581,8 +676,8 @@ private fun preparedImagePreflightScopeKeys(
     resources: List<GPUPreparedImageFrameResourcePlan>,
     allocations: List<GPUPreparedImageUniformAllocation>,
     sourceScopeIndices: List<Int>,
-): List<GPUPreparedNativeScopeKey> =
-    resources.mapIndexed { index, resource ->
+): List<GPUPreparedNativeScopeKey> {
+    val uploads = resources.mapIndexed { index, resource ->
         val textureGenerationLabel =
             "GPUFrameTextureRef:${resource.frameTextureRef.value}@${11 + index}"
         GPUPreparedNativeScopeKey(
@@ -607,18 +702,20 @@ private fun preparedImagePreflightScopeKeys(
                 ),
             ),
         )
-    } + allocations.mapIndexed { index, allocation ->
-        val targetGenerationLabel = "GPUFrameTargetRef:target.scene@13"
-        GPUPreparedNativeScopeKey(
-            sourceStepIndex = sourceScopeIndices[resources.size + index],
-            operationKind = GPUEncoderOperationKind.Render,
-            resourceGenerationLabels = listOf(targetGenerationLabel),
-            operandKeys = listOf(
-                GPUPreparedNativeOperandKey(
-                    GPUPreparedNativeOperandRole.RenderColorTarget,
-                    GPUPreparedNativeOperandKind.TextureView,
-                    gpuPreparedNativeBindingKey(targetGenerationLabel),
-                ),
+    }
+    val targetGenerationLabel = "GPUFrameTargetRef:target.scene@13"
+    val render = GPUPreparedNativeScopeKey(
+        sourceStepIndex = sourceScopeIndices.last(),
+        operationKind = GPUEncoderOperationKind.Render,
+        resourceGenerationLabels = listOf(targetGenerationLabel),
+        operandKeys = listOf(
+            GPUPreparedNativeOperandKey(
+                GPUPreparedNativeOperandRole.RenderColorTarget,
+                GPUPreparedNativeOperandKind.TextureView,
+                gpuPreparedNativeBindingKey(targetGenerationLabel),
+            ),
+        ) + allocations.flatMap { allocation ->
+            listOf(
                 GPUPreparedNativeOperandKey(
                     GPUPreparedNativeOperandRole.RenderPipeline,
                     GPUPreparedNativeOperandKind.RenderPipeline,
@@ -633,9 +730,11 @@ private fun preparedImagePreflightScopeKeys(
                         "preflight.bridge.bind-group.${allocation.packetId}",
                     ),
                 ),
-            ),
-        )
-    }
+            )
+        },
+    )
+    return uploads + render
+}
 
 private fun assertPreparedImageRefusal(
     plan: GPUPreparedImageRenderRunPlan,
@@ -736,6 +835,7 @@ internal class RecordingPreparedImageHandleFactory : GPUPreparedImageNativeHandl
     val samplerFilters = mutableListOf<String>()
     val uniformBuffers = mutableListOf<GPUBuffer>()
     val bindGroupUniformBuffers = mutableListOf<GPUBuffer>()
+    var handleCreates = 0
     private var ordinal = 0
 
     override fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture =
@@ -765,6 +865,7 @@ internal class RecordingPreparedImageHandleFactory : GPUPreparedImageNativeHandl
     }
 
     private inline fun <reified T> handle(prefix: String): T {
+        handleCreates += 1
         val label = "$prefix.${ordinal++}"
         return Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) {
                 proxy, method, args ->

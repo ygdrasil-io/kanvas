@@ -1035,45 +1035,59 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         }
     }
 
-    /**
-     * Image-specific render operands without a target. A later approved frame-level caller may
-     * compose this closed packet with its already-selected render target.
-     */
-    class PreparedImageRenderRun(
-        override val sourceStepIndex: Int,
+    class PreparedImageDrawEntry(
         val pipeline: GPUPreparedNativeRenderPipelineOperand,
         val bindGroup: GPUPreparedNativeBindGroupOperand,
         val dynamicUniformOffset: Long,
         uniformBytes: ByteArray,
         val scissor: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds,
-        exactOperandKeys: List<GPUPreparedNativeOperandKey>,
-    ) : GPUPreparedNativeScopeOperand {
-        override val operationKind = GPUEncoderOperationKind.Render
-        override val operands: List<GPUPreparedNativeOperand> =
-            immutableList(listOf(pipeline, bindGroup))
-        override val exactOperandKeys: List<GPUPreparedNativeOperandKey> =
-            immutableList(exactOperandKeys)
+    ) {
         private val uniformSnapshot = uniformBytes.copyOf()
 
         init {
             require(dynamicUniformOffset >= 0L)
             require(uniformSnapshot.size == GPUPreparedImageUniformAbi.BYTE_SIZE)
+        }
+
+        fun uniformBytes(): ByteArray = uniformSnapshot.copyOf()
+    }
+
+    /**
+     * One contiguous prepared-image render scope without a target handle. A later approved
+     * frame-level caller may compose its ordered draws with the already-selected render target.
+     */
+    class PreparedImageRenderRun(
+        override val sourceStepIndex: Int,
+        drawEntries: List<PreparedImageDrawEntry>,
+        exactOperandKeys: List<GPUPreparedNativeOperandKey>,
+    ) : GPUPreparedNativeScopeOperand {
+        override val operationKind = GPUEncoderOperationKind.Render
+        val drawEntries: List<PreparedImageDrawEntry> = immutableList(drawEntries)
+        override val operands: List<GPUPreparedNativeOperand> = immutableList(
+            this.drawEntries.flatMap { entry -> listOf(entry.pipeline, entry.bindGroup) },
+        )
+        override val exactOperandKeys: List<GPUPreparedNativeOperandKey> =
+            immutableList(exactOperandKeys)
+
+        init {
+            require(this.drawEntries.isNotEmpty())
             require(this.exactOperandKeys.map { key -> key.role to key.kind } ==
                 listOf(
                     GPUPreparedNativeOperandRole.RenderColorTarget to
                         GPUPreparedNativeOperandKind.TextureView,
-                    GPUPreparedNativeOperandRole.RenderPipeline to
-                        GPUPreparedNativeOperandKind.RenderPipeline,
-                    GPUPreparedNativeOperandRole.RenderBindGroup to
-                        GPUPreparedNativeOperandKind.BindGroup,
-                )
+                ) + this.drawEntries.flatMap {
+                    listOf(
+                        GPUPreparedNativeOperandRole.RenderPipeline to
+                            GPUPreparedNativeOperandKind.RenderPipeline,
+                        GPUPreparedNativeOperandRole.RenderBindGroup to
+                            GPUPreparedNativeOperandKind.BindGroup,
+                    )
+                }
             )
             require(this.exactOperandKeys.all {
                 it.ownership == GPUPreparedNativeOperandOwnership.Borrowed
             })
         }
-
-        fun uniformBytes(): ByteArray = uniformSnapshot.copyOf()
     }
 
     class Copy(

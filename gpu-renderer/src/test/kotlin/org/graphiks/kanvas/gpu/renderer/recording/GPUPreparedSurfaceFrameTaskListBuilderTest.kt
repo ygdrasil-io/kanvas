@@ -78,9 +78,13 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUploadLayout
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUPreparedSurfaceFrameTaskListBuilderTest {
@@ -359,8 +363,24 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
     }
 
     @Test
-    fun `materialized image run keys equal actual preflight upload and render scope keys`() {
-        val base = recording(imageCommand(0, 0)).taskList
+    fun `two packet image run materializes one actual preflight render scope in packet order`() {
+        val recorded = recording(imageCommand(0, 0), imageCommand(1, 1)).taskList
+        val sharedPassId = packet(recorded, 0).passId
+        val base = recorded.transformPackets { packet -> packet.rebuilt(passId = sharedPassId) }
+        val nearest = imageSemantic(
+            base,
+            commandId = 0,
+            sampling = GPUPreparedImageSampling.Nearest,
+        )
+        val imageSemantics = linkedMapOf<Int, GPUDrawSemanticPayload>(
+            0 to nearest,
+            1 to imageSemantic(
+                base,
+                commandId = 1,
+                artifactOverride = nearest,
+                sampling = GPUPreparedImageSampling.Linear,
+            ),
+        )
         val target = GPUFrameTargetRef("target.prepared-image-key-authority")
         val capabilities = capabilities()
         val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
@@ -370,17 +390,18 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
                     capabilities = capabilities,
                     target = target,
                     targetBounds = bounds,
-                    semanticsByCommandId = semantics(base),
+                    semanticsByCommandId = imageSemantics,
                     readbackRequestId = null,
                 ),
             ),
         ).taskList
         val framePlan = GPUFramePlanner.plan(taskList)
-        val renderPacket = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertFalse(framePlan.atomicallyRefused, framePlan.diagnostics.toString())
+        val renderPackets = taskList.tasks.filterIsInstance<GPUTask.Render>()
             .single()
             .drawPackets
-            .single()
-        val targetGeneration = renderPacket.resourceGeneration
+        assertEquals(listOf(0, 1), renderPackets.map(GPUDrawPacket::commandIdValue))
+        val targetGeneration = renderPackets.first().resourceGeneration
         val resourceGenerations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
             .flatMap { it.requests }
             .associate { request ->
@@ -441,24 +462,24 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         val resource = requireNotNull(
             taskList.tasks.filterIsInstance<GPUTask.Upload>().single().preparedImagePlan,
         )
-        val nominalSemantic = assertIs<GPUDrawSemanticPayload.SampledImage>(
-            renderPacket.semanticPayload,
-        )
-        val semantic = GPUPreparedImagePayloadGatherer().gatherSemantic(
-            GPUPreparedImagePayloadInput(
-                payloadRef = nominalSemantic.payloadRef,
-                artifact = nominalSemantic.artifact,
-                geometry = nominalSemantic.geometry,
-                sampling = nominalSemantic.sampling,
-                tintPremultipliedRgba = nominalSemantic.tintPremultipliedRgba,
-                atlasColorPremultipliedRgba = nominalSemantic.atlasColorPremultipliedRgba,
-                atlasSourceBlend = nominalSemantic.atlasSourceBlend,
-                targetBounds = nominalSemantic.targetBounds,
-                scissorBounds = nominalSemantic.scissorBounds,
-                blendPlanIdentity = "SrcOver",
-                frameProvenance = nominalSemantic.frameProvenance,
-            ),
-        )
+        val semantics = renderPackets.map { packet ->
+            val nominal = assertIs<GPUDrawSemanticPayload.SampledImage>(packet.semanticPayload)
+            GPUPreparedImagePayloadGatherer().gatherSemantic(
+                GPUPreparedImagePayloadInput(
+                    payloadRef = nominal.payloadRef,
+                    artifact = nominal.artifact,
+                    geometry = nominal.geometry,
+                    sampling = nominal.sampling,
+                    tintPremultipliedRgba = nominal.tintPremultipliedRgba,
+                    atlasColorPremultipliedRgba = nominal.atlasColorPremultipliedRgba,
+                    atlasSourceBlend = nominal.atlasSourceBlend,
+                    targetBounds = nominal.targetBounds,
+                    scissorBounds = nominal.scissorBounds,
+                    blendPlanIdentity = "SrcOver",
+                    frameProvenance = nominal.frameProvenance,
+                ),
+            )
+        }
         val exactScopeKeys = scopes.map { scope ->
             GPUPreparedNativeScopeKey(
                 sourceStepIndex = scope.sourceStepIndex,
@@ -472,19 +493,21 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
             nativeDevice.device,
             taskList.capabilitySeal.deviceGeneration,
         )
+        val handleFactory = RecordingPreparedImageHandleFactory()
+        val runPlan = GPUPreparedImageRenderRunPlan(
+            sourceScopeIndices = scopes.map { it.sourceStepIndex },
+            packets = semantics,
+            resources = listOf(resource),
+            uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
+            exactScopeKeys = exactScopeKeys,
+        )
+        assertEquals(runPlan, runPlan.copy())
+        assertEquals(runPlan.hashCode(), runPlan.copy().hashCode())
         val materialized = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
             GPUWgpu4kPreparedImageRenderRunMaterializer(
                 cache,
-                RecordingPreparedImageHandleFactory(),
-            ).materializeAcceptedRun(
-                GPUPreparedImageRenderRunPlan(
-                    sourceScopeIndices = scopes.map { it.sourceStepIndex },
-                    packets = listOf(semantic),
-                    resources = listOf(resource),
-                    uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
-                    exactScopeKeys = exactScopeKeys,
-                ),
-            ),
+                handleFactory,
+            ).materializeAcceptedRun(runPlan),
         )
 
         assertEquals(
@@ -501,9 +524,118 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
             materialized.scopeOperands.last().exactOperandKeys.map { it.bindingKey },
             "render target and command-bridge labels must come from preflight verbatim",
         )
+        val renderRun = assertIs<GPUPreparedNativeScopeOperand.PreparedImageRenderRun>(
+            materialized.scopeOperands.last(),
+        )
+        assertEquals(5, renderRun.exactOperandKeys.size)
+        assertEquals(listOf(0L, 256L), renderRun.drawEntries.map { it.dynamicUniformOffset })
+        assertSame(
+            renderRun.drawEntries[0].pipeline.pipeline,
+            renderRun.drawEntries[1].pipeline.pipeline,
+        )
+        assertEquals(1, nativeDevice.pipelineCreates)
+        assertEquals(listOf("nearest", "linear"), handleFactory.samplerFilters)
+        assertEquals(
+            listOf(scopes.last().sourceStepIndex),
+            materialized.uniformUploads.single().consumerSourceStepIndices,
+        )
+        assertTrue(renderRun.operands.none { it is org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedNativeTextureViewOperand })
 
         materialized.ownedResources.single().close()
         cache.close()
+    }
+
+    @Test
+    fun `sampled observer is not called when another packet materialization is invalid`() {
+        val recorded = recording(imageCommand(0, 0), imageCommand(1, 1)).taskList
+        val sharedPassId = packet(recorded, 0).passId
+        val base = recorded.transformPackets { packet -> packet.rebuilt(passId = sharedPassId) }
+        val nearest = imageSemantic(
+            base,
+            commandId = 0,
+            sampling = GPUPreparedImageSampling.Nearest,
+        )
+        val imageSemantics = linkedMapOf<Int, GPUDrawSemanticPayload>(
+            0 to nearest,
+            1 to imageSemantic(
+                base,
+                commandId = 1,
+                artifactOverride = nearest,
+                sampling = GPUPreparedImageSampling.Linear,
+            ),
+        )
+        val target = GPUFrameTargetRef("target.prepared-image-invalid-observer")
+        val capabilities = capabilities()
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(
+                GPUPreparedSurfaceFrameRequest(
+                    baseTaskList = base,
+                    capabilities = capabilities,
+                    target = target,
+                    targetBounds = bounds,
+                    semanticsByCommandId = imageSemantics,
+                    readbackRequestId = null,
+                ),
+            ),
+        ).taskList
+        val delegate = GPUConcreteResourceProvider()
+        val invalidProvider = object : GPUFrameResourcePreflightProvider by delegate {
+            override fun materializeCommandOperands(
+                request: GPUCommandOperandMaterializationRequest,
+                context: GPUTargetPreparationContext,
+            ): GPUResourceMaterializationDecision =
+                when (val decision = delegate.materializeCommandOperands(request, context)) {
+                    is GPUResourceMaterializationDecision.Materialized ->
+                        decision.copy(taskIds = emptyList())
+                    else -> decision
+                }
+        }
+        var observerCalled = false
+
+        val result = preflightPreparedTaskList(
+            taskList = taskList,
+            target = target,
+            capabilities = capabilities,
+            resourceProvider = invalidProvider,
+            observer = { observerCalled = true },
+        )
+
+        assertEquals(
+            "invalid.preflight.render_materialization_scope",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertFalse(observerCalled)
+    }
+
+    @Test
+    fun `sampled observer exception is not translated into encoder lowering refusal`() {
+        class NominalObserverFailure : RuntimeException("nominal observer failure")
+
+        val base = recording(imageCommand(0, 0)).taskList
+        val target = GPUFrameTargetRef("target.prepared-image-throwing-observer")
+        val capabilities = capabilities()
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(
+                GPUPreparedSurfaceFrameRequest(
+                    baseTaskList = base,
+                    capabilities = capabilities,
+                    target = target,
+                    targetBounds = bounds,
+                    semanticsByCommandId = semantics(base),
+                    readbackRequestId = null,
+                ),
+            ),
+        ).taskList
+
+        assertFailsWith<NominalObserverFailure> {
+            preflightPreparedTaskList(
+                taskList = taskList,
+                target = target,
+                capabilities = capabilities,
+                resourceProvider = GPUConcreteResourceProvider(),
+                observer = { throw NominalObserverFailure() },
+            )
+        }
     }
 
     @Test
@@ -654,6 +786,67 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         semanticsByCommandId = semantics,
         readbackRequestId = GPUReadbackRequestID("readback.prepared-surface"),
     )
+
+    private fun preflightPreparedTaskList(
+        taskList: GPUTaskList,
+        target: GPUFrameTargetRef,
+        capabilities: GPUCapabilities,
+        resourceProvider: GPUFrameResourcePreflightProvider,
+        observer: (List<GPUCommandEncoderScopePlan>) -> Unit,
+    ): GPUFramePreflightResult {
+        val framePlan = GPUFramePlanner.plan(taskList)
+        assertFalse(framePlan.atomicallyRefused, framePlan.diagnostics.toString())
+        val targetGeneration = taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .first()
+            .resourceGeneration
+        val resourceGenerations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap { it.requests }
+            .associate { request ->
+                request.resource to if (request.resource == target) targetGeneration else 5L
+            }
+        val completion = object : GPUQueueCompletionProvider {
+            override fun reserveTicket(
+                request: GPUQueueCompletionTicketRequest,
+            ): GPUQueueCompletionTicketReservation =
+                GPUQueueCompletionTicketReservation.Reserved(
+                    GPUQueueCompletionTicket(
+                        GPUQueueCompletionTicketID("ticket.prepared-image-observer"),
+                        request.frameId,
+                        request.deviceGeneration,
+                    ),
+                )
+
+            override fun abandonReservedTicket(
+                ticket: GPUQueueCompletionTicket,
+            ): GPUQueueCompletionTicketAbandonResult =
+                GPUQueueCompletionTicketAbandonResult.Abandoned(ticket.ticketId)
+        }
+        val surface = object : GPUSurfaceOutputProvider {
+            override fun acquire(
+                request: GPUSurfaceAcquisitionRequest,
+            ): GPUSurfaceAcquisitionResult =
+                error("Prepared image observer preflight must not acquire a surface")
+
+            override fun release(
+                output: GPUAcquiredSurfaceOutput,
+            ): GPUSurfaceReleaseResult =
+                error("Prepared image observer preflight must not release a surface")
+        }
+        return GPUFramePreflighter(
+            context = GPUFramePreflightContext(
+                targetId = target.value,
+                deviceGeneration = taskList.capabilitySeal.deviceGeneration,
+                targetGeneration = targetGeneration,
+                resourceGenerations = resourceGenerations,
+            ),
+            capabilities = capabilities,
+            resourceProvider = resourceProvider,
+            completionProvider = completion,
+            surfaceProvider = surface,
+            nominalEncoderScopeObserver = observer,
+        ).preflight(framePlan)
+    }
 
     private fun recording(vararg commands: org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand) =
         rawRecording(*commands).let { recording ->
@@ -877,19 +1070,9 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         textureDescriptor:
             org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor = this.textureDescriptor,
         uploadLayout: GPUPreparedImageUploadLayout = this.uploadLayout,
-    ) = GPUPreparedImageFrameResourcePlan(
-        artifactKey = artifactKey,
-        stagingRef = stagingRef,
-        textureRef = textureRef,
-        frameTextureRef = frameTextureRef,
-        uniformRef = uniformRef,
+    ) = copy(
         textureDescriptor = textureDescriptor,
         uploadLayout = uploadLayout,
-        uploadTaskLayout = uploadTaskLayout,
-        bindingRequests = bindingRequests,
-        preparationRequests = preparationRequests,
-        memoryAllocations = memoryAllocations,
-        uploadTaskId = uploadTaskId,
     )
 
     private fun GPUFramePlan.replacingStep(
@@ -910,6 +1093,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
 
     private fun GPUDrawPacket.rebuilt(
         packetId: GPUDrawPacketID = this.packetId,
+        passId: String = this.passId,
         renderStepId: GPURenderStepID = this.renderStepId,
         renderPipelineKey: GPURenderPipelineKey? = this.renderPipelineKey,
         clipCoveragePlan: GPUClipCoveragePlan? = this.clipCoveragePlan,

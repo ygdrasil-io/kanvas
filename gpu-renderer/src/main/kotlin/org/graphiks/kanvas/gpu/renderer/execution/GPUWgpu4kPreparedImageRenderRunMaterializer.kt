@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import java.security.MessageDigest
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
@@ -9,23 +10,44 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourceP
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUniformAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPU_PREPARED_IMAGE_UNIFORM_ALLOCATION_SIZE_BYTES
 
-internal class GPUPreparedImageRenderRunPlan(
-    sourceScopeIndices: List<Int>,
-    packets: List<GPUDrawSemanticPayload.SampledImage>,
-    resources: List<GPUPreparedImageFrameResourcePlan>,
-    uniformAllocations: List<GPUPreparedImageUniformAllocation>,
-    exactScopeKeys: List<GPUPreparedNativeScopeKey>,
+private data class GPUPreparedImageRenderRunPlanSnapshot(
+    val sourceScopeIndices: List<Int>,
+    val packets: List<GPUDrawSemanticPayload.SampledImage>,
+    val resources: List<GPUPreparedImageFrameResourcePlan>,
+    val uniformAllocations: List<GPUPreparedImageUniformAllocation>,
+    val exactScopeKeys: List<GPUPreparedNativeScopeKey>,
+)
+
+@ConsistentCopyVisibility
+internal data class GPUPreparedImageRenderRunPlan private constructor(
+    private val snapshot: GPUPreparedImageRenderRunPlanSnapshot,
 ) {
-    val sourceScopeIndices = immutableList(sourceScopeIndices)
-    val packets = immutableList(packets)
-    val resources = immutableList(resources)
-    val uniformAllocations = immutableList(uniformAllocations)
-    val exactScopeKeys = immutableList(exactScopeKeys)
+    constructor(
+        sourceScopeIndices: List<Int>,
+        packets: List<GPUDrawSemanticPayload.SampledImage>,
+        resources: List<GPUPreparedImageFrameResourcePlan>,
+        uniformAllocations: List<GPUPreparedImageUniformAllocation>,
+        exactScopeKeys: List<GPUPreparedNativeScopeKey>,
+    ) : this(
+        GPUPreparedImageRenderRunPlanSnapshot(
+            sourceScopeIndices = immutableList(sourceScopeIndices),
+            packets = immutableList(packets),
+            resources = immutableList(resources),
+            uniformAllocations = immutableList(uniformAllocations),
+            exactScopeKeys = immutableList(exactScopeKeys),
+        ),
+    )
+
+    val sourceScopeIndices get() = snapshot.sourceScopeIndices
+    val packets get() = snapshot.packets
+    val resources get() = snapshot.resources
+    val uniformAllocations get() = snapshot.uniformAllocations
+    val exactScopeKeys get() = snapshot.exactScopeKeys
 
     init {
         require(this.packets.isNotEmpty() && this.resources.isNotEmpty())
         require(this.packets.size == this.uniformAllocations.size)
-        require(this.sourceScopeIndices.size == this.resources.size + this.packets.size)
+        require(this.sourceScopeIndices.size == this.resources.size + 1)
         require(this.sourceScopeIndices.distinct().size == this.sourceScopeIndices.size &&
             this.sourceScopeIndices.all { it >= 0 }
         )
@@ -34,12 +56,26 @@ internal class GPUPreparedImageRenderRunPlan(
         ) { "Prepared-image exact scope keys must match the accepted source scopes in order" }
         require(this.exactScopeKeys.map(GPUPreparedNativeScopeKey::operationKind) ==
             List(this.resources.size) { GPUEncoderOperationKind.Upload } +
-            List(this.packets.size) { GPUEncoderOperationKind.Render }
-        ) { "Prepared-image exact scope keys must retain upload-then-render operation kinds" }
+            GPUEncoderOperationKind.Render
+        ) { "Prepared-image exact scope keys must retain uploads plus one render run" }
         require(this.exactScopeKeys.all { it.operandKeys.isNotEmpty() }) {
             "Prepared-image exact scope keys must retain preflight operand authority"
         }
     }
+
+    fun copy(
+        sourceScopeIndices: List<Int> = this.sourceScopeIndices,
+        packets: List<GPUDrawSemanticPayload.SampledImage> = this.packets,
+        resources: List<GPUPreparedImageFrameResourcePlan> = this.resources,
+        uniformAllocations: List<GPUPreparedImageUniformAllocation> = this.uniformAllocations,
+        exactScopeKeys: List<GPUPreparedNativeScopeKey> = this.exactScopeKeys,
+    ): GPUPreparedImageRenderRunPlan = GPUPreparedImageRenderRunPlan(
+        sourceScopeIndices,
+        packets,
+        resources,
+        uniformAllocations,
+        exactScopeKeys,
+    )
 }
 
 internal sealed interface GPUPreparedRenderRunMaterialization {
@@ -74,15 +110,12 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
         val created = mutableListOf<AutoCloseable>()
         return try {
             val uploadScopeIndices = plan.sourceScopeIndices.take(plan.resources.size)
-            val renderScopeIndices = plan.sourceScopeIndices.drop(plan.resources.size)
+            val renderScopeIndex = plan.sourceScopeIndices.last()
             val uploadScopeKeys = plan.exactScopeKeys.take(plan.resources.size)
-            val renderScopeKeys = plan.exactScopeKeys.drop(plan.resources.size)
+            val renderScopeKey = plan.exactScopeKeys.last()
             val uploads = mutableListOf<GPUPreparedNativeScopeOperand.TextureUpload>()
             val uniformUploads = mutableListOf<GPUPreparedNativeBufferUpload>()
             val bindingByPacketId = linkedMapOf<String, MaterializedBinding>()
-            val renderIndexByPacketId = plan.uniformAllocations.mapIndexed { index, allocation ->
-                allocation.packetId to renderScopeIndices[index]
-            }.toMap()
             val uniformBytesByPacketId = plan.packets.mapIndexed { index, packet ->
                 plan.uniformAllocations[index].packetId to preparedImageUniformBytes(packet)
             }.toMap()
@@ -99,9 +132,6 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                         uniformSlab,
                         destinationOffset = allocation.offset.toInt(),
                     )
-                }
-                val consumerIndices = resource.bindingRequests.map { request ->
-                    renderIndexByPacketId.getValue(request.packetId)
                 }
                 val texture = handleFactory.createTexture(resource).track(created)
                 val view = handleFactory.createTextureView(texture, resource).track(created)
@@ -132,7 +162,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                         ),
                     ),
                     destinationOffset = 0L,
-                    consumerSourceStepIndices = consumerIndices,
+                    consumerSourceStepIndices = listOf(renderScopeIndex),
                 )
                 val samplers = linkedMapOf<Any, io.ygdrasil.webgpu.GPUSampler>()
                 resource.bindingRequests.forEach { request ->
@@ -171,7 +201,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                     layout = resource.uploadLayout,
                 )
             }
-            val renders = plan.packets.mapIndexed { index, packet ->
+            val drawEntries = plan.packets.mapIndexed { index, packet ->
                 val allocation = plan.uniformAllocations[index]
                 val binding = requireNotNull(bindingByPacketId[allocation.packetId])
                 check(binding.allocation == allocation)
@@ -180,8 +210,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                 )
                 val pipeline = sessionCache.acquire(cacheKey)
                 val uniformBytes = uniformBytesByPacketId.getValue(allocation.packetId)
-                GPUPreparedNativeScopeOperand.PreparedImageRenderRun(
-                    sourceStepIndex = renderScopeIndices[index],
+                GPUPreparedNativeScopeOperand.PreparedImageDrawEntry(
                     pipeline = GPUPreparedNativeRenderPipelineOperand(
                         pipeline.pipeline,
                         sessionCache.deviceGeneration,
@@ -194,10 +223,16 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                     dynamicUniformOffset = allocation.offset,
                     uniformBytes = uniformBytes,
                     scissor = packet.scissorBounds,
-                    exactOperandKeys = renderScopeKeys[index].operandKeys,
                 )
             }
-            val scopes = (uploads + renders).sortedBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
+            val render = GPUPreparedNativeScopeOperand.PreparedImageRenderRun(
+                sourceStepIndex = renderScopeIndex,
+                drawEntries = drawEntries,
+                exactOperandKeys = renderScopeKey.operandKeys,
+            )
+            val scopes = (uploads + render).sortedBy(
+                GPUPreparedNativeScopeOperand::sourceStepIndex,
+            )
             val owner = GPUPreparedImageRunOwnedResources(created)
             created.clear()
             GPUPreparedRenderRunMaterialization.Ready(
@@ -230,23 +265,25 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
             return "unsupported.prepared_image.scope_identity" to
                 "Prepared-image upload scopes require exact borrowed preflight source and destination keys."
         }
-        val renderScopeKeys = plan.exactScopeKeys.drop(plan.resources.size)
-        if (renderScopeKeys.any { scope ->
-                scope.operandKeys.map { key -> key.role to key.kind } != listOf(
+        val renderScopeKey = plan.exactScopeKeys.last()
+        if (renderScopeKey.operandKeys.map { key -> key.role to key.kind } !=
+            listOf(
                     GPUPreparedNativeOperandRole.RenderColorTarget to
                         GPUPreparedNativeOperandKind.TextureView,
-                    GPUPreparedNativeOperandRole.RenderPipeline to
-                        GPUPreparedNativeOperandKind.RenderPipeline,
-                    GPUPreparedNativeOperandRole.RenderBindGroup to
-                        GPUPreparedNativeOperandKind.BindGroup,
-                ) ||
-                    scope.operandKeys.any {
-                        it.ownership != GPUPreparedNativeOperandOwnership.Borrowed
-                    }
+                ) + plan.packets.flatMap {
+                    listOf(
+                        GPUPreparedNativeOperandRole.RenderPipeline to
+                            GPUPreparedNativeOperandKind.RenderPipeline,
+                        GPUPreparedNativeOperandRole.RenderBindGroup to
+                            GPUPreparedNativeOperandKind.BindGroup,
+                    )
+                } ||
+            renderScopeKey.operandKeys.any {
+                it.ownership != GPUPreparedNativeOperandOwnership.Borrowed
             }
         ) {
             return "unsupported.prepared_image.scope_identity" to
-                "Prepared-image render scopes require exact borrowed target and native bridge keys."
+                "Prepared-image render run requires the exact borrowed target and packet bridges."
         }
         if (plan.uniformAllocations.any {
                 it.offset < 0L ||
@@ -288,6 +325,36 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
         if (resourceArtifactKeys.distinct().size != resourceArtifactKeys.size) {
             return "unsupported.prepared_image.artifact_identity" to
                 "Prepared-image runs require exactly one upload resource per artifact."
+        }
+        plan.resources.forEach { resource ->
+            val logicalRowBytes = try {
+                Math.multiplyExact(resource.artifactWidth.toLong(), 4L)
+            } catch (_: ArithmeticException) {
+                return "unsupported.prepared_image.upload_provenance" to
+                    "Prepared-image upload provenance dimensions overflowed."
+            }
+            val packetArtifacts = resource.bindingRequests.map { request ->
+                packetById.getValue(request.packetId).artifact
+            }
+            if (resource.artifactWidth <= 0 ||
+                resource.artifactHeight <= 0 ||
+                resource.textureDescriptor.width != resource.artifactWidth ||
+                resource.textureDescriptor.height != resource.artifactHeight ||
+                resource.uploadLayout.width != resource.artifactWidth ||
+                resource.uploadLayout.height != resource.artifactHeight ||
+                resource.uploadLayout.logicalBytesPerRow != logicalRowBytes ||
+                packetArtifacts.any { artifact ->
+                    artifact.key != resource.artifactKey ||
+                        artifact.width != resource.artifactWidth ||
+                        artifact.height != resource.artifactHeight ||
+                        artifact.contentHash != resource.artifactContentHash
+                } ||
+                resource.uploadLayout.logicalBytesForHash().preparedImageSha256() !=
+                resource.artifactContentHash
+            ) {
+                return "unsupported.prepared_image.upload_provenance" to
+                    "Prepared-image upload bytes must retain artifact dimensions and content hash."
+            }
         }
         val allocationByPacketId = plan.uniformAllocations.associateBy { it.packetId }
         if (plan.resources.any { resource ->
@@ -343,17 +410,8 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
             }
         }
         val uploadIndices = plan.sourceScopeIndices.take(plan.resources.size)
-        val renderIndices = plan.sourceScopeIndices.drop(plan.resources.size)
-        val renderIndexByPacketId = plan.uniformAllocations.mapIndexed { index, allocation ->
-            allocation.packetId to renderIndices[index]
-        }.toMap()
-        if (plan.resources.indices.any { resourceIndex ->
-                val uploadIndex = uploadIndices[resourceIndex]
-                plan.resources[resourceIndex].bindingRequests.any { request ->
-                    uploadIndex >= renderIndexByPacketId.getValue(request.packetId)
-                }
-            }
-        ) {
+        val renderIndex = plan.sourceScopeIndices.last()
+        if (uploadIndices.any { uploadIndex -> uploadIndex >= renderIndex }) {
             return "unsupported.prepared_image.upload_order" to
                 "Every prepared-image upload must precede each of its consuming renders."
         }
@@ -369,6 +427,11 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
         return null
     }
 }
+
+private fun ByteArray.preparedImageSha256(): String =
+    MessageDigest.getInstance("SHA-256").digest(this).joinToString("") { byte ->
+        "%02x".format(byte)
+    }
 
 private fun preparedImageUniformBytes(
     packet: GPUDrawSemanticPayload.SampledImage,

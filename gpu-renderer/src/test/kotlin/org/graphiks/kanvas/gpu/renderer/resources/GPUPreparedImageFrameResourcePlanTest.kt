@@ -168,12 +168,13 @@ class GPUPreparedImageFrameResourcePlanTest {
 
     @Test
     fun `resource plan retains value structure across copy and caller mutation`() {
+        val sourceArtifact = artifact(
+            format = GPUPreparedImageSourceFormat.A8,
+            sourceRowBytes = 3,
+            bytes = byteArrayOf(1, 2, 3, 4, 5, 6),
+        )
         val template = buildPreparedImageFrameResourcePlan(
-            artifact = artifact(
-                format = GPUPreparedImageSourceFormat.A8,
-                sourceRowBytes = 3,
-                bytes = byteArrayOf(1, 2, 3, 4, 5, 6),
-            ),
+            artifact = sourceArtifact,
             packetIds = listOf("packet.image"),
             bindingLayoutHash = "texture-sampler-tint.v1",
             capabilities = capabilities(),
@@ -207,7 +208,7 @@ class GPUPreparedImageFrameResourcePlanTest {
         }.toMutableList()
         val callerAllocations = template.memoryAllocations.toMutableList()
         val plan = GPUPreparedImageFrameResourcePlan(
-            artifactKey = template.artifactKey,
+            artifact = sourceArtifact,
             stagingRef = template.stagingRef,
             textureRef = template.textureRef,
             frameTextureRef = template.frameTextureRef,
@@ -245,6 +246,9 @@ class GPUPreparedImageFrameResourcePlanTest {
 
         assertEquals(plan, copied)
         assertEquals(plan.artifactKey, copied.artifactKey)
+        assertEquals(sourceArtifact.width, copied.artifactWidth)
+        assertEquals(sourceArtifact.height, copied.artifactHeight)
+        assertEquals(sourceArtifact.contentHash, copied.artifactContentHash)
         assertEquals(plan.hashCode(), copied.hashCode())
         assertNotSame(plan, copied)
         assertTrue(plan.toString().startsWith("GPUPreparedImageFrameResourcePlan("))

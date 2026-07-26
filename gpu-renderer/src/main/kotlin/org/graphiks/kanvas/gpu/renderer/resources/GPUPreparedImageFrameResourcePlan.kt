@@ -144,6 +144,9 @@ class GPUPreparedImageFrameResourcePlan private constructor(
     val memoryAllocations: List<GPUFrameMemoryAllocation>,
     val uploadTaskId: GPUTaskID,
     val artifactKey: GPUImageUploadArtifactKey,
+    val artifactWidth: Int,
+    val artifactHeight: Int,
+    val artifactContentHash: String,
     private val snapshotMarker: GPUPreparedImageFrameResourcePlanSnapshot,
 ) {
     constructor(
@@ -158,7 +161,7 @@ class GPUPreparedImageFrameResourcePlan private constructor(
         preparationRequests: List<GPUResourcePreparationRequest>,
         memoryAllocations: List<GPUFrameMemoryAllocation>,
         uploadTaskId: GPUTaskID,
-        artifactKey: GPUImageUploadArtifactKey,
+        artifact: GPUPreparedImageUploadArtifact,
     ) : this(
         stagingRef = stagingRef,
         textureRef = textureRef,
@@ -171,9 +174,21 @@ class GPUPreparedImageFrameResourcePlan private constructor(
         preparationRequests = preparationRequests.snapshotPreparedImagePreparations(),
         memoryAllocations = memoryAllocations.snapshotPreparedImageAllocations(),
         uploadTaskId = uploadTaskId,
-        artifactKey = artifactKey,
+        artifactKey = artifact.key,
+        artifactWidth = artifact.width,
+        artifactHeight = artifact.height,
+        artifactContentHash = artifact.contentHash,
         snapshotMarker = GPUPreparedImageFrameResourcePlanSnapshot,
     )
+
+    init {
+        require(artifactWidth > 0 && artifactHeight > 0) {
+            "Prepared-image artifact provenance dimensions must be positive"
+        }
+        require(artifactContentHash.isNotBlank()) {
+            "Prepared-image artifact provenance hash must not be blank"
+        }
+    }
 
     @Suppress("DataClassPrivateConstructor")
     fun copy(
@@ -190,6 +205,9 @@ class GPUPreparedImageFrameResourcePlan private constructor(
         uploadTaskId: GPUTaskID = this.uploadTaskId,
     ): GPUPreparedImageFrameResourcePlan = GPUPreparedImageFrameResourcePlan(
         artifactKey = artifactKey,
+        artifactWidth = artifactWidth,
+        artifactHeight = artifactHeight,
+        artifactContentHash = artifactContentHash,
         stagingRef = stagingRef,
         textureRef = textureRef,
         frameTextureRef = frameTextureRef,
@@ -236,6 +254,9 @@ class GPUPreparedImageFrameResourcePlan private constructor(
     operator fun component10() = memoryAllocations
     operator fun component11() = uploadTaskId
     operator fun component12() = artifactKey
+    operator fun component13() = artifactWidth
+    operator fun component14() = artifactHeight
+    operator fun component15() = artifactContentHash
 
     override fun equals(other: Any?): Boolean =
         other is GPUPreparedImageFrameResourcePlan &&
@@ -250,7 +271,10 @@ class GPUPreparedImageFrameResourcePlan private constructor(
             preparationRequests == other.preparationRequests &&
             memoryAllocations == other.memoryAllocations &&
             uploadTaskId == other.uploadTaskId &&
-            artifactKey == other.artifactKey
+            artifactKey == other.artifactKey &&
+            artifactWidth == other.artifactWidth &&
+            artifactHeight == other.artifactHeight &&
+            artifactContentHash == other.artifactContentHash
 
     override fun hashCode(): Int {
         var result = stagingRef.hashCode()
@@ -265,11 +289,16 @@ class GPUPreparedImageFrameResourcePlan private constructor(
         result = 31 * result + memoryAllocations.hashCode()
         result = 31 * result + uploadTaskId.hashCode()
         result = 31 * result + artifactKey.hashCode()
+        result = 31 * result + artifactWidth
+        result = 31 * result + artifactHeight
+        result = 31 * result + artifactContentHash.hashCode()
         return result
     }
 
     override fun toString(): String =
-        "GPUPreparedImageFrameResourcePlan(artifactKey=$artifactKey, stagingRef=$stagingRef, textureRef=$textureRef, " +
+        "GPUPreparedImageFrameResourcePlan(artifactKey=$artifactKey, artifactWidth=$artifactWidth, " +
+            "artifactHeight=$artifactHeight, artifactContentHash=$artifactContentHash, " +
+            "stagingRef=$stagingRef, textureRef=$textureRef, " +
             "frameTextureRef=$frameTextureRef, uniformRef=$uniformRef, " +
             "textureDescriptor=$textureDescriptor, uploadLayout=$uploadLayout, " +
             "uploadTaskLayout=$uploadTaskLayout, bindingRequests=$bindingRequests, " +
@@ -421,7 +450,7 @@ internal fun buildPreparedImageFrameResourcePlanFromBindings(
         ),
     )
     return GPUPreparedImageFrameResourcePlan(
-        artifactKey = artifact.key,
+        artifact = artifact,
         stagingRef = stagingRef,
         textureRef = textureRef,
         frameTextureRef = frameTextureRef,
