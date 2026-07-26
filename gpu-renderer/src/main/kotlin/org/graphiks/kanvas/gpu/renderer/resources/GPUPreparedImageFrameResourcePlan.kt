@@ -127,9 +127,11 @@ data class GPUPreparedImageBindingRequest(
     val uniformAllocation: GPUPreparedImageUniformAllocation,
 )
 
+internal const val GPU_PREPARED_IMAGE_UNIFORM_ALLOCATION_SIZE_BYTES = 112L
+
 private object GPUPreparedImageFrameResourcePlanSnapshot
 
-data class GPUPreparedImageFrameResourcePlan private constructor(
+class GPUPreparedImageFrameResourcePlan private constructor(
     val stagingRef: GPUFrameBufferRef,
     val textureRef: GPUTextureResourceRef,
     val frameTextureRef: GPUFrameTextureRef,
@@ -141,6 +143,7 @@ data class GPUPreparedImageFrameResourcePlan private constructor(
     val preparationRequests: List<GPUResourcePreparationRequest>,
     val memoryAllocations: List<GPUFrameMemoryAllocation>,
     val uploadTaskId: GPUTaskID,
+    val artifactKey: GPUImageUploadArtifactKey,
     private val snapshotMarker: GPUPreparedImageFrameResourcePlanSnapshot,
 ) {
     constructor(
@@ -155,6 +158,7 @@ data class GPUPreparedImageFrameResourcePlan private constructor(
         preparationRequests: List<GPUResourcePreparationRequest>,
         memoryAllocations: List<GPUFrameMemoryAllocation>,
         uploadTaskId: GPUTaskID,
+        artifactKey: GPUImageUploadArtifactKey,
     ) : this(
         stagingRef = stagingRef,
         textureRef = textureRef,
@@ -167,6 +171,7 @@ data class GPUPreparedImageFrameResourcePlan private constructor(
         preparationRequests = preparationRequests.snapshotPreparedImagePreparations(),
         memoryAllocations = memoryAllocations.snapshotPreparedImageAllocations(),
         uploadTaskId = uploadTaskId,
+        artifactKey = artifactKey,
         snapshotMarker = GPUPreparedImageFrameResourcePlanSnapshot,
     )
 
@@ -184,6 +189,7 @@ data class GPUPreparedImageFrameResourcePlan private constructor(
         memoryAllocations: List<GPUFrameMemoryAllocation> = this.memoryAllocations,
         uploadTaskId: GPUTaskID = this.uploadTaskId,
     ): GPUPreparedImageFrameResourcePlan = GPUPreparedImageFrameResourcePlan(
+        artifactKey = artifactKey,
         stagingRef = stagingRef,
         textureRef = textureRef,
         frameTextureRef = frameTextureRef,
@@ -218,8 +224,52 @@ data class GPUPreparedImageFrameResourcePlan private constructor(
         snapshotMarker = GPUPreparedImageFrameResourcePlanSnapshot,
     )
 
+    operator fun component1() = stagingRef
+    operator fun component2() = textureRef
+    operator fun component3() = frameTextureRef
+    operator fun component4() = uniformRef
+    operator fun component5() = textureDescriptor
+    operator fun component6() = uploadLayout
+    operator fun component7() = uploadTaskLayout
+    operator fun component8() = bindingRequests
+    operator fun component9() = preparationRequests
+    operator fun component10() = memoryAllocations
+    operator fun component11() = uploadTaskId
+    operator fun component12() = artifactKey
+
+    override fun equals(other: Any?): Boolean =
+        other is GPUPreparedImageFrameResourcePlan &&
+            stagingRef == other.stagingRef &&
+            textureRef == other.textureRef &&
+            frameTextureRef == other.frameTextureRef &&
+            uniformRef == other.uniformRef &&
+            textureDescriptor == other.textureDescriptor &&
+            uploadLayout == other.uploadLayout &&
+            uploadTaskLayout == other.uploadTaskLayout &&
+            bindingRequests == other.bindingRequests &&
+            preparationRequests == other.preparationRequests &&
+            memoryAllocations == other.memoryAllocations &&
+            uploadTaskId == other.uploadTaskId &&
+            artifactKey == other.artifactKey
+
+    override fun hashCode(): Int {
+        var result = stagingRef.hashCode()
+        result = 31 * result + textureRef.hashCode()
+        result = 31 * result + frameTextureRef.hashCode()
+        result = 31 * result + uniformRef.hashCode()
+        result = 31 * result + textureDescriptor.hashCode()
+        result = 31 * result + uploadLayout.hashCode()
+        result = 31 * result + uploadTaskLayout.hashCode()
+        result = 31 * result + bindingRequests.hashCode()
+        result = 31 * result + preparationRequests.hashCode()
+        result = 31 * result + memoryAllocations.hashCode()
+        result = 31 * result + uploadTaskId.hashCode()
+        result = 31 * result + artifactKey.hashCode()
+        return result
+    }
+
     override fun toString(): String =
-        "GPUPreparedImageFrameResourcePlan(stagingRef=$stagingRef, textureRef=$textureRef, " +
+        "GPUPreparedImageFrameResourcePlan(artifactKey=$artifactKey, stagingRef=$stagingRef, textureRef=$textureRef, " +
             "frameTextureRef=$frameTextureRef, uniformRef=$uniformRef, " +
             "textureDescriptor=$textureDescriptor, uploadLayout=$uploadLayout, " +
             "uploadTaskLayout=$uploadTaskLayout, bindingRequests=$bindingRequests, " +
@@ -288,7 +338,7 @@ internal fun buildPreparedImageFrameResourcePlanFromBindings(
         mipRange = 0..0,
         arrayLayerRange = 0..0,
     )
-    val uniformSize = 48L
+    val uniformSize = GPU_PREPARED_IMAGE_UNIFORM_ALLOCATION_SIZE_BYTES
     val uniformStride = alignUp(uniformSize, limits.minUniformBufferOffsetAlignment)
     val bindingRequests = bindingInputs.mapIndexed { index, bindingInput ->
         val filter = when (bindingInput.sampling) {
@@ -371,6 +421,7 @@ internal fun buildPreparedImageFrameResourcePlanFromBindings(
         ),
     )
     return GPUPreparedImageFrameResourcePlan(
+        artifactKey = artifact.key,
         stagingRef = stagingRef,
         textureRef = textureRef,
         frameTextureRef = frameTextureRef,

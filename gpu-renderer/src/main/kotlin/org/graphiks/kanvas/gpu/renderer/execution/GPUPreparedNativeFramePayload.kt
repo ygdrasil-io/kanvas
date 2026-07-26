@@ -1058,13 +1058,19 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         init {
             require(dynamicUniformOffset >= 0L)
             require(uniformSnapshot.size == GPUPreparedImageUniformAbi.BYTE_SIZE)
-            require(this.exactOperandKeys.size == 2)
-            require(this.exactOperandKeys.map(GPUPreparedNativeOperandKey::kind) ==
+            require(this.exactOperandKeys.map { key -> key.role to key.kind } ==
                 listOf(
-                    GPUPreparedNativeOperandKind.RenderPipeline,
-                    GPUPreparedNativeOperandKind.BindGroup,
+                    GPUPreparedNativeOperandRole.RenderColorTarget to
+                        GPUPreparedNativeOperandKind.TextureView,
+                    GPUPreparedNativeOperandRole.RenderPipeline to
+                        GPUPreparedNativeOperandKind.RenderPipeline,
+                    GPUPreparedNativeOperandRole.RenderBindGroup to
+                        GPUPreparedNativeOperandKind.BindGroup,
                 )
             )
+            require(this.exactOperandKeys.all {
+                it.ownership == GPUPreparedNativeOperandOwnership.Borrowed
+            })
         }
 
         fun uniformBytes(): ByteArray = uniformSnapshot.copyOf()

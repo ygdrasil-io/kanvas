@@ -136,7 +136,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         )
         val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
             .materializeAcceptedRun(
-                GPUPreparedImageRenderRunPlan(
+                preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2, 3),
                     packets = listOf(
                         preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
@@ -199,6 +199,53 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
     }
 
     @Test
+    fun `accepted run copies exact preflight scope keys without rebuilding labels`() {
+        val nativeDevice = RecordingPreparedImageDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            nativeDevice.device,
+            GPUDeviceGenerationID(19),
+        )
+        val artifact = preparedImageArtifact(pixelSeed = 3)
+        val resource = preparedImageResource(artifact, "packet.exact")
+        val exactScopeKeys = preparedImagePreflightScopeKeys(
+            listOf(resource),
+            resource.bindingRequests.map { it.uniformAllocation },
+            listOf(4, 9),
+        )
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            RecordingPreparedImageHandleFactory(),
+        ).materializeAcceptedRun(
+            GPUPreparedImageRenderRunPlan(
+                sourceScopeIndices = listOf(4, 9),
+                packets = listOf(
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
+                ),
+                resources = listOf(resource),
+                uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
+                exactScopeKeys = exactScopeKeys,
+            ),
+        ) as GPUPreparedRenderRunMaterialization.Ready
+
+        assertEquals(
+            exactScopeKeys.map(GPUPreparedNativeScopeKey::operandKeys),
+            result.scopeOperands.map(GPUPreparedNativeScopeOperand::exactOperandKeys),
+        )
+        val render = result.scopeOperands.filterIsInstance<
+            GPUPreparedNativeScopeOperand.PreparedImageRenderRun
+        >().single()
+        assertEquals(listOf(render.pipeline, render.bindGroup), render.operands)
+        assertEquals(
+            GPUPreparedNativeOperandRole.RenderColorTarget,
+            render.exactOperandKeys.first().role,
+        )
+        assertTrue(render.operands.none { it is GPUPreparedNativeTextureViewOperand })
+
+        result.ownedResources.single().close()
+        cache.close()
+    }
+
+    @Test
     fun `plan refuses a binding whose artifact differs from its packet`() {
         val artifact = preparedImageArtifact(pixelSeed = 1)
         val foreignArtifact = preparedImageArtifact(pixelSeed = 17)
@@ -209,7 +256,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         )
 
         assertPreparedImageRefusal(
-            GPUPreparedImageRenderRunPlan(
+            preparedImageRenderRunPlan(
                 sourceScopeIndices = listOf(1, 2),
                 packets = listOf(preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f)),
                 resources = listOf(resource),
@@ -222,11 +269,157 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
     }
 
     @Test
+    fun `plan refuses complete bindings and packet from a different artifact than the resource`() {
+        val resourceArtifact = preparedImageArtifact(pixelSeed = 5)
+        val foreignArtifact = preparedImageArtifact(pixelSeed = 21)
+        val resource = preparedImageResource(resourceArtifact, "packet.swap").copy(
+            bindingRequests = preparedImageResource(foreignArtifact, "packet.swap").bindingRequests,
+        )
+
+        assertPreparedImageRefusal(
+            preparedImageRenderRunPlan(
+                sourceScopeIndices = listOf(1, 2),
+                packets = listOf(
+                    preparedImageSemantic(
+                        foreignArtifact,
+                        GPUPreparedImageSampling.Nearest,
+                        1f,
+                    ),
+                ),
+                resources = listOf(resource),
+                uniformAllocations = listOf(
+                    GPUPreparedImageUniformAllocation("packet.swap", 0L, 112L),
+                ),
+            ),
+            "unsupported.prepared_image.artifact_identity",
+        )
+    }
+
+    @Test
+    fun `plan refuses a run allocation that differs from the sealed binding`() {
+        val artifact = preparedImageArtifact(pixelSeed = 25)
+        val resource = preparedImageResource(artifact, "packet.diverged").copy(
+            bindingRequests = preparedImageResource(artifact, "packet.diverged")
+                .bindingRequests
+                .map { request ->
+                    request.copy(
+                        uniformAllocation = GPUPreparedImageUniformAllocation(
+                            "packet.diverged",
+                            256L,
+                            112L,
+                        ),
+                    )
+                },
+        )
+
+        assertPreparedImageRefusal(
+            preparedImageRenderRunPlan(
+                sourceScopeIndices = listOf(1, 2),
+                packets = listOf(
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
+                ),
+                resources = listOf(resource),
+                uniformAllocations = listOf(
+                    GPUPreparedImageUniformAllocation("packet.diverged", 0L, 112L),
+                ),
+            ),
+            "unsupported.prepared_image.uniform_identity",
+        )
+    }
+
+    @Test
+    fun `plan refuses an unaligned sealed uniform allocation`() {
+        val artifact = preparedImageArtifact(pixelSeed = 29)
+        val unaligned = GPUPreparedImageUniformAllocation("packet.unaligned", 1L, 112L)
+        val resource = preparedImageResource(artifact, unaligned.packetId).copy(
+            bindingRequests = preparedImageResource(artifact, unaligned.packetId)
+                .bindingRequests
+                .map { request -> request.copy(uniformAllocation = unaligned) },
+        )
+
+        assertPreparedImageRefusal(
+            preparedImageRenderRunPlan(
+                sourceScopeIndices = listOf(1, 2),
+                packets = listOf(
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
+                ),
+                resources = listOf(resource),
+                uniformAllocations = listOf(unaligned),
+            ),
+            "unsupported.prepared_image.uniform_alignment",
+        )
+    }
+
+    @Test
+    fun `plan refuses a sealed uniform allocation beyond prepared buffer capacity`() {
+        val artifact = preparedImageArtifact(pixelSeed = 30)
+        val outOfRange = GPUPreparedImageUniformAllocation("packet.out-of-range", 256L, 112L)
+        val resource = preparedImageResource(artifact, outOfRange.packetId).copy(
+            bindingRequests = preparedImageResource(artifact, outOfRange.packetId)
+                .bindingRequests
+                .map { request -> request.copy(uniformAllocation = outOfRange) },
+        )
+
+        assertPreparedImageRefusal(
+            preparedImageRenderRunPlan(
+                sourceScopeIndices = listOf(1, 2),
+                packets = listOf(
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
+                ),
+                resources = listOf(resource),
+                uniformAllocations = listOf(outOfRange),
+            ),
+            "unsupported.prepared_image.uniform_range",
+        )
+    }
+
+    @Test
+    fun `plan refuses overlapping sealed uniform allocations in one resource`() {
+        val artifact = preparedImageArtifact(pixelSeed = 31)
+        val resource = buildPreparedImageFrameResourcePlanFromBindings(
+            artifact = artifact,
+            bindingInputs = listOf(
+                GPUPreparedImageBindingInput("packet.first", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput("packet.second", GPUPreparedImageSampling.Linear),
+            ),
+            bindingLayoutHash = PREPARED_IMAGE_BINDING_LAYOUT_HASH,
+            capabilities = preparedImageCapabilities(),
+            frameIdentity = "frame.overlap",
+            uploadTaskId = GPUTaskID("task.upload.overlap"),
+        ).let { original ->
+            original.copy(
+                bindingRequests = original.bindingRequests.map { request ->
+                    request.copy(
+                        uniformAllocation = GPUPreparedImageUniformAllocation(
+                            request.packetId,
+                            0L,
+                            112L,
+                        ),
+                    )
+                },
+            )
+        }
+
+        assertPreparedImageRefusal(
+            preparedImageRenderRunPlan(
+                sourceScopeIndices = listOf(1, 2, 3),
+                packets = listOf(
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
+                    preparedImageSemantic(artifact, GPUPreparedImageSampling.Linear, 9f),
+                ),
+                resources = listOf(resource),
+                uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
+            ),
+            "unsupported.prepared_image.uniform_overlap",
+        )
+    }
+
+    @Test
     fun `plan refuses duplicate resource uploads for one artifact`() {
         val artifact = preparedImageArtifact(pixelSeed = 33)
 
         assertPreparedImageRefusal(
-            GPUPreparedImageRenderRunPlan(
+            preparedImageRenderRunPlan(
                 sourceScopeIndices = listOf(1, 2, 3, 4),
                 packets = listOf(
                     preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
@@ -251,7 +444,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val secondArtifact = preparedImageArtifact(pixelSeed = 65)
 
         assertPreparedImageRefusal(
-            GPUPreparedImageRenderRunPlan(
+            preparedImageRenderRunPlan(
                 sourceScopeIndices = listOf(5, 1, 2, 6),
                 packets = listOf(
                     preparedImageSemantic(firstArtifact, GPUPreparedImageSampling.Nearest, 1f),
@@ -263,7 +456,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 ),
                 uniformAllocations = listOf(
                     GPUPreparedImageUniformAllocation("packet.first", 0L, 112L),
-                    GPUPreparedImageUniformAllocation("packet.second", 256L, 112L),
+                    GPUPreparedImageUniformAllocation("packet.second", 0L, 112L),
                 ),
             ),
             "unsupported.prepared_image.upload_order",
@@ -281,7 +474,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val artifact = preparedImageArtifact(pixelSeed = 81)
         val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
             .materializeAcceptedRun(
-                GPUPreparedImageRenderRunPlan(
+                preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2),
                     packets = listOf(
                         preparedImageSemantic(artifact, GPUPreparedImageSampling.Nearest, 1f),
@@ -367,6 +560,83 @@ private fun preparedImageResource(
     uploadTaskId = GPUTaskID("task.upload.$packetId"),
 )
 
+private fun preparedImageRenderRunPlan(
+    sourceScopeIndices: List<Int>,
+    packets: List<GPUDrawSemanticPayload.SampledImage>,
+    resources: List<GPUPreparedImageFrameResourcePlan>,
+    uniformAllocations: List<GPUPreparedImageUniformAllocation>,
+): GPUPreparedImageRenderRunPlan = GPUPreparedImageRenderRunPlan(
+    sourceScopeIndices = sourceScopeIndices,
+    packets = packets,
+    resources = resources,
+    uniformAllocations = uniformAllocations,
+    exactScopeKeys = preparedImagePreflightScopeKeys(
+        resources,
+        uniformAllocations,
+        sourceScopeIndices,
+    ),
+)
+
+private fun preparedImagePreflightScopeKeys(
+    resources: List<GPUPreparedImageFrameResourcePlan>,
+    allocations: List<GPUPreparedImageUniformAllocation>,
+    sourceScopeIndices: List<Int>,
+): List<GPUPreparedNativeScopeKey> =
+    resources.mapIndexed { index, resource ->
+        val textureGenerationLabel =
+            "GPUFrameTextureRef:${resource.frameTextureRef.value}@${11 + index}"
+        GPUPreparedNativeScopeKey(
+            sourceStepIndex = sourceScopeIndices[index],
+            operationKind = GPUEncoderOperationKind.Upload,
+            resourceGenerationLabels = listOf(
+                "GPUFrameBufferRef:${resource.stagingRef.value}@${7 + index}",
+                textureGenerationLabel,
+            ),
+            operandKeys = listOf(
+                GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.UploadSource,
+                    GPUPreparedNativeOperandKind.Buffer,
+                    gpuPreparedNativeBindingKey(
+                        "prepared-image-upload-data:${resource.stagingRef.value}",
+                    ),
+                ),
+                GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.UploadDestination,
+                    GPUPreparedNativeOperandKind.Texture,
+                    gpuPreparedNativeBindingKey(textureGenerationLabel),
+                ),
+            ),
+        )
+    } + allocations.mapIndexed { index, allocation ->
+        val targetGenerationLabel = "GPUFrameTargetRef:target.scene@13"
+        GPUPreparedNativeScopeKey(
+            sourceStepIndex = sourceScopeIndices[resources.size + index],
+            operationKind = GPUEncoderOperationKind.Render,
+            resourceGenerationLabels = listOf(targetGenerationLabel),
+            operandKeys = listOf(
+                GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderColorTarget,
+                    GPUPreparedNativeOperandKind.TextureView,
+                    gpuPreparedNativeBindingKey(targetGenerationLabel),
+                ),
+                GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderPipeline,
+                    GPUPreparedNativeOperandKind.RenderPipeline,
+                    gpuPreparedNativeBindingKey(
+                        "preflight.bridge.pipeline.${allocation.packetId}",
+                    ),
+                ),
+                GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                    GPUPreparedNativeOperandKind.BindGroup,
+                    gpuPreparedNativeBindingKey(
+                        "preflight.bridge.bind-group.${allocation.packetId}",
+                    ),
+                ),
+            ),
+        )
+    }
+
 private fun assertPreparedImageRefusal(
     plan: GPUPreparedImageRenderRunPlan,
     code: String,
@@ -428,7 +698,7 @@ private fun preparedImageCapabilities() = GPUCapabilities(
     ),
 )
 
-private class RecordingPreparedImageDevice {
+internal class RecordingPreparedImageDevice {
     var pipelineCreates = 0
     val closeCounts = linkedMapOf<String, Int>()
 
@@ -461,7 +731,7 @@ private class RecordingPreparedImageDevice {
     } as T
 }
 
-private class RecordingPreparedImageHandleFactory : GPUPreparedImageNativeHandleFactory {
+internal class RecordingPreparedImageHandleFactory : GPUPreparedImageNativeHandleFactory {
     val closeCounts = linkedMapOf<String, Int>()
     val samplerFilters = mutableListOf<String>()
     val uniformBuffers = mutableListOf<GPUBuffer>()

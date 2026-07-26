@@ -90,7 +90,9 @@ class GPUPreparedImageFrameResourcePlanTest {
         assertEquals("RGBA8Unorm", plan.textureDescriptor.format)
         assertEquals(setOf("copy_dst", "texture_binding"), plan.textureDescriptor.usageLabels)
         assertEquals(listOf(0L, 256L), plan.bindingRequests.map { it.uniformAllocation.offset })
+        assertEquals(listOf(112L, 112L), plan.bindingRequests.map { it.uniformAllocation.size })
         assertTrue(plan.bindingRequests.all { it.uniformAllocation.offset % 256L == 0L })
+        assertEquals(artifact.key, plan.artifactKey)
         assertTrue(plan.bindingRequests.all { it.artifactKey == artifact.key })
         assertTrue(plan.bindingRequests.all { it.bindingLayoutHash == "texture-sampler-tint.v1" })
     }
@@ -165,7 +167,7 @@ class GPUPreparedImageFrameResourcePlanTest {
     }
 
     @Test
-    fun `resource plan retains data class structure across copy and caller mutation`() {
+    fun `resource plan retains value structure across copy and caller mutation`() {
         val template = buildPreparedImageFrameResourcePlan(
             artifact = artifact(
                 format = GPUPreparedImageSourceFormat.A8,
@@ -205,6 +207,7 @@ class GPUPreparedImageFrameResourcePlanTest {
         }.toMutableList()
         val callerAllocations = template.memoryAllocations.toMutableList()
         val plan = GPUPreparedImageFrameResourcePlan(
+            artifactKey = template.artifactKey,
             stagingRef = template.stagingRef,
             textureRef = template.textureRef,
             frameTextureRef = template.frameTextureRef,
@@ -241,6 +244,7 @@ class GPUPreparedImageFrameResourcePlanTest {
         ) = plan
 
         assertEquals(plan, copied)
+        assertEquals(plan.artifactKey, copied.artifactKey)
         assertEquals(plan.hashCode(), copied.hashCode())
         assertNotSame(plan, copied)
         assertTrue(plan.toString().startsWith("GPUPreparedImageFrameResourcePlan("))

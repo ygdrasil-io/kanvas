@@ -138,6 +138,7 @@ internal class GPUFramePreflighter(
     private val surfaceProvider: GPUSurfaceOutputProvider,
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
     private val nativeBoundary: GPUPreparedNativeFrameBoundary? = null,
+    private val nominalEncoderScopeObserver: ((List<GPUCommandEncoderScopePlan>) -> Unit)? = null,
 ) {
     private val capabilities: GPUCapabilities = capabilities.preflightSnapshot()
 
@@ -407,6 +408,46 @@ internal class GPUFramePreflighter(
                 ),
             )
         }
+        val observedEncoderScopes = if (nominalEncoderScopeObserver == null) {
+            null
+        } else {
+            try {
+                lowerEncoderScopes(
+                    framePlan,
+                    materialized,
+                    preparedGenerationMap,
+                    corePrimitiveDirectRoutes,
+                    corePrimitivePathStencilRoutes,
+                    corePrimitiveNativeScopeRoutes,
+                    corePrimitiveClipStencilPreparedRoutes,
+                    corePrimitiveCoverageMaskPreparedRoutes,
+                ).also(nominalEncoderScopeObserver)
+            } catch (failure: Throwable) {
+                return refuseWithRollback(
+                    rollback,
+                    acquiredAnyResource,
+                    diagnostic(
+                        "invalid.preflight.encoder_lowering",
+                        "Semantic steps could not be lowered to a one-to-one encoder plan.",
+                        mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                    ),
+                )
+            }
+        }
+        if (nominalEncoderScopeObserver != null &&
+            framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .flatMap { it.drawPackets }
+                .any { it.semanticPayload is GPUDrawSemanticPayload.SampledImage }
+        ) {
+            return refuseWithRollback(
+                rollback,
+                acquiredAnyResource,
+                diagnostic(
+                    "unsupported.preflight.sampled_image_unmaterialized",
+                    "Prepared sampled-image semantics have no executable native materialization route.",
+                ),
+            )
+        }
         validateRenderOperands(
             framePlan,
             materialized,
@@ -418,28 +459,28 @@ internal class GPUFramePreflighter(
             return refuseWithRollback(rollback, acquiredAnyResource, invalid)
         }
 
-        val encoderScopes = try {
-            lowerEncoderScopes(
-                framePlan,
-                materialized,
-                preparedGenerationMap,
-                corePrimitiveDirectRoutes,
-                corePrimitivePathStencilRoutes,
-                corePrimitiveNativeScopeRoutes,
-                corePrimitiveClipStencilPreparedRoutes,
-                corePrimitiveCoverageMaskPreparedRoutes,
-            )
-        } catch (failure: Throwable) {
-            return refuseWithRollback(
-                rollback,
-                acquiredAnyResource,
-                diagnostic(
-                    "invalid.preflight.encoder_lowering",
-                    "Semantic steps could not be lowered to a one-to-one encoder plan.",
-                    mapOf("failureClass" to failure::class.simpleName.orEmpty()),
-                ),
-            )
-        }
+        val encoderScopes = observedEncoderScopes ?: try {
+                lowerEncoderScopes(
+                    framePlan,
+                    materialized,
+                    preparedGenerationMap,
+                    corePrimitiveDirectRoutes,
+                    corePrimitivePathStencilRoutes,
+                    corePrimitiveNativeScopeRoutes,
+                    corePrimitiveClipStencilPreparedRoutes,
+                    corePrimitiveCoverageMaskPreparedRoutes,
+                )
+            } catch (failure: Throwable) {
+                return refuseWithRollback(
+                    rollback,
+                    acquiredAnyResource,
+                    diagnostic(
+                        "invalid.preflight.encoder_lowering",
+                        "Semantic steps could not be lowered to a one-to-one encoder plan.",
+                        mapOf("failureClass" to failure::class.simpleName.orEmpty()),
+                    ),
+                )
+            }
         val encoderPlan = try {
             GPUCommandEncoderPlan.ordered(
                 planId = "frame.${framePlan.frameId.value}",
@@ -3860,10 +3901,15 @@ internal class GPUFramePreflighter(
                 validateRegisteredUniformRectSemanticPayload(render, packet, semantic)
             is GPUDrawSemanticPayload.SeparableBlurRect ->
                 validateSeparableBlurRectSemanticPayload(packet, semantic)
-            is GPUDrawSemanticPayload.SampledImage -> diagnostic(
-                "unsupported.preflight.sampled_image_unmaterialized",
-                "Prepared sampled-image semantics have no executable native materialization route.",
-            )
+            is GPUDrawSemanticPayload.SampledImage ->
+                if (nominalEncoderScopeObserver == null) {
+                    diagnostic(
+                        "unsupported.preflight.sampled_image_unmaterialized",
+                        "Prepared sampled-image semantics have no executable native materialization route.",
+                    )
+                } else {
+                    null
+                }
             is GPUDrawSemanticPayload.ColorGlyph ->
                 validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
         }
