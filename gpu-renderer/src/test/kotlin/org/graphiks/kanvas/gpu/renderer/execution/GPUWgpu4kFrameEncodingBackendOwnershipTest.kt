@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUCommandBuffer
 import io.ygdrasil.webgpu.GPUCommandEncoder
+import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
 import java.lang.reflect.Proxy
@@ -9,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
@@ -47,7 +49,6 @@ class GPUWgpu4kFrameEncodingBackendOwnershipTest {
                     GPUPreparedNativeOperandRole.UploadDestination,
                     GPUPreparedNativeOperandKind.Texture,
                     gpuPreparedNativeBindingKey("GPUFrameTextureRef:image@1"),
-                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
                 ),
                 layout = layout,
             ),
@@ -58,6 +59,62 @@ class GPUWgpu4kFrameEncodingBackendOwnershipTest {
         assertEquals(256L, layout.bytesPerRow)
         assertEquals(1, layout.width)
         assertEquals(1, layout.height)
+    }
+
+    @Test
+    fun `uniform upload writes the bound buffer at its exact offset before its consumers`() {
+        val calls = mutableListOf<List<Any?>>()
+        val queue = nativeProxy(GPUQueue::class.java) { methodName, _, arguments ->
+            when {
+                methodName.startsWith("writeBuffer") -> {
+                    calls += arguments.orEmpty().toList()
+                    Unit
+                }
+                methodName == "toString" -> "UniformUploadQueue"
+                else -> error("Unexpected fake queue call: $methodName")
+            }
+        }
+        val buffer = nativeProxy(GPUBuffer::class.java) { methodName, _, _ ->
+            when (methodName) {
+                "close" -> Unit
+                "getLabel" -> "prepared-image-uniform-buffer"
+                "setLabel" -> Unit
+                "toString" -> "PreparedImageUniformBuffer"
+                else -> error("Unexpected fake buffer call: $methodName")
+            }
+        }
+        val bytes = ByteArray(112) { (it + 1).toByte() }
+        val upload = GPUPreparedNativeBufferUpload(
+            data = GPUPreparedNativeUploadData(
+                GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.UploadSource,
+                    GPUPreparedNativeOperandKind.Buffer,
+                    gpuPreparedNativeBindingKey("prepared-image-uniform-data:uniform"),
+                ),
+                bytes,
+            ),
+            destination = GPUPreparedNativeBufferOperand(
+                buffer,
+                GPUDeviceGenerationID(9),
+                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                byteCapacity = 512L,
+            ),
+            destinationKey = GPUPreparedNativeOperandKey(
+                GPUPreparedNativeOperandRole.UploadDestination,
+                GPUPreparedNativeOperandKind.Buffer,
+                gpuPreparedNativeBindingKey("GPUFrameBufferRef:uniform"),
+            ),
+            destinationOffset = 256L,
+            consumerSourceStepIndices = listOf(7),
+        )
+
+        encodePreparedImageUniformUpload(queue, upload)
+
+        assertEquals(1, calls.size)
+        assertSame(buffer, calls.single()[0])
+        assertEquals(256L, calls.single()[1])
+        assertContentEquals(bytes, upload.data.bytes())
+        assertEquals(listOf(7), upload.consumerSourceStepIndices)
     }
 
     @TestFactory

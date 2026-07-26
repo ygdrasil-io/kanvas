@@ -531,3 +531,17 @@ internal fun encodePreparedImageTextureUpload(
         ),
     )
 }
+
+/**
+ * Encodes a non-scope prepared-image uniform write before its declared render consumers.
+ */
+internal fun encodePreparedImageUniformUpload(
+    queue: GPUQueue,
+    upload: GPUPreparedNativeBufferUpload,
+) {
+    queue.writeBuffer(
+        upload.destination.buffer,
+        upload.destinationOffset.toULong(),
+        ArrayBuffer.of(upload.data.bytes()),
+    )
+}

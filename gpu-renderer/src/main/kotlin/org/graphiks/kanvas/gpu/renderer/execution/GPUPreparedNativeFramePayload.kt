@@ -672,7 +672,7 @@ internal enum class GPUPreparedNativeRenderOperandLayout {
 
 /**
  * Immutable logical staging payload. It is intentionally neither a native handle nor
- * [AutoCloseable]; native ownership begins at the destination texture.
+ * [AutoCloseable]; native ownership begins at the destination resource.
  */
 internal class GPUPreparedNativeUploadData(
     val key: GPUPreparedNativeOperandKey,
@@ -688,6 +688,47 @@ internal class GPUPreparedNativeUploadData(
     }
 
     fun bytes(): ByteArray = snapshot.copyOf()
+}
+
+/**
+ * Non-scope write into the exact frame-owned uniform buffer captured by prepared-image bind
+ * groups. A frame-level caller must encode it before the listed consumer scopes.
+ */
+internal class GPUPreparedNativeBufferUpload(
+    val data: GPUPreparedNativeUploadData,
+    val destination: GPUPreparedNativeBufferOperand,
+    val destinationKey: GPUPreparedNativeOperandKey,
+    val destinationOffset: Long,
+    consumerSourceStepIndices: List<Int>,
+) {
+    val exactOperandKeys: List<GPUPreparedNativeOperandKey> =
+        immutableList(listOf(data.key, destinationKey))
+    val consumerSourceStepIndices: List<Int> =
+        immutableList(consumerSourceStepIndices)
+
+    init {
+        require(data.key.role == GPUPreparedNativeOperandRole.UploadSource &&
+            data.key.kind == GPUPreparedNativeOperandKind.Buffer
+        ) { "Prepared-image uniform upload requires the exact logical Buffer source key" }
+        require(destinationKey.role == GPUPreparedNativeOperandRole.UploadDestination &&
+            destinationKey.kind == GPUPreparedNativeOperandKind.Buffer &&
+            destinationKey.ownership == GPUPreparedNativeOperandOwnership.Borrowed
+        ) { "Prepared-image uniform upload requires the borrowed preflight Buffer destination key" }
+        require(destination.ownership == GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion) {
+            "Prepared-image uniform upload buffer must remain frame-owned"
+        }
+        require(destinationOffset >= 0L && data.bytes().size.toLong() <=
+            Long.MAX_VALUE - destinationOffset
+        )
+        val uploadEnd = destinationOffset + data.bytes().size
+        require(destination.byteCapacity == null || uploadEnd <= destination.byteCapacity) {
+            "Prepared-image uniform upload exceeds its bound buffer capacity"
+        }
+        require(this.consumerSourceStepIndices.isNotEmpty() &&
+            this.consumerSourceStepIndices.all { it >= 0 } &&
+            this.consumerSourceStepIndices.distinct().size == this.consumerSourceStepIndices.size
+        ) { "Prepared-image uniform upload requires exact distinct consumer scope indices" }
+    }
 }
 
 /** Closed per-scope operand algebra. No arbitrary encode callback can enter the payload. */
@@ -985,11 +1026,9 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                 data.key.kind == GPUPreparedNativeOperandKind.Buffer
             ) { "Prepared-image upload data requires the exact logical Buffer source key" }
             require(destinationKey.role == GPUPreparedNativeOperandRole.UploadDestination &&
-                destinationKey.kind == GPUPreparedNativeOperandKind.Texture
-            ) { "Prepared-image texture upload requires the exact Texture destination key" }
-            require(destinationKey.ownership == destination.ownership) {
-                "Prepared-image texture upload destination key must retain native ownership"
-            }
+                destinationKey.kind == GPUPreparedNativeOperandKind.Texture &&
+                destinationKey.ownership == GPUPreparedNativeOperandOwnership.Borrowed
+            ) { "Prepared-image texture upload requires the borrowed preflight Texture destination key" }
             require(data.bytes().contentEquals(layout.bytesForUpload())) {
                 "Prepared-image texture upload data must equal the sealed padded upload layout"
             }
