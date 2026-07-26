@@ -220,6 +220,61 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
     }
 
     @Test
+    fun `two artifacts with the same descriptor share one sampler across the frame`() {
+        val nativeDevice = RecordingPreparedImageDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            nativeDevice.device,
+            GPUDeviceGenerationID(171),
+        )
+        val factory = RecordingPreparedImageHandleFactory()
+        val firstArtifact = preparedImageArtifact(pixelSeed = 31)
+        val secondArtifact = preparedImageArtifact(pixelSeed = 47)
+        val firstResource = preparedImageResource(
+            firstArtifact,
+            "packet.artifact.first",
+        )
+        val secondResource = preparedImageResource(
+            secondArtifact,
+            "packet.artifact.second",
+        )
+
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+            .materializeAcceptedRun(
+                preparedImageRenderRunPlan(
+                    sourceScopeIndices = listOf(1, 2, 3),
+                    packets = listOf(
+                        preparedImageSemantic(
+                            firstArtifact,
+                            GPUPreparedImageSampling.Nearest,
+                            1f,
+                        ),
+                        preparedImageSemantic(
+                            secondArtifact,
+                            GPUPreparedImageSampling.Nearest,
+                            7f,
+                        ),
+                    ),
+                    resources = listOf(firstResource, secondResource),
+                    uniformAllocations = listOf(
+                        firstResource.bindingRequests.single().uniformAllocation,
+                        secondResource.bindingRequests.single().uniformAllocation,
+                    ),
+                ),
+            )
+        val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(result)
+
+        assertEquals(1, factory.samplerCreates)
+        assertEquals(listOf("nearest"), factory.samplerFilters)
+        assertEquals(2, factory.textureCreates)
+        assertEquals(2, factory.textureViewCreates)
+        assertEquals(2, factory.uniformBufferCreates)
+        assertEquals(2, factory.bindGroupCreates)
+
+        ready.ownedResources.single().close()
+        cache.close()
+    }
+
+    @Test
     fun `mismatched native binding identity refuses before any handle creation`() {
         val nativeDevice = RecordingPreparedImageDevice()
         val cache = GPUWgpu4kPreparedImageSessionCache(

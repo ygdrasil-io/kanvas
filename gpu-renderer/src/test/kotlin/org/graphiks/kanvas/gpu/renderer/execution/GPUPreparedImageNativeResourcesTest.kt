@@ -168,6 +168,30 @@ class GPUPreparedImageNativeResourcesTest {
     }
 
     @Test
+    fun `foreign binding layout refuses before native handles`() {
+        val fixture = fixture(
+            bindings = listOf(
+                GPUPreparedImageBindingInput(
+                    "packet.foreign-layout",
+                    GPUPreparedImageSampling.Nearest,
+                ),
+            ),
+            bindingLayoutHash = "layout.image",
+        )
+        val factory = RecordingFactory()
+        val result = GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request)
+        if (result is GPUPreparedImageNativePreflightResult.Sealed) {
+            result.materialize(factory).close()
+        }
+
+        assertEquals(0, factory.createCalls)
+        assertEquals(
+            "unsupported.image.native_binding",
+            assertIs<GPUPreparedImageNativePreflightResult.Refused>(result).reasonCode,
+        )
+    }
+
+    @Test
     fun `seal refuses incoherent staging uniform limits and upload layout`() {
         val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
         val staging = fixture.plan.preparationRequests.single { it.resource == fixture.plan.stagingRef }
@@ -390,7 +414,11 @@ class GPUPreparedImageNativeResourcesTest {
         assertFailsWith<IllegalStateException> { resources.texture(fixture.artifactKey) }
     }
 
-    private fun fixture(bindings: List<GPUPreparedImageBindingInput>): Fixture {
+    private fun fixture(
+        bindings: List<GPUPreparedImageBindingInput>,
+        bindingLayoutHash: String =
+            "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
+    ): Fixture {
         val artifact = (GPUPreparedImageArtifactFactory.prepare(
             GPUPreparedImageSourceInput(
                 sourceClass = GPUPreparedImageSourceClass.DecodedCpu,
@@ -411,7 +439,7 @@ class GPUPreparedImageNativeResourcesTest {
         val plan = buildPreparedImageFrameResourcePlanFromBindings(
             artifact = artifact,
             bindingInputs = bindings,
-            bindingLayoutHash = "layout.image",
+            bindingLayoutHash = bindingLayoutHash,
             capabilities = caps,
             frameIdentity = "frame.native-resources",
             uploadTaskId = GPUTaskID("task.upload.image"),

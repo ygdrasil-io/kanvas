@@ -116,6 +116,8 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
             val uploads = mutableListOf<GPUPreparedNativeScopeOperand.TextureUpload>()
             val uniformUploads = mutableListOf<GPUPreparedNativeBufferUpload>()
             val bindingByPacketId = linkedMapOf<String, MaterializedBinding>()
+            val samplers =
+                linkedMapOf<GPUPreparedImageSamplerKey, io.ygdrasil.webgpu.GPUSampler>()
             val uniformBytesByPacketId = plan.packets.mapIndexed { index, packet ->
                 plan.uniformAllocations[index].packetId to preparedImageUniformBytes(packet)
             }.toMap()
@@ -167,8 +169,6 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                 val bindingKeys = resource.preparedImageNativeBindingKeys(
                     deviceGeneration = sessionCache.deviceGeneration.value,
                 )
-                val samplers =
-                    linkedMapOf<GPUPreparedImageSamplerKey, io.ygdrasil.webgpu.GPUSampler>()
                 val bindGroups =
                     linkedMapOf<GPUPreparedImageBindingKey, io.ygdrasil.webgpu.GPUBindGroup>()
                 resource.bindingRequests.forEach { request ->

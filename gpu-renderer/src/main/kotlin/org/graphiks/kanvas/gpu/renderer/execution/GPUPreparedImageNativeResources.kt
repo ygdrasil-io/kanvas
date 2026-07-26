@@ -119,6 +119,13 @@ internal object GPUPreparedImageNativeResourcePreflighter {
 
     private fun refusalReason(request: GPUPreparedImageNativePreflightRequest): String? {
         val plan = request.resourcePlan
+        val bindingLayoutIdentity = preparedImageBindingLayoutContract().identity
+        if (plan.bindingRequests.any { binding ->
+                binding.bindingLayoutHash != bindingLayoutIdentity
+            }
+        ) {
+            return "unsupported.image.native_binding"
+        }
         if (request.activeAttachment == plan.frameTextureRef) {
             return "unsupported.prepared_image.active_attachment"
         }
