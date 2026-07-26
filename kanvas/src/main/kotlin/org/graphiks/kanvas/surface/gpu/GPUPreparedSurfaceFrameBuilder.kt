@@ -157,13 +157,28 @@ internal data class GPUPreparedImageCommandSource(
     val operation: DisplayOp.DrawImage,
 )
 
+private data class GPUPreparedVisualAssociation(
+    val visual: GPUFramePathVisualCommand,
+    val imageSource: GPUPreparedImageCommandSource?,
+)
+
+private fun GPUPreparedImageCommandSource.matchesExactOperation(
+    command: NormalizedDrawCommand.DrawImageRect,
+    operations: List<DisplayOp>,
+): Boolean {
+    val indexedOperation = operations.getOrNull(operationIndex)
+    return commandId == command.commandId.value &&
+        indexedOperation === operation &&
+        indexedOperation is DisplayOp.DrawImage &&
+        indexedOperation.image === operation.image
+}
+
 private fun prepareImageVisuals(
     mapping: GPUOpMapping,
     operations: List<DisplayOp>,
     target: GPUTargetFacts,
 ): PreparedImageVisuals {
-    val orderedVisuals = mutableListOf<GPUFramePathVisualCommand>()
-    val sourcesByCommandId = linkedMapOf<Int, GPUPreparedImageCommandSource>()
+    val orderedAssociations = mutableListOf<GPUPreparedVisualAssociation>()
     val mappedCoreVisuals = mapping.visualCommands.iterator()
     var provenance = GPUFrameProvenance.None
     operations.forEachIndexed { operationIndex, operation ->
@@ -178,7 +193,7 @@ private fun prepareImageVisuals(
             is DisplayOp.FlushAndSnapshot,
             -> Unit
             is DisplayOp.DrawImage -> {
-                val commandId = orderedVisuals.size
+                val commandId = orderedAssociations.size
                 val rawNormalized = operation.toImageRectCommand(
                     cmdId = GPUDrawCommandID(commandId),
                     target = target,
@@ -204,19 +219,21 @@ private fun prepareImageVisuals(
                         message = "Prepared image clip execution must be classified before recording.",
                     )
                 }
-                orderedVisuals += GPUFramePathVisualCommand(
-                    normalized = normalized,
-                    targetSpaceBounds = normalized.bounds,
-                    geometryCoverage = GPUCoverageConsumption.FullOrScissor,
-                    clipCoverage = clipCoverage,
-                    clipExecutionPlan = clipExecution,
-                    blendPlan = normalized.blend.canonicalBlendPlan(),
-                    provenance = provenance,
-                )
-                sourcesByCommandId[commandId] = GPUPreparedImageCommandSource(
-                    commandId = commandId,
-                    operationIndex = operationIndex,
-                    operation = operation,
+                orderedAssociations += GPUPreparedVisualAssociation(
+                    visual = GPUFramePathVisualCommand(
+                        normalized = normalized,
+                        targetSpaceBounds = normalized.bounds,
+                        geometryCoverage = GPUCoverageConsumption.FullOrScissor,
+                        clipCoverage = clipCoverage,
+                        clipExecutionPlan = clipExecution,
+                        blendPlan = normalized.blend.canonicalBlendPlan(),
+                        provenance = provenance,
+                    ),
+                    imageSource = GPUPreparedImageCommandSource(
+                        commandId = commandId,
+                        operationIndex = operationIndex,
+                        operation = operation,
+                    ),
                 )
             }
             is DisplayOp.DrawColor,
@@ -236,9 +253,12 @@ private fun prepareImageVisuals(
                         ),
                     )
                 }
-                orderedVisuals += mappedCoreVisuals.next().withPreparedCommandIdentity(
-                    commandId = orderedVisuals.size,
-                    provenance = provenance,
+                orderedAssociations += GPUPreparedVisualAssociation(
+                    visual = mappedCoreVisuals.next().withPreparedCommandIdentity(
+                        commandId = orderedAssociations.size,
+                        provenance = provenance,
+                    ),
+                    imageSource = null,
                 )
             }
             else -> Unit
@@ -253,30 +273,33 @@ private fun prepareImageVisuals(
     }
     val artifacts = linkedMapOf<Int, GPUPreparedImageUploadArtifact>()
     val visuals = mutableListOf<GPUFramePathVisualCommand>()
-    for (visual in orderedVisuals) {
+    for ((visual, source) in orderedAssociations) {
         val command = visual.normalized as? NormalizedDrawCommand.DrawImageRect
         if (command == null) {
+            if (source != null) {
+                return PreparedImageVisuals.Refused(
+                    imageCommandSourceDiagnostic(
+                        message = "Prepared image source was associated with a non-image command.",
+                        facts = mapOf(
+                            "commandId" to source.commandId.toString(),
+                            "operationIndex" to source.operationIndex.toString(),
+                        ),
+                    ),
+                )
+            }
             visuals += visual
             continue
         }
-        val source = sourcesByCommandId[command.commandId.value]
-            ?: return PreparedImageVisuals.Refused(
-                diagnostic(
-                    code = "invalid.surface.prepared.image-command-source",
-                    message = "Prepared image command requires one exact Surface image source.",
-                    facts = mapOf("commandId" to command.commandId.value.toString()),
-                ),
-            )
-        if (source.operation.image.sourceId != command.imageSourceId) {
+        if (source == null || !source.matchesExactOperation(command, operations)) {
             return PreparedImageVisuals.Refused(
                 diagnostic(
                     code = "invalid.surface.prepared.image-command-source",
-                    message = "Prepared image command source identity diverged from its Surface operation.",
+                    message = "Prepared image command requires its exact indexed Surface operation.",
                     facts = mapOf(
                         "commandId" to command.commandId.value.toString(),
-                        "operationIndex" to source.operationIndex.toString(),
+                        "operationIndex" to (source?.operationIndex?.toString() ?: "missing"),
                         "commandImageSourceId" to command.imageSourceId,
-                        "operationImageSourceId" to source.operation.image.sourceId,
+                        "operationImageSourceId" to (source?.operation?.image?.sourceId ?: "missing"),
                     ),
                 ),
             )

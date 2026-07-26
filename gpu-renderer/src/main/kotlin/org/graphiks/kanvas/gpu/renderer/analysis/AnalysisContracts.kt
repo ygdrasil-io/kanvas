@@ -1002,8 +1002,8 @@ class GPUFirstRoutePlanner(
         val pipelineKey = "pending.pipeline.draw_image_rect.decoded_pixels.rgba8unorm.src_over"
         val renderStep = imageDrawRenderStep
         val consumerKind = "sampled-image.draw_image_rect"
-        val artifactKey = "prepared.draw_image_rect.${command.imageSourceId.sanitizeForAnalysisKey()}.${command.pixelsWidth}x${command.pixelsHeight}.${command.pixelsFormat.lowercase()}"
-        val invalidationFacts = listOf("image-source-id", "pixel-content-hash", "generation", "pixel-format", "alpha-type", "color-profile")
+        val artifactKey = "prepared.draw_image_rect.${command.pixelsContentHash.sanitizeForAnalysisKey()}.${command.pixelsWidth}x${command.pixelsHeight}.${command.pixelsFormat.lowercase()}"
+        val invalidationFacts = listOf("pixel-content-hash", "generation", "pixel-format", "alpha-type", "color-profile")
 
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
@@ -1147,7 +1147,6 @@ class GPUFirstRoutePlanner(
     private fun NormalizedDrawCommand.DrawImageRect.refusalCode(): String? =
         coordinateRefusalCode() ?: when {
             stroke -> "unsupported.stroke.unimplemented"
-            imageSourceId.isBlank() -> GPUPreparedImageRefusalCodes.PIXELS_MISSING
             src.left.isNaN() || src.top.isNaN() || src.right.isNaN() || src.bottom.isNaN() ->
                 "unsupported.image.src_rect_nan"
             dst.left.isNaN() || dst.top.isNaN() || dst.right.isNaN() || dst.bottom.isNaN() ->

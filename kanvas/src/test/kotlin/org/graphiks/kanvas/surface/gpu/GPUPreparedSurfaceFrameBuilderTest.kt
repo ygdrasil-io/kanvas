@@ -405,6 +405,102 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
+    fun `blank source provenance keeps exact image bytes by command and operation index`() {
+        val first = Image(
+            width = 1,
+            height = 1,
+            sourceId = "",
+            pixels = byteArrayOf(11, 12, 13, -1),
+            alphaType = AlphaType.PREMUL,
+        )
+        val second = Image(
+            width = 1,
+            height = 1,
+            sourceId = "",
+            pixels = byteArrayOf(21, 22, 23, -1),
+            alphaType = AlphaType.PREMUL,
+        )
+
+        val buildResult = GPUPreparedSurfaceFrameBuilder.build(
+            imageRequest(
+                listOf(
+                    drawImage(first, Rect.fromLTRB(1f, 1f, 5f, 5f)),
+                    drawImage(second, Rect.fromLTRB(7f, 1f, 11f, 5f)),
+                ),
+            ),
+        )
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            buildResult,
+            buildResult.toString(),
+        )
+        val semantics = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .map { packet -> assertIs<GPUDrawSemanticPayload.SampledImage>(packet.semanticPayload) }
+
+        assertEquals(listOf(0, 1), ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .map { packet -> packet.commandIdValue })
+        assertContentEquals(first.pixels, semantics[0].artifact.tightRgba8BytesForUpload())
+        assertContentEquals(second.pixels, semantics[1].artifact.tightRgba8BytesForUpload())
+        assertNotEquals(semantics[0].artifact.key, semantics[1].artifact.key)
+    }
+
+    @Test
+    fun `core image core image preserves exact paint order and artifact association`() {
+        val first = Image(
+            width = 1,
+            height = 1,
+            sourceId = "mixed-shared-provenance",
+            pixels = byteArrayOf(31, 32, 33, -1),
+            alphaType = AlphaType.PREMUL,
+        )
+        val second = Image(
+            width = 1,
+            height = 1,
+            sourceId = "mixed-shared-provenance",
+            pixels = byteArrayOf(41, 42, 43, -1),
+            alphaType = AlphaType.PREMUL,
+        )
+        val operations: List<DisplayOp> = listOf(
+            rect(Rect.fromLTRB(1f, 1f, 5f, 5f), Color.RED),
+            drawImage(first, Rect.fromLTRB(6f, 1f, 10f, 5f)),
+            rect(Rect.fromLTRB(11f, 1f, 15f, 5f), Color.BLUE),
+            drawImage(second, Rect.fromLTRB(16f, 1f, 20f, 5f)),
+        )
+
+        val buildResult = GPUPreparedSurfaceFrameBuilder.build(imageRequest(operations))
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            buildResult,
+            buildResult.toString(),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val imageSemantics = packets.mapNotNull { packet ->
+            packet.semanticPayload as? GPUDrawSemanticPayload.SampledImage
+        }
+        val uploadPlans = ready.taskList.tasks.filterIsInstance<GPUTask.Upload>()
+            .mapNotNull(GPUTask.Upload::preparedImagePlan)
+
+        assertEquals(listOf(0, 1, 2, 3), packets.map { packet -> packet.commandIdValue })
+        assertEquals(4, packets.size)
+        assertEquals(4, packets.map { packet -> packet.commandIdValue }.toSet().size)
+        assertIs<GPUDrawSemanticPayload.CorePrimitive>(packets[0].semanticPayload)
+        assertIs<GPUDrawSemanticPayload.SampledImage>(packets[1].semanticPayload)
+        assertIs<GPUDrawSemanticPayload.CorePrimitive>(packets[2].semanticPayload)
+        assertIs<GPUDrawSemanticPayload.SampledImage>(packets[3].semanticPayload)
+        assertContentEquals(first.pixels, imageSemantics[0].artifact.tightRgba8BytesForUpload())
+        assertContentEquals(second.pixels, imageSemantics[1].artifact.tightRgba8BytesForUpload())
+        assertEquals(
+            imageSemantics.map { semantic -> semantic.artifact.key }.toSet(),
+            uploadPlans.map { plan -> plan.artifactKey }.toSet(),
+        )
+        assertEquals(
+            imageSemantics.map { semantic -> semantic.artifact.key }.toSet().size,
+            uploadPlans.size,
+        )
+    }
+
+    @Test
     fun `surface propagates canonical image refusal codes and adds only boundary facts`() {
         val cases = listOf(
             Image(
@@ -509,7 +605,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         )
     }
 
-    private fun imageRequest(operations: List<DisplayOp.DrawImage>): GPUPreparedSurfaceFrameBuildRequest {
+    private fun imageRequest(operations: List<DisplayOp>): GPUPreparedSurfaceFrameBuildRequest {
         val base = request(listOf(rect()))
         return base.copy(
             candidate = GPUPreparedSurfaceEligibility.Candidate(

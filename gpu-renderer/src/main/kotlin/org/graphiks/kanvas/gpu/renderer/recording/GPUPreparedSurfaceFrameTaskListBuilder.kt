@@ -182,8 +182,9 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             val execution = packet.clipExecutionPlan
             coverage == null || execution == null ||
                 coverage != semantic.clipCoveragePlan ||
-                semantic.clipExecutionPlanIdentity == null ||
-                execution.canonicalIdentity() != semantic.clipExecutionPlanIdentity
+                semantic.clipExecutionPlanIdentity?.let { identity ->
+                    execution.canonicalIdentity() != identity
+                } == true
         }
         if (invalidCoreAuthority != null) {
             return refused(

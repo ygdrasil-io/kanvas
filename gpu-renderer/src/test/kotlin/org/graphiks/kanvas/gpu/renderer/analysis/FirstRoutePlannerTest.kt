@@ -1704,9 +1704,9 @@ class FirstRoutePlannerTest {
         assertEquals("unsupported.material.source_unimplemented", plan.pass.diagnostics.single().code)
     }
 
-    /** DrawImageRect with blank image source ID refuses diagnostically. */
+    /** Blank source provenance does not replace the decoded-pixel admission authority. */
     @Test
-    fun `draw image rect with blank source id refuses diagnostically`() {
+    fun `draw image rect admits valid pixels with blank source provenance`() {
         val command = GPUDrawImageRectCommandBuilder.build(
             commandId = GPUDrawCommandID(32),
             imageSourceId = "",
@@ -1726,9 +1726,24 @@ class FirstRoutePlannerTest {
             pixelsProvenance = IMAGE_DRAW_PIXELS_PROVENANCE,
         )
 
-        val plan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command)
-        assertIs<GPURouteDecision.Refused>(plan.routeDecision)
-        assertEquals(GPUPreparedImageRefusalCodes.PIXELS_MISSING, plan.pass.diagnostics.single().code)
+        val blankSourcePlan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(command)
+        val namedSourcePlan = GPUFirstRoutePlanner(capabilities = firstSliceCapabilities()).plan(
+            command.copy(
+                imageSourceId = "provenance-only",
+                material = GPUMaterialDescriptor.ImageDraw(
+                    imageSourceId = "provenance-only",
+                    imageWidth = 2,
+                    imageHeight = 2,
+                ),
+            ),
+        )
+
+        val blankRoute = assertIs<GPURouteDecision.Prepared>(blankSourcePlan.routeDecision)
+        val namedRoute = assertIs<GPURouteDecision.Prepared>(namedSourcePlan.routeDecision)
+        assertEquals(blankRoute.route.artifactKey, namedRoute.route.artifactKey)
+        assertTrue(blankSourcePlan.pass.diagnostics.none {
+            it.code == GPUPreparedImageRefusalCodes.PIXELS_MISSING
+        })
     }
 
     /** DrawImageRect with NaN source rect refuses diagnostically. */

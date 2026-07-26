@@ -219,6 +219,28 @@ class GPUPreparedImageNativeResourcesTest {
     }
 
     @Test
+    fun `incompatible copy row alignment refuses before native handles`() {
+        val fixture = fixture(
+            listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)),
+        )
+        val factory = RecordingFactory()
+
+        val result = GPUPreparedImageNativeResourcePreflighter.preflight(
+            fixture.request.copy(
+                capabilities = capabilities(copyBytesPerRowAlignment = 512),
+            ),
+        )
+        if (result is GPUPreparedImageNativePreflightResult.Sealed) {
+            result.materialize(factory).close()
+        }
+
+        val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(result)
+        assertEquals(GPUPreparedImageRefusalCodes.PIXEL_ROW_STRIDE, refused.reasonCode)
+        assertEquals("preflight", refused.facts["boundary"])
+        assertEquals(0, factory.createCalls)
+    }
+
+    @Test
     fun `seal refuses incoherent staging uniform limits and upload layout`() {
         val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
         val staging = fixture.plan.preparationRequests.single { it.resource == fixture.plan.stagingRef }
@@ -491,13 +513,16 @@ class GPUPreparedImageNativeResourcesTest {
         )
     }
 
-    private fun capabilities(maxTextureDimension2D: Long = 8192) = GPUCapabilities(
+    private fun capabilities(
+        maxTextureDimension2D: Long = 8192,
+        copyBytesPerRowAlignment: Long = 256,
+    ) = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),
         facts = emptyList(),
         snapshotId = "prepared-image-native-resources",
         limits = GPULimits(
             maxTextureDimension2D = maxTextureDimension2D,
-            copyBytesPerRowAlignment = 256,
+            copyBytesPerRowAlignment = copyBytesPerRowAlignment,
             minUniformBufferOffsetAlignment = 256,
             maxBufferSize = 1L shl 30,
             maxDynamicUniformBuffersPerPipelineLayout = 1,
