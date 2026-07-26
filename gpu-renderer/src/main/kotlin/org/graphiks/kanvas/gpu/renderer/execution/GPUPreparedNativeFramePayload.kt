@@ -670,11 +670,33 @@ internal enum class GPUPreparedNativeRenderOperandLayout {
     IndexedCorePrimitiveFullTarget,
 }
 
+/**
+ * Immutable logical staging payload. It is intentionally neither a native handle nor
+ * [AutoCloseable]; native ownership begins at the destination texture.
+ */
+internal class GPUPreparedNativeUploadData(
+    val key: GPUPreparedNativeOperandKey,
+    bytes: ByteArray,
+) {
+    private val snapshot = bytes.copyOf()
+
+    init {
+        require(key.role == GPUPreparedNativeOperandRole.UploadSource)
+        require(key.kind == GPUPreparedNativeOperandKind.Buffer)
+        require(key.ownership == GPUPreparedNativeOperandOwnership.Borrowed)
+        require(snapshot.isNotEmpty())
+    }
+
+    fun bytes(): ByteArray = snapshot.copyOf()
+}
+
 /** Closed per-scope operand algebra. No arbitrary encode callback can enter the payload. */
 internal sealed interface GPUPreparedNativeScopeOperand {
     val sourceStepIndex: Int
     val operationKind: GPUEncoderOperationKind
     val operands: List<GPUPreparedNativeOperand>
+    val exactOperandKeys: List<GPUPreparedNativeOperandKey>
+        get() = emptyList()
 
     class Render(
         override val sourceStepIndex: Int,
@@ -940,6 +962,73 @@ internal sealed interface GPUPreparedNativeScopeOperand {
     ) : GPUPreparedNativeScopeOperand {
         override val operationKind = GPUEncoderOperationKind.Upload
         override val operands: List<GPUPreparedNativeOperand> = immutableList(listOf(source, destination))
+    }
+
+    /**
+     * Immutable host upload for a prepared image. Unlike [Upload], the logical source is copied
+     * host data rather than a native staging buffer and therefore is deliberately not an operand.
+     */
+    class TextureUpload(
+        override val sourceStepIndex: Int,
+        val data: GPUPreparedNativeUploadData,
+        val destination: GPUPreparedNativeTextureOperand,
+        val destinationKey: GPUPreparedNativeOperandKey,
+        val layout: org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUploadLayout,
+    ) : GPUPreparedNativeScopeOperand {
+        override val operationKind = GPUEncoderOperationKind.Upload
+        override val operands: List<GPUPreparedNativeOperand> = immutableList(listOf(destination))
+        override val exactOperandKeys: List<GPUPreparedNativeOperandKey> =
+            immutableList(listOf(data.key, destinationKey))
+
+        init {
+            require(data.key.role == GPUPreparedNativeOperandRole.UploadSource &&
+                data.key.kind == GPUPreparedNativeOperandKind.Buffer
+            ) { "Prepared-image upload data requires the exact logical Buffer source key" }
+            require(destinationKey.role == GPUPreparedNativeOperandRole.UploadDestination &&
+                destinationKey.kind == GPUPreparedNativeOperandKind.Texture
+            ) { "Prepared-image texture upload requires the exact Texture destination key" }
+            require(destinationKey.ownership == destination.ownership) {
+                "Prepared-image texture upload destination key must retain native ownership"
+            }
+            require(data.bytes().contentEquals(layout.bytesForUpload())) {
+                "Prepared-image texture upload data must equal the sealed padded upload layout"
+            }
+        }
+    }
+
+    /**
+     * Image-specific render operands without a target. A later approved frame-level caller may
+     * compose this closed packet with its already-selected render target.
+     */
+    class PreparedImageRenderRun(
+        override val sourceStepIndex: Int,
+        val pipeline: GPUPreparedNativeRenderPipelineOperand,
+        val bindGroup: GPUPreparedNativeBindGroupOperand,
+        val dynamicUniformOffset: Long,
+        uniformBytes: ByteArray,
+        val scissor: org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds,
+        exactOperandKeys: List<GPUPreparedNativeOperandKey>,
+    ) : GPUPreparedNativeScopeOperand {
+        override val operationKind = GPUEncoderOperationKind.Render
+        override val operands: List<GPUPreparedNativeOperand> =
+            immutableList(listOf(pipeline, bindGroup))
+        override val exactOperandKeys: List<GPUPreparedNativeOperandKey> =
+            immutableList(exactOperandKeys)
+        private val uniformSnapshot = uniformBytes.copyOf()
+
+        init {
+            require(dynamicUniformOffset >= 0L)
+            require(uniformSnapshot.size == GPUPreparedImageUniformAbi.BYTE_SIZE)
+            require(this.exactOperandKeys.size == 2)
+            require(this.exactOperandKeys.map(GPUPreparedNativeOperandKey::kind) ==
+                listOf(
+                    GPUPreparedNativeOperandKind.RenderPipeline,
+                    GPUPreparedNativeOperandKind.BindGroup,
+                )
+            )
+        }
+
+        fun uniformBytes(): ByteArray = uniformSnapshot.copyOf()
     }
 
     class Copy(

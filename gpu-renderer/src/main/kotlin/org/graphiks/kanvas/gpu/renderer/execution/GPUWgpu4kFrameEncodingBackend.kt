@@ -14,8 +14,10 @@ import io.ygdrasil.webgpu.RenderPassColorAttachment
 import io.ygdrasil.webgpu.RenderPassDepthStencilAttachment
 import io.ygdrasil.webgpu.RenderPassDescriptor
 import io.ygdrasil.webgpu.TexelCopyBufferInfo
+import io.ygdrasil.webgpu.TexelCopyBufferLayout
 import io.ygdrasil.webgpu.TexelCopyTextureInfo
 import io.ygdrasil.webgpu.beginRenderPass
+import io.ygdrasil.webgpu.ArrayBuffer
 import java.util.concurrent.atomic.AtomicLong
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
@@ -358,6 +360,8 @@ internal class GPUWgpu4kFrameEncodingBackend(
             require(operand.operationKind == scope.operationKind)
             when (operand) {
                 is GPUPreparedNativeScopeOperand.Render -> encodeRender(operand)
+                is GPUPreparedNativeScopeOperand.TextureUpload ->
+                    encodePreparedImageTextureUpload(queue, operand)
                 is GPUPreparedNativeScopeOperand.Copy -> encodeCopy(operand)
                 is GPUPreparedNativeScopeOperand.Readback -> encodeReadback(operand)
                 is GPUPreparedNativeScopeOperand.SurfaceBlit -> encodeSurfaceBlit(operand)
@@ -502,4 +506,28 @@ internal class GPUWgpu4kFrameEncodingBackend(
         }
         GPUFrameDiscardResult.Failed(failure::class.simpleName.orEmpty())
     }
+}
+
+internal fun encodePreparedImageTextureUpload(
+    queue: GPUQueue,
+    upload: GPUPreparedNativeScopeOperand.TextureUpload,
+) {
+    val layout = upload.layout
+    val bytes = upload.data.bytes()
+    require(bytes.contentEquals(layout.bytesForUpload())) {
+        "Prepared-image writeTexture bytes must retain the sealed padded layout"
+    }
+    queue.writeTexture(
+        destination = TexelCopyTextureInfo(texture = upload.destination.texture),
+        data = ArrayBuffer.of(bytes),
+        dataLayout = TexelCopyBufferLayout(
+            offset = 0uL,
+            bytesPerRow = layout.bytesPerRow.toUInt(),
+            rowsPerImage = layout.rowsPerImage.toUInt(),
+        ),
+        size = Extent3D(
+            width = layout.width.toUInt(),
+            height = layout.height.toUInt(),
+        ),
+    )
 }

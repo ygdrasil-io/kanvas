@@ -5,6 +5,8 @@ import io.ygdrasil.webgpu.GPUCommandEncoder
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
 import java.lang.reflect.Proxy
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -12,6 +14,52 @@ import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
 class GPUWgpu4kFrameEncodingBackendOwnershipTest {
+    @Test
+    fun `texture upload forwards padded bytes and logical extent to writeTexture`() {
+        val calls = mutableListOf<List<Any?>>()
+        val queue = nativeProxy(GPUQueue::class.java) { methodName, _, arguments ->
+            when (methodName) {
+                "writeTexture" -> {
+                    calls += arguments.orEmpty().toList()
+                    Unit
+                }
+                "toString" -> "TextureUploadQueue"
+                else -> error("Unexpected fake queue call: $methodName")
+            }
+        }
+        val layout = preparedImageUploadLayoutForTest()
+        val data = GPUPreparedNativeUploadData(
+            GPUPreparedNativeOperandKey(
+                GPUPreparedNativeOperandRole.UploadSource,
+                GPUPreparedNativeOperandKind.Buffer,
+                gpuPreparedNativeBindingKey("prepared-image-upload-data:staging"),
+            ),
+            layout.bytesForUpload(),
+        )
+
+        encodePreparedImageTextureUpload(
+            queue,
+            GPUPreparedNativeScopeOperand.TextureUpload(
+                sourceStepIndex = 1,
+                data = data,
+                destination = fakeNativeTextureOperand(GPUDeviceGenerationID(9)),
+                destinationKey = GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.UploadDestination,
+                    GPUPreparedNativeOperandKind.Texture,
+                    gpuPreparedNativeBindingKey("GPUFrameTextureRef:image@1"),
+                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                ),
+                layout = layout,
+            ),
+        )
+
+        assertEquals(1, calls.size)
+        assertContentEquals(layout.bytesForUpload(), data.bytes())
+        assertEquals(256L, layout.bytesPerRow)
+        assertEquals(1, layout.width)
+        assertEquals(1, layout.height)
+    }
+
     @TestFactory
     fun `encoding backend retains every failed native ledger until retry succeeds`(): List<DynamicTest> =
         EncodingLedgerRoute.entries.map { route ->
@@ -61,7 +109,7 @@ class GPUWgpu4kFrameEncodingBackendOwnershipTest {
     ) {
         private var encoderOrdinal = 0
 
-        val device: GPUDevice = nativeProxy(GPUDevice::class.java) { methodName, _ ->
+        val device: GPUDevice = nativeProxy(GPUDevice::class.java) { methodName, _, _ ->
             when (methodName) {
                 "createCommandEncoder" -> encoder()
                 "toString" -> "EncodingBackendFixtureDevice"
@@ -69,7 +117,7 @@ class GPUWgpu4kFrameEncodingBackendOwnershipTest {
             }
         }
 
-        val queue: GPUQueue = nativeProxy(GPUQueue::class.java) { methodName, _ ->
+        val queue: GPUQueue = nativeProxy(GPUQueue::class.java) { methodName, _, _ ->
             when (methodName) {
                 "toString" -> "EncodingBackendFixtureQueue"
                 else -> error("Unexpected fake queue call: $methodName")
@@ -103,7 +151,7 @@ class GPUWgpu4kFrameEncodingBackendOwnershipTest {
                 RetryingNativeClose("non-target-buffer-$encoderOrdinal", 0)
             }
             val commandBuffer = closeableNative(GPUCommandBuffer::class.java, commandBufferClose)
-            return nativeProxy(GPUCommandEncoder::class.java) { methodName, _ ->
+            return nativeProxy(GPUCommandEncoder::class.java) { methodName, _, _ ->
                 when (methodName) {
                     "finish" -> commandBuffer
                     "close" -> encoderClose.close()
@@ -139,7 +187,7 @@ class GPUWgpu4kFrameEncodingBackendOwnershipTest {
     private fun <T : Any> closeableNative(
         type: Class<T>,
         close: RetryingNativeClose,
-    ): T = nativeProxy(type) { methodName, _ ->
+    ): T = nativeProxy(type) { methodName, _, _ ->
         when (methodName) {
             "close" -> close.close()
             "getLabel" -> "closeable-native"
@@ -152,13 +200,13 @@ class GPUWgpu4kFrameEncodingBackendOwnershipTest {
 
 private fun <T : Any> nativeProxy(
     type: Class<T>,
-    invocation: (String, Class<*>) -> Any?,
+    invocation: (String, Class<*>, Array<out Any?>?) -> Any?,
 ): T = type.cast(
     Proxy.newProxyInstance(type.classLoader, arrayOf(type)) { proxy, method, arguments ->
         when (method.name) {
             "equals" -> proxy === arguments?.singleOrNull()
             "hashCode" -> System.identityHashCode(proxy)
-            else -> invocation(method.name, method.returnType)
+            else -> invocation(method.name, method.returnType, arguments)
         }
     },
 )

@@ -2109,6 +2109,10 @@ private fun testOperandKeys(
             GPUPreparedNativeOperandRole.UploadSource,
             GPUPreparedNativeOperandRole.UploadDestination,
         )
+        is GPUPreparedNativeScopeOperand.TextureUpload ->
+            error("Prepared-image TextureUpload is not used by legacy adapter test payloads")
+        is GPUPreparedNativeScopeOperand.PreparedImageRenderRun ->
+            error("Prepared-image operand-only render runs are composed only by the Task 6 boundary")
         is GPUPreparedNativeScopeOperand.Copy -> listOf(
             GPUPreparedNativeOperandRole.CopySource,
             GPUPreparedNativeOperandRole.CopyDestination,
