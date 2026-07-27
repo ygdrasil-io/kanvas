@@ -221,6 +221,8 @@ internal object GPUPreparedDrawImageLowerer {
             tintA.coerceIn(0f, 1f),
         )
 
+        // Prepared draws retain pixels only in the immutable artifact. The generic material
+        // descriptor stays byte-free so an expanded grid cannot retain one full copy per cell.
         val material = GPUMaterialDescriptor.ImageDraw(
             imageSourceId = image.sourceId,
             imageWidth = image.width,
@@ -231,7 +233,6 @@ internal object GPUPreparedDrawImageLowerer {
             tintG = tintG,
             tintB = tintB,
             tintA = tintA,
-            rgbaPixels = artifact.tightRgba8BytesForUpload(),
         )
 
         val gpuSrc = GPURect(sx0, sy0, sx1, sy1)

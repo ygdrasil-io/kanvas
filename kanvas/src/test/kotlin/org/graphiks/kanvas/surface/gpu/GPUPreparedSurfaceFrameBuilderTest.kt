@@ -89,6 +89,29 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
+    fun `prepared image nine hard scissor refuses the whole expanded frame exactly`() {
+        val image = imageNine("builder-nine-scissor-refusal")
+        val operation = DisplayOp.DrawImageNine(
+            image = image,
+            center = Rect.fromLTRB(2f, 2f, 4f, 4f),
+            dst = Rect.fromLTRB(2f, 3f, 26f, 21f),
+            paint = null,
+            transform = Matrix33.identity(),
+            clip = ClipStack.DeviceRect(
+                Rect.fromLTRB(6f, 7f, 18f, 16f),
+                antiAlias = false,
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+            GPUPreparedSurfaceFrameBuilder.build(imageRequest(listOf(operation))),
+        )
+
+        assertEquals("unsupported.surface.prepared.image-clip", refused.diagnostic.code.value)
+        assertEquals("0", refused.diagnostic.facts["commandId"])
+    }
+
+    @Test
     fun `prepared mixed lattice preserves sampled core order and omits transparent cell`() {
         val image = imageNine("builder-mixed-lattice")
         val operation = DisplayOp.DrawImageLattice(

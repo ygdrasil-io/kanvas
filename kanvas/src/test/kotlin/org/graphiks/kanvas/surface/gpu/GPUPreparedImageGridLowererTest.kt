@@ -23,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.surface.RenderConfig
@@ -75,6 +76,60 @@ class GPUPreparedImageGridLowererTest {
             listOf(23f to 26.5f, 25f to 27f, 26f to 29f, 24f to 28.5f),
             facts.first().geometry.vertices.map { it.x to it.y },
         )
+    }
+
+    @Test
+    fun `nine refuses overlapping raw destination cells before filtered decomposition`() {
+        val operation = DisplayOp.DrawImageNine(
+            image = imageNine(),
+            center = Rect.fromLTRB(2f, 2f, 4f, 4f),
+            dst = Rect.fromLTRB(0f, 0f, 2f, 2f),
+            paint = null,
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        val refused = assertIs<GPUPreparedImageGridLowering.Refused>(
+            GPUPreparedImageGridLowerer.lowerNine(operation, 7, 19, context()),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.NINE_GEOMETRY, refused.code)
+        assertEquals(-1, refused.operationIndex)
+        assertEquals("overlapping_destination_cells", refused.facts["reason"])
+    }
+
+    @Test
+    fun `sampled grid commands retain no duplicate upload byte payloads`() {
+        val image = Image(
+            width = 64,
+            height = 64,
+            sourceId = "prepared-grid-payload-64x64",
+            pixels = ByteArray(64 * 64 * 4) { index -> (index % 251).toByte() },
+            alphaType = AlphaType.PREMUL,
+        )
+        val divisions = (8 until 64 step 8).toList()
+        val operation = DisplayOp.DrawImageLattice(
+            image = image,
+            lattice = Lattice(xDivs = divisions, yDivs = divisions),
+            dst = Rect.fromLTRB(0f, 0f, 64f, 64f),
+            paint = null,
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+            sampling = SamplingOptions.NEAREST,
+        )
+
+        val ready = assertIs<GPUPreparedImageGridLowering.Ready>(
+            GPUPreparedImageGridLowerer.lowerLattice(operation, 0, 0, context()),
+        )
+
+        assertEquals(64, ready.commands.size)
+        val prepared = ready.commands.map { requireNotNull(it.preparedImage) }
+        prepared.drop(1).forEach { assertSame(prepared.first().artifact, it.artifact) }
+        val retainedPayloads = ready.commands.map { command ->
+            assertIs<GPUMaterialDescriptor.ImageDraw>(command.normalized.material).rgbaPixels
+        }
+        assertTrue(retainedPayloads.all(ByteArray::isEmpty))
+        assertEquals(0, retainedPayloads.sumOf(ByteArray::size))
     }
 
     @Test
@@ -151,6 +206,62 @@ class GPUPreparedImageGridLowererTest {
         assertTrue(ready.commands.all { it.normalized is NormalizedDrawCommand.FillRect })
         assertTrue(ready.commands.all { it.preparedImage == null })
         assertTrue(ready.commands.all { it.normalized.blend.mode == GPUBlendMode.PLUS })
+    }
+
+    @Test
+    fun `fixed color lattice honors mode blender over legacy blend mode`() {
+        val operation = DisplayOp.DrawImageLattice(
+            image = imageNine(),
+            lattice = Lattice(
+                xDivs = listOf(2),
+                yDivs = emptyList(),
+                colors = listOf(Color.GREEN, Color.BLUE),
+                flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
+            ),
+            dst = Rect.fromLTRB(0f, 0f, 12f, 6f),
+            paint = Paint.fill(Color.WHITE).copy(
+                blendMode = BlendMode.SRC,
+                blender = Blender.Mode(BlendMode.PLUS),
+                antiAlias = false,
+            ),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        val ready = assertIs<GPUPreparedImageGridLowering.Ready>(
+            GPUPreparedImageGridLowerer.lowerLattice(operation, 0, 0, context()),
+        )
+
+        assertEquals(2, ready.commands.size)
+        assertTrue(ready.commands.all { it.normalized.blend.mode == GPUBlendMode.PLUS })
+    }
+
+    @Test
+    fun `unsupported lattice blender refuses the whole logical operation`() {
+        val operation = DisplayOp.DrawImageLattice(
+            image = imageNine(),
+            lattice = Lattice(
+                xDivs = listOf(2),
+                yDivs = emptyList(),
+                colors = listOf(Color.GREEN, Color.BLUE),
+                flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
+            ),
+            dst = Rect.fromLTRB(0f, 0f, 12f, 6f),
+            paint = Paint.fill(Color.WHITE).copy(
+                blender = Blender.Arithmetic(0f, 1f, 0f, 0f),
+                antiAlias = false,
+            ),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        val refused = assertIs<GPUPreparedImageGridLowering.Refused>(
+            GPUPreparedImageGridLowerer.lowerLattice(operation, 0, 0, context()),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.code)
+        assertEquals(-1, refused.operationIndex)
+        assertEquals("unsupported_blender", refused.facts["reason"])
     }
 
     @Test

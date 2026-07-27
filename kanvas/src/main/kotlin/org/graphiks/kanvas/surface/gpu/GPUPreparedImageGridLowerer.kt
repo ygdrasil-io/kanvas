@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
+import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.SamplingOptions
@@ -70,6 +71,9 @@ internal object GPUPreparedImageGridLowerer {
                 reason = "invalid_center",
             )
         }
+        validateNineDestinationGrid(operation)?.let { return it }
+        validateGridBlender(operation.paint)?.let { return it }
+        val resolvedPaint = operation.paint.withResolvedGridBlender()
         val artifact = when (val prepared = GPUPreparedSurfaceImageSource.prepare(operation.image)) {
             is GPUPreparedImageArtifactResult.Ready -> prepared.artifact
             is GPUPreparedImageArtifactResult.Refused -> return GPUPreparedImageGridLowering.Refused(
@@ -98,7 +102,7 @@ internal object GPUPreparedImageGridLowerer {
                 image = operation.image,
                 src = cell.src,
                 dst = cell.dst,
-                paint = operation.paint.withImageSampling(operation.image, SamplingOptions.LINEAR),
+                paint = resolvedPaint.withImageSampling(operation.image, SamplingOptions.LINEAR),
                 transform = operation.transform,
                 clip = operation.clip,
             )
@@ -139,6 +143,8 @@ internal object GPUPreparedImageGridLowerer {
             context = context,
             geometryCode = GPUPreparedImageRefusalCodes.LATTICE_GEOMETRY,
         )?.let { return it }
+        validateGridBlender(operation.paint)?.let { return it }
+        val resolvedPaint = operation.paint.withResolvedGridBlender()
         validateSampling(operation.sampling)?.let { return it }
 
         val lattice = operation.lattice
@@ -230,9 +236,9 @@ internal object GPUPreparedImageGridLowerer {
         val temporary = ArrayList<GPUFramePathVisualCommand>(cells.size)
         for (cell in cells) {
             val lowered = if (cell.color == null) {
-                lowerSampledLatticeCell(operation, cell, artifact, context)
+                lowerSampledLatticeCell(operation, cell, artifact, resolvedPaint, context)
             } else {
-                lowerFixedLatticeCell(operation, cell, context)
+                lowerFixedLatticeCell(operation, cell, resolvedPaint, context)
             }
             when (lowered) {
                 is GPUPreparedGridCellLowering.Ready -> temporary += lowered.command
@@ -250,13 +256,14 @@ internal object GPUPreparedImageGridLowerer {
         operation: DisplayOp.DrawImageLattice,
         cell: ImageCell,
         artifact: org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact,
+        resolvedPaint: Paint?,
         context: GPUPreparedImageLoweringContext,
     ): GPUPreparedGridCellLowering {
         val draw = DisplayOp.DrawImage(
             image = operation.image,
             src = cell.src,
             dst = cell.dst,
-            paint = operation.paint.withImageSampling(operation.image, operation.sampling),
+            paint = resolvedPaint.withImageSampling(operation.image, operation.sampling),
             transform = operation.transform,
             clip = operation.clip,
         )
@@ -281,9 +288,10 @@ internal object GPUPreparedImageGridLowerer {
     private fun lowerFixedLatticeCell(
         operation: DisplayOp.DrawImageLattice,
         cell: ImageCell,
+        resolvedPaint: Paint?,
         context: GPUPreparedImageLoweringContext,
     ): GPUPreparedGridCellLowering {
-        val fixedPaint = fixedLatticeColorPaint(requireNotNull(cell.color), operation.paint).copy(
+        val fixedPaint = fixedLatticeColorPaint(requireNotNull(cell.color), resolvedPaint).copy(
             shader = null,
             colorFilter = null,
             maskFilter = null,
@@ -315,6 +323,60 @@ internal object GPUPreparedImageGridLowerer {
             )
         }
         return GPUPreparedGridCellLowering.Ready(visual)
+    }
+
+    private fun validateNineDestinationGrid(
+        operation: DisplayOp.DrawImageNine,
+    ): GPUPreparedImageGridLowering.Refused? {
+        val imageWidth = operation.image.width.toFloat()
+        val imageHeight = operation.image.height.toFloat()
+        val center = operation.center
+        val dst = operation.dst
+        val columns = listOf(
+            dst.left,
+            dst.left + center.left,
+            dst.right - (imageWidth - center.right),
+            dst.right,
+        )
+        val rows = listOf(
+            dst.top,
+            dst.top + center.top,
+            dst.bottom - (imageHeight - center.bottom),
+            dst.bottom,
+        )
+        return if (columns.any { !it.isFinite() } ||
+            rows.any { !it.isFinite() } ||
+            columns.zipWithNext().any { (left, right) -> left > right } ||
+            rows.zipWithNext().any { (top, bottom) -> top > bottom }
+        ) {
+            refused(
+                code = GPUPreparedImageRefusalCodes.NINE_GEOMETRY,
+                operationIndex = -1,
+                reason = "overlapping_destination_cells",
+            )
+        } else {
+            null
+        }
+    }
+
+    private fun validateGridBlender(
+        paint: Paint?,
+    ): GPUPreparedImageGridLowering.Refused? = when (paint?.blender) {
+        null,
+        is Blender.Mode,
+        -> null
+        is Blender.Arithmetic -> refused(
+            code = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+            operationIndex = -1,
+            reason = "unsupported_blender",
+            extraFacts = mapOf("blenderKind" to "Arithmetic"),
+        )
+    }
+
+    private fun Paint?.withResolvedGridBlender(): Paint? = when (val blender = this?.blender) {
+        null -> this
+        is Blender.Mode -> copy(blendMode = blender.mode, blender = null)
+        is Blender.Arithmetic -> error("Unsupported grid blender must be refused before lowering.")
     }
 
     private fun validateCommon(

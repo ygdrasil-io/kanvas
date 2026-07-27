@@ -230,6 +230,11 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 lattice = Lattice(
                     xDivs = listOf(2, 4),
                     yDivs = emptyList(),
+                    rects = listOf(
+                        Rect.fromLTRB(20f, 0f, 28f, 6f),
+                        Rect.fromLTRB(24f, 0f, 32f, 6f),
+                        Rect.fromLTRB(32f, 0f, 38f, 6f),
+                    ),
                     colors = listOf(Color.TRANSPARENT, Color.GREEN, Color.TRANSPARENT),
                     flags = listOf(
                         LatticeFlags.DEFAULT,
@@ -269,8 +274,16 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertPixel(result.rgba, 40, 2, 10, listOf(0, 255, 0, 255))
         assertPixel(result.rgba, 40, 10, 10, listOf(0, 0, 255, 255))
         assertPixel(result.rgba, 40, 18, 18, listOf(255, 255, 255, 255))
-        assertPixel(result.rgba, 40, 20, 11, listOf(255, 255, 255, 255))
-        assertPixel(result.rgba, 40, 25, 11, listOf(0, 255, 0, 255))
+        assertPixel(result.rgba, 40, 21, 11, listOf(255, 255, 255, 255))
+        // Both emitted lattice cells cover this pixel; green proves fixed cell 1 ran after sampled cell 0.
+        assertPixel(
+            result.rgba,
+            40,
+            25,
+            11,
+            listOf(0, 255, 0, 255),
+        )
+        assertPixel(result.rgba, 40, 30, 11, listOf(0, 255, 0, 255))
         assertPixel(result.rgba, 40, 37, 11, listOf(0, 0, 0, 0))
         assertEquals(11, result.visualOperationCount)
         assertEquals(1L, result.evidence.targetCreations)
