@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUBindGroup
+import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPURenderPipeline
@@ -51,6 +52,75 @@ import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFro
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
+    @Test
+    fun `pipeline cache warms once while every equivalent frame recreates its owned image handles`() {
+        val generation = GPUDeviceGenerationID(170)
+        val nativeDevice = RecordingPreparedImageDevice()
+        val counters = GPUPreparedImageNativeCounterRecorder()
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            nativeDevice.device,
+            generation,
+            counters,
+        )
+        val artifact = preparedImageArtifact(pixelSeed = 17)
+        val resource = preparedImageResource(artifact, "packet.telemetry")
+        val plan = preparedImageRenderRunPlan(
+            sourceScopeIndices = listOf(1, 2),
+            packets = listOf(
+                preparedImageSemantic(
+                    artifact,
+                    GPUPreparedImageSampling.Nearest,
+                    1f,
+                ),
+            ),
+            resources = listOf(resource),
+            uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
+        )
+
+        val first = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
+            GPUWgpu4kPreparedImageRenderRunMaterializer(
+                cache,
+                GPUWgpu4kPreparedImageNativeHandleFactory(nativeDevice.device, counters),
+            ).materializeAcceptedRun(plan, generation),
+        )
+        first.ownedResources.single().close()
+        val afterFirstFrame = counters.snapshot()
+
+        val second = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
+            GPUWgpu4kPreparedImageRenderRunMaterializer(
+                cache,
+                GPUWgpu4kPreparedImageNativeHandleFactory(nativeDevice.device, counters),
+            ).materializeAcceptedRun(plan, generation),
+        )
+        second.ownedResources.single().close()
+        val afterSecondFrame = counters.snapshot()
+
+        assertEquals(1L, afterFirstFrame.pipelineCreations)
+        assertEquals(0L, afterFirstFrame.pipelineReuses)
+        assertEquals(1, nativeDevice.pipelineCreates)
+        assertEquals(1L, afterFirstFrame.frameTextureCreations)
+        assertEquals(1L, afterFirstFrame.frameTextureViewCreations)
+        assertEquals(1L, afterFirstFrame.frameSamplerCreations)
+        assertEquals(1L, afterFirstFrame.frameUniformBufferCreations)
+        assertEquals(1L, afterFirstFrame.frameBindGroupCreations)
+
+        assertEquals(1L, afterSecondFrame.pipelineCreations)
+        assertEquals(1L, afterSecondFrame.pipelineReuses)
+        assertEquals(1, nativeDevice.pipelineCreates)
+        assertEquals(2L, afterSecondFrame.frameTextureCreations)
+        assertEquals(2L, afterSecondFrame.frameTextureViewCreations)
+        assertEquals(2L, afterSecondFrame.frameSamplerCreations)
+        assertEquals(2L, afterSecondFrame.frameUniformBufferCreations)
+        assertEquals(2L, afterSecondFrame.frameBindGroupCreations)
+        assertTrue(
+            GPUPreparedImageNativeCounterSnapshot::class.java.declaredFields.none {
+                AutoCloseable::class.java.isAssignableFrom(it.type)
+            },
+        )
+
+        cache.close()
+    }
+
     @Test
     fun `upload data owns a defensive non-closeable byte snapshot and exact preflight key`() {
         val bytes = byteArrayOf(1, 2, 3, 4)
@@ -1129,6 +1199,30 @@ internal class RecordingPreparedImageDevice {
                 pipelineCreates += 1
                 nativeHandle<GPURenderPipeline>("pipeline-$pipelineCreates")
             }
+            "createTexture" -> {
+                handleCreates += 1
+                nativeHandle<GPUTexture>("frame-texture-$handleCreates") { textureMethod ->
+                    when (textureMethod) {
+                        "createView" -> {
+                            handleCreates += 1
+                            nativeHandle<GPUTextureView>("frame-texture-view-$handleCreates")
+                        }
+                        else -> null
+                    }
+                }
+            }
+            "createSampler" -> {
+                handleCreates += 1
+                nativeHandle<GPUSampler>("frame-sampler-$handleCreates")
+            }
+            "createBuffer" -> {
+                handleCreates += 1
+                nativeHandle<GPUBuffer>("frame-uniform-buffer-$handleCreates")
+            }
+            "createBindGroup" -> {
+                handleCreates += 1
+                nativeHandle<GPUBindGroup>("frame-bind-group-$handleCreates")
+            }
             else -> null
         }
     }
@@ -1187,6 +1281,7 @@ internal class RecordingPreparedImageHandleFactory : GPUPreparedImageNativeHandl
     }
 
     override fun createBindGroup(
+        bindGroupLayout: GPUBindGroupLayout,
         request: GPUImageBindingRequest,
         uniformBuffer: GPUBuffer,
         textureView: GPUTextureView,
@@ -1250,6 +1345,7 @@ private class SharingPreparedImageHandleFactory : GPUPreparedImageNativeHandleFa
     override fun createUniformBuffer(size: Long): GPUBuffer = shared as GPUBuffer
 
     override fun createBindGroup(
+        bindGroupLayout: GPUBindGroupLayout,
         request: GPUImageBindingRequest,
         uniformBuffer: GPUBuffer,
         textureView: GPUTextureView,

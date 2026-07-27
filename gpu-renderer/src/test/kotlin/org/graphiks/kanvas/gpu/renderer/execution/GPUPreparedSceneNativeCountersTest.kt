@@ -6,11 +6,18 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 
 class GPUPreparedSceneNativeCountersTest {
     @Test
-    fun `public counters preserve the exact historical data class ABI`() {
+    fun `public counters preserve source compatibility and the order of 41 historical fields`() {
         val counters = GPUPreparedSceneNativeCounters(
             11L,
             12L,
             13L,
+            preparedImagePipelineCreations = 31L,
+            preparedImagePipelineReuses = 37L,
+            preparedImageFrameTextureCreations = 41L,
+            preparedImageFrameTextureViewCreations = 43L,
+            preparedImageFrameSamplerCreations = 47L,
+            preparedImageFrameUniformBufferCreations = 53L,
+            preparedImageFrameBindGroupCreations = 59L,
             renderPasses = 17L,
             draws = 19L,
             drawIndexed = 23L,
@@ -28,12 +35,49 @@ class GPUPreparedSceneNativeCountersTest {
         assertEquals(19L, counters.draws)
         assertEquals(23L, counters.drawIndexed)
         assertEquals(29L, counters.pipelineBinds)
-        assertEquals(41, type.declaredMethods.count { it.name.matches(Regex("component\\d+")) })
-        assertEquals(41, type.declaredMethods.single { it.name == "copy" }.parameterCount)
+        assertEquals(31L, counters.preparedImagePipelineCreations)
+        assertEquals(37L, counters.preparedImagePipelineReuses)
+        assertEquals(41L, counters.preparedImageFrameTextureCreations)
+        assertEquals(43L, counters.preparedImageFrameTextureViewCreations)
+        assertEquals(47L, counters.preparedImageFrameSamplerCreations)
+        assertEquals(53L, counters.preparedImageFrameUniformBufferCreations)
+        assertEquals(59L, counters.preparedImageFrameBindGroupCreations)
+        assertEquals(48, type.declaredMethods.count { it.name.matches(Regex("component\\d+")) })
+        assertEquals(48, type.declaredMethods.single { it.name == "copy" }.parameterCount)
         assertEquals(
-            41,
+            48,
             type.declaredConstructors.filterNot { it.isSynthetic }.maxOf { it.parameterCount },
         )
+    }
+
+    @Test
+    fun `native counters factory exposes the handle free prepared image snapshot`() {
+        val recorder = GPUPreparedImageNativeCounterRecorder()
+        recorder.recordPipelineCreation()
+        recorder.recordPipelineReuse()
+        recorder.recordFrameTextureCreation()
+        recorder.recordFrameTextureViewCreation()
+        recorder.recordFrameSamplerCreation()
+        recorder.recordFrameUniformBufferCreation()
+        recorder.recordFrameBindGroupCreation()
+        val session = GPUPreparedSceneFrameSession(
+            deviceGeneration = GPUDeviceGenerationID(1L),
+            coordinatorFactory = GPUFrameCoordinatorFactory { _, _ -> error("unused") },
+            nativeCountersFactory = {
+                GPUPreparedSceneNativeCounters()
+                    .withPreparedImageNativeCounters(recorder.snapshot())
+            },
+        )
+
+        val counters = session.nativeCounters()
+
+        assertEquals(1L, counters.preparedImagePipelineCreations)
+        assertEquals(1L, counters.preparedImagePipelineReuses)
+        assertEquals(1L, counters.preparedImageFrameTextureCreations)
+        assertEquals(1L, counters.preparedImageFrameTextureViewCreations)
+        assertEquals(1L, counters.preparedImageFrameSamplerCreations)
+        assertEquals(1L, counters.preparedImageFrameUniformBufferCreations)
+        assertEquals(1L, counters.preparedImageFrameBindGroupCreations)
     }
 
     @Test

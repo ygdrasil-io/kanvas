@@ -7,8 +7,11 @@ import io.ygdrasil.webgpu.BindGroupDescriptor
 import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
 import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.GPUBuffer
+import io.ygdrasil.webgpu.GPUCommandBuffer
+import io.ygdrasil.webgpu.GPUCommandEncoder
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
+import io.ygdrasil.webgpu.GPURenderPassEncoder
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
@@ -2544,6 +2547,90 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `single sample pure path wrapper uses the frame global engine and preserves draft lifecycle`() {
+        val failedFixture = fixture(
+            readback = true,
+            routeShape = RouteShape.PathOnly,
+            useRealPreflight = true,
+        )
+        failedFixture.native.events.clear()
+        failedFixture.native.fail("writeBuffer", 1)
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+            failedFixture.materializeCoreResult(),
+        )
+
+        assertEquals(
+            "failed.native-core-primitive.frame-global-materialization",
+            refused.code,
+            "the compatible pure wrapper must delegate allocation and uploads to the operand-only engine",
+        )
+        assertEquals(1, framePoolSlotCount(failedFixture.cache))
+        failedFixture.close()
+
+        val fixture = fixture(
+            readback = true,
+            routeShape = RouteShape.PathOnly,
+            useRealPreflight = true,
+        )
+        fixture.native.events.clear()
+
+        val materialized = fixture.materializeCore()
+        val payload = materialized.draft.payload
+        val render = payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        val readback = payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Readback>()
+            .single()
+        val binds = render.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+        val vertexBuffer = render.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>()
+            .single()
+            .buffer
+            .buffer
+
+        assertEquals(
+            fixture.encoderPlan.scopes.map { it.sourceStepIndex to it.operationKind },
+            payload.scopeOperands.map { it.sourceStepIndex to it.operationKind },
+        )
+        assertEquals(listOf(listOf(0L), listOf(0L)), binds.map { it.dynamicOffsets })
+        assertEquals(1, framePoolSlotCount(fixture.cache))
+        assertSame(
+            render.pass.depthStencilTarget!!.view,
+            payload.pathDepthStencilViewAuthority.getValue(render.sourceStepIndex),
+        )
+
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        assertEquals(1, fixture.native.closeCounts.getOrDefault(readback.destination.buffer, 0))
+        assertEquals(0, fixture.native.closeCounts.getOrDefault(vertexBuffer, 0))
+        fixture.close()
+        assertEquals(1, fixture.native.closeCounts.getOrDefault(vertexBuffer, 0))
+    }
+
+    @Test
+    fun `single sample unified direct wrapper delegates uploads to the frame global engine`() {
+        val fixture = fixture(useRealPreflight = true)
+        fixture.native.events.clear()
+        fixture.native.fail("writeBuffer", 1)
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+            fixture.materializeCoreResult(),
+        )
+
+        assertEquals(
+            "failed.native-core-primitive.frame-global-materialization",
+            refused.code,
+        )
+        assertEquals(1, framePoolSlotCount(fixture.cache))
+        assertTrue(fixture.native.textureDescriptors.none {
+            it.format == GPUTextureFormat.Depth24PlusStencil8
+        })
+        fixture.close()
+    }
+
+    @Test
     fun `mixed materializes direct path pair direct in sealed command order`() {
         val fixture = fixture(routeShape = RouteShape.Mixed)
         fixture.native.events.clear()
@@ -3011,7 +3098,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val refused = fixture.materializeCoreResult()
 
         assertEquals(
-            "failed.native-core-primitive.materialization",
+            "failed.native-core-primitive.frame-global-materialization",
             assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(refused).code,
         )
         val pooledLabels = listOf(
@@ -4856,9 +4943,14 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         }
     }
 
-    private class NativeProxy {
+    internal class NativeProxy {
         val events = mutableListOf<String>()
         val writeBufferCalls = mutableListOf<WriteBufferCall>()
+        var writeTextureCalls = 0
+            private set
+        val renderPipelineKinds = mutableListOf<String>()
+        var readbackCopyCalls = 0
+            private set
         val bindGroupLayoutDescriptors = mutableListOf<BindGroupLayoutDescriptor>()
         val textureDescriptors = mutableListOf<TextureDescriptor>()
         val renderPipelineDescriptors = mutableListOf<RenderPipelineDescriptor>()
@@ -4902,6 +4994,21 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         }.also { created ->
                             createdHandlesByLabel.getOrPut(label) { mutableListOf() } += created
                         }
+                    } else if (label == "Kanvas.frame.preparedImage.texture") {
+                        val imageViewLabel = "Kanvas.frame.preparedImage.textureView"
+                        handle(GPUTexture::class.java, label) { textureMethod ->
+                            if (textureMethod.name == "createView") {
+                                events += "createView:$imageViewLabel"
+                                recordedHandle(
+                                    GPUTextureView::class.java,
+                                    imageViewLabel,
+                                ) as GPUTextureView
+                            } else {
+                                null
+                            }
+                        }.also { created ->
+                            createdHandlesByLabel.getOrPut(label) { mutableListOf() } += created
+                        }
                     } else {
                         texture
                     }
@@ -4924,10 +5031,18 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     handle(method.returnType, method.name)
                 }
                 "createRenderPipeline" -> {
-                    renderPipelineDescriptors += args?.firstOrNull() as RenderPipelineDescriptor
+                    val descriptor = args?.firstOrNull() as RenderPipelineDescriptor
+                    renderPipelineDescriptors += descriptor
+                    val label = descriptor.label.orEmpty()
                     events += method.name
-                    handle(method.returnType, method.name)
+                    events += "createRenderPipeline:$label"
+                    recordedHandle(method.returnType, label)
                 }
+                "createSampler" -> {
+                    events += method.name
+                    recordedHandle(method.returnType, method.name)
+                }
+                "createCommandEncoder" -> frameCommandEncoder()
                 "createShaderModule", "createPipelineLayout" -> {
                     events += method.name
                     handle(method.returnType, method.name)
@@ -4936,19 +5051,26 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             }
         }
         val queue: GPUQueue = proxy(GPUQueue::class.java) { method, args ->
-            if (method.name.startsWith("writeBuffer")) {
-                events += "writeBuffer"
-                val data = args?.getOrNull(2) as io.ygdrasil.webgpu.ArrayBuffer
-                writeBufferCalls += WriteBufferCall(
-                    bufferLabel = args[0].toString(),
-                    bufferOffset = (args[1] as Long).toULong(),
-                    dataOffset = (args[3] as Long).toULong(),
-                    dataBytes = data.size,
-                    size = args[4] as ULong?,
-                    snapshot = data.toByteArray(),
-                    buffer = args[0] as GPUBuffer,
-                )
-                failIfRequested("writeBuffer")
+            when {
+                method.name.startsWith("writeBuffer") -> {
+                    events += "writeBuffer"
+                    val data = args?.getOrNull(2) as io.ygdrasil.webgpu.ArrayBuffer
+                    writeBufferCalls += WriteBufferCall(
+                        bufferLabel = args[0].toString(),
+                        bufferOffset = (args[1] as Long).toULong(),
+                        dataOffset = (args[3] as Long).toULong(),
+                        dataBytes = data.size,
+                        size = args[4] as ULong?,
+                        snapshot = data.toByteArray(),
+                        buffer = args[0] as GPUBuffer,
+                    )
+                    failIfRequested("writeBuffer")
+                }
+                method.name.startsWith("writeTexture") -> {
+                    writeTextureCalls += 1
+                    events += "writeTexture"
+                }
+                method.name == "submit" -> events += "queue.submit"
             }
             defaultValue(method.returnType)
         }
@@ -4979,6 +5101,50 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         }
 
         fun createdHandles(label: String): List<Any> = createdHandlesByLabel[label].orEmpty()
+
+        fun closeAttempts(label: String): Int = closeAttemptsByLabel.getOrDefault(label, 0)
+
+        private fun frameCommandEncoder(): GPUCommandEncoder {
+            val commandBuffer = recordedHandle(
+                GPUCommandBuffer::class.java,
+                "frame.commandBuffer",
+            ) as GPUCommandBuffer
+            return handle(GPUCommandEncoder::class.java, "frame.commandEncoder") { method ->
+                when (method.name) {
+                    "beginRenderPass" -> {
+                        events += "render.begin"
+                        renderPass()
+                    }
+                    "copyTextureToBuffer" -> {
+                        readbackCopyCalls += 1
+                        events += "readback.copyTextureToBuffer"
+                        Unit
+                    }
+                    "finish" -> {
+                        events += "encoder.finish"
+                        commandBuffer
+                    }
+                    else -> null
+                }
+            }
+        }
+
+        private fun renderPass(): GPURenderPassEncoder =
+            handle(GPURenderPassEncoder::class.java, "frame.renderPass") { method ->
+                when (method.name) {
+                    "setPipeline" -> {
+                        val label = currentArguments.get()?.firstOrNull().toString()
+                        renderPipelineKinds += when {
+                            ".corePrimitive.pipeline." in label -> "core"
+                            ".preparedImage.pipeline." in label -> "image"
+                            else -> "other:$label"
+                        }
+                        events += "render.pipeline:$label"
+                    }
+                    "end" -> events += "render.end"
+                }
+                Unit
+            }
 
         private fun failIfRequested(operation: String) {
             if (failingOperation != operation) return
@@ -5016,6 +5182,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             }
 
         private val currentProxy = ThreadLocal<Any>()
+        private val currentArguments = ThreadLocal<Array<out Any?>?>()
 
         @Suppress("UNCHECKED_CAST")
         private fun <T> proxy(
@@ -5025,6 +5192,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             var created: Any? = null
             created = Proxy.newProxyInstance(type.classLoader, arrayOf(type)) { proxy, method, args ->
                 currentProxy.set(proxy)
+                currentArguments.set(args)
                 try {
                     when (method.name) {
                         "hashCode" -> System.identityHashCode(proxy)
@@ -5032,6 +5200,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         else -> action(method, args)
                     }
                 } finally {
+                    currentArguments.remove()
                     currentProxy.remove()
                 }
             }
@@ -5066,7 +5235,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val generationSeal: GPUPreparedGenerationSeal,
     )
 
-    private data class WriteBufferCall(
+    internal data class WriteBufferCall(
         val bufferLabel: String,
         val bufferOffset: ULong,
         val dataOffset: ULong,

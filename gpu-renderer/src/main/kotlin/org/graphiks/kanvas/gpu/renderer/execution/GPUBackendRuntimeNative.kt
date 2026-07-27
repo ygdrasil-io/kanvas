@@ -642,6 +642,30 @@ internal data class GPUPreparedSceneChildOwnerTier(
     }
 }
 
+internal fun preparedSceneChildOwnerTiers(
+    activityOwners: List<AutoCloseable>,
+    preparedImageCache: GPUWgpu4kPreparedImageSessionCache,
+    deviceCacheOwners: List<AutoCloseable>,
+    target: AutoCloseable,
+): List<GPUPreparedSceneChildOwnerTier> = listOf(
+    GPUPreparedSceneChildOwnerTier(
+        label = "activity",
+        owners = activityOwners,
+    ),
+    GPUPreparedSceneChildOwnerTier(
+        label = "prepared-image-cache",
+        owners = listOf(preparedImageCache),
+    ),
+    GPUPreparedSceneChildOwnerTier(
+        label = "cache",
+        owners = deviceCacheOwners,
+    ),
+    GPUPreparedSceneChildOwnerTier(
+        label = "target",
+        owners = listOf(target),
+    ),
+)
+
 /** Real prepared-scene child teardown ordered from active work to the target dependency. */
 internal class GPUPreparedSceneChildTeardown(
     ownerTiers: List<GPUPreparedSceneChildOwnerTier>,
@@ -1253,6 +1277,14 @@ private class WgpuBackendSession(
         val surfaceBlitCache = setupTransaction.own(
             GPUWgpu4kSurfaceBlitSessionCache(glfw.wgpuContext.device, preparedTarget),
         )
+        val preparedImageNativeCounters = GPUPreparedImageNativeCounterRecorder()
+        val preparedImageCache = setupTransaction.own(
+            GPUWgpu4kPreparedImageSessionCache(
+                glfw.wgpuContext.device,
+                deviceGeneration,
+                preparedImageNativeCounters,
+            ),
+        )
         telemetryRecorder.recordTextureCreated()
         val encodingBackend = setupTransaction.own(GPUWgpu4kFrameEncodingBackend(
             deviceGeneration = deviceGeneration,
@@ -1275,27 +1307,19 @@ private class WgpuBackendSession(
         val coordinatorCreations = AtomicLong(0L)
         var canonicalTargetRef: GPUFrameTargetRef? = null
         val childTeardown = GPUPreparedSceneChildTeardown(
-            ownerTiers = listOf(
-                GPUPreparedSceneChildOwnerTier(
-                    label = "activity",
-                    owners = listOf(encodingBackend, mappingExecutorCloser),
+            ownerTiers = preparedSceneChildOwnerTiers(
+                activityOwners = listOf(encodingBackend, mappingExecutorCloser),
+                preparedImageCache = preparedImageCache,
+                deviceCacheOwners = listOf(
+                    surfaceBlitCache,
+                    solidRectCache,
+                    corePrimitiveCache,
+                    colorGlyphCache,
+                    registeredUniformRectCache,
+                    separableBlurRectCache,
+                    destinationCopyCache,
                 ),
-                GPUPreparedSceneChildOwnerTier(
-                    label = "cache",
-                    owners = listOf(
-                        surfaceBlitCache,
-                        solidRectCache,
-                        corePrimitiveCache,
-                        colorGlyphCache,
-                        registeredUniformRectCache,
-                        separableBlurRectCache,
-                        destinationCopyCache,
-                    ),
-                ),
-                GPUPreparedSceneChildOwnerTier(
-                    label = "target",
-                    owners = listOf(preparedTarget),
-                ),
+                target = preparedTarget,
             ),
             releaseLease = childLease,
         )
@@ -1382,20 +1406,38 @@ private class WgpuBackendSession(
                         }
                     }
 
+                val surfaceTargetResolver = windowOutput?.nativeTargetResolver
+                    ?: GPUAcquiredSurfaceNativeTargetResolver.Unavailable
+                val preparedSurfaceMixedMaterializer =
+                    GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
+                        device = glfw.wgpuContext.device,
+                        queue = glfw.wgpuContext.device.queue,
+                        preparedSceneTarget = preparedTarget,
+                        corePrimitiveCache = corePrimitiveCache,
+                        preparedImageCache = preparedImageCache,
+                        preparedImageHandleFactory =
+                            GPUWgpu4kPreparedImageNativeHandleFactory(
+                                glfw.wgpuContext.device,
+                                preparedImageNativeCounters,
+                            ),
+                        surfaceBlitCache = surfaceBlitCache,
+                        surfaceTargetResolver = surfaceTargetResolver,
+                        corePrimitiveLimits = backendLimits,
+                    )
                 val materializer = GPUWgpu4kFramePayloadMaterializerDispatcher(
-                    glfw.wgpuContext.device,
-                    glfw.wgpuContext.device.queue,
-                    preparedTarget,
-                    solidRectCache,
-                    corePrimitiveCache,
-                    colorGlyphCache,
-                    registeredUniformRectCache,
-                    separableBlurRectCache,
-                    destinationCopyCache,
-                    surfaceBlitCache,
-                    windowOutput?.nativeTargetResolver
-                        ?: GPUAcquiredSurfaceNativeTargetResolver.Unavailable,
-                    backendLimits,
+                    device = glfw.wgpuContext.device,
+                    queue = glfw.wgpuContext.device.queue,
+                    preparedSceneTarget = preparedTarget,
+                    solidRectCache = solidRectCache,
+                    corePrimitiveCache = corePrimitiveCache,
+                    colorGlyphCache = colorGlyphCache,
+                    registeredUniformRectCache = registeredUniformRectCache,
+                    separableBlurRectCache = separableBlurRectCache,
+                    destinationCopyCache = destinationCopyCache,
+                    surfaceBlitCache = surfaceBlitCache,
+                    surfaceTargetResolver = surfaceTargetResolver,
+                    corePrimitiveLimits = backendLimits,
+                    preparedSurfaceMixedMaterializer = preparedSurfaceMixedMaterializer,
                 )
                 val preflighter = GPUFramePreflighter(
                     context = GPUFramePreflightContext(
@@ -1468,6 +1510,7 @@ private class WgpuBackendSession(
                 val registeredUniform = registeredUniformRectCache.counters()
                 val separableBlur = separableBlurRectCache.counters()
                 val destinationCopy = destinationCopyCache.counters()
+                val preparedImage = preparedImageNativeCounters.snapshot()
                 GPUPreparedSceneNativeCounters(
                     encoders = encoding.encoders,
                     commandBuffers = encoding.finishes,
@@ -1511,7 +1554,7 @@ private class WgpuBackendSession(
                     draws = encoding.draws,
                     drawIndexed = encoding.drawIndexed,
                     pipelineBinds = encoding.pipelineBinds,
-                )
+                ).withPreparedImageNativeCounters(preparedImage)
             },
         ).also { child ->
             setupTransaction.commit()

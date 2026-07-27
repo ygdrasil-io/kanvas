@@ -350,6 +350,25 @@ data class GPUPreparedSceneNativeCounters(
     val draws: Long = 0L,
     val drawIndexed: Long = 0L,
     val pipelineBinds: Long = 0L,
+    val preparedImagePipelineCreations: Long = 0L,
+    val preparedImagePipelineReuses: Long = 0L,
+    val preparedImageFrameTextureCreations: Long = 0L,
+    val preparedImageFrameTextureViewCreations: Long = 0L,
+    val preparedImageFrameSamplerCreations: Long = 0L,
+    val preparedImageFrameUniformBufferCreations: Long = 0L,
+    val preparedImageFrameBindGroupCreations: Long = 0L,
+)
+
+internal fun GPUPreparedSceneNativeCounters.withPreparedImageNativeCounters(
+    counters: GPUPreparedImageNativeCounterSnapshot,
+): GPUPreparedSceneNativeCounters = copy(
+    preparedImagePipelineCreations = counters.pipelineCreations,
+    preparedImagePipelineReuses = counters.pipelineReuses,
+    preparedImageFrameTextureCreations = counters.frameTextureCreations,
+    preparedImageFrameTextureViewCreations = counters.frameTextureViewCreations,
+    preparedImageFrameSamplerCreations = counters.frameSamplerCreations,
+    preparedImageFrameUniformBufferCreations = counters.frameUniformBufferCreations,
+    preparedImageFrameBindGroupCreations = counters.frameBindGroupCreations,
 )
 
 /** Render counters whose [draws] and [drawIndexed] values are disjoint native call counts. */

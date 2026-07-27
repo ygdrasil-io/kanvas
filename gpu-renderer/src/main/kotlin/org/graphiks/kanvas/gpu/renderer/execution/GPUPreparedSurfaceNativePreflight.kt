@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import java.security.MessageDigest
+import java.util.IdentityHashMap
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
@@ -45,6 +47,11 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPU_PREPARED_IMAGE_UNIFORM_ALL
 import org.graphiks.kanvas.gpu.renderer.resources.preparedImageDescriptorHash
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+
+private data class GPUPreparedSurfaceArtifactByteEvidence(
+    val tightRgba8Bytes: ByteArray,
+    val contentHash: String,
+)
 
 internal sealed interface GPUPreparedSurfaceNativeRunPlan {
     data class Core(val plan: GPUCorePrimitiveRenderRunPlan) :
@@ -616,6 +623,14 @@ internal class GPUPreparedSurfaceNativePreflight {
                 )
             }
         }
+        GPUPreparedImagePlanValidator.validateFramePlans(
+            imageFrames = imageFrames,
+            runs = orderedRuns
+                .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Image>()
+                .map(GPUPreparedSurfaceNativeRunPlan.Image::plan),
+        )?.let { (code, message) ->
+            return refused(code, message)
+        }
         val sceneTarget = framePlan.steps
             .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
@@ -1047,6 +1062,8 @@ internal class GPUPreparedSurfaceNativePreflight {
         uploads: List<Triple<Int, GPUFrameStep.UploadResourceStep, GPUImageFrameResourcePlan>>,
         shaderContract: GPUPreparedImageShaderContract,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
+        val artifactEvidenceByIdentity =
+            IdentityHashMap<GPUPreparedImageUploadArtifact, GPUPreparedSurfaceArtifactByteEvidence>()
         val renderBindingList = framePlan.steps
             .filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap { render -> render.preparedImageBindingsByPacketId.values }
@@ -1117,11 +1134,21 @@ internal class GPUPreparedSurfaceNativePreflight {
                 )
             }
             val logicalArtifactBytes = plan.uploadLayout.logicalBytesForHash()
+            val uploadBytes = plan.uploadLayout.bytesForUpload()
             val planArtifacts = plan.bindingRequests.mapNotNull { binding ->
                 packetById[binding.packetId]?.artifact
             }
             if (planArtifacts.size != plan.bindingRequests.size ||
                 planArtifacts.any { artifact ->
+                    val byteEvidence = artifactEvidenceByIdentity[artifact] ?: run {
+                        val tightBytes = artifact.tightRgba8BytesForUpload()
+                        GPUPreparedSurfaceArtifactByteEvidence(
+                            tightRgba8Bytes = tightBytes,
+                            contentHash = preparedSurfaceSha256(tightBytes),
+                        ).also { evidence ->
+                            artifactEvidenceByIdentity[artifact] = evidence
+                        }
+                    }
                     artifact.key != plan.artifactKey ||
                         artifact.width != plan.artifactWidth ||
                         artifact.height != plan.artifactHeight ||
@@ -1129,10 +1156,8 @@ internal class GPUPreparedSurfaceNativePreflight {
                         expectedLogicalRowBytes ||
                         artifact.pixelLayout.rowCount != plan.artifactHeight ||
                         artifact.contentHash != plan.artifactContentHash ||
-                        preparedSurfaceSha256(artifact.tightRgba8BytesForUpload()) !=
-                        artifact.contentHash ||
-                        !artifact.tightRgba8BytesForUpload()
-                            .contentEquals(logicalArtifactBytes) ||
+                        byteEvidence.contentHash != artifact.contentHash ||
+                        !byteEvidence.tightRgba8Bytes.contentEquals(logicalArtifactBytes) ||
                         artifact.colorInterpretation !=
                         GPUColorInterpretation.EncodedPremulSrgb.value ||
                         if (artifact.alphaOnly) {
@@ -1161,8 +1186,8 @@ internal class GPUPreparedSurfaceNativePreflight {
                 plan.uploadTaskLayout.bytesPerRow != plan.uploadLayout.bytesPerRow ||
                 plan.uploadTaskLayout.rowsPerImage != plan.uploadLayout.rowsPerImage ||
                 plan.uploadTaskLayout.byteSize != expectedUploadBytes ||
-                plan.uploadLayout.bytesForUpload().size.toLong() != expectedUploadBytes ||
-                preparedSurfaceSha256(plan.uploadLayout.logicalBytesForHash()) !=
+                uploadBytes.size.toLong() != expectedUploadBytes ||
+                preparedSurfaceSha256(logicalArtifactBytes) !=
                 plan.artifactContentHash
             ) {
                 return refused(

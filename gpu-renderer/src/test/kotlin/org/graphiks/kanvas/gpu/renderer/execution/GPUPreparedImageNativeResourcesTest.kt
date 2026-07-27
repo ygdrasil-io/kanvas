@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUBindGroup
+import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUSampler
 import io.ygdrasil.webgpu.GPUTexture
@@ -70,7 +71,7 @@ class GPUPreparedImageNativeResourcesTest {
         assertTrue(seal.samplerKeysByPacketId.values.all { it.deviceGeneration == 7L })
 
         val factory = RecordingFactory()
-        val resources = seal.materialize(factory)
+        val resources = seal.materialize(factory, factory.bindGroupLayout)
         assertEquals(seal.uploadKeys.single(), resources.uploadKey(fixture.artifactKey))
         assertSame(resources.texture(fixture.artifactKey), resources.texture(fixture.artifactKey))
         assertSame(resources.binding("packet.nearest.a"), resources.binding("packet.nearest.b"))
@@ -105,7 +106,7 @@ class GPUPreparedImageNativeResourcesTest {
 
         assertEquals(1, seal.bindingKeysByPacketId.values.toSet().size)
         val factory = RecordingFactory()
-        val resources = seal.materialize(factory)
+        val resources = seal.materialize(factory, factory.bindGroupLayout)
         assertSame(resources.binding("packet.tint.a"), resources.binding("packet.tint.b"))
         assertEquals(listOf(0L, 256L), listOf(
             resources.dynamicUniformOffset("packet.tint.a"),
@@ -190,7 +191,7 @@ class GPUPreparedImageNativeResourcesTest {
         val factory = RecordingFactory()
         val result = GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request)
         if (result is GPUPreparedImageNativePreflightResult.Sealed) {
-            result.materialize(factory).close()
+            result.materialize(factory, factory.bindGroupLayout).close()
         }
 
         assertEquals(0, factory.createCalls)
@@ -230,7 +231,7 @@ class GPUPreparedImageNativeResourcesTest {
             ),
         )
         if (result is GPUPreparedImageNativePreflightResult.Sealed) {
-            result.materialize(factory).close()
+            result.materialize(factory, factory.bindGroupLayout).close()
         }
 
         val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(result)
@@ -430,7 +431,9 @@ class GPUPreparedImageNativeResourcesTest {
         val events = mutableListOf<String>()
         val factory = RecordingFactory(events, failOnSecondBindGroup = true)
 
-        assertFailsWith<IllegalStateException> { seal.materialize(factory) }
+        assertFailsWith<IllegalStateException> {
+            seal.materialize(factory, factory.bindGroupLayout)
+        }
         assertEquals(
             factory.createdLabels.asReversed(),
             events,
@@ -449,7 +452,7 @@ class GPUPreparedImageNativeResourcesTest {
             closeEvents = events,
             failCloseLabels = setOf("bind-group.nearest", "sampler.nearest"),
         )
-        val resources = seal.materialize(factory)
+        val resources = seal.materialize(factory, factory.bindGroupLayout)
 
         val failure = assertFailsWith<IllegalStateException> { resources.close() }
         val firstCloseEvents = factory.createdLabels.asReversed()
@@ -538,6 +541,18 @@ class GPUPreparedImageNativeResourcesTest {
         private val failOnSecondBindGroup: Boolean = false,
         private val failCloseLabels: Set<String> = emptySet(),
     ) : GPUPreparedImageNativeHandleFactory {
+        val bindGroupLayout: GPUBindGroupLayout = Proxy.newProxyInstance(
+            GPUBindGroupLayout::class.java.classLoader,
+            arrayOf(GPUBindGroupLayout::class.java),
+        ) { proxy, method, args ->
+            when (method.name) {
+                "close", "setLabel" -> Unit
+                "getLabel", "toString" -> "prepared-image-test-layout"
+                "hashCode" -> System.identityHashCode(proxy)
+                "equals" -> proxy === args?.singleOrNull()
+                else -> null
+            }
+        } as GPUBindGroupLayout
         var createCalls = 0
         var textureCreates = 0
         var textureViewCreates = 0
@@ -570,6 +585,7 @@ class GPUPreparedImageNativeResourcesTest {
         }
 
         override fun createBindGroup(
+            bindGroupLayout: GPUBindGroupLayout,
             request: GPUImageBindingRequest,
             uniformBuffer: GPUBuffer,
             textureView: GPUTextureView,

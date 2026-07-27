@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUBindGroup
+import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUSampler
 import io.ygdrasil.webgpu.GPUTexture
@@ -52,6 +53,7 @@ internal interface GPUPreparedImageNativeHandleFactory {
     fun createSampler(descriptor: GPUSamplerDescriptor): GPUSampler
     fun createUniformBuffer(size: Long): GPUBuffer
     fun createBindGroup(
+        bindGroupLayout: GPUBindGroupLayout,
         request: GPUImageBindingRequest,
         uniformBuffer: GPUBuffer,
         textureView: GPUTextureView,
@@ -101,8 +103,11 @@ internal sealed interface GPUPreparedImageNativePreflightResult {
         val samplerKeysByPacketId: Map<String, GPUPreparedImageSamplerKey>,
         val bindingKeysByPacketId: Map<String, GPUPreparedImageBindingKey>,
     ) : GPUPreparedImageNativePreflightResult {
-        fun materialize(factory: GPUPreparedImageNativeHandleFactory): GPUPreparedImageNativeResourceSet =
-            materializePreparedImageNativeResources(this, factory)
+        fun materialize(
+            factory: GPUPreparedImageNativeHandleFactory,
+            bindGroupLayout: GPUBindGroupLayout,
+        ): GPUPreparedImageNativeResourceSet =
+            materializePreparedImageNativeResources(this, factory, bindGroupLayout)
     }
 }
 
@@ -287,6 +292,7 @@ internal fun GPUImageFrameResourcePlan.preparedImageNativeBindingKeys(
 private fun materializePreparedImageNativeResources(
     seal: GPUPreparedImageNativePreflightResult.Sealed,
     factory: GPUPreparedImageNativeHandleFactory,
+    bindGroupLayout: GPUBindGroupLayout,
 ): GPUPreparedImageNativeResourceSet {
     val plan = seal.request.resourcePlan
     val generation = GPUDeviceGenerationID(seal.request.actualDeviceGeneration)
@@ -311,6 +317,7 @@ private fun materializePreparedImageNativeResources(
             bindGroupsByKey.getOrPut(bindingKey) {
                 val samplerKey = seal.samplerKeysByPacketId.getValue(binding.packetId)
                 factory.createBindGroup(
+                    bindGroupLayout = bindGroupLayout,
                     request = binding,
                     uniformBuffer = uniformBuffer,
                     textureView = textureView,

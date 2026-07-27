@@ -1376,10 +1376,18 @@ ready for the mixed-frame materializer.
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedSurfaceNativePreflight.kt`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedSurfaceNativePreflightTest.kt`
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveRenderRunMaterializer.kt`
+- Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageNativeHandleFactory.kt`
 - Create: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedSurfaceFramePayloadMaterializer.kt`
+- Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageNativeHandleFactoryTest.kt`
 - Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest.kt`
+- Create: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimePreparedImageCacheLifecycleTest.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResources.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedNativeFramePayload.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResourcesTest.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.kt`
+- Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializer.kt`
+- Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializerTest.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kFramePayloadMaterializerDispatcher.kt`
 - Modify: `gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kFramePayloadMaterializerDispatcherTest.kt`
 - Modify: `gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt`
@@ -1422,7 +1430,7 @@ internal class GPUPreparedSurfaceNativePreflight {
 }
 ```
 
-- [ ] **Step 1: Write failing global-preflight tests**
+- [x] **Step 1: Write failing global-preflight tests**
 
 Consume the exact handle-free inputs already supplied to
 `GPUPreparedNativeFramePayloadMaterializer.materializeReusable`: frame plan,
@@ -1446,7 +1454,7 @@ rollback owner.
 Assert the accepted image route contains no destination CPU snapshot,
 CPU-raster continuation, or compatibility texture upload.
 
-- [ ] **Step 2: Write failing single-owner materialization tests**
+- [x] **Step 2: Write failing single-owner materialization tests**
 
 Cover `core -> upload -> image -> core`, two image runs, and lattice-shaped `image -> core -> image`. Assert the composed operands match the full encoder plan rather than a hardcoded render-only list:
 
@@ -1467,7 +1475,7 @@ image cache closes before a generation-8 cache is constructed with the
 replacement `GPUDevice`; no handle or pipeline from generation 7 is returned
 after the transition.
 
-- [ ] **Step 3: Run RED**
+- [x] **Step 3: Run RED**
 
 ```powershell
 $env:JAVA_HOME='C:\Users\Shadow\.jdks\temurin-25.0.3'
@@ -1481,19 +1489,28 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 
 Expected: global preflight and single-owner materializer are unresolved.
 
-- [ ] **Step 4: Extract operand-only core runs**
+- [x] **Step 4: Extract operand-only core runs**
 
-Refactor the current core materializer so its reusable internal `GPUWgpu4kCorePrimitiveRenderRunMaterializer` returns only run operands/resources. Keep the existing pure-core public materializer as a wrapper that performs full preflight and builds one draft. No behavior or pure-core scope seal may regress.
+Refactor the current core materializer so its reusable internal
+`GPUWgpu4kCorePrimitiveRenderRunMaterializer` materializes all accepted Core
+runs as one frame-global lot and returns only run operands/resources. It owns
+one shared V/I/U allocation and at most one shared D24S8 allocation; it must not
+allocate one lease per run. Keep the existing pure-core public materializer as
+a wrapper that performs full preflight and builds one draft. No behavior or
+pure-core scope seal may regress.
 
-- [ ] **Step 5: Implement global preflight then one draft**
+- [x] **Step 5: Implement global preflight then one draft**
 
 The mixed materializer executes in this order:
 
 ```text
 pure full-frame preflight
 -> if refused: return with zero native factory calls
--> allocate target and frame resources
--> materialize ordered core/image runs into operands
+-> borrow the target once
+-> materialize one frame-global Core lot and one frame-global Image lot
+-> create each image artifact resource once even across separated image runs
+-> convert target-free PreparedImageRenderRun values into encodable Render operands
+-> reorder all operands by the exact complete encoder plan
 -> verify operand keys equal the complete encoder plan
 -> append readback/output/surface operands once
 -> construct one GPUPreparedNativeFramePayload
@@ -1502,9 +1519,15 @@ pure full-frame preflight
 
 Any post-preflight allocation failure rolls back the one owner ledger. Replace `mixed-semantic-shape` only for the exact closed `{CorePrimitive, SampledImage}` route. Keep pure routes unchanged.
 
+The mixed dispatcher must pass the complete frame and encoder plans directly to
+the composite. It must not use the pure-route surface split/decorate helper,
+because that helper creates a child draft. `PreparedImageRenderRun` remains an
+operand-only intermediate: production payloads contain only the final
+target-bound `Render` operands accepted by the encoding backend.
+
 Wire one `GPUWgpu4kPreparedImageSessionCache` into `GPUBackendRuntimeNative`; close it on runtime close/device-generation invalidation. Telemetry distinguishes pipeline cache from frame-owned texture/sampler counts and makes no inter-frame image-cache claim.
 
-- [ ] **Step 6: Run GREEN and pure-route regressions**
+- [x] **Step 6: Run GREEN and pure-route regressions**
 
 Rerun Step 3, then:
 
@@ -1518,20 +1541,31 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
   --dependency-verification=off --no-daemon --console=plain --rerun-tasks --max-workers=1
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git -c safe.directory=C:/Users/Shadow/IdeaProjects/kanvas add -- `
+  docs/superpowers/plans/2026-07-25-prepared-surface-image-route.md `
   gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedSurfaceNativePreflight.kt `
   gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedSurfaceNativePreflightTest.kt `
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResources.kt `
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageNativeResourcesTest.kt `
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedNativeFramePayload.kt `
   gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveRenderRunMaterializer.kt `
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageNativeHandleFactory.kt `
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageNativeHandleFactoryTest.kt `
   gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedSurfaceFramePayloadMaterializer.kt `
   gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest.kt `
   gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializer.kt `
   gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.kt `
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializer.kt `
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageRenderRunMaterializerTest.kt `
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kPreparedImageSessionCache.kt `
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUPreparedImageSessionCacheTest.kt `
   gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kFramePayloadMaterializerDispatcher.kt `
   gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUWgpu4kFramePayloadMaterializerDispatcherTest.kt `
-  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt
+  gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt `
+  gpu-renderer/src/test/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimePreparedImageCacheLifecycleTest.kt
 git -c safe.directory=C:/Users/Shadow/IdeaProjects/kanvas -c user.name=ygdrasil-io -c user.email=alexandre.mommers@gmail.com commit -m "feat(gpu): materialize mixed prepared frames"
 ```
 

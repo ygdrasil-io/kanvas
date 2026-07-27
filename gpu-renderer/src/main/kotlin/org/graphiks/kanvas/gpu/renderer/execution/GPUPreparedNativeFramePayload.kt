@@ -1356,6 +1356,10 @@ internal class GPUPreparedNativeFramePayload(
 private fun GPUPreparedNativeScopeOperand.declaredOperandDescriptors(): List<
     Pair<GPUPreparedNativeOperandKind, GPUPreparedNativeOperandOwnership>,
 > = when (this) {
+    is GPUPreparedNativeScopeOperand.TextureUpload -> listOf(
+        data.key.kind to data.key.ownership,
+        destination.nativeKind() to destination.ownership,
+    )
     is GPUPreparedNativeScopeOperand.SurfaceBlit -> listOf(
         source.nativeKind() to source.ownership,
         GPUPreparedNativeOperandKind.TextureView to GPUPreparedNativeOperandOwnership.Borrowed,

@@ -16,6 +16,7 @@ internal sealed interface GPUWgpu4kPreparedFramePayloadRoute {
     data object ColorGlyph : GPUWgpu4kPreparedFramePayloadRoute
     data object RegisteredUniformRect : GPUWgpu4kPreparedFramePayloadRoute
     data object SeparableBlurRect : GPUWgpu4kPreparedFramePayloadRoute
+    data object PreparedSurfaceMixed : GPUWgpu4kPreparedFramePayloadRoute
     data class Refused(val code: String, val message: String) : GPUWgpu4kPreparedFramePayloadRoute
 }
 
@@ -186,6 +187,11 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             GPUWgpu4kPreparedFramePayloadRoute.RegisteredUniformRect
         distinct == listOf(GPUDrawSemanticPayload.SeparableBlurRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.SeparableBlurRect
+        distinct.size == 2 &&
+            distinct.toSet() == setOf(
+                GPUDrawSemanticPayload.CorePrimitive::class,
+                GPUDrawSemanticPayload.SampledImage::class,
+            ) -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
         distinct.size > 1 -> GPUWgpu4kPreparedFramePayloadRoute.Refused(
             "unsupported.native-frame-payload.mixed-semantic-shape",
             "One prepared native frame may not mix typed semantic payload shapes.",
@@ -212,7 +218,20 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val surfaceTargetResolver: GPUAcquiredSurfaceNativeTargetResolver =
         GPUAcquiredSurfaceNativeTargetResolver.Unavailable,
     private val corePrimitiveLimits: GPULimits? = null,
+    private val preparedSurfaceMixedMaterializer: GPUPreparedNativeFramePayloadMaterializer? = null,
 ) : GPUPreparedNativeFramePayloadMaterializer, AutoCloseable {
+    private val preparedSurfaceMixedAvailable =
+        preparedSurfaceMixedMaterializer?.capabilities?.contains(
+            GPUPreparedNativeFrameMaterializerCapability.PreparedSurfaceMixedSealed,
+        ) == true
+
+    override val capabilities: Set<GPUPreparedNativeFrameMaterializerCapability> =
+        if (preparedSurfaceMixedAvailable) {
+            setOf(GPUPreparedNativeFrameMaterializerCapability.PreparedSurfaceMixedSealed)
+        } else {
+            emptySet()
+        }
+
     private var delegate: GPUPreparedNativeFramePayloadMaterializer? = null
     private var closed = false
 
@@ -227,6 +246,24 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
             return GPUPreparedNativeFramePayloadMaterialization.Refused(
                 "unsupported.native-frame-payload.dispatcher-state",
                 "The prepared frame payload dispatcher is one-shot and already consumed.",
+            )
+        }
+        val fullSemantics = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap { step -> step.drawPackets.mapNotNull { it.semanticPayload } }
+        val fullHasDestinationCopy = framePlan.steps.any {
+            it is GPUFrameStep.CopyDestinationStep
+        }
+        if (
+            selectWgpu4kPreparedFramePayloadRoute(
+                fullSemantics.map { it::class },
+                fullHasDestinationCopy,
+            ) == GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
+        ) {
+            return dispatchPreparedSurfaceMixed(
+                framePlan,
+                encoderPlan,
+                resources,
+                generationSeal,
             )
         }
         val surfaceRoute = when (val split = splitWgpu4kSurfaceRoute(framePlan, encoderPlan)) {
@@ -336,9 +373,37 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                 resources,
                 generationSeal,
             )
+            GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed ->
+                dispatchPreparedSurfaceMixed(
+                    framePlan,
+                    encoderPlan,
+                    resources,
+                    generationSeal,
+                )
             is GPUWgpu4kPreparedFramePayloadRoute.Refused ->
                 GPUPreparedNativeFramePayloadMaterialization.Refused(route.code, route.message)
         }
+    }
+
+    private fun dispatchPreparedSurfaceMixed(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        val selected = preparedSurfaceMixedMaterializer
+            ?.takeIf { preparedSurfaceMixedAvailable }
+            ?: return GPUPreparedNativeFramePayloadMaterialization.Refused(
+                "unsupported.native-frame-payload.prepared-surface-mixed-unavailable",
+                "The sealed mixed CorePrimitive/SampledImage native route is unavailable.",
+            )
+        delegate = selected
+        return selected.materializeReusable(
+            framePlan,
+            encoderPlan,
+            resources,
+            generationSeal,
+        )
     }
 
     private fun dispatch(
@@ -414,6 +479,9 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     override fun close() {
         closed = true
         (delegate as? AutoCloseable)?.close()
+        if (preparedSurfaceMixedMaterializer !== delegate) {
+            (preparedSurfaceMixedMaterializer as? AutoCloseable)?.close()
+        }
     }
 }
 

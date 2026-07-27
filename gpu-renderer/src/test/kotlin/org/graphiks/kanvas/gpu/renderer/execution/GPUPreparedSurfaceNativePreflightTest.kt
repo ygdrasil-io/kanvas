@@ -1167,7 +1167,7 @@ internal class CapturingPreparedNativeMaterializer(
         GPUPreparedNativeFrameLateSurfaceBinding.NotRequired
 }
 
-private data class CapturedPreparedSurfaceInputs(
+internal data class CapturedPreparedSurfaceInputs(
     val framePlan: GPUFramePlan,
     val encoderPlan: GPUCommandEncoderPlan,
     val resources: GPUPreparedResourceSet,
@@ -1175,10 +1175,10 @@ private data class CapturedPreparedSurfaceInputs(
     val generationSeal: GPUPreparedGenerationSeal,
 )
 
-private fun capturePreparedSurfaceInputs(): CapturedPreparedSurfaceInputs =
+internal fun capturePreparedSurfaceInputs(): CapturedPreparedSurfaceInputs =
     capturedPreparedSurfaceInputs(PreparedSurfaceFixtureShape.Mixed)
 
-private fun capturedPreparedSurfaceInputs(
+internal fun capturedPreparedSurfaceInputs(
     shape: PreparedSurfaceFixtureShape,
     includeReadback: Boolean = true,
     includeSurface: Boolean = false,

@@ -72,6 +72,35 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
                 listOf(GPUDrawSemanticPayload.SeparableBlurRect::class),
             ),
         )
+        assertEquals(
+            GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed,
+            selectWgpu4kPreparedFramePayloadRoute(
+                listOf(
+                    GPUDrawSemanticPayload.CorePrimitive::class,
+                    GPUDrawSemanticPayload.SampledImage::class,
+                    GPUDrawSemanticPayload.CorePrimitive::class,
+                ),
+            ),
+        )
+        assertEquals(
+            GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed,
+            selectWgpu4kPreparedFramePayloadRoute(
+                listOf(
+                    GPUDrawSemanticPayload.SampledImage::class,
+                    GPUDrawSemanticPayload.CorePrimitive::class,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `dispatcher keeps pure sampled image outside the admitted native routes`() {
+        val route = selectWgpu4kPreparedFramePayloadRoute(
+            listOf(GPUDrawSemanticPayload.SampledImage::class),
+        )
+
+        val refused = assertIs<GPUWgpu4kPreparedFramePayloadRoute.Refused>(route)
+        assertEquals("unsupported.native-frame-payload.semantic-shape", refused.code)
     }
 
     @Test
@@ -96,6 +125,68 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
 
         val refused = assertIs<GPUWgpu4kPreparedFramePayloadRoute.Refused>(route)
         assertEquals("unsupported.native-frame-payload.mixed-semantic-shape", refused.code)
+    }
+
+    @Test
+    fun `mixed route advertises its seal and receives the unsplit surface frame`() {
+        val input = capturedPreparedSurfaceInputs(
+            shape = PreparedSurfaceFixtureShape.CoreImageCore,
+            includeReadback = true,
+            includeSurface = true,
+        )
+        val mixed = CapturingPreparedNativeMaterializer()
+        dispatcherFixture(input, mixed).use { fixture ->
+            assertEquals(
+                setOf(GPUPreparedNativeFrameMaterializerCapability.PreparedSurfaceMixedSealed),
+                fixture.dispatcher.capabilities,
+            )
+
+            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.dispatcher.materializeReusable(
+                    input.framePlan,
+                    input.encoderPlan,
+                    input.resources,
+                    input.generationSeal,
+                ),
+            )
+
+            assertEquals("test.prepared-surface.boundary", refused.code)
+            assertEquals(1, mixed.materializeCallCount)
+            assertSame(input.framePlan, mixed.capturedFramePlan)
+            assertSame(input.encoderPlan, mixed.capturedEncoderPlan)
+            assertSame(input.resources, mixed.capturedResources)
+            assertSame(input.generationSeal, mixed.capturedGenerationSeal)
+        }
+    }
+
+    @Test
+    fun `mixed route stays unavailable when its delegate does not advertise the seal`() {
+        val input = capturedPreparedSurfaceInputs(
+            shape = PreparedSurfaceFixtureShape.ImageCoreImage,
+            includeReadback = true,
+            includeSurface = true,
+        )
+        val unsealed = CapturingPreparedNativeMaterializer(
+            advertisePreparedSurfaceMixedSealed = false,
+        )
+        dispatcherFixture(input, unsealed).use { fixture ->
+            assertTrue(fixture.dispatcher.capabilities.isEmpty())
+
+            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.dispatcher.materializeReusable(
+                    input.framePlan,
+                    input.encoderPlan,
+                    input.resources,
+                    input.generationSeal,
+                ),
+            )
+
+            assertEquals(
+                "unsupported.native-frame-payload.prepared-surface-mixed-unavailable",
+                refused.code,
+            )
+            assertEquals(0, unsealed.materializeCallCount)
+        }
     }
 
     @Test
@@ -357,6 +448,84 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             ),
         ),
     )
+
+    private fun dispatcherFixture(
+        input: CapturedPreparedSurfaceInputs,
+        mixed: GPUPreparedNativeFramePayloadMaterializer?,
+    ): DispatcherFixture {
+        val native = GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy()
+        val setup = GPUPreparedSceneSetupTransaction()
+        val target = GPUWgpu4kPreparedSceneTarget.create(
+            device = native.device,
+            width = 16,
+            height = 16,
+            format = GPUTextureFormat.RGBA8UnormSrgb,
+            deviceGeneration = input.generationSeal.deviceGeneration,
+            targetGeneration = input.generationSeal.targetGeneration,
+            lifecycle = GPUWgpu4kPreparedSceneTargetLifecycle(),
+            setupTransaction = setup,
+        )
+        setup.commit()
+        val solidRectCache = GPUWgpu4kSolidRectSessionCache(native.device)
+        val corePrimitiveCache = GPUWgpu4kCorePrimitiveSessionCache(
+            native.device,
+            input.generationSeal.deviceGeneration,
+        )
+        val colorGlyphCache = GPUWgpu4kColorGlyphSessionCache(native.device, native.queue)
+        val registeredUniformRectCache =
+            GPUWgpu4kRegisteredUniformRectSessionCache(native.device)
+        val separableBlurRectCache = GPUWgpu4kSeparableBlurRectSessionCache(native.device)
+        val destinationCopyCache = GPUWgpu4kDestinationCopySessionCache(native.device)
+        val surfaceBlitCache = GPUWgpu4kSurfaceBlitSessionCache(native.device, target)
+        val dispatcher = GPUWgpu4kFramePayloadMaterializerDispatcher(
+            device = native.device,
+            queue = native.queue,
+            preparedSceneTarget = target,
+            solidRectCache = solidRectCache,
+            corePrimitiveCache = corePrimitiveCache,
+            colorGlyphCache = colorGlyphCache,
+            registeredUniformRectCache = registeredUniformRectCache,
+            separableBlurRectCache = separableBlurRectCache,
+            destinationCopyCache = destinationCopyCache,
+            surfaceBlitCache = surfaceBlitCache,
+            preparedSurfaceMixedMaterializer = mixed,
+        )
+        return DispatcherFixture(
+            dispatcher,
+            target,
+            solidRectCache,
+            corePrimitiveCache,
+            colorGlyphCache,
+            registeredUniformRectCache,
+            separableBlurRectCache,
+            destinationCopyCache,
+            surfaceBlitCache,
+        )
+    }
+
+    private class DispatcherFixture(
+        val dispatcher: GPUWgpu4kFramePayloadMaterializerDispatcher,
+        private val target: GPUWgpu4kPreparedSceneTarget,
+        private val solidRectCache: GPUWgpu4kSolidRectSessionCache,
+        private val corePrimitiveCache: GPUWgpu4kCorePrimitiveSessionCache,
+        private val colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
+        private val registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
+        private val separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
+        private val destinationCopyCache: GPUWgpu4kDestinationCopySessionCache,
+        private val surfaceBlitCache: GPUWgpu4kSurfaceBlitSessionCache,
+    ) : AutoCloseable {
+        override fun close() {
+            runCatching { dispatcher.close() }
+            runCatching { surfaceBlitCache.close() }
+            runCatching { destinationCopyCache.close() }
+            runCatching { separableBlurRectCache.close() }
+            runCatching { registeredUniformRectCache.close() }
+            runCatching { colorGlyphCache.close() }
+            runCatching { corePrimitiveCache.close() }
+            runCatching { solidRectCache.close() }
+            runCatching { target.close() }
+        }
+    }
 
     private class CountingHandle : AutoCloseable {
         var closeCount = 0

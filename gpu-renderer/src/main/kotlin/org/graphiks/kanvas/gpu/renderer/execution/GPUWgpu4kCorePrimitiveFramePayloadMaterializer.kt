@@ -968,6 +968,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             }
         }
 
+        if (!isMsaa4x && unifiedRoute != null) {
+            return materializeSingleSampleFrameGlobalCore(
+                framePlan = framePlan,
+                encoderPlan = encoderPlan,
+                resources = resources,
+                generationSeal = generationSeal,
+                renderStep = renderStep,
+                renderScope = renderScope,
+                route = unifiedRoute,
+                readbackScope = readbackScope,
+                output = output,
+                targetFormat = declaredTargetFormat,
+            )
+        }
+
         synchronized(this) {
             if (closed) {
                 return refused(
@@ -3667,6 +3682,21 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             ).copy(pipelineIdentity = mapped.identity)
         }
 
+        if (!isMsaa4x) {
+            return materializeSingleSampleFrameGlobalCore(
+                framePlan = framePlan,
+                encoderPlan = encoderPlan,
+                resources = resources,
+                generationSeal = generationSeal,
+                renderStep = renderStep,
+                renderScope = renderScope,
+                route = unifiedRoute,
+                readbackScope = readbackScope,
+                output = output,
+                targetFormat = indexedTargetFormat,
+            )
+        }
+
         synchronized(this) {
             if (closed) {
                 return refused(
@@ -3964,6 +3994,191 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
     }
 
+    private fun materializeSingleSampleFrameGlobalCore(
+        framePlan: GPUFramePlan,
+        encoderPlan: GPUCommandEncoderPlan,
+        resources: GPUPreparedResourceSet,
+        generationSeal: GPUPreparedGenerationSeal,
+        renderStep: GPUFrameStep.RenderPassStep,
+        renderScope: GPUCommandEncoderScopePlan,
+        route: GPUCorePrimitiveNativeScopeRouteSeal.Routes,
+        readbackScope: GPUCommandEncoderScopePlan?,
+        output: GPUPreparedReadbackOutput?,
+        targetFormat: GPUColorFormat,
+    ): GPUPreparedNativeFramePayloadMaterialization {
+        val preparationByResource = framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .associateBy(GPUResourcePreparationRequest::resource)
+        val evidenceByResource = resources.ordinaryResources.associateBy(
+            GPUPreparedResourceEvidence::logicalResource,
+        )
+        val exactScopeKey = GPUPreparedNativeScopeKey(
+            renderScope.sourceStepIndex,
+            renderScope.operationKind,
+            renderScope.resourceGenerationLabels,
+            renderScope.nativeOperandKeys,
+        )
+        val acceptedPlan = try {
+            GPUCorePrimitiveRenderRunPlan(
+                sourceScopeIndices = listOf(renderScope.sourceStepIndex),
+                packetIds = renderStep.drawPackets.map { packet -> packet.packetId },
+                renderStep = renderStep,
+                preparationRequests = renderStep.resourceUses.map { use ->
+                    preparationByResource.getValue(use.resource)
+                },
+                resourceEvidences = renderStep.resourceUses.map { use ->
+                    evidenceByResource.getValue(use.resource)
+                },
+                routeSeal = route,
+                exactScopeKey = exactScopeKey,
+            )
+        } catch (failure: Throwable) {
+            return refused(
+                "invalid.native-core-primitive.frame-global-plan",
+                "The fully preflighted pure CorePrimitive route cannot form its frame-global plan: " +
+                    "${failure::class.simpleName.orEmpty()}.",
+            )
+        }
+
+        synchronized(this) {
+            if (closed) {
+                return refused(
+                    "unsupported.native-core-primitive.materializer-state",
+                    "The CorePrimitive materializer closed after full preflight.",
+                )
+            }
+            materializing = true
+        }
+
+        var leaseLifecycle: GPUPreparedNativeFrameLeaseLifecycle? = null
+        var leaseTransferred = false
+        val runMaterializer = GPUWgpu4kCorePrimitiveRenderRunMaterializer(
+            queue,
+            sessionCache,
+            limits,
+        )
+        return try {
+            val (targetTexture, targetView) = preparedSceneTarget.borrow()
+            val ready = when (
+                val result = runMaterializer.materializeAcceptedRuns(
+                    plans = listOf(acceptedPlan),
+                    targetTexture = targetTexture,
+                    targetView = targetView,
+                    generationSeal = generationSeal,
+                )
+            ) {
+                is GPUCorePrimitiveRenderRunMaterialization.Ready -> result
+                is GPUCorePrimitiveRenderRunMaterialization.Refused -> {
+                    synchronized(this) {
+                        materializing = false
+                        preRegistrationHandles.closeRetainingFailures()
+                    }
+                    return refused(result.code, result.message)
+                }
+            }
+            leaseLifecycle = ready.leaseLifecycle
+            val stagingBuffer = output?.let { readback ->
+                device.createBuffer(
+                    BufferDescriptor(
+                        size = readback.stagingLease.backingBufferBytes.toULong(),
+                        usage = GPUBufferUsage.MapRead or GPUBufferUsage.CopyDst,
+                        mappedAtCreation = false,
+                        label = "Kanvas.frame.corePrimitive.frameGlobal.readback",
+                    ),
+                ).tracked()
+            }
+            val readbackOperand =
+                if (readbackScope != null && output != null && stagingBuffer != null) {
+                    GPUPreparedNativeScopeOperand.Readback(
+                        sourceStepIndex = readbackScope.sourceStepIndex,
+                        source = GPUPreparedNativeTextureOperand(
+                            targetTexture,
+                            generationSeal.deviceGeneration,
+                            GPUPreparedNativeOperandOwnership.Borrowed,
+                        ),
+                        destination = GPUPreparedNativeBufferOperand(
+                            stagingBuffer,
+                            generationSeal.deviceGeneration,
+                            GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
+                        ),
+                        layout = GPUPreparedNativeReadbackLayout(
+                            originX = output.request.sourceBounds.left,
+                            originY = output.request.sourceBounds.top,
+                            width = output.layout.width,
+                            height = output.layout.height,
+                            bytesPerRow = output.layout.paddedBytesPerRow,
+                            rowsPerImage = output.layout.rowsPerImage,
+                            bufferOffset = output.layout.bufferOffset,
+                            mappedSize = output.layout.totalBufferBytes,
+                            format = targetFormat.toCorePrimitiveGPUTextureFormat(),
+                        ),
+                    )
+                } else {
+                    null
+                }
+            val operandsByStep = (
+                ready.renderOperands + listOfNotNull(readbackOperand)
+                ).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
+            val exactScopeKeys = encoderPlan.scopes.map { scope ->
+                GPUPreparedNativeScopeKey(
+                    scope.sourceStepIndex,
+                    scope.operationKind,
+                    scope.resourceGenerationLabels,
+                    scope.nativeOperandKeys,
+                )
+            }
+            val payload = GPUPreparedNativeFramePayload(
+                identity = GPUPreparedNativeFrameIdentity(
+                    frameId = framePlan.frameId,
+                    contextIdentity = encoderPlan.contextIdentity,
+                    encoderPlanId = encoderPlan.planId,
+                    deviceGeneration = generationSeal.deviceGeneration,
+                    targetGeneration = generationSeal.targetGeneration,
+                    scopes = exactScopeKeys,
+                ),
+                scopeOperands = exactScopeKeys.map { scope ->
+                    requireNotNull(operandsByStep[scope.sourceStepIndex])
+                },
+                scopeOperandKeys = exactScopeKeys.map(GPUPreparedNativeScopeKey::operandKeys),
+                leaseLifecycle = ready.leaseLifecycle,
+                pathDepthStencilViewAuthority = ready.pathDepthStencilViewAuthority,
+            )
+            val result = GPUPreparedNativeFramePayloadMaterialization.Materialized(
+                GPUPreparedNativeFrameDraft(payload),
+            )
+            synchronized(this) {
+                check(!closed) {
+                    "Native CorePrimitive materializer closed during frame-global materialization"
+                }
+                preRegistrationHandles.transferAll()
+                materializing = false
+                leaseTransferred = true
+            }
+            result
+        } catch (failure: Throwable) {
+            if (!leaseTransferred) {
+                val lifecycle = leaseLifecycle
+                if (lifecycle != null &&
+                    lifecycle.releaseBeforeSubmit() !is GPUPreparedNativeFrameLeaseTransition.Applied
+                ) {
+                    lifecycle.quarantineUncertain()
+                }
+            }
+            synchronized(this) {
+                materializing = false
+                preRegistrationHandles.closeRetainingFailures()
+            }
+            refused(
+                "failed.native-core-primitive.frame-global-wrapper-materialization",
+                "Public wgpu4k frame-global CorePrimitive assembly failed: " +
+                    "${failure::class.simpleName.orEmpty()}: ${failure.message.orEmpty()}.",
+            )
+        } finally {
+            runMaterializer.close()
+        }
+    }
+
     @Synchronized
     override fun close() {
         closed = true
@@ -4064,7 +4279,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     }
 }
 
-private class GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(
+internal class GPUWgpu4kCorePrimitivePayloadLeaseLifecycle(
     private val lease: GPUWgpu4kCorePrimitiveFramePoolLease,
 ) : GPUPreparedNativeFrameLeaseLifecycle {
     override fun releaseBeforeSubmit(): GPUPreparedNativeFrameLeaseTransition =

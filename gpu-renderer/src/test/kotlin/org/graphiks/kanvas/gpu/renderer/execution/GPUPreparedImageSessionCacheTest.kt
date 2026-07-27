@@ -9,6 +9,7 @@ import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -17,6 +18,106 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
 
 class GPUPreparedImageSessionCacheTest {
+    @Test
+    fun `failed invariant rollback retains pending ownership and closes it on retry`() {
+        val generation = GPUDeviceGenerationID(6)
+        val counters = GPUPreparedImageNativeCounterRecorder()
+        val native = TrackingDevice(
+            failCloseOnceFor = "createBindGroupLayout",
+            failCreateFor = "createPipelineLayout",
+        )
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            native.device,
+            generation,
+            counters,
+        )
+
+        val creationFailure = assertFailsWith<IllegalStateException> {
+            cache.acquire(PIPELINE_KEY, generation)
+        }
+
+        assertEquals("createPipelineLayout creation failed", creationFailure.message)
+        assertEquals(
+            listOf(
+                "createShaderModule#1:success",
+                "createBindGroupLayout#1:failure",
+            ),
+            native.closeEvents,
+        )
+        val closingFailure = assertFailsWith<IllegalStateException> {
+            cache.acquire(PIPELINE_KEY, generation)
+        }
+        assertContains(closingFailure.message.orEmpty(), "cache is closing")
+
+        cache.close()
+        cache.close()
+
+        assertEquals(
+            listOf(
+                "createShaderModule#1:success",
+                "createBindGroupLayout#1:failure",
+                "createBindGroupLayout#2:success",
+            ),
+            native.closeEvents,
+        )
+        assertEquals(
+            mapOf(
+                "createBindGroupLayout" to 2,
+                "createShaderModule" to 1,
+            ),
+            native.handles.associate { it.label to it.closeCalls },
+        )
+        assertEquals(0L, counters.snapshot().pipelineCreations)
+        assertEquals(0L, counters.snapshot().pipelineReuses)
+    }
+
+    @Test
+    fun `successful invariant rollback keeps the cache active without double close`() {
+        val generation = GPUDeviceGenerationID(6)
+        val native = TrackingDevice(failCreateFor = "createShaderModule")
+        val cache = GPUWgpu4kPreparedImageSessionCache(native.device, generation)
+
+        assertFailsWith<IllegalStateException> {
+            cache.acquire(PIPELINE_KEY, generation)
+        }
+
+        assertEquals(
+            listOf("createBindGroupLayout#1:success"),
+            native.closeEvents,
+        )
+        val empty = assertIs<GPUPreparedImageCacheBatchAcquire.Ready>(
+            cache.acquireBatch(emptyList(), generation),
+        )
+        assertTrue(empty.pipelinesByKey.isEmpty())
+
+        cache.close()
+
+        assertEquals(
+            mapOf("createBindGroupLayout" to 1),
+            native.handles.associate { it.label to it.closeCalls },
+        )
+    }
+
+    @Test
+    fun `failed native pipeline creation does not increment prepared image counters`() {
+        val generation = GPUDeviceGenerationID(6)
+        val counters = GPUPreparedImageNativeCounterRecorder()
+        val native = TrackingDevice(failCreateFor = "createRenderPipeline")
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            native.device,
+            generation,
+            counters,
+        )
+
+        assertFailsWith<IllegalStateException> {
+            cache.acquire(PIPELINE_KEY, generation)
+        }
+
+        assertEquals(0L, counters.snapshot().pipelineCreations)
+        assertEquals(0L, counters.snapshot().pipelineReuses)
+        cache.close()
+    }
+
     @Test
     fun `generation mismatch refuses before lookup or handle creation without mutating the cache`() {
         val generation7 = GPUDeviceGenerationID(7)
@@ -83,6 +184,53 @@ class GPUPreparedImageSessionCacheTest {
     }
 
     @Test
+    fun `close failure retains only pending handles and retries without closing dependencies early`() {
+        val generation = GPUDeviceGenerationID(7)
+        val native = TrackingDevice(failCloseOnceFor = "createPipelineLayout")
+        val cache = GPUWgpu4kPreparedImageSessionCache(native.device, generation)
+        assertIs<GPUPreparedImageCacheAcquire.Ready>(cache.acquire(PIPELINE_KEY, generation))
+
+        val incomplete = assertFailsWith<GPUOwnedNativeCloseIncompleteException> {
+            cache.close()
+        }
+
+        assertEquals(3, incomplete.remainingOwnerCount)
+        assertEquals(
+            listOf(
+                "createRenderPipeline#1:success",
+                "createPipelineLayout#1:failure",
+            ),
+            native.closeEvents,
+        )
+        assertFailsWith<IllegalStateException> {
+            cache.acquireBatch(emptyList(), generation)
+        }
+
+        cache.close()
+        cache.close()
+
+        assertEquals(
+            listOf(
+                "createRenderPipeline#1:success",
+                "createPipelineLayout#1:failure",
+                "createPipelineLayout#2:success",
+                "createShaderModule#1:success",
+                "createBindGroupLayout#1:success",
+            ),
+            native.closeEvents,
+        )
+        assertEquals(
+            mapOf(
+                "createBindGroupLayout" to 1,
+                "createShaderModule" to 1,
+                "createPipelineLayout" to 2,
+                "createRenderPipeline" to 1,
+            ),
+            native.handles.associate { it.label to it.closeCalls },
+        )
+    }
+
+    @Test
     fun `supported alias batch preserves raw mapping and drives one native descriptor`() {
         val generation = GPUDeviceGenerationID(7)
         val native = TrackingDevice()
@@ -96,6 +244,11 @@ class GPUPreparedImageSessionCacheTest {
             PIPELINE_KEY.copy(
                 destinationBlendState = "src_over",
                 targetFormat = "RGBA8UNORMSRGB",
+            ),
+            PIPELINE_KEY.copy(
+                destinationBlendState =
+                    "fixed:SRC_OVER:None:one_isa:one:one-minus-src-alpha:" +
+                        "add:one:one-minus-src-alpha:add:rgba",
             ),
         )
 
@@ -178,8 +331,12 @@ class GPUPreparedImageSessionCacheTest {
         cache.close()
     }
 
-    private class TrackingDevice {
+    private class TrackingDevice(
+        private val failCloseOnceFor: String? = null,
+        private val failCreateFor: String? = null,
+    ) {
         val handles = mutableListOf<TrackedHandle>()
+        val closeEvents = mutableListOf<String>()
         val renderPipelineDescriptors = mutableListOf<RenderPipelineDescriptor>()
         val device: GPUDevice = proxy(GPUDevice::class.java) { methodName, returnType, args ->
             when (methodName) {
@@ -196,11 +353,22 @@ class GPUPreparedImageSessionCacheTest {
         }
 
         private fun track(label: String, type: Class<*>): Any {
-            val tracked = TrackedHandle(label)
+            if (label == failCreateFor) error("$label creation failed")
+            val tracked = TrackedHandle(
+                label = label,
+                closeFailuresRemaining = if (label == failCloseOnceFor) 1 else 0,
+            )
             val native = proxy(type) { methodName, returnType, args ->
                 when (methodName) {
                     "close" -> {
                         tracked.closeCalls += 1
+                        val event = "$label#${tracked.closeCalls}"
+                        if (tracked.closeFailuresRemaining > 0) {
+                            tracked.closeFailuresRemaining -= 1
+                            closeEvents += "$event:failure"
+                            error("$label close failed")
+                        }
+                        closeEvents += "$event:success"
                         Unit
                     }
                     "toString" -> label
@@ -215,7 +383,10 @@ class GPUPreparedImageSessionCacheTest {
         }
     }
 
-    private class TrackedHandle(val label: String) {
+    private class TrackedHandle(
+        val label: String,
+        var closeFailuresRemaining: Int,
+    ) {
         lateinit var native: Any
         var closeCalls: Int = 0
 

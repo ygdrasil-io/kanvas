@@ -410,6 +410,35 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     }
 
     @Test
+    fun `path stencil producers retain the general dynamic uniform component`() {
+        listOf(
+            pathKey(producerWinding()),
+            pathKey(producerEvenOdd()),
+        ).forEach { key ->
+            val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+            )
+
+            assertEquals(
+                PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
+                mapped.componentIdentity,
+            )
+            assertEquals(
+                GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired,
+                mapped.componentIdentity.bindingPolicy,
+            )
+            assertEquals(
+                CORE_PRIMITIVE_NATIVE_VERTEX_ENTRY_POINT,
+                corePrimitiveWgpu4kRenderPipelineDescriptor(
+                    mapped.identity,
+                    shader,
+                    pipelineLayout,
+                ).vertex.entryPoint,
+            )
+        }
+    }
+
+    @Test
     fun `four clip stencil structural keys map to four exact native programs and binding policies`() {
         val cases = listOf(
             corePrimitiveClipStencilProducerRenderPipelineStructuralKey(GPUClipFillRule.Winding) to

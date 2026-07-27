@@ -78,14 +78,22 @@ private sealed interface GPUPreparedImagePipelineCanonicalization {
 internal class GPUWgpu4kPreparedImageSessionCache(
     private val device: GPUDevice,
     internal val deviceGeneration: GPUDeviceGenerationID,
+    private val counterRecorder: GPUPreparedImageNativeCounterRecorder =
+        GPUPreparedImageNativeCounterRecorder(),
 ) : AutoCloseable {
+    private enum class Lifecycle {
+        Active,
+        Closing,
+        Closed,
+    }
+
     private var bindGroupLayout: GPUBindGroupLayout? = null
     private var shader: GPUShaderModule? = null
     private var pipelineLayout: GPUPipelineLayout? = null
     private var contract: GPUPreparedImageShaderContract? = null
     private val pipelines = linkedMapOf<GPUPreparedImagePipelineKey, GPUPreparedImageCachedPipeline>()
     private val owned = mutableListOf<AutoCloseable>()
-    private var closed = false
+    private var lifecycle = Lifecycle.Active
 
     fun acquire(
         key: GPUPreparedImagePipelineKey,
@@ -103,7 +111,9 @@ internal class GPUWgpu4kPreparedImageSessionCache(
         keys: List<GPUPreparedImagePipelineKey>,
         actualDeviceGeneration: GPUDeviceGenerationID,
     ): GPUPreparedImageCacheBatchAcquire {
-        check(!closed) { "Prepared-image session cache is closed" }
+        check(lifecycle == Lifecycle.Active) {
+            "Prepared-image session cache is ${lifecycle.name.lowercase()}"
+        }
         if (actualDeviceGeneration != deviceGeneration) {
             return GPUPreparedImageCacheBatchAcquire.Refused(
                 code = GPUPreparedImageRefusalCodes.NATIVE_GENERATION,
@@ -134,7 +144,11 @@ internal class GPUWgpu4kPreparedImageSessionCache(
         val acquiredByRawKey =
             linkedMapOf<GPUPreparedImagePipelineKey, GPUPreparedImageCachedPipeline>()
         canonicalByRawKey.forEach { (rawKey, canonical) ->
-            acquiredByRawKey[rawKey] = pipelines.getOrPut(canonical.key) {
+            val cached = pipelines[canonical.key]
+            acquiredByRawKey[rawKey] = if (cached != null) {
+                counterRecorder.recordPipelineReuse()
+                cached
+            } else {
                 val pipeline = track(
                     device.createRenderPipeline(
                         RenderPipelineDescriptor(
@@ -158,7 +172,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
                         ),
                     ),
                 )
-                GPUPreparedImageCachedPipeline(
+                val created = GPUPreparedImageCachedPipeline(
                     requireNotNull(contract),
                     requireNotNull(bindGroupLayout),
                     requireNotNull(shader),
@@ -166,6 +180,9 @@ internal class GPUWgpu4kPreparedImageSessionCache(
                     pipeline,
                     deviceGeneration,
                 )
+                pipelines[canonical.key] = created
+                counterRecorder.recordPipelineCreation()
+                created
             }
         }
         return GPUPreparedImageCacheBatchAcquire.Ready(acquiredByRawKey.toMap())
@@ -178,9 +195,15 @@ internal class GPUWgpu4kPreparedImageSessionCache(
 
     @Synchronized
     override fun close() {
-        if (closed) return
-        closed = true
-        retireOwnedOnce()
+        if (lifecycle == Lifecycle.Closed) return
+        lifecycle = Lifecycle.Closing
+        retireOwnedInDependencyOrder()
+        pipelines.clear()
+        bindGroupLayout = null
+        shader = null
+        pipelineLayout = null
+        contract = null
+        lifecycle = Lifecycle.Closed
     }
 
     private fun ensureInvariants() {
@@ -240,7 +263,13 @@ internal class GPUWgpu4kPreparedImageSessionCache(
             contract = shaderContract
             owned += created
         } catch (failure: Throwable) {
-            closeCreatedOnce(created, failure)
+            owned += created
+            try {
+                retireOwnedInDependencyOrder()
+            } catch (rollbackFailure: GPUOwnedNativeCloseIncompleteException) {
+                lifecycle = Lifecycle.Closing
+                failure.addSuppressed(rollbackFailure)
+            }
             throw failure
         }
     }
@@ -250,23 +279,21 @@ internal class GPUWgpu4kPreparedImageSessionCache(
         return handle
     }
 
-    private fun retireOwnedOnce() {
-        val pending = owned.asReversed().toList()
-        owned.clear()
-        pipelines.clear()
-        bindGroupLayout = null
-        shader = null
-        pipelineLayout = null
-        contract = null
-        var firstFailure: Throwable? = null
-        pending.forEach { handle ->
+    private fun retireOwnedInDependencyOrder() {
+        while (owned.isNotEmpty()) {
+            val pendingIndex = owned.lastIndex
+            val handle = owned[pendingIndex]
             try {
                 handle.close()
+                owned.removeAt(pendingIndex)
             } catch (failure: Throwable) {
-                if (firstFailure == null) firstFailure = failure else firstFailure.addSuppressed(failure)
+                throw GPUOwnedNativeCloseIncompleteException(
+                    ownerLabel = "prepared-image-session-cache",
+                    remainingOwnerCount = owned.size,
+                    failures = listOf(failure),
+                )
             }
         }
-        firstFailure?.let { throw IllegalStateException("Prepared-image session cache close failed", it) }
     }
 
     private fun canonicalize(
@@ -294,7 +321,10 @@ internal class GPUWgpu4kPreparedImageSessionCache(
             .lowercase()
             .replace('_', '-')
         val destinationBlendState = when (normalizedBlend) {
-            "src-over", "srcover" -> preparedImageSrcOverBlendState()
+            "src-over",
+            "srcover",
+            PREPARED_IMAGE_CANONICAL_SRC_OVER_BLEND,
+            -> preparedImageSrcOverBlendState()
             else ->
                 return GPUPreparedImagePipelineCanonicalization.Refused(
                     code = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
@@ -317,6 +347,10 @@ internal class GPUWgpu4kPreparedImageSessionCache(
     }
 }
 
+private const val PREPARED_IMAGE_CANONICAL_SRC_OVER_BLEND =
+    "fixed:src-over:none:one-isa:one:one-minus-src-alpha:" +
+        "add:one:one-minus-src-alpha:add:rgba"
+
 private fun preparedImageSrcOverBlendState(): BlendState = BlendState(
     color = BlendComponent(
         GPUBlendOperation.Add,
@@ -329,13 +363,3 @@ private fun preparedImageSrcOverBlendState(): BlendState = BlendState(
         GPUBlendFactor.OneMinusSrcAlpha,
     ),
 )
-
-private fun closeCreatedOnce(handles: List<AutoCloseable>, cause: Throwable) {
-    handles.asReversed().forEach { handle ->
-        try {
-            handle.close()
-        } catch (closeFailure: Throwable) {
-            cause.addSuppressed(closeFailure)
-        }
-    }
-}
