@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.surface.gpu
 
+import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -142,7 +143,7 @@ object GPUPreparedImagePixelOracle {
      * channel is multiplied by the corresponding tint component, and the
      * overall alpha is scaled by [paintAlpha].
      *
-     * This matches `GPUPreparedImagePixelOracle`'s per-pixel behaviour:
+     * This applies a tint colour and paint alpha to a single premultiplied pixel:
      *   dst.R = src.R × tint.R
      *   dst.G = src.G × tint.G
      *   dst.B = src.B × tint.B
@@ -172,7 +173,7 @@ object GPUPreparedImagePixelOracle {
     fun maxChannelDelta(a: ByteArray, b: ByteArray): Int {
         require(a.size == b.size)
         return a.indices.maxOfOrNull { index ->
-            kotlin.math.abs((a[index].toInt() and 0xff) - (b[index].toInt() and 0xff))
+            abs((a[index].toInt() and 0xff) - (b[index].toInt() and 0xff))
         } ?: 0
     }
 
@@ -241,7 +242,6 @@ object GPUPreparedImagePixelOracle {
         )
     }
 
-    // ---- Internal helpers -----------------------------------------------------
     // ---- sRGB transfer functions ----------------------------------------------
 
     private fun decodeSrgb(encoded: Float): Float =
