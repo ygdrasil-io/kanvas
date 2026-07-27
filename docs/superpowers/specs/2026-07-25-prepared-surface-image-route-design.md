@@ -565,7 +565,7 @@ FP-04 réutilise les codes autoritatifs lorsqu'ils existent, notamment :
 - `unsupported.color.yuv_conversion`,
   `unsupported.color.hdr_transfer` et `unsupported.color.gainmap` ;
 - `unsupported.image.codec.unregistered` et
-  `unsupported.image.animation.not_requested` ;
+  `unsupported.image.animation` ;
 - `unsupported.texture.import_unvalidated` ;
 - `unsupported.image.mip_required`,
   `unsupported.image.sampling_cubic`,
