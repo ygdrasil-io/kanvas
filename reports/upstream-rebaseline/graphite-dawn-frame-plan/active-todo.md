@@ -246,9 +246,26 @@ Current state:
   `fp-04-task-5-review.md`;
 - Task 5 is `completed` and accepted after the initial independent findings
   were repaired and the independent re-review returned no significant finding;
-- Task 6 is ready to start under a separate implementation scope but has not
-  started here; product routing and the image legacy allowlist remain
-  unchanged.
+- Task 6 is `completed` in `983ce190c`:
+  - one pure full-frame preflight validates the closed
+    `{CorePrimitive, SampledImage}` mix before target borrow or native
+    allocation;
+  - one mixed-frame materializer owns the target, readback, late surface,
+    resource ledger, ordered Core/Image operands, and final draft;
+  - prepared-image texture uploads occur before their exact consumers, while
+    pipeline caching remains session-owned and image operands remain
+    frame-owned;
+  - runtime close and generation replacement close the prepared-image session
+    cache without returning stale handles;
+  - independent cache, preflight, ownership, and end-to-end reviews reported
+    no blocking finding;
+  - the fresh complete `:gpu-renderer:test --rerun-tasks` run passed
+    2,485/2,485 tests with zero failure or error;
+- Task 7 remains `in_progress`: the pure `DrawImage` lowerer is reviewed and
+  tested on its integration branch, but direct builder/inventory wiring and
+  native `GPUPreparedSurfaceProductNativeSmokeTest` evidence are not yet
+  integrated;
+- product routing and the image legacy allowlist remain unchanged.
 
 Acceptance:
 
