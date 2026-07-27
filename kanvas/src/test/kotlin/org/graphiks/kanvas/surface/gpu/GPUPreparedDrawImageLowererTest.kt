@@ -17,7 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
@@ -57,6 +57,24 @@ class GPUPreparedDrawImageLowererTest {
             maxDynamicUniformBuffersPerPipelineLayout = 1,
         ),
         rendererFeatures = buildSet { add(GPURendererFeature.RenderPass) },
+    )
+
+    private fun commonRgbaImage(sourceId: String = "fixture-rgba"): Image = Image(
+        width = GPUPreparedImageTestFixtures.rgbaPremul2x2Width,
+        height = GPUPreparedImageTestFixtures.rgbaPremul2x2Height,
+        colorType = GPUPreparedImageTestFixtures.rgbaPremul2x2ColorType,
+        sourceId = sourceId,
+        pixels = GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes,
+        alphaType = AlphaType.PREMUL,
+    )
+
+    private fun commonA8Image(sourceId: String = "fixture-a8"): Image = Image(
+        width = GPUPreparedImageTestFixtures.a8_3x1Width,
+        height = GPUPreparedImageTestFixtures.a8_3x1Height,
+        colorType = GPUPreparedImageTestFixtures.a8_3x1ColorType,
+        sourceId = sourceId,
+        pixels = GPUPreparedImageTestFixtures.a8_3x1Bytes,
+        alphaType = AlphaType.PREMUL,
     )
 
     private fun rgbaImage(
@@ -297,7 +315,7 @@ class GPUPreparedDrawImageLowererTest {
 
     @Test
     fun `identity transform produces rect geometry with exact positions`() {
-        val image = rgbaImage(width = 2, height = 2)
+        val image = commonRgbaImage()
         val dst = Rect.fromLTRB(10f, 20f, 30f, 40f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
             GPUPreparedDrawImageLowerer.lower(
@@ -321,7 +339,7 @@ class GPUPreparedDrawImageLowererTest {
 
     @Test
     fun `translation transform produces rect geometry with shifted positions`() {
-        val image = rgbaImage(width = 2, height = 2)
+        val image = commonRgbaImage()
         val dst = Rect.fromLTRB(0f, 0f, 20f, 20f)
         val tx = Matrix33.translate(5f, 10f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
@@ -344,7 +362,7 @@ class GPUPreparedDrawImageLowererTest {
 
     @Test
     fun `scale transform produces rect geometry with scaled positions`() {
-        val image = rgbaImage(width = 2, height = 2)
+        val image = commonRgbaImage()
         val dst = Rect.fromLTRB(1f, 2f, 4f, 6f)
         val scale = Matrix33.scale(2f, 3f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
@@ -367,7 +385,7 @@ class GPUPreparedDrawImageLowererTest {
 
     @Test
     fun `rotation transform preserves four transformed corners`() {
-        val image = rgbaImage(width = 2, height = 2)
+        val image = commonRgbaImage()
         val dst = Rect.fromLTRB(0f, 0f, 10f, 10f)
         val rotate = Matrix33.rotate(90f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
@@ -390,7 +408,7 @@ class GPUPreparedDrawImageLowererTest {
 
     @Test
     fun `reflection transform preserves four corners`() {
-        val image = rgbaImage(width = 2, height = 2)
+        val image = commonRgbaImage()
         val dst = Rect.fromLTRB(1f, 2f, 5f, 8f)
         val reflectX = Matrix33.makeAll(-1f, 0f, 0f, 0f, 1f, 0f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
@@ -413,7 +431,7 @@ class GPUPreparedDrawImageLowererTest {
 
     @Test
     fun `skew transform produces quad geometry with four corners preserved`() {
-        val image = rgbaImage(width = 2, height = 2)
+        val image = commonRgbaImage()
         val dst = Rect.fromLTRB(10f, 10f, 30f, 30f)
         val skew = Matrix33.makeAll(1f, 0.5f, 0f, 0f, 1f, 0f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
@@ -437,7 +455,7 @@ class GPUPreparedDrawImageLowererTest {
 
     @Test
     fun `composed transform order is scale then rotation then translation`() {
-        val image = rgbaImage(width = 2, height = 2)
+        val image = commonRgbaImage()
         val dst = Rect.fromLTRB(1f, 2f, 3f, 4f)
         val transform =
             Matrix33.translate(10f, 20f) * Matrix33.rotate(90f) * Matrix33.scale(2f, 3f)
@@ -557,7 +575,7 @@ class GPUPreparedDrawImageLowererTest {
 
     @Test
     fun `tint A8 uses paint color channels`() {
-        val image = a8Image()
+        val image = commonA8Image()
         val red = Color.fromArgb(255, 255, 0, 0)
         val paint = Paint.fill(red)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
@@ -740,7 +758,7 @@ class GPUPreparedDrawImageLowererTest {
 
     @Test
     fun `cannot substitute with bounding box for skew`() {
-        val image = rgbaImage(width = 2, height = 2)
+        val image = commonRgbaImage()
         val dst = Rect.fromLTRB(10f, 10f, 30f, 20f)
         val skew = Matrix33.makeAll(1f, 0.5f, 0f, 0.3f, 1f, 0f)
         val result = assertIs<GPUPreparedDrawImageLowering.Ready>(

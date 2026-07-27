@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
@@ -18,9 +19,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
@@ -138,10 +138,10 @@ internal object GPUPreparedDrawImageLowerer {
         val dst = operation.dst
         val src = operation.src
 
-        val dx0 = dst.left.toFloat()
-        val dy0 = dst.top.toFloat()
-        val dx1 = dst.right.toFloat()
-        val dy1 = dst.bottom.toFloat()
+        val dx0 = dst.left
+        val dy0 = dst.top
+        val dx1 = dst.right
+        val dy1 = dst.bottom
 
         val corners = listOf(
             Point(dx0, dy0),
@@ -154,10 +154,10 @@ internal object GPUPreparedDrawImageLowerer {
         val imageW = image.width.toFloat()
         val imageH = image.height.toFloat()
 
-        val sx0 = max(0f, min(src.left.toFloat(), imageW))
-        val sy0 = max(0f, min(src.top.toFloat(), imageH))
-        val sx1 = max(0f, min(src.right.toFloat(), imageW))
-        val sy1 = max(0f, min(src.bottom.toFloat(), imageH))
+        val sx0 = max(0f, min(src.left, imageW))
+        val sy0 = max(0f, min(src.top, imageH))
+        val sx1 = max(0f, min(src.right, imageW))
+        val sy1 = max(0f, min(src.bottom, imageH))
 
         val uvs = listOf(
             GPUPreparedImageVertex(0f, 0f, sx0 / imageW, sy0 / imageH),
@@ -221,7 +221,7 @@ internal object GPUPreparedDrawImageLowerer {
         )
 
         val gpuSrc = GPURect(sx0, sy0, sx1, sy1)
-        val gpuDst = GPURect(dst.left.toFloat(), dst.top.toFloat(), dst.right.toFloat(), dst.bottom.toFloat())
+        val gpuDst = GPURect(dst.left, dst.top, dst.right, dst.bottom)
 
         val minX = transformedCorners.minOf { it.x }
         val minY = transformedCorners.minOf { it.y }
