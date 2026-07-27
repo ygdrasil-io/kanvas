@@ -48,6 +48,15 @@ internal sealed interface GPUPreparedImageCacheAcquire {
         GPUPreparedImageCacheAcquire
 }
 
+internal sealed interface GPUPreparedImageCacheBatchAcquire {
+    data class Ready(
+        val pipelinesByKey: Map<GPUPreparedImagePipelineKey, GPUPreparedImageCachedPipeline>,
+    ) : GPUPreparedImageCacheBatchAcquire
+
+    data class Refused(val code: String, val message: String) :
+        GPUPreparedImageCacheBatchAcquire
+}
+
 private data class GPUPreparedImageCanonicalPipelineState(
     val key: GPUPreparedImagePipelineKey,
     val targetFormat: GPUTextureFormat,
@@ -78,61 +87,88 @@ internal class GPUWgpu4kPreparedImageSessionCache(
     private val owned = mutableListOf<AutoCloseable>()
     private var closed = false
 
-    @Synchronized
     fun acquire(
         key: GPUPreparedImagePipelineKey,
         actualDeviceGeneration: GPUDeviceGenerationID,
-    ): GPUPreparedImageCacheAcquire {
+    ): GPUPreparedImageCacheAcquire =
+        when (val batch = acquireBatch(listOf(key), actualDeviceGeneration)) {
+            is GPUPreparedImageCacheBatchAcquire.Ready ->
+                GPUPreparedImageCacheAcquire.Ready(batch.pipelinesByKey.getValue(key))
+            is GPUPreparedImageCacheBatchAcquire.Refused ->
+                GPUPreparedImageCacheAcquire.Refused(batch.code, batch.message)
+        }
+
+    @Synchronized
+    fun acquireBatch(
+        keys: List<GPUPreparedImagePipelineKey>,
+        actualDeviceGeneration: GPUDeviceGenerationID,
+    ): GPUPreparedImageCacheBatchAcquire {
         check(!closed) { "Prepared-image session cache is closed" }
         if (actualDeviceGeneration != deviceGeneration) {
-            return GPUPreparedImageCacheAcquire.Refused(
+            return GPUPreparedImageCacheBatchAcquire.Refused(
                 code = GPUPreparedImageRefusalCodes.NATIVE_GENERATION,
                 message =
                     "Prepared-image cache device generation mismatch " +
                         "expected=${deviceGeneration.value} actual=${actualDeviceGeneration.value}",
             )
         }
-        val canonical = when (val result = canonicalize(key)) {
-            is GPUPreparedImagePipelineCanonicalization.Ready -> result.state
-            is GPUPreparedImagePipelineCanonicalization.Refused ->
-                return GPUPreparedImageCacheAcquire.Refused(result.code, result.message)
+        val canonicalByRawKey =
+            linkedMapOf<GPUPreparedImagePipelineKey, GPUPreparedImageCanonicalPipelineState>()
+        keys.forEach { key ->
+            when (val result = canonicalize(key)) {
+                is GPUPreparedImagePipelineCanonicalization.Ready -> {
+                    canonicalByRawKey[key] = result.state
+                }
+                is GPUPreparedImagePipelineCanonicalization.Refused ->
+                    return GPUPreparedImageCacheBatchAcquire.Refused(
+                        result.code,
+                        result.message,
+                    )
+            }
+        }
+        if (canonicalByRawKey.isEmpty()) {
+            return GPUPreparedImageCacheBatchAcquire.Ready(emptyMap())
         }
         ensureInvariants()
         val descriptorLayout = requireNotNull(pipelineLayout)
-        val cached = pipelines.getOrPut(canonical.key) {
-            val pipeline = track(
-                device.createRenderPipeline(
-                    RenderPipelineDescriptor(
-                        label = "Kanvas.session.preparedImage.pipeline.${pipelines.size}",
-                        layout = descriptorLayout,
-                        vertex = VertexState(
-                            module = requireNotNull(shader),
-                            entryPoint = "vs_main",
-                        ),
-                        primitive = PrimitiveState(),
-                        fragment = FragmentState(
-                            module = requireNotNull(shader),
-                            entryPoint = "fs_main",
-                            targets = listOf(
-                                ColorTargetState(
-                                    format = canonical.targetFormat,
-                                    blend = canonical.destinationBlendState,
+        val acquiredByRawKey =
+            linkedMapOf<GPUPreparedImagePipelineKey, GPUPreparedImageCachedPipeline>()
+        canonicalByRawKey.forEach { (rawKey, canonical) ->
+            acquiredByRawKey[rawKey] = pipelines.getOrPut(canonical.key) {
+                val pipeline = track(
+                    device.createRenderPipeline(
+                        RenderPipelineDescriptor(
+                            label = "Kanvas.session.preparedImage.pipeline.${pipelines.size}",
+                            layout = descriptorLayout,
+                            vertex = VertexState(
+                                module = requireNotNull(shader),
+                                entryPoint = "vs_main",
+                            ),
+                            primitive = PrimitiveState(),
+                            fragment = FragmentState(
+                                module = requireNotNull(shader),
+                                entryPoint = "fs_main",
+                                targets = listOf(
+                                    ColorTargetState(
+                                        format = canonical.targetFormat,
+                                        blend = canonical.destinationBlendState,
+                                    ),
                                 ),
                             ),
                         ),
                     ),
-                ),
-            )
-            GPUPreparedImageCachedPipeline(
-                requireNotNull(contract),
-                requireNotNull(bindGroupLayout),
-                requireNotNull(shader),
-                descriptorLayout,
-                pipeline,
-                deviceGeneration,
-            )
+                )
+                GPUPreparedImageCachedPipeline(
+                    requireNotNull(contract),
+                    requireNotNull(bindGroupLayout),
+                    requireNotNull(shader),
+                    descriptorLayout,
+                    pipeline,
+                    deviceGeneration,
+                )
+            }
         }
-        return GPUPreparedImageCacheAcquire.Ready(cached)
+        return GPUPreparedImageCacheBatchAcquire.Ready(acquiredByRawKey.toMap())
     }
 
     @Synchronized

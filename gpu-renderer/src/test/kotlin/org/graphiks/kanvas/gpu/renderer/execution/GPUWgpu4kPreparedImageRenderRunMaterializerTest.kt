@@ -313,6 +313,67 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
     }
 
     @Test
+    fun `valid then unsupported pipeline keys refuse atomically before cache or run handles`() {
+        val generation = GPUDeviceGenerationID(172)
+        val nativeDevice = RecordingPreparedImageDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(nativeDevice.device, generation)
+        val factory = RecordingPreparedImageHandleFactory()
+        val artifact = preparedImageArtifact(pixelSeed = 72)
+        val valid = preparedImageSemantic(
+            artifact,
+            GPUPreparedImageSampling.Nearest,
+            1f,
+        )
+        val unsupported = preparedImageSemantic(
+            artifact,
+            GPUPreparedImageSampling.Nearest,
+            7f,
+        )
+        unsupported.javaClass.getDeclaredField("pipelineKey").apply {
+            isAccessible = true
+            set(
+                unsupported,
+                unsupported.pipelineKey.copy(targetFormat = "BGRA8Unorm"),
+            )
+        }
+        val resource = buildPreparedImageFrameResourcePlanFromBindings(
+            artifact = artifact,
+            bindingInputs = listOf(
+                GPUPreparedImageBindingInput("packet.valid", GPUPreparedImageSampling.Nearest),
+                GPUPreparedImageBindingInput(
+                    "packet.unsupported",
+                    GPUPreparedImageSampling.Nearest,
+                ),
+            ),
+            bindingLayoutHash =
+                "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
+            capabilities = preparedImageCapabilities(),
+            frameIdentity = "frame.atomic-pipeline-refusal",
+            uploadTaskId = GPUTaskID("task.upload.atomic-pipeline-refusal"),
+        )
+
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+            .materializeAcceptedRun(
+                preparedImageRenderRunPlan(
+                    sourceScopeIndices = listOf(1, 2),
+                    packets = listOf(valid, unsupported),
+                    resources = listOf(resource),
+                    uniformAllocations =
+                        resource.bindingRequests.map { it.uniformAllocation },
+                ),
+                generation,
+            )
+
+        val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(result)
+        assertEquals(GPUPreparedImageRefusalCodes.PIXEL_FORMAT, refused.code)
+        assertEquals("RGBA8Unorm", valid.pipelineKey.targetFormat)
+        assertEquals("BGRA8Unorm", unsupported.pipelineKey.targetFormat)
+        assertEquals(0, nativeDevice.handleCreates)
+        assertEquals(0, factory.handleCreates)
+        cache.close()
+    }
+
+    @Test
     fun `mismatched native binding identity refuses before any handle creation`() {
         val nativeDevice = RecordingPreparedImageDevice()
         val cache = GPUWgpu4kPreparedImageSessionCache(

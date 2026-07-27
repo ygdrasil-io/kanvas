@@ -6,7 +6,6 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
-import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
@@ -119,20 +118,19 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                 facts = mapOf("boundary" to "native"),
             )
         }
-        val pipelineByKey =
-            linkedMapOf<GPUPreparedImagePipelineKey, GPUPreparedImageCachedPipeline>()
-        plan.packets.forEach { packet ->
-            when (val acquired = sessionCache.acquire(packet.pipelineKey, actualDeviceGeneration)) {
-                is GPUPreparedImageCacheAcquire.Ready -> {
-                    pipelineByKey[packet.pipelineKey] = acquired.pipeline
-                }
-                is GPUPreparedImageCacheAcquire.Refused -> {
-                    return GPUPreparedRenderRunMaterialization.Refused(
-                        code = acquired.code,
-                        message = acquired.message,
-                        facts = mapOf("boundary" to "native"),
-                    )
-                }
+        val pipelineByKey = when (
+            val acquired = sessionCache.acquireBatch(
+                plan.packets.map(GPUDrawSemanticPayload.SampledImage::pipelineKey),
+                actualDeviceGeneration,
+            )
+        ) {
+            is GPUPreparedImageCacheBatchAcquire.Ready -> acquired.pipelinesByKey
+            is GPUPreparedImageCacheBatchAcquire.Refused -> {
+                return GPUPreparedRenderRunMaterialization.Refused(
+                    code = acquired.code,
+                    message = acquired.message,
+                    facts = mapOf("boundary" to "native"),
+                )
             }
         }
         val created = mutableListOf<AutoCloseable>()

@@ -83,7 +83,7 @@ class GPUPreparedImageSessionCacheTest {
     }
 
     @Test
-    fun `supported aliases canonicalize before lookup and drive the native descriptor`() {
+    fun `supported alias batch preserves raw mapping and drives one native descriptor`() {
         val generation = GPUDeviceGenerationID(7)
         val native = TrackingDevice()
         val cache = GPUWgpu4kPreparedImageSessionCache(native.device, generation)
@@ -99,12 +99,12 @@ class GPUPreparedImageSessionCacheTest {
             ),
         )
 
-        val pipelines = aliases.map { key ->
-            assertIs<GPUPreparedImageCacheAcquire.Ready>(
-                cache.acquire(key, generation),
-            ).pipeline
-        }
+        val ready = assertIs<GPUPreparedImageCacheBatchAcquire.Ready>(
+            cache.acquireBatch(aliases, generation),
+        )
+        val pipelines = aliases.map(ready.pipelinesByKey::getValue)
 
+        assertEquals(aliases, ready.pipelinesByKey.keys.toList())
         assertTrue(pipelines.all { it === pipelines.first() })
         assertEquals(4, native.handles.size)
         val descriptor = native.renderPipelineDescriptors.single()
@@ -121,6 +121,32 @@ class GPUPreparedImageSessionCacheTest {
         assertEquals(GPUBlendOperation.Add, blend.alpha.operation)
         assertEquals(GPUBlendFactor.One, blend.alpha.srcFactor)
         assertEquals(GPUBlendFactor.OneMinusSrcAlpha, blend.alpha.dstFactor)
+
+        cache.close()
+        cache.close()
+
+        assertTrue(native.handles.all { it.closeCalls == 1 })
+    }
+
+    @Test
+    fun `valid then unsupported batch refuses before any native handle creation`() {
+        val generation = GPUDeviceGenerationID(7)
+        val native = TrackingDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(native.device, generation)
+
+        val refused = assertIs<GPUPreparedImageCacheBatchAcquire.Refused>(
+            cache.acquireBatch(
+                listOf(
+                    PIPELINE_KEY,
+                    PIPELINE_KEY.copy(targetFormat = "BGRA8Unorm"),
+                ),
+                generation,
+            ),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.PIXEL_FORMAT, refused.code)
+        assertContains(refused.message, "BGRA8Unorm")
+        assertTrue(native.handles.isEmpty())
 
         cache.close()
     }
