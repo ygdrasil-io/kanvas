@@ -5,6 +5,9 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLReflectionProvider
+import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLValidator
+import org.graphiks.kanvas.gpu.renderer.wgsl.validation.WGSLParsedModule
 
 class CustomRuntimeEffectRegistryTest {
 
@@ -62,7 +65,7 @@ class CustomRuntimeEffectRegistryTest {
     }
 
     @Test
-    fun `WGSLReflectionProvider reflect returns WGSLReflectionResult`() {
+    fun `WGSLReflectionProvider reflect returns WGSLModuleReflection`() {
         val provider = KanvasWGSLReflectionProvider()
         val module = fixtureModule()
         val result = provider.reflect(module)

@@ -9,8 +9,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
-import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasWGSLReflectionProvider
-import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasWGSLValidator
+import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLReflectionProvider
+import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLValidator
 
 class GPUPreparedImageShaderTest {
     @Test

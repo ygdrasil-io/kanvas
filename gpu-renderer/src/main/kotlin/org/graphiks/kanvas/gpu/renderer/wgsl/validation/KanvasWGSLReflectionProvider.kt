@@ -1,13 +1,13 @@
-package org.graphiks.kanvas.gpu.renderer.runtimeeffects
+package org.graphiks.kanvas.gpu.renderer.wgsl.validation
 
+import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
-import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 
 /** Reflects on parsed WGSL through parser-backed reflection with fixture fallback. */
 class KanvasWGSLReflectionProvider : WGSLReflectionProvider {
 
-    override fun reflect(module: WGSLParsedModule): WGSLReflectionResult {
+    override fun reflect(module: WGSLParsedModule): WGSLModuleReflection {
         return try {
             parserBackedReflect(module)
         } catch (_: NoClassDefFoundError) {
@@ -17,7 +17,7 @@ class KanvasWGSLReflectionProvider : WGSLReflectionProvider {
         }
     }
 
-    private fun parserBackedReflect(module: WGSLParsedModule): WGSLReflectionResult {
+    private fun parserBackedReflect(module: WGSLParsedModule): WGSLModuleReflection {
         val source = module.source.ifBlank { return fixtureBackedReflect(module) }
         val parsed = parseWgslResult(source)
         val lowered = Lowerer().lower(parsed.translationUnit)
@@ -33,7 +33,7 @@ class KanvasWGSLReflectionProvider : WGSLReflectionProvider {
         val moduleHash = WGSLHashUtils.sha256("custom-module:$uniformCount:$textureCount:$bindGroupCount")
         val reflectionHash = WGSLHashUtils.sha256("$moduleHash:$entryPointName:reflection-v1")
 
-        return WGSLReflectionResult(
+        return WGSLModuleReflection(
             moduleHash = moduleHash,
             entryPoint = entryPointName,
             uniformCount = uniformCount,
@@ -44,9 +44,9 @@ class KanvasWGSLReflectionProvider : WGSLReflectionProvider {
         )
     }
 
-    private fun fixtureBackedReflect(module: WGSLParsedModule): WGSLReflectionResult {
+    private fun fixtureBackedReflect(module: WGSLParsedModule): WGSLModuleReflection {
         val moduleHash = "fixture:${module.sourceHash}"
-        return WGSLReflectionResult(
+        return WGSLModuleReflection(
             moduleHash = moduleHash,
             entryPoint = "main",
             uniformCount = module.uniforms.size,

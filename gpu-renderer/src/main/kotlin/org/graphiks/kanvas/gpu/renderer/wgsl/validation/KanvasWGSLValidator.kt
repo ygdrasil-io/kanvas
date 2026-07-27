@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.gpu.renderer.runtimeeffects
+package org.graphiks.kanvas.gpu.renderer.wgsl.validation
 
 import org.graphiks.wgsl.ir.ShaderStage
 import org.graphiks.wgsl.ir.StorageClass

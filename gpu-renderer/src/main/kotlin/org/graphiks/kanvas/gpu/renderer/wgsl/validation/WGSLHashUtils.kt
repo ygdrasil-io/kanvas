@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.gpu.renderer.runtimeeffects
+package org.graphiks.kanvas.gpu.renderer.wgsl.validation
 
 import java.security.MessageDigest
 
