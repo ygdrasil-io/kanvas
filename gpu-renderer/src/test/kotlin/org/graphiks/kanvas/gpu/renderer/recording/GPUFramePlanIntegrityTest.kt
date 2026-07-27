@@ -1145,7 +1145,7 @@ class GPUFramePlanIntegrityTest {
         val baseline = plan(prepared)
         val changed = plan(changedSourceStride)
         val dump = baseline.dumpLines().joinToString("\n")
-        val logicalHash = logicalPixels.sha256ForIntegrityTest()
+        val logicalHash = artifact.tightRgba8BytesForUpload().sha256ForIntegrityTest()
         val paddedHash = prepared.uploadLayout.bytesForUpload().sha256ForIntegrityTest()
 
         assertNotEquals(baseline.stableHash(), changed.stableHash())

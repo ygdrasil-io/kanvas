@@ -1043,7 +1043,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             targetGeneration = 1L,
             deviceGeneration = generation,
             colorFormat = GPUColorFormat("rgba8unorm"),
-            colorInterpretation = GPUColorInterpretation("srgb-premul"),
+            colorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
             samplePlan = samplePlan,
             attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
                 .GPUSampleAttachmentAuthority.SceneTargetRetained,
@@ -1182,7 +1182,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
                 requestId = GPUReadbackRequestID("readback.msaa-continuation"),
                 sourceBounds = GPUPixelBounds(0, 0, 4, 4),
                 pixelFormat = GPUReadbackPixelFormat.Rgba8Unorm,
-                outputColorInterpretation = GPUColorInterpretation("srgb-premul"),
+                outputColorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
             ),
             sourceTaskIds = listOf(GPUTaskID("task.readback.msaa")),
         )
@@ -1426,7 +1426,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             requestId = readbackRequestId,
             sourceBounds = GPUPixelBounds(0, 0, 4, 4),
             pixelFormat = GPUReadbackPixelFormat.Rgba8Unorm,
-            outputColorInterpretation = GPUColorInterpretation("srgb-premul"),
+            outputColorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
         )
         val readback = GPUFrameStep.ReadbackCopyStep(
             source = readbackSource,
@@ -1739,7 +1739,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
                 width = 4,
                 height = 4,
                 format = GPUColorFormat("rgba8unorm"),
-                colorInterpretation = GPUColorInterpretation("srgb-premul"),
+                colorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
                 sampleCount = sampleCount,
                 deviceGeneration = generation,
                 targetGeneration = 1L,
@@ -1748,7 +1748,7 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
         width = 4,
         height = 4,
         format = GPUColorFormat("rgba8unorm"),
-        colorInterpretation = GPUColorInterpretation("srgb-premul"),
+        colorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
         usages = setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource),
         sampleCount = sampleCount,
         deviceGeneration = generation,

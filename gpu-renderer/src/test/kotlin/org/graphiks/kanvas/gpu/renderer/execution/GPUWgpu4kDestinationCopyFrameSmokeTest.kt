@@ -774,7 +774,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
                 readbackRequestId,
                 TARGET_BOUNDS,
                 GPUReadbackPixelFormat.Rgba8Unorm,
-                GPUColorInterpretation("srgb-premul"),
+                GPUColorInterpretation.EncodedPremulSrgb,
             ),
         )
         val dependencies = listOf(
@@ -952,7 +952,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
                 GPUReadbackRequestID("readback.destination-copy"),
                 TARGET_BOUNDS,
                 GPUReadbackPixelFormat.Rgba8Unorm,
-                GPUColorInterpretation("srgb-premul"),
+                GPUColorInterpretation.EncodedPremulSrgb,
             ),
             sourceTaskIds = listOf(GPUTaskID("task.readback")),
         )
@@ -1083,7 +1083,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         colorInterpretation = if (invalid == InvalidRoute.SourceColorMismatch) {
             GPUColorInterpretation("linear-premul")
         } else {
-            GPUColorInterpretation("srgb-premul")
+            GPUColorInterpretation.EncodedPremulSrgb
         },
         sampleContinuation = if (invalid == InvalidRoute.SourceSampleMismatch) {
             GPUSampleContinuationKey(
@@ -1091,7 +1091,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
                 targetGeneration = 1,
                 deviceGeneration = generation,
                 colorFormat = RGBA8,
-                colorInterpretation = GPUColorInterpretation("srgb-premul"),
+                colorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
                 samplePlan = GPUSamplePlan.MultisampleFrame(4),
                 attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
                     .GPUSampleAttachmentAuthority.SceneTargetRetained,
@@ -1184,7 +1184,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
         width = 4,
         height = 4,
         format = RGBA8,
-        colorInterpretation = GPUColorInterpretation("srgb-premul"),
+        colorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
         usages = setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource),
         sampleCount = 1,
         deviceGeneration = generation,

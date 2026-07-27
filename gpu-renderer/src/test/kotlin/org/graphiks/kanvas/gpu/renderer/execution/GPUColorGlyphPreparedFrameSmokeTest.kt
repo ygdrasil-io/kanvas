@@ -453,7 +453,7 @@ class GPUColorGlyphPreparedFrameSmokeTest {
                 readbackRequestId,
                 GPUPixelBounds(0, 0, TARGET_WIDTH, TARGET_HEIGHT),
                 GPUReadbackPixelFormat.Rgba8Unorm,
-                GPUColorInterpretation("srgb-premul"),
+                GPUColorInterpretation.EncodedPremulSrgb,
             )
         }
         val readbackBytes = readbackRequest?.let { request ->
