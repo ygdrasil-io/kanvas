@@ -1246,6 +1246,94 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `direct inventory preserves solid image solid order with prepared image facts`() {
+        val image = org.graphiks.kanvas.image.Image(
+            width = GPUPreparedImageTestFixtures.rgbaPremul2x2Width,
+            height = GPUPreparedImageTestFixtures.rgbaPremul2x2Height,
+            colorType = GPUPreparedImageTestFixtures.rgbaPremul2x2ColorType,
+            sourceId = "inventory-prepared-image",
+            pixels = GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes,
+            alphaType = org.graphiks.kanvas.image.AlphaType.PREMUL,
+        )
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(0f, 0f, 2f, 2f),
+                Paint.fill(Color.RED).copy(antiAlias = false),
+                Matrix33.identity(),
+                org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawImage(
+                image = image,
+                src = Rect.fromLTRB(0f, 0f, 2f, 2f),
+                dst = Rect.fromLTRB(2f, 0f, 4f, 2f),
+                paint = null,
+                transform = Matrix33.identity(),
+                clip = org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(4f, 0f, 6f, 2f),
+                Paint.fill(Color.BLUE).copy(antiAlias = false),
+                Matrix33.identity(),
+                org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+            ),
+        )
+
+        val baseCapabilities = capabilitiesWith(FILL_RECT_CAPABILITY)
+        val capabilities = GPUCapabilities(
+            implementation = baseCapabilities.implementation,
+            facts = baseCapabilities.facts,
+            knownUnsupportedFacts = baseCapabilities.knownUnsupportedFacts,
+            snapshotId = "${baseCapabilities.snapshotId}:prepared-image",
+            limits = GPULimits(
+                maxTextureDimension2D = 8192,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+                maxBufferSize = 1L shl 30,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+            ),
+            textureFormatSampleSupport = baseCapabilities.textureFormatSampleSupport,
+            rendererFeatures = baseCapabilities.rendererFeatures,
+            copyAsDrawCapability = baseCapabilities.copyAsDrawCapability,
+        )
+        val plan = GPUFramePathApiInventory.plan(
+            operations,
+            org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts(8, 4, "rgba8unorm-srgb"),
+            RenderConfig.DEFAULT,
+            capabilities,
+        )
+
+        assertEquals(
+            listOf(
+                NormalizedDrawCommand.FillRect::class,
+                NormalizedDrawCommand.DrawImageRect::class,
+                NormalizedDrawCommand.FillRect::class,
+            ),
+            plan.visualCommands.map { it.normalized::class },
+        )
+        assertEquals(listOf(0, 1, 2), plan.normalizedCommands.map { it.commandId.value })
+        assertNotNull(plan.visualCommands[1].preparedImage)
+        assertEquals(0, plan.legacyDump.invocationCount)
+        val preparation = GPUFramePathApiInventory.preparePreparedNativeTaskList(
+            inventory = plan,
+            capabilities = capabilities,
+            targetBounds = GPUPixelBounds(0, 0, 8, 4),
+            readbackRequestId = GPUReadbackRequestID("inventory-prepared-image"),
+        )
+        val prepared = assertIs<org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult.Recorded>(
+            preparation,
+            preparation.toString(),
+        )
+        val preparedPlan = org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner.plan(
+            prepared.taskList,
+        )
+        assertEquals(
+            3,
+            preparedPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .sumOf { it.drawPackets.size },
+        )
+    }
+
+    @Test
     fun `unknown provenance annotation is inert and cannot activate a reserved value`() {
         val surface = Surface(16, 16)
         surface.canvas {

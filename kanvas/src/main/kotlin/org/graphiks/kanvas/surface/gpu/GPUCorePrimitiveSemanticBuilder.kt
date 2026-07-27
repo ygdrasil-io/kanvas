@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.pow
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUDrawAnalysisRecord
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRectGeometry
 import org.graphiks.kanvas.gpu.renderer.analysis.matchesCorePrimitiveRRectGeometry
@@ -58,6 +59,11 @@ internal enum class GPUCorePrimitiveBlendAuthorityPolicy {
     InventoryHarness,
 }
 
+internal enum class GPUCorePrimitiveColorTransform {
+    Identity,
+    SrgbToLinear,
+}
+
 data class GPUCorePrimitiveGeometryRefusal(
     val code: String,
     val refusalFacts: Map<String, String>,
@@ -75,6 +81,8 @@ internal object GPUCorePrimitiveSemanticBuilder {
         targetBounds: GPUPixelBounds,
         blendAuthorityPolicy: GPUCorePrimitiveBlendAuthorityPolicy =
             GPUCorePrimitiveBlendAuthorityPolicy.Required,
+        colorTransform: GPUCorePrimitiveColorTransform =
+            GPUCorePrimitiveColorTransform.Identity,
     ): GPUCorePrimitiveSemanticGatherResult {
         val gatherer = GPUCorePrimitivePayloadGatherer()
         val semantics = linkedMapOf<Int, GPUDrawSemanticPayload.CorePrimitive>()
@@ -147,6 +155,7 @@ internal object GPUCorePrimitiveSemanticBuilder {
                         targetBounds = targetBounds,
                         analysisRecord = analysisRecord,
                         recordingBlendPlanIdentity = recordingBlendPlanIdentity,
+                        colorTransform = colorTransform,
                     ),
                 )
             } catch (failure: GPUCorePrimitiveGeometryRefusalException) {
@@ -181,6 +190,7 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     targetBounds: GPUPixelBounds,
     analysisRecord: GPUDrawAnalysisRecord,
     recordingBlendPlanIdentity: String,
+    colorTransform: GPUCorePrimitiveColorTransform,
 ): GPUCorePrimitivePayloadInput {
     val material = normalized.material as? GPUMaterialDescriptor.SolidColor
         ?: refuseGeometry(
@@ -188,6 +198,9 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
             mapOf("materialKind" to normalized.material::class.simpleName.orEmpty()),
         )
     val alpha = material.a
+    val linearR = colorTransform.apply(material.r)
+    val linearG = colorTransform.apply(material.g)
+    val linearB = colorTransform.apply(material.b)
     val sourceFamily = normalized.toCoreSourceFamily()
     val rectRouteAuthority: GPUCorePrimitiveRectRouteAuthority?
     val rectGeometryAuthority: GPUCorePrimitiveRectGeometryAuthority?
@@ -303,7 +316,7 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         commandIdValue = normalized.commandId.value,
         sourceFamily = sourceFamily,
         geometry = geometry,
-        premultipliedRgba = listOf(material.r * alpha, material.g * alpha, material.b * alpha, alpha),
+        premultipliedRgba = listOf(linearR * alpha, linearG * alpha, linearB * alpha, alpha),
         targetBounds = targetBounds,
         scissorBounds = scissor,
         clipCoveragePlan = clipCoverage,
@@ -322,6 +335,15 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         rectGeometryAuthority = rectGeometryAuthority,
         rrectGeometryAuthority = rrectGeometryAuthority,
     )
+}
+
+private fun GPUCorePrimitiveColorTransform.apply(channel: Float): Float = when (this) {
+    GPUCorePrimitiveColorTransform.Identity -> channel
+    GPUCorePrimitiveColorTransform.SrgbToLinear -> if (channel <= 0.04045f) {
+        channel / 12.92f
+    } else {
+        ((channel + 0.055f) / 1.055f).pow(2.4f)
+    }
 }
 
 private fun GPUFramePathVisualCommand.coverageMode(): GPUCorePrimitiveCoverageMode = when (geometryCoverage) {

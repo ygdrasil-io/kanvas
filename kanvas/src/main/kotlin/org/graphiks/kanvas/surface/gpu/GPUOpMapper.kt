@@ -90,6 +90,14 @@ internal data class GPUOpMapping(
     val visualCommands: List<GPUFramePathVisualCommand>,
     val stateEvents: List<GPUFramePathStateEvent>,
     val legacyDump: GPULegacyImmediatePathDump,
+    val preparedRefusal: GPUPreparedOperationRefusal? = null,
+)
+
+data class GPUPreparedOperationRefusal(
+    val commandId: Int,
+    val operationIndex: Int,
+    val code: String,
+    val facts: Map<String, String>,
 )
 
 /** Sole Canvas-state translator for the Slice 12A frame route. */
@@ -119,6 +127,33 @@ internal object GPUOpMapper {
                     stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.Clip)
                 is DisplayOp.FlushAndSnapshot ->
                     stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.FlushSnapshot)
+                is DisplayOp.DrawImage -> {
+                    val commandId = visual.size
+                    when (
+                        val lowered = GPUPreparedDrawImageLowerer.lower(
+                            operation = operation,
+                            commandId = GPUDrawCommandID(commandId),
+                            paintOrder = commandId,
+                            provenance = provenance,
+                            target = target,
+                            config = config,
+                            capabilities = capabilities,
+                        )
+                    ) {
+                        is GPUPreparedDrawImageLowering.Ready -> visual += lowered.command
+                        is GPUPreparedDrawImageLowering.Refused -> return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            legacyDump = legacy.dump(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = commandId,
+                                operationIndex = operationIndex,
+                                code = lowered.code,
+                                facts = lowered.facts,
+                            ),
+                        )
+                    }
+                }
                 else -> {
                     val paintOrder = visual.size
                     var loweringRefusal: GPUCorePrimitiveGeometryRefusal? = null

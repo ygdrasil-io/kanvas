@@ -510,7 +510,7 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        assertEquals("unsupported.transform.affine_singular", result.code)
+        assertEquals(GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING, result.code)
     }
 
     @Test
@@ -661,10 +661,10 @@ class GPUPreparedDrawImageLowererTest {
     }
 
     @Test
-    fun `blend mode preserved`() {
+    fun `blend mode unsupported by native image pipeline is refused before recording`() {
         val image = rgbaImage()
         val multiplyPaint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.MULTIPLY)
-        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 drawImage(image, paint = multiplyPaint),
                 GPUDrawCommandID(0),
@@ -675,8 +675,9 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        val normalized = assertIs<NormalizedDrawCommand.DrawImageRect>(result.command.normalized)
-        assertEquals(BlendMode.MULTIPLY.toGpuBlendFacts(), normalized.blend)
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, result.code)
+        assertEquals(BlendMode.MULTIPLY.name, result.facts["blendMode"])
+        assertEquals(BlendMode.SRC_OVER.name, result.facts["supportedBlendMode"])
     }
 
     @Test

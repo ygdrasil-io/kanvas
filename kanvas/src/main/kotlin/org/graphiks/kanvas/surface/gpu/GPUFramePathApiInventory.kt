@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
@@ -22,6 +23,9 @@ import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameTaskListBuilder
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameTaskListBuilder
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
@@ -65,6 +69,7 @@ data class GPUFramePathVisualCommand(
 )
 
 data class GPUFramePathInventoryPlan(
+    val target: GPUTargetFacts,
     val visualCommands: List<GPUFramePathVisualCommand>,
     val normalizedCommands: List<NormalizedDrawCommand>,
     val stateEvents: List<GPUFramePathStateEvent>,
@@ -72,6 +77,7 @@ data class GPUFramePathInventoryPlan(
     val recording: GPURecording,
     val framePlan: GPUFramePlan,
     val legacyDump: GPULegacyImmediatePathDump,
+    val preparedRefusal: GPUPreparedOperationRefusal?,
 )
 
 /**
@@ -102,6 +108,7 @@ object GPUFramePathApiInventory {
         val recording = recorder.close()
         val framePlan = GPUFramePlanner.plan(recording.taskList)
         return GPUFramePathInventoryPlan(
+            target = target,
             visualCommands = visual.toList(),
             normalizedCommands = visual.map(GPUFramePathVisualCommand::normalized),
             stateEvents = mapping.stateEvents,
@@ -115,6 +122,7 @@ object GPUFramePathApiInventory {
             recording = recording,
             framePlan = framePlan,
             legacyDump = mapping.legacyDump,
+            preparedRefusal = mapping.preparedRefusal,
         )
     }
 
@@ -149,6 +157,47 @@ object GPUFramePathApiInventory {
         )
     }
 
+    /** Builds the heterogeneous direct prepared seam without opening the Surface product gate. */
+    fun preparePreparedNativeTaskList(
+        inventory: GPUFramePathInventoryPlan,
+        capabilities: GPUCapabilities,
+        targetBounds: GPUPixelBounds,
+        readbackRequestId: GPUReadbackRequestID? = null,
+    ): GPUPreparedSurfaceFrameResult {
+        inventory.preparedRefusal?.let { refusal ->
+            return GPUPreparedSurfaceFrameResult.Refused(
+                preparedRefusalDiagnostic(refusal),
+            )
+        }
+        val artifacts = inventory.visualCommands.mapNotNull { visual ->
+            visual.preparedImage?.artifact?.let { artifact ->
+                visual.normalized.commandId.value to artifact
+            }
+        }.toMap()
+        val semantics = when (
+            val gathered = gatherPreparedSurfaceSemantics(
+                inventory = inventory,
+                targetBounds = targetBounds,
+                imageArtifactsByCommandId = artifacts,
+            )
+        ) {
+            is GPUPreparedSurfaceSemanticGatherResult.Gathered -> gathered.semanticsByCommandId
+            is GPUPreparedSurfaceSemanticGatherResult.Refused ->
+                return GPUPreparedSurfaceFrameResult.Refused(gathered.diagnostic)
+        }
+        return GPUPreparedSurfaceFrameTaskListBuilder().build(
+            GPUPreparedSurfaceFrameRequest(
+                baseTaskList = inventory.recording.taskList,
+                capabilities = capabilities,
+                target = GPUFrameTargetRef("frame.scene"),
+                targetBounds = targetBounds,
+                semanticsByCommandId = semantics,
+                readbackRequestId = readbackRequestId,
+                targetFormat = GPUColorFormat(inventory.target.colorFormat),
+            ),
+        )
+    }
+
     /** Delegates exact handle-free semantics to the production builder. */
     internal fun gatherCorePrimitiveSemantics(
         inventory: GPUFramePathInventoryPlan,
@@ -172,4 +221,17 @@ object GPUFramePathApiInventory {
         imageArtifactsByCommandId = imageArtifactsByCommandId,
         blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
     )
+
+    private fun preparedRefusalDiagnostic(refusal: GPUPreparedOperationRefusal): GPUDiagnostic =
+        GPUDiagnostic(
+            code = GPUDiagnosticCode(refusal.code),
+            domain = GPUDiagnosticDomain.Recording,
+            severity = GPUDiagnosticSeverity.Error,
+            message = "Prepared inventory operation could not be lowered.",
+            facts = refusal.facts + mapOf(
+                "boundary" to "inventory",
+                "commandId" to refusal.commandId.toString(),
+                "operationIndex" to refusal.operationIndex.toString(),
+            ),
+        )
 }

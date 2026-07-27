@@ -23,7 +23,6 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
-import org.graphiks.kanvas.gpu.renderer.recording.buildPreparedImageGeometry
 
 sealed interface GPUPreparedSurfaceSemanticGatherResult {
     data class Gathered(
@@ -88,6 +87,7 @@ internal object GPUPreparedSurfaceSemanticBuilder {
                 recording = recording,
                 targetBounds = targetBounds,
                 blendAuthorityPolicy = blendAuthorityPolicy,
+                colorTransform = GPUCorePrimitiveColorTransform.SrgbToLinear,
             )
         ) {
             is GPUCorePrimitiveSemanticGatherResult.Gathered ->
@@ -109,6 +109,13 @@ internal object GPUPreparedSurfaceSemanticBuilder {
             val commandId = visual.normalized.commandId.value
             val command = visual.normalized as? NormalizedDrawCommand.DrawImageRect
             if (command == null) {
+                if (visual.preparedImage != null) {
+                    return refused(
+                        "invalid.surface.prepared.image-lowerer-authority",
+                        "Prepared image facts cannot be attached to a core command.",
+                        mapOf("commandId" to commandId.toString()),
+                    )
+                }
                 result[commandId] = coreSemantics.getValue(commandId)
                 continue
             }
@@ -149,13 +156,63 @@ internal object GPUPreparedSurfaceSemanticBuilder {
                 )
             }
             val artifact = imageArtifactsByCommandId.getValue(commandId)
-            val vertices = command.preparedVertices(artifact)
+            val preparedImage = visual.preparedImage
+                ?: return refused(
+                    "invalid.surface.prepared.image-lowerer-authority",
+                    "Prepared image command requires exact lowerer facts.",
+                    mapOf("commandId" to commandId.toString()),
+                )
+            val expectedVertices = command.preparedVertices(artifact)
                 ?: return refused(
                     "unsupported.surface.prepared.image-transform",
                     "Prepared image semantics require one finite non-singular affine transform.",
                     mapOf("commandId" to commandId.toString()),
                 )
             val alpha = material.tintA
+            val expectedGeometryClass = if (
+                command.transform.type == GPUTransformType.Affine &&
+                (command.transform.skewX != 0f || command.transform.skewY != 0f)
+            ) {
+                GPUPreparedImageGeometryClass.Quad
+            } else {
+                GPUPreparedImageGeometryClass.Rect
+            }
+            val expectedSampling = when (command.samplingFilterMode) {
+                "nearest" -> GPUPreparedImageSampling.Nearest
+                "linear" -> GPUPreparedImageSampling.Linear
+                else -> return refused(
+                    "invalid.surface.prepared.image-lowerer-authority",
+                    "Prepared image command has an unknown sampler authority.",
+                    mapOf(
+                        "commandId" to commandId.toString(),
+                        "sampling" to command.samplingFilterMode,
+                    ),
+                )
+            }
+            val expectedTint = listOf(
+                material.tintR * alpha,
+                material.tintG * alpha,
+                material.tintB * alpha,
+                alpha,
+            )
+            if (preparedImage.artifact !== artifact ||
+                preparedImage.geometry.geometryClass != expectedGeometryClass ||
+                preparedImage.geometry.vertices != expectedVertices ||
+                preparedImage.sampling != expectedSampling ||
+                preparedImage.tintPremultipliedRgba != expectedTint ||
+                command.pixelsWidth != artifact.width ||
+                command.pixelsHeight != artifact.height ||
+                command.pixelsRowBytes != artifact.pixelLayout.normalizedRgba8RowBytes ||
+                command.pixelsGeneration != artifact.sourceGeneration ||
+                command.pixelsContentHash != artifact.contentHash ||
+                command.pixelsProvenance != "prepared-surface-artifact"
+            ) {
+                return refused(
+                    "invalid.surface.prepared.image-lowerer-authority",
+                    "Normalized image facts and prepared lowerer facts must remain identical.",
+                    mapOf("commandId" to commandId.toString()),
+                )
+            }
             val semantic = try {
                 imageGatherer.gatherSemantic(
                     GPUPreparedImagePayloadInput(
@@ -164,27 +221,9 @@ internal object GPUPreparedSurfaceSemanticBuilder {
                             renderStepIdentity = "image.draw.texture_upload",
                         ),
                         artifact = artifact,
-                        geometry = buildPreparedImageGeometry(
-                            geometryClass = if (
-                                command.transform.type == GPUTransformType.Affine &&
-                                (command.transform.skewX != 0f || command.transform.skewY != 0f)
-                            ) {
-                                GPUPreparedImageGeometryClass.Quad
-                            } else {
-                                GPUPreparedImageGeometryClass.Rect
-                            },
-                            vertices = vertices,
-                        ),
-                        sampling = when (command.samplingFilterMode) {
-                            "nearest" -> GPUPreparedImageSampling.Nearest
-                            else -> GPUPreparedImageSampling.Linear
-                        },
-                        tintPremultipliedRgba = listOf(
-                            material.tintR * alpha,
-                            material.tintG * alpha,
-                            material.tintB * alpha,
-                            alpha,
-                        ),
+                        geometry = preparedImage.geometry,
+                        sampling = preparedImage.sampling,
+                        tintPremultipliedRgba = preparedImage.tintPremultipliedRgba,
                         atlasColorPremultipliedRgba = null,
                         atlasSourceBlend = null,
                         targetBounds = targetBounds,

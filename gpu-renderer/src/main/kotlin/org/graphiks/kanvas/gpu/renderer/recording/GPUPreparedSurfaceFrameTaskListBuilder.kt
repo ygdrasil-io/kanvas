@@ -738,6 +738,7 @@ private fun packetForSemantic(
 
 private data class PreparedRouteRunKey(
     val semanticKind: String,
+    val passId: String,
     val renderStepId: String,
     val renderStepVersion: Int,
     val renderPipelineKey: String?,
@@ -771,6 +772,7 @@ private fun List<GPUDrawPacket>.contiguousRouteRuns(
                 is GPUDrawSemanticPayload.CorePrimitive -> "core-primitive"
                 else -> "unsupported"
             },
+            passId = packet.passId,
             renderStepId = coreRouteIdentity ?: packet.renderStepId.value,
             renderStepVersion = if (coreRouteIdentity == null) packet.renderStepVersion else 0,
             renderPipelineKey = if (coreRouteIdentity == null) {
@@ -803,6 +805,7 @@ private fun List<GPUDrawPacket>.contiguousRouteRuns(
                     is GPUDrawSemanticPayload.CorePrimitive -> "core-primitive"
                     else -> "unsupported"
                 },
+                passId = first.passId,
                 renderStepId = firstCoreRouteIdentity ?: first.renderStepId.value,
                 renderStepVersion =
                     if (firstCoreRouteIdentity == null) first.renderStepVersion else 0,

@@ -80,6 +80,17 @@ internal object GPUPreparedDrawImageLowerer {
         capabilities: GPUCapabilities,
     ): GPUPreparedDrawImageLowering {
         val image = operation.image
+        val blendMode = operation.paint?.blendMode ?: BlendMode.SRC_OVER
+        if (blendMode != BlendMode.SRC_OVER) {
+            return GPUPreparedDrawImageLowering.Refused(
+                GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                mapOf(
+                    "sourceId" to image.sourceId,
+                    "blendMode" to blendMode.name,
+                    "supportedBlendMode" to BlendMode.SRC_OVER.name,
+                ),
+            )
+        }
 
         if (image.pixels == null && image.width > 0 && image.height > 0) {
             return GPUPreparedDrawImageLowering.Refused(
@@ -124,9 +135,10 @@ internal object GPUPreparedDrawImageLowerer {
                 operation.transform.skewX * operation.transform.skewY
         if (determinant == 0f || !determinant.isFinite()) {
             return GPUPreparedDrawImageLowering.Refused(
-                "unsupported.transform.affine_singular",
+                GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
                 mapOf(
                     "sourceId" to image.sourceId,
+                    "transformClass" to "singular-affine",
                     "scaleX" to operation.transform.scaleX.toString(),
                     "skewX" to operation.transform.skewX.toString(),
                     "skewY" to operation.transform.skewY.toString(),
@@ -218,6 +230,7 @@ internal object GPUPreparedDrawImageLowerer {
             tintG = tintG,
             tintB = tintB,
             tintA = tintA,
+            rgbaPixels = artifact.tightRgba8BytesForUpload(),
         )
 
         val gpuSrc = GPURect(sx0, sy0, sx1, sy1)
@@ -229,7 +242,6 @@ internal object GPUPreparedDrawImageLowerer {
         val maxY = transformedCorners.maxOf { it.y }
         val bounds = GPUBounds(minX, minY, maxX, maxY)
 
-        val blendMode = operation.paint?.blendMode ?: BlendMode.SRC_OVER
         val blendFacts = blendMode.toGpuBlendFacts()
 
         val blendPlan = GPUBlendPlanner().plan(

@@ -85,6 +85,29 @@ import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 
 class GPUPreparedSurfaceNativePreflightTest {
     @Test
+    fun `frame validation late binds prepared packet generation to active target`() {
+        val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed)
+        val sceneTarget = fixture.framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .single { request -> request.role == GPUFrameResourceRole.SceneTarget }
+            .resource
+        val activeGeneration = 7L
+        val context = GPUFramePreflightContext(
+            targetId = fixture.context.targetId,
+            deviceGeneration = fixture.context.deviceGeneration,
+            targetGeneration = activeGeneration,
+            resourceGenerations = fixture.context.resourceGenerations.mapValues { (resource, generation) ->
+                if (resource == sceneTarget) activeGeneration else generation
+            },
+        )
+
+        assertNull(
+            GPUPreparedSurfaceNativePreflight().validateFramePlan(fixture.framePlan, context),
+        )
+    }
+
+    @Test
     fun `accepted mixed preflight retains exact handle free frame resources scopes and run order`() {
         val input = capturePreparedSurfaceInputs()
 

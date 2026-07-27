@@ -343,6 +343,27 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
     }
 
     @Test
+    fun `adjacent image packets with distinct pass identities form distinct route runs`() {
+        val base = recording(imageCommand(0, 0), imageCommand(1, 1)).taskList
+        val shared = imageSemantic(base, 0)
+        val semanticMap = linkedMapOf<Int, GPUDrawSemanticPayload>(
+            0 to shared,
+            1 to imageSemantic(base, 1, artifactOverride = shared),
+        )
+
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(request(base, semanticMap)),
+        ).taskList
+
+        val renders = taskList.tasks.filterIsInstance<GPUTask.Render>()
+        assertEquals(2, renders.size)
+        assertTrue(renders.all { render ->
+            render.drawPackets.map(GPUDrawPacket::passId).distinct().size == 1
+        })
+        assertFalse(GPUFramePlanner.plan(taskList).atomicallyRefused)
+    }
+
+    @Test
     fun `adjacent image packets with distinct provisional segment keys form distinct route runs`() {
         val original = recording(imageCommand(0, 0), imageCommand(1, 1)).taskList
         val base = original.splitRenders(

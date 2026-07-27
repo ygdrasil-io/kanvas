@@ -1979,6 +1979,7 @@ internal class GPUFramePreflighter(
                             val preparedLateBound =
                                 packet.semanticPayload is GPUDrawSemanticPayload.SolidRect ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive ||
+                                    packet.semanticPayload is GPUDrawSemanticPayload.SampledImage ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.RegisteredUniformRect ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.SeparableBlurRect
                             val acceptedGeneration = when {

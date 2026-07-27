@@ -8,8 +8,6 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskSampling
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
-import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
-import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -27,9 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
-import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.canvas.DisplayOp
 
@@ -72,10 +68,22 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 config = request.candidate.config,
                 capabilities = request.capabilities,
             )
-            val preparedImages = prepareImageVisuals(
+            mapping.preparedRefusal?.let { refusal ->
+                return GPUPreparedSurfaceFrameBuildResult.Refused(
+                    diagnostic(
+                        code = refusal.code,
+                        message = "Prepared Surface operation could not be lowered.",
+                        facts = refusal.facts + mapOf(
+                            "boundary" to "surface",
+                            "commandId" to refusal.commandId.toString(),
+                            "operationIndex" to refusal.operationIndex.toString(),
+                        ),
+                    ),
+                )
+            }
+            val preparedImages = collectPreparedImageVisuals(
                 mapping = mapping,
                 operations = request.candidate.operations,
-                target = request.targetFacts,
             )
             if (preparedImages is PreparedImageVisuals.Refused) {
                 return GPUPreparedSurfaceFrameBuildResult.Refused(preparedImages.diagnostic)
@@ -153,173 +161,78 @@ private sealed interface PreparedImageVisuals {
     data class Refused(val diagnostic: GPUDiagnostic) : PreparedImageVisuals
 }
 
-internal data class GPUPreparedImageCommandSource(
-    val commandId: Int,
-    val operationIndex: Int,
-    val operation: DisplayOp.DrawImage,
-)
-
-private data class GPUPreparedVisualAssociation(
-    val visual: GPUFramePathVisualCommand,
-    val imageSource: GPUPreparedImageCommandSource?,
-)
-
-private fun GPUPreparedImageCommandSource.matchesExactOperation(
-    command: NormalizedDrawCommand.DrawImageRect,
-    operations: List<DisplayOp>,
-): Boolean {
-    val indexedOperation = operations.getOrNull(operationIndex)
-    return commandId == command.commandId.value &&
-        indexedOperation === operation &&
-        indexedOperation is DisplayOp.DrawImage &&
-        indexedOperation.image === operation.image
-}
-
-private fun prepareImageVisuals(
+private fun collectPreparedImageVisuals(
     mapping: GPUOpMapping,
     operations: List<DisplayOp>,
-    target: GPUTargetFacts,
 ): PreparedImageVisuals {
-    val orderedAssociations = mutableListOf<GPUPreparedVisualAssociation>()
-    val mappedCoreVisuals = mapping.visualCommands.iterator()
-    var provenance = GPUFrameProvenance.None
-    operations.forEachIndexed { operationIndex, operation ->
-        when (operation) {
-            is DisplayOp.Annotation -> {
-                if (operation.key == GPU_FRAME_PROVENANCE_ANNOTATION_KEY) {
-                    GPUFrameProvenance.fromAnnotationValue(operation.value)?.let { provenance = it }
-                }
-            }
-            is DisplayOp.SetTransform,
-            is DisplayOp.SetClip,
-            is DisplayOp.FlushAndSnapshot,
-            -> Unit
-            is DisplayOp.DrawImage -> {
-                val commandId = orderedAssociations.size
-                val rawNormalized = operation.toImageRectCommand(
-                    cmdId = GPUDrawCommandID(commandId),
-                    target = target,
-                )
-                val normalized = rawNormalized.copy(
-                    ordering = rawNormalized.ordering.copy(paintOrder = commandId),
-                    source = rawNormalized.source.copy(frameProvenance = provenance),
-                )
-                val clipCoverage = if (normalized.clip.coverageRequest == null) {
-                    org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.NoClip
-                } else {
-                    org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused(
-                        "unsupported.clip.prepared_image_execution_unclassified",
-                    )
-                }
-                val clipExecution = if (clipCoverage ==
-                    org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.NoClip
-                ) {
-                    GPUClipExecutionPlan.NoClip
-                } else {
-                    GPUClipExecutionPlan.Refused(
-                        code = "unsupported.clip.prepared_image_execution_unclassified",
-                        message = "Prepared image clip execution must be classified before recording.",
-                    )
-                }
-                orderedAssociations += GPUPreparedVisualAssociation(
-                    visual = GPUFramePathVisualCommand(
-                        normalized = normalized,
-                        targetSpaceBounds = normalized.bounds,
-                        geometryCoverage = GPUCoverageConsumption.FullOrScissor,
-                        clipCoverage = clipCoverage,
-                        clipExecutionPlan = clipExecution,
-                        blendPlan = normalized.blend.canonicalBlendPlan(),
-                        provenance = provenance,
-                    ),
-                    imageSource = GPUPreparedImageCommandSource(
-                        commandId = commandId,
-                        operationIndex = operationIndex,
-                        operation = operation,
-                    ),
-                )
-            }
-            is DisplayOp.DrawColor,
-            is DisplayOp.Clear,
-            is DisplayOp.DrawPoint,
-            is DisplayOp.DrawPoints,
-            is DisplayOp.DrawRect,
-            is DisplayOp.DrawRRect,
-            is DisplayOp.DrawDRRect,
-            is DisplayOp.DrawPath,
-            -> {
-                if (!mappedCoreVisuals.hasNext()) {
-                    return PreparedImageVisuals.Refused(
-                        imageCommandSourceDiagnostic(
-                            message = "Prepared Surface operation lost its normalized visual command.",
-                            facts = mapOf("operationIndex" to operationIndex.toString()),
-                        ),
-                    )
-                }
-                orderedAssociations += GPUPreparedVisualAssociation(
-                    visual = mappedCoreVisuals.next().withPreparedCommandIdentity(
-                        commandId = orderedAssociations.size,
-                        provenance = provenance,
-                    ),
-                    imageSource = null,
-                )
-            }
-            else -> Unit
-        }
+    val visualOperations = operations.withIndex().filter { (_, operation) ->
+        operation is DisplayOp.DrawImage || operation.isCorePreparedVisual()
     }
-    if (mappedCoreVisuals.hasNext()) {
+    if (visualOperations.size != mapping.visualCommands.size) {
         return PreparedImageVisuals.Refused(
             imageCommandSourceDiagnostic(
-                message = "Prepared Surface mapping retained an unassociated visual command.",
+                message = "Prepared Surface operations and normalized visuals must be bijective.",
+                facts = mapOf(
+                    "operationCount" to visualOperations.size.toString(),
+                    "visualCount" to mapping.visualCommands.size.toString(),
+                ),
             ),
         )
     }
     val artifacts = linkedMapOf<Int, GPUPreparedImageUploadArtifact>()
-    val visuals = mutableListOf<GPUFramePathVisualCommand>()
-    for ((visual, source) in orderedAssociations) {
-        val command = visual.normalized as? NormalizedDrawCommand.DrawImageRect
-        if (command == null) {
-            if (source != null) {
+    visualOperations.zip(mapping.visualCommands).forEachIndexed { commandIndex, (indexed, visual) ->
+        val operationIndex = indexed.index
+        val operation = indexed.value
+        if (visual.normalized.commandId.value != commandIndex ||
+            visual.normalized.ordering.paintOrder != commandIndex
+        ) {
+            return PreparedImageVisuals.Refused(
+                imageCommandSourceDiagnostic(
+                    message = "Prepared Surface command identity no longer matches source order.",
+                    facts = mapOf(
+                        "commandId" to visual.normalized.commandId.value.toString(),
+                        "operationIndex" to operationIndex.toString(),
+                    ),
+                ),
+            )
+        }
+        if (operation !is DisplayOp.DrawImage) {
+            if (visual.normalized is NormalizedDrawCommand.DrawImageRect ||
+                visual.preparedImage != null
+            ) {
                 return PreparedImageVisuals.Refused(
                     imageCommandSourceDiagnostic(
-                        message = "Prepared image source was associated with a non-image command.",
+                        message = "Prepared core operation was associated with image facts.",
                         facts = mapOf(
-                            "commandId" to source.commandId.toString(),
-                            "operationIndex" to source.operationIndex.toString(),
+                            "commandId" to commandIndex.toString(),
+                            "operationIndex" to operationIndex.toString(),
                         ),
                     ),
                 )
             }
-            visuals += visual
-            continue
+            return@forEachIndexed
         }
-        if (source == null || !source.matchesExactOperation(command, operations)) {
-            return PreparedImageVisuals.Refused(
-                diagnostic(
-                    code = "invalid.surface.prepared.image-command-source",
-                    message = "Prepared image command requires its exact indexed Surface operation.",
+        val command = visual.normalized as? NormalizedDrawCommand.DrawImageRect
+            ?: return PreparedImageVisuals.Refused(
+                imageCommandSourceDiagnostic(
+                    message = "Prepared image source was associated with a non-image command.",
                     facts = mapOf(
-                        "commandId" to command.commandId.value.toString(),
-                        "operationIndex" to (source?.operationIndex?.toString() ?: "missing"),
-                        "commandImageSourceId" to command.imageSourceId,
-                        "operationImageSourceId" to (source?.operation?.image?.sourceId ?: "missing"),
+                        "commandId" to commandIndex.toString(),
+                        "operationIndex" to operationIndex.toString(),
                     ),
                 ),
             )
-        }
-        val artifact = when (val prepared = GPUPreparedSurfaceImageSource.prepare(source.operation.image)) {
-            is GPUPreparedImageArtifactResult.Ready -> prepared.artifact
-            is GPUPreparedImageArtifactResult.Refused -> return PreparedImageVisuals.Refused(
-                diagnostic(
-                    code = prepared.code,
-                    message = "Surface image source could not produce an exact prepared artifact.",
-                    facts = prepared.facts + mapOf(
-                        "boundary" to "surface",
-                        "commandId" to command.commandId.value.toString(),
-                        "operationIndex" to source.operationIndex.toString(),
+        val prepared = visual.preparedImage
+            ?: return PreparedImageVisuals.Refused(
+                imageCommandSourceDiagnostic(
+                    message = "Prepared image command lost its lowerer facts.",
+                    facts = mapOf(
+                        "commandId" to commandIndex.toString(),
+                        "operationIndex" to operationIndex.toString(),
                     ),
                 ),
             )
-        }
+        val artifact = prepared.artifact
         val material = command.material as? GPUMaterialDescriptor.ImageDraw
             ?: return PreparedImageVisuals.Refused(
                 diagnostic(
@@ -327,48 +240,41 @@ private fun prepareImageVisuals(
                     message = "Prepared Surface image command lost its image material descriptor.",
                 ),
             )
-        val commandId = command.commandId.value
-        artifacts[commandId] = artifact
-        visuals += visual.copy(
-            normalized = command.copy(
-                material = material.copy(rgbaPixels = artifact.tightRgba8BytesForUpload()),
-                pixelsWidth = artifact.width,
-                pixelsHeight = artifact.height,
-                pixelsFormat = "RGBA8Unorm",
-                pixelsRowBytes = artifact.pixelLayout.normalizedRgba8RowBytes,
-                pixelsGeneration = artifact.sourceGeneration,
-                pixelsContentHash = artifact.contentHash,
-                pixelsProvenance = "prepared-surface-artifact",
-            ),
-        )
+        if (command.imageSourceId != operation.image.sourceId ||
+            material.imageSourceId != operation.image.sourceId ||
+            command.pixelsWidth != artifact.width ||
+            command.pixelsHeight != artifact.height ||
+            command.pixelsRowBytes != artifact.pixelLayout.normalizedRgba8RowBytes ||
+            command.pixelsGeneration != artifact.sourceGeneration ||
+            command.pixelsContentHash != artifact.contentHash ||
+            command.pixelsProvenance != "prepared-surface-artifact"
+        ) {
+            return PreparedImageVisuals.Refused(
+                imageCommandSourceDiagnostic(
+                    message = "Prepared image command does not match its exact lowerer artifact.",
+                    facts = mapOf(
+                        "commandId" to commandIndex.toString(),
+                        "operationIndex" to operationIndex.toString(),
+                    ),
+                ),
+            )
+        }
+        artifacts[commandIndex] = artifact
     }
-    return PreparedImageVisuals.Ready(visuals, artifacts)
+    return PreparedImageVisuals.Ready(mapping.visualCommands.toList(), artifacts)
 }
 
-private fun GPUFramePathVisualCommand.withPreparedCommandIdentity(
-    commandId: Int,
-    provenance: GPUFrameProvenance,
-): GPUFramePathVisualCommand {
-    val identity = GPUDrawCommandID(commandId)
-    val command = when (val current = normalized) {
-        is NormalizedDrawCommand.FillRect -> current.copy(
-            commandId = identity,
-            ordering = current.ordering.copy(paintOrder = commandId),
-            source = current.source.copy(frameProvenance = provenance),
-        )
-        is NormalizedDrawCommand.FillRRect -> current.copy(
-            commandId = identity,
-            ordering = current.ordering.copy(paintOrder = commandId),
-            source = current.source.copy(frameProvenance = provenance),
-        )
-        is NormalizedDrawCommand.FillPath -> current.copy(
-            commandId = identity,
-            ordering = current.ordering.copy(paintOrder = commandId),
-            source = current.source.copy(frameProvenance = provenance),
-        )
-        else -> error("Prepared Surface core mapping produced an unsupported command family.")
-    }
-    return copy(normalized = command, provenance = provenance)
+private fun DisplayOp.isCorePreparedVisual(): Boolean = when (this) {
+    is DisplayOp.DrawColor,
+    is DisplayOp.Clear,
+    is DisplayOp.DrawPoint,
+    is DisplayOp.DrawPoints,
+    is DisplayOp.DrawRect,
+    is DisplayOp.DrawRRect,
+    is DisplayOp.DrawDRRect,
+    is DisplayOp.DrawPath,
+    -> true
+    else -> false
 }
 
 private fun imageCommandSourceDiagnostic(

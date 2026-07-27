@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import java.io.File
+import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertContentEquals
@@ -38,6 +39,7 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.pipeline.ClipOp
@@ -112,6 +114,16 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 packets.map(GPUDrawPacket::targetStateHash).toSet(),
                 label,
             )
+            if (label == "material-alpha") {
+                val semantic = assertIs<GPUDrawSemanticPayload.CorePrimitive>(
+                    packets.single().semanticPayload,
+                )
+                val alpha = 160f / 255f
+                assertEquals(srgbToLinear(40f / 255f) * alpha, semantic.premultipliedRgba[0], 1e-6f)
+                assertEquals(srgbToLinear(120f / 255f) * alpha, semantic.premultipliedRgba[1], 1e-6f)
+                assertEquals(srgbToLinear(208f / 255f) * alpha, semantic.premultipliedRgba[2], 1e-6f)
+                assertEquals(alpha, semantic.premultipliedRgba[3], 1e-6f)
+            }
         }
 
         assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
@@ -142,6 +154,12 @@ class GPUPreparedSurfaceFrameBuilderTest {
             "invalid.core_primitive.coverage_sample.stencil_aa_requires_multisample",
             unsupportedAaPath.diagnostic.code.value,
         )
+    }
+
+    private fun srgbToLinear(encoded: Float): Float = if (encoded <= 0.04045f) {
+        encoded / 12.92f
+    } else {
+        ((encoded + 0.055f) / 1.055f).pow(2.4f)
     }
 
     @Test
@@ -558,6 +576,51 @@ class GPUPreparedSurfaceFrameBuilderTest {
             assertEquals("0", refused.diagnostic.facts["commandId"])
             assertEquals("0", refused.diagnostic.facts["operationIndex"])
             assertTrue(!refused.diagnostic.code.value.startsWith("unsupported.surface.prepared.image-source."))
+        }
+    }
+
+    @Test
+    fun `direct builder propagates DrawImage lowerer refusals transactionally`() {
+        val image = Image(
+            width = GPUPreparedImageTestFixtures.rgbaPremul2x2Width,
+            height = GPUPreparedImageTestFixtures.rgbaPremul2x2Height,
+            colorType = GPUPreparedImageTestFixtures.rgbaPremul2x2ColorType,
+            sourceId = "builder-lowerer-refusal",
+            pixels = GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes,
+            alphaType = AlphaType.PREMUL,
+        )
+        val base = drawImage(image, Rect.fromLTRB(1f, 1f, 5f, 5f))
+        val cases = listOf(
+            base.copy(
+                paint = Paint.fill(Color.WHITE).copy(
+                    shader = Shader.Image(image, sampling = SamplingOptions.Cubic.Mitchell),
+                ),
+            ) to GPUPreparedImageRefusalCodes.SAMPLING_CUBIC,
+            base.copy(
+                transform = Matrix33.makeAll(
+                    1f, 0f, 0f,
+                    0f, 1f, 0f,
+                    0.001f, 0f, 1f,
+                ),
+            ) to GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
+            base.copy(
+                transform = Matrix33.makeAll(
+                    0f, 0f, 0f,
+                    0f, 0f, 0f,
+                ),
+            ) to GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
+            base.copy(
+                paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.MULTIPLY),
+            ) to GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+        )
+
+        cases.forEach { (operation, expectedCode) ->
+            val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+                GPUPreparedSurfaceFrameBuilder.build(imageRequest(listOf(operation))),
+            )
+            assertEquals(expectedCode, refused.diagnostic.code.value)
+            assertEquals("surface", refused.diagnostic.facts["boundary"])
+            assertEquals("0", refused.diagnostic.facts["operationIndex"])
         }
     }
 

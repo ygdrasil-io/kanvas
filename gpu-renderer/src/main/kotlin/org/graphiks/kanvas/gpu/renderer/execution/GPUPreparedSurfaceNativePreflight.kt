@@ -30,6 +30,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputDescriptor
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -404,7 +405,8 @@ internal class GPUPreparedSurfaceNativePreflight {
                 sceneTarget?.resource?.value != expected.targetId ||
                 renders.any { render ->
                     render.drawPackets.any { packet ->
-                        packet.resourceGeneration != expected.targetGeneration
+                        packet.resourceGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION &&
+                            packet.resourceGeneration != expected.targetGeneration
                     }
                 }
             ) {

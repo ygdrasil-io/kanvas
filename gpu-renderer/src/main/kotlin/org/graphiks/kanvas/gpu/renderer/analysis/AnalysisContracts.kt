@@ -973,8 +973,9 @@ class GPUFirstRoutePlanner(
     }
 
     /**
-     * Plans DrawImageRect as CPU-prepared GPU route by default for decoded
-     * image upload, or native when bitmap WGSL capability promotes it.
+     * Plans DrawImageRect as the canonical prepared upload route when the
+     * command already owns a prepared Surface artifact. Other callers retain
+     * the older native-bitmap capability selection.
      *
      * The planner consumes command-owned immutable facts and produces analysis,
      * route, and pass records; it does not decode images, upload textures,
@@ -992,6 +993,8 @@ class GPUFirstRoutePlanner(
         }
 
         return when {
+            command.pixelsProvenance == preparedSurfaceArtifactProvenance ->
+                preparedDrawImageRectRouteDecision(command)
             capabilities.hasFact(firstImageDrawNativeCapabilityName) ->
                 nativeDrawImageRectRouteDecision(command)
             else ->
@@ -2014,6 +2017,9 @@ class GPUFirstRoutePlanner(
 
         /** Render step identity for the DrawImageRect prepared upload route. */
         const val imageDrawRenderStep = "image.draw.texture_upload"
+
+        /** Exact provenance authority emitted by the prepared Surface image lowerer. */
+        const val preparedSurfaceArtifactProvenance = "prepared-surface-artifact"
 
         /** Transform classes accepted by the DrawImageRect route. */
         val acceptedDrawImageRectTransformTypes = setOf(
