@@ -195,6 +195,10 @@ private fun collectPreparedImageVisuals(
                         PreparedVisualSource.Core(operationIndex)
                     }
                 }
+            is DisplayOp.DrawAtlas ->
+                operation.texRects.map {
+                    PreparedVisualSource.Image(operationIndex, operation.atlas)
+                }
             else -> if (operation.isCorePreparedVisual()) {
                 listOf(PreparedVisualSource.Core(operationIndex))
             } else {

@@ -1,0 +1,422 @@
+package org.graphiks.kanvas.surface.gpu
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotSame
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.ClipStackOp
+import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.Blender
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.Rect
+
+class GPUPreparedAtlasLowererTest {
+    @Test
+    fun `array and color lengths refuse transactionally before any sprite`() {
+        val transformMismatch = atlasOperation(
+            transforms = listOf(Matrix33.identity()),
+            texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
+        )
+        val colorMismatch = atlasOperation(
+            transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+            texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
+            colors = listOf(Color.RED),
+        )
+
+        listOf(transformMismatch, colorMismatch).forEach { operation ->
+            val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
+                GPUPreparedAtlasLowerer.lower(operation, 7, 13, context()),
+            )
+            assertEquals(GPUPreparedImageRefusalCodes.ATLAS_ARRAY_LENGTHS, refused.code)
+            assertEquals(null, refused.spriteIndex)
+        }
+    }
+
+    @Test
+    fun `every source rect must be finite nonempty and inside the artifact`() {
+        val invalidRects = listOf(
+            Rect.fromLTRB(Float.NaN, 0f, 1f, 1f),
+            Rect.fromLTRB(1f, 1f, 1f, 2f),
+            Rect.fromLTRB(-1f, 0f, 1f, 1f),
+            Rect.fromLTRB(0f, 0f, 5f, 1f),
+        )
+
+        invalidRects.forEach { invalid ->
+            val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
+                GPUPreparedAtlasLowerer.lower(
+                    atlasOperation(
+                        transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+                        texRects = listOf(quadrant(0, 0), invalid),
+                        colors = listOf(Color.RED, Color.GREEN),
+                    ),
+                    0,
+                    0,
+                    context(),
+                ),
+            )
+            assertEquals(GPUPreparedImageRefusalCodes.ATLAS_GEOMETRY, refused.code)
+            assertEquals(1, refused.spriteIndex)
+            assertEquals("invalid_source_rect", refused.facts["reason"])
+        }
+    }
+
+    @Test
+    fun `identity translation scale rotation reflection and skew preserve four corners UVs and order`() {
+        val spriteTransforms = listOf(
+            Matrix33.identity(),
+            Matrix33.translate(7f, 11f),
+            Matrix33.scale(2f, 3f),
+            Matrix33.rotate(90f),
+            Matrix33.makeAll(-1f, 0f, 0f, 0f, 1f, 0f),
+            Matrix33.skew(0.5f, 0.25f),
+        )
+        val outer = Matrix33.translate(3f, 5f) * Matrix33.scale(2f, 2f)
+        val rects = listOf(
+            quadrant(0, 0),
+            quadrant(1, 0),
+            quadrant(0, 1),
+            quadrant(1, 1),
+            quadrant(0, 0),
+            quadrant(1, 0),
+        )
+        val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
+            GPUPreparedAtlasLowerer.lower(
+                atlasOperation(
+                    transforms = spriteTransforms,
+                    texRects = rects,
+                    colors = List(spriteTransforms.size) { Color.WHITE },
+                    transform = outer,
+                ),
+                17,
+                29,
+                context(),
+            ),
+        )
+
+        assertEquals((17..22).toList(), ready.commands.map { it.normalized.commandId.value })
+        assertEquals((29..34).toList(), ready.commands.map { it.normalized.ordering.paintOrder })
+        ready.commands.forEachIndexed { index, command ->
+            val combined = outer * spriteTransforms[index]
+            val rect = rects[index]
+            val expectedPositions = listOf(
+                Point(rect.left, rect.top),
+                Point(rect.right, rect.top),
+                Point(rect.right, rect.bottom),
+                Point(rect.left, rect.bottom),
+            ).map(combined::times).map { it.x to it.y }
+            val geometry = requireNotNull(command.preparedImage).geometry
+            assertEquals(expectedPositions, geometry.vertices.map { it.x to it.y }, "positions $index")
+            assertEquals(
+                listOf(
+                    rect.left / 4f to rect.top / 4f,
+                    rect.right / 4f to rect.top / 4f,
+                    rect.right / 4f to rect.bottom / 4f,
+                    rect.left / 4f to rect.bottom / 4f,
+                ),
+                geometry.vertices.map { it.u to it.v },
+                "UVs $index",
+            )
+            val expectedClass = if (combined.skewX == 0f && combined.skewY == 0f) {
+                GPUPreparedImageGeometryClass.Rect
+            } else {
+                GPUPreparedImageGeometryClass.Quad
+            }
+            assertEquals(expectedClass, geometry.geometryClass, "geometry class $index")
+        }
+    }
+
+    @Test
+    fun `skewed sprite remains a quad and is never substituted by its bounding box`() {
+        val rect = quadrant(0, 0)
+        val transform = Matrix33.makeAll(1f, 0.75f, 4f, 0.25f, 1f, 6f)
+        val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
+            GPUPreparedAtlasLowerer.lower(
+                atlasOperation(
+                    transforms = listOf(transform),
+                    texRects = listOf(rect),
+                    colors = listOf(Color.WHITE),
+                ),
+                0,
+                0,
+                context(),
+            ),
+        )
+
+        val geometry = requireNotNull(ready.commands.single().preparedImage).geometry
+        assertEquals(GPUPreparedImageGeometryClass.Quad, geometry.geometryClass)
+        assertEquals(
+            listOf(4f to 6f, 6f to 6.5f, 7.5f to 8.5f, 5.5f to 8f),
+            geometry.vertices.map { it.x to it.y },
+        )
+        assertTrue(geometry.vertices[1].x != geometry.vertices[2].x)
+        assertTrue(geometry.vertices[0].y != geometry.vertices[1].y)
+    }
+
+    @Test
+    fun `perspective singular and later invalid transforms refuse the entire atlas`() {
+        val perspective = Matrix33.makeAll(
+            1f, 0f, 0f,
+            0f, 1f, 0f,
+            0.01f, 0f, 1f,
+        )
+        val singular = Matrix33.makeAll(1f, 2f, 0f, 2f, 4f, 0f)
+
+        listOf(perspective, singular).forEach { invalid ->
+            val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
+                GPUPreparedAtlasLowerer.lower(
+                    atlasOperation(
+                        transforms = listOf(Matrix33.identity(), invalid),
+                        texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
+                        colors = listOf(Color.RED, Color.GREEN),
+                    ),
+                    0,
+                    0,
+                    context(),
+                ),
+            )
+            assertEquals(GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING, refused.code)
+            assertEquals(1, refused.spriteIndex)
+        }
+    }
+
+    @Test
+    fun `sprites share one artifact and sampler choice but keep distinct dynamic uniforms`() {
+        val colors = listOf(Color.fromArgb(128, 128, 0, 0), Color.fromArgb(64, 0, 64, 0))
+        val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
+            GPUPreparedAtlasLowerer.lower(
+                atlasOperation(
+                    transforms = listOf(Matrix33.identity(), Matrix33.translate(8f, 0f)),
+                    texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
+                    colors = colors,
+                    paint = Paint.fill(Color.fromArgb(128, 255, 255, 255)),
+                ),
+                3,
+                9,
+                context(),
+            ),
+        )
+
+        val first = requireNotNull(ready.commands[0].preparedImage)
+        val second = requireNotNull(ready.commands[1].preparedImage)
+        assertSame(first.artifact, second.artifact)
+        assertEquals(first.sampling, second.sampling)
+        assertNotSame(first, second)
+        assertTrue(first.geometry.vertices != second.geometry.vertices)
+        assertTrue(first.atlasColorPremultipliedRgba != second.atlasColorPremultipliedRgba)
+        assertEquals(listOf(128f / 255f, 128f / 255f, 128f / 255f, 128f / 255f), first.tintPremultipliedRgba)
+        assertEquals(
+            listOf((128f / 255f) * (128f / 255f), 0f, 0f, 128f / 255f),
+            first.atlasColorPremultipliedRgba,
+        )
+        assertEquals(
+            listOf(0f, (64f / 255f) * (64f / 255f), 0f, 64f / 255f),
+            second.atlasColorPremultipliedRgba,
+        )
+    }
+
+    @Test
+    fun `closed source blend set maps exactly and every other BlendMode refuses transactionally`() {
+        val accepted = mapOf(
+            BlendMode.SRC to GPUPreparedAtlasSourceBlend.Src,
+            BlendMode.DST to GPUPreparedAtlasSourceBlend.Dst,
+            BlendMode.SRC_OVER to GPUPreparedAtlasSourceBlend.SrcOver,
+            BlendMode.PLUS to GPUPreparedAtlasSourceBlend.Plus,
+            BlendMode.MODULATE to GPUPreparedAtlasSourceBlend.Modulate,
+        )
+
+        accepted.forEach { (mode, expected) ->
+            val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
+                GPUPreparedAtlasLowerer.lower(
+                    atlasOperation(
+                        transforms = listOf(Matrix33.identity()),
+                        texRects = listOf(quadrant(0, 0)),
+                        colors = listOf(Color.RED),
+                        blendMode = mode,
+                    ),
+                    0,
+                    0,
+                    context(),
+                ),
+            )
+            assertEquals(expected, ready.commands.single().preparedImage?.atlasSourceBlend)
+        }
+
+        (BlendMode.entries - accepted.keys).forEach { mode ->
+            val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
+                GPUPreparedAtlasLowerer.lower(
+                    atlasOperation(
+                        transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+                        texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
+                        colors = listOf(Color.RED, Color.GREEN),
+                        blendMode = mode,
+                    ),
+                    0,
+                    0,
+                    context(),
+                ),
+            )
+            assertEquals(GPUPreparedImageRefusalCodes.ATLAS_SOURCE_BLEND, refused.code, mode.name)
+            assertEquals(null, refused.spriteIndex, mode.name)
+            assertEquals(mode.name, refused.facts["blendMode"], mode.name)
+        }
+    }
+
+    @Test
+    fun `sprite color paint alpha clip destination blend and order are each applied once`() {
+        val clip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.RectOp(
+                    Rect.fromLTRB(2f, 3f, 31f, 37f),
+                    ClipOp.INTERSECT,
+                    false,
+                ),
+            ),
+        )
+        val paint = Paint.fill(Color.fromArgb(128, 255, 255, 255)).copy(
+            blendMode = BlendMode.PLUS,
+            blender = Blender.Mode(BlendMode.SRC_OVER),
+        )
+        val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
+            GPUPreparedAtlasLowerer.lower(
+                atlasOperation(
+                    transforms = listOf(Matrix33.identity()),
+                    texRects = listOf(quadrant(0, 0)),
+                    colors = listOf(Color.fromArgb(128, 255, 64, 0)),
+                    blendMode = BlendMode.MODULATE,
+                    paint = paint,
+                    clip = clip,
+                ),
+                41,
+                73,
+                context(),
+            ),
+        )
+
+        val visual = ready.commands.single()
+        val command = assertIs<NormalizedDrawCommand.DrawImageRect>(visual.normalized)
+        val prepared = requireNotNull(visual.preparedImage)
+        assertEquals(41, command.commandId.value)
+        assertEquals(73, command.ordering.paintOrder)
+        assertEquals(GPUBlendMode.SRC_OVER, command.blend.mode)
+        assertEquals(listOf(128f / 255f, 128f / 255f, 128f / 255f, 128f / 255f), prepared.tintPremultipliedRgba)
+        assertEquals(
+            listOf(
+                128f / 255f,
+                (64f / 255f) * (128f / 255f),
+                0f,
+                128f / 255f,
+            ),
+            prepared.atlasColorPremultipliedRgba,
+        )
+        assertEquals(GPUPreparedAtlasSourceBlend.Modulate, prepared.atlasSourceBlend)
+        assertEquals(command.clip, visual.normalized.clip)
+        assertTrue(command.clip.coverageRequest != null)
+    }
+
+    @Test
+    fun `arithmetic destination blender and non SrcOver destination mode refuse without a prefix`() {
+        val invalidPaints = listOf(
+            Paint().copy(blender = Blender.Arithmetic(0f, 1f, 1f, 0f)),
+            Paint().copy(blendMode = BlendMode.PLUS),
+        )
+
+        invalidPaints.forEach { paint ->
+            val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
+                GPUPreparedAtlasLowerer.lower(
+                    atlasOperation(
+                        transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+                        texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
+                        colors = listOf(Color.RED, Color.GREEN),
+                        paint = paint,
+                    ),
+                    0,
+                    0,
+                    context(),
+                ),
+            )
+            assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.code)
+            assertEquals(null, refused.spriteIndex)
+        }
+    }
+
+    private fun atlasOperation(
+        transforms: List<Matrix33>,
+        texRects: List<Rect>,
+        colors: List<Color>? = null,
+        blendMode: BlendMode = BlendMode.SRC_OVER,
+        paint: Paint? = null,
+        transform: Matrix33 = Matrix33.identity(),
+        clip: ClipStack = ClipStack.WideOpen,
+    ) = DisplayOp.DrawAtlas(
+        atlas = atlasImage(),
+        transforms = transforms,
+        texRects = texRects,
+        colors = colors,
+        blendMode = blendMode,
+        paint = paint,
+        transform = transform,
+        clip = clip,
+    )
+
+    private fun atlasImage() = Image(
+        width = GPUPreparedImageTestFixtures.atlas4x4Width,
+        height = GPUPreparedImageTestFixtures.atlas4x4Height,
+        colorType = GPUPreparedImageTestFixtures.atlas4x4ColorType,
+        sourceId = "task-9-atlas",
+        pixels = GPUPreparedImageTestFixtures.atlas4x4Bytes,
+        alphaType = AlphaType.PREMUL,
+    )
+
+    private fun quadrant(x: Int, y: Int): Rect = Rect.fromLTRB(
+        x * 2f,
+        y * 2f,
+        x * 2f + 2f,
+        y * 2f + 2f,
+    )
+
+    private fun context() = GPUPreparedImageLoweringContext(
+        provenance = org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance.GmContent,
+        target = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+        config = RenderConfig.DEFAULT,
+        capabilities = GPUCapabilities(
+            implementation = GPUImplementationIdentity(
+                facadeName = "test",
+                implementationName = "fake",
+                adapterName = "mock",
+                deviceName = "mock-device",
+            ),
+            facts = emptyList(),
+            knownUnsupportedFacts = emptyList(),
+            snapshotId = "task-9-atlas-lowerer",
+            limits = GPULimits(
+                maxTextureDimension2D = 8192,
+                copyBytesPerRowAlignment = 256,
+                minUniformBufferOffsetAlignment = 256,
+                maxBufferSize = 1L shl 30,
+                maxDynamicUniformBuffersPerPipelineLayout = 1,
+            ),
+            rendererFeatures = setOf(GPURendererFeature.RenderPass),
+        ),
+    )
+}

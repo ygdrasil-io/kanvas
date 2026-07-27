@@ -23,11 +23,14 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendTriangleData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendUniformPayloadDraw
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexColorData
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendVertexPositionUVData
+import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
@@ -110,6 +113,34 @@ class GPUAlphaImageMaterialTest {
         assertEquals(1f, material.tintG, 0.001f)
         assertEquals(0f, material.tintB, 0.001f)
         assertEquals(halfAlpha, material.tintA, 0.001f)
+    }
+
+    @Test
+    fun `prepared alpha image retains upload bytes only in the immutable artifact`() {
+        val preparedAlphaImage = alphaImage.copy(alphaType = AlphaType.PREMUL)
+        val operation = DisplayOp.DrawImage(
+            image = preparedAlphaImage,
+            src = Rect(0f, 0f, 2f, 1f),
+            dst = Rect(0f, 0f, 2f, 1f),
+            paint = Paint.fill(Color.RED).copy(
+                shader = Shader.Image(preparedAlphaImage, sampling = SamplingOptions.NEAREST),
+            ),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = listOf(operation),
+            target = GPUTargetFacts(width = 16, height = 16, colorFormat = "rgba8unorm-srgb"),
+            config = RenderConfig.DEFAULT,
+            capabilities = GPUProductFlagConfig().buildCapabilities(),
+        )
+        val visual = inventory.visualCommands.single()
+        val material = visual.normalized.material as GPUMaterialDescriptor.ImageDraw
+        val prepared = requireNotNull(visual.preparedImage)
+
+        assertEquals(0, inventory.legacyDump.invocationCount)
+        assertEquals(0, material.rgbaPixels.size)
+        assertArrayEquals(expandedAlphaPixels, prepared.artifact.tightRgba8BytesForUpload())
     }
 
     @Test

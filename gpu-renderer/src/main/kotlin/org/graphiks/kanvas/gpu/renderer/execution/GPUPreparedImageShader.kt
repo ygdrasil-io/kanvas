@@ -211,8 +211,24 @@ internal val GPU_PREPARED_IMAGE_WGSL: String = """
     fn fs_main(input: PreparedImageVertexOutput) -> @location(0) vec4<f32> {
         let sampled = textureSample(image_texture, image_sampler, input.uv);
         if (image.flags.x == 0u) {
-            let source = vec4<f32>(sampled.rgb * sampled.a, sampled.a);
-            return vec4<f32>(source.rgb * image.tint.rgb, source.a * image.tint.a);
+            let sampled_source = vec4<f32>(sampled.rgb * sampled.a, sampled.a);
+            var combined = sampled_source;
+            if (image.flags.y == 1u) {
+                combined = image.atlas_color;
+            }
+            if (image.flags.y == 2u) {
+                combined = sampled_source;
+            }
+            if (image.flags.y == 3u) {
+                combined = atlas_source_over(image.atlas_color, sampled_source);
+            }
+            if (image.flags.y == 4u) {
+                combined = min(image.atlas_color + sampled_source, vec4<f32>(1.0));
+            }
+            if (image.flags.y == 5u) {
+                combined = image.atlas_color * sampled_source;
+            }
+            return vec4<f32>(combined.rgb * image.tint.rgb, combined.a * image.tint.a);
         }
         let coverage = sampled.r;
         if (image.flags.y == 0u) {

@@ -33,9 +33,12 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
 import org.graphiks.kanvas.gpu.renderer.recording.buildPreparedImageGeometry
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.SamplingOptions
+import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -61,6 +64,8 @@ data class GPUPreparedImageDrawFacts(
     val sampling: GPUPreparedImageSampling,
     val geometry: GPUPreparedImageGeometry,
     val tintPremultipliedRgba: List<Float>,
+    val atlasColorPremultipliedRgba: List<Float>? = null,
+    val atlasSourceBlend: GPUPreparedAtlasSourceBlend? = null,
 )
 
 sealed interface GPUPreparedDrawImageLowering {
@@ -104,10 +109,21 @@ internal object GPUPreparedDrawImageLowerer {
             )
         }
 
-        val requestedSampling = operation.paint?.let { p ->
-            val sh = p.shader
-            (sh as? org.graphiks.kanvas.paint.Shader.Image)?.sampling
+        val requestedImageShader = operation.paint?.shader as? Shader.Image
+        if (requestedImageShader != null &&
+            (requestedImageShader.tileModeX != TileMode.CLAMP ||
+                requestedImageShader.tileModeY != TileMode.CLAMP)
+        ) {
+            return GPUPreparedDrawImageLowering.Refused(
+                GPUPreparedImageRefusalCodes.TILE_MODE,
+                mapOf(
+                    "sourceId" to image.sourceId,
+                    "tileModeX" to requestedImageShader.tileModeX.name,
+                    "tileModeY" to requestedImageShader.tileModeY.name,
+                ),
+            )
         }
+        val requestedSampling = requestedImageShader?.sampling
         val sampling = when (requestedSampling) {
             SamplingOptions.NEAREST -> GPUPreparedImageSampling.Nearest
             SamplingOptions.LINEAR,

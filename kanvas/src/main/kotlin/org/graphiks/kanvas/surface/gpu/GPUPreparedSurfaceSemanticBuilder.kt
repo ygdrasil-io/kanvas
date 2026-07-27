@@ -195,11 +195,15 @@ internal object GPUPreparedSurfaceSemanticBuilder {
                 material.tintB * alpha,
                 alpha,
             )
+            val atlasFactsPaired =
+                (preparedImage.atlasColorPremultipliedRgba == null) ==
+                    (preparedImage.atlasSourceBlend == null)
             if (preparedImage.artifact !== artifact ||
                 preparedImage.geometry.geometryClass != expectedGeometryClass ||
                 preparedImage.geometry.vertices != expectedVertices ||
                 preparedImage.sampling != expectedSampling ||
                 preparedImage.tintPremultipliedRgba != expectedTint ||
+                !atlasFactsPaired ||
                 command.pixelsWidth != artifact.width ||
                 command.pixelsHeight != artifact.height ||
                 command.pixelsRowBytes != artifact.pixelLayout.normalizedRgba8RowBytes ||
@@ -224,8 +228,9 @@ internal object GPUPreparedSurfaceSemanticBuilder {
                         geometry = preparedImage.geometry,
                         sampling = preparedImage.sampling,
                         tintPremultipliedRgba = preparedImage.tintPremultipliedRgba,
-                        atlasColorPremultipliedRgba = null,
-                        atlasSourceBlend = null,
+                        atlasColorPremultipliedRgba =
+                            preparedImage.atlasColorPremultipliedRgba,
+                        atlasSourceBlend = preparedImage.atlasSourceBlend,
                         targetBounds = targetBounds,
                         scissorBounds = scissor,
                         blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),

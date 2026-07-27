@@ -216,6 +216,38 @@ internal object GPUOpMapper {
                         )
                     }
                 }
+                is DisplayOp.DrawAtlas -> {
+                    val commandId = visual.size
+                    val context = GPUPreparedImageLoweringContext(
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                        capabilities = capabilities,
+                    )
+                    when (
+                        val lowered = GPUPreparedAtlasLowerer.lower(
+                            operation = operation,
+                            firstCommandId = commandId,
+                            firstPaintOrder = commandId,
+                            context = context,
+                        )
+                    ) {
+                        is GPUPreparedAtlasLowering.Ready -> visual += lowered.commands
+                        is GPUPreparedAtlasLowering.Refused -> return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            legacyDump = legacy.dump(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = commandId,
+                                operationIndex = operationIndex,
+                                code = lowered.code,
+                                facts = lowered.facts + listOfNotNull(
+                                    lowered.spriteIndex?.let { "spriteIndex" to it.toString() },
+                                ),
+                            ),
+                        )
+                    }
+                }
                 else -> {
                     val paintOrder = visual.size
                     val lowered = lowerPreparedCoreVisual(

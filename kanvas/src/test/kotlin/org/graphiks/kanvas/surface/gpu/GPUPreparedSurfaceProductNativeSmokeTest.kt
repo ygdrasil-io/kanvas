@@ -10,10 +10,13 @@ import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.PixelFormat
@@ -290,6 +293,78 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertEquals(1L, result.evidence.targetCloses)
         assertEquals(1L, result.evidence.submits)
         assertEquals(1L, result.evidence.readbackCopies)
+        assertEquals(0, result.evidence.activeNativePayloads)
+    }
+
+    @Test
+    fun `direct affine atlas has prepared route pixels and closed product gate evidence`() {
+        val atlas = image(
+            width = GPUPreparedImageTestFixtures.atlas4x4Width,
+            height = GPUPreparedImageTestFixtures.atlas4x4Height,
+            colorType = GPUPreparedImageTestFixtures.atlas4x4ColorType,
+            sourceId = "native-atlas",
+            pixels = GPUPreparedImageTestFixtures.atlas4x4Bytes,
+        )
+        val operations = listOf(
+            rect(Rect.fromLTRB(12f, 12f, 16f, 16f), Color.GREEN),
+            DisplayOp.DrawAtlas(
+                atlas = atlas,
+                transforms = listOf(
+                    Matrix33.translate(2f, 2f),
+                    Matrix33.translate(8f, 2f),
+                ),
+                texRects = listOf(
+                    Rect.fromLTRB(0f, 0f, 2f, 2f),
+                    Rect.fromLTRB(2f, 0f, 4f, 2f),
+                ),
+                colors = listOf(Color.BLUE, Color.RED),
+                blendMode = BlendMode.SRC,
+                paint = Paint.fill(Color.WHITE),
+                transform = Matrix33.identity(),
+                clip = ClipStack.WideOpen,
+            ),
+        )
+        val inventory = GPUFramePathApiInventory.plan(
+            operations = operations,
+            target = GPUTargetFacts(16, 16, "rgba8unorm-srgb"),
+            config = RenderConfig.DEFAULT,
+            capabilities = GPUProductFlagConfig().buildCapabilities(),
+        )
+        assertEquals(null, inventory.preparedRefusal)
+        assertEquals(0, inventory.legacyDump.invocationCount)
+        assertTrue(inventory.visualCommands.any { it.normalized.source.operation == "drawAtlas" })
+        assertEquals(
+            "legacy.surface.prepared.family.images",
+            assertIs<GPUPreparedSurfaceEligibility.Legacy>(
+                GPUPreparedSurfaceFrameGate.classify(operations, RenderConfig.DEFAULT),
+            ).code,
+        )
+
+        val color = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+        )
+        val execution = GPUPreparedSurfaceFrameExecutor(
+            GPUPreparedSurfaceNativeBackendPortFactory,
+        ).execute(
+            GPUPreparedSurfaceExecutionRequest(
+                candidate = GPUPreparedSurfaceEligibility.Candidate(
+                    operations = operations,
+                    config = RenderConfig.DEFAULT,
+                    color = color,
+                ),
+                width = 16,
+                height = 16,
+            ),
+        )
+        val result = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            execution,
+            execution.toString(),
+        )
+
+        assertPixel(result.rgba, 16, 3, 3, listOf(0, 0, 255, 255))
+        assertPixel(result.rgba, 16, 11, 3, listOf(255, 0, 0, 255))
+        assertPixel(result.rgba, 16, 13, 13, listOf(0, 255, 0, 255))
+        assertEquals(1L, result.evidence.submits)
         assertEquals(0, result.evidence.activeNativePayloads)
     }
 

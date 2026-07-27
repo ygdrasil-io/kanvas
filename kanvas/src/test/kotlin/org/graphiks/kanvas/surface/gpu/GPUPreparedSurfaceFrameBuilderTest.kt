@@ -26,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
@@ -55,6 +56,58 @@ import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceFrameBuilderTest {
+    @Test
+    fun `prepared atlas expands to ordered sampled packets sharing one artifact with distinct uniforms`() {
+        val atlas = atlasImage("builder-atlas")
+        val operation = DisplayOp.DrawAtlas(
+            atlas = atlas,
+            transforms = listOf(
+                Matrix33.translate(2f, 3f),
+                Matrix33.translate(12f, 5f) * Matrix33.skew(0.25f, 0f),
+            ),
+            texRects = listOf(
+                Rect.fromLTRB(0f, 0f, 2f, 2f),
+                Rect.fromLTRB(2f, 0f, 4f, 2f),
+            ),
+            colors = listOf(Color.RED, Color.fromArgb(128, 0, 128, 0)),
+            blendMode = BlendMode.MODULATE,
+            paint = Paint.fill(Color.fromArgb(192, 255, 255, 255)),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        val buildResult = GPUPreparedSurfaceFrameBuilder.build(imageRequest(listOf(operation)))
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            buildResult,
+            buildResult.toString(),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val semantics = packets.map { packet ->
+            assertIs<GPUDrawSemanticPayload.SampledImage>(packet.semanticPayload)
+        }
+        val uploads = ready.taskList.tasks.filterIsInstance<GPUTask.Upload>()
+            .mapNotNull(GPUTask.Upload::imageResourcePlan)
+
+        assertEquals(listOf(0, 1), packets.map(GPUDrawPacket::commandIdValue))
+        assertEquals(2, ready.visualOperationCount)
+        assertEquals(1, semantics.map { it.artifact.key }.toSet().size)
+        assertEquals(1, uploads.size)
+        assertEquals(
+            listOf(GPUPreparedAtlasSourceBlend.Modulate, GPUPreparedAtlasSourceBlend.Modulate),
+            semantics.map { it.atlasSourceBlend },
+        )
+        assertEquals(
+            listOf(1f, 0f, 0f, 1f),
+            semantics[0].atlasColorPremultipliedRgba,
+        )
+        assertEquals(
+            listOf(0f, (128f / 255f) * (128f / 255f), 0f, 128f / 255f),
+            semantics[1].atlasColorPremultipliedRgba,
+        )
+        assertNotEquals(semantics[0].canonicalHash, semantics[1].canonicalHash)
+    }
+
     @Test
     fun `prepared image nine expands to nine ordered packets with one artifact upload`() {
         val image = imageNine("builder-nine")
@@ -874,6 +927,15 @@ class GPUPreparedSurfaceFrameBuilderTest {
         colorType = GPUPreparedImageTestFixtures.imageNine6x6ColorType,
         sourceId = sourceId,
         pixels = GPUPreparedImageTestFixtures.imageNine6x6Bytes,
+        alphaType = AlphaType.PREMUL,
+    )
+
+    private fun atlasImage(sourceId: String): Image = Image(
+        width = GPUPreparedImageTestFixtures.atlas4x4Width,
+        height = GPUPreparedImageTestFixtures.atlas4x4Height,
+        colorType = GPUPreparedImageTestFixtures.atlas4x4ColorType,
+        sourceId = sourceId,
+        pixels = GPUPreparedImageTestFixtures.atlas4x4Bytes,
         alphaType = AlphaType.PREMUL,
     )
 
