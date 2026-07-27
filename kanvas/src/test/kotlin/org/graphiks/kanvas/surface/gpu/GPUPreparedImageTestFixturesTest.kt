@@ -213,32 +213,21 @@ class GPUPreparedImageTestFixturesTest {
     }
 
     @Test
-    fun `fixtures hash is stable`() {
-        assertEquals(
-            GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes.contentHashCode(),
-            GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes.contentHashCode(),
-            "rgba premul 2x2 hash must be stable",
+    fun `every fixture access returns an isolated byte snapshot`() {
+        val fixtures = listOf<() -> ByteArray>(
+            { GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes },
+            { GPUPreparedImageTestFixtures.bgraOpaque2x2Bytes },
+            { GPUPreparedImageTestFixtures.a8_3x1Bytes },
+            { GPUPreparedImageTestFixtures.imageNine6x6Bytes },
+            { GPUPreparedImageTestFixtures.atlas4x4Bytes },
         )
-        assertEquals(
-            GPUPreparedImageTestFixtures.bgraOpaque2x2Bytes.contentHashCode(),
-            GPUPreparedImageTestFixtures.bgraOpaque2x2Bytes.contentHashCode(),
-            "bgra opaque 2x2 hash must be stable",
-        )
-        assertEquals(
-            GPUPreparedImageTestFixtures.a8_3x1Bytes.contentHashCode(),
-            GPUPreparedImageTestFixtures.a8_3x1Bytes.contentHashCode(),
-            "a8 3x1 hash must be stable",
-        )
-        assertEquals(
-            GPUPreparedImageTestFixtures.imageNine6x6Bytes.contentHashCode(),
-            GPUPreparedImageTestFixtures.imageNine6x6Bytes.contentHashCode(),
-            "image nine 6x6 hash must be stable",
-        )
-        assertEquals(
-            GPUPreparedImageTestFixtures.atlas4x4Bytes.contentHashCode(),
-            GPUPreparedImageTestFixtures.atlas4x4Bytes.contentHashCode(),
-            "atlas 4x4 hash must be stable",
-        )
+
+        fixtures.forEachIndexed { index, fixture ->
+            val expected = fixture().copyOf()
+            val mutated = fixture()
+            mutated[0] = (mutated[0].toInt() xor 0xff).toByte()
+            assertArrayEquals(expected, fixture(), "fixture $index leaked a mutation")
+        }
     }
 
     @Test

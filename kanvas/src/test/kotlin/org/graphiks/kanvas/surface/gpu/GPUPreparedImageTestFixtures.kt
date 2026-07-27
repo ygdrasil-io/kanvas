@@ -29,7 +29,7 @@ object GPUPreparedImageTestFixtures {
      * | (0,1) blue    |   0 |   0 | 128 | 128 |
      * | (1,1) white   | 128 | 128 | 128 | 128 |
      */
-    val rgbaPremul2x2Bytes: ByteArray = byteArrayOf(
+    private val rgbaPremul2x2Storage: ByteArray = byteArrayOf(
         // row 0
         128.toByte(), 0, 0, 128.toByte(),     // red premul
         0, 128.toByte(), 0, 128.toByte(),     // green premul
@@ -37,6 +37,9 @@ object GPUPreparedImageTestFixtures {
         0, 0, 128.toByte(), 128.toByte(),     // blue premul
         128.toByte(), 128.toByte(), 128.toByte(), 128.toByte(), // white premul
     )
+
+    val rgbaPremul2x2Bytes: ByteArray
+        get() = rgbaPremul2x2Storage.copyOf()
 
     // ---- BGRA opaque 2×2 ------------------------------------------------------
 
@@ -48,7 +51,7 @@ object GPUPreparedImageTestFixtures {
      * BGRA opaque 2×2: same logical colours as the RGBA fixture, but with
      * BGRA byte order and fully opaque alpha.
      */
-    val bgraOpaque2x2Bytes: ByteArray = byteArrayOf(
+    private val bgraOpaque2x2Storage: ByteArray = byteArrayOf(
         // row 0
         0, 0, 255.toByte(), 255.toByte(),     // red
         0, 255.toByte(), 0, 255.toByte(),     // green
@@ -57,14 +60,20 @@ object GPUPreparedImageTestFixtures {
         255.toByte(), 255.toByte(), 255.toByte(), 255.toByte(), // white
     )
 
+    val bgraOpaque2x2Bytes: ByteArray
+        get() = bgraOpaque2x2Storage.copyOf()
+
     // ---- A8 3×1 ---------------------------------------------------------------
 
     val a8_3x1Width = 3
     val a8_3x1Height = 1
     val a8_3x1ColorType = ColorType.ALPHA_8
 
+    private val a8_3x1Storage: ByteArray = byteArrayOf(0, 128.toByte(), 255.toByte())
+
     /** A8 3×1: 0 (transparent), 128 (half), 255 (fully opaque). */
-    val a8_3x1Bytes: ByteArray = byteArrayOf(0, 128.toByte(), 255.toByte())
+    val a8_3x1Bytes: ByteArray
+        get() = a8_3x1Storage.copyOf()
 
     // ---- Image nine / lattice 6×6 ---------------------------------------------
 
@@ -83,7 +92,10 @@ object GPUPreparedImageTestFixtures {
      * | edges left/right|   0 | 255 |   0 | 255 |
      * | centre          |   0 |   0 | 255 | 255 |
      */
-    val imageNine6x6Bytes: ByteArray = buildImageNineBytes()
+    val imageNine6x6Bytes: ByteArray
+        get() = imageNine6x6Storage.copyOf()
+
+    private val imageNine6x6Storage: ByteArray = buildImageNineBytes()
 
     private fun buildImageNineBytes(): ByteArray {
         val w = 6
@@ -134,7 +146,10 @@ object GPUPreparedImageTestFixtures {
      * | (0,1) blue |   0 |   0 | 255 | 255 |
      * | (1,1) white| 128 | 128 | 128 | 128 |
      */
-    val atlas4x4Bytes: ByteArray = buildAtlasBytes()
+    val atlas4x4Bytes: ByteArray
+        get() = atlas4x4Storage.copyOf()
+
+    private val atlas4x4Storage: ByteArray = buildAtlasBytes()
 
     private fun buildAtlasBytes(): ByteArray {
         val w = 4
