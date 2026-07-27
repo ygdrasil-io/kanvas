@@ -165,15 +165,26 @@ object GPUPreparedImagePixelOracle {
     // ---- Comparison oracles ---------------------------------------------------
 
     /** Returns true when every channel of [a] equals the corresponding channel of [b]. */
-    fun exactMatch(a: ByteArray, b: ByteArray): Boolean = a.contentEquals(b)
+    fun rawExactMatch(a: ByteArray, b: ByteArray): Boolean = a.contentEquals(b)
 
     /**
-     * Returns true when the maximum per-channel delta between [a] and [b]
-     * is at most 1 (one LSB).  This is the accepted tolerance for bilinear
-     * filtering comparisons.
+     * Returns the true unsigned maximum per-channel absolute difference
+     * between [a] and [b].  Both arrays must be the same length.
      */
-    fun linearMatch(a: ByteArray, b: ByteArray): Boolean =
-        a.indices.all { i -> abs(a[i].toInt().and(0xFF) - b[i].toInt().and(0xFF)) <= 1 }
+    fun maxChannelDelta(a: ByteArray, b: ByteArray): Int {
+        require(a.size == b.size)
+        return a.indices.maxOfOrNull { index ->
+            kotlin.math.abs((a[index].toInt() and 0xff) - (b[index].toInt() and 0xff))
+        } ?: 0
+    }
+
+    /**
+     * Returns true when [maxChannelDelta] between [a] and [b] is at most 1
+     * (one LSB).  This is the accepted tolerance for bilinear-filtering
+     * comparisons against the physical colour oracle.
+     */
+    fun matchesWithinOneLsb(a: ByteArray, b: ByteArray): Boolean =
+        maxChannelDelta(a, b) <= 1
 
     // ---- Internal helpers -----------------------------------------------------
 

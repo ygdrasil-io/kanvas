@@ -308,7 +308,7 @@ class GPUPreparedImageTestFixturesTest {
         val oracle = GPUPreparedImagePixelOracle
         val a = ia(10, 20, 30, 40)
         val b = ia(10, 20, 30, 40)
-        assertTrue(oracle.exactMatch(a, b))
+        assertTrue(oracle.rawExactMatch(a, b))
     }
 
     @Test
@@ -316,7 +316,7 @@ class GPUPreparedImageTestFixturesTest {
         val oracle = GPUPreparedImagePixelOracle
         val a = ia(10, 20, 30, 40)
         val b = ia(10, 20, 30, 41)
-        assertTrue(!oracle.exactMatch(a, b))
+        assertTrue(!oracle.rawExactMatch(a, b))
     }
 
     @Test
@@ -324,7 +324,7 @@ class GPUPreparedImageTestFixturesTest {
         val oracle = GPUPreparedImagePixelOracle
         val a = ia(10, 20, 30, 40)
         val b = ia(11, 19, 31, 41)
-        assertTrue(oracle.linearMatch(a, b))
+        assertTrue(oracle.matchesWithinOneLsb(a, b))
     }
 
     @Test
@@ -332,7 +332,7 @@ class GPUPreparedImageTestFixturesTest {
         val oracle = GPUPreparedImagePixelOracle
         val a = ia(10, 20, 30, 40)
         val b = ia(12, 20, 30, 40)
-        assertTrue(!oracle.linearMatch(a, b))
+        assertTrue(!oracle.matchesWithinOneLsb(a, b))
     }
 
     @Test
@@ -420,6 +420,15 @@ class GPUPreparedImageTestFixturesTest {
                 sample = GPUPreparedImagePixelOracle.SampleKind.NEAREST,
             ),
         )
+    }
+
+    @Test
+    fun `maximum channel delta is unsigned and one LSB bound is strict`() {
+        val a = ia(0, 20, 255, 40)
+        assertEquals(1, GPUPreparedImagePixelOracle.maxChannelDelta(a, ia(1, 19, 254, 41)))
+        assertTrue(GPUPreparedImagePixelOracle.matchesWithinOneLsb(a, ia(1, 19, 254, 41)))
+        assertEquals(2, GPUPreparedImagePixelOracle.maxChannelDelta(a, ia(2, 20, 255, 40)))
+        assertTrue(!GPUPreparedImagePixelOracle.matchesWithinOneLsb(a, ia(2, 20, 255, 40)))
     }
 
     private fun pixelAt(bytes: ByteArray, stride: Int, x: Int, y: Int): ByteArray {
