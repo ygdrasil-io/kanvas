@@ -28,10 +28,10 @@ import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.TextureBindingLayout
 import io.ygdrasil.webgpu.VertexState
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
-import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
 
-internal data class GPUWgpu4kPreparedImagePipelineHandles(
+internal data class GPUPreparedImageCachedPipeline(
     val contract: GPUPreparedImageShaderContract,
     val bindGroupLayout: GPUBindGroupLayout,
     val shader: GPUShaderModule,
@@ -40,40 +40,56 @@ internal data class GPUWgpu4kPreparedImagePipelineHandles(
     val deviceGeneration: GPUDeviceGenerationID,
 )
 
+internal sealed interface GPUPreparedImageCacheAcquire {
+    data class Ready(val pipeline: GPUPreparedImageCachedPipeline) :
+        GPUPreparedImageCacheAcquire
+
+    data class Refused(val code: String, val message: String) :
+        GPUPreparedImageCacheAcquire
+}
+
 /**
  * Session-owned prepared-image cache. Its closed ownership set is shader module, reflected
  * bind-group layout, pipeline layout and keyed render pipelines only.
  */
 internal class GPUWgpu4kPreparedImageSessionCache(
     private val device: GPUDevice,
-    initialDeviceGeneration: GPUDeviceGenerationID,
+    internal val deviceGeneration: GPUDeviceGenerationID,
 ) : AutoCloseable {
-    private var generation = initialDeviceGeneration
     private var bindGroupLayout: GPUBindGroupLayout? = null
     private var shader: GPUShaderModule? = null
     private var pipelineLayout: GPUPipelineLayout? = null
     private var contract: GPUPreparedImageShaderContract? = null
-    private val pipelines = linkedMapOf<GPUPreparedImagePipelineKey, GPURenderPipeline>()
+    private val pipelines = linkedMapOf<GPUPreparedImagePipelineKey, GPUPreparedImageCachedPipeline>()
     private val owned = mutableListOf<AutoCloseable>()
     private var closed = false
 
-    internal val deviceGeneration: GPUDeviceGenerationID
-        @Synchronized get() = generation
+    @Synchronized
+    fun acquire(key: GPUPreparedImagePipelineKey): GPUPreparedImageCachedPipeline =
+        when (val acquired = acquire(key, deviceGeneration)) {
+            is GPUPreparedImageCacheAcquire.Ready -> acquired.pipeline
+            is GPUPreparedImageCacheAcquire.Refused ->
+                error("Prepared-image cache refused its sealed device generation: ${acquired.message}")
+        }
 
     @Synchronized
     fun acquire(
         key: GPUPreparedImagePipelineKey,
-        actualDeviceGeneration: GPUDeviceGenerationID = generation,
-    ): GPUWgpu4kPreparedImagePipelineHandles {
+        actualDeviceGeneration: GPUDeviceGenerationID,
+    ): GPUPreparedImageCacheAcquire {
         check(!closed) { "Prepared-image session cache is closed" }
-        if (actualDeviceGeneration != generation) {
-            retireOwnedOnce()
-            generation = actualDeviceGeneration
+        if (actualDeviceGeneration != deviceGeneration) {
+            return GPUPreparedImageCacheAcquire.Refused(
+                code = GPUPreparedImageRefusalCodes.NATIVE_GENERATION,
+                message =
+                    "Prepared-image cache device generation mismatch " +
+                        "expected=${deviceGeneration.value} actual=${actualDeviceGeneration.value}",
+            )
         }
         validateKey(key)
         ensureInvariants()
-        val pipeline = pipelines.getOrPut(key) {
-            track(
+        val cached = pipelines.getOrPut(key) {
+            val pipeline = track(
                 device.createRenderPipeline(
                     RenderPipelineDescriptor(
                         label = "Kanvas.session.preparedImage.pipeline.${pipelines.size}",
@@ -107,21 +123,21 @@ internal class GPUWgpu4kPreparedImageSessionCache(
                     ),
                 ),
             )
+            GPUPreparedImageCachedPipeline(
+                requireNotNull(contract),
+                requireNotNull(bindGroupLayout),
+                requireNotNull(shader),
+                requireNotNull(pipelineLayout),
+                pipeline,
+                deviceGeneration,
+            )
         }
-        return GPUWgpu4kPreparedImagePipelineHandles(
-            requireNotNull(contract),
-            requireNotNull(bindGroupLayout),
-            requireNotNull(shader),
-            requireNotNull(pipelineLayout),
-            pipeline,
-            generation,
-        )
+        return GPUPreparedImageCacheAcquire.Ready(cached)
     }
 
     @Synchronized
     fun invalidateForDeviceLoss() {
-        if (closed) return
-        retireOwnedOnce()
+        close()
     }
 
     @Synchronized
@@ -197,12 +213,9 @@ internal class GPUWgpu4kPreparedImageSessionCache(
         require(key.bindingLayoutHash == preparedImageBindingLayoutContract().identity)
         require(key.targetFormat.equals("rgba8unorm", ignoreCase = true))
         require(key.destinationBlendState.equals("SrcOver", ignoreCase = true) ||
-            key.destinationBlendState.equals("src_over", ignoreCase = true)
+            key.destinationBlendState.equals("src_over", ignoreCase = true) ||
+            key.destinationBlendState.equals("src-over", ignoreCase = true)
         )
-        require(key.atlasSourceBlend == null ||
-            key.atlasSourceBlend in GPUPreparedAtlasSourceBlend.entries
-        )
-        require((key.atlasColorMode == "none") == (key.atlasSourceBlend == null))
     }
 
     private fun <T : AutoCloseable> track(handle: T): T {

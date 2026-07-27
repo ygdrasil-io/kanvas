@@ -43,12 +43,7 @@ class GPUPreparedImageGeometry internal constructor(
 
 /** Structural specialization facts only; artifact identity and uniform/sampler values are excluded. */
 data class GPUPreparedImagePipelineKey(
-    val geometryAbi: String,
-    val alphaOnly: Boolean,
-    val atlasColorMode: String,
-    val atlasSourceBlend: GPUPreparedAtlasSourceBlend?,
     val destinationBlendState: String,
-    val clipClass: String,
     val targetFormat: String,
     val bindingLayoutHash: String,
 )
@@ -133,12 +128,7 @@ internal const val GPU_PREPARED_IMAGE_TARGET_FORMAT = "RGBA8Unorm"
 internal val GPU_PREPARED_IMAGE_FIXED_INDICES: List<Int> = listOf(0, 1, 2, 0, 2, 3)
 
 internal fun GPUPreparedImagePayloadInput.pipelineKey(): GPUPreparedImagePipelineKey = GPUPreparedImagePipelineKey(
-    geometryAbi = "prepared-image.${geometry.geometryClass.name.lowercase()}.xyuv.v1",
-    alphaOnly = artifact.alphaOnly,
-    atlasColorMode = if (atlasColorPremultipliedRgba == null) "none" else "premultiplied-rgba",
-    atlasSourceBlend = atlasSourceBlend,
     destinationBlendState = blendPlanIdentity,
-    clipClass = if (scissorBounds == targetBounds) "full-target" else "scissor",
     targetFormat = GPU_PREPARED_IMAGE_TARGET_FORMAT,
     bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
 )

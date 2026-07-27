@@ -447,8 +447,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                 "Every prepared-image upload must precede each of its consuming renders."
         }
         if (plan.packets.any { packet ->
-                packet.pipelineKey.atlasSourceBlend != packet.atlasSourceBlend ||
-                    (packet.atlasColorPremultipliedRgba == null) !=
+                (packet.atlasColorPremultipliedRgba == null) !=
                     (packet.atlasSourceBlend == null)
             }
         ) {

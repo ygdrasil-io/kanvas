@@ -42,6 +42,52 @@ class GPUPreparedImagePayloadTest {
     }
 
     @Test
+    fun `uniform and dynamic facts change semantic identity without specializing the pipeline`() {
+        val baseline = payload()
+        val alphaOnly = payload(alphaOnly = true)
+        val atlas = payload(
+            atlasColor = listOf(0.25f, 0.5f, 0.75f, 1f),
+            atlasSourceBlend = GPUPreparedAtlasSourceBlend.Modulate,
+        )
+        val clipped = payload(scissorBounds = GPUPixelBounds(1, 2, 15, 14))
+
+        assertEquals(baseline.pipelineKey, alphaOnly.pipelineKey)
+        assertEquals(baseline.pipelineKey, atlas.pipelineKey)
+        assertEquals(baseline.pipelineKey, clipped.pipelineKey)
+        assertEquals(
+            4,
+            setOf(
+                baseline.canonicalHash,
+                alphaOnly.canonicalHash,
+                atlas.canonicalHash,
+                clipped.canonicalHash,
+            ).size,
+        )
+    }
+
+    @Test
+    fun `rect and quad geometry share reflected shader and primitive pipeline state`() {
+        val rect = payload(geometryClass = GPUPreparedImageGeometryClass.Rect)
+        val quad = payload(geometryClass = GPUPreparedImageGeometryClass.Quad)
+
+        assertEquals(rect.pipelineKey, quad.pipelineKey)
+        assertNotEquals(rect.canonicalHash, quad.canonicalHash)
+    }
+
+    @Test
+    fun `destination blend target format and binding layout remain pipeline axes`() {
+        val baseline = payload()
+        val destinationBlend = payload(blendPlanIdentity = "dst-over")
+        val targetFormat = baseline.pipelineKey.copy(targetFormat = "BGRA8Unorm")
+        val bindingLayout = baseline.pipelineKey.copy(bindingLayoutHash = "prepared-image.layout.alternate")
+
+        assertNotEquals(baseline.pipelineKey, destinationBlend.pipelineKey)
+        assertNotEquals(baseline.pipelineKey, targetFormat)
+        assertNotEquals(baseline.pipelineKey, bindingLayout)
+        assertNotEquals(baseline.canonicalHash, destinationBlend.canonicalHash)
+    }
+
+    @Test
     fun `quad preserves all four transformed positions and uvs with fixed indices`() {
         val geometry = GPUPreparedImageGeometry(
             geometryClass = GPUPreparedImageGeometryClass.Quad,
@@ -102,12 +148,18 @@ class GPUPreparedImagePayloadTest {
         bytes: ByteArray = byteArrayOf(1, 2, 3, 4),
         sampling: GPUPreparedImageSampling = GPUPreparedImageSampling.Nearest,
         tint: List<Float> = listOf(1f, 1f, 1f, 1f),
+        alphaOnly: Boolean = false,
+        geometryClass: GPUPreparedImageGeometryClass = GPUPreparedImageGeometryClass.Rect,
+        atlasColor: List<Float>? = null,
+        atlasSourceBlend: GPUPreparedAtlasSourceBlend? = null,
+        scissorBounds: GPUPixelBounds = GPUPixelBounds(0, 0, 16, 16),
+        blendPlanIdentity: String = "src-over",
     ): GPUDrawSemanticPayload.SampledImage = GPUPreparedImagePayloadGatherer().gatherSemantic(
         GPUPreparedImagePayloadInput(
             payloadRef = GPUDrawPayloadRef(commandIdValue = 41, renderStepIdentity = "image.draw.texture_upload"),
-            artifact = artifact(bytes),
+            artifact = artifact(bytes, alphaOnly),
             geometry = GPUPreparedImageGeometry(
-                GPUPreparedImageGeometryClass.Rect,
+                geometryClass,
                 listOf(
                     GPUPreparedImageVertex(0f, 0f, 0f, 0f),
                     GPUPreparedImageVertex(4f, 0f, 1f, 0f),
@@ -118,29 +170,29 @@ class GPUPreparedImagePayloadTest {
             ),
             sampling = sampling,
             tintPremultipliedRgba = tint,
-            atlasColorPremultipliedRgba = null,
-            atlasSourceBlend = null,
+            atlasColorPremultipliedRgba = atlasColor,
+            atlasSourceBlend = atlasSourceBlend,
             targetBounds = GPUPixelBounds(0, 0, 16, 16),
-            scissorBounds = GPUPixelBounds(0, 0, 16, 16),
-            blendPlanIdentity = "src-over",
+            scissorBounds = scissorBounds,
+            blendPlanIdentity = blendPlanIdentity,
             frameProvenance = GPUFrameProvenance.GmContent,
         ),
     )
 
-    private fun artifact(bytes: ByteArray) = (GPUPreparedImageArtifactFactory.prepare(
+    private fun artifact(bytes: ByteArray, alphaOnly: Boolean = false) = (GPUPreparedImageArtifactFactory.prepare(
         GPUPreparedImageSourceInput(
             sourceClass = GPUPreparedImageSourceClass.DecodedCpu,
             sourceId = "test-image",
             width = 1,
             height = 1,
-            sourceFormat = GPUPreparedImageSourceFormat.Rgba8,
+            sourceFormat = if (alphaOnly) GPUPreparedImageSourceFormat.A8 else GPUPreparedImageSourceFormat.Rgba8,
             alphaType = AlphaType.PREMUL,
-            sourceRowBytes = 4,
+            sourceRowBytes = if (alphaOnly) 1 else 4,
             profile = GPUPreparedImageProfile.Srgb,
             orientation = GPUPreparedImageOrientation.AppliedIdentity,
             provenance = GPUPreparedImageProvenance.CallerPixels,
             sourceGeneration = 2,
-            pixelBytes = bytes,
+            pixelBytes = if (alphaOnly) byteArrayOf(bytes.first()) else bytes,
         ),
     ) as GPUPreparedImageArtifactResult.Ready).artifact
 }
