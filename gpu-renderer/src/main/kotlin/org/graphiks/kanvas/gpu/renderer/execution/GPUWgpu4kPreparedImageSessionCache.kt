@@ -28,7 +28,7 @@ import io.ygdrasil.webgpu.ShaderModuleDescriptor
 import io.ygdrasil.webgpu.TextureBindingLayout
 import io.ygdrasil.webgpu.VertexState
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
 
 internal data class GPUPreparedImageCachedPipeline(

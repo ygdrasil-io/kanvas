@@ -13,7 +13,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
 
 class GPUPreparedImageSessionCacheTest {

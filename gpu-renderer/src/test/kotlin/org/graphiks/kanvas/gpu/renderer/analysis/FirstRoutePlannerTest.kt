@@ -51,7 +51,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 
 /** Verifies the first native FillRect analysis, route, and pass builder. */

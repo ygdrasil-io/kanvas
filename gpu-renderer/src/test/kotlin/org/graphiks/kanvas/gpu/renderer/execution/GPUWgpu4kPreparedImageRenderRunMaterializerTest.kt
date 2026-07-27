@@ -28,7 +28,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageOrientation
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProfile
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProvenance
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput

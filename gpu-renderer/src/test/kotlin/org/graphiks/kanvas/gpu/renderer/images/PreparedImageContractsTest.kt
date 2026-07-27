@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes as CanonicalRefusalCodes
 import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -113,69 +114,71 @@ class PreparedImageContractsTest {
         assertIs<GPUPreparedImageArtifactResult.Ready>(GPUPreparedImageArtifactFactory.prepare(input(alpha = AlphaType.OPAQUE, bytes = byteArrayOf(1, 2, 3, -1))))
         assertRefusal(
             input(alpha = AlphaType.OPAQUE, bytes = byteArrayOf(1, 2, 3, 4)),
-            GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
+            CanonicalRefusalCodes.ALPHA_INTERPRETATION,
         )
     }
 
     @Test
     fun `factory emits canonical FP04 refusals for unsupported source authorities`() {
-        assertRefusal(input(bytes = null), GPUPreparedImageRefusalCodes.PIXELS_MISSING)
+        assertRefusal(input(bytes = null), CanonicalRefusalCodes.PIXELS_MISSING)
         assertRefusal(
             input(format = GPUPreparedImageSourceFormat.Unsupported),
-            GPUPreparedImageRefusalCodes.PIXEL_FORMAT,
+            CanonicalRefusalCodes.PIXEL_FORMAT,
         )
         assertRefusal(
             input(alpha = AlphaType.UNPREMUL),
-            GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
+            CanonicalRefusalCodes.ALPHA_INTERPRETATION,
         )
         assertRefusal(
             input(format = GPUPreparedImageSourceFormat.A8, alpha = AlphaType.OPAQUE, bytes = byteArrayOf(1)),
-            GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
+            CanonicalRefusalCodes.ALPHA_INTERPRETATION,
         )
         assertRefusal(
             input(sourceRowBytes = 3, bytes = byteArrayOf(1, 2, 3)),
-            GPUPreparedImageRefusalCodes.PIXEL_ROW_STRIDE,
+            CanonicalRefusalCodes.PIXEL_ROW_STRIDE,
         )
         assertRefusal(
             input(generation = -1),
-            GPUPreparedImageRefusalCodes.NATIVE_GENERATION,
+            CanonicalRefusalCodes.NATIVE_GENERATION,
         )
         assertRefusal(
             input(sourceClass = GPUPreparedImageSourceClass.Encoded),
-            GPUPreparedImageRefusalCodes.CODEC_UNREGISTERED,
+            CanonicalRefusalCodes.CODEC_UNREGISTERED,
         )
         assertRefusal(
             input(sourceClass = GPUPreparedImageSourceClass.Animated),
-            GPUPreparedImageRefusalCodes.ANIMATION,
+            CanonicalRefusalCodes.ANIMATION,
         )
         assertRefusal(
             input(sourceClass = GPUPreparedImageSourceClass.Yuv),
-            GPUPreparedImageRefusalCodes.YUV_CONVERSION,
+            CanonicalRefusalCodes.YUV_CONVERSION,
         )
         assertRefusal(
             input(sourceClass = GPUPreparedImageSourceClass.Hdr),
-            GPUPreparedImageRefusalCodes.HDR_TRANSFER,
+            CanonicalRefusalCodes.HDR_TRANSFER,
         )
         assertRefusal(
             input(sourceClass = GPUPreparedImageSourceClass.Imported),
-            GPUPreparedImageRefusalCodes.TEXTURE_IMPORT_UNVALIDATED,
+            CanonicalRefusalCodes.TEXTURE_IMPORT_UNVALIDATED,
         )
         assertRefusal(
             input(profile = GPUPreparedImageProfile.Other),
-            GPUPreparedImageRefusalCodes.GAMUT_TRANSFORM,
+            CanonicalRefusalCodes.GAMUT_TRANSFORM,
         )
         assertRefusal(
             input(profile = GPUPreparedImageProfile.Unresolved),
-            GPUPreparedImageRefusalCodes.IMAGE_PROFILE_CONVERSION,
+            CanonicalRefusalCodes.IMAGE_PROFILE_CONVERSION,
         )
         assertRefusal(
             input(orientation = GPUPreparedImageOrientation.Unresolved),
-            GPUPreparedImageRefusalCodes.ORIENTATION,
+            CanonicalRefusalCodes.ORIENTATION,
         )
     }
 
     @Test
     fun `public refusal authority contains the complete stable FP04 table`() {
+        assertEquals("unsupported.image.animation", CanonicalRefusalCodes.ANIMATION)
+        assertTrue(CanonicalRefusalCodes.ANIMATION in CanonicalRefusalCodes.ALL)
         assertEquals(
             setOf(
                 "unsupported.image.pixels_missing",
@@ -208,7 +211,7 @@ class PreparedImageContractsTest {
                 "unsupported.image.native_binding",
                 "unsupported.image.wgsl_validation",
             ),
-            GPUPreparedImageRefusalCodes.ALL,
+            CanonicalRefusalCodes.ALL,
         )
     }
 

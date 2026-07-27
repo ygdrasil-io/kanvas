@@ -35,7 +35,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImagePixelsDescriptor
 import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.images.GPUDecodedImageShaderPreparedPlanner
 import org.graphiks.kanvas.gpu.renderer.images.GPUImageDecodePlanner
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPass
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
