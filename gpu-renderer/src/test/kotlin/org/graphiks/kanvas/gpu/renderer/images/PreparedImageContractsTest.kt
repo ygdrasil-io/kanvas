@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedColorUploadEncoding as ArtifactColorUploadEncoding
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact as PreparedUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.preparedSdrColorContract as artifactSdrColorContract
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes as CanonicalRefusalCodes
 import io.ygdrasil.webgpu.GPUTextureFormat
@@ -14,12 +17,12 @@ import kotlin.test.assertTrue
 class PreparedImageContractsTest {
     @Test
     fun `bounded SDR contract names the native source decode coverage and sRGB store`() {
-        val contract = preparedSdrColorContract()
+        val contract = artifactSdrColorContract()
 
         assertEquals(GPUTextureFormat.RGBA8UnormSrgb, contract.colorSourceTextureFormat)
         assertEquals(GPUTextureFormat.RGBA8Unorm, contract.coverageSourceTextureFormat)
         assertEquals(
-            GPUPreparedColorUploadEncoding.StraightEncodedSrgb,
+            ArtifactColorUploadEncoding.StraightEncodedSrgb,
             contract.colorUploadEncoding,
         )
         assertEquals(GPUTextureFormat.RGBA8UnormSrgb, contract.targetTextureFormat)
@@ -44,7 +47,7 @@ class PreparedImageContractsTest {
             artifact.tightRgba8BytesForUpload(),
         )
         assertEquals(
-            GPUPreparedColorUploadEncoding.StraightEncodedSrgb,
+            ArtifactColorUploadEncoding.StraightEncodedSrgb,
             artifact.colorUploadEncoding,
         )
         assertEquals(
@@ -52,7 +55,7 @@ class PreparedImageContractsTest {
             artifact.colorUploadInterpretation,
         )
         assertTrue(
-            artifact.key.value.contains(GPUPreparedColorUploadEncoding.StraightEncodedSrgb.name),
+            artifact.key.value.contains(ArtifactColorUploadEncoding.StraightEncodedSrgb.name),
         )
         assertTrue(artifact.key.value.contains(artifact.contentHash))
     }
@@ -229,7 +232,7 @@ class PreparedImageContractsTest {
         assertNotEquals(a.key, ready(input(generation = 8)).key)
     }
 
-    private fun ready(input: GPUPreparedImageSourceInput): GPUPreparedImageUploadArtifact =
+    private fun ready(input: GPUPreparedImageSourceInput): PreparedUploadArtifact =
         assertIs<GPUPreparedImageArtifactResult.Ready>(GPUPreparedImageArtifactFactory.prepare(input)).artifact
 
     private fun assertRefusal(input: GPUPreparedImageSourceInput, code: String) {

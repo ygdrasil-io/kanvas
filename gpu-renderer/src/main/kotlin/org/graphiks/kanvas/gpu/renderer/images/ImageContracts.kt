@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUImageUploadArtifactKey as ArtifactKey
 import org.graphiks.kanvas.gpu.renderer.materials.GPUImageShaderPlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceDescriptor
@@ -21,14 +22,6 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureViewDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUseToken
 import java.security.MessageDigest
-
-/** Image upload artifact key. */
-@JvmInline
-value class GPUImageUploadArtifactKey(val value: String) {
-    init {
-        require(value.isNotBlank()) { "GPUImageUploadArtifactKey.value must not be blank" }
-    }
-}
 
 /** Image source descriptor. */
 data class GPUImageSourceDescriptor(
@@ -263,7 +256,7 @@ class GPUImageDecodePlanner(
 /** Image decode result descriptor. */
 sealed interface GPUImageDecodeResult {
     /** Decode produced a typed pixel artifact. */
-    data class Decoded(val pixelPlan: GPUImagePixelPlan, val artifactKey: GPUImageUploadArtifactKey) : GPUImageDecodeResult
+    data class Decoded(val pixelPlan: GPUImagePixelPlan, val artifactKey: ArtifactKey) : GPUImageDecodeResult
 
     /** Decode is dependency-gated. */
     data class DependencyGated(val diagnostic: GPUImageDiagnostic) : GPUImageDecodeResult
@@ -326,7 +319,7 @@ data class GPUImageMipmapPlan(
 
 /** Image upload plan. */
 data class GPUImageUploadPlan(
-    val artifactKey: GPUImageUploadArtifactKey,
+    val artifactKey: ArtifactKey,
     val pixelPlan: GPUImagePixelPlan,
     val mipmapPlan: GPUImageMipmapPlan,
     val uploadBudgetClass: String,
@@ -344,7 +337,7 @@ data class GPUImagePipelinePlan(
 
 /** Uploaded texture artifact descriptor. */
 data class UploadedTextureArtifact(
-    val artifactKey: GPUImageUploadArtifactKey,
+    val artifactKey: ArtifactKey,
     val pixelPlan: GPUImagePixelPlan,
     val uploadPlan: GPUImageUploadPlan,
     val generation: Long,
@@ -784,7 +777,7 @@ private fun GPUDecodedImagePixelsDescriptor.placeholderArtifact(
         levelCount = 1,
         filterPolicy = "none",
     )
-    val safeKey = GPUImageUploadArtifactKey("refused.image.${sourceId.encodeForImageKey()}")
+    val safeKey = ArtifactKey("refused.image.${sourceId.encodeForImageKey()}")
     val safeUploadPlan = GPUImageUploadPlan(
         artifactKey = safeKey,
         pixelPlan = safePixelPlan,
@@ -800,8 +793,8 @@ private fun GPUDecodedImagePixelsDescriptor.placeholderArtifact(
     )
 }
 
-private fun GPUDecodedImagePixelsDescriptor.artifactKey(): GPUImageUploadArtifactKey =
-    GPUImageUploadArtifactKey(
+private fun GPUDecodedImagePixelsDescriptor.artifactKey(): ArtifactKey =
+    ArtifactKey(
         "uploaded.image.decoded." +
             "$uploadArtifactDescriptorVersion." +
             "src${sourceId.encodeForImageKey()}." +

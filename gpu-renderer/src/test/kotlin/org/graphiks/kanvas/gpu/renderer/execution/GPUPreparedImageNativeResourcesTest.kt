@@ -14,11 +14,11 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUImageUploadArtifactKey
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.images.AlphaType
-import org.graphiks.kanvas.gpu.renderer.images.GPUImageUploadArtifactKey
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactFactory
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageOrientation

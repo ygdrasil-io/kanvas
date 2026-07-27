@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.math.ceil
 import kotlin.math.floor
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
@@ -11,7 +12,6 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawPayloadRef

@@ -1,16 +1,16 @@
 package org.graphiks.kanvas.gpu.renderer.resources
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUImageUploadArtifactKey
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedColorUploadEncoding
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.preparedSdrColorContract
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
-import org.graphiks.kanvas.gpu.renderer.images.GPUImageUploadArtifactKey
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedColorUploadEncoding
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
-import org.graphiks.kanvas.gpu.renderer.images.preparedSdrColorContract
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 

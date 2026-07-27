@@ -1,6 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
-import io.ygdrasil.webgpu.GPUTextureFormat
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUImageUploadArtifactKey as ArtifactKey
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImagePixelLayout as ArtifactPixelLayout
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact as PreparedUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.preparedSdrColorContract as artifactSdrColorContract
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes as CanonicalRefusalCodes
 import java.security.MessageDigest
@@ -11,29 +14,6 @@ enum class GPUPreparedImageSourceFormat { Rgba8, Bgra8, A8, Unsupported }
 enum class GPUPreparedImageProfile { Srgb, Other, Unresolved }
 enum class GPUPreparedImageOrientation { AppliedIdentity, Unresolved }
 enum class GPUPreparedImageProvenance { CallerPixels, SurfaceReadback, RegisteredDecode }
-
-internal data class GPUPreparedSdrColorContract(
-    val colorSourceTextureFormat: GPUTextureFormat,
-    val coverageSourceTextureFormat: GPUTextureFormat,
-    val colorUploadEncoding: GPUPreparedColorUploadEncoding,
-    val targetTextureFormat: GPUTextureFormat,
-    val shaderInterpretation: GPUColorInterpretation,
-    val readbackInterpretation: GPUColorInterpretation,
-)
-
-internal enum class GPUPreparedColorUploadEncoding {
-    StraightEncodedSrgb,
-}
-
-internal fun preparedSdrColorContract(): GPUPreparedSdrColorContract =
-    GPUPreparedSdrColorContract(
-        colorSourceTextureFormat = GPUTextureFormat.RGBA8UnormSrgb,
-        coverageSourceTextureFormat = GPUTextureFormat.RGBA8Unorm,
-        colorUploadEncoding = GPUPreparedColorUploadEncoding.StraightEncodedSrgb,
-        targetTextureFormat = GPUTextureFormat.RGBA8UnormSrgb,
-        shaderInterpretation = GPUColorInterpretation.LinearPremul,
-        readbackInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
-    )
 
 class GPUPreparedImageSourceInput(
     val sourceClass: GPUPreparedImageSourceClass,
@@ -53,31 +33,8 @@ class GPUPreparedImageSourceInput(
     internal fun snapshotBytesOrNull(): ByteArray? = snapshot?.copyOf()
 }
 
-data class GPUPreparedImagePixelLayout(
-    val sourceRowBytes: Long,
-    val normalizedRgba8RowBytes: Long,
-    val rowCount: Int,
-)
-
-class GPUPreparedImageUploadArtifact internal constructor(
-    val key: GPUImageUploadArtifactKey,
-    val width: Int,
-    val height: Int,
-    val pixelLayout: GPUPreparedImagePixelLayout,
-    val sourceGeneration: Long,
-    val contentHash: String,
-    val alphaOnly: Boolean,
-    val colorInterpretation: String,
-    internal val colorUploadEncoding: GPUPreparedColorUploadEncoding?,
-    internal val colorUploadInterpretation: String,
-    rgba8UploadBytes: ByteArray,
-) {
-    private val snapshot = rgba8UploadBytes.copyOf()
-    fun tightRgba8BytesForUpload(): ByteArray = snapshot.copyOf()
-}
-
 sealed interface GPUPreparedImageArtifactResult {
-    data class Ready(val artifact: GPUPreparedImageUploadArtifact) : GPUPreparedImageArtifactResult
+    data class Ready(val artifact: PreparedUploadArtifact) : GPUPreparedImageArtifactResult
     data class Refused(val code: String, val facts: Map<String, String>) : GPUPreparedImageArtifactResult
 }
 
@@ -255,7 +212,7 @@ object GPUPreparedImageArtifactFactory {
                 }
             }
         }
-        val contract = preparedSdrColorContract()
+        val contract = artifactSdrColorContract()
         val uploadEncoding = if (alphaOnly) null else contract.colorUploadEncoding
         val uploadInterpretation = if (alphaOnly) {
             GPUColorInterpretation.LinearPremul
@@ -263,8 +220,8 @@ object GPUPreparedImageArtifactFactory {
             GPUColorInterpretation.StraightEncodedSrgb
         }
         val hash = MessageDigest.getInstance("SHA-256").digest(normalized).joinToString("") { "%02x".format(it) }
-        val layout = GPUPreparedImagePixelLayout(input.sourceRowBytes, normalizedRowBytes, input.height)
-        val key = GPUImageUploadArtifactKey(
+        val layout = ArtifactPixelLayout(input.sourceRowBytes, normalizedRowBytes, input.height)
+        val key = ArtifactKey(
             listOf(
                 "prepared-image-v1",
                 hash,
@@ -282,7 +239,7 @@ object GPUPreparedImageArtifactFactory {
             ).joinToString("|"),
         )
         return GPUPreparedImageArtifactResult.Ready(
-            GPUPreparedImageUploadArtifact(
+            PreparedUploadArtifact(
                 key,
                 input.width,
                 input.height,

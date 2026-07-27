@@ -368,7 +368,7 @@ class GPURendererLayoutSurfaceTest {
             "org.graphiks.kanvas.gpu.renderer.images.GPUImagePixelPlan",
             "org.graphiks.kanvas.gpu.renderer.images.GPUImageMipmapPlan",
             "org.graphiks.kanvas.gpu.renderer.images.GPUImageUploadPlan",
-            "org.graphiks.kanvas.gpu.renderer.images.GPUImageUploadArtifactKey",
+            "org.graphiks.kanvas.gpu.renderer.artifacts.GPUImageUploadArtifactKey",
             "org.graphiks.kanvas.gpu.renderer.images.UploadedTextureArtifact",
             "org.graphiks.kanvas.gpu.renderer.images.GPUImageDiagnostic",
             "org.graphiks.kanvas.gpu.renderer.text.GPUTextRunPlan",

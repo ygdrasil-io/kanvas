@@ -6,6 +6,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
@@ -30,7 +31,6 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProvenance
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan

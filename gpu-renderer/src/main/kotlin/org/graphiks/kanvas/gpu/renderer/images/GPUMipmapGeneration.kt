@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUImageUploadArtifactKey as ArtifactKey
 import org.graphiks.kanvas.gpu.renderer.routing.RefuseDiagnostic
 
 /** Mipmap downsampling filter selection. */
@@ -75,7 +76,7 @@ sealed interface GPUImageMipmapGenerationResult {
         val plan: GPUImageMipmapGenerationPlan,
         val blitPlan: GPUImageMipmapBlitPlan,
         val computePlan: GPUImageMipmapComputePlan?,
-        val artifactKey: GPUImageUploadArtifactKey,
+        val artifactKey: ArtifactKey,
         val format: String,
     ) : GPUImageMipmapGenerationResult
 
@@ -184,7 +185,7 @@ class GPUImageMipmapPlanner(
         height: Int,
         filter: MipmapFilter,
         computeAvailable: Boolean,
-        artifactKey: GPUImageUploadArtifactKey,
+        artifactKey: ArtifactKey,
         format: String = "RGBA8Unorm",
         blitAvailable: Boolean = true,
     ): GPUImageMipmapGenerationResult {

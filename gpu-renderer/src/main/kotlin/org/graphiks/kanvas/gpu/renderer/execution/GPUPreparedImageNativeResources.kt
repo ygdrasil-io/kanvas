@@ -6,9 +6,9 @@ import io.ygdrasil.webgpu.GPUSampler
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureView
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUImageUploadArtifactKey
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
-import org.graphiks.kanvas.gpu.renderer.images.GPUImageUploadArtifactKey
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole

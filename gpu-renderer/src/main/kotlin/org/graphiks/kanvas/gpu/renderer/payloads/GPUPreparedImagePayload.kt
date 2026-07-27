@@ -2,10 +2,10 @@ package org.graphiks.kanvas.gpu.renderer.payloads
 
 import io.ygdrasil.webgpu.GPUTextureFormat
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.preparedSdrColorContract
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
-import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
-import org.graphiks.kanvas.gpu.renderer.images.preparedSdrColorContract
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 /** Closed device-geometry ABI for a prepared sampled image. */

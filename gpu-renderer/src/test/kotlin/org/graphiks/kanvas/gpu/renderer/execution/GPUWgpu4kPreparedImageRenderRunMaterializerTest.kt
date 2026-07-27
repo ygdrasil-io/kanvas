@@ -958,7 +958,7 @@ private fun preparedImageArtifact(pixelSeed: Int = 1) =
     ) as GPUPreparedImageArtifactResult.Ready).artifact
 
 internal fun preparedImageResource(
-    artifact: org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact,
+    artifact: org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact,
     packetId: String,
     sampling: GPUPreparedImageSampling = GPUPreparedImageSampling.Nearest,
 ): GPUPreparedImageFrameResourcePlan = buildPreparedImageFrameResourcePlanFromBindings(
@@ -1070,7 +1070,7 @@ private fun assertPreparedImageRefusal(
 }
 
 private fun preparedImageSemantic(
-    artifact: org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact,
+    artifact: org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact,
     sampling: GPUPreparedImageSampling,
     left: Float,
 ): GPUDrawSemanticPayload.SampledImage =

@@ -1706,6 +1706,7 @@ private val reservedPackageSegments = setOf("webgpu", "graphite", "ganesh")
 private val skiaLikePublicTypes = setOf("SkCanvas", "SkPaint", "SkShader", "SkPath")
 
 private val foundationPackageSegments = setOf(
+    "artifacts",
     "diagnostics",
     "telemetry",
     "capabilities",

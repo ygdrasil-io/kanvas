@@ -209,7 +209,7 @@ class GPUPreparedSurfaceSemanticBuilderTest {
     private data class MixedFixture(
         val visuals: List<GPUFramePathVisualCommand>,
         val recording: org.graphiks.kanvas.gpu.renderer.recording.GPURecording,
-        val artifact: org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact,
+        val artifact: org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact,
     )
 
     private companion object {

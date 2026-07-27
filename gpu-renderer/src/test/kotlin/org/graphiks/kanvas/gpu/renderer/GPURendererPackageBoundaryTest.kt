@@ -456,6 +456,29 @@ class GPURendererPackageBoundaryTest {
         assertContains(report, "execution semantic package import violation")
     }
 
+    /** Keeps immutable artifact contracts independent from frame planning and native execution. */
+    @Test
+    fun `artifact foundation rejects late planning imports`() {
+        val root = temporarySourceRoot()
+        root.writeSource(
+            relativePath = "org/graphiks/kanvas/gpu/renderer/artifacts/ArtifactLeak.kt",
+            text = """
+                package org.graphiks.kanvas.gpu.renderer.artifacts
+
+                import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceProvider
+
+                class ArtifactLeak
+            """.trimIndent(),
+        )
+
+        val violations = GPUPackageBoundaryCheck().findViolations(root)
+
+        assertContains(
+            violations.joinToString("\n"),
+            "foundation package dependency violation: artifacts imports resources",
+        )
+    }
+
     /** Ensures package-level cycles are treated as structure failures. */
     @Test
     fun `package boundary check rejects package import cycles`() {
