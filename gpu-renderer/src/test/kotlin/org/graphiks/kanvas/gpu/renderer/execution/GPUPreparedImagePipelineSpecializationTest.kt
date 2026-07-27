@@ -37,6 +37,8 @@ class GPUPreparedImagePipelineSpecializationTest {
         val generation = GPUDeviceGenerationID(7)
         val native = MeasuringDevice()
         val cache = GPUWgpu4kPreparedImageSessionCache(native.device, generation)
+        val factory = RecordingPreparedImageHandleFactory()
+        val materializer = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
         val seenPipelines = IdentityHashMap<Any, Boolean>()
         val semanticHashes = linkedSetOf<String>()
         val preChangeKeys = linkedSetOf<PreChangeKey>()
@@ -55,19 +57,48 @@ class GPUPreparedImagePipelineSpecializationTest {
                     atlasSourceBlend = draw.atlasSourceBlend,
                     clipClass = if (draw.scissorBounds == draw.targetBounds) "full-target" else "scissor",
                 )
-                val pipelineCreatesBefore = native.pipelineCreates
-                val acquired = assertIs<GPUPreparedImageCacheAcquire.Ready>(
-                    cache.acquire(draw.pipelineKey, generation),
+                val packetId = "pipeline-specialization-$index"
+                val resource = preparedImageResource(
+                    artifact = draw.artifact,
+                    packetId = packetId,
+                    sampling = draw.sampling,
                 )
-                if (seenPipelines.put(acquired.pipeline.pipeline, true) == null) {
-                    cacheMisses += 1
-                } else {
-                    cacheHits += 1
+                val pipelineCreatesBefore = native.pipelineCreates
+                val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
+                    materializer.materializeAcceptedRun(
+                        preparedImageRenderRunPlan(
+                            sourceScopeIndices = listOf(index * 2, index * 2 + 1),
+                            packets = listOf(draw),
+                            resources = listOf(resource),
+                            uniformAllocations =
+                                resource.bindingRequests.map { it.uniformAllocation },
+                        ),
+                        generation,
+                    ),
+                )
+                try {
+                    val pipeline = ready.scopeOperands
+                        .filterIsInstance<GPUPreparedNativeScopeOperand.PreparedImageRenderRun>()
+                        .single()
+                        .drawEntries
+                        .single()
+                        .pipeline
+                        .pipeline
+                    if (seenPipelines.put(pipeline, true) == null) {
+                        cacheMisses += 1
+                    } else {
+                        cacheHits += 1
+                    }
+                    if (index > 0) {
+                        pipelineCreatesAfterWarmup +=
+                            native.pipelineCreates - pipelineCreatesBefore
+                    }
+                    uniformUploadBytes += ready.uniformUploads.sumOf {
+                        it.data.bytes().size.toLong()
+                    }
+                } finally {
+                    ready.ownedResources.single().close()
                 }
-                if (index > 0) {
-                    pipelineCreatesAfterWarmup += native.pipelineCreates - pipelineCreatesBefore
-                }
-                uniformUploadBytes += preparedImageBindingLayoutContract().uniformMinBindingSize
             }
         } finally {
             cache.close()
@@ -85,6 +116,7 @@ class GPUPreparedImagePipelineSpecializationTest {
         val checkedInReport = Files.readString(repoRoot().resolve(EVIDENCE_PATH))
 
         assertEquals(DRAW_COUNT, semanticHashes.size)
+        assertEquals(DRAW_COUNT, factory.uniformBufferCreates)
         assertEquals(0, pipelineCreatesAfterWarmup)
         assertTrue(native.pipelineCreates < preChangeKeys.size)
         assertEquals(measuredReport, checkedInReport, "checked-in evidence must equal fixture output")

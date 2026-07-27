@@ -151,6 +151,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                     resources = listOf(resource),
                     uniformAllocations = allocations,
                 ),
+                GPUDeviceGenerationID(17),
             ) as GPUPreparedRenderRunMaterialization.Ready
 
         val upload = result.scopeOperands.filterIsInstance<
@@ -261,6 +262,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                         secondResource.bindingRequests.single().uniformAllocation,
                     ),
                 ),
+                GPUDeviceGenerationID(171),
             )
         val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(result)
 
@@ -272,6 +274,41 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         assertEquals(2, factory.bindGroupCreates)
 
         ready.ownedResources.single().close()
+        cache.close()
+    }
+
+    @Test
+    fun `authoritative generation mismatch refuses before every native handle creation`() {
+        val generation7 = GPUDeviceGenerationID(7)
+        val nativeDevice = RecordingPreparedImageDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(nativeDevice.device, generation7)
+        val factory = RecordingPreparedImageHandleFactory()
+        val artifact = preparedImageArtifact(pixelSeed = 71)
+        val resource = preparedImageResource(artifact, "packet.generation-mismatch")
+
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+            .materializeAcceptedRun(
+                preparedImageRenderRunPlan(
+                    sourceScopeIndices = listOf(1, 2),
+                    packets = listOf(
+                        preparedImageSemantic(
+                            artifact,
+                            GPUPreparedImageSampling.Nearest,
+                            1f,
+                        ),
+                    ),
+                    resources = listOf(resource),
+                    uniformAllocations =
+                        resource.bindingRequests.map { it.uniformAllocation },
+                ),
+                GPUDeviceGenerationID(8),
+            )
+
+        val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(result)
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_GENERATION, refused.code)
+        assertEquals("native", refused.facts["boundary"])
+        assertEquals(0, nativeDevice.handleCreates)
+        assertEquals(0, factory.handleCreates)
         cache.close()
     }
 
@@ -307,6 +344,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                     uniformAllocations =
                         resource.bindingRequests.map { it.uniformAllocation },
                 ),
+                GPUDeviceGenerationID(18),
             )
 
         val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(result)
@@ -351,6 +389,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                     uniformAllocations =
                         resource.bindingRequests.map { it.uniformAllocation },
                 ),
+                GPUDeviceGenerationID(181),
             )
 
         val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(result)
@@ -401,6 +440,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 resources = listOf(resource),
                 uniformAllocations = allocations,
             ),
+            GPUDeviceGenerationID(182),
         )
 
         val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(result)
@@ -437,6 +477,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
                 exactScopeKeys = exactScopeKeys,
             ),
+            GPUDeviceGenerationID(19),
         ) as GPUPreparedRenderRunMaterialization.Ready
 
         assertEquals(
@@ -536,6 +577,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                     resources = listOf(swapped),
                     uniformAllocations = swapped.bindingRequests.map { it.uniformAllocation },
                 ),
+                GPUDeviceGenerationID(29),
             )
 
         assertEquals(
@@ -588,6 +630,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                     resources = listOf(forged),
                     uniformAllocations = forged.bindingRequests.map { it.uniformAllocation },
                 ),
+                GPUDeviceGenerationID(29),
             )
 
         assertEquals(
@@ -789,6 +832,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                         GPUPreparedImageUniformAllocation("packet.shared", 0L, 112L),
                     ),
                 ),
+                GPUDeviceGenerationID(23),
             ) as GPUPreparedRenderRunMaterialization.Ready
 
         result.ownedResources.single().close()
@@ -852,7 +896,7 @@ private fun preparedImageArtifact(pixelSeed: Int = 1) =
         ),
     ) as GPUPreparedImageArtifactResult.Ready).artifact
 
-private fun preparedImageResource(
+internal fun preparedImageResource(
     artifact: org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact,
     packetId: String,
     sampling: GPUPreparedImageSampling = GPUPreparedImageSampling.Nearest,
@@ -865,7 +909,7 @@ private fun preparedImageResource(
     uploadTaskId = GPUTaskID("task.upload.$packetId"),
 )
 
-private fun preparedImageRenderRunPlan(
+internal fun preparedImageRenderRunPlan(
     sourceScopeIndices: List<Int>,
     packets: List<GPUDrawSemanticPayload.SampledImage>,
     resources: List<GPUPreparedImageFrameResourcePlan>,
@@ -958,7 +1002,7 @@ private fun assertPreparedImageRefusal(
     val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
         cache,
         RecordingPreparedImageHandleFactory(),
-    ).materializeAcceptedRun(plan)
+    ).materializeAcceptedRun(plan, GPUDeviceGenerationID(29))
 
     assertEquals(code, assertIs<GPUPreparedRenderRunMaterialization.Refused>(result).code)
     cache.close()
@@ -1008,15 +1052,26 @@ private fun preparedImageCapabilities() = GPUCapabilities(
 )
 
 internal class RecordingPreparedImageDevice {
+    var handleCreates = 0
     var pipelineCreates = 0
     val closeCounts = linkedMapOf<String, Int>()
 
     val device: GPUDevice = nativeHandle("device") { methodName ->
         when (methodName) {
-            "createBindGroupLayout" -> nativeHandle<io.ygdrasil.webgpu.GPUBindGroupLayout>("layout")
-            "createShaderModule" -> nativeHandle<GPUShaderModule>("shader")
-            "createPipelineLayout" -> nativeHandle<io.ygdrasil.webgpu.GPUPipelineLayout>("pipeline-layout")
+            "createBindGroupLayout" -> {
+                handleCreates += 1
+                nativeHandle<io.ygdrasil.webgpu.GPUBindGroupLayout>("layout")
+            }
+            "createShaderModule" -> {
+                handleCreates += 1
+                nativeHandle<GPUShaderModule>("shader")
+            }
+            "createPipelineLayout" -> {
+                handleCreates += 1
+                nativeHandle<io.ygdrasil.webgpu.GPUPipelineLayout>("pipeline-layout")
+            }
             "createRenderPipeline" -> {
+                handleCreates += 1
                 pipelineCreates += 1
                 nativeHandle<GPURenderPipeline>("pipeline-$pipelineCreates")
             }

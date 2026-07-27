@@ -2,9 +2,11 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import java.security.MessageDigest
 import java.util.IdentityHashMap
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
@@ -108,6 +110,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
 ) {
     fun materializeAcceptedRun(
         plan: GPUPreparedImageRenderRunPlan,
+        actualDeviceGeneration: GPUDeviceGenerationID,
     ): GPUPreparedRenderRunMaterialization {
         validatePlan(plan)?.let {
             return GPUPreparedRenderRunMaterialization.Refused(
@@ -115,6 +118,22 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                 message = it.second,
                 facts = mapOf("boundary" to "native"),
             )
+        }
+        val pipelineByKey =
+            linkedMapOf<GPUPreparedImagePipelineKey, GPUPreparedImageCachedPipeline>()
+        plan.packets.forEach { packet ->
+            when (val acquired = sessionCache.acquire(packet.pipelineKey, actualDeviceGeneration)) {
+                is GPUPreparedImageCacheAcquire.Ready -> {
+                    pipelineByKey[packet.pipelineKey] = acquired.pipeline
+                }
+                is GPUPreparedImageCacheAcquire.Refused -> {
+                    return GPUPreparedRenderRunMaterialization.Refused(
+                        code = acquired.code,
+                        message = acquired.message,
+                        facts = mapOf("boundary" to "native"),
+                    )
+                }
+            }
         }
         val created = mutableListOf<AutoCloseable>()
         return try {
@@ -149,7 +168,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                 val uniformBuffer = handleFactory.createUniformBuffer(uniformBufferSize).track(created)
                 val uniformBufferOperand = GPUPreparedNativeBufferOperand(
                     uniformBuffer,
-                    sessionCache.deviceGeneration,
+                    actualDeviceGeneration,
                     GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
                     byteCapacity = uniformBufferSize,
                 )
@@ -176,7 +195,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                     consumerSourceStepIndices = listOf(renderScopeIndex),
                 )
                 val bindingKeys = resource.preparedImageNativeBindingKeys(
-                    deviceGeneration = sessionCache.deviceGeneration.value,
+                    deviceGeneration = actualDeviceGeneration.value,
                 )
                 val bindGroups =
                     linkedMapOf<GPUPreparedImageBindingKey, io.ygdrasil.webgpu.GPUBindGroup>()
@@ -215,7 +234,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                     ),
                     destination = GPUPreparedNativeTextureOperand(
                         texture,
-                        sessionCache.deviceGeneration,
+                        actualDeviceGeneration,
                         GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
                     ),
                     destinationKey = destinationKey,
@@ -226,16 +245,16 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                 val allocation = plan.uniformAllocations[index]
                 val binding = requireNotNull(bindingByPacketId[allocation.packetId])
                 check(binding.allocation == allocation)
-                val pipeline = sessionCache.acquire(packet.pipelineKey)
+                val pipeline = requireNotNull(pipelineByKey[packet.pipelineKey])
                 val uniformBytes = uniformBytesByPacketId.getValue(allocation.packetId)
                 GPUPreparedNativeScopeOperand.PreparedImageDrawEntry(
                     pipeline = GPUPreparedNativeRenderPipelineOperand(
                         pipeline.pipeline,
-                        sessionCache.deviceGeneration,
+                        actualDeviceGeneration,
                     ),
                     bindGroup = GPUPreparedNativeBindGroupOperand(
                         binding.bindGroup,
-                        sessionCache.deviceGeneration,
+                        actualDeviceGeneration,
                         GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
                     ),
                     dynamicUniformOffset = allocation.offset,

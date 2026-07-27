@@ -507,7 +507,10 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
             GPUWgpu4kPreparedImageRenderRunMaterializer(
                 cache,
                 handleFactory,
-            ).materializeAcceptedRun(runPlan),
+            ).materializeAcceptedRun(
+                runPlan,
+                taskList.capabilitySeal.deviceGeneration,
+            ),
         )
 
         assertEquals(

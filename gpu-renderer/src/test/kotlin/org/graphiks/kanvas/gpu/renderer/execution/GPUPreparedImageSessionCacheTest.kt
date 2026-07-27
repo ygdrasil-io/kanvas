@@ -1,6 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUDevice
+import io.ygdrasil.webgpu.GPUBlendFactor
+import io.ygdrasil.webgpu.GPUBlendOperation
+import io.ygdrasil.webgpu.GPUTextureFormat
+import io.ygdrasil.webgpu.RenderPipelineDescriptor
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -78,15 +82,89 @@ class GPUPreparedImageSessionCacheTest {
         assertTrue(native8.handles.all { it.closeCalls == 1 })
     }
 
+    @Test
+    fun `supported aliases canonicalize before lookup and drive the native descriptor`() {
+        val generation = GPUDeviceGenerationID(7)
+        val native = TrackingDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(native.device, generation)
+        val aliases = listOf(
+            PIPELINE_KEY,
+            PIPELINE_KEY.copy(
+                destinationBlendState = "SrcOver",
+                targetFormat = "rgba8unorm",
+            ),
+            PIPELINE_KEY.copy(
+                destinationBlendState = "src_over",
+                targetFormat = "RGBA8UNORM",
+            ),
+        )
+
+        val pipelines = aliases.map { key ->
+            assertIs<GPUPreparedImageCacheAcquire.Ready>(
+                cache.acquire(key, generation),
+            ).pipeline
+        }
+
+        assertTrue(pipelines.all { it === pipelines.first() })
+        assertEquals(4, native.handles.size)
+        val descriptor = native.renderPipelineDescriptors.single()
+        assertTrue(
+            native.handles.single { it.label == "createPipelineLayout" }.native ===
+                descriptor.layout,
+        )
+        val target = requireNotNull(descriptor.fragment).targets.single()
+        assertEquals(GPUTextureFormat.RGBA8Unorm, target.format)
+        val blend = requireNotNull(target.blend)
+        assertEquals(GPUBlendOperation.Add, blend.color.operation)
+        assertEquals(GPUBlendFactor.One, blend.color.srcFactor)
+        assertEquals(GPUBlendFactor.OneMinusSrcAlpha, blend.color.dstFactor)
+        assertEquals(GPUBlendOperation.Add, blend.alpha.operation)
+        assertEquals(GPUBlendFactor.One, blend.alpha.srcFactor)
+        assertEquals(GPUBlendFactor.OneMinusSrcAlpha, blend.alpha.dstFactor)
+
+        cache.close()
+    }
+
+    @Test
+    fun `unsupported descriptor axes refuse before any native handle creation`() {
+        val generation = GPUDeviceGenerationID(7)
+        val native = TrackingDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(native.device, generation)
+
+        val formatRefusal = assertIs<GPUPreparedImageCacheAcquire.Refused>(
+            cache.acquire(PIPELINE_KEY.copy(targetFormat = "BGRA8Unorm"), generation),
+        )
+        val blendRefusal = assertIs<GPUPreparedImageCacheAcquire.Refused>(
+            cache.acquire(PIPELINE_KEY.copy(destinationBlendState = "multiply"), generation),
+        )
+        val layoutRefusal = assertIs<GPUPreparedImageCacheAcquire.Refused>(
+            cache.acquire(PIPELINE_KEY.copy(bindingLayoutHash = "foreign-layout"), generation),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.PIXEL_FORMAT, formatRefusal.code)
+        assertContains(formatRefusal.message, "BGRA8Unorm")
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, blendRefusal.code)
+        assertContains(blendRefusal.message, "multiply")
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, layoutRefusal.code)
+        assertContains(layoutRefusal.message, "foreign-layout")
+        assertTrue(native.handles.isEmpty())
+
+        cache.close()
+    }
+
     private class TrackingDevice {
         val handles = mutableListOf<TrackedHandle>()
-        val device: GPUDevice = proxy(GPUDevice::class.java) { methodName, returnType, _ ->
+        val renderPipelineDescriptors = mutableListOf<RenderPipelineDescriptor>()
+        val device: GPUDevice = proxy(GPUDevice::class.java) { methodName, returnType, args ->
             when (methodName) {
                 "createBindGroupLayout",
                 "createShaderModule",
                 "createPipelineLayout",
-                "createRenderPipeline",
                 -> track(methodName, returnType)
+                "createRenderPipeline" -> {
+                    renderPipelineDescriptors += args?.firstOrNull() as RenderPipelineDescriptor
+                    track(methodName, returnType)
+                }
                 else -> defaultValue(returnType)
             }
         }

@@ -48,6 +48,20 @@ internal sealed interface GPUPreparedImageCacheAcquire {
         GPUPreparedImageCacheAcquire
 }
 
+private data class GPUPreparedImageCanonicalPipelineState(
+    val key: GPUPreparedImagePipelineKey,
+    val targetFormat: GPUTextureFormat,
+    val destinationBlendState: BlendState,
+)
+
+private sealed interface GPUPreparedImagePipelineCanonicalization {
+    data class Ready(val state: GPUPreparedImageCanonicalPipelineState) :
+        GPUPreparedImagePipelineCanonicalization
+
+    data class Refused(val code: String, val message: String) :
+        GPUPreparedImagePipelineCanonicalization
+}
+
 /**
  * Session-owned prepared-image cache. Its closed ownership set is shader module, reflected
  * bind-group layout, pipeline layout and keyed render pipelines only.
@@ -65,14 +79,6 @@ internal class GPUWgpu4kPreparedImageSessionCache(
     private var closed = false
 
     @Synchronized
-    fun acquire(key: GPUPreparedImagePipelineKey): GPUPreparedImageCachedPipeline =
-        when (val acquired = acquire(key, deviceGeneration)) {
-            is GPUPreparedImageCacheAcquire.Ready -> acquired.pipeline
-            is GPUPreparedImageCacheAcquire.Refused ->
-                error("Prepared-image cache refused its sealed device generation: ${acquired.message}")
-        }
-
-    @Synchronized
     fun acquire(
         key: GPUPreparedImagePipelineKey,
         actualDeviceGeneration: GPUDeviceGenerationID,
@@ -86,14 +92,19 @@ internal class GPUWgpu4kPreparedImageSessionCache(
                         "expected=${deviceGeneration.value} actual=${actualDeviceGeneration.value}",
             )
         }
-        validateKey(key)
+        val canonical = when (val result = canonicalize(key)) {
+            is GPUPreparedImagePipelineCanonicalization.Ready -> result.state
+            is GPUPreparedImagePipelineCanonicalization.Refused ->
+                return GPUPreparedImageCacheAcquire.Refused(result.code, result.message)
+        }
         ensureInvariants()
-        val cached = pipelines.getOrPut(key) {
+        val descriptorLayout = requireNotNull(pipelineLayout)
+        val cached = pipelines.getOrPut(canonical.key) {
             val pipeline = track(
                 device.createRenderPipeline(
                     RenderPipelineDescriptor(
                         label = "Kanvas.session.preparedImage.pipeline.${pipelines.size}",
-                        layout = requireNotNull(pipelineLayout),
+                        layout = descriptorLayout,
                         vertex = VertexState(
                             module = requireNotNull(shader),
                             entryPoint = "vs_main",
@@ -104,19 +115,8 @@ internal class GPUWgpu4kPreparedImageSessionCache(
                             entryPoint = "fs_main",
                             targets = listOf(
                                 ColorTargetState(
-                                    format = GPUTextureFormat.RGBA8Unorm,
-                                    blend = BlendState(
-                                        color = BlendComponent(
-                                            GPUBlendOperation.Add,
-                                            GPUBlendFactor.One,
-                                            GPUBlendFactor.OneMinusSrcAlpha,
-                                        ),
-                                        alpha = BlendComponent(
-                                            GPUBlendOperation.Add,
-                                            GPUBlendFactor.One,
-                                            GPUBlendFactor.OneMinusSrcAlpha,
-                                        ),
-                                    ),
+                                    format = canonical.targetFormat,
+                                    blend = canonical.destinationBlendState,
                                 ),
                             ),
                         ),
@@ -127,7 +127,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
                 requireNotNull(contract),
                 requireNotNull(bindGroupLayout),
                 requireNotNull(shader),
-                requireNotNull(pipelineLayout),
+                descriptorLayout,
                 pipeline,
                 deviceGeneration,
             )
@@ -209,15 +209,6 @@ internal class GPUWgpu4kPreparedImageSessionCache(
         }
     }
 
-    private fun validateKey(key: GPUPreparedImagePipelineKey) {
-        require(key.bindingLayoutHash == preparedImageBindingLayoutContract().identity)
-        require(key.targetFormat.equals("rgba8unorm", ignoreCase = true))
-        require(key.destinationBlendState.equals("SrcOver", ignoreCase = true) ||
-            key.destinationBlendState.equals("src_over", ignoreCase = true) ||
-            key.destinationBlendState.equals("src-over", ignoreCase = true)
-        )
-    }
-
     private fun <T : AutoCloseable> track(handle: T): T {
         owned += handle
         return handle
@@ -241,7 +232,67 @@ internal class GPUWgpu4kPreparedImageSessionCache(
         }
         firstFailure?.let { throw IllegalStateException("Prepared-image session cache close failed", it) }
     }
+
+    private fun canonicalize(
+        key: GPUPreparedImagePipelineKey,
+    ): GPUPreparedImagePipelineCanonicalization {
+        val bindingLayoutIdentity = preparedImageBindingLayoutContract().identity
+        if (key.bindingLayoutHash != bindingLayoutIdentity) {
+            return GPUPreparedImagePipelineCanonicalization.Refused(
+                code = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                message =
+                    "Unsupported prepared-image binding layout " +
+                        "expected=$bindingLayoutIdentity actual=${key.bindingLayoutHash}",
+            )
+        }
+        val targetFormat = when (key.targetFormat.trim().lowercase()) {
+            "rgba8unorm" -> GPUTextureFormat.RGBA8Unorm
+            else ->
+                return GPUPreparedImagePipelineCanonicalization.Refused(
+                    code = GPUPreparedImageRefusalCodes.PIXEL_FORMAT,
+                    message = "Unsupported prepared-image target format ${key.targetFormat}",
+                )
+        }
+        val normalizedBlend = key.destinationBlendState
+            .trim()
+            .lowercase()
+            .replace('_', '-')
+        val destinationBlendState = when (normalizedBlend) {
+            "src-over", "srcover" -> preparedImageSrcOverBlendState()
+            else ->
+                return GPUPreparedImagePipelineCanonicalization.Refused(
+                    code = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                    message =
+                        "Unsupported prepared-image destination blend state " +
+                            key.destinationBlendState,
+                )
+        }
+        return GPUPreparedImagePipelineCanonicalization.Ready(
+            GPUPreparedImageCanonicalPipelineState(
+                key = GPUPreparedImagePipelineKey(
+                    destinationBlendState = "src-over",
+                    targetFormat = "RGBA8Unorm",
+                    bindingLayoutHash = bindingLayoutIdentity,
+                ),
+                targetFormat = targetFormat,
+                destinationBlendState = destinationBlendState,
+            ),
+        )
+    }
 }
+
+private fun preparedImageSrcOverBlendState(): BlendState = BlendState(
+    color = BlendComponent(
+        GPUBlendOperation.Add,
+        GPUBlendFactor.One,
+        GPUBlendFactor.OneMinusSrcAlpha,
+    ),
+    alpha = BlendComponent(
+        GPUBlendOperation.Add,
+        GPUBlendFactor.One,
+        GPUBlendFactor.OneMinusSrcAlpha,
+    ),
+)
 
 private fun closeCreatedOnce(handles: List<AutoCloseable>, cause: Throwable) {
     handles.asReversed().forEach { handle ->
