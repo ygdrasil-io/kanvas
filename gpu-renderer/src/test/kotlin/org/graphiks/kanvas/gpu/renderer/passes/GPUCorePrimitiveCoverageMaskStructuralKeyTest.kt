@@ -12,6 +12,36 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 class GPUCorePrimitiveCoverageMaskStructuralKeyTest {
     @Test
+    fun `coverage mask intermediate stays unorm while scene consumer may target sRGB`() {
+        val producer = corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
+            GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+            GPUClipMaskCombine.Intersect,
+        )
+        val consumer = corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey(
+            blendPlan = srcOverBlendPlan(),
+            colorFormat = GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb,
+        )
+
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
+            producer.colorFormat,
+        )
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb,
+            consumer.colorFormat,
+        )
+        assertEquals(
+            GPUCorePrimitiveCoverageMaskStructuralProgram.ConsumerNearest,
+            consumer.coverageMaskStructuralProgramOrNull(),
+        )
+        assertNotEquals(
+            corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey(srcOverBlendPlan())
+                .stableRenderPipelineKey("pipeline.test"),
+            consumer.stableRenderPipelineKey("pipeline.test"),
+        )
+    }
+
+    @Test
     fun `coverage mask producer exposes four exact structural programs`() {
         val rectIntersect = corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
             GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,

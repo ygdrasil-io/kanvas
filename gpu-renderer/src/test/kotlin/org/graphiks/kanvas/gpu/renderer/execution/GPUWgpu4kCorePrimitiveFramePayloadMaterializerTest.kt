@@ -60,6 +60,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
@@ -124,6 +126,94 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         TwoPathPairs,
         ClipStencil,
         CoverageMask,
+    }
+
+    @Test
+    fun `materializer accepts exact sRGB scene authority and refuses unorm preparation mismatch`() {
+        val fixture = fixture(
+            targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+            useRealPreflight = true,
+        )
+        val materialized = fixture.materializeCore()
+
+        assertTrue(fixture.native.renderPipelineDescriptors.isNotEmpty())
+        fixture.native.renderPipelineDescriptors.forEach { descriptor ->
+            assertEquals(
+                GPUTextureFormat.RGBA8UnormSrgb,
+                assertIs<io.ygdrasil.webgpu.ColorTargetState>(
+                    requireNotNull(descriptor.fragment).targets.single(),
+                ).format,
+            )
+        }
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+
+        val mismatchPlan = fixture.plan.withPreparation(GPUFrameResourceRole.SceneTarget) { request ->
+            val descriptor = assertIs<
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
+                >(request.descriptor)
+            GPUResourcePreparationRequest(
+                resource = request.resource,
+                descriptor = descriptor.copy(format = GPUColorFormat.RGBA8Unorm),
+                role = request.role,
+                usages = request.usages,
+                lifetime = request.lifetime,
+                byteSize = request.byteSize,
+                diagnosticLabel = request.diagnosticLabel,
+            )
+        }
+        val nativeEventCount = fixture.native.events.size
+        val mismatch = fixture.copy(plan = mismatchPlan).materializeCoreResult()
+
+        assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(mismatch)
+        assertEquals(nativeEventCount, fixture.native.events.size)
+        fixture.close()
+    }
+
+    @Test
+    fun `sRGB 4x refuses centrally before encoder validation and every native acquisition`() {
+        val fixture = fixture(
+            targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+        )
+        val renderStep = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
+        val guardedPlan = fixture.plan.replacingStep(
+            renderStep,
+            GPUFrameStep.RenderPassStep(
+                target = renderStep.target,
+                loadStore = renderStep.loadStore,
+                samplePlan = org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.MultisampleFrame(4),
+                resourceUses = renderStep.resourceUses,
+                drawPackets = renderStep.drawPackets,
+                sourceTaskIds = renderStep.sourceTaskIds,
+                batches = renderStep.batches,
+                sampleContinuation = null,
+                depthStencilLoadStore = renderStep.depthStencilLoadStore,
+                preparedImageBindingsByPacketId = renderStep.preparedImageBindingsByPacketId,
+            ),
+        )
+        val invalidEncoderPlan = GPUCommandEncoderPlan.ordered(
+            planId = fixture.encoderPlan.planId,
+            contextIdentity = fixture.encoderPlan.contextIdentity,
+            deviceGeneration = fixture.encoderPlan.deviceGeneration,
+            targetGeneration = fixture.encoderPlan.targetGeneration,
+            scopes = emptyList(),
+        )
+        val guardedFixture = fixture.copy(
+            plan = guardedPlan,
+            encoderPlan = invalidEncoderPlan,
+        )
+        val nativeEventsBefore = fixture.native.events.toList()
+        val cacheBefore = fixture.cache.counters()
+        val poolSlotsBefore = framePoolSlotCount(fixture.cache)
+
+        val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+            guardedFixture.materializeCoreResult(),
+        )
+
+        assertEquals("unsupported.native-core-primitive.srgb-msaa", refused.code)
+        assertEquals(nativeEventsBefore, fixture.native.events)
+        assertEquals(cacheBefore, fixture.cache.counters())
+        assertEquals(poolSlotsBefore, framePoolSlotCount(fixture.cache))
+        fixture.close()
     }
 
     @Test
@@ -3615,6 +3705,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         analyticIntersection: Boolean = false,
         clipStencilPlan: GPUClipExecutionPlan.StencilCoverage? = null,
         sampleCount: Int = 1,
+        targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
     ): Fixture {
         require(!analyticClip || !analyticIntersection)
         val generation = GPUDeviceGenerationID(23L)
@@ -3647,7 +3738,14 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         }
         val recorded = GPURecorder(GPURecordingID("recording.core.proxy"), frameId, capabilities, generation).apply {
             commandIds.forEachIndexed { order, commandId ->
-                record(command(commandId, order, GPURect(1f + order, 1f, 5f + order, 5f)))
+                record(
+                    command(
+                        commandId,
+                        order,
+                        GPURect(1f + order, 1f, 5f + order, 5f),
+                        targetFormat,
+                    ),
+                )
             }
         }.close().taskList
         val clipPlans = commandIds.associateWith { commandId ->
@@ -3719,6 +3817,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val base = recorded.withClipPlans(clipPlans).withSampleCount(
             sampleCount,
             canonicalClear = sampleCount == 4 && pathCommandIds.isNotEmpty(),
+            targetFormat = targetFormat,
         ).let { taskList ->
             if (sampleCount == 4 && commandIds.size > 1 && pathCommandIds.isNotEmpty()) {
                 taskList.mergeRenderTasksForSingleScope()
@@ -3772,6 +3871,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     targetBounds = TARGET,
                     semanticsByCommandId = semantics,
                     readbackRequestId = if (readback) GPUReadbackRequestID("readback.core.proxy") else null,
+                    targetFormat = targetFormat,
                 ),
             ),
         ).taskList
@@ -3936,7 +4036,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             native.device,
             TARGET.width,
             TARGET.height,
-            GPUTextureFormat.RGBA8Unorm,
+            when (targetFormat) {
+                GPUColorFormat.RGBA8Unorm -> GPUTextureFormat.RGBA8Unorm
+                GPUColorFormat.RGBA8UnormSrgb -> GPUTextureFormat.RGBA8UnormSrgb
+                else -> error("Unsupported CorePrimitive fixture target format: ${targetFormat.value}")
+            },
             generation,
             1L,
             GPUWgpu4kPreparedSceneTargetLifecycle(),
@@ -4329,10 +4433,15 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         ),
     )
 
-    private fun command(id: Int, order: Int, rect: GPURect) = GPUFillRectCommandBuilder.build(
+    private fun command(
+        id: Int,
+        order: Int,
+        rect: GPURect,
+        targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+    ) = GPUFillRectCommandBuilder.build(
         commandId = GPUDrawCommandID(id),
         rect = rect,
-        target = GPUTargetFacts(TARGET.width, TARGET.height, "rgba8unorm"),
+        target = GPUTargetFacts(TARGET.width, TARGET.height, targetFormat.value),
         material = GPUMaterialDescriptor.SolidColor(0.5f, 0f, 0f, 0.5f),
         clip = GPUClipFacts(
             kind = GPUClipKind.WideOpen,
@@ -4359,12 +4468,22 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         ),
         supportedTextureFormats = setOf(
             GPUTextureFormat.RGBA8Unorm,
+            GPUTextureFormat.RGBA8UnormSrgb,
             GPUTextureFormat.Depth24PlusStencil8,
         ),
         textureFormatSampleSupport =
             org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport(
                 mapOf(
                     GPUTextureFormat.RGBA8Unorm to
+                        org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport(
+                            renderAttachmentSampleCounts = if (sampleCount == 4) {
+                                setOf(1, 4)
+                            } else {
+                                setOf(1)
+                            },
+                            resolveSourceSampleCounts = if (sampleCount == 4) setOf(4) else emptySet(),
+                        ),
+                    GPUTextureFormat.RGBA8UnormSrgb to
                         org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport(
                             renderAttachmentSampleCounts = if (sampleCount == 4) {
                                 setOf(1, 4)
@@ -4389,6 +4508,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     private fun GPUTaskList.withSampleCount(
         sampleCount: Int,
         canonicalClear: Boolean = false,
+        targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
     ): GPUTaskList {
         require(sampleCount in setOf(1, 4))
         val samplePlan = if (sampleCount == 1) {
@@ -4411,13 +4531,12 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         ),
                         targetGeneration = 1L,
                         deviceGeneration = capabilitySeal.deviceGeneration,
-                        colorFormat = org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat(
-                            "rgba8unorm",
-                        ),
-                        colorInterpretation =
-                            org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation(
-                                "encoded-premul-srgb",
-                            ),
+                        colorFormat = targetFormat,
+                        colorInterpretation = if (targetFormat == GPUColorFormat.RGBA8UnormSrgb) {
+                            GPUColorInterpretation.LinearPremul
+                        } else {
+                            GPUColorInterpretation.EncodedPremulSrgb
+                        },
                         samplePlan = it,
                         attachmentAuthority = org.graphiks.kanvas.gpu.renderer.passes
                             .GPUSampleAttachmentAuthority.PreparedFramePayload,

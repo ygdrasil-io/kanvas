@@ -99,10 +99,10 @@ internal fun validateCorePrimitiveDirectNativeRoute(
     targetFormat: String,
 ): GPUCorePrimitiveDirectNativeRoute {
     fun refused(code: String, message: String) = GPUCorePrimitiveDirectNativeRoute.Refused(code, message)
-    if (targetFormat != "rgba8unorm") {
+    if (targetFormat !in setOf("rgba8unorm", "rgba8unorm-srgb")) {
         return refused(
             "unsupported.native-core-primitive.target-format",
-            "Direct CorePrimitive native geometry requires rgba8unorm.",
+            "Direct CorePrimitive native geometry requires rgba8unorm or rgba8unorm-srgb.",
         )
     }
     val sampleCount = when (samplePlan) {

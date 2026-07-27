@@ -56,6 +56,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizationResult
 import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCorePrimitiveDirectPreparedPassSeal
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
@@ -89,11 +90,53 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 class GPUCorePrimitivePreparedFrameTaskListBuilderTest {
+    @Test
+    fun `sRGB request retains exact scene target and packet state identity`() {
+        val base = recording(command(0, 0)).taskList.withClipPlans(
+            mapOf(0 to GPUClipExecutionPlan.NoClip),
+        )
+        val packet = base.tasks.filterIsInstance<GPUTask.Render>().single().drawPackets.single()
+
+        val taskList = assertIs<GPUCorePrimitivePreparedFrameResult.Recorded>(
+            GPUCorePrimitivePreparedFrameTaskListBuilder().build(
+                GPUCorePrimitivePreparedFrameRequest(
+                    baseTaskList = base,
+                    capabilities = capabilities(),
+                    target = GPUFrameTargetRef("target.core.srgb"),
+                    targetBounds = targetBounds,
+                    semanticsByCommandId = mapOf(0 to semantic(packet)),
+                    targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+                ),
+            ),
+        ).taskList
+
+        val targetPreparation = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+            .single { it.role == GPUFrameResourceRole.SceneTarget }
+        assertEquals(
+            GPUColorFormat.RGBA8UnormSrgb,
+            assertIs<GPUFrameTextureDescriptor>(targetPreparation.descriptor).format,
+        )
+        assertEquals(
+            setOf("target.rgba8unorm-srgb.single-sample"),
+            taskList.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets)
+                .map(GPUDrawPacket::targetStateHash)
+                .toSet(),
+        )
+        assertEquals(
+            CORE_PRIMITIVE_TARGET_STATE_HASH,
+            corePrimitiveTargetStateHash(1),
+            "The one-argument legacy ABI must remain byte-for-byte stable",
+        )
+    }
+
     @Test
     fun `fill rect packet refuses a forged path semantic before resource planning`() {
         val base = recording(command(1, 0)).taskList.withClipPlans(

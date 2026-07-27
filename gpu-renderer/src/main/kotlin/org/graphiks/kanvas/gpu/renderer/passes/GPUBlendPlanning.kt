@@ -406,7 +406,8 @@ class GPUBlendAllowlistPlanner(
     }
 }
 
-private val acceptedBlendTargetFormats = setOf("rgba8unorm", "bgra8unorm", "rgba16float")
+private val acceptedBlendTargetFormats =
+    setOf("rgba8unorm", "rgba8unorm-srgb", "bgra8unorm", "rgba16float")
 
 private fun GPUAlphaPlan.isAcceptedPremultiplied(): Boolean =
     inputAlpha == "premultiplied" &&

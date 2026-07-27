@@ -179,6 +179,25 @@ class GPUBackendRuntimeNativeSmokeTest {
     }
 
     @Test
+    fun `native session advertises exact sRGB prepared scene attachment support`() {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+
+        val capabilities = assertNotNull(session!!.capabilities)
+        assertContains(capabilities.supportedTextureFormats, GPUTextureFormat.RGBA8UnormSrgb)
+        assertEquals(
+            setOf(1),
+            capabilities.textureFormatSampleSupport[GPUTextureFormat.RGBA8UnormSrgb]
+                ?.renderAttachmentSampleCounts,
+        )
+        assertEquals(
+            emptySet(),
+            capabilities.textureFormatSampleSupport[GPUTextureFormat.RGBA8UnormSrgb]
+                ?.resolveSourceSampleCounts,
+        )
+    }
+
+    @Test
     fun `fullscreen uniform alignment requires device limits and preserves stricter alignment`() {
         val capabilities = GPUCapabilities(
             implementation = GPUImplementationIdentity("GPU", "unit", "unit", "unit"),
@@ -267,6 +286,81 @@ class GPUBackendRuntimeNativeSmokeTest {
                 }
             }
             assertTrue(failure.message.orEmpty().startsWith(expectedCode), failure.message)
+            assertEquals(0, allocationAttempts)
+        }
+    }
+
+    @Test
+    fun `prepared scene target validation accepts only two exact color pairs and maps their native formats`() {
+        val supported = GPUCapabilities(
+            implementation = GPUImplementationIdentity("GPU", "unit", "unit", "unit"),
+            facts = emptyList(),
+            snapshotId = "prepared-target-exact-color-pairs",
+            supportedTextureFormats = setOf(
+                GPUTextureFormat.RGBA8Unorm,
+                GPUTextureFormat.RGBA8UnormSrgb,
+            ),
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(
+                    GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1),
+                    ),
+                    GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1),
+                    ),
+                ),
+            ),
+        )
+        val accepted = listOf(
+            GPUOffscreenTargetRequest(
+                4,
+                4,
+                GPUColorFormat.RGBA8Unorm,
+                GPUColorInterpretation.EncodedPremulSrgb,
+            ) to GPUTextureFormat.RGBA8Unorm,
+            GPUOffscreenTargetRequest(
+                4,
+                4,
+                GPUColorFormat.RGBA8UnormSrgb,
+                GPUColorInterpretation.LinearPremul,
+            ) to GPUTextureFormat.RGBA8UnormSrgb,
+        )
+        accepted.forEach { (request, expectedNativeFormat) ->
+            assertEquals(expectedNativeFormat, validatePreparedSceneTargetRequest(request, supported))
+        }
+
+        val crossPairs = listOf(
+            GPUOffscreenTargetRequest(
+                4,
+                4,
+                GPUColorFormat.RGBA8Unorm,
+                GPUColorInterpretation.LinearPremul,
+            ),
+            GPUOffscreenTargetRequest(
+                4,
+                4,
+                GPUColorFormat.RGBA8UnormSrgb,
+                GPUColorInterpretation.EncodedPremulSrgb,
+            ),
+        )
+        crossPairs.forEach { request ->
+            var allocationAttempts = 0
+            val failure = assertFailsWith<IllegalArgumentException> {
+                withValidatedPreparedSceneTargetRequest(
+                    request,
+                    supported.copy(
+                        supportedTextureFormats = emptySet(),
+                        textureFormatSampleSupport = GPUTextureFormatSampleSupport(emptyMap()),
+                    ),
+                ) {
+                    allocationAttempts += 1
+                }
+            }
+            assertTrue(
+                failure.message.orEmpty()
+                    .startsWith("unsupported.prepared-scene-session.color-interpretation"),
+                failure.message,
+            )
             assertEquals(0, allocationAttempts)
         }
     }

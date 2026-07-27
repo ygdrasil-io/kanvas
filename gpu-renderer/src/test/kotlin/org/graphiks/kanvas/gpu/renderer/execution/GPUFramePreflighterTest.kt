@@ -2352,6 +2352,60 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `direct core preflight accepts exact sRGB authority and refuses unorm target mismatch`() {
+        val srgb = GPUColorFormat.RGBA8UnormSrgb
+        val semantic = coreSemantic()
+        val render = coreRenderStep(
+            semantic = semantic,
+            targetFormat = srgb,
+            targetStateHash = corePrimitiveTargetStateHash(1, srgb),
+        )
+        val acceptedPlan = framePlan(listOf(coreDirectPrepare(srgb), render))
+        val acceptedEvents = mutableListOf<String>()
+        val accepted = preflighter(
+            RecordingResourceProvider(acceptedEvents),
+            RecordingCompletionProvider(acceptedEvents),
+            RecordingSurfaceProvider(acceptedEvents),
+        ).preflight(acceptedPlan)
+
+        assertIs<GPUFramePreflightResult.Prepared>(
+            accepted,
+            (accepted as? GPUFramePreflightResult.Refused)?.diagnostic.toString(),
+        )
+        assertTrue(acceptedEvents.isNotEmpty())
+
+        val mismatchEvents = mutableListOf<String>()
+        val mismatchPlan = acceptedPlan.mapPreparations { request ->
+            if (request.role != GPUFrameResourceRole.SceneTarget) {
+                request
+            } else {
+                GPUResourcePreparationRequest(
+                    resource = request.resource,
+                    descriptor = (request.descriptor as GPUFrameTextureDescriptor).copy(
+                        format = GPUColorFormat.RGBA8Unorm,
+                    ),
+                    role = request.role,
+                    usages = request.usages,
+                    lifetime = request.lifetime,
+                    byteSize = request.byteSize,
+                    diagnosticLabel = request.diagnosticLabel,
+                )
+            }
+        }
+        val mismatch = preflighter(
+            RecordingResourceProvider(mismatchEvents),
+            RecordingCompletionProvider(mismatchEvents),
+            RecordingSurfaceProvider(mismatchEvents),
+        ).preflight(mismatchPlan)
+
+        assertEquals(
+            "invalid.preflight.core_primitive_target_authority",
+            assertIs<GPUFramePreflightResult.Refused>(mismatch).diagnostic.code.value,
+        )
+        assertTrue(mismatchEvents.isEmpty(), "mismatch reached preflight side effects: $mismatchEvents")
+    }
+
+    @Test
     fun `color only 4x core primitive preflight accepts exact continuation and refuses substitution before effects`() {
         val samplePlan = GPUSamplePlan.MultisampleFrame(4)
         val continuation = org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest(
@@ -7202,11 +7256,12 @@ class GPUFramePreflighterTest {
     }
 
     private fun coreDirectPrepare(
+        targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
         vertexBytes: Long = 32L,
         indexBytes: Long = 24L,
         uniformBytes: Long = 256L,
     ): GPUFrameStep.PrepareResourcesStep = GPUFrameStep.PrepareResourcesStep(
-        requests = prepareScene().requests + listOf(
+        requests = prepareScene(format = targetFormat.value).requests + listOf(
             GPUResourcePreparationRequest(
                 resource = GPUFrameBufferRef("buffer.core.vertices"),
                 descriptor = GPUFrameBufferDescriptor(vertexBytes, 4L),
@@ -7281,6 +7336,7 @@ class GPUFramePreflighterTest {
         renderPipelineKey: GPURenderPipelineKey? = null,
         bindingLayoutHash: String = CORE_PRIMITIVE_BINDING_LAYOUT_HASH,
         vertexSourceLabel: String = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
+        targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
         targetStateHash: String = CORE_PRIMITIVE_TARGET_STATE_HASH,
         scissorBoundsHash: String = corePrimitiveScissorAuthority(GPUPixelBounds(0, 0, 4, 4)),
         renderStepVersion: Int = 1,
@@ -7312,6 +7368,7 @@ class GPUFramePreflighterTest {
                     clipExecutionPlan,
                     blendPlan,
                     samplePlan.sampleCount,
+                    targetFormat.corePrimitiveStructuralColorFormat(),
                 ).stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
             } ?: GPURenderPipelineKey("pipeline.core.missing-semantic"),
             bindingLayoutHash = bindingLayoutHash,
@@ -7336,7 +7393,7 @@ class GPUFramePreflighterTest {
                     clipExecutionPlan,
                     blendPlan,
                     samplePlan,
-                    "rgba8unorm",
+                    targetFormat.value,
                 ) is GPUCorePrimitiveDirectNativeRoute.Accepted
             ) {
                 listOf(
@@ -8126,6 +8183,11 @@ class GPUFramePreflighterTest {
     ) {
         val preparations = steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val sceneTargetFormat = preparations.singleOrNull {
+            it.role == GPUFrameResourceRole.SceneTarget
+        }?.descriptor?.let { descriptor ->
+            (descriptor as? GPUFrameTextureDescriptor)?.format
+        } ?: GPUColorFormat.RGBA8Unorm
         steps.filterIsInstance<GPUFrameStep.RenderPassStep>().forEach { render ->
             val packets = render.drawPackets.filter { packet ->
                 packet.role == GPUDrawPacketRole.Shading &&
@@ -8177,11 +8239,14 @@ class GPUFramePreflighterTest {
                 val semantic = packet.semanticPayload as GPUDrawSemanticPayload.CorePrimitive
                 val clip = packet.clipExecutionPlan ?: return@forEach
                 val blend = packet.blendPlan ?: return@forEach
+                val structuralColorFormat =
+                    sceneTargetFormat.corePrimitiveStructuralColorFormatOrNull() ?: return@forEach
                 val structuralKey = corePrimitiveRenderPipelineStructuralKey(
                     semantic,
                     clip,
                     blend,
                     render.samplePlan.sampleCount,
+                    structuralColorFormat,
                 )
                 val publicKey = structuralKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
                 if (packet.renderPipelineKey == publicKey) {
@@ -8211,6 +8276,21 @@ class GPUFramePreflighterTest {
             GPUFrameBufferRef("buffer.core.uniforms"),
         ).associateWith { resourceGeneration },
     )
+
+    private fun GPUColorFormat.corePrimitiveStructuralColorFormatOrNull():
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat? = when (this) {
+        GPUColorFormat.RGBA8Unorm ->
+            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
+        GPUColorFormat.RGBA8UnormSrgb ->
+            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb
+        else -> null
+    }
+
+    private fun GPUColorFormat.corePrimitiveStructuralColorFormat():
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat =
+        requireNotNull(corePrimitiveStructuralColorFormatOrNull()) {
+            "Unsupported CorePrimitive test target format: $value"
+        }
 
     private fun clipPreflightContext(plan: GPUFramePlan): GPUFramePreflightContext =
         GPUFramePreflightContext(

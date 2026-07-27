@@ -47,6 +47,7 @@ data class GPUPreparedSurfaceFrameRequest(
     val targetBounds: GPUPixelBounds,
     val semanticsByCommandId: Map<Int, GPUDrawSemanticPayload>,
     val readbackRequestId: GPUReadbackRequestID?,
+    val targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
 )
 
 sealed interface GPUPreparedSurfaceFrameResult {
@@ -154,6 +155,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         semanticsByCommandId = coreSemantics,
                         readbackRequestId = request.readbackRequestId,
                         configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
+                        targetFormat = request.targetFormat,
                     ),
                 )
             ) {
@@ -315,7 +317,11 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         val preparations = mutableListOf<GPUResourcePreparationRequest>()
         preparations += coreAssembly.preparations
             .filterNot { preparation -> preparation.resource == request.target }
-        preparations += corePrimitiveTargetPreparation(request.target, request.targetBounds)
+        preparations += corePrimitiveTargetPreparation(
+            request.target,
+            request.targetBounds,
+            request.targetFormat,
+        )
         imagePlans.forEach { plan ->
             preparations += plan.preparationRequests
         }
@@ -506,12 +512,17 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             code = GPUDiagnosticCode("info.recording.prepared_image_color_contract"),
             domain = GPUDiagnosticDomain.Color,
             severity = GPUDiagnosticSeverity.Info,
-            message = "Prepared image upload and target retain encoded premultiplied sRGB values.",
+            message =
+                "Prepared color images upload straight encoded sRGB bytes through an sRGB source " +
+                    "texture and shade as linear-premultiplied values into the declared target.",
             facts = mapOf(
-                "image.upload.format" to "RGBA8Unorm",
-                "image.target.format" to "RGBA8Unorm",
-                "image.color.interpretation" to "EncodedPremulSrgb",
-                "image.attachment.srgbConversion" to "false",
+                "image.upload.format" to "RGBA8UnormSrgb",
+                "image.upload.encoding" to "StraightEncodedSrgb",
+                "image.upload.interpretation" to "StraightEncodedSrgb",
+                "image.target.format" to request.targetFormat.value,
+                "image.shader.interpretation" to "LinearPremul",
+                "image.attachment.srgbConversion" to
+                    (request.targetFormat == GPUColorFormat.RGBA8UnormSrgb).toString(),
             ),
         )
         return GPUPreparedSurfaceFrameResult.Recorded(
@@ -589,6 +600,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     semanticsByCommandId = coreSemantics,
                     readbackRequestId = null,
                     configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
+                    targetFormat = request.targetFormat,
                 ),
                 additionalMemoryAllocations = additionalMemoryAllocations,
             )

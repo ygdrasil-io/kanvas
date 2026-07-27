@@ -11,6 +11,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import io.ygdrasil.webgpu.GPUMapMode
 import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlinx.coroutines.runBlocking
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackCompletionFailure
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackMapFailureSafety
@@ -704,6 +706,15 @@ internal class GPUWgpu4kNativeReadbackMapper(
         operand: GPUPreparedNativeScopeOperand.Readback,
     ): GPUDiagnostic? {
         val layout = operand.layout
+        val exactEncodedRgba8Storage =
+            output.request.pixelFormat == GPUReadbackPixelFormat.Rgba8Unorm &&
+                output.request.outputColorInterpretation == GPUColorInterpretation.EncodedPremulSrgb &&
+                when (layout.format) {
+                    GPUTextureFormat.RGBA8Unorm,
+                    GPUTextureFormat.RGBA8UnormSrgb,
+                    -> true
+                    else -> false
+                }
         return when {
             operand.destination.ownership != GPUPreparedNativeOperandOwnership.OutputOwnedReadback ->
                 executionDiagnostic(
@@ -718,9 +729,9 @@ internal class GPUWgpu4kNativeReadbackMapper(
                 layout.rowsPerImage != output.layout.rowsPerImage ||
                 layout.bufferOffset != output.layout.bufferOffset ||
                 layout.mappedSize != output.layout.totalBufferBytes ||
-                layout.format != GPUTextureFormat.RGBA8Unorm -> executionDiagnostic(
+                !exactEncodedRgba8Storage -> executionDiagnostic(
                 "invalid.frame-readback.native-layout",
-                "Native readback operand does not exactly match the preflighted RGBA8 layout.",
+                "Native readback operand does not exactly match the preflighted encoded RGBA8 layout.",
             )
             else -> null
         }

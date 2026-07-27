@@ -42,6 +42,48 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
     @Test
+    fun `scene sRGB structural authority maps exact native target while mask producer stays unorm`() {
+        val sceneKeys = listOf(
+            directKey(),
+            pathKey(producerWinding()),
+            pathKey(regularCover(), cover = true),
+            corePrimitiveClipStencilProducerRenderPipelineStructuralKey(GPUClipFillRule.Winding),
+            corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(false, srcOverBlendPlan()),
+            corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey(srcOverBlendPlan()),
+        )
+
+        sceneKeys.forEach { legacy ->
+            val srgb = legacy.copy(
+                colorFormat = GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb,
+            )
+            val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(srgb),
+            )
+            val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(
+                mapped.identity,
+                shader,
+                pipelineLayout,
+            )
+
+            assertEquals("rgba8unorm-srgb", mapped.identity.targetFormat)
+            assertEquals(
+                GPUTextureFormat.RGBA8UnormSrgb,
+                assertIs<ColorTargetState>(requireNotNull(descriptor.fragment).targets.single()).format,
+            )
+        }
+
+        val producer = corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
+            GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+            GPUClipMaskCombine.Intersect,
+        )
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
+            producer.colorFormat,
+        )
+        assertEquals("rgba8unorm", mappedIdentity(producer).targetFormat)
+    }
+
+    @Test
     fun `direct color only pipeline maps exact 4x structural sample state`() {
         val key = directKey().copy(sampleCount = 4)
         val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(

@@ -25,6 +25,48 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUCorePrimitivePathStencilStructuralKeyTest {
     @Test
+    fun `scene structural keys distinguish sRGB while legacy hashes stay byte exact`() {
+        val legacyDirect = GPUCorePrimitiveRenderPipelineStructuralKey(
+            shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
+            topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
+            blend = fixedBlend(),
+            clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+        )
+        val srgbDirect = legacyDirect.copy(
+            colorFormat = GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb,
+        )
+        val semantic = pathSemantic(GPUCorePrimitiveFillRule.Winding, inverseFill = false)
+        val legacyPath = pathKey(
+            semantic,
+            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+        )
+        val srgbPath = corePrimitivePathStencilRenderPipelineStructuralKey(
+            semantic = semantic,
+            role = GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
+            clipExecutionPlan = GPUClipExecutionPlan.NoClip,
+            blendPlan = blendPlan(),
+            colorFormat = GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb,
+        )
+
+        assertEquals(
+            "pipeline.test.c9154fca6554ac5609573aa375e2d7cd3fb59d95665aa2ea86b22f1b3ff8d3aa",
+            legacyDirect.stableRenderPipelineKey("pipeline.test").value,
+        )
+        assertNotEquals(
+            legacyDirect.stableRenderPipelineKey("pipeline.test"),
+            srgbDirect.stableRenderPipelineKey("pipeline.test"),
+        )
+        assertNotEquals(
+            legacyPath.stableRenderPipelineKey("pipeline.test"),
+            srgbPath.stableRenderPipelineKey("pipeline.test"),
+        )
+        assertEquals(
+            GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb,
+            srgbPath.colorFormat,
+        )
+    }
+
+    @Test
     fun `direct shading keeps its historical stable pipeline hash`() {
         val key = GPUCorePrimitiveRenderPipelineStructuralKey(
             shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,

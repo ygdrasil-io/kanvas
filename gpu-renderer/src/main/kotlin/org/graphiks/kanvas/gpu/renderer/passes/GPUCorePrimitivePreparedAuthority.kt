@@ -9,6 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskSampling
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilCompare
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipStencilOperation
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
@@ -19,6 +20,15 @@ import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+
+internal fun GPUColorFormat.corePrimitiveStructuralColorFormat():
+    GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat = when (this) {
+    GPUColorFormat.RGBA8Unorm ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
+    GPUColorFormat.RGBA8UnormSrgb ->
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb
+    else -> throw IllegalArgumentException("Unsupported CorePrimitive scene target format: $value")
+}
 
 /** Compact code/layout axes computed once while the prepared packet is recorded. */
 internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
@@ -56,7 +66,10 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
     enum class Topology { DirectTriangleList, AnalyticRRect, StencilEdgeFan, StrokeStencilEdgeFan }
     enum class FrontFace { Ccw }
     enum class CullMode { None }
-    enum class ColorFormat { Rgba8Unorm }
+    enum class ColorFormat(val stableIdentity: String) {
+        Rgba8Unorm("rgba8unorm"),
+        Rgba8UnormSrgb("rgba8unorm-srgb"),
+    }
     enum class DepthStencilFormat { Depth24PlusStencil8 }
     enum class ClipGeometry { Rect, RRect, Path }
     enum class UniformLayout(val stableIdentity: String) {
@@ -267,7 +280,7 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
                 append("|shader=").append(shader.name)
                 append("|layout=").append(uniformLayout.stableIdentity)
                 append("|topology=").append(topology.name)
-                append("|frontFace=ccw|cull=none|target=rgba8unorm")
+                append("|frontFace=ccw|cull=none|target=").append(colorFormat.stableIdentity)
                 append("|samples=").append(sampleCount)
                 append("|blend=").append(blend)
                 append("|clip=").append(clip)
@@ -371,6 +384,8 @@ internal fun corePrimitiveCoverageMaskProducerRenderPipelineStructuralKey(
 
 internal fun corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey(
     blendPlan: GPUBlendPlan,
+    colorFormat: GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat =
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
 ): GPUCorePrimitiveRenderPipelineStructuralKey {
     require(blendPlan.isCanonicalCoverageMaskConsumerSrcOver()) {
         "Coverage-mask consumer structural authority requires canonical premultiplied SrcOver"
@@ -381,6 +396,7 @@ internal fun corePrimitiveCoverageMaskConsumerRenderPipelineStructuralKey(
         blend = coverageMaskConsumerBlend(),
         clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.CoverageMaskNearest,
         role = GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskConsumer,
+        colorFormat = colorFormat,
         depthStencil = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None,
         sampleCount = 1,
     )
@@ -390,7 +406,13 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.hasExactCoverageMaskFixe
     topology == GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList &&
         frontFace == GPUCorePrimitiveRenderPipelineStructuralKey.FrontFace.Ccw &&
         cullMode == GPUCorePrimitiveRenderPipelineStructuralKey.CullMode.None &&
-        colorFormat == GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm &&
+        when (role) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskProducer ->
+                colorFormat == GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
+            GPUCorePrimitiveRenderPipelineStructuralKey.Role.CoverageMaskConsumer ->
+                colorFormat in GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.entries
+            else -> false
+        } &&
         depthStencil == GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None &&
         sampleCount == 1 && clipStencilFillRule == null
 
@@ -517,12 +539,15 @@ internal fun GPUCorePrimitiveRenderPipelineStructuralKey.clipStencilStructuralPr
 internal fun corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
     fillRule: GPUClipFillRule,
     sampleCount: Int = 1,
+    colorFormat: GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat =
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
 ): GPUCorePrimitiveRenderPipelineStructuralKey = GPUCorePrimitiveRenderPipelineStructuralKey(
     shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.ClipStencilProducer,
     topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.StencilEdgeFan,
     blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone,
     clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
     role = GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer,
+    colorFormat = colorFormat,
     depthStencil = when (fillRule) {
         GPUClipFillRule.Winding -> CLIP_STENCIL_PRODUCER_WINDING_STATE
         GPUClipFillRule.EvenOdd -> CLIP_STENCIL_PRODUCER_EVEN_ODD_STATE
@@ -535,12 +560,15 @@ internal fun corePrimitiveClipStencilConsumerRenderPipelineStructuralKey(
     inverseFill: Boolean,
     blendPlan: GPUBlendPlan,
     sampleCount: Int = 1,
+    colorFormat: GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat =
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
 ): GPUCorePrimitiveRenderPipelineStructuralKey = GPUCorePrimitiveRenderPipelineStructuralKey(
     shader = GPUCorePrimitiveRenderPipelineStructuralKey.Shader.DirectGeometry,
     topology = GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList,
     blend = blendPlan.corePrimitiveStructuralBlend(),
     clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
     role = GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer,
+    colorFormat = colorFormat,
     depthStencil = if (inverseFill) {
         CLIP_STENCIL_CONSUMER_INVERSE_STATE
     } else {
@@ -617,6 +645,8 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
     clipExecutionPlan: GPUClipExecutionPlan,
     blendPlan: GPUBlendPlan,
     sampleCount: Int = 1,
+    colorFormat: GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat =
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
 ): GPUCorePrimitiveRenderPipelineStructuralKey = GPUCorePrimitiveRenderPipelineStructuralKey(
     shader = when (val geometry = semantic.geometry) {
         is GPUCorePrimitiveGeometry.Rect -> if (
@@ -652,6 +682,7 @@ internal fun corePrimitiveRenderPipelineStructuralKey(
     },
     blend = blendPlan.corePrimitiveStructuralBlend(),
     clip = clipExecutionPlan.corePrimitiveStructuralClip(),
+    colorFormat = colorFormat,
     sampleCount = sampleCount,
 )
 
@@ -662,6 +693,8 @@ internal fun corePrimitivePathStencilRenderPipelineStructuralKey(
     clipExecutionPlan: GPUClipExecutionPlan,
     blendPlan: GPUBlendPlan,
     sampleCount: Int = 1,
+    colorFormat: GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat =
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm,
 ): GPUCorePrimitiveRenderPipelineStructuralKey {
     require(
         role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer ||
@@ -708,6 +741,7 @@ internal fun corePrimitivePathStencilRenderPipelineStructuralKey(
                 blendPlan.corePrimitiveStructuralBlend()
         },
         clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+        colorFormat = colorFormat,
         depthStencil = pathStencilState(role, geometry.fillRule, geometry.inverseFill),
         sampleCount = sampleCount,
     )

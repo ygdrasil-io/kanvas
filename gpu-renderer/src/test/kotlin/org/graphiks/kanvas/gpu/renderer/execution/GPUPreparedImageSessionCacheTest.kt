@@ -91,11 +91,11 @@ class GPUPreparedImageSessionCacheTest {
             PIPELINE_KEY,
             PIPELINE_KEY.copy(
                 destinationBlendState = "SrcOver",
-                targetFormat = "rgba8unorm",
+                targetFormat = "rgba8unorm-srgb",
             ),
             PIPELINE_KEY.copy(
                 destinationBlendState = "src_over",
-                targetFormat = "RGBA8UNORM",
+                targetFormat = "RGBA8UNORMSRGB",
             ),
         )
 
@@ -113,7 +113,7 @@ class GPUPreparedImageSessionCacheTest {
                 descriptor.layout,
         )
         val target = requireNotNull(descriptor.fragment).targets.single()
-        assertEquals(GPUTextureFormat.RGBA8Unorm, target.format)
+        assertEquals(GPUTextureFormat.RGBA8UnormSrgb, target.format)
         val blend = requireNotNull(target.blend)
         assertEquals(GPUBlendOperation.Add, blend.color.operation)
         assertEquals(GPUBlendFactor.One, blend.color.srcFactor)
@@ -144,7 +144,7 @@ class GPUPreparedImageSessionCacheTest {
             ),
         )
 
-        assertEquals(GPUPreparedImageRefusalCodes.PIXEL_FORMAT, refused.code)
+        assertEquals(GPUPreparedImageRefusalCodes.IMAGE_PROFILE_CONVERSION, refused.code)
         assertContains(refused.message, "BGRA8Unorm")
         assertTrue(native.handles.isEmpty())
 
@@ -167,7 +167,7 @@ class GPUPreparedImageSessionCacheTest {
             cache.acquire(PIPELINE_KEY.copy(bindingLayoutHash = "foreign-layout"), generation),
         )
 
-        assertEquals(GPUPreparedImageRefusalCodes.PIXEL_FORMAT, formatRefusal.code)
+        assertEquals(GPUPreparedImageRefusalCodes.IMAGE_PROFILE_CONVERSION, formatRefusal.code)
         assertContains(formatRefusal.message, "BGRA8Unorm")
         assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, blendRefusal.code)
         assertContains(blendRefusal.message, "multiply")
@@ -225,7 +225,7 @@ class GPUPreparedImageSessionCacheTest {
     private companion object {
         val PIPELINE_KEY = GPUPreparedImagePipelineKey(
             destinationBlendState = "src-over",
-            targetFormat = "RGBA8Unorm",
+            targetFormat = "RGBA8UnormSrgb",
             bindingLayoutHash = "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
         )
 

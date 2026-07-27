@@ -1,9 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.payloads
 
+import io.ygdrasil.webgpu.GPUTextureFormat
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.images.preparedSdrColorContract
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 /** Closed device-geometry ABI for a prepared sampled image. */
@@ -124,7 +126,8 @@ class GPUPreparedImagePayloadGatherer {
 }
 
 internal const val GPU_PREPARED_IMAGE_RENDER_STEP_IDENTITY = "image.draw.texture_upload"
-internal const val GPU_PREPARED_IMAGE_TARGET_FORMAT = "RGBA8Unorm"
+internal val GPU_PREPARED_IMAGE_TARGET_FORMAT: String =
+    preparedSdrColorContract().targetTextureFormat.preparedImageFormatLabel()
 internal val GPU_PREPARED_IMAGE_FIXED_INDICES: List<Int> = listOf(0, 1, 2, 0, 2, 3)
 
 internal fun GPUPreparedImagePayloadInput.pipelineKey(): GPUPreparedImagePipelineKey = GPUPreparedImagePipelineKey(
@@ -146,6 +149,12 @@ internal fun GPUPreparedImagePayloadInput.canonicalHash(): String = preparedImag
         append("artifactGeneration=").append(artifact.sourceGeneration).append(';')
         append("artifactAlphaOnly=").append(artifact.alphaOnly).append(';')
         append("artifactColorInterpretation=").append(artifact.colorInterpretation).append(';')
+        append("artifactUploadEncoding=").append(artifact.colorUploadEncoding?.name ?: "CoverageLinear").append(';')
+        append("artifactUploadInterpretation=").append(artifact.colorUploadInterpretation).append(';')
+        append("artifactUploadFormat=").append(artifact.preparedImageUploadFormat()).append(';')
+        append("targetFormat=").append(GPU_PREPARED_IMAGE_TARGET_FORMAT).append(';')
+        append("shaderInterpretation=").append(preparedSdrColorContract().shaderInterpretation.value).append(';')
+        append("readbackInterpretation=").append(preparedSdrColorContract().readbackInterpretation.value).append(';')
         append("geometryClass=").append(geometry.geometryClass.name).append(';')
         geometry.vertices.forEachIndexed { index, vertex ->
             append("vertex").append(index).append('=').append(vertex.x.toRawBits()).append(',')
@@ -169,6 +178,12 @@ internal fun GPUPreparedImagePayloadInput.stableDumpLine(canonicalHash: String):
         "artifactFormat=$GPU_PREPARED_IMAGE_TARGET_FORMAT artifactLayout=${artifact.pixelLayout.sourceRowBytes}," +
         "${artifact.pixelLayout.normalizedRgba8RowBytes},${artifact.pixelLayout.rowCount} " +
         "artifactAlphaOnly=${artifact.alphaOnly} artifactInterpretation=${artifact.colorInterpretation} " +
+        "artifactUploadEncoding=${artifact.colorUploadEncoding?.name ?: "CoverageLinear"} " +
+        "artifactUploadInterpretation=${artifact.colorUploadInterpretation} " +
+        "artifactUploadFormat=${artifact.preparedImageUploadFormat()} " +
+        "targetFormat=$GPU_PREPARED_IMAGE_TARGET_FORMAT " +
+        "shaderInterpretation=${preparedSdrColorContract().shaderInterpretation.value} " +
+        "readbackInterpretation=${preparedSdrColorContract().readbackInterpretation.value} " +
         "geometry=${geometry.geometryClass.name} " +
         geometry.vertices.mapIndexed { index, vertex ->
             "vertex$index=${vertex.x.toRawBits()},${vertex.y.toRawBits()},${vertex.u.toRawBits()},${vertex.v.toRawBits()}"
@@ -187,3 +202,16 @@ private fun GPUPixelBounds.contains(other: GPUPixelBounds): Boolean =
 
 private fun preparedImageSha256Hex(input: String): String =
     MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+
+private fun GPUPreparedImageUploadArtifact.preparedImageUploadFormat(): String {
+    val contract = preparedSdrColorContract()
+    return (
+        if (alphaOnly) contract.coverageSourceTextureFormat else contract.colorSourceTextureFormat
+    ).preparedImageFormatLabel()
+}
+
+private fun GPUTextureFormat.preparedImageFormatLabel(): String = when (this) {
+    GPUTextureFormat.RGBA8Unorm -> "RGBA8Unorm"
+    GPUTextureFormat.RGBA8UnormSrgb -> "RGBA8UnormSrgb"
+    else -> error("Prepared-image SDR contract selected unsupported texture format")
+}

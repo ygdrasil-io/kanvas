@@ -909,17 +909,27 @@ internal fun validatePreparedSceneTargetRequest(
     request: GPUOffscreenTargetRequest,
     capabilities: GPUCapabilities,
 ): GPUTextureFormat {
-    require(request.colorFormat == GPUColorFormat.RGBA8Unorm) {
-        "unsupported.prepared-scene-session.target-format: " +
-            "expected=${GPUColorFormat.RGBA8Unorm.value} actual=${request.colorFormat.value}"
+    val expectedInterpretation: GPUColorInterpretation
+    val nativeFormat = when (request.colorFormat) {
+        GPUColorFormat.RGBA8Unorm -> {
+            expectedInterpretation = GPUColorInterpretation.EncodedPremulSrgb
+            GPUTextureFormat.RGBA8Unorm
+        }
+        GPUColorFormat.RGBA8UnormSrgb -> {
+            expectedInterpretation = GPUColorInterpretation.LinearPremul
+            GPUTextureFormat.RGBA8UnormSrgb
+        }
+        else -> throw IllegalArgumentException(
+            "unsupported.prepared-scene-session.target-format: " +
+                "expected=${GPUColorFormat.RGBA8Unorm.value}|" +
+                "${GPUColorFormat.RGBA8UnormSrgb.value} actual=${request.colorFormat.value}",
+        )
     }
-    require(request.colorInterpretation == GPUColorInterpretation.EncodedPremulSrgb) {
+    require(request.colorInterpretation == expectedInterpretation) {
         "unsupported.prepared-scene-session.color-interpretation: " +
-            "expected=${GPUColorInterpretation.EncodedPremulSrgb.value} " +
+            "format=${request.colorFormat.value} expected=${expectedInterpretation.value} " +
             "actual=${request.colorInterpretation.value}"
     }
-
-    val nativeFormat = GPUTextureFormat.RGBA8Unorm
     val sampleSupport = capabilities.textureFormatSampleSupport[nativeFormat]
     require(
         nativeFormat in capabilities.supportedTextureFormats &&
@@ -1126,10 +1136,11 @@ private class WgpuBackendSession(
             ),
             snapshotId = "gpu-runtime-${deviceGeneration.value}",
             limits = backendLimits,
-            // Legacy formats that may use the broad color/copy/texture-binding usage set below.
+            // Color formats that may use the broad color/copy/texture-binding usage set below.
             // Render-only D24S8 support is carried by textureFormatSampleSupport instead.
             supportedTextureFormats = setOf(
                 GPUTextureFormat.RGBA8Unorm,
+                GPUTextureFormat.RGBA8UnormSrgb,
                 GPUTextureFormat.BGRA8Unorm,
                 GPUTextureFormat.R8Unorm,
             ),
@@ -1143,6 +1154,9 @@ private class WgpuBackendSession(
                     GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
                         renderAttachmentSampleCounts = setOf(1, 4),
                         resolveSourceSampleCounts = setOf(4),
+                    ),
+                    GPUTextureFormat.RGBA8UnormSrgb to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1),
                     ),
                     GPUTextureFormat.Depth24PlusStencil8 to GPUTextureSampleCountSupport(
                         renderAttachmentSampleCounts = setOf(1, 4),

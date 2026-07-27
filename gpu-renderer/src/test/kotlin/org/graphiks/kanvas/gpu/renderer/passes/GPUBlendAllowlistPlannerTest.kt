@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class GPUBlendAllowlistPlannerTest {
     private val planner = GPUBlendAllowlistPlanner()
@@ -63,6 +64,31 @@ class GPUBlendAllowlistPlannerTest {
                 assertEquals(direct.destinationReadRequirement, adapted.destinationReadRequirement)
             }
         }
+    }
+
+    @Test
+    fun `sRGB target accepts the same SrcOver blend while retaining distinct target identity`() {
+        val linear = planner.plan(request(GPUBlendMode.SRC_OVER))
+        val srgb =
+            planner.plan(
+                request(GPUBlendMode.SRC_OVER).copy(
+                    targetFormatClass = "rgba8unorm-srgb",
+                ),
+            )
+        val incompatible =
+            planner.plan(
+                request(GPUBlendMode.SRC_OVER).copy(
+                    targetFormatClass = "rgba32float",
+                ),
+            )
+
+        assertIs<GPUBlendPlan.FixedFunctionBlend>(linear.plan)
+        assertEquals(linear.plan, assertIs<GPUBlendPlan.FixedFunctionBlend>(srgb.plan))
+        assertEquals("rgba8unorm-srgb", srgb.targetFormatClass)
+        assertNotEquals(linear.pipelineKeyHash, srgb.pipelineKeyHash)
+        assertTrue(srgb.dumpLines().first().contains("target=rgba8unorm-srgb"))
+        assertIs<GPUBlendPlan.UnsupportedBlend>(incompatible.plan)
+        assertEquals("unsupported.target.format_blend_incompatible", incompatible.diagnostics.single().code)
     }
 
     private fun request(mode: GPUBlendMode) = GPUBlendAllowlistRequest(

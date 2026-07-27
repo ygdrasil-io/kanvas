@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.execution.GPUEncoderOperationKind
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCommandEncoderScopePlan
 import org.graphiks.kanvas.gpu.renderer.execution.GPUFramePreflightContext
@@ -77,6 +78,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
@@ -88,6 +90,44 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUPreparedSurfaceFrameTaskListBuilderTest {
+    @Test
+    fun `sRGB all core and mixed requests retain the exact scene target format`() {
+        val cases = listOf(
+            recording(coreCommand(0, 0)).taskList,
+            recording(coreCommand(0, 0), imageCommand(1, 1)).taskList,
+        )
+
+        cases.forEach { base ->
+            val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+                GPUPreparedSurfaceFrameTaskListBuilder().build(
+                    request(
+                        base = base,
+                        semantics = semantics(base),
+                        targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+                    ),
+                ),
+            ).taskList
+
+            val targetPreparation = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+                .flatMap(GPUTask.PrepareResources::requests)
+                .single { it.role == GPUFrameResourceRole.SceneTarget }
+            assertEquals(
+                GPUColorFormat.RGBA8UnormSrgb,
+                assertIs<GPUFrameTextureDescriptor>(targetPreparation.descriptor).format,
+            )
+            assertEquals(
+                setOf("target.rgba8unorm-srgb.single-sample"),
+                taskList.tasks.filterIsInstance<GPUTask.Render>()
+                    .flatMap(GPUTask.Render::drawPackets)
+                    .filter { packet ->
+                        packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+                    }
+                    .map(GPUDrawPacket::targetStateHash)
+                    .toSet(),
+            )
+        }
+    }
+
     @Test
     fun `core image core stays in paint order and splits only contiguous route runs`() {
         val base = recording(coreCommand(0, 0), imageCommand(1, 1), coreCommand(2, 2)).taskList
@@ -122,7 +162,9 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
             2 to imageSemantic(base, commandId = 2, artifactOverride = sharedImage),
         )
 
-        val result = GPUPreparedSurfaceFrameTaskListBuilder().build(request(base, semantics))
+        val result = GPUPreparedSurfaceFrameTaskListBuilder().build(
+            request(base, semantics, GPUColorFormat.RGBA8UnormSrgb),
+        )
         val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
             result,
             (result as? GPUPreparedSurfaceFrameResult.Refused)?.diagnostic.toString(),
@@ -139,12 +181,14 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
                     it.reasonCode == "prepared.image.upload-before-consumer"
             })
         }
-        assertEquals("RGBA8Unorm", taskList.diagnostics.single {
+        val colorContract = taskList.diagnostics.single {
             it.code.value == "info.recording.prepared_image_color_contract"
-        }.facts.getValue("image.upload.format"))
-        assertEquals("false", taskList.diagnostics.single {
-            it.code.value == "info.recording.prepared_image_color_contract"
-        }.facts.getValue("image.attachment.srgbConversion"))
+        }
+        assertEquals("RGBA8UnormSrgb", colorContract.facts.getValue("image.upload.format"))
+        assertEquals("StraightEncodedSrgb", colorContract.facts.getValue("image.upload.encoding"))
+        assertEquals("rgba8unorm-srgb", colorContract.facts.getValue("image.target.format"))
+        assertEquals("LinearPremul", colorContract.facts.getValue("image.shader.interpretation"))
+        assertEquals("true", colorContract.facts.getValue("image.attachment.srgbConversion"))
     }
 
     @Test
@@ -781,6 +825,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
     private fun request(
         base: GPUTaskList,
         semantics: Map<Int, GPUDrawSemanticPayload>,
+        targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
     ) = GPUPreparedSurfaceFrameRequest(
         baseTaskList = base,
         capabilities = capabilities(),
@@ -788,6 +833,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         targetBounds = bounds,
         semanticsByCommandId = semantics,
         readbackRequestId = GPUReadbackRequestID("readback.prepared-surface"),
+        targetFormat = targetFormat,
     )
 
     private fun preflightPreparedTaskList(

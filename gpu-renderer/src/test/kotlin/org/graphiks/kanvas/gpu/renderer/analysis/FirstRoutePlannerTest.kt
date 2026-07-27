@@ -196,6 +196,43 @@ class FirstRoutePlannerTest {
     }
 
     @Test
+    fun `solid fill rect accepts sRGB target without erasing format identity`() {
+        val linearFixture =
+            firstRouteCommand(
+                target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm"),
+            )
+        val srgbFixture =
+            firstRouteCommand(
+                target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm-srgb"),
+            )
+        val incompatibleFixture =
+            firstRouteCommand(
+                target = GPUTargetFacts(width = 64, height = 64, colorFormat = "bgra8unorm"),
+            )
+
+        val linear =
+            GPUFirstRoutePlanner(capabilities = linearFixture.capabilities).plan(linearFixture.command)
+        val srgb =
+            GPUFirstRoutePlanner(capabilities = srgbFixture.capabilities).plan(srgbFixture.command)
+        val incompatible =
+            GPUFirstRoutePlanner(capabilities = incompatibleFixture.capabilities)
+                .plan(incompatibleFixture.command)
+
+        assertIs<GPURouteDecision.Native>(srgb.routeDecision)
+        assertEquals("target.rgba8unorm-srgb.64x64", srgb.pass.targetStateHash)
+        assertEquals(
+            listOf("pending.pipeline.fill_rect.solid.rgba8unorm-srgb.src_over"),
+            srgb.pass.pipelineKeys,
+        )
+        assertNotEquals(linear.pass.targetStateHash, srgb.pass.targetStateHash)
+        assertNotEquals(linear.pass.pipelineKeys, srgb.pass.pipelineKeys)
+        assertEquals(
+            "unsupported.target.format_blend_incompatible",
+            assertIs<GPURouteDecision.Refused>(incompatible.routeDecision).diagnostic.code,
+        )
+    }
+
+    @Test
     fun `solid fill rect packet owns the gatherers exact rectangle color and zero radii payload`() {
         val command = GPUFillRectCommandBuilder.build(
             commandId = GPUDrawCommandID(41),

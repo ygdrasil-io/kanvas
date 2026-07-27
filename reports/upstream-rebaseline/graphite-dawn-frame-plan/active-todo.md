@@ -1,6 +1,6 @@
 # Graphite/Dawn Frame Plan Active TODO
 
-Last updated: 2026-07-25
+Last updated: 2026-07-27
 
 This is the active, branch-specific backlog for
 `codex/graphite-dawn-frame-plan-design`. Items are processed strictly in the
@@ -220,20 +220,35 @@ Current state:
 
 - Tasks 1-4 and the first implementation of Task 5 are present through
   `a037a7c463d84d8ceb99eabeb0d01d426769d8b3`;
-- the 2026-07-26 audit reran 289 focused tests with zero failure, but this
-  evidence does not accept Task 5 because the fake native seams do not validate
-  the complete binding-layout and sharing contract;
-- Task 5 must be consolidated before Task 6:
+- the 2026-07-26 audit reran 289 focused tests with zero failure, but that
+  historical evidence did not by itself accept Task 5 because the fake native
+  seams did not validate the complete binding-layout and sharing contract;
+- Task 5 consolidation is now completed and independently reviewed:
   - one reflected ABI112/layout identity from builder to native bind group;
   - command-exact image-source mapping allowing repeated draws;
   - Task-4 texture/view/sampler/bind-group sharing reused by Task 5;
   - immutable cache device generation;
   - stable refusal codes propagated unchanged;
   - measured removal of uniform-only pipeline-key axes;
-- the native sRGB source/sample/store contract must then match an independent
+- the native sRGB source/sample/store contract matches an independent
   translucent oracle without a destination CPU snapshot/upload;
-- Task 6 and product routing remain unopened until these gates pass an
-  independent review.
+- the Task 5.4 repair now propagates an exact `rgba8unorm-srgb` scene target
+  authority, keeps coverage-mask intermediates unorm, closes the two prepared
+  scene format/interpretation pairs, declares only single-sample native sRGB
+  attachment support, explicitly refuses sRGB x4 before encoder/cache/pool or
+  native acquisition, preserves byte-exact canonical
+  `EncodedPremulSrgb` readback without CPU conversion, and updates the
+  straight-upload/sRGB-store diagnostic;
+- the fresh Task 5.4 manifests cover 24 GPU suites (531/531) and 9 Kanvas
+  suites (81/81), with zero failure or skip;
+- bounded evidence is recorded in
+  `fp-04-srgb-store.md` and the accepting consolidation review in
+  `fp-04-task-5-review.md`;
+- Task 5 is `completed` and accepted after the initial independent findings
+  were repaired and the independent re-review returned no significant finding;
+- Task 6 is ready to start under a separate implementation scope but has not
+  started here; product routing and the image legacy allowlist remain
+  unchanged.
 
 Acceptance:
 

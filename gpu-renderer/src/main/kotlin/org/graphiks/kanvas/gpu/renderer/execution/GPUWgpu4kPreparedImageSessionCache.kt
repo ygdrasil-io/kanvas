@@ -282,10 +282,10 @@ internal class GPUWgpu4kPreparedImageSessionCache(
             )
         }
         val targetFormat = when (key.targetFormat.trim().lowercase()) {
-            "rgba8unorm" -> GPUTextureFormat.RGBA8Unorm
+            "rgba8unormsrgb", "rgba8unorm-srgb" -> GPUTextureFormat.RGBA8UnormSrgb
             else ->
                 return GPUPreparedImagePipelineCanonicalization.Refused(
-                    code = GPUPreparedImageRefusalCodes.PIXEL_FORMAT,
+                    code = GPUPreparedImageRefusalCodes.IMAGE_PROFILE_CONVERSION,
                     message = "Unsupported prepared-image target format ${key.targetFormat}",
                 )
         }
@@ -307,7 +307,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
             GPUPreparedImageCanonicalPipelineState(
                 key = GPUPreparedImagePipelineKey(
                     destinationBlendState = "src-over",
-                    targetFormat = "RGBA8Unorm",
+                    targetFormat = "RGBA8UnormSrgb",
                     bindingLayoutHash = bindingLayoutIdentity,
                 ),
                 targetFormat = targetFormat,

@@ -95,7 +95,7 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
         )
     return GPUWgpu4kCorePrimitivePipelineMapping.Mapped(
         GPUWgpu4kCorePrimitiveRenderPipelineIdentity(
-            targetFormat = "rgba8unorm",
+            targetFormat = structuralKey.colorFormat.stableIdentity,
             sampleCount = structuralKey.sampleCount,
             topology = "triangle-list",
             frontFace = "ccw",
@@ -124,7 +124,7 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
     if (sampleCount !in setOf(1, 4) ||
         frontFace != GPUCorePrimitiveRenderPipelineStructuralKey.FrontFace.Ccw ||
         cullMode != GPUCorePrimitiveRenderPipelineStructuralKey.CullMode.None ||
-        colorFormat != GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
+        colorFormat !in GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.entries
     ) return null
     if (sampleCount == 4 && !supportsFourSampleProgram()) return null
 
@@ -383,7 +383,11 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
             },
             targets = listOf(
                 ColorTargetState(
-                    format = GPUTextureFormat.RGBA8Unorm,
+                    format = when (identity.targetFormat) {
+                        "rgba8unorm" -> GPUTextureFormat.RGBA8Unorm
+                        "rgba8unorm-srgb" -> GPUTextureFormat.RGBA8UnormSrgb
+                        else -> error("Validated CorePrimitive target format became unsupported")
+                    },
                     blend = when {
                         producer -> null
                         coverageMaskProducer -> identity.program.coverageMaskProducerBlendState()
@@ -398,7 +402,7 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
 
 internal fun isSupportedCorePrimitiveRenderPipelineIdentity(
     identity: GPUWgpu4kCorePrimitiveRenderPipelineIdentity,
-): Boolean = identity.targetFormat == "rgba8unorm" &&
+): Boolean = identity.targetFormat in setOf("rgba8unorm", "rgba8unorm-srgb") &&
     (identity.sampleCount == 1 ||
         identity.sampleCount == 4 && identity.program.supportsFourSamples()) &&
     identity.topology == "triangle-list" && identity.frontFace == "ccw" &&

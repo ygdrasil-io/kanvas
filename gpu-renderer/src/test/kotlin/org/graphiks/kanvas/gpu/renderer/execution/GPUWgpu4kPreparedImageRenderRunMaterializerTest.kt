@@ -365,8 +365,8 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             )
 
         val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(result)
-        assertEquals(GPUPreparedImageRefusalCodes.PIXEL_FORMAT, refused.code)
-        assertEquals("RGBA8Unorm", valid.pipelineKey.targetFormat)
+        assertEquals(GPUPreparedImageRefusalCodes.IMAGE_PROFILE_CONVERSION, refused.code)
+        assertEquals("RGBA8UnormSrgb", valid.pipelineKey.targetFormat)
         assertEquals("BGRA8Unorm", unsupported.pipelineKey.targetFormat)
         assertEquals(0, nativeDevice.handleCreates)
         assertEquals(0, factory.handleCreates)

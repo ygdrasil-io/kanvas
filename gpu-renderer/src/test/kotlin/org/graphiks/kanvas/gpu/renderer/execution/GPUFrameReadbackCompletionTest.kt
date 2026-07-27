@@ -6,12 +6,14 @@ import io.ygdrasil.webgpu.GPUBufferMapState
 import io.ygdrasil.webgpu.GPUBufferUsage
 import io.ygdrasil.webgpu.GPUMapMode
 import io.ygdrasil.webgpu.GPUSize64
+import io.ygdrasil.webgpu.GPUTextureFormat
 import java.util.concurrent.AbstractExecutorService
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -184,6 +186,58 @@ class GPUFrameReadbackCompletionTest {
     }
 
     @Test
+    fun `wgpu4k mapper accepts exact sRGB storage bytes and refuses incoherent or unsupported formats`() {
+        val output = readbackOutput("readback.srgb-storage")
+        val mappedBytes = ByteArray(output.layout.totalBufferBytes.toInt()) { index ->
+            (index * 37).toByte()
+        }
+        val buffer = RecordingGPUBuffer(mappedBytes = mappedBytes)
+        val srgbOperand = readbackOperand(buffer, GPUTextureFormat.RGBA8UnormSrgb)
+        val delivery = AtomicReference<GPUFrameNativeReadbackMapDelivery>()
+        val delivered = CountDownLatch(1)
+        val executor = Executors.newSingleThreadExecutor()
+
+        try {
+            val mapper = GPUWgpu4kNativeReadbackMapper(executor)
+            val accepted = mapper.map(output, srgbOperand) {
+                delivery.set(it)
+                delivered.countDown()
+            }
+
+            assertIs<GPUFrameReadbackMapArmResult.Armed>(accepted)
+            assertTrue(delivered.await(2, TimeUnit.SECONDS))
+            val mapped = assertIs<GPUFrameNativeReadbackMapDelivery.Mapped>(delivery.get())
+            assertContentEquals(mappedBytes, mapped.range.copyBytesFromZero())
+            mapped.range.unmap()
+
+            val incoherentOutput = output.copy(
+                request = output.request.copy(
+                    outputColorInterpretation = GPUColorInterpretation.LinearPremul,
+                ),
+            )
+            val incoherent = mapper.map(incoherentOutput, srgbOperand) { error("must not deliver") }
+            val unsupported = mapper.map(
+                output,
+                readbackOperand(buffer, GPUTextureFormat.BGRA8Unorm),
+            ) { error("must not deliver") }
+
+            assertEquals(
+                "invalid.frame-readback.native-layout",
+                assertIs<GPUFrameReadbackMapArmResult.Refused>(incoherent).diagnostic.code.value,
+            )
+            assertEquals(
+                "invalid.frame-readback.native-layout",
+                assertIs<GPUFrameReadbackMapArmResult.Refused>(unsupported).diagnostic.code.value,
+            )
+            assertEquals(1, buffer.mapCalls)
+            assertEquals(1, buffer.rangeCalls)
+            assertEquals(1, buffer.unmapCalls)
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun `wgpu4k mapper refuses mismatched layout and non-output ownership before mapping`() {
         val output = readbackOutput("readback.invalid-native")
         val buffer = RecordingGPUBuffer()
@@ -240,9 +294,18 @@ class GPUFrameReadbackCompletionTest {
     private fun readbackOutput(requestId: String): GPUPreparedReadbackOutput =
         GPUFrameCoreTestFixture.preparedFrame(
             readbackRequestId = GPUReadbackRequestID(requestId),
-        ).resources.outputOwnedReadbacks.single()
+        ).resources.outputOwnedReadbacks.single().let { output ->
+            output.copy(
+                request = output.request.copy(
+                    outputColorInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
+                ),
+            )
+        }
 
-    private fun readbackOperand(buffer: GPUBuffer): GPUPreparedNativeScopeOperand.Readback {
+    private fun readbackOperand(
+        buffer: GPUBuffer,
+        format: GPUTextureFormat? = null,
+    ): GPUPreparedNativeScopeOperand.Readback {
         val base = GPUFrameCoreTestFixture.nativePayload(withReadback = true)
             .scopeOperands
             .filterIsInstance<GPUPreparedNativeScopeOperand.Readback>()
@@ -255,7 +318,7 @@ class GPUFrameReadbackCompletionTest {
                 base.destination.deviceGeneration,
                 GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
             ),
-            layout = base.layout,
+            layout = base.layout.copy(format = format ?: base.layout.format),
         )
     }
 

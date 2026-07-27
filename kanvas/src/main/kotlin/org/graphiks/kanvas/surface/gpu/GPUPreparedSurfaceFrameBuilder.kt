@@ -4,6 +4,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskSampling
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
@@ -110,6 +111,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     targetBounds = request.targetBounds,
                     semanticsByCommandId = semantics,
                     readbackRequestId = request.readbackRequestId,
+                    targetFormat = GPUColorFormat(request.targetFacts.colorFormat),
                 ),
             )) {
                 is GPUPreparedSurfaceFrameResult.Recorded -> {

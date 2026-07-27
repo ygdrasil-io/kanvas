@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
+import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import java.security.MessageDigest
 
@@ -9,6 +10,29 @@ enum class GPUPreparedImageSourceFormat { Rgba8, Bgra8, A8, Unsupported }
 enum class GPUPreparedImageProfile { Srgb, Other, Unresolved }
 enum class GPUPreparedImageOrientation { AppliedIdentity, Unresolved }
 enum class GPUPreparedImageProvenance { CallerPixels, SurfaceReadback, RegisteredDecode }
+
+internal data class GPUPreparedSdrColorContract(
+    val colorSourceTextureFormat: GPUTextureFormat,
+    val coverageSourceTextureFormat: GPUTextureFormat,
+    val colorUploadEncoding: GPUPreparedColorUploadEncoding,
+    val targetTextureFormat: GPUTextureFormat,
+    val shaderInterpretation: GPUColorInterpretation,
+    val readbackInterpretation: GPUColorInterpretation,
+)
+
+internal enum class GPUPreparedColorUploadEncoding {
+    StraightEncodedSrgb,
+}
+
+internal fun preparedSdrColorContract(): GPUPreparedSdrColorContract =
+    GPUPreparedSdrColorContract(
+        colorSourceTextureFormat = GPUTextureFormat.RGBA8UnormSrgb,
+        coverageSourceTextureFormat = GPUTextureFormat.RGBA8Unorm,
+        colorUploadEncoding = GPUPreparedColorUploadEncoding.StraightEncodedSrgb,
+        targetTextureFormat = GPUTextureFormat.RGBA8UnormSrgb,
+        shaderInterpretation = GPUColorInterpretation.LinearPremul,
+        readbackInterpretation = GPUColorInterpretation.EncodedPremulSrgb,
+    )
 
 /** Public authority for every stable refusal row in the approved FP-04 contract. */
 object GPUPreparedImageRefusalCodes {
@@ -108,9 +132,11 @@ class GPUPreparedImageUploadArtifact internal constructor(
     val contentHash: String,
     val alphaOnly: Boolean,
     val colorInterpretation: String,
-    rgba8PremulBytes: ByteArray,
+    internal val colorUploadEncoding: GPUPreparedColorUploadEncoding?,
+    internal val colorUploadInterpretation: String,
+    rgba8UploadBytes: ByteArray,
 ) {
-    private val snapshot = rgba8PremulBytes.copyOf()
+    private val snapshot = rgba8UploadBytes.copyOf()
     fun tightRgba8BytesForUpload(): ByteArray = snapshot.copyOf()
 }
 
@@ -278,13 +304,61 @@ object GPUPreparedImageArtifactFactory {
                 }
             }
         }
+        val alphaOnly = input.sourceFormat == GPUPreparedImageSourceFormat.A8
+        if (!alphaOnly) {
+            for (pixelOffset in normalized.indices step 4) {
+                val alpha = normalized[pixelOffset + 3].toInt() and 0xFF
+                for (channel in 0..2) {
+                    val premultiplied = normalized[pixelOffset + channel].toInt() and 0xFF
+                    normalized[pixelOffset + channel] = when (alpha) {
+                        0 -> 0
+                        else -> ((premultiplied * 255 + alpha / 2) / alpha)
+                            .coerceIn(0, 255)
+                            .toByte()
+                    }
+                }
+            }
+        }
+        val contract = preparedSdrColorContract()
+        val uploadEncoding = if (alphaOnly) null else contract.colorUploadEncoding
+        val uploadInterpretation = if (alphaOnly) {
+            GPUColorInterpretation.LinearPremul
+        } else {
+            GPUColorInterpretation.StraightEncodedSrgb
+        }
         val hash = MessageDigest.getInstance("SHA-256").digest(normalized).joinToString("") { "%02x".format(it) }
         val layout = GPUPreparedImagePixelLayout(input.sourceRowBytes, normalizedRowBytes, input.height)
         val key = GPUImageUploadArtifactKey(
-            listOf("prepared-image-v1", hash, input.width, input.height, input.sourceRowBytes, normalizedRowBytes, input.sourceFormat, input.alphaType, input.profile, input.orientation, input.provenance, input.sourceGeneration).joinToString("|"),
+            listOf(
+                "prepared-image-v1",
+                hash,
+                input.width,
+                input.height,
+                input.sourceRowBytes,
+                normalizedRowBytes,
+                input.sourceFormat,
+                input.alphaType,
+                input.profile,
+                input.orientation,
+                input.provenance,
+                input.sourceGeneration,
+                uploadEncoding?.name ?: "CoverageLinear",
+            ).joinToString("|"),
         )
         return GPUPreparedImageArtifactResult.Ready(
-            GPUPreparedImageUploadArtifact(key, input.width, input.height, layout, input.sourceGeneration, hash, input.sourceFormat == GPUPreparedImageSourceFormat.A8, GPUColorInterpretation.EncodedPremulSrgb.value, normalized),
+            GPUPreparedImageUploadArtifact(
+                key,
+                input.width,
+                input.height,
+                layout,
+                input.sourceGeneration,
+                hash,
+                alphaOnly,
+                GPUColorInterpretation.EncodedPremulSrgb.value,
+                uploadEncoding,
+                uploadInterpretation.value,
+                normalized,
+            ),
         )
     }
 

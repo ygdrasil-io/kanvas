@@ -285,19 +285,22 @@ class GPUFirstRoutePlanner(
         val capabilityName: String
 
         if (isAffineSolid) {
-            pipelineKey = "pending.pipeline.fill_rect.affine.solid.rgba8unorm.src_over"
+            pipelineKey =
+                "pending.pipeline.fill_rect.affine.solid.${command.layer.target.colorFormat}.src_over"
             renderStep = CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
             routeLabel = "native.fill_rect.affine.solid"
             materialKeyHash = "pending.material.solid"
             capabilityName = CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
         } else if (isLinearGradient) {
-            pipelineKey = "pending.pipeline.fill_rect.linear_gradient.rgba8unorm.src_over"
+            pipelineKey =
+                "pending.pipeline.fill_rect.linear_gradient.${command.layer.target.colorFormat}.src_over"
             renderStep = linearGradientRenderStep
             routeLabel = "native.fill_rect.linear_gradient"
             materialKeyHash = "pending.material.linear_gradient"
             capabilityName = firstLinearGradientCapabilityName
         } else {
-            pipelineKey = "pending.pipeline.fill_rect.solid.rgba8unorm.src_over"
+            pipelineKey =
+                "pending.pipeline.fill_rect.solid.${command.layer.target.colorFormat}.src_over"
             renderStep = "rect.fill.coverage"
             routeLabel = "native.fill_rect.solid"
             materialKeyHash = "pending.material.solid"
@@ -413,7 +416,7 @@ class GPUFirstRoutePlanner(
     private fun blurMaskFillRectRouteDecision(command: NormalizedDrawCommand.FillRect): GPUFirstRoutePlan {
         val recordId = "analysis.fill_rect.${command.commandId.value}"
         val routeLabel = "executable.fill_rect.mask_blur"
-        val pipelineKey = "mask-blur.rect-fill.rgba8unorm.src_over"
+        val pipelineKey = "mask-blur.rect-fill.${command.layer.target.colorFormat}.src_over"
         val renderStep = "rect.fill.mask_blur"
         val consumerKind = "mask-blur.rect-fill"
         val mf = requireNotNull(command.maskFilter)
@@ -537,13 +540,15 @@ class GPUFirstRoutePlanner(
         val capabilityName: String
 
         if (isLinearGradient) {
-            pipelineKey = "pending.pipeline.fill_rrect.linear_gradient.rgba8unorm.src_over"
+            pipelineKey =
+                "pending.pipeline.fill_rrect.linear_gradient.${command.layer.target.colorFormat}.src_over"
             renderStep = linearGradientRenderStep
             routeLabel = "native.fill_rrect.linear_gradient"
             materialKeyHash = "pending.material.linear_gradient"
             capabilityName = firstLinearGradientCapabilityName
         } else {
-            pipelineKey = "pending.pipeline.fill_rrect.solid.rgba8unorm.src_over"
+            pipelineKey =
+                "pending.pipeline.fill_rrect.solid.${command.layer.target.colorFormat}.src_over"
             renderStep = CORE_PRIMITIVE_FILL_RRECT_STEP_IDENTITY
             routeLabel = "native.fill_rrect.solid"
             materialKeyHash = "pending.material.solid"
@@ -621,7 +626,7 @@ class GPUFirstRoutePlanner(
     ): GPUFirstRoutePlan {
         val recordId = "analysis.fill_rrect.${command.commandId.value}"
         val routeLabel = "executable.fill_rrect.mask_blur"
-        val pipelineKey = "mask-blur.rrect-fill.rgba8unorm.src_over"
+        val pipelineKey = "mask-blur.rrect-fill.${command.layer.target.colorFormat}.src_over"
         val renderStep = "rrect.fill.mask_blur"
         val consumerKind = "mask-blur.rrect-fill"
         val mf = requireNotNull(command.maskFilter)
@@ -720,7 +725,8 @@ class GPUFirstRoutePlanner(
     /** Builds a prepared FillStroke CPUPreparedGPU route and pass for stroked paths. */
     private fun preparedStrokeRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
         val recordId = "analysis.fill_path.${command.commandId.value}"
-        val pipelineKey = "pending.pipeline.fill_stroke.tessellated.rgba8unorm.src_over"
+        val pipelineKey =
+            "pending.pipeline.fill_stroke.tessellated.${command.layer.target.colorFormat}.src_over"
         val renderStep = "path.stroke.tessellated"
         val consumerKind = "stroke-strip.render-step"
 
@@ -786,7 +792,8 @@ class GPUFirstRoutePlanner(
     /** Builds a prepared FillPath CPUPreparedGPU route and pass. */
     private fun preparedFillPathRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
         val recordId = "analysis.fill_path.${command.commandId.value}"
-        val pipelineKey = "pending.pipeline.fill_path.tessellated.rgba8unorm.src_over"
+        val pipelineKey =
+            "pending.pipeline.fill_path.tessellated.${command.layer.target.colorFormat}.src_over"
         val renderStep = "path.fill.coverage_mask"
         val consumerKind = "coverage-mask.sample.path-fill"
         val artifactKey = "prepared.path-fill.${command.pathKey.sanitizeForAnalysisKey()}.${command.pathDescriptor.fillRule.lowercase()}.${command.pathDescriptor.transformClass}.edges${command.edgeCount}"
@@ -843,7 +850,7 @@ class GPUFirstRoutePlanner(
     private fun blurMaskFillPathRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
         val recordId = "analysis.fill_path.${command.commandId.value}"
         val routeLabel = "executable.path_fill.mask_blur"
-        val pipelineKey = "mask-blur.path-fill.rgba8unorm.src_over"
+        val pipelineKey = "mask-blur.path-fill.${command.layer.target.colorFormat}.src_over"
         val renderStep = "path.fill.mask_blur"
         val consumerKind = "mask-blur.path-fill"
         val mf = requireNotNull(command.maskFilter)
@@ -914,7 +921,8 @@ class GPUFirstRoutePlanner(
     /** Builds a native FillPath stencil-cover GPU route when capability and product facts promote it. */
     private fun nativeFillPathRouteDecision(command: NormalizedDrawCommand.FillPath): GPUFirstRoutePlan {
         val recordId = "analysis.fill_path.${command.commandId.value}"
-        val pipelineKey = "pending.pipeline.fill_path.stencil_cover.rgba8unorm.src_over"
+        val pipelineKey =
+            "pending.pipeline.fill_path.stencil_cover.${command.layer.target.colorFormat}.src_over"
         val renderStep = "path.fill.stencil_cover"
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
@@ -999,7 +1007,8 @@ class GPUFirstRoutePlanner(
         command: NormalizedDrawCommand.DrawImageRect,
     ): GPUFirstRoutePlan {
         val recordId = "analysis.draw_image_rect.${command.commandId.value}"
-        val pipelineKey = "pending.pipeline.draw_image_rect.decoded_pixels.rgba8unorm.src_over"
+        val pipelineKey =
+            "pending.pipeline.draw_image_rect.decoded_pixels.${command.layer.target.colorFormat}.src_over"
         val renderStep = imageDrawRenderStep
         val consumerKind = "sampled-image.draw_image_rect"
         val artifactKey = "prepared.draw_image_rect.${command.pixelsContentHash.sanitizeForAnalysisKey()}.${command.pixelsWidth}x${command.pixelsHeight}.${command.pixelsFormat.lowercase()}"
@@ -1057,7 +1066,8 @@ class GPUFirstRoutePlanner(
         command: NormalizedDrawCommand.DrawImageRect,
     ): GPUFirstRoutePlan {
         val recordId = "analysis.draw_image_rect.${command.commandId.value}"
-        val pipelineKey = "pending.pipeline.draw_image_rect.native_bitmap.rgba8unorm.src_over"
+        val pipelineKey =
+            "pending.pipeline.draw_image_rect.native_bitmap.${command.layer.target.colorFormat}.src_over"
         val renderStep = "image.draw.bitmap_shader"
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
@@ -1192,7 +1202,7 @@ class GPUFirstRoutePlanner(
             layer.requiresFilter -> "unsupported.layer.filter_chain"
             layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
-            layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
+            layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             else -> null
         }
 
@@ -1225,7 +1235,8 @@ class GPUFirstRoutePlanner(
     /** Builds a prepared DrawLayer CPUPreparedGPU route with filtered-compositor artifact. */
     private fun preparedDrawLayerRouteDecision(command: NormalizedDrawCommand.DrawLayer): GPUFirstRoutePlan {
         val recordId = "analysis.draw_layer.${command.commandId.value}"
-        val pipelineKey = "pending.pipeline.draw_layer.composite.rgba8unorm.src_over"
+        val pipelineKey =
+            "pending.pipeline.draw_layer.composite.${command.layer.target.colorFormat}.src_over"
         val renderStep = drawLayerRenderStep
         val consumerKind = "composite-layer.draw_layer"
         val artifactKey = "prepared.draw_layer.${command.scopeId.sanitizeForAnalysisKey()}.children${command.childCommandIds.size}.filter${command.sourceFilterCount}.blend${command.restoreBlendMode.lowercase()}"
@@ -1280,7 +1291,8 @@ class GPUFirstRoutePlanner(
     /** Builds a native DrawLayer isolated-target GPU route when capability promotes it. */
     private fun nativeDrawLayerRouteDecision(command: NormalizedDrawCommand.DrawLayer): GPUFirstRoutePlan {
         val recordId = "analysis.draw_layer.${command.commandId.value}"
-        val pipelineKey = "pending.pipeline.draw_layer.native_isolation.rgba8unorm.src_over"
+        val pipelineKey =
+            "pending.pipeline.draw_layer.native_isolation.${command.layer.target.colorFormat}.src_over"
         val renderStep = "layer.isolated_target"
         val analysisRecord = GPUDrawAnalysisRecord(
             recordId = recordId,
@@ -1392,7 +1404,7 @@ class GPUFirstRoutePlanner(
             cpuFallbackRequested -> "unsupported.layer.cpu_fallback_forbidden"
             preserveLCDText -> "unsupported.layer.preserve_lcd_text"
             f16Requested -> "unsupported.layer.f16_unavailable"
-            layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
+            layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstDrawLayerCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
         }
@@ -1582,7 +1594,7 @@ class GPUFirstRoutePlanner(
             layer.requiresFilter -> "unsupported.layer.filter_chain"
             layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
-            layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
+            layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
         }
@@ -1617,7 +1629,7 @@ class GPUFirstRoutePlanner(
             layer.requiresFilter -> "unsupported.layer.filter_chain"
             layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
-            layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
+            layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstRRectRouteCapabilityName) -> "unsupported.pipeline.capability_missing"
             else -> null
         }
@@ -1686,7 +1698,7 @@ class GPUFirstRoutePlanner(
             layer.requiresFilter -> "unsupported.layer.filter_chain"
             layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
-            layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
+            layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !capabilities.hasFact(firstPreparedPathFillCapabilityName) &&
                 (maskFilter != null || !capabilities.hasFact(firstStencilCoverCapabilityName)) ->
                 "unsupported.pipeline.capability_missing"
@@ -1920,7 +1932,7 @@ class GPUFirstRoutePlanner(
             layer.requiresFilter -> "unsupported.layer.filter_chain"
             layer.requiresDestinationRead || ordering.dependsOnDestination ->
                 "unsupported.destination_read.required"
-            layer.target.colorFormat != firstRouteTargetFormat -> "unsupported.target.format_blend_incompatible"
+            layer.target.colorFormat !in firstRouteTargetFormats -> "unsupported.target.format_blend_incompatible"
             !filterBounds.finite -> "unsupported.filter.bounds_unbounded"
             filterBounds.width <= 0 || filterBounds.height <= 0 -> "unsupported.filter.bounds_invalid"
             filterGraph.nodes.size != 1 || filterGraph.edges.isNotEmpty() -> "unsupported.filter.graph_node_limit"
@@ -1931,8 +1943,8 @@ class GPUFirstRoutePlanner(
         }
 
     private companion object {
-        /** Required target format for the first native FillRect route. */
-        const val firstRouteTargetFormat = "rgba8unorm"
+        /** Closed target-format set for first native routes. */
+        val firstRouteTargetFormats = setOf("rgba8unorm", "rgba8unorm-srgb")
 
         /** Required capability fact for the first native FillRect route. */
         const val firstRouteCapabilityName = "first_slice.fill_rect.native"

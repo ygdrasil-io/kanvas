@@ -19,8 +19,8 @@ class GPUPreparedSurfaceColorMappingTest {
         assertEquals(GPUColorFormat.RGBA8_UNORM_SRGB, config.gpuColorFormat)
         assertEquals("rgba8unorm-srgb", config.gpuColorFormat.gpuLabel)
         val ready = assertIs<GPUPreparedSurfaceColorMapping.Ready>(config.mapPreparedGpuColorConfig())
-        assertEquals(CanonicalGPUColorFormat.RGBA8Unorm, ready.physicalFormat)
-        assertEquals(GPUColorInterpretation.EncodedPremulSrgb, ready.interpretation)
+        assertEquals(CanonicalGPUColorFormat.RGBA8UnormSrgb, ready.physicalFormat)
+        assertEquals(GPUColorInterpretation.LinearPremul, ready.interpretation)
     }
 
     @Test

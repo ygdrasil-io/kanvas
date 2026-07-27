@@ -21,6 +21,7 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
@@ -70,42 +71,47 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `encoded premul sRGB refuses exact fractional alpha authorities but admits hard coverage`() {
+    fun `hardware sRGB store admits fractional alpha and coverage authorities`() {
         val nonPrimary = Color.fromArgb(a = 255, r = 40, g = 120, b = 208)
         val fractionalCases = listOf(
-            Triple(
-                "material-alpha",
+            "material-alpha" to
                 rect(color = Color.fromArgb(a = 160, r = 40, g = 120, b = 208)),
-                "unsupported.surface.prepared.encoded-premul-srgb.translucent-solid",
-            ),
-            Triple(
-                "rect-aa",
-                rect(color = nonPrimary).copy(paint = Paint.fill(nonPrimary).copy(antiAlias = true)),
-                "unsupported.surface.prepared.encoded-premul-srgb.fractional-coverage",
-            ),
-            Triple("rrect-aa", DisplayOp.DrawRRect(
-                RRect(RECT, radius = 2f),
-                Paint.fill(nonPrimary).copy(antiAlias = true),
-                Matrix33.identity(),
-                ClipStack.WideOpen,
-            ), "unsupported.surface.prepared.encoded-premul-srgb.fractional-coverage"),
-            Triple(
-                "clip-aa",
+            "rect-aa" to
                 rect(color = nonPrimary).copy(
-                    clip = ClipStack.DeviceRect(Rect.fromLTRB(1.5f, 1.5f, 14.5f, 12.5f), antiAlias = true),
+                    paint = Paint.fill(nonPrimary).copy(antiAlias = true),
                 ),
-                "unsupported.surface.prepared.encoded-premul-srgb.fractional-coverage",
-            ),
+            "rrect-aa" to
+                DisplayOp.DrawRRect(
+                    RRect(RECT, radius = 2f),
+                    Paint.fill(nonPrimary).copy(antiAlias = true),
+                    Matrix33.identity(),
+                    ClipStack.WideOpen,
+                ),
+            "clip-aa" to
+                rect(color = nonPrimary).copy(
+                    clip = ClipStack.DeviceRect(
+                        Rect.fromLTRB(1.5f, 1.5f, 14.5f, 12.5f),
+                        antiAlias = true,
+                    ),
+                ),
         )
 
-        fractionalCases.forEach { (label, operation, expectedCode) ->
-            val refusal = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
-                GPUPreparedSurfaceFrameBuilder.build(request(listOf(operation))),
+        fractionalCases.forEach { (label, operation) ->
+            val buildRequest = request(listOf(operation))
+            val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+                GPUPreparedSurfaceFrameBuilder.build(buildRequest),
                 label,
             )
-            assertEquals(expectedCode, refusal.diagnostic.code.value, label)
-            assertEquals("0", refusal.diagnostic.facts["commandId"], label)
-            if (label != "material-alpha") assertTrue(refusal.diagnostic.facts["authority"].orEmpty().isNotBlank())
+            val renders = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            val packets = renders.flatMap(GPUTask.Render::drawPackets)
+
+            assertTrue(packets.isNotEmpty(), label)
+            assertTrue(renders.all { it.target == buildRequest.target }, label)
+            assertEquals(
+                setOf("target.rgba8unorm-srgb.single-sample"),
+                packets.map(GPUDrawPacket::targetStateHash).toSet(),
+                label,
+            )
         }
 
         assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
@@ -239,7 +245,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `pure refusal matrix preserves original mapper semantic and prepared diagnostics`() {
+    fun `refusal matrix preserves true diagnostics while sRGB translucent solid is ready`() {
         val gradient = Shader.LinearGradient(
             Point(0f, 0f),
             Point(8f, 8f),
@@ -255,9 +261,20 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 ),
             ),
         )
+        val translucentRequest =
+            request(listOf(rect(color = Color.fromArgb(a = 160, r = 40, g = 120, b = 208))))
+        val translucentReady = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(translucentRequest),
+        )
+        val translucentPackets = translucentReady.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        assertTrue(translucentPackets.isNotEmpty())
+        assertEquals(
+            setOf("target.rgba8unorm-srgb.single-sample"),
+            translucentPackets.map(GPUDrawPacket::targetStateHash).toSet(),
+        )
+
         val cases = listOf(
-            request(listOf(rect(color = Color.fromArgb(a = 160, r = 40, g = 120, b = 208)))) to
-                "unsupported.surface.prepared.encoded-premul-srgb.translucent-solid",
             request(listOf(rect().copy(paint = Paint.fill(Color.WHITE).copy(shader = gradient)))) to
                 "unsupported.core_primitive.material.non_solid",
             request(listOf(rect().copy(paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC)))) to
@@ -315,7 +332,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val cases = listOf(
             base.copy(targetBounds = GPUPixelBounds(1, 0, 33, 24)) to
                 "invalid.surface.prepared.target-bounds",
-            base.copy(targetFacts = GPUTargetFacts(31, 24, "rgba8unorm")) to
+            base.copy(targetFacts = GPUTargetFacts(31, 24, "rgba8unorm-srgb")) to
                 "invalid.surface.prepared.target-bounds",
             base.copy(targetFacts = GPUTargetFacts(32, 24, "bgra8unorm")) to
                 "invalid.surface.prepared.target-format",
@@ -594,7 +611,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         )
         return GPUPreparedSurfaceFrameBuildRequest(
             candidate = candidate,
-            targetFacts = GPUTargetFacts(32, 24, "rgba8unorm"),
+            targetFacts = GPUTargetFacts(32, 24, "rgba8unorm-srgb"),
             targetBounds = GPUPixelBounds(0, 0, 32, 24),
             capabilities = capabilities,
             deviceGeneration = GPUDeviceGenerationID(11),

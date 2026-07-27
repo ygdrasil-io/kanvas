@@ -17,8 +17,8 @@ internal sealed interface GPUPreparedSurfaceColorMapping {
 internal fun RenderConfig.mapPreparedGpuColorConfig(): GPUPreparedSurfaceColorMapping =
     when (gpuColorFormat) {
         GPUColorFormat.RGBA8_UNORM_SRGB -> GPUPreparedSurfaceColorMapping.Ready(
-            physicalFormat = CanonicalGPUColorFormat.RGBA8Unorm,
-            interpretation = GPUColorInterpretation.EncodedPremulSrgb,
+            physicalFormat = CanonicalGPUColorFormat.RGBA8UnormSrgb,
+            interpretation = GPUColorInterpretation.LinearPremul,
         )
         GPUColorFormat.RGBA8_UNORM -> GPUPreparedSurfaceColorMapping.Refused(
             "unsupported.surface.gpu-color-format.rgba8-unorm",

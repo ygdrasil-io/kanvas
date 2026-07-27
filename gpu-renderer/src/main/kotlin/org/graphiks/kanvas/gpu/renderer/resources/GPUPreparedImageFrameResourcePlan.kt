@@ -8,7 +8,9 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.images.GPUImageUploadArtifactKey
+import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedColorUploadEncoding
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.images.preparedSdrColorContract
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 
@@ -324,6 +326,23 @@ internal fun buildPreparedImageFrameResourcePlanFromBindings(
     require(artifact.colorInterpretation == GPUColorInterpretation.EncodedPremulSrgb.value) {
         "Prepared images must retain EncodedPremulSrgb interpretation"
     }
+    val colorContract = preparedSdrColorContract()
+    if (artifact.alphaOnly) {
+        require(artifact.colorUploadEncoding == null &&
+            artifact.colorUploadInterpretation == GPUColorInterpretation.LinearPremul.value
+        ) {
+            "Prepared A8 images must retain linear coverage upload interpretation"
+        }
+    } else {
+        require(
+            artifact.colorUploadEncoding ==
+                GPUPreparedColorUploadEncoding.StraightEncodedSrgb &&
+                artifact.colorUploadInterpretation ==
+                GPUColorInterpretation.StraightEncodedSrgb.value,
+        ) {
+            "Prepared color images must retain straight encoded sRGB upload interpretation"
+        }
+    }
 
     val limits = requireNotNull(capabilities.limits) {
         "Prepared-image resource planning requires observed device limits"
@@ -355,10 +374,24 @@ internal fun buildPreparedImageFrameResourcePlanFromBindings(
         )
     }
 
+    val sourceTextureFormat = if (artifact.alphaOnly) {
+        colorContract.coverageSourceTextureFormat
+    } else {
+        colorContract.colorSourceTextureFormat
+    }
+    val sourceTextureFormatLabel = when (sourceTextureFormat) {
+        io.ygdrasil.webgpu.GPUTextureFormat.RGBA8Unorm -> "RGBA8Unorm"
+        io.ygdrasil.webgpu.GPUTextureFormat.RGBA8UnormSrgb -> "rgba8unorm-srgb"
+        else -> error("Prepared-image SDR source contract selected unsupported texture format")
+    }
+    val sourceFrameColorFormat = when (sourceTextureFormat) {
+        io.ygdrasil.webgpu.GPUTextureFormat.RGBA8Unorm -> GPUColorFormat.RGBA8Unorm
+        io.ygdrasil.webgpu.GPUTextureFormat.RGBA8UnormSrgb -> GPUColorFormat.RGBA8UnormSrgb
+    }
     val textureDescriptor = GPUTextureDescriptor(
         width = artifact.width,
         height = artifact.height,
-        format = "RGBA8Unorm",
+        format = sourceTextureFormatLabel,
         usageLabels = setOf("copy_dst", "texture_binding"),
     )
     val view = GPUTextureViewDescriptor(
@@ -421,7 +454,7 @@ internal fun buildPreparedImageFrameResourcePlanFromBindings(
             resource = frameTextureRef,
             descriptor = GPUFrameTextureDescriptor(
                 logicalBounds = imageBounds,
-                format = GPUColorFormat("rgba8unorm"),
+                format = sourceFrameColorFormat,
                 sampleCount = 1,
             ),
             role = GPUFrameResourceRole.StorageData,

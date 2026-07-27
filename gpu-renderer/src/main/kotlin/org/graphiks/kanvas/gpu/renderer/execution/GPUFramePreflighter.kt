@@ -3,6 +3,8 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import io.ygdrasil.webgpu.GPUTextureFormat
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSupport
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -30,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveCoverageSamp
 import org.graphiks.kanvas.gpu.renderer.passes.buildCorePrimitiveAnalyticShapeUniform
 import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitivePathStencilRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.isCorePrimitiveNoClipOrScissorExecution
@@ -128,6 +131,12 @@ import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 private const val solidRectRenderStepIdentity = "rect.fill.coverage"
+
+private fun GPUColorFormat.corePrimitiveInterpretationOrNull(): GPUColorInterpretation? = when (this) {
+    GPUColorFormat.RGBA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
+    GPUColorFormat.RGBA8UnormSrgb -> GPUColorInterpretation.LinearPremul
+    else -> null
+}
 
 /** Sole transactional join between an immutable semantic frame and materialized resource facts. */
 internal class GPUFramePreflighter(
@@ -921,6 +930,7 @@ internal class GPUFramePreflighter(
                 sceneTargetPreparation,
                 sceneTarget,
                 sceneDescriptor.logicalBounds,
+                sceneDescriptor.format,
             ) || sceneDescriptor.logicalBounds != plan.bounds
         ) return refuse("Prepared coverage-mask scene target authority was substituted.")
         val maskPreparation = preparations.singleOrNull {
@@ -1363,6 +1373,15 @@ internal class GPUFramePreflighter(
 
         val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val sceneTargetPreparation = preparations.singleOrNull {
+            it.resource == producerLocation.render.target &&
+                it.role == GPUFrameResourceRole.SceneTarget
+        } ?: return refuse("Prepared clip-stencil target preparation is missing.")
+        val sceneTargetDescriptor = sceneTargetPreparation.descriptor as? GPUFrameTextureDescriptor
+            ?: return refuse("Prepared clip-stencil target is not a texture.")
+        val sceneTargetInterpretation =
+            sceneTargetDescriptor.format.corePrimitiveInterpretationOrNull()
+                ?: return refuse("Prepared clip-stencil target format is unsupported.")
         val producerUses = producerLocation.render.resourceUses
         val vertexUse = producerUses.singleOrNull { it.role == GPUFrameResourceRole.VertexData }
             ?: return refuse("Prepared clip-stencil producer is missing its exact vertex slab use.")
@@ -1411,8 +1430,8 @@ internal class GPUFramePreflighter(
                 producerContinuation.key.target.value != producerLocation.render.target.value ||
                 producerContinuation.key.targetGeneration != context.targetGeneration ||
                 producerContinuation.key.deviceGeneration != context.deviceGeneration ||
-                producerContinuation.key.colorFormat.value != "rgba8unorm" ||
-                producerContinuation.key.colorInterpretation.value != "encoded-premul-srgb" ||
+                producerContinuation.key.colorFormat != sceneTargetDescriptor.format ||
+                producerContinuation.key.colorInterpretation != sceneTargetInterpretation ||
                 producerContinuation.key.samplePlan != expectedSamplePlan ||
                 producerContinuation.key.attachmentAuthority !=
                 org.graphiks.kanvas.gpu.renderer.passes
@@ -1565,12 +1584,8 @@ internal class GPUFramePreflighter(
             }
         }
 
-        val targetPreparation = preparations.singleOrNull {
-            it.resource == producerLocation.render.target &&
-                it.role == GPUFrameResourceRole.SceneTarget
-        } ?: return refuse("Prepared clip-stencil target preparation is missing.")
-        val targetDescriptor = targetPreparation.descriptor as? GPUFrameTextureDescriptor
-            ?: return refuse("Prepared clip-stencil target is not a texture.")
+        val targetPreparation = sceneTargetPreparation
+        val targetDescriptor = sceneTargetDescriptor
         val targetBounds = targetDescriptor.logicalBounds
         if (targetBounds.left != 0 || targetBounds.top != 0 ||
             candidate.attachmentWidth != targetBounds.width ||
@@ -1579,6 +1594,7 @@ internal class GPUFramePreflighter(
                 targetPreparation,
                 producerLocation.render.target,
                 targetBounds,
+                targetDescriptor.format,
             )
         ) return refuse("Prepared clip-stencil target dimensions or origin were substituted.")
 
@@ -2142,6 +2158,14 @@ internal class GPUFramePreflighter(
         val targetBounds = semantics.map(GPUDrawSemanticPayload.CorePrimitive::targetBounds)
             .distinct().singleOrNull()
             ?: return refused("Path stencil MSAA semantics require one exact target extent.")
+        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val targetPreparation = preparations.singleOrNull { it.resource == render.target }
+            ?: return refused("Path stencil MSAA requires one exact canonical target preparation.")
+        val targetDescriptor = targetPreparation.descriptor as? GPUFrameTextureDescriptor
+            ?: return refused("Path stencil MSAA target preparation must be a texture.")
+        val targetInterpretation = targetDescriptor.format.corePrimitiveInterpretationOrNull()
+            ?: return refused("Path stencil MSAA target format is unsupported.")
         if (render.drawPackets.zip(semantics).any { (packet, semantic) ->
                 packet.role != GPUDrawPacketRole.Shading &&
                     (
@@ -2168,8 +2192,8 @@ internal class GPUFramePreflighter(
         if (key.target.value != render.target.value ||
             key.targetGeneration != context.targetGeneration ||
             key.deviceGeneration != context.deviceGeneration ||
-            key.colorFormat.value != "rgba8unorm" ||
-            key.colorInterpretation.value != "encoded-premul-srgb" ||
+            key.colorFormat != targetDescriptor.format ||
+            key.colorInterpretation != targetInterpretation ||
             key.samplePlan != GPUSamplePlan.MultisampleFrame(4) ||
             key.attachmentAuthority != org.graphiks.kanvas.gpu.renderer.passes
                 .GPUSampleAttachmentAuthority.PreparedFramePayload ||
@@ -2191,21 +2215,22 @@ internal class GPUFramePreflighter(
         ) {
             return refused("Path stencil MSAA requires color Clear+Store+Resolve and stencil Clear0+Discard.")
         }
-        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
-            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
         val depthPreparation = preparations.singleOrNull { request ->
             request.role == GPUFrameResourceRole.PathDepthStencil
         } ?: return refused("Path stencil MSAA requires one exact Path D24S8 preparation.")
         val depthDescriptor = depthPreparation.descriptor as? GPUFrameTextureDescriptor
             ?: return refused("Path stencil MSAA Path D24S8 preparation must be a texture.")
-        val targetPreparation = preparations.singleOrNull { it.resource == render.target }
-            ?: return refused("Path stencil MSAA requires one exact canonical target preparation.")
         val attachmentBytes = try {
             corePrimitiveDepthStencilByteSize(targetBounds, 4)
         } catch (_: ArithmeticException) {
             return refused("Path stencil MSAA attachment byte authority overflows.")
         }
-        if (!isCanonicalCorePrimitiveTargetPreparation(targetPreparation, render.target, targetBounds) ||
+        if (!isCanonicalCorePrimitiveTargetPreparation(
+                targetPreparation,
+                render.target,
+                targetBounds,
+                targetDescriptor.format,
+            ) ||
             depthPreparation.resource != pathUse.resource ||
             depthDescriptor.logicalBounds != targetBounds ||
             depthDescriptor.format.value != "depth24plus-stencil8" ||
@@ -2234,6 +2259,7 @@ internal class GPUFramePreflighter(
                         clip,
                         blend,
                         4,
+                        targetDescriptor.format.corePrimitiveStructuralColorFormat(),
                     ).copy(depthStencil = corePrimitiveDirectPathDepthStencilState())
                     GPUDrawPacketRole.PathStencilProducer ->
                         corePrimitivePathStencilRenderPipelineStructuralKey(
@@ -2242,6 +2268,7 @@ internal class GPUFramePreflighter(
                             clip,
                             blend,
                             4,
+                            targetDescriptor.format.corePrimitiveStructuralColorFormat(),
                         )
                     GPUDrawPacketRole.PathStencilCover ->
                         corePrimitivePathStencilRenderPipelineStructuralKey(
@@ -2250,6 +2277,7 @@ internal class GPUFramePreflighter(
                             clip,
                             blend,
                             4,
+                            targetDescriptor.format.corePrimitiveStructuralColorFormat(),
                         )
                     else -> error("Validated above")
                 }
@@ -2261,7 +2289,7 @@ internal class GPUFramePreflighter(
                 authority.renderPipelineKey != packet.renderPipelineKey ||
                 packet.renderPipelineKey != structural.stableRenderPipelineKey(
                     CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
-                ) || packet.targetStateHash != corePrimitiveTargetStateHash(4)
+                ) || packet.targetStateHash != corePrimitiveTargetStateHash(4, targetDescriptor.format)
             ) {
                 return refused("Path stencil MSAA structural key, pipeline key, or target state is not exact.")
             }
@@ -2322,6 +2350,7 @@ internal class GPUFramePreflighter(
                 targetPreparation,
                 render.target,
                 semanticTargetBounds.single(),
+                targetDescriptor.format,
             )
         ) {
             return refused(
@@ -2383,6 +2412,7 @@ internal class GPUFramePreflighter(
                         clip,
                         blend,
                         render.samplePlan.sampleCount,
+                        targetDescriptor.format.corePrimitiveStructuralColorFormat(),
                     )
                         .copy(depthStencil = corePrimitiveDirectPathDepthStencilState())
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer,
@@ -2393,6 +2423,7 @@ internal class GPUFramePreflighter(
                     clip,
                     blend,
                     render.samplePlan.sampleCount,
+                    targetDescriptor.format.corePrimitiveStructuralColorFormat(),
                 )
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer,
                 GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilConsumer,
@@ -2922,6 +2953,20 @@ internal class GPUFramePreflighter(
             return refuse("Direct CorePrimitive requires one all-direct multi-packet render pass.")
         }
         val directRender = coreRenders.single()
+        val directTargetDescriptor =
+            targetPreparations[directRender.target]?.descriptor as? GPUFrameTextureDescriptor
+                ?: return diagnostic(
+                    "unsupported.native-core-primitive.target-format",
+                    "Direct CorePrimitive native geometry requires an exact prepared target format.",
+                )
+        val directStructuralColorFormat = try {
+            directTargetDescriptor.format.corePrimitiveStructuralColorFormat()
+        } catch (_: IllegalArgumentException) {
+            return diagnostic(
+                "unsupported.native-core-primitive.target-format",
+                "Direct CorePrimitive native geometry requires an exact prepared target format.",
+            )
+        }
         if (directRender.loadStore.loadOp != "clear" ||
             directRender.loadStore.storePlan != GPUStorePlan.Store ||
             directRender.loadStore.clearColorLabel != null
@@ -3000,6 +3045,7 @@ internal class GPUFramePreflighter(
                 clipExecutionPlan,
                 blendPlan,
                 directRender.samplePlan.sampleCount,
+                directStructuralColorFormat,
             )
             val authority = packetAuthorities[acceptedIndex]
             if (authority.structuralPipelineKey != expectedStructuralKey ||
@@ -3918,6 +3964,32 @@ internal class GPUFramePreflighter(
         }
         val blendPlan = requireNotNull(packet.blendPlan)
         val preparedAuthority = packet.corePrimitivePreparedAuthority
+        val targetPreparations = framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .filter { request -> request.resource == render.target }
+        val targetPreparation = targetPreparations.singleOrNull()
+        val targetDescriptor = targetPreparation?.descriptor as? GPUFrameTextureDescriptor
+            ?: return diagnostic(
+                "invalid.preflight.core_primitive_target_authority",
+                "Core primitive target preparation must be one exact texture.",
+            )
+        val targetStructuralColorFormat = try {
+            targetDescriptor.format.corePrimitiveStructuralColorFormat()
+        } catch (_: IllegalArgumentException) {
+            null
+        } ?: return diagnostic(
+            "invalid.preflight.core_primitive_target_authority",
+            "Core primitive target preparation must use one supported scene target format.",
+        )
+        if (preparedAuthority?.structuralPipelineKey?.colorFormat != null &&
+            preparedAuthority.structuralPipelineKey.colorFormat != targetStructuralColorFormat
+        ) {
+            return diagnostic(
+                "invalid.preflight.core_primitive_target_authority",
+                "Core primitive target preparation contradicts its structural pipeline format.",
+            )
+        }
         val coverageMaskConsumerScope = when (coverageMaskPreparedRouteSeal) {
             GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Empty -> null
             is GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Route ->
@@ -3969,6 +4041,7 @@ internal class GPUFramePreflighter(
                         clipExecutionPlan,
                         blendPlan,
                         render.samplePlan.sampleCount,
+                        targetStructuralColorFormat,
                     ).let { structuralKey ->
                         if (render.resourceUses.any {
                                 it.role == GPUFrameResourceRole.PathDepthStencil
@@ -3990,6 +4063,7 @@ internal class GPUFramePreflighter(
                     clipExecutionPlan,
                     blendPlan,
                     render.samplePlan.sampleCount,
+                    targetStructuralColorFormat,
                 )
             GPUDrawPacketRole.PathStencilCover ->
                 corePrimitivePathStencilRenderPipelineStructuralKey(
@@ -3998,6 +4072,7 @@ internal class GPUFramePreflighter(
                     clipExecutionPlan,
                     blendPlan,
                     render.samplePlan.sampleCount,
+                    targetStructuralColorFormat,
                 )
             else -> return diagnostic(
                 "invalid.preflight.core_primitive_packet_authority",
@@ -4036,7 +4111,10 @@ internal class GPUFramePreflighter(
             packet.renderStepVersion != 1 ||
             packet.bindingLayoutHash != expectedBindingLayoutHash ||
             packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
-            packet.targetStateHash != corePrimitiveTargetStateHash(render.samplePlan.sampleCount) ||
+            packet.targetStateHash != corePrimitiveTargetStateHash(
+                render.samplePlan.sampleCount,
+                targetDescriptor.format,
+            ) ||
             packet.scissorBoundsHash != if (coverageMaskConsumerSlot == null) {
                 corePrimitiveScissorAuthority(semantic.scissorBounds)
             } else {
@@ -4048,13 +4126,12 @@ internal class GPUFramePreflighter(
                 "Core primitive executable packet fields contradict the canonical route authority.",
             )
         }
-        val targetPreparations = framePlan.steps
-            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
-            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
-            .filter { request -> request.resource == render.target }
-        val targetPreparation = targetPreparations.singleOrNull()
-        if (targetPreparation == null ||
-            !isCanonicalCorePrimitiveTargetPreparation(targetPreparation, render.target, semantic.targetBounds)
+        if (!isCanonicalCorePrimitiveTargetPreparation(
+                targetPreparation,
+                render.target,
+                semantic.targetBounds,
+                targetDescriptor.format,
+            )
         ) {
             return diagnostic(
                 "invalid.preflight.core_primitive_target_authority",

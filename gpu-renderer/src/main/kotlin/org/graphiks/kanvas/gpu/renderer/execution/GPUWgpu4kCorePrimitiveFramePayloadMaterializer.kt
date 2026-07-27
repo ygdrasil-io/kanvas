@@ -10,6 +10,8 @@ import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskAttachmentAuthority
@@ -23,6 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStencilState
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleAttachmentAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationRequest
@@ -42,7 +45,6 @@ import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_COVERAGE_MASK_C
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_INTERSECTION_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
-import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveTargetStateHash
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
@@ -66,6 +68,38 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+
+private fun GPUColorFormat.isCorePrimitiveSceneTargetFormat(): Boolean =
+    this == GPUColorFormat.RGBA8Unorm || this == GPUColorFormat.RGBA8UnormSrgb
+
+private fun GPUColorFormat.corePrimitiveInterpretationOrNull(): GPUColorInterpretation? = when (this) {
+    GPUColorFormat.RGBA8Unorm -> GPUColorInterpretation.EncodedPremulSrgb
+    GPUColorFormat.RGBA8UnormSrgb -> GPUColorInterpretation.LinearPremul
+    else -> null
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.toGPUColorFormat(): GPUColorFormat =
+    when (this) {
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm ->
+            GPUColorFormat.RGBA8Unorm
+        GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8UnormSrgb ->
+            GPUColorFormat.RGBA8UnormSrgb
+    }
+
+private fun GPUColorFormat.toCorePrimitiveGPUTextureFormat(): GPUTextureFormat = when (this) {
+    GPUColorFormat.RGBA8Unorm -> GPUTextureFormat.RGBA8Unorm
+    GPUColorFormat.RGBA8UnormSrgb -> GPUTextureFormat.RGBA8UnormSrgb
+    else -> throw IllegalArgumentException("Unsupported CorePrimitive scene target format: $value")
+}
+
+private fun GPUFramePlan.corePrimitiveSceneTargetDescriptor(
+    target: GPUFrameResourceRef,
+): GPUFrameTextureDescriptor? = steps
+    .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+    .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+    .singleOrNull {
+        it.role == GPUFrameResourceRole.SceneTarget && it.resource == target
+    }?.descriptor as? GPUFrameTextureDescriptor
 
 /** Public-wgpu4k materializer for direct and unified indexed path CorePrimitive routes. */
 internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
@@ -94,6 +128,20 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 )
             }
             consumed = true
+        }
+
+        val unsupportedSrgbMsaa = framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .firstOrNull { renderStep ->
+                renderStep.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
+                    framePlan.corePrimitiveSceneTargetDescriptor(renderStep.target)?.format ==
+                    GPUColorFormat.RGBA8UnormSrgb
+            }
+        if (unsupportedSrgbMsaa != null) {
+            return refused(
+                "unsupported.native-core-primitive.srgb-msaa",
+                "CorePrimitive sRGB MSAA is not promoted until the frame pool owns an exact sRGB attachment.",
+            )
         }
 
         if (encoderPlan.scopes.any { scope ->
@@ -287,6 +335,24 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             return (from.toInt() until until.toInt()).all { index -> uniformUploadBytes[index] == 0.toByte() }
         }
         val targetBounds = semanticPackets.first().third.targetBounds
+        val declaredTargetDescriptor =
+            framePlan.corePrimitiveSceneTargetDescriptor(renderStep.target) ?: return refused(
+            "unsupported.native-core-primitive.target-contract",
+            "CorePrimitive requires one exact supported scene target.",
+        )
+        val declaredTargetFormat = declaredTargetDescriptor.format
+        val declaredTargetInterpretation =
+            declaredTargetFormat.corePrimitiveInterpretationOrNull() ?: return refused(
+                "unsupported.native-core-primitive.target-contract",
+                "CorePrimitive requires one exact supported scene target.",
+            )
+        val declaredStructuralColorFormat = declaredTargetFormat.corePrimitiveStructuralColorFormat()
+        if (preparedPassSeal.structuralPipelineKey.colorFormat != declaredStructuralColorFormat) {
+            return refused(
+                "invalid.native-core-primitive.target-contract",
+                "CorePrimitive target format contradicts its structural pipeline authority.",
+            )
+        }
         val acceptedGeometries = semanticPackets.mapIndexed { packetIndex, (_, packet, semantic) ->
             val packetAuthority = packet.corePrimitivePreparedAuthority
             val expectedAnalyticShapeSeal = analyticShapeUniformSeals.getOrNull(packetIndex)
@@ -297,7 +363,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 packet.uniformSlot != semantic.payloadRef.uniformSlot ||
                 packet.bindingLayoutHash != expectedBindingLayoutHash ||
                 packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
-                packet.targetStateHash != corePrimitiveTargetStateHash(sampleCount) ||
+                packet.targetStateHash != corePrimitiveTargetStateHash(sampleCount, declaredTargetFormat) ||
                 packet.scissorBoundsHash != corePrimitiveScissorAuthority(semantic.scissorBounds) ||
                 packetAuthority?.structuralPipelineKey != preparedPassSeal.structuralPipelineKey ||
                 packetAuthority.renderPipelineKey != packet.renderPipelineKey ||
@@ -582,8 +648,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     continuation.key.target.value == renderStep.target.value &&
                         continuation.key.targetGeneration == generationSeal.targetGeneration &&
                         continuation.key.deviceGeneration == generationSeal.deviceGeneration &&
-                        continuation.key.colorFormat.value == RGBA8_UNORM &&
-                        continuation.key.colorInterpretation.value == "encoded-premul-srgb" &&
+                        continuation.key.colorFormat == declaredTargetFormat &&
+                        continuation.key.colorInterpretation == declaredTargetInterpretation &&
                         continuation.key.samplePlan == renderStep.samplePlan &&
                         continuation.key.attachmentAuthority ==
                         org.graphiks.kanvas.gpu.renderer.passes
@@ -638,7 +704,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         val targetDescriptor = targetPreparation.descriptor as? GPUFrameTextureDescriptor
         if (targetPreparation.resource != renderSteps.first().target ||
             renderSteps.any { it.target != targetPreparation.resource } || targetDescriptor == null ||
-            targetDescriptor.logicalBounds != targetBounds || targetDescriptor.format.value != RGBA8_UNORM ||
+            targetDescriptor != declaredTargetDescriptor ||
+            targetDescriptor.logicalBounds != targetBounds ||
+            !targetDescriptor.format.isCorePrimitiveSceneTargetFormat() ||
             targetDescriptor.sampleCount != 1 ||
             targetPreparation.usages != setOf(
                 GPUFrameResourceUsage.RenderAttachment,
@@ -647,7 +715,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         ) {
             return refused(
                 "unsupported.native-core-primitive.target-contract",
-                "CorePrimitive requires one exact frame-local rgba8unorm scene target.",
+                "CorePrimitive requires one exact frame-local supported scene target.",
             )
         }
         if (isMsaa4x) {
@@ -1111,7 +1179,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         rowsPerImage = output.layout.rowsPerImage,
                         bufferOffset = output.layout.bufferOffset,
                         mappedSize = output.layout.totalBufferBytes,
-                        format = GPUTextureFormat.RGBA8Unorm,
+                        format = declaredTargetFormat.toCorePrimitiveGPUTextureFormat(),
                     ),
                 )
             } else {
@@ -1237,6 +1305,19 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         val attachment = producers.first().second.attachmentAuthority
         val sceneTarget = consumers.first().second.sceneTarget
         val sceneTargetGeneration = consumers.first().second.sceneTargetGeneration
+        val sceneTargetFormat =
+            framePlan.corePrimitiveSceneTargetDescriptor(sceneTarget)?.format ?: return invalid(
+                "resource-contract",
+                "Coverage-mask requires one exact supported scene target.",
+            )
+        val sceneStructuralColorFormat = try {
+            sceneTargetFormat.corePrimitiveStructuralColorFormat()
+        } catch (_: IllegalArgumentException) {
+            return invalid(
+                "resource-contract",
+                "Coverage-mask requires one exact supported scene target.",
+            )
+        }
         if (producers.size != route.producers.size || consumers.size != route.consumers.size ||
             producers.any { (entry, seal) ->
                 seal.sourceStepIndex != entry.scope.sourceStepIndex ||
@@ -1255,7 +1336,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             consumers.map { it.second.dependencyFromPreviousConsumerToken } !=
             slab.uniformSlabSeal.consumerSlots.map { it.dependencyFromPreviousConsumerToken } ||
             consumers.dropLast(1).any { it.second.isLastConsumer } ||
-            !consumers.last().second.isLastConsumer
+            !consumers.last().second.isLastConsumer ||
+            route.producers.any {
+                it.structuralKey.colorFormat !=
+                    GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat.Rgba8Unorm
+            } ||
+            route.consumers.any { it.structuralKey.colorFormat != sceneStructuralColorFormat }
         ) return invalid(
             "seal",
             "Coverage-mask scope order, identity, dependency, or retained frame authority was substituted.",
@@ -1306,7 +1392,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 packet.resourceGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
                 packet.clipCoveragePlan != semantic.clipCoveragePlan ||
                 packet.frameProvenance != semantic.frameProvenance ||
-                packet.targetStateHash != CORE_PRIMITIVE_TARGET_STATE_HASH ||
+                packet.targetStateHash != corePrimitiveTargetStateHash(1, sceneTargetFormat) ||
                 packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
                 packet.scissorBoundsHash != null ||
                 slot.slotIndex != slab.uniformSlabSeal.producerSlots.size + index ||
@@ -1513,14 +1599,16 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         if (targetBounds.left != 0 || targetBounds.top != 0 ||
             targetBounds.width != preparedSceneTarget.width ||
             targetBounds.height != preparedSceneTarget.height ||
-            scenePreparation.resource != sceneTarget || sceneDescriptor.format.value != RGBA8_UNORM ||
+            scenePreparation.resource != sceneTarget || sceneDescriptor.format != sceneTargetFormat ||
+            !sceneDescriptor.format.isCorePrimitiveSceneTargetFormat() ||
             sceneDescriptor.sampleCount != 1 || scenePreparation.usages != setOf(
                 GPUFrameResourceUsage.RenderAttachment,
                 GPUFrameResourceUsage.CopySource,
             ) || scenePreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
             scenePreparation.byteSize != exactSceneBytes ||
             maskPreparation.resource != attachment.resource ||
-            maskDescriptor.logicalBounds != route.bounds || maskDescriptor.format.value != RGBA8_UNORM ||
+            maskDescriptor.logicalBounds != route.bounds ||
+            maskDescriptor.format.value != COVERAGE_MASK_RGBA8_UNORM ||
             maskDescriptor.sampleCount != 1 || maskPreparation.usages != setOf(
                 GPUFrameResourceUsage.RenderAttachment,
                 GPUFrameResourceUsage.TextureBinding,
@@ -2005,7 +2093,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         output.layout.rowsPerImage,
                         output.layout.bufferOffset,
                         output.layout.totalBufferBytes,
-                        GPUTextureFormat.RGBA8Unorm,
+                        sceneTargetFormat.toCorePrimitiveGPUTextureFormat(),
                     ),
                 )
             } else null
@@ -2246,6 +2334,14 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         val targetBounds = targetDescriptor.logicalBounds
         val route = producerSeal.route
+        val targetStructuralColorFormat = try {
+            targetDescriptor.format.corePrimitiveStructuralColorFormat()
+        } catch (_: IllegalArgumentException) {
+            return refused(
+                "invalid.native-core-primitive.clip-stencil-resource-contract",
+                "Prepared clip-stencil requires one exact supported scene target.",
+            )
+        }
         val sampleCount = route.attachment.sampleCount
         val isMsaa4x = sampleCount == 4
         val expectedSamplePlan = if (isMsaa4x) {
@@ -2263,7 +2359,10 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         if (targetBounds.left != 0 || targetBounds.top != 0 ||
             targetBounds.width != route.attachment.width || targetBounds.height != route.attachment.height ||
             targetPreparation.resource != producerEntry.render.target ||
-            targetDescriptor.format.value != RGBA8_UNORM || targetDescriptor.sampleCount != 1 ||
+            !targetDescriptor.format.isCorePrimitiveSceneTargetFormat() ||
+            route.producer.structuralKey.colorFormat != targetStructuralColorFormat ||
+            route.consumers.any { it.structuralKey.colorFormat != targetStructuralColorFormat } ||
+            targetDescriptor.sampleCount != 1 ||
             targetPreparation.usages != setOf(
                 GPUFrameResourceUsage.RenderAttachment,
                 GPUFrameResourceUsage.CopySource,
@@ -2343,6 +2442,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 producerContinuation,
                 clipDepthStencilPreparation.resource,
                 generationSeal,
+                targetDescriptor.format,
                 expectedLoad = if (isMsaa4x) GPUSampleLoadTransition.FreshClear else null,
             ) || orderedConsumers.withIndex().any { (index, pair) ->
                 pair.first.render.target != producerEntry.render.target ||
@@ -2357,6 +2457,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         pair.first.render.sampleContinuation,
                         clipDepthStencilPreparation.resource,
                         generationSeal,
+                        targetDescriptor.format,
                         expectedLoad = if (isMsaa4x) GPUSampleLoadTransition.RetainedLoad else null,
                         expectedKey = producerContinuation?.key,
                     )
@@ -2792,7 +2893,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         rowsPerImage = output.layout.rowsPerImage,
                         bufferOffset = output.layout.bufferOffset,
                         mappedSize = output.layout.totalBufferBytes,
-                        format = GPUTextureFormat.RGBA8Unorm,
+                        format = targetDescriptor.format.toCorePrimitiveGPUTextureFormat(),
                     ),
                 )
             } else {
@@ -2855,6 +2956,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         continuation: GPUSampleContinuationRequest?,
         depthStencilResource: GPUFrameResourceRef,
         generationSeal: GPUPreparedGenerationSeal,
+        targetFormat: GPUColorFormat,
         expectedLoad: GPUSampleLoadTransition?,
         expectedKey: GPUSampleContinuationKey? = null,
     ): Boolean {
@@ -2863,13 +2965,14 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
         }
         val exact = continuation ?: return false
         val key = exact.key
+        val targetInterpretation = targetFormat.corePrimitiveInterpretationOrNull() ?: return false
         return render.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
             (expectedKey == null || key == expectedKey) &&
             key.target.value == render.target.value &&
             key.targetGeneration == generationSeal.targetGeneration &&
             key.deviceGeneration == generationSeal.deviceGeneration &&
-            key.colorFormat.value == RGBA8_UNORM &&
-            key.colorInterpretation.value == "encoded-premul-srgb" &&
+            key.colorFormat == targetFormat &&
+            key.colorInterpretation == targetInterpretation &&
             key.samplePlan == GPUSamplePlan.MultisampleFrame(4) &&
             key.attachmentAuthority == GPUSampleAttachmentAuthority.PreparedFramePayload &&
             key.colorAttachment.value ==
@@ -2964,6 +3067,18 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             .filterIsInstance<GPUCorePrimitiveNativeScopeRouteUnit.Direct>()
         val sampleCount = renderStep.samplePlan.sampleCount
         val isMsaa4x = renderStep.samplePlan == GPUSamplePlan.MultisampleFrame(4)
+        val indexedTargetFormat =
+            framePlan.corePrimitiveSceneTargetDescriptor(renderStep.target)?.format ?: return refused(
+                "invalid.native-core-primitive.indexed-target",
+                "Indexed CorePrimitive requires one exact supported scene target.",
+            )
+        val indexedTargetInterpretation =
+            indexedTargetFormat.corePrimitiveInterpretationOrNull() ?: return refused(
+                "invalid.native-core-primitive.indexed-target",
+                "Indexed CorePrimitive requires one exact supported scene target.",
+            )
+        val indexedStructuralColorFormat =
+            indexedTargetFormat.corePrimitiveStructuralColorFormat()
         val pathDepthStencilUse = renderStep.resourceUses.singleOrNull {
             it.role == GPUFrameResourceRole.PathDepthStencil
         }
@@ -2984,8 +3099,8 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     authority.key.target.value == renderStep.target.value &&
                         authority.key.targetGeneration == generationSeal.targetGeneration &&
                         authority.key.deviceGeneration == generationSeal.deviceGeneration &&
-                        authority.key.colorFormat.value == RGBA8_UNORM &&
-                        authority.key.colorInterpretation.value == "encoded-premul-srgb" &&
+                        authority.key.colorFormat == indexedTargetFormat &&
+                        authority.key.colorInterpretation == indexedTargetInterpretation &&
                         authority.key.samplePlan == renderStep.samplePlan &&
                         authority.key.attachmentAuthority ==
                         org.graphiks.kanvas.gpu.renderer.passes
@@ -3144,8 +3259,12 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                     plan.packet.uniformSlot != plan.semantic.payloadRef.uniformSlot ||
                     plan.packet.bindingLayoutHash != CORE_PRIMITIVE_BINDING_LAYOUT_HASH ||
                     plan.packet.vertexSourceLabel != CORE_PRIMITIVE_VERTEX_SOURCE_LABEL ||
-                    plan.packet.targetStateHash != corePrimitiveTargetStateHash(sampleCount) ||
+                    plan.packet.targetStateHash != corePrimitiveTargetStateHash(
+                        sampleCount,
+                        indexedTargetFormat,
+                    ) ||
                     plan.packet.scissorBoundsHash != corePrimitiveScissorAuthority(plan.semantic.scissorBounds) ||
+                    plan.structuralKey.colorFormat != indexedStructuralColorFormat ||
                     authority?.structuralPipelineKey != plan.structuralKey ||
                     authority.renderPipelineKey != plan.packet.renderPipelineKey ||
                     authority.uniformSlabSeal !== unifiedRoute.uniformSlabSeal ||
@@ -3259,7 +3378,9 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
             )
         }
         if (targetPreparation.resource != renderStep.target || targetDescriptor?.logicalBounds != targetBounds ||
-            targetDescriptor.format.value != RGBA8_UNORM || targetDescriptor.sampleCount != 1 ||
+            targetDescriptor.format != indexedTargetFormat ||
+            !targetDescriptor.format.isCorePrimitiveSceneTargetFormat() ||
+            targetDescriptor.sampleCount != 1 ||
             targetPreparation.usages != setOf(
                 GPUFrameResourceUsage.RenderAttachment,
                 GPUFrameResourceUsage.CopySource,
@@ -3541,7 +3662,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                 )
             }
             cacheKeys[structuralKey] = GPUWgpu4kCorePrimitivePipelineCacheKey(
-                RGBA8_UNORM,
+                structuralKey.colorFormat.toGPUColorFormat().value,
                 sampleCount,
             ).copy(pipelineIdentity = mapped.identity)
         }
@@ -3786,7 +3907,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
                         rowsPerImage = output.layout.rowsPerImage,
                         bufferOffset = output.layout.bufferOffset,
                         mappedSize = output.layout.totalBufferBytes,
-                        format = GPUTextureFormat.RGBA8Unorm,
+                        format = indexedTargetFormat.toCorePrimitiveGPUTextureFormat(),
                     ),
                 )
             } else {
@@ -3935,7 +4056,7 @@ internal class GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
     }
 
     private companion object {
-        const val RGBA8_UNORM = "rgba8unorm"
+        const val COVERAGE_MASK_RGBA8_UNORM = "rgba8unorm"
         const val DEPTH24PLUS_STENCIL8 = "depth24plus-stencil8"
         const val CORE_PRIMITIVE_UNIFORM_BYTES = 32
         const val RGBA_BYTES_PER_PIXEL = 4L

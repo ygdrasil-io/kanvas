@@ -60,6 +60,7 @@ import org.graphiks.kanvas.gpu.renderer.geometry.corePrimitiveClipStencilEdgeFan
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilNativePathOrNull
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilNdcVertices
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveClipStencilProducerRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorFormat
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
@@ -122,10 +123,27 @@ const val CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_BINDING_LAYOUT_HASH =
 const val CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_BINDING_LAYOUT_HASH =
     "layout.core-primitive.coverage-mask-consumer.uniform64-texture2d-v1"
 const val CORE_PRIMITIVE_TARGET_STATE_HASH = "target.rgba8unorm.single-sample"
-internal fun corePrimitiveTargetStateHash(sampleCount: Int): String = when (sampleCount) {
-    1 -> CORE_PRIMITIVE_TARGET_STATE_HASH
-    4 -> "target.rgba8unorm.multisample-4x-resolve"
-    else -> "target.rgba8unorm.unsupported-${sampleCount}x"
+private val corePrimitiveSceneTargetFormats = setOf(
+    GPUColorFormat.RGBA8Unorm,
+    GPUColorFormat.RGBA8UnormSrgb,
+)
+
+internal fun corePrimitiveTargetStateHash(
+    sampleCount: Int,
+    targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+): String {
+    require(targetFormat in corePrimitiveSceneTargetFormats) {
+        "Unsupported CorePrimitive scene target format: ${targetFormat.value}"
+    }
+    return when (sampleCount) {
+        1 -> if (targetFormat == GPUColorFormat.RGBA8Unorm) {
+            CORE_PRIMITIVE_TARGET_STATE_HASH
+        } else {
+            "target.${targetFormat.value}.single-sample"
+        }
+        4 -> "target.${targetFormat.value}.multisample-4x-resolve"
+        else -> "target.${targetFormat.value}.unsupported-${sampleCount}x"
+    }
 }
 const val CORE_PRIMITIVE_VERTEX_SOURCE_LABEL = "core-primitive-device-geometry"
 const val CORE_PRIMITIVE_MASK_CLEAR_COLOR_LABEL = "opaque-white"
@@ -563,8 +581,15 @@ private fun corePrimitiveClipProducerBlendPlan(
     }
 }
 
-internal fun corePrimitiveTargetDescriptor(bounds: GPUPixelBounds): GPUFrameTextureDescriptor =
-    GPUFrameTextureDescriptor(bounds, GPUColorFormat("rgba8unorm"), 1)
+internal fun corePrimitiveTargetDescriptor(
+    bounds: GPUPixelBounds,
+    targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
+): GPUFrameTextureDescriptor {
+    require(targetFormat in corePrimitiveSceneTargetFormats) {
+        "Unsupported CorePrimitive scene target format: ${targetFormat.value}"
+    }
+    return GPUFrameTextureDescriptor(bounds, targetFormat, 1)
+}
 
 internal fun corePrimitiveTargetByteSize(bounds: GPUPixelBounds): Long =
     Math.multiplyExact(Math.multiplyExact(bounds.width.toLong(), bounds.height.toLong()), 4L)
@@ -785,9 +810,10 @@ private fun corePrimitiveGeometryBufferPreparation(
 internal fun corePrimitiveTargetPreparation(
     target: GPUFrameTargetRef,
     bounds: GPUPixelBounds,
+    targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
 ): GPUResourcePreparationRequest = GPUResourcePreparationRequest(
     resource = target,
-    descriptor = corePrimitiveTargetDescriptor(bounds),
+    descriptor = corePrimitiveTargetDescriptor(bounds, targetFormat),
     role = GPUFrameResourceRole.SceneTarget,
     usages = setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource),
     lifetime = GPUFrameResourceLifetime.FrameLocal,
@@ -799,9 +825,12 @@ internal fun isCanonicalCorePrimitiveTargetPreparation(
     request: GPUResourcePreparationRequest,
     target: GPUFrameTargetRef,
     bounds: GPUPixelBounds,
+    targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
 ): Boolean {
     val expected = try {
-        corePrimitiveTargetPreparation(target, bounds)
+        corePrimitiveTargetPreparation(target, bounds, targetFormat)
+    } catch (_: IllegalArgumentException) {
+        return false
     } catch (_: ArithmeticException) {
         return false
     }
@@ -1312,6 +1341,7 @@ data class GPUCorePrimitivePreparedFrameRequest(
     val semanticsByCommandId: Map<Int, GPUDrawSemanticPayload.CorePrimitive>,
     val readbackRequestId: GPUReadbackRequestID? = null,
     val configuredAggregateBudgetBytes: Long = 1L shl 30,
+    val targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
 )
 
 sealed interface GPUCorePrimitivePreparedFrameResult {
@@ -1333,6 +1363,7 @@ class GPUCorePrimitivePreparedFrameTaskListBuilder(
                     targetBounds = request.targetBounds,
                     semanticsByCommandId = request.semanticsByCommandId,
                     readbackRequestId = request.readbackRequestId,
+                    targetFormat = request.targetFormat,
                 ),
                 configuredAggregateBudgetBytes = request.configuredAggregateBudgetBytes,
             )
@@ -1364,6 +1395,12 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             return refused(
                 "unsupported.recording.core_primitive_target",
                 "Prepared core primitive recording requires one non-empty zero-origin target.",
+            )
+        }
+        if (request.targetFormat !in corePrimitiveSceneTargetFormats) {
+            return refused(
+                "unsupported.recording.core_primitive_target_format",
+                "Prepared core primitive recording requires rgba8unorm or rgba8unorm-srgb.",
             )
         }
         if (request.configuredAggregateBudgetBytes <= 0L) {
@@ -2199,7 +2236,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     )
                 },
                 consumerSlots = candidate.consumers.mapIndexed { index, consumer ->
-                    val renderPipelineKey = consumer.structuralKey.stableRenderPipelineKey(
+                    val structuralPipelineKey = consumer.structuralKey.copy(
+                        colorFormat = request.targetFormat.corePrimitiveStructuralColorFormat(),
+                    )
+                    val renderPipelineKey = structuralPipelineKey.stableRenderPipelineKey(
                         CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
                     )
                     GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal(
@@ -2216,7 +2256,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                             )
                         },
                         semanticAuthority = consumer.semanticAuthority,
-                        structuralPipelineKey = consumer.structuralKey,
+                        structuralPipelineKey = structuralPipelineKey,
                         renderPipelineKey = renderPipelineKey,
                         bindingLayoutHash = CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_BINDING_LAYOUT_HASH,
                     )
@@ -2375,10 +2415,11 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 coverageMaskUniformSlab = coverageMaskUniformSlab,
                 coverageMaskUniformSlabSeal = coverageMaskUniformSlabSeal,
                 sampleContinuationKey = multisampleContinuationKey,
+                targetFormat = request.targetFormat,
             )
         }
         val preparations = mutableListOf(
-            corePrimitiveTargetPreparation(request.target, request.targetBounds),
+            corePrimitiveTargetPreparation(request.target, request.targetBounds, request.targetFormat),
         )
         if (geometryVertex != null && geometryIndex != null) {
             preparations += corePrimitiveGeometryBufferPreparation(
@@ -2756,6 +2797,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                                 analyticIntersectionUniformBytesByCommandId[basePacket.commandIdValue],
                             coverageMaskUniformSlabSeal = coverageMaskUniformSlabSeal,
                             sampleCount = preparedSamplePlan.sampleCount,
+                            targetFormat = request.targetFormat,
                             publicPipelineKeys = publicPipelineKeys,
                         ),
                     )
@@ -2769,6 +2811,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                             corePrimitiveColorWriteNoneBlendPlan(),
                             requireNotNull(uniformSlabSeal),
                             preparedSamplePlan.sampleCount,
+                            request.targetFormat,
                             publicPipelineKeys,
                         ),
                         pathStencilPacket(
@@ -2779,6 +2822,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                             requireNotNull(basePacket.blendPlan),
                             requireNotNull(uniformSlabSeal),
                             preparedSamplePlan.sampleCount,
+                            request.targetFormat,
                             publicPipelineKeys,
                         ),
                     )
@@ -2882,6 +2926,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
                         path.fillRule,
                         nativeClipStencilPlan.sampleCount,
+                        request.targetFormat.corePrimitiveStructuralColorFormat(),
                     ),
                 consumers = consumerPackets.mapIndexed { index, packet ->
                     GPUCorePrimitiveClipStencilPreparedCandidate.Consumer(
@@ -3128,6 +3173,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         coverageMaskUniformSlab: GPUFrameBufferRef?,
         coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal?,
         sampleContinuationKey: org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey?,
+        targetFormat: GPUColorFormat,
     ): GPUCoreClipArtifactTopology {
         val key = plan.clipResourceKey()
         return when (plan) {
@@ -3147,6 +3193,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                     variant = "stencil",
                     authority = GPUClipProducerAuthority.Stencil(plan.producer),
                     nativeClipStencilPath = nativePath,
+                    targetFormat = targetFormat,
                 )
                 val use = GPUFrameResourceUse(
                     resource,
@@ -3333,6 +3380,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                         coverageMaskProducerSlot = coverageMaskUniformSlabSeal?.producerSlots
                             ?.singleOrNull { slot -> slot.sourceOrder == producer.sourceOrder },
                         coverageMaskUniformSlabSeal = coverageMaskUniformSlabSeal,
+                        targetFormat = GPUColorFormat.RGBA8Unorm,
                     )
                     GPUTask.Render(
                         producerId,
@@ -3392,6 +3440,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         nativeClipStencilPath: GPUClipExecutionGeometry.Path?,
         coverageMaskProducerSlot: GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal? = null,
         coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal? = null,
+        targetFormat: GPUColorFormat,
     ): GPUDrawPacket = GPUDrawPacket(
         packetId = GPUDrawPacketID("packet.${taskId.value}"),
         commandIdValue = base.commandIdValue,
@@ -3410,6 +3459,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             corePrimitiveClipStencilProducerRenderPipelineStructuralKey(
                 path.fillRule,
                 (plan as GPUClipExecutionPlan.StencilCoverage).sampleCount,
+                targetFormat.corePrimitiveStructuralColorFormat(),
             )
                 .stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
         } ?: corePrimitiveClipProducerPipelineKey(plan, authority),
@@ -3422,7 +3472,10 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         targetStateHash = if (nativeClipStencilPath == null) {
             "target.$renderStep.single-sample"
         } else {
-            corePrimitiveTargetStateHash((plan as GPUClipExecutionPlan.StencilCoverage).sampleCount)
+            corePrimitiveTargetStateHash(
+                (plan as GPUClipExecutionPlan.StencilCoverage).sampleCount,
+                targetFormat,
+            )
         },
         originalPaintOrder = base.originalPaintOrder,
         resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
@@ -3476,6 +3529,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         blendPlan: GPUBlendPlan,
         uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
         sampleCount: Int,
+        targetFormat: GPUColorFormat,
         publicPipelineKeys: MutableMap<GPUCorePrimitiveRenderPipelineStructuralKey, GPURenderPipelineKey>,
     ): GPUDrawPacket {
         require(
@@ -3496,6 +3550,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             clipExecutionPlan,
             blendPlan,
             sampleCount,
+            targetFormat.corePrimitiveStructuralColorFormat(),
         )
         val renderPipelineKey = publicPipelineKeys.getOrPut(structuralPipelineKey) {
             structuralPipelineKey.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
@@ -3522,7 +3577,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
             semanticPayload = preparedSemantic,
             vertexSourceLabel = CORE_PRIMITIVE_VERTEX_SOURCE_LABEL,
             scissorBoundsHash = corePrimitiveScissorAuthority(preparedSemantic.scissorBounds),
-            targetStateHash = corePrimitiveTargetStateHash(sampleCount),
+            targetStateHash = corePrimitiveTargetStateHash(sampleCount, targetFormat),
             originalPaintOrder = basePacket.originalPaintOrder,
             resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
             frameProvenance = basePacket.frameProvenance,
@@ -3602,6 +3657,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         analyticIntersectionUniformBytes: ByteArray?,
         coverageMaskUniformSlabSeal: GPUCorePrimitiveCoverageMaskUniformSlabSeal?,
         sampleCount: Int,
+        targetFormat: GPUColorFormat,
         publicPipelineKeys: MutableMap<GPUCorePrimitiveRenderPipelineStructuralKey, GPURenderPipelineKey>,
     ): GPUDrawPacket {
         val clipExecutionPlan = requireNotNull(basePacket.clipExecutionPlan)
@@ -3623,6 +3679,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 inverseFill = path.inverseFill,
                 blendPlan = requireNotNull(basePacket.blendPlan),
                 sampleCount = sampleCount,
+                colorFormat = targetFormat.corePrimitiveStructuralColorFormat(),
             )
         } else {
             corePrimitiveRenderPipelineStructuralKey(
@@ -3630,6 +3687,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
                 clipExecutionPlan,
                 requireNotNull(basePacket.blendPlan),
                 sampleCount,
+                targetFormat.corePrimitiveStructuralColorFormat(),
             )
         }
         val structuralPipelineKey = if (pathDepthStencilCompatible) {
@@ -3750,7 +3808,7 @@ internal class GPUCorePrimitivePreparedFrameTaskListAssembler(
         } else {
             null
         },
-        targetStateHash = corePrimitiveTargetStateHash(sampleCount),
+        targetStateHash = corePrimitiveTargetStateHash(sampleCount, targetFormat),
         originalPaintOrder = basePacket.originalPaintOrder,
         resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
         frameProvenance = basePacket.frameProvenance,

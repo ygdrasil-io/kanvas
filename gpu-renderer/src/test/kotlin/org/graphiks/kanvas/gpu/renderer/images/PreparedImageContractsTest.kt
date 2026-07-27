@@ -1,13 +1,78 @@
 package org.graphiks.kanvas.gpu.renderer.images
 
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PreparedImageContractsTest {
+    @Test
+    fun `bounded SDR contract names the native source decode coverage and sRGB store`() {
+        val contract = preparedSdrColorContract()
+
+        assertEquals(GPUTextureFormat.RGBA8UnormSrgb, contract.colorSourceTextureFormat)
+        assertEquals(GPUTextureFormat.RGBA8Unorm, contract.coverageSourceTextureFormat)
+        assertEquals(
+            GPUPreparedColorUploadEncoding.StraightEncodedSrgb,
+            contract.colorUploadEncoding,
+        )
+        assertEquals(GPUTextureFormat.RGBA8UnormSrgb, contract.targetTextureFormat)
+        assertEquals(GPUColorInterpretation.LinearPremul, contract.shaderInterpretation)
+        assertEquals(
+            GPUColorInterpretation.EncodedPremulSrgb,
+            contract.readbackInterpretation,
+        )
+    }
+
+    @Test
+    fun `factory recovers bounded straight encoded sRGB before color upload`() {
+        val artifact = ready(
+            input(
+                alpha = AlphaType.PREMUL,
+                bytes = byteArrayOf(25, 75, 132.toByte(), 160.toByte()),
+            ),
+        )
+
+        assertContentEquals(
+            byteArrayOf(40, 120, 210.toByte(), 160.toByte()),
+            artifact.tightRgba8BytesForUpload(),
+        )
+        assertEquals(
+            GPUPreparedColorUploadEncoding.StraightEncodedSrgb,
+            artifact.colorUploadEncoding,
+        )
+        assertEquals(
+            GPUColorInterpretation.StraightEncodedSrgb.value,
+            artifact.colorUploadInterpretation,
+        )
+        assertTrue(
+            artifact.key.value.contains(GPUPreparedColorUploadEncoding.StraightEncodedSrgb.name),
+        )
+        assertTrue(artifact.key.value.contains(artifact.contentHash))
+    }
+
+    @Test
+    fun `factory zeroes transparent color and keeps opaque straight bytes bounded`() {
+        val transparent = ready(input(bytes = byteArrayOf(12, 34, 56, 0)))
+        val opaque = ready(
+            input(
+                alpha = AlphaType.OPAQUE,
+                bytes = byteArrayOf(40, 120, 210.toByte(), 255.toByte()),
+            ),
+        )
+
+        assertContentEquals(byteArrayOf(0, 0, 0, 0), transparent.tightRgba8BytesForUpload())
+        assertContentEquals(
+            byteArrayOf(40, 120, 210.toByte(), 255.toByte()),
+            opaque.tightRgba8BytesForUpload(),
+        )
+    }
+
     @Test
     fun `factory snapshots A8 bytes and expands tight premultiplied upload bytes`() {
         val callerBytes = byteArrayOf(1, 2, 3)
@@ -23,6 +88,8 @@ class PreparedImageContractsTest {
         assertEquals(3L, artifact.pixelLayout.sourceRowBytes)
         assertEquals(12L, artifact.pixelLayout.normalizedRgba8RowBytes)
         assertEquals(GPUColorInterpretation.EncodedPremulSrgb.value, artifact.colorInterpretation)
+        assertNull(artifact.colorUploadEncoding)
+        assertEquals(GPUColorInterpretation.LinearPremul.value, artifact.colorUploadInterpretation)
         assertContentEquals(
             byteArrayOf(1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3),
             artifact.tightRgba8BytesForUpload(),
@@ -34,9 +101,15 @@ class PreparedImageContractsTest {
 
     @Test
     fun `factory converts BGRA and accepts only authoritative opaque RGBA`() {
-        assertContentEquals(byteArrayOf(1, 2, 3, 4), ready(input()).tightRgba8BytesForUpload())
+        assertContentEquals(
+            byteArrayOf(64, 128.toByte(), 191.toByte(), 4),
+            ready(input()).tightRgba8BytesForUpload(),
+        )
         val bgra = ready(input(format = GPUPreparedImageSourceFormat.Bgra8, alpha = AlphaType.PREMUL, bytes = byteArrayOf(3, 2, 1, 4)))
-        assertContentEquals(byteArrayOf(1, 2, 3, 4), bgra.tightRgba8BytesForUpload())
+        assertContentEquals(
+            byteArrayOf(64, 128.toByte(), 191.toByte(), 4),
+            bgra.tightRgba8BytesForUpload(),
+        )
         assertIs<GPUPreparedImageArtifactResult.Ready>(GPUPreparedImageArtifactFactory.prepare(input(alpha = AlphaType.OPAQUE, bytes = byteArrayOf(1, 2, 3, -1))))
         assertRefusal(
             input(alpha = AlphaType.OPAQUE, bytes = byteArrayOf(1, 2, 3, 4)),

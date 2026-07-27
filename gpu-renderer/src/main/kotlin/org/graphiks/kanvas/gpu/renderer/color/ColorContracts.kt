@@ -9,6 +9,7 @@ value class GPUColorFormat(val value: String) {
 
     companion object {
         val RGBA8Unorm: GPUColorFormat = GPUColorFormat("rgba8unorm")
+        val RGBA8UnormSrgb: GPUColorFormat = GPUColorFormat("rgba8unorm-srgb")
         val BGRA8Unorm: GPUColorFormat = GPUColorFormat("bgra8unorm")
     }
 }
@@ -22,6 +23,9 @@ value class GPUColorInterpretation(val value: String) {
 
     companion object {
         val EncodedPremulSrgb: GPUColorInterpretation = GPUColorInterpretation("encoded-premul-srgb")
+        val LinearPremul: GPUColorInterpretation = GPUColorInterpretation("linear-premul")
+        val StraightEncodedSrgb: GPUColorInterpretation =
+            GPUColorInterpretation("straight-encoded-srgb")
     }
 }
 
