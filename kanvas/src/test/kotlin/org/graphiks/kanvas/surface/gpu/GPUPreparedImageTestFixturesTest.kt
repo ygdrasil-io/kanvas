@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.math.abs
 import org.graphiks.kanvas.image.ColorType
+import kotlin.test.assertFailsWith
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -429,6 +430,76 @@ class GPUPreparedImageTestFixturesTest {
         assertTrue(GPUPreparedImagePixelOracle.matchesWithinOneLsb(a, ia(1, 19, 254, 41)))
         assertEquals(2, GPUPreparedImagePixelOracle.maxChannelDelta(a, ia(2, 20, 255, 40)))
         assertTrue(!GPUPreparedImagePixelOracle.matchesWithinOneLsb(a, ia(2, 20, 255, 40)))
+    }
+
+    @Test
+    fun `linear sRGB midpoint encodes near 188 instead of raw 128`() {
+        val result = GPUPreparedImagePixelOracle.sampleSrgbStraightToEncodedPremul(
+            straightEncodedSrgb = ia(
+                0, 0, 0, 255,
+                255, 255, 255, 255,
+            ),
+            width = 2,
+            height = 1,
+            u = 0.5f,
+            v = 0.5f,
+            sample = GPUPreparedImagePixelOracle.SampleKind.LINEAR,
+            tintPremultipliedRgba = floatArrayOf(1f, 1f, 1f, 1f),
+        )
+
+        assertTrue(
+            GPUPreparedImagePixelOracle.matchesWithinOneLsb(
+                ia(188, 188, 188, 255),
+                result,
+            ),
+        )
+    }
+
+    @Test
+    fun `native translucent vector applies premultiplication and paint alpha once`() {
+        val result = GPUPreparedImagePixelOracle.sampleSrgbStraightToEncodedPremul(
+            straightEncodedSrgb = ia(40, 120, 210, 160),
+            width = 1,
+            height = 1,
+            u = 0.5f,
+            v = 0.5f,
+            sample = GPUPreparedImagePixelOracle.SampleKind.NEAREST,
+            tintPremultipliedRgba = floatArrayOf(0.75f, 0.75f, 0.75f, 0.75f),
+        )
+
+        assertTrue(
+            GPUPreparedImagePixelOracle.matchesWithinOneLsb(
+                ia(25, 84, 150, 120),
+                result,
+            ),
+        )
+    }
+
+    @Test
+    fun `opaque nearest color survives the physical oracle exactly`() {
+        assertArrayEquals(
+            ia(40, 120, 210, 255),
+            GPUPreparedImagePixelOracle.sampleSrgbStraightToEncodedPremul(
+                straightEncodedSrgb = ia(40, 120, 210, 255),
+                width = 1,
+                height = 1,
+                u = 0.5f,
+                v = 0.5f,
+                sample = GPUPreparedImagePixelOracle.SampleKind.NEAREST,
+                tintPremultipliedRgba = floatArrayOf(1f, 1f, 1f, 1f),
+            ),
+        )
+    }
+
+    @Test
+    fun `physical oracle rejects non premultiplied tint`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUPreparedImagePixelOracle.sampleSrgbStraightToEncodedPremul(
+                ia(0, 0, 0, 255), 1, 1, 0.5f, 0.5f,
+                GPUPreparedImagePixelOracle.SampleKind.NEAREST,
+                floatArrayOf(1f, 0f, 0f, 0.5f),
+            )
+        }
     }
 
     private fun pixelAt(bytes: ByteArray, stride: Int, x: Int, y: Int): ByteArray {
