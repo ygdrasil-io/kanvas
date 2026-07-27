@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
@@ -375,17 +376,19 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         val baseRenderByPacketId = baseRenders.flatMap { render ->
             render.drawPackets.map { packet -> packet.packetId to render }
         }.toMap()
-        val orderedPreparedPackets = packets.map { packet ->
+        val preparedRenderByPacketId = baseRenderByPacketId +
+            coreAssembly.renderByPacketId
+        val orderedPreparedPackets = packets.flatMap { packet ->
             val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
             if (semantic is GPUDrawSemanticPayload.CorePrimitive) {
                 coreAssembly.packetByCommandId.getValue(packet.commandIdValue)
             } else {
-                packet.withSemantic(semantic)
+                listOf(packet.withSemantic(semantic))
             }
         }
-        val routeRuns = orderedPreparedPackets.contiguousRouteRuns(baseRenderByPacketId)
+        val routeRuns = orderedPreparedPackets.contiguousRouteRuns(preparedRenderByPacketId)
         val renders = routeRuns.mapIndexed { index, run ->
-            val original = baseRenderByPacketId.getValue(run.first().packetId)
+            val original = preparedRenderByPacketId.getValue(run.first().packetId)
             val uses = if (run.first().semanticPayload is GPUDrawSemanticPayload.SampledImage) {
                 run.flatMap { packet ->
                     val semantic = packet.semanticPayload as GPUDrawSemanticPayload.SampledImage
@@ -429,11 +432,18 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 drawPackets = run,
                 batchEligibilityByPacketId = run.associate { packet ->
                     packet.packetId to
-                        baseRenderByPacketId.getValue(packet.packetId)
+                        preparedRenderByPacketId.getValue(packet.packetId)
                             .batchEligibilityByPacketId.getValue(packet.packetId)
                 },
                 sampleContinuationKey = original.sampleContinuationKey,
-                depthStencilLoadStore = original.depthStencilLoadStore,
+                depthStencilLoadStore = original.depthStencilLoadStore?.takeIf {
+                    run.any { packet ->
+                        packet.role == org.graphiks.kanvas.gpu.renderer.passes
+                            .GPUDrawPacketRole.PathStencilProducer ||
+                            packet.role == org.graphiks.kanvas.gpu.renderer.passes
+                                .GPUDrawPacketRole.PathStencilCover
+                    }
+                },
                 preparedImageBindingsByPacketId = run.mapNotNull { packet ->
                     val semantic = packet.semanticPayload as? GPUDrawSemanticPayload.SampledImage
                         ?: return@mapNotNull null
@@ -552,7 +562,12 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             packet.withSemantic(semantic)
         }
         if (corePackets.isEmpty()) {
-            return MixedCoreAssembly.Prepared(emptyMap(), emptyMap(), emptyList(), null)
+            return MixedCoreAssembly.Prepared(
+                packetByCommandId = emptyMap(),
+                resourceUsesByCommandId = emptyMap(),
+                preparations = emptyList(),
+                memoryBudget = null,
+            )
         }
         val baseRenderByPacketId = request.baseTaskList.tasks.filterIsInstance<GPUTask.Render>()
             .flatMap { render -> render.drawPackets.map { packet -> packet.packetId to render } }
@@ -628,12 +643,39 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 } else {
                     MixedCoreAssembly.Prepared(
                         packetByCommandId = consumerByCommandId.mapValues { (commandId, render) ->
-                            requireNotNull(render).drawPackets.single { packet ->
+                            val packetsForCommand = requireNotNull(render).drawPackets.filter { packet ->
                                 packet.commandIdValue == commandId
                             }
+                            if (packetsForCommand.any { packet ->
+                                    packet.role == org.graphiks.kanvas.gpu.renderer.passes
+                                        .GPUDrawPacketRole.PathStencilProducer
+                                }
+                            ) {
+                                packetsForCommand
+                            } else {
+                                packetsForCommand.map(
+                                    GPUDrawPacket::withoutPreparedPathDepthStencil,
+                                )
+                            }
                         },
-                        resourceUsesByCommandId = consumerByCommandId.mapValues { (_, render) ->
-                            requireNotNull(render).resourceUses
+                        renderByPacketId = renders.flatMap { render ->
+                            render.drawPackets.map { packet -> packet.packetId to render }
+                        }.toMap(),
+                        resourceUsesByCommandId = consumerByCommandId.mapValues { (commandId, render) ->
+                            val exactRender = requireNotNull(render)
+                            val hasPath = exactRender.drawPackets.any { packet ->
+                                packet.commandIdValue == commandId &&
+                                    packet.role in setOf(
+                                        org.graphiks.kanvas.gpu.renderer.passes
+                                            .GPUDrawPacketRole.PathStencilProducer,
+                                        org.graphiks.kanvas.gpu.renderer.passes
+                                            .GPUDrawPacketRole.PathStencilCover,
+                                    )
+                            }
+                            exactRender.resourceUses.filter { use ->
+                                hasPath ||
+                                    use.role != GPUFrameResourceRole.PathDepthStencil
+                            }
                         },
                         preparations = result.taskList.tasks
                             .filterIsInstance<GPUTask.PrepareResources>()
@@ -651,7 +693,11 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
 
 private sealed interface MixedCoreAssembly {
     data class Prepared(
-        val packetByCommandId: Map<Int, GPUDrawPacket>,
+        val packetByCommandId: Map<Int, List<GPUDrawPacket>>,
+        val renderByPacketId: Map<
+            org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID,
+            GPUTask.Render,
+            > = emptyMap(),
         val resourceUsesByCommandId: Map<Int, List<GPUFrameResourceUse>>,
         val preparations: List<GPUResourcePreparationRequest>,
         val memoryBudget: GPUFrameMemoryBudgetPlan?,
@@ -699,43 +745,66 @@ private fun List<GPUDrawPacket>.contiguousRouteRuns(
     val runs = mutableListOf<MutableList<GPUDrawPacket>>()
     forEach { packet ->
         val render = baseRenderByPacketId.getValue(packet.packetId)
+        val coreRouteIdentity = if (
+            packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+        ) {
+            render.taskId.value
+        } else {
+            null
+        }
         val key = PreparedRouteRunKey(
             semanticKind = when (packet.semanticPayload) {
                 is GPUDrawSemanticPayload.SampledImage -> "sampled-image"
                 is GPUDrawSemanticPayload.CorePrimitive -> "core-primitive"
                 else -> "unsupported"
             },
-            renderStepId = packet.renderStepId.value,
-            renderStepVersion = packet.renderStepVersion,
-            renderPipelineKey = packet.renderPipelineKey?.value,
-            bindingLayoutHash = packet.bindingLayoutHash,
+            renderStepId = coreRouteIdentity ?: packet.renderStepId.value,
+            renderStepVersion = if (coreRouteIdentity == null) packet.renderStepVersion else 0,
+            renderPipelineKey = if (coreRouteIdentity == null) {
+                packet.renderPipelineKey?.value
+            } else {
+                null
+            },
+            bindingLayoutHash = coreRouteIdentity ?: packet.bindingLayoutHash,
             samplePlanKey = render.samplePlan.specializationKey,
             target = render.target.value,
             loadStore = render.loadStore,
             provisionalSegmentKey = render.provisionalSegmentKey,
             depthStencilLoadStore = render.depthStencilLoadStore,
-            targetStateHash = packet.targetStateHash,
+            targetStateHash = coreRouteIdentity ?: packet.targetStateHash,
             continuationKey = render.sampleContinuationKey?.toString(),
         )
         val current = runs.lastOrNull()
         val currentKey = current?.firstOrNull()?.let { first ->
             val firstRender = baseRenderByPacketId.getValue(first.packetId)
+            val firstCoreRouteIdentity = if (
+                first.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+            ) {
+                firstRender.taskId.value
+            } else {
+                null
+            }
             PreparedRouteRunKey(
                 semanticKind = when (first.semanticPayload) {
                     is GPUDrawSemanticPayload.SampledImage -> "sampled-image"
                     is GPUDrawSemanticPayload.CorePrimitive -> "core-primitive"
                     else -> "unsupported"
                 },
-                renderStepId = first.renderStepId.value,
-                renderStepVersion = first.renderStepVersion,
-                renderPipelineKey = first.renderPipelineKey?.value,
-                bindingLayoutHash = first.bindingLayoutHash,
+                renderStepId = firstCoreRouteIdentity ?: first.renderStepId.value,
+                renderStepVersion =
+                    if (firstCoreRouteIdentity == null) first.renderStepVersion else 0,
+                renderPipelineKey = if (firstCoreRouteIdentity == null) {
+                    first.renderPipelineKey?.value
+                } else {
+                    null
+                },
+                bindingLayoutHash = firstCoreRouteIdentity ?: first.bindingLayoutHash,
                 samplePlanKey = firstRender.samplePlan.specializationKey,
                 target = firstRender.target.value,
                 loadStore = firstRender.loadStore,
                 provisionalSegmentKey = firstRender.provisionalSegmentKey,
                 depthStencilLoadStore = firstRender.depthStencilLoadStore,
-                targetStateHash = first.targetStateHash,
+                targetStateHash = firstCoreRouteIdentity ?: first.targetStateHash,
                 continuationKey = firstRender.sampleContinuationKey?.toString(),
             )
         }
@@ -783,6 +852,51 @@ private fun GPUDrawPacket.withSemantic(
     diagnostics = diagnostics,
     clipProducerAuthority = clipProducerAuthority,
 )
+
+private fun GPUDrawPacket.withoutPreparedPathDepthStencil(): GPUDrawPacket {
+    val authority = requireNotNull(corePrimitivePreparedAuthority)
+    val structural = authority.structuralPipelineKey.copy(
+        depthStencil = GPUCorePrimitiveRenderPipelineStructuralKey.DepthStencil.None,
+    )
+    val pipeline = structural.stableRenderPipelineKey(CORE_PRIMITIVE_RENDER_PIPELINE_KEY)
+    val rebuilt = GPUDrawPacket(
+        packetId = packetId,
+        commandIdValue = commandIdValue,
+        analysisRecordId = analysisRecordId,
+        passId = passId,
+        layerId = layerId,
+        bindingListId = bindingListId,
+        insertionReasonCode = insertionReasonCode,
+        sortKey = sortKey,
+        sortKeyPreimage = sortKeyPreimage,
+        renderStepId = renderStepId,
+        renderStepVersion = renderStepVersion,
+        role = role,
+        blendPlan = blendPlan,
+        renderPipelineKey = pipeline,
+        computePipelineKey = computePipelineKey,
+        bindingLayoutHash = bindingLayoutHash,
+        uniformSlot = uniformSlot,
+        resourceSlot = resourceSlot,
+        semanticPayload = semanticPayload,
+        vertexSourceLabel = vertexSourceLabel,
+        scissorBoundsHash = scissorBoundsHash,
+        targetStateHash = targetStateHash,
+        originalPaintOrder = originalPaintOrder,
+        resourceGeneration = resourceGeneration,
+        frameProvenance = frameProvenance,
+        clipCoveragePlan = clipCoveragePlan,
+        clipExecutionPlan = clipExecutionPlan,
+        diagnostics = diagnostics,
+        clipProducerAuthority = clipProducerAuthority,
+    )
+    return rebuilt.attachCorePrimitivePreparedAuthority(
+        authority.copy(
+            structuralPipelineKey = structural,
+            renderPipelineKey = pipeline,
+        ),
+    )
+}
 
 private fun dependency(
     from: GPUTaskID,

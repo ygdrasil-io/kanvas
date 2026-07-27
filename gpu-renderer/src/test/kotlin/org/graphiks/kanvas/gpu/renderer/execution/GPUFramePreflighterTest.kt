@@ -211,6 +211,169 @@ import kotlin.test.assertTrue
 
 class GPUFramePreflighterTest {
     @Test
+    fun `exact core image boundary reaches native materialization while the boundary owns no side effects`() {
+        val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed)
+        val events = mutableListOf<String>()
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val materializer = CapturingPreparedNativeMaterializer()
+        try {
+            val result = preflighter(
+                resources = resources,
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                context = fixture.context,
+                capabilities = fixture.capabilities,
+                nativeBoundary = adapter.bindNativeFrameBoundary(resources, materializer),
+            ).preflight(fixture.framePlan)
+
+            val refused = assertIs<GPUFramePreflightResult.Refused>(result)
+            assertEquals(
+                "test.prepared-surface.boundary",
+                refused.diagnostic.code.value,
+                "${refused.diagnostic.message} ${refused.diagnostic.facts}",
+            )
+            assertEquals(1, materializer.materializeCallCount)
+            assertSame(fixture.framePlan, materializer.capturedFramePlan)
+            assertFalse("ticket:reserve" in events)
+            assertFalse(events.any { event -> event.startsWith("surface:") })
+        } finally {
+            adapter.close()
+        }
+    }
+
+    @Test
+    fun `unmarked native materializer cannot admit the sealed mixed route`() {
+        val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed)
+        val events = mutableListOf<String>()
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val materializer = CapturingPreparedNativeMaterializer(
+            advertisePreparedSurfaceMixedSealed = false,
+        )
+        try {
+            val result = preflighter(
+                resources = resources,
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                context = fixture.context,
+                capabilities = fixture.capabilities,
+                nativeBoundary = adapter.bindNativeFrameBoundary(resources, materializer),
+            ).preflight(fixture.framePlan)
+
+            assertEquals(
+                "unsupported.preflight.sampled_image_unmaterialized",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertEquals(0, materializer.materializeCallCount)
+            assertTrue(events.isEmpty(), "unmarked mixed boundary produced side effects: $events")
+        } finally {
+            adapter.close()
+        }
+    }
+
+    @Test
+    fun `marked mixed boundary validates frame facts before opening resource preparation`() {
+        val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed)
+        val events = mutableListOf<String>()
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val materializer = CapturingPreparedNativeMaterializer()
+        try {
+            val invalid = preflighter(
+                resources = resources,
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                context = fixture.context,
+                capabilities = fixture.capabilities,
+                nativeBoundary = adapter.bindNativeFrameBoundary(resources, materializer),
+            ).preflight(fixture.framePlan.withSceneTargetFormat(GPUColorFormat.RGBA8Unorm))
+
+            assertEquals(
+                "unsupported.prepared-surface.target-color",
+                assertIs<GPUFramePreflightResult.Refused>(invalid).diagnostic.code.value,
+            )
+            assertEquals(0, materializer.materializeCallCount)
+
+            val valid = preflighter(
+                resources = resources,
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                context = fixture.context,
+                capabilities = fixture.capabilities,
+                nativeBoundary = adapter.bindNativeFrameBoundary(resources, materializer),
+            ).preflight(fixture.framePlan)
+
+            assertEquals(
+                "test.prepared-surface.boundary",
+                assertIs<GPUFramePreflightResult.Refused>(valid).diagnostic.code.value,
+            )
+            val ownerScope = requireNotNull(materializer.capturedResources)
+                .outputOwnedReadbacks
+                .single()
+                .stagingLease
+                .ownerScope
+            assertTrue(
+                ownerScope.endsWith(":attempt:1"),
+                "invalid frame opened resource preparation before refusal: $ownerScope",
+            )
+        } finally {
+            adapter.close()
+        }
+    }
+
+    @Test
+    fun `sampled image without exact mixed native boundary keeps historical refusal before side effects`() {
+        listOf(
+            preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed),
+            preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.ImageOnly),
+        ).forEach { fixture ->
+            val events = mutableListOf<String>()
+            val resources = RecordingResourceProvider(events)
+
+            val result = preflighter(
+                resources = resources,
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                context = fixture.context,
+                capabilities = fixture.capabilities,
+            ).preflight(fixture.framePlan)
+
+            assertEquals(
+                "unsupported.preflight.sampled_image_unmaterialized",
+                assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+            )
+            assertEquals(0, resources.beginFramePreparationCount)
+            assertTrue(events.isEmpty(), "historical refusal produced side effects: $events")
+        }
+    }
+
+    @Test
+    fun `sampled image observer cannot bypass refusal before resource preparation`() {
+        val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.ImageOnly)
+        val events = mutableListOf<String>()
+        val resources = RecordingResourceProvider(events)
+        var observed = false
+
+        val result = preflighter(
+            resources = resources,
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+            context = fixture.context,
+            capabilities = fixture.capabilities,
+            observer = { observed = true },
+        ).preflight(fixture.framePlan)
+
+        assertEquals(
+            "unsupported.preflight.sampled_image_unmaterialized",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertEquals(0, resources.beginFramePreparationCount)
+        assertFalse(observed)
+        assertTrue(events.isEmpty(), "observer bypass produced side effects: $events")
+    }
+
+    @Test
     fun `core semantic blend provenance and clip mismatches refuse before preflight side effects`() {
         val semantic = coreSemantic()
         val cases = listOf(
@@ -5872,6 +6035,7 @@ class GPUFramePreflighterTest {
         context: GPUFramePreflightContext = preflightContext(),
         nativeBoundary: GPUPreparedNativeFrameBoundary? = null,
         capabilities: GPUCapabilities = capabilities(),
+        observer: ((List<GPUCommandEncoderScopePlan>) -> Unit)? = null,
     ): GPUFramePreflighter = GPUFramePreflighter(
         context = context,
         capabilities = capabilities,
@@ -5879,6 +6043,7 @@ class GPUFramePreflighterTest {
         completionProvider = completion,
         surfaceProvider = surface,
         nativeBoundary = nativeBoundary,
+        nominalEncoderScopeObserver = observer,
     )
 
     private class RecordingResourceProvider(

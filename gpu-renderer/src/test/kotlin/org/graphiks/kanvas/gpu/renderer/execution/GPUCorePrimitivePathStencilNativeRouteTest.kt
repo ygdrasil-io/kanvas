@@ -20,6 +20,76 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabSlot
 
 class GPUCorePrimitivePathStencilNativeRouteTest {
     @Test
+    fun `pure core unified route refuses an incomplete shared uniform slab`() {
+        val unit = directRoutes("pure-subset", 1).orderedUnits.single()
+        val slab = GPUCorePrimitiveUniformSlabSeal(
+            GPUUniformSlabPlan(
+                planHash = "plan.pure-subset",
+                sourceLabel = "source.pure-subset",
+                deviceGeneration = 1,
+                alignmentBytes = 4,
+                totalBytes = 8,
+                uploadBudgetBytes = 8,
+                slots = listOf(
+                    GPUUniformSlabSlot("slot.1", "hash.1", 4, 0, 4),
+                    GPUUniformSlabSlot("slot.2", "hash.2", 4, 4, 4),
+                ),
+            ),
+            listOf(1, 2),
+            byteArrayOf(0, 0, 0, 0, 0, 0, 0, 0),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            GPUCorePrimitiveNativeScopeRouteSeal.Routes(listOf(unit), slab)
+        }
+    }
+
+    @Test
+    fun `mixed core unified route accepts only its exact contiguous uniform range`() {
+        val units = listOf(
+            directRoutes("mixed-range-1", 1).orderedUnits.single(),
+            directRoutes("mixed-range-3", 3).orderedUnits.single(),
+        )
+        val slab = GPUCorePrimitiveUniformSlabSeal(
+            GPUUniformSlabPlan(
+                planHash = "plan.mixed-range",
+                sourceLabel = "source.mixed-range",
+                deviceGeneration = 1,
+                alignmentBytes = 4,
+                totalBytes = 12,
+                uploadBudgetBytes = 12,
+                slots = listOf(
+                    GPUUniformSlabSlot("slot.1", "hash.1", 4, 0, 4),
+                    GPUUniformSlabSlot("slot.2", "hash.2", 4, 4, 4),
+                    GPUUniformSlabSlot("slot.3", "hash.3", 4, 8, 4),
+                ),
+            ),
+            listOf(1, 2, 3),
+            ByteArray(12),
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+                units,
+                slab,
+                GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange(
+                    startIndex = 0,
+                    commandCount = 2,
+                ),
+            )
+        }
+        val accepted = GPUCorePrimitiveNativeScopeRouteSeal.Routes(
+            listOf(directRoutes("mixed-range-2", 2).orderedUnits.single()),
+            slab,
+            GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange(
+                startIndex = 1,
+                commandCount = 1,
+            ),
+        )
+        assertEquals(listOf(2), accepted.commandIds)
+    }
+
+    @Test
     fun `accepted pair snapshots its edge fan and derives a conservative cover quad`() {
         val producerVertices = floatArrayOf(
             -1f, -1f, 2f, 3f, 9f, 3f,

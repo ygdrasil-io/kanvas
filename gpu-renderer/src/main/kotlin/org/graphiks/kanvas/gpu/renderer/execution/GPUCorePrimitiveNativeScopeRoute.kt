@@ -54,6 +54,21 @@ internal sealed interface GPUCorePrimitiveNativeScopeRouteUnit {
 }
 
 /** Primary render-scope seal. Direct/path seals are derived compatibility views of these units. */
+internal sealed interface GPUCorePrimitiveNativeScopeUniformCoverage {
+    data object ExactScope : GPUCorePrimitiveNativeScopeUniformCoverage
+
+    data class ExactCommandRange(
+        val startIndex: Int,
+        val commandCount: Int,
+    ) : GPUCorePrimitiveNativeScopeUniformCoverage {
+        init {
+            require(startIndex >= 0 && commandCount > 0) {
+                "A mixed prepared-surface uniform range must be positive and bounded"
+            }
+        }
+    }
+}
+
 internal sealed interface GPUCorePrimitiveNativeScopeRouteSeal {
     data object Missing : GPUCorePrimitiveNativeScopeRouteSeal
     data object Empty : GPUCorePrimitiveNativeScopeRouteSeal
@@ -61,6 +76,8 @@ internal sealed interface GPUCorePrimitiveNativeScopeRouteSeal {
     class Routes internal constructor(
         orderedUnits: List<GPUCorePrimitiveNativeScopeRouteUnit>,
         val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+        val uniformCoverage: GPUCorePrimitiveNativeScopeUniformCoverage =
+            GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope,
     ) : GPUCorePrimitiveNativeScopeRouteSeal {
         val orderedUnits: List<GPUCorePrimitiveNativeScopeRouteUnit> = immutableList(orderedUnits)
         val commandIds: List<Int> = immutableList(orderedUnits.map { it.commandIdValue })
@@ -76,8 +93,23 @@ internal sealed interface GPUCorePrimitiveNativeScopeRouteSeal {
             require(flattenedPacketIds.distinct().size == flattenedPacketIds.size) {
                 "A unified native route seal cannot reuse packet identities"
             }
-            require(commandIds == uniformSlabSeal.commandIds) {
-                "Unified native route commands must exactly match the shared uniform slab order"
+            require(
+                when (uniformCoverage) {
+                    GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope ->
+                        commandIds == uniformSlabSeal.commandIds
+                    is GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange -> {
+                        val endIndex = uniformCoverage.startIndex +
+                            uniformCoverage.commandCount
+                        endIndex <= uniformSlabSeal.commandIds.size &&
+                            uniformCoverage.commandCount == commandIds.size &&
+                            uniformSlabSeal.commandIds.subList(
+                                uniformCoverage.startIndex,
+                                endIndex,
+                            ) == commandIds
+                    }
+                },
+            ) {
+                "Unified native route commands must match their declared shared-uniform coverage"
             }
         }
     }

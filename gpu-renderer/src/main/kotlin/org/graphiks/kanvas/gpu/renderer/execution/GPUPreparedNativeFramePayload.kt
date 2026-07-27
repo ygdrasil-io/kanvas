@@ -1539,7 +1539,15 @@ internal sealed interface GPUPreparedNativeFrameConsumption {
 }
 
 /** Typed preflight materializer. It creates payload data, never encoded work or callbacks. */
+internal sealed interface GPUPreparedNativeFrameMaterializerCapability {
+    data object PreparedSurfaceMixedSealed :
+        GPUPreparedNativeFrameMaterializerCapability
+}
+
 internal interface GPUPreparedNativeFramePayloadMaterializer {
+    val capabilities: Set<GPUPreparedNativeFrameMaterializerCapability>
+        get() = emptySet()
+
     fun materializeReusable(
         framePlan: GPUFramePlan,
         encoderPlan: GPUCommandEncoderPlan,
@@ -1617,6 +1625,14 @@ internal class GPUPreparedNativeFrameBoundary private constructor(
     private val adapter: GPURuntimeResourceAdapter,
     private val materializer: GPUPreparedNativeFramePayloadMaterializer,
 ) {
+    private val materializerCapabilities =
+        materializer.capabilities.toSet()
+
+    internal val supportsPreparedSurfaceMixedSealed: Boolean
+        get() =
+            GPUPreparedNativeFrameMaterializerCapability.PreparedSurfaceMixedSealed in
+                materializerCapabilities
+
     internal fun materializeReusable(
         framePlan: GPUFramePlan,
         encoderPlan: GPUCommandEncoderPlan,

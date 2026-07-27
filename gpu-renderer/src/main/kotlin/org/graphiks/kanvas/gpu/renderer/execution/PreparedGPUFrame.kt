@@ -1679,7 +1679,7 @@ private class PreparedHashSink {
 
 private fun GPUFrameResourceRef.typedLabel(): String = "${this::class.simpleName}:$value"
 
-private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEncoderOperationKind():
+internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEncoderOperationKind():
     GPUEncoderOperationKind = when (this) {
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep -> GPUEncoderOperationKind.Render
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.ComputePassStep -> GPUEncoderOperationKind.Compute
@@ -1692,7 +1692,7 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedEnco
     else -> error("Non-encodable semantic step has no encoder operation kind")
 }
 
-private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFacadeOperations(
+internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFacadeOperations(
     scope: GPUCommandEncoderScopePlan,
 ): List<String> =
     when (this) {
@@ -1745,7 +1745,7 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFaca
         else -> error("Non-encodable semantic step has no facade operations")
     }
 
-private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep
+internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep
     .expectedRenderCommandPacketIds(scope: GPUCommandEncoderScopePlan): List<GPUDrawPacketID> = buildList {
     val directRoutes = scope.corePrimitiveDirectNativeRouteSeal as?
         GPUCorePrimitiveDirectNativeRouteSeal.Routes
@@ -1774,7 +1774,7 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassSt
     }
 }
 
-private fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.preparedResourceRefs():
+internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.preparedResourceRefs():
     List<GPUFrameResourceRef> = when (this) {
     is org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep ->
         listOf(target) + resourceUses.map { it.resource }
