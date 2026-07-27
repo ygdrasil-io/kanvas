@@ -61,6 +61,7 @@ data class GPUFramePathVisualCommand(
     val blendPlan: GPUBlendPlan,
     val provenance: GPUFrameProvenance,
     val geometryRefusal: GPUCorePrimitiveGeometryRefusal? = null,
+    val preparedImage: GPUPreparedImageDrawFacts? = null,
 )
 
 data class GPUFramePathInventoryPlan(
