@@ -237,16 +237,16 @@ class GPUPreparedImageTestFixturesTest {
         val width = GPUPreparedImageTestFixtures.rgbaPremul2x2Width
         val height = GPUPreparedImageTestFixtures.rgbaPremul2x2Height
 
-        val result = oracle.nearestSample(bytes, width, height, 0f, 0f)
+        val result = oracle.rawRgbaNearestSample(bytes, width, height, 0f, 0f)
         assertArrayEquals(ia(128, 0, 0, 128), result)
 
-        val result2 = oracle.nearestSample(bytes, width, height, 1f, 0f)
+        val result2 = oracle.rawRgbaNearestSample(bytes, width, height, 1f, 0f)
         assertArrayEquals(ia(0, 128, 0, 128), result2)
 
-        val result3 = oracle.nearestSample(bytes, width, height, 0f, 1f)
+        val result3 = oracle.rawRgbaNearestSample(bytes, width, height, 0f, 1f)
         assertArrayEquals(ia(0, 0, 128, 128), result3)
 
-        val result4 = oracle.nearestSample(bytes, width, height, 1f, 1f)
+        val result4 = oracle.rawRgbaNearestSample(bytes, width, height, 1f, 1f)
         assertArrayEquals(ia(128, 128, 128, 128), result4)
     }
 
@@ -254,9 +254,9 @@ class GPUPreparedImageTestFixturesTest {
     fun `nearest sample clamps UV to texture bounds`() {
         val oracle = GPUPreparedImagePixelOracle
         val bytes = ia(10, 20, 30, 40)
-        val clamped = oracle.nearestSample(bytes, 1, 1, -1f, 0f)
+        val clamped = oracle.rawRgbaNearestSample(bytes, 1, 1, -1f, 0f)
         assertArrayEquals(ia(10, 20, 30, 40), clamped)
-        val clamped2 = oracle.nearestSample(bytes, 1, 1, 0f, 2f)
+        val clamped2 = oracle.rawRgbaNearestSample(bytes, 1, 1, 0f, 2f)
         assertArrayEquals(ia(10, 20, 30, 40), clamped2)
     }
 
@@ -264,7 +264,7 @@ class GPUPreparedImageTestFixturesTest {
     fun `linear sample oracle returns corner texel for integer UV`() {
         val oracle = GPUPreparedImagePixelOracle
         val bytes = GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes
-        val result = oracle.linearSample(bytes, 2, 2, 0f, 0f)
+        val result = oracle.rawRgbaLinearSample(bytes, 2, 2, 0f, 0f)
         assertArrayEquals(ia(128, 0, 0, 128), result)
     }
 
@@ -272,7 +272,7 @@ class GPUPreparedImageTestFixturesTest {
     fun `linear sample oracle interpolates between two texels horizontally`() {
         val oracle = GPUPreparedImagePixelOracle
         val bytes = ia(0, 0, 0, 255, 100, 100, 100, 255)
-        val result = oracle.linearSample(bytes, 2, 1, 0.5f, 0f)
+        val result = oracle.rawRgbaLinearSample(bytes, 2, 1, 0.5f, 0f)
         val diff = abs(result[0].toInt().and(0xFF) - 50)
         assertTrue(diff <= 1, "expected ~50, got ${result[0].toInt().and(0xFF)}")
     }
@@ -283,7 +283,7 @@ class GPUPreparedImageTestFixturesTest {
         val src = ia(100, 100, 100, 100)
         val tint = floatArrayOf(1f, 0.5f, 0f, 1f)
         val paintAlpha = 0.5f
-        val result = oracle.applyTint(src, tint, paintAlpha)
+        val result = oracle.rawRgbaApplyTint(src, tint, paintAlpha)
         assertEquals(100, result[0].toInt().and(0xFF))
         assertEquals(50, result[1].toInt().and(0xFF))
         assertEquals(0, result[2].toInt().and(0xFF))
@@ -295,8 +295,8 @@ class GPUPreparedImageTestFixturesTest {
         val oracle = GPUPreparedImagePixelOracle
         val src = ia(100, 100, 100, 100)
         val tint = floatArrayOf(0.5f, 0.5f, 0.5f, 1f)
-        val once = oracle.applyTint(src, tint, 0.8f)
-        val twice = oracle.applyTint(once, tint, 0.8f)
+        val once = oracle.rawRgbaApplyTint(src, tint, 0.8f)
+        val twice = oracle.rawRgbaApplyTint(once, tint, 0.8f)
         assertTrue(
             !once.contentEquals(twice),
             "twice-applied tint should differ from once-applied",
@@ -339,7 +339,7 @@ class GPUPreparedImageTestFixturesTest {
     fun `source rect and UV clamp produces expected mapping`() {
         val oracle = GPUPreparedImagePixelOracle
         val bytes = GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes
-        val result = oracle.sourceRectSample(
+        val result = oracle.rawRgbaSourceRectSample(
             bytes, 2, 2,
             srcL = 0f, srcT = 0f, srcR = 1f, srcB = 1f,
             u = 0.25f, v = 0.25f,
@@ -352,19 +352,74 @@ class GPUPreparedImageTestFixturesTest {
     fun `UV clamp restricts to source rect bounds`() {
         val oracle = GPUPreparedImagePixelOracle
         val bytes = GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes
-        val uInside = oracle.sourceRectSample(
+        val uInside = oracle.rawRgbaSourceRectSample(
             bytes, 2, 2,
             srcL = 0.25f, srcT = 0.25f, srcR = 0.75f, srcB = 0.75f,
             u = 0f, v = 0f,
             sample = GPUPreparedImagePixelOracle.SampleKind.NEAREST,
         )
-        val uClamped = oracle.sourceRectSample(
+        val uClamped = oracle.rawRgbaSourceRectSample(
             bytes, 2, 2,
             srcL = 0.25f, srcT = 0.25f, srcR = 0.75f, srcB = 0.75f,
             u = -1f, v = -1f,
             sample = GPUPreparedImagePixelOracle.SampleKind.NEAREST,
         )
         assertArrayEquals(uInside, uClamped, "UV clamp must fold out-of-range UV into source rect")
+    }
+
+    @Test
+    fun `raw linear sampling uses WebGPU texel centers`() {
+        val bytes = ia(10, 10, 10, 255, 110, 110, 110, 255)
+
+        assertArrayEquals(
+            ia(10, 10, 10, 255),
+            GPUPreparedImagePixelOracle.rawRgbaLinearSample(bytes, 2, 1, 0.25f, 0.5f),
+        )
+        assertArrayEquals(
+            ia(110, 110, 110, 255),
+            GPUPreparedImagePixelOracle.rawRgbaLinearSample(bytes, 2, 1, 0.75f, 0.5f),
+        )
+    }
+
+    @Test
+    fun `source rect clamps absolute full image UV without remapping`() {
+        val bytes = ia(
+            10, 0, 0, 255,
+            20, 0, 0, 255,
+            30, 0, 0, 255,
+            40, 0, 0, 255,
+        )
+
+        assertArrayEquals(
+            ia(20, 0, 0, 255),
+            GPUPreparedImagePixelOracle.rawRgbaSourceRectSample(
+                bytes = bytes,
+                width = 4,
+                height = 1,
+                srcL = 0.375f,
+                srcT = 0f,
+                srcR = 0.625f,
+                srcB = 1f,
+                u = -1f,
+                v = 0.5f,
+                sample = GPUPreparedImagePixelOracle.SampleKind.NEAREST,
+            ),
+        )
+        assertArrayEquals(
+            ia(30, 0, 0, 255),
+            GPUPreparedImagePixelOracle.rawRgbaSourceRectSample(
+                bytes = bytes,
+                width = 4,
+                height = 1,
+                srcL = 0.375f,
+                srcT = 0f,
+                srcR = 0.625f,
+                srcB = 1f,
+                u = 2f,
+                v = 0.5f,
+                sample = GPUPreparedImagePixelOracle.SampleKind.NEAREST,
+            ),
+        )
     }
 
     private fun pixelAt(bytes: ByteArray, stride: Int, x: Int, y: Int): ByteArray {

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -9,9 +10,10 @@ import kotlin.math.roundToInt
  * CPU-side pixel oracles for prepared-image correctness tests.
  *
  * Every function is a pure-Kotlin reference: no GPU, no WGSL, no shader helpers.
- * The implementations match the WebGPU texture-sampling behaviour that the
- * WGSL shader and upload pipeline are expected to produce under the colour
- * contract:
+ * Raw RGBA helpers own only byte-layout, texel-center, clamp, and geometry
+ * evidence — they are never a physical GPU colour oracle.
+ *
+ * Colour contract:
  *
  * - Source colour : [org.graphiks.kanvas.surface.GPUColorFormat.RGBA8_UNORM_SRGB]
  * - Source A8/coverage : RGBA8Unorm
@@ -23,25 +25,29 @@ object GPUPreparedImagePixelOracle {
 
     enum class SampleKind { NEAREST, LINEAR }
 
-    // ---- Sampling oracles ----------------------------------------------------
+    // ---- Raw sampling oracles ------------------------------------------------
 
     /**
      * Nearest-neighbour sample from a raw RGBA byte buffer.
      *
      * UV coordinates are in the range [0, 1] where (0,0) is top-left and
      * (1,1) is bottom-right.  Values outside [0, 1] are clamped.
+     * Texel selection uses the WebGPU texel-centre model:
+     *     floor(u * width) for nearest.
      */
-    fun nearestSample(
+    fun rawRgbaNearestSample(
         bytes: ByteArray,
         width: Int,
         height: Int,
         u: Float,
         v: Float,
     ): ByteArray {
+        requireRawRgba(bytes, width, height)
+        requireFiniteUv(u, v)
         val cu = u.coerceIn(0f, 1f)
         val cv = v.coerceIn(0f, 1f)
-        val x = (cu * (width - 1) + 0.5f).toInt().coerceIn(0, width - 1)
-        val y = (cv * (height - 1) + 0.5f).toInt().coerceIn(0, height - 1)
+        val x = floor(cu * width).toInt().coerceIn(0, width - 1)
+        val y = floor(cv * height).toInt().coerceIn(0, height - 1)
         val offset = (y * width + x) * 4
         return bytes.copyOfRange(offset, offset + 4)
     }
@@ -49,26 +55,33 @@ object GPUPreparedImagePixelOracle {
     /**
      * Bilinear sample from a raw RGBA byte buffer.
      *
-     * Linearly interpolates the four nearest texels. UV clamping is the same
-     * as [nearestSample].
+     * Uses WebGPU texel-centre coordinates:
+     *     fx = u * width - 0.5
+     *     fy = v * height - 0.5
+     *
+     * UV clamping is the same as [rawRgbaNearestSample].
      */
-    fun linearSample(
+    fun rawRgbaLinearSample(
         bytes: ByteArray,
         width: Int,
         height: Int,
         u: Float,
         v: Float,
     ): ByteArray {
+        requireRawRgba(bytes, width, height)
+        requireFiniteUv(u, v)
         val cu = u.coerceIn(0f, 1f)
         val cv = v.coerceIn(0f, 1f)
-        val fx = cu * (width - 1)
-        val fy = cv * (height - 1)
-        val x0 = fx.toInt().coerceIn(0, width - 1)
-        val y0 = fy.toInt().coerceIn(0, height - 1)
-        val x1 = (x0 + 1).coerceIn(0, width - 1)
-        val y1 = (y0 + 1).coerceIn(0, height - 1)
-        val wx1 = fx - x0
-        val wy1 = fy - y0
+        val fx = cu * width - 0.5f
+        val fy = cv * height - 0.5f
+        val rawX0 = floor(fx).toInt()
+        val rawY0 = floor(fy).toInt()
+        val wx1 = fx - rawX0
+        val wy1 = fy - rawY0
+        val x0 = rawX0.coerceIn(0, width - 1)
+        val y0 = rawY0.coerceIn(0, height - 1)
+        val x1 = (rawX0 + 1).coerceIn(0, width - 1)
+        val y1 = (rawY0 + 1).coerceIn(0, height - 1)
         val wx0 = 1f - wx1
         val wy0 = 1f - wy1
 
@@ -94,10 +107,10 @@ object GPUPreparedImagePixelOracle {
      *
      * The source rect ([srcL], [srcT], [srcR], [srcB]) is in normalised
      * image coordinates [0, 1].  The sample coordinate ([u], [v]) is clamped
-     * to that rect, then remapped back to full-image UV, then passed to the
-     * chosen [sample] kind.
+     * to that rect, then passed directly to the chosen [sample] kind as
+     * absolute full-image UV coordinates — it is never remapped to [0, 1].
      */
-    fun sourceRectSample(
+    fun rawRgbaSourceRectSample(
         bytes: ByteArray,
         width: Int,
         height: Int,
@@ -109,13 +122,17 @@ object GPUPreparedImagePixelOracle {
         v: Float,
         sample: SampleKind,
     ): ByteArray {
-        val cu = u.coerceIn(srcL, srcR)
-        val cv = v.coerceIn(srcT, srcB)
-        val imageU = (cu - srcL) / (srcR - srcL)
-        val imageV = (cv - srcT) / (srcB - srcT)
+        requireRawRgba(bytes, width, height)
+        require(srcL.isFinite() && srcT.isFinite() && srcR.isFinite() && srcB.isFinite())
+        require(srcL in 0f..1f && srcT in 0f..1f)
+        require(srcR in 0f..1f && srcB in 0f..1f)
+        require(srcL < srcR && srcT < srcB)
+        requireFiniteUv(u, v)
+        val imageU = u.coerceIn(srcL, srcR)
+        val imageV = v.coerceIn(srcT, srcB)
         return when (sample) {
-            SampleKind.NEAREST -> nearestSample(bytes, width, height, imageU, imageV)
-            SampleKind.LINEAR -> linearSample(bytes, width, height, imageU, imageV)
+            SampleKind.NEAREST -> rawRgbaNearestSample(bytes, width, height, imageU, imageV)
+            SampleKind.LINEAR -> rawRgbaLinearSample(bytes, width, height, imageU, imageV)
         }
     }
 
@@ -133,7 +150,7 @@ object GPUPreparedImagePixelOracle {
      *   dst.B = src.B × tint.B
      *   dst.A = src.A × paintAlpha
      */
-    fun applyTint(
+    fun rawRgbaApplyTint(
         srcRgba: ByteArray,
         tintRgba: FloatArray,
         paintAlpha: Float,
@@ -159,6 +176,15 @@ object GPUPreparedImagePixelOracle {
         a.indices.all { i -> abs(a[i].toInt().and(0xFF) - b[i].toInt().and(0xFF)) <= 1 }
 
     // ---- Internal helpers -----------------------------------------------------
+
+    private fun requireRawRgba(bytes: ByteArray, width: Int, height: Int) {
+        require(width > 0 && height > 0)
+        require(bytes.size.toLong() == width.toLong() * height.toLong() * 4L)
+    }
+
+    private fun requireFiniteUv(u: Float, v: Float) {
+        require(u.isFinite() && v.isFinite())
+    }
 
     private fun readChannelFloats(bytes: ByteArray, width: Int, x: Int, y: Int): FloatArray {
         val offset = (y * width + x) * 4
