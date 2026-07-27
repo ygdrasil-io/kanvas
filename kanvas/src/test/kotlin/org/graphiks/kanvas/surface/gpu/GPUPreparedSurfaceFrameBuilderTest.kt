@@ -26,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
@@ -45,6 +46,8 @@ import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Lattice
+import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
@@ -52,6 +55,131 @@ import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceFrameBuilderTest {
+    @Test
+    fun `prepared image nine expands to nine ordered packets with one artifact upload`() {
+        val image = imageNine("builder-nine")
+        val operation = DisplayOp.DrawImageNine(
+            image = image,
+            center = Rect.fromLTRB(2f, 2f, 4f, 4f),
+            dst = Rect.fromLTRB(2f, 3f, 26f, 21f),
+            paint = null,
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        val buildResult = GPUPreparedSurfaceFrameBuilder.build(imageRequest(listOf(operation)))
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            buildResult,
+            buildResult.toString(),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val semantics = packets.map { packet ->
+            assertIs<GPUDrawSemanticPayload.SampledImage>(packet.semanticPayload)
+        }
+        val uploads = ready.taskList.tasks.filterIsInstance<GPUTask.Upload>()
+            .mapNotNull(GPUTask.Upload::imageResourcePlan)
+
+        assertEquals((0..8).toList(), packets.map(GPUDrawPacket::commandIdValue))
+        assertEquals(9, ready.visualOperationCount)
+        assertTrue(semantics.all { it.sampling == GPUPreparedImageSampling.Linear })
+        assertEquals(1, semantics.map { it.artifact.key }.toSet().size)
+        assertEquals(1, uploads.size)
+        assertEquals(semantics.first().artifact.key, uploads.single().artifactKey)
+    }
+
+    @Test
+    fun `prepared mixed lattice preserves sampled core order and omits transparent cell`() {
+        val image = imageNine("builder-mixed-lattice")
+        val operation = DisplayOp.DrawImageLattice(
+            image = image,
+            lattice = Lattice(
+                xDivs = listOf(2, 4),
+                yDivs = emptyList(),
+                colors = listOf(
+                    Color.TRANSPARENT,
+                    Color.fromArgb(128, 128, 64, 32),
+                    Color.TRANSPARENT,
+                ),
+                flags = listOf(
+                    LatticeFlags.DEFAULT,
+                    LatticeFlags.FIXED_COLOR,
+                    LatticeFlags.TRANSPARENT,
+                ),
+            ),
+            dst = Rect.fromLTRB(2f, 4f, 26f, 12f),
+            paint = Paint.fill(Color.fromArgb(128, 30, 40, 50)).copy(antiAlias = false),
+            transform = Matrix33.translate(1f, 2f),
+            clip = ClipStack.WideOpen,
+            sampling = SamplingOptions.NEAREST,
+        )
+
+        val buildResult = GPUPreparedSurfaceFrameBuilder.build(imageRequest(listOf(operation)))
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            buildResult,
+            buildResult.toString(),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val uploads = ready.taskList.tasks.filterIsInstance<GPUTask.Upload>()
+            .mapNotNull(GPUTask.Upload::imageResourcePlan)
+
+        assertEquals(listOf(0, 1), packets.map(GPUDrawPacket::commandIdValue))
+        assertIs<GPUDrawSemanticPayload.SampledImage>(packets[0].semanticPayload).also {
+            assertEquals(GPUPreparedImageSampling.Nearest, it.sampling)
+        }
+        val fixed = assertIs<GPUDrawSemanticPayload.CorePrimitive>(packets[1].semanticPayload)
+        val fixedAlpha = 64f / 255f
+        assertEquals(
+            srgbToLinear(128f / 255f) * fixedAlpha,
+            fixed.premultipliedRgba[0],
+            1e-6f,
+        )
+        assertEquals(
+            srgbToLinear(64f / 255f) * fixedAlpha,
+            fixed.premultipliedRgba[1],
+            1e-6f,
+        )
+        assertEquals(
+            srgbToLinear(32f / 255f) * fixedAlpha,
+            fixed.premultipliedRgba[2],
+            1e-6f,
+        )
+        assertEquals(fixedAlpha, fixed.premultipliedRgba[3], 1e-6f)
+        assertEquals(1, uploads.size)
+    }
+
+    @Test
+    fun `prepared fixed color lattice uses no image upload`() {
+        val operation = DisplayOp.DrawImageLattice(
+            image = imageNine("builder-fixed-lattice"),
+            lattice = Lattice(
+                xDivs = listOf(2),
+                yDivs = emptyList(),
+                colors = listOf(Color.GREEN, Color.BLUE),
+                flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
+            ),
+            dst = Rect.fromLTRB(2f, 4f, 18f, 12f),
+            paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        val buildResult = GPUPreparedSurfaceFrameBuilder.build(imageRequest(listOf(operation)))
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            buildResult,
+            buildResult.toString(),
+        )
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val uploads = ready.taskList.tasks.filterIsInstance<GPUTask.Upload>()
+            .mapNotNull(GPUTask.Upload::imageResourcePlan)
+
+        assertEquals(listOf(0, 1), packets.map(GPUDrawPacket::commandIdValue))
+        assertTrue(packets.all { it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive })
+        assertTrue(uploads.isEmpty())
+    }
+
     @Test
     fun `analytic antialiased rect semantic uses the recorded packet blend authority`() {
         val operation = DisplayOp.DrawRect(
@@ -715,6 +843,15 @@ class GPUPreparedSurfaceFrameBuilderTest {
         paint = null,
         transform = Matrix33.identity(),
         clip = ClipStack.WideOpen,
+    )
+
+    private fun imageNine(sourceId: String): Image = Image(
+        width = GPUPreparedImageTestFixtures.imageNine6x6Width,
+        height = GPUPreparedImageTestFixtures.imageNine6x6Height,
+        colorType = GPUPreparedImageTestFixtures.imageNine6x6ColorType,
+        sourceId = sourceId,
+        pixels = GPUPreparedImageTestFixtures.imageNine6x6Bytes,
+        alphaType = AlphaType.PREMUL,
     )
 
     private fun capabilities(

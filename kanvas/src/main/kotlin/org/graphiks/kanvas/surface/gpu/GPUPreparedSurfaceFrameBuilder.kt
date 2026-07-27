@@ -161,28 +161,61 @@ private sealed interface PreparedImageVisuals {
     data class Refused(val diagnostic: GPUDiagnostic) : PreparedImageVisuals
 }
 
+private sealed interface PreparedVisualSource {
+    val operationIndex: Int
+
+    data class Image(
+        override val operationIndex: Int,
+        val image: org.graphiks.kanvas.image.Image,
+    ) : PreparedVisualSource
+
+    data class Core(
+        override val operationIndex: Int,
+    ) : PreparedVisualSource
+}
+
 private fun collectPreparedImageVisuals(
     mapping: GPUOpMapping,
     operations: List<DisplayOp>,
 ): PreparedImageVisuals {
-    val visualOperations = operations.withIndex().filter { (_, operation) ->
-        operation is DisplayOp.DrawImage || operation.isCorePreparedVisual()
+    val visualSources = operations.withIndex().flatMap { indexed ->
+        val operationIndex = indexed.index
+        when (val operation = indexed.value) {
+            is DisplayOp.DrawImage ->
+                listOf(PreparedVisualSource.Image(operationIndex, operation.image))
+            is DisplayOp.DrawImageNine ->
+                operation.decompose().map {
+                    PreparedVisualSource.Image(operationIndex, operation.image)
+                }
+            is DisplayOp.DrawImageLattice ->
+                operation.decompose().map { cell ->
+                    if (cell.color == null) {
+                        PreparedVisualSource.Image(operationIndex, operation.image)
+                    } else {
+                        PreparedVisualSource.Core(operationIndex)
+                    }
+                }
+            else -> if (operation.isCorePreparedVisual()) {
+                listOf(PreparedVisualSource.Core(operationIndex))
+            } else {
+                emptyList()
+            }
+        }
     }
-    if (visualOperations.size != mapping.visualCommands.size) {
+    if (visualSources.size != mapping.visualCommands.size) {
         return PreparedImageVisuals.Refused(
             imageCommandSourceDiagnostic(
                 message = "Prepared Surface operations and normalized visuals must be bijective.",
                 facts = mapOf(
-                    "operationCount" to visualOperations.size.toString(),
+                    "operationCount" to visualSources.size.toString(),
                     "visualCount" to mapping.visualCommands.size.toString(),
                 ),
             ),
         )
     }
     val artifacts = linkedMapOf<Int, GPUPreparedImageUploadArtifact>()
-    visualOperations.zip(mapping.visualCommands).forEachIndexed { commandIndex, (indexed, visual) ->
-        val operationIndex = indexed.index
-        val operation = indexed.value
+    visualSources.zip(mapping.visualCommands).forEachIndexed { commandIndex, (source, visual) ->
+        val operationIndex = source.operationIndex
         if (visual.normalized.commandId.value != commandIndex ||
             visual.normalized.ordering.paintOrder != commandIndex
         ) {
@@ -196,7 +229,7 @@ private fun collectPreparedImageVisuals(
                 ),
             )
         }
-        if (operation !is DisplayOp.DrawImage) {
+        if (source is PreparedVisualSource.Core) {
             if (visual.normalized is NormalizedDrawCommand.DrawImageRect ||
                 visual.preparedImage != null
             ) {
@@ -212,6 +245,7 @@ private fun collectPreparedImageVisuals(
             }
             return@forEachIndexed
         }
+        source as PreparedVisualSource.Image
         val command = visual.normalized as? NormalizedDrawCommand.DrawImageRect
             ?: return PreparedImageVisuals.Refused(
                 imageCommandSourceDiagnostic(
@@ -240,8 +274,8 @@ private fun collectPreparedImageVisuals(
                     message = "Prepared Surface image command lost its image material descriptor.",
                 ),
             )
-        if (command.imageSourceId != operation.image.sourceId ||
-            material.imageSourceId != operation.image.sourceId ||
+        if (command.imageSourceId != source.image.sourceId ||
+            material.imageSourceId != source.image.sourceId ||
             command.pixelsWidth != artifact.width ||
             command.pixelsHeight != artifact.height ||
             command.pixelsRowBytes != artifact.pixelLayout.normalizedRgba8RowBytes ||

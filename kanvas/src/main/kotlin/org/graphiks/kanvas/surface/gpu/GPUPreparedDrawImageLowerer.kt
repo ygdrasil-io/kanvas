@@ -78,6 +78,7 @@ internal object GPUPreparedDrawImageLowerer {
         target: GPUTargetFacts,
         config: RenderConfig,
         capabilities: GPUCapabilities,
+        preparedArtifact: GPUPreparedImageUploadArtifact? = null,
     ): GPUPreparedDrawImageLowering {
         val image = operation.image
         val blendMode = operation.paint?.blendMode ?: BlendMode.SRC_OVER
@@ -196,7 +197,7 @@ internal object GPUPreparedDrawImageLowerer {
             vertices = vertices,
         )
 
-        val artifact = when (val prepared = GPUPreparedSurfaceImageSource.prepare(image)) {
+        val artifact = preparedArtifact ?: when (val prepared = GPUPreparedSurfaceImageSource.prepare(image)) {
             is GPUPreparedImageArtifactResult.Ready -> prepared.artifact
             is GPUPreparedImageArtifactResult.Refused -> return GPUPreparedDrawImageLowering.Refused(
                 prepared.code,

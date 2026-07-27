@@ -19,6 +19,8 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Lattice
+import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
@@ -203,6 +205,79 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertEquals(0L, evidence.retentionQuarantines)
         assertEquals(1, evidence.distinctRetentionTickets)
         assertEquals(operations.size, result.visualOperationCount)
+    }
+
+    @Test
+    fun `direct prepared nine and mixed lattice preserve pixels affine placement and route order`() {
+        val gridImage = image(
+            width = GPUPreparedImageTestFixtures.imageNine6x6Width,
+            height = GPUPreparedImageTestFixtures.imageNine6x6Height,
+            colorType = GPUPreparedImageTestFixtures.imageNine6x6ColorType,
+            sourceId = "native-grid",
+            pixels = GPUPreparedImageTestFixtures.imageNine6x6Bytes,
+        )
+        val operations = listOf(
+            DisplayOp.DrawImageNine(
+                image = gridImage,
+                center = Rect.fromLTRB(2f, 2f, 4f, 4f),
+                dst = Rect.fromLTRB(0f, 0f, 18f, 18f),
+                paint = null,
+                transform = Matrix33.translate(1f, 1f),
+                clip = ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawImageLattice(
+                image = gridImage,
+                lattice = Lattice(
+                    xDivs = listOf(2, 4),
+                    yDivs = emptyList(),
+                    colors = listOf(Color.TRANSPARENT, Color.GREEN, Color.TRANSPARENT),
+                    flags = listOf(
+                        LatticeFlags.DEFAULT,
+                        LatticeFlags.FIXED_COLOR,
+                        LatticeFlags.TRANSPARENT,
+                    ),
+                ),
+                dst = Rect.fromLTRB(20f, 0f, 38f, 6f),
+                paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
+                transform = Matrix33.translate(0f, 10f),
+                clip = ClipStack.WideOpen,
+                sampling = SamplingOptions.NEAREST,
+            ),
+        )
+        val color = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+        )
+
+        val execution = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory).execute(
+            GPUPreparedSurfaceExecutionRequest(
+                candidate = GPUPreparedSurfaceEligibility.Candidate(
+                    operations = operations,
+                    config = RenderConfig.DEFAULT,
+                    color = color,
+                ),
+                width = 40,
+                height = 20,
+            ),
+        )
+        val result = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            execution,
+            execution.toString(),
+        )
+
+        assertPixel(result.rgba, 40, 2, 2, listOf(255, 255, 255, 255))
+        assertPixel(result.rgba, 40, 10, 2, listOf(255, 0, 0, 255))
+        assertPixel(result.rgba, 40, 2, 10, listOf(0, 255, 0, 255))
+        assertPixel(result.rgba, 40, 10, 10, listOf(0, 0, 255, 255))
+        assertPixel(result.rgba, 40, 18, 18, listOf(255, 255, 255, 255))
+        assertPixel(result.rgba, 40, 20, 11, listOf(255, 255, 255, 255))
+        assertPixel(result.rgba, 40, 25, 11, listOf(0, 255, 0, 255))
+        assertPixel(result.rgba, 40, 37, 11, listOf(0, 0, 0, 0))
+        assertEquals(11, result.visualOperationCount)
+        assertEquals(1L, result.evidence.targetCreations)
+        assertEquals(1L, result.evidence.targetCloses)
+        assertEquals(1L, result.evidence.submits)
+        assertEquals(1L, result.evidence.readbackCopies)
+        assertEquals(0, result.evidence.activeNativePayloads)
     }
 
     private fun rect(bounds: Rect, color: Color) = DisplayOp.DrawRect(

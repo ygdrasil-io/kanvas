@@ -154,42 +154,85 @@ internal object GPUOpMapper {
                         )
                     }
                 }
-                else -> {
-                    val paintOrder = visual.size
-                    var loweringRefusal: GPUCorePrimitiveGeometryRefusal? = null
-                    val rawNormalized = mapCoreOperation(
-                        operation = operation,
-                        commandId = GPUDrawCommandID(paintOrder),
-                        paintOrder = paintOrder,
+                is DisplayOp.DrawImageNine -> {
+                    val commandId = visual.size
+                    val context = GPUPreparedImageLoweringContext(
                         provenance = provenance,
                         target = target,
                         config = config,
-                        onGeometryRefusal = { refusal -> loweringRefusal = refusal },
+                        capabilities = capabilities,
                     )
-                    if (rawNormalized == null) {
+                    when (
+                        val lowered = GPUPreparedImageGridLowerer.lowerNine(
+                            operation = operation,
+                            firstCommandId = commandId,
+                            firstPaintOrder = commandId,
+                            context = context,
+                        )
+                    ) {
+                        is GPUPreparedImageGridLowering.Ready -> visual += lowered.commands
+                        is GPUPreparedImageGridLowering.Refused -> return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            legacyDump = legacy.dump(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = commandId,
+                                operationIndex = operationIndex,
+                                code = lowered.code,
+                                facts = lowered.facts +
+                                    ("cellOperationIndex" to lowered.operationIndex.toString()),
+                            ),
+                        )
+                    }
+                }
+                is DisplayOp.DrawImageLattice -> {
+                    val commandId = visual.size
+                    val context = GPUPreparedImageLoweringContext(
+                        provenance = provenance,
+                        target = target,
+                        config = config,
+                        capabilities = capabilities,
+                    )
+                    when (
+                        val lowered = GPUPreparedImageGridLowerer.lowerLattice(
+                            operation = operation,
+                            firstCommandId = commandId,
+                            firstPaintOrder = commandId,
+                            context = context,
+                        )
+                    ) {
+                        is GPUPreparedImageGridLowering.Ready -> visual += lowered.commands
+                        is GPUPreparedImageGridLowering.Refused -> return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            legacyDump = legacy.dump(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = commandId,
+                                operationIndex = operationIndex,
+                                code = lowered.code,
+                                facts = lowered.facts +
+                                    ("cellOperationIndex" to lowered.operationIndex.toString()),
+                            ),
+                        )
+                    }
+                }
+                else -> {
+                    val paintOrder = visual.size
+                    val lowered = lowerPreparedCoreVisual(
+                        operation = operation,
+                        commandId = GPUDrawCommandID(paintOrder),
+                        paintOrder = paintOrder,
+                        context = GPUPreparedImageLoweringContext(
+                            provenance = provenance,
+                            target = target,
+                            config = config,
+                            capabilities = capabilities,
+                        ),
+                    )
+                    if (lowered == null) {
                         if (legacy.accepts(operation)) legacy.recordInvocation(operation)
                     } else {
-                        val geometryRefusal = loweringRefusal ?: operation.coreGeometryRefusalOrNull()
-                        val coverage = rawNormalized.geometryCoverage()
-                        val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
-                            GPUClipCoveragePlanner.planForFrameRoute(
-                                request,
-                                config,
-                                maxOf(target.width, target.height),
-                            )
-                        } ?: GPUClipCoveragePlan.NoClip
-                        val clipExecutionPlan = clipPlan.toExecutionPlan(capabilities, target)
-                        val normalized = rawNormalized.withClipPlans(clipPlan, clipExecutionPlan)
-                        visual += GPUFramePathVisualCommand(
-                            normalized = normalized,
-                            targetSpaceBounds = normalized.bounds,
-                            geometryCoverage = coverage,
-                            clipCoverage = clipPlan,
-                            clipExecutionPlan = clipExecutionPlan,
-                            blendPlan = normalized.blend.canonicalBlendPlan(coverage),
-                            provenance = provenance,
-                            geometryRefusal = geometryRefusal,
-                        )
+                        visual += lowered
                     }
                 }
             }
@@ -198,6 +241,45 @@ internal object GPUOpMapper {
             visualCommands = visual.toList(),
             stateEvents = stateEvents.toList(),
             legacyDump = legacy.dump(),
+        )
+    }
+
+    internal fun lowerPreparedCoreVisual(
+        operation: DisplayOp,
+        commandId: GPUDrawCommandID,
+        paintOrder: Int,
+        context: GPUPreparedImageLoweringContext,
+    ): GPUFramePathVisualCommand? {
+        var loweringRefusal: GPUCorePrimitiveGeometryRefusal? = null
+        val rawNormalized = mapCoreOperation(
+            operation = operation,
+            commandId = commandId,
+            paintOrder = paintOrder,
+            provenance = context.provenance,
+            target = context.target,
+            config = context.config,
+            onGeometryRefusal = { refusal -> loweringRefusal = refusal },
+        ) ?: return null
+        val geometryRefusal = loweringRefusal ?: operation.coreGeometryRefusalOrNull()
+        val coverage = rawNormalized.geometryCoverage()
+        val clipPlan = rawNormalized.clip.coverageRequest?.let { request ->
+            GPUClipCoveragePlanner.planForFrameRoute(
+                request,
+                context.config,
+                maxOf(context.target.width, context.target.height),
+            )
+        } ?: GPUClipCoveragePlan.NoClip
+        val clipExecutionPlan = clipPlan.toExecutionPlan(context.capabilities, context.target)
+        val normalized = rawNormalized.withClipPlans(clipPlan, clipExecutionPlan)
+        return GPUFramePathVisualCommand(
+            normalized = normalized,
+            targetSpaceBounds = normalized.bounds,
+            geometryCoverage = coverage,
+            clipCoverage = clipPlan,
+            clipExecutionPlan = clipExecutionPlan,
+            blendPlan = normalized.blend.canonicalBlendPlan(coverage),
+            provenance = context.provenance,
+            geometryRefusal = geometryRefusal,
         )
     }
 
@@ -1383,6 +1465,7 @@ internal data class ImageCell(
     val src: Rect,
     val dst: Rect,
     val color: Color? = null,
+    val sourceIndex: Int = 0,
 )
 
 internal fun DisplayOp.DrawImageNine.decompose(): List<ImageCell> {
@@ -1416,7 +1499,7 @@ internal fun DisplayOp.DrawImageNine.decompose(): List<ImageCell> {
             val src = Rect.fromLTRB(srcL[col], srcT[row], srcL[col + 1], srcT[row + 1])
             val dst = Rect.fromLTRB(dstL[col], dstT[row], dstL[col + 1], dstT[row + 1])
             if (!src.isEmpty && !dst.isEmpty) {
-                cells.add(ImageCell(src = src, dst = dst))
+                cells.add(ImageCell(src = src, dst = dst, sourceIndex = row * 3 + col))
             }
         }
     }
@@ -1481,6 +1564,7 @@ internal fun DisplayOp.DrawImageLattice.decompose(): List<ImageCell> {
                 src = Rect.fromLTRB(srcLeft, srcTop, srcRight, srcBottom),
                 dst = dstRect,
                 color = color,
+                sourceIndex = cellIndex,
             ))
             cellIndex++
         }
