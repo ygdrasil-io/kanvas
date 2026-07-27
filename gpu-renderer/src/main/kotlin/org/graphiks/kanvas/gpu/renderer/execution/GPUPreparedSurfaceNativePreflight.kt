@@ -35,7 +35,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUniformAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingLease
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
@@ -55,7 +55,7 @@ internal sealed interface GPUPreparedSurfaceNativeRunPlan {
 }
 
 internal class GPUPreparedSurfaceImageFramePlan(
-    val resourcePlan: GPUPreparedImageFrameResourcePlan,
+    val resourcePlan: GPUImageFrameResourcePlan,
     val uploadScopeKey: GPUPreparedNativeScopeKey,
     consumerRenderScopeIndices: List<Int>,
 ) {
@@ -78,14 +78,14 @@ internal class GPUPreparedSurfaceImageRenderRunPlan(
     val sourceScopeIndex: Int,
     val renderStep: GPUFrameStep.RenderPassStep,
     packets: List<GPUDrawSemanticPayload.SampledImage>,
-    resourcePlans: List<GPUPreparedImageFrameResourcePlan>,
-    orderedBindings: List<org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest>,
+    resourcePlans: List<GPUImageFrameResourcePlan>,
+    orderedBindings: List<org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest>,
     uniformAllocations: List<GPUPreparedImageUniformAllocation>,
     val exactScopeKey: GPUPreparedNativeScopeKey,
 ) {
     val sourceScopeIndices: List<Int> = listOf(sourceScopeIndex)
     val packets: List<GPUDrawSemanticPayload.SampledImage> = immutableList(packets)
-    val resourcePlans: List<GPUPreparedImageFrameResourcePlan> = immutableList(resourcePlans)
+    val resourcePlans: List<GPUImageFrameResourcePlan> = immutableList(resourcePlans)
     val artifactKeys = immutableList(resourcePlans.map { plan -> plan.artifactKey })
     val orderedBindings = immutableList(orderedBindings)
     val uniformAllocations: List<GPUPreparedImageUniformAllocation> =
@@ -416,7 +416,7 @@ internal class GPUPreparedSurfaceNativePreflight {
                 indexed.index to indexed.value as GPUFrameStep.UploadResourceStep
             }
         val imageUploads = uploadSteps.mapNotNull { (index, step) ->
-            step.preparedImagePlan?.let { plan -> Triple(index, step, plan) }
+            step.imageResourcePlan?.let { plan -> Triple(index, step, plan) }
         }
         if (imageUploads.size != uploadSteps.size ||
             imageUploads.map { (_, _, plan) -> plan.artifactKey }.distinct().size !=
@@ -472,7 +472,7 @@ internal class GPUPreparedSurfaceNativePreflight {
                 indexed.index to indexed.value as GPUFrameStep.UploadResourceStep
             }
         val imageUploads = uploadSteps.mapNotNull { (index, step) ->
-            step.preparedImagePlan?.let { plan -> Triple(index, step, plan) }
+            step.imageResourcePlan?.let { plan -> Triple(index, step, plan) }
         }
         if (imageUploads.size != uploadSteps.size ||
             imageUploads.map { (_, _, plan) -> plan.artifactKey }.distinct().size != imageUploads.size
@@ -809,8 +809,8 @@ internal class GPUPreparedSurfaceNativePreflight {
         }
         val imagePreparations = framePlan.steps
             .filterIsInstance<GPUFrameStep.UploadResourceStep>()
-            .mapNotNull(GPUFrameStep.UploadResourceStep::preparedImagePlan)
-            .flatMap(GPUPreparedImageFrameResourcePlan::preparationRequests)
+            .mapNotNull(GPUFrameStep.UploadResourceStep::imageResourcePlan)
+            .flatMap(GPUImageFrameResourcePlan::preparationRequests)
         if (imagePreparations.any { imageRequest ->
                 requests.singleOrNull { declared ->
                     declared.samePreparationAs(imageRequest)
@@ -1044,7 +1044,7 @@ internal class GPUPreparedSurfaceNativePreflight {
     private fun validateImageAuthority(
         framePlan: GPUFramePlan,
         imagePackets: List<Pair<GPUDrawPacket, GPUDrawSemanticPayload.SampledImage>>,
-        uploads: List<Triple<Int, GPUFrameStep.UploadResourceStep, GPUPreparedImageFrameResourcePlan>>,
+        uploads: List<Triple<Int, GPUFrameStep.UploadResourceStep, GPUImageFrameResourcePlan>>,
         shaderContract: GPUPreparedImageShaderContract,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
         val renderBindingList = framePlan.steps

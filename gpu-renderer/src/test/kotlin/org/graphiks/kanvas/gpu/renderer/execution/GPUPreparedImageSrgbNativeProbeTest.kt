@@ -63,10 +63,9 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPU_PREPARED_IMAGE_TARGET_FORMAT
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingInput
-import org.graphiks.kanvas.gpu.renderer.resources.buildPreparedImageFrameResourcePlanFromBindings
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingInput
+import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFromBindings
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
-import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.junit.jupiter.api.Timeout
 
 class GPUPreparedImageSrgbNativeProbeTest {
@@ -337,15 +336,14 @@ class GPUPreparedImageSrgbNativeProbeTest {
                 pixelBytes = PREMUL_COLOR_FIXTURES,
             ),
         ) as GPUPreparedImageArtifactResult.Ready).artifact
-        val plan = buildPreparedImageFrameResourcePlanFromBindings(
+        val plan = buildImageFrameResourcePlanFromBindings(
             artifact = artifact,
             bindingInputs = listOf(
-                GPUPreparedImageBindingInput("native-probe-production", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("native-probe-production", GPUPreparedImageSampling.Nearest),
             ),
             bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
             capabilities = probeCapabilities(),
             frameIdentity = "native-probe-production",
-            uploadTaskId = GPUTaskID("native-probe-production.upload"),
         )
         val productionRepremultiplies =
             GPU_PREPARED_IMAGE_WGSL.contains("sampled.rgb * sampled.a")

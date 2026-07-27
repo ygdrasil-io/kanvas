@@ -420,7 +420,7 @@ data class GPUPreparedImageUniformAllocation(
     val size: Long,
 )
 
-data class GPUPreparedImageBindingRequest(
+data class GPUImageBindingRequest(
     val packetId: String,
     val artifactKey: GPUImageUploadArtifactKey,
     val texture: GPUTextureDescriptor,
@@ -430,15 +430,27 @@ data class GPUPreparedImageBindingRequest(
     val uniformAllocation: GPUPreparedImageUniformAllocation,
 )
 
-data class GPUPreparedImageFrameResourcePlan(
+data class GPUImageFrameResourcePlan(
     val stagingRef: GPUFrameBufferRef,
     val textureRef: GPUTextureResourceRef,
     val textureDescriptor: GPUTextureDescriptor,
     val uploadLayout: GPUPreparedImageUploadLayout,
-    val bindingRequests: List<GPUPreparedImageBindingRequest>,
-    val uploadTaskId: GPUTaskID,
+    val bindingRequests: List<GPUImageBindingRequest>,
+)
+
+data class GPURecordedImageUpload(
+    val taskId: GPUTaskID,
+    val resources: GPUImageFrameResourcePlan,
 )
 ```
+
+> **Package-boundary correction (2026-07-27):** the resource plan is a
+> handle-free resource descriptor and therefore must not own or import
+> `GPUTaskID`. Recording owns task identity through `GPURecordedImageUpload`;
+> the resource builder is `buildImageFrameResourcePlanFromBindings` and returns
+> only `GPUImageFrameResourcePlan`. This explicitly supersedes the earlier
+> `GPUPreparedImageFrameResourcePlan.uploadTaskId` sketch without changing the
+> one-upload-per-artifact or upload-before-consumer requirements.
 
 - [ ] **Step 1: Write failing mixed semantic/task tests**
 
@@ -478,8 +490,9 @@ Expected: heterogeneous builders are unresolved.
 
 Keep `GPUCorePrimitivePreparedFrameTaskListBuilder` as a compatibility wrapper around shared task assembly. Validate the complete semantic map and budget first; only then create ordered resource preparation, upload, render, readback, and output tasks. Group only contiguous packets of the same route. Preserve core clip/blend/coverage authorities and the then-current `validateEncodedPremulSrgbOutput()`. Task 3 records the baseline image interpretation `EncodedPremulSrgb` and physical `RGBA8Unorm`; Task 5.4 must replace these facts everywhere with the oracle-proven sRGB contract before any native pixel or admission claim.
 
-Construct `GPUPreparedImageFrameResourcePlan` before emitting image tasks.
-`GPUTask.Upload` consumes its exact staging/texture/layout authority; later
+Construct `GPUImageFrameResourcePlan` before emitting image tasks, then attach
+its recording-owned `GPUTaskID` through `GPURecordedImageUpload`.
+`GPUTask.Upload` consumes the association's exact staging/texture/layout authority; later
 tasks may not reconstruct labels, strides, usages, binding slots, or uniform
 offsets independently.
 
@@ -569,12 +582,12 @@ data class GPUPreparedImageBindingKey(
 )
 
 internal interface GPUPreparedImageNativeHandleFactory {
-    fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture
-    fun createTextureView(texture: GPUTexture, request: GPUPreparedImageFrameResourcePlan): GPUTextureView
+    fun createTexture(request: GPUImageFrameResourcePlan): GPUTexture
+    fun createTextureView(texture: GPUTexture, request: GPUImageFrameResourcePlan): GPUTextureView
     fun createSampler(descriptor: GPUSamplerDescriptor): GPUSampler
     fun createUniformBuffer(size: Long): GPUBuffer
     fun createBindGroup(
-        request: GPUPreparedImageBindingRequest,
+        request: GPUImageBindingRequest,
         uniformBuffer: GPUBuffer,
         textureView: GPUTextureView,
         sampler: GPUSampler,
@@ -726,7 +739,7 @@ internal object GPUPreparedImageUniformAbi {
 internal data class GPUPreparedImageRenderRunPlan(
     val sourceScopeIndices: List<Int>,
     val packets: List<GPUDrawSemanticPayload.SampledImage>,
-    val resources: List<GPUPreparedImageFrameResourcePlan>,
+    val resources: List<GPUImageFrameResourcePlan>,
     val uniformAllocations: List<GPUPreparedImageUniformAllocation>,
 )
 

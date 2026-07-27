@@ -8,14 +8,14 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUniformAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPU_PREPARED_IMAGE_UNIFORM_ALLOCATION_SIZE_BYTES
 
 private data class GPUPreparedImageRenderRunPlanSnapshot(
     val sourceScopeIndices: List<Int>,
     val packets: List<GPUDrawSemanticPayload.SampledImage>,
-    val resources: List<GPUPreparedImageFrameResourcePlan>,
+    val resources: List<GPUImageFrameResourcePlan>,
     val uniformAllocations: List<GPUPreparedImageUniformAllocation>,
     val exactScopeKeys: List<GPUPreparedNativeScopeKey>,
 )
@@ -27,7 +27,7 @@ internal data class GPUPreparedImageRenderRunPlan private constructor(
     constructor(
         sourceScopeIndices: List<Int>,
         packets: List<GPUDrawSemanticPayload.SampledImage>,
-        resources: List<GPUPreparedImageFrameResourcePlan>,
+        resources: List<GPUImageFrameResourcePlan>,
         uniformAllocations: List<GPUPreparedImageUniformAllocation>,
         exactScopeKeys: List<GPUPreparedNativeScopeKey>,
     ) : this(
@@ -68,7 +68,7 @@ internal data class GPUPreparedImageRenderRunPlan private constructor(
     fun copy(
         sourceScopeIndices: List<Int> = this.sourceScopeIndices,
         packets: List<GPUDrawSemanticPayload.SampledImage> = this.packets,
-        resources: List<GPUPreparedImageFrameResourcePlan> = this.resources,
+        resources: List<GPUImageFrameResourcePlan> = this.resources,
         uniformAllocations: List<GPUPreparedImageUniformAllocation> = this.uniformAllocations,
         exactScopeKeys: List<GPUPreparedNativeScopeKey> = this.exactScopeKeys,
     ): GPUPreparedImageRenderRunPlan = GPUPreparedImageRenderRunPlan(

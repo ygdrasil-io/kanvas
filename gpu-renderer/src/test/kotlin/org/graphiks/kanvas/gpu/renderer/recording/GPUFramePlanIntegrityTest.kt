@@ -1118,7 +1118,6 @@ class GPUFramePlanIntegrityTest {
             bindingLayoutHash = "layout.image",
             capabilities = integrityCapabilities(),
             frameIdentity = "frame.integrity",
-            uploadTaskId = GPUTaskID("task.upload.image"),
         )
         val changedSourceStride = prepared.copy(
             uploadLayout = GPUPreparedImageUploadLayout(
@@ -1131,25 +1130,36 @@ class GPUFramePlanIntegrityTest {
                 paddedUploadBytes = prepared.uploadLayout.bytesForUpload(),
             ),
         )
-        fun plan(resourcePlan: org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan) =
+        fun plan(
+            resourcePlan: org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan,
+            taskId: GPUTaskID = GPUTaskID("task.upload.image"),
+        ) =
             framePlan(
                 GPUFrameStep.UploadResourceStep(
                     staging = resourcePlan.stagingRef,
                     destination = resourcePlan.frameTextureRef,
                     layout = resourcePlan.uploadTaskLayout,
-                    sourceTaskIds = listOf(resourcePlan.uploadTaskId),
-                    preparedImagePlan = resourcePlan,
+                    sourceTaskIds = listOf(taskId),
+                    imageResourcePlan = resourcePlan,
                 ),
             )
 
         val baseline = plan(prepared)
         val changed = plan(changedSourceStride)
+        val changedTaskIdentity = plan(prepared, GPUTaskID("task.upload.image.changed"))
         val dump = baseline.dumpLines().joinToString("\n")
         val logicalHash = artifact.tightRgba8BytesForUpload().sha256ForIntegrityTest()
         val paddedHash = prepared.uploadLayout.bytesForUpload().sha256ForIntegrityTest()
 
         assertNotEquals(baseline.stableHash(), changed.stableHash())
         assertNotEquals(baseline.dumpLines(), changed.dumpLines())
+        assertNotEquals(baseline.stableHash(), changedTaskIdentity.stableHash())
+        assertNotEquals(baseline.dumpLines(), changedTaskIdentity.dumpLines())
+        assertFalse(
+            prepared.javaClass.declaredFields.any { field ->
+                field.type == GPUTaskID::class.java || field.name == "uploadTaskId"
+            },
+        )
         assertTrue(dump.contains("sourceBytesPerRow=4"), dump)
         assertTrue(dump.contains("payloadSha256=$logicalHash"), dump)
         assertFalse(dump.contains("payloadSha256=$paddedHash"), dump)

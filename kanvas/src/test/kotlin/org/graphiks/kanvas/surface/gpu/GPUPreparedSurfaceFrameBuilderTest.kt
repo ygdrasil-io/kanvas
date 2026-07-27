@@ -370,7 +370,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
         val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
             .flatMap(GPUTask.Render::drawPackets)
         val artifacts = ready.taskList.tasks.filterIsInstance<GPUTask.Upload>()
-            .mapNotNull(GPUTask.Upload::preparedImagePlan)
+            .mapNotNull(GPUTask.Upload::imageResourcePlan)
 
         assertEquals(2, packets.size)
         assertEquals(1, artifacts.size)
@@ -412,7 +412,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             assertIs<GPUDrawSemanticPayload.SampledImage>(packet.semanticPayload)
         }
         val artifacts = ready.taskList.tasks.filterIsInstance<GPUTask.Upload>()
-            .mapNotNull(GPUTask.Upload::preparedImagePlan)
+            .mapNotNull(GPUTask.Upload::imageResourcePlan)
             .map { plan -> plan.bindingRequests.single().artifactKey }
 
         assertEquals(2, packets.size)
@@ -496,7 +496,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             packet.semanticPayload as? GPUDrawSemanticPayload.SampledImage
         }
         val uploadPlans = ready.taskList.tasks.filterIsInstance<GPUTask.Upload>()
-            .mapNotNull(GPUTask.Upload::preparedImagePlan)
+            .mapNotNull(GPUTask.Upload::imageResourcePlan)
 
         assertEquals(listOf(0, 1, 2, 3), packets.map { packet -> packet.commandIdValue })
         assertEquals(4, packets.size)

@@ -41,14 +41,13 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
-import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUploadLayout
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingInput
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingInput
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUniformAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
-import org.graphiks.kanvas.gpu.renderer.resources.buildPreparedImageFrameResourcePlanFromBindings
+import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFromBindings
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
@@ -121,18 +120,17 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         )
         val factory = RecordingPreparedImageHandleFactory()
         val artifact = preparedImageArtifact()
-        val resource = buildPreparedImageFrameResourcePlanFromBindings(
+        val resource = buildImageFrameResourcePlanFromBindings(
             artifact = artifact,
             bindingInputs = listOf(
-                GPUPreparedImageBindingInput("packet.nearest.a", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.nearest.b", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.nearest.a", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.nearest.b", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
             ),
             bindingLayoutHash =
                 "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
             capabilities = preparedImageCapabilities(),
             frameIdentity = "frame.task5",
-            uploadTaskId = GPUTaskID("task.upload.image"),
         )
         val allocations = listOf(
             GPUPreparedImageUniformAllocation("packet.nearest.a", 0L, 112L),
@@ -336,11 +334,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 unsupported.pipelineKey.copy(targetFormat = "BGRA8Unorm"),
             )
         }
-        val resource = buildPreparedImageFrameResourcePlanFromBindings(
+        val resource = buildImageFrameResourcePlanFromBindings(
             artifact = artifact,
             bindingInputs = listOf(
-                GPUPreparedImageBindingInput("packet.valid", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput(
+                GPUImageBindingInput("packet.valid", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput(
                     "packet.unsupported",
                     GPUPreparedImageSampling.Nearest,
                 ),
@@ -349,7 +347,6 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
                 "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
             capabilities = preparedImageCapabilities(),
             frameIdentity = "frame.atomic-pipeline-refusal",
-            uploadTaskId = GPUTaskID("task.upload.atomic-pipeline-refusal"),
         )
 
         val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
@@ -464,16 +461,15 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
     @Test
     fun `missing packet binding preserves canonical refusal through native boundary`() {
         val artifact = preparedImageArtifact(pixelSeed = 19)
-        val completeResource = buildPreparedImageFrameResourcePlanFromBindings(
+        val completeResource = buildImageFrameResourcePlanFromBindings(
             artifact = artifact,
             bindingInputs = listOf(
-                GPUPreparedImageBindingInput("packet.one", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.two", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.one", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.two", GPUPreparedImageSampling.Nearest),
             ),
             bindingLayoutHash = "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
             capabilities = preparedImageCapabilities(),
             frameIdentity = "frame.missing-binding",
-            uploadTaskId = GPUTaskID("task.upload.missing-binding"),
         )
         val resource = completeResource.copy(
             bindingRequests = completeResource.bindingRequests.take(1),
@@ -656,7 +652,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val artifactB = preparedImageArtifact(pixelSeed = 25)
         val resourceA = preparedImageResource(artifactA, "packet.a")
         val resourceB = preparedImageResource(artifactB, "packet.b")
-        val forged = GPUPreparedImageFrameResourcePlan(
+        val forged = GPUImageFrameResourcePlan(
             stagingRef = resourceB.stagingRef,
             textureRef = resourceB.textureRef,
             frameTextureRef = resourceB.frameTextureRef,
@@ -667,7 +663,6 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             bindingRequests = resourceB.bindingRequests,
             preparationRequests = resourceB.preparationRequests,
             memoryAllocations = resourceB.memoryAllocations,
-            uploadTaskId = resourceB.uploadTaskId,
             artifact = artifactB,
         )
         val nativeDevice = RecordingPreparedImageDevice()
@@ -784,17 +779,16 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
     @Test
     fun `plan refuses overlapping sealed uniform allocations in one resource`() {
         val artifact = preparedImageArtifact(pixelSeed = 31)
-        val resource = buildPreparedImageFrameResourcePlanFromBindings(
+        val resource = buildImageFrameResourcePlanFromBindings(
             artifact = artifact,
             bindingInputs = listOf(
-                GPUPreparedImageBindingInput("packet.first", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.second", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.first", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.second", GPUPreparedImageSampling.Linear),
             ),
             bindingLayoutHash =
                 "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
             capabilities = preparedImageCapabilities(),
             frameIdentity = "frame.overlap",
-            uploadTaskId = GPUTaskID("task.upload.overlap"),
         ).let { original ->
             original.copy(
                 bindingRequests = original.bindingRequests.map { request ->
@@ -961,19 +955,18 @@ internal fun preparedImageResource(
     artifact: org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact,
     packetId: String,
     sampling: GPUPreparedImageSampling = GPUPreparedImageSampling.Nearest,
-): GPUPreparedImageFrameResourcePlan = buildPreparedImageFrameResourcePlanFromBindings(
+): GPUImageFrameResourcePlan = buildImageFrameResourcePlanFromBindings(
     artifact = artifact,
-    bindingInputs = listOf(GPUPreparedImageBindingInput(packetId, sampling)),
+    bindingInputs = listOf(GPUImageBindingInput(packetId, sampling)),
     bindingLayoutHash = "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
     capabilities = preparedImageCapabilities(),
     frameIdentity = "frame.$packetId",
-    uploadTaskId = GPUTaskID("task.upload.$packetId"),
 )
 
 internal fun preparedImageRenderRunPlan(
     sourceScopeIndices: List<Int>,
     packets: List<GPUDrawSemanticPayload.SampledImage>,
-    resources: List<GPUPreparedImageFrameResourcePlan>,
+    resources: List<GPUImageFrameResourcePlan>,
     uniformAllocations: List<GPUPreparedImageUniformAllocation>,
 ): GPUPreparedImageRenderRunPlan = GPUPreparedImageRenderRunPlan(
     sourceScopeIndices = sourceScopeIndices,
@@ -988,7 +981,7 @@ internal fun preparedImageRenderRunPlan(
 )
 
 private fun preparedImagePreflightScopeKeys(
-    resources: List<GPUPreparedImageFrameResourcePlan>,
+    resources: List<GPUImageFrameResourcePlan>,
     allocations: List<GPUPreparedImageUniformAllocation>,
     sourceScopeIndices: List<Int>,
 ): List<GPUPreparedNativeScopeKey> {
@@ -1169,14 +1162,14 @@ internal class RecordingPreparedImageHandleFactory : GPUPreparedImageNativeHandl
     var handleCreates = 0
     private var ordinal = 0
 
-    override fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture {
+    override fun createTexture(request: GPUImageFrameResourcePlan): GPUTexture {
         textureCreates += 1
         return handle("texture")
     }
 
     override fun createTextureView(
         texture: GPUTexture,
-        request: GPUPreparedImageFrameResourcePlan,
+        request: GPUImageFrameResourcePlan,
     ): GPUTextureView {
         textureViewCreates += 1
         return handle("view")
@@ -1194,7 +1187,7 @@ internal class RecordingPreparedImageHandleFactory : GPUPreparedImageNativeHandl
     }
 
     override fun createBindGroup(
-        request: GPUPreparedImageBindingRequest,
+        request: GPUImageBindingRequest,
         uniformBuffer: GPUBuffer,
         textureView: GPUTextureView,
         sampler: GPUSampler,
@@ -1243,12 +1236,12 @@ private class SharingPreparedImageHandleFactory : GPUPreparedImageNativeHandleFa
         }
     }
 
-    override fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture =
+    override fun createTexture(request: GPUImageFrameResourcePlan): GPUTexture =
         shared as GPUTexture
 
     override fun createTextureView(
         texture: GPUTexture,
-        request: GPUPreparedImageFrameResourcePlan,
+        request: GPUImageFrameResourcePlan,
     ): GPUTextureView = shared as GPUTextureView
 
     override fun createSampler(descriptor: GPUSamplerDescriptor): GPUSampler =
@@ -1257,7 +1250,7 @@ private class SharingPreparedImageHandleFactory : GPUPreparedImageNativeHandleFa
     override fun createUniformBuffer(size: Long): GPUBuffer = shared as GPUBuffer
 
     override fun createBindGroup(
-        request: GPUPreparedImageBindingRequest,
+        request: GPUImageBindingRequest,
         uniformBuffer: GPUBuffer,
         textureView: GPUTextureView,
         sampler: GPUSampler,

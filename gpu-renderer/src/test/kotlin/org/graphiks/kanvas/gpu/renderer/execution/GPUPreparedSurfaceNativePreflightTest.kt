@@ -72,8 +72,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceDiagnostic
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
@@ -156,7 +156,7 @@ class GPUPreparedSurfaceNativePreflightTest {
         val exactImageResource = input.framePlan.steps
             .filterIsInstance<GPUFrameStep.UploadResourceStep>()
             .single()
-            .preparedImagePlan
+            .imageResourcePlan
         val imageFrame = accepted.plan.imageFrames.single()
         assertSame(exactImageResource, imageFrame.resourcePlan)
         assertEquals(
@@ -557,7 +557,7 @@ class GPUPreparedSurfaceNativePreflightTest {
                 input.framePlan.steps
                     .filterIsInstance<GPUFrameStep.UploadResourceStep>()
                     .single()
-                    .preparedImagePlan,
+                    .imageResourcePlan,
             )
             assertSame(uploadPlan, accepted.plan.imageFrames.single().resourcePlan)
             accepted.plan.orderedRuns
@@ -676,7 +676,7 @@ class GPUPreparedSurfaceNativePreflightTest {
             input.framePlan.steps
                 .filterIsInstance<GPUFrameStep.UploadResourceStep>()
                 .single()
-                .preparedImagePlan,
+                .imageResourcePlan,
         ).uniformRef
         val aliases = listOf(
             input.framePlan.withCoreResourceAlias(
@@ -1274,11 +1274,11 @@ private fun GPUFramePlan.withInvalidPreparedImageUpload(): GPUFramePlan =
     rebuilt(
         steps = steps.map { step ->
             if (step !is GPUFrameStep.UploadResourceStep ||
-                step.preparedImagePlan == null
+                step.imageResourcePlan == null
             ) {
                 step
             } else {
-                val plan = requireNotNull(step.preparedImagePlan)
+                val plan = requireNotNull(step.imageResourcePlan)
                 val invalidLayout = plan.uploadTaskLayout.copy(
                     bytesPerRow = plan.uploadTaskLayout.bytesPerRow + 256L,
                 )
@@ -1287,18 +1287,18 @@ private fun GPUFramePlan.withInvalidPreparedImageUpload(): GPUFramePlan =
                     destination = step.destination,
                     layout = invalidLayout,
                     sourceTaskIds = step.sourceTaskIds,
-                    preparedImagePlan = plan.copy(uploadTaskLayout = invalidLayout),
+                    imageResourcePlan = plan.copy(uploadTaskLayout = invalidLayout),
                 )
             }
         },
     )
 
 private fun GPUFramePlan.withPreparedImagePlanMutation(
-    transform: (GPUPreparedImageFrameResourcePlan) -> GPUPreparedImageFrameResourcePlan,
+    transform: (GPUImageFrameResourcePlan) -> GPUImageFrameResourcePlan,
 ): GPUFramePlan = rebuilt(
     steps = steps.map { step ->
         if (step !is GPUFrameStep.UploadResourceStep ||
-            step.preparedImagePlan == null
+            step.imageResourcePlan == null
         ) {
             step
         } else {
@@ -1307,25 +1307,25 @@ private fun GPUFramePlan.withPreparedImagePlanMutation(
                 destination = step.destination,
                 layout = step.layout,
                 sourceTaskIds = step.sourceTaskIds,
-                preparedImagePlan = transform(requireNotNull(step.preparedImagePlan)),
+                imageResourcePlan = transform(requireNotNull(step.imageResourcePlan)),
             )
         }
     },
 )
 
 private fun GPUFramePlan.withPreparedImageBindingMutation(
-    transform: (GPUPreparedImageBindingRequest) -> GPUPreparedImageBindingRequest,
+    transform: (GPUImageBindingRequest) -> GPUImageBindingRequest,
 ): GPUFramePlan {
     val transformedByPacketId = steps
         .filterIsInstance<GPUFrameStep.UploadResourceStep>()
-        .mapNotNull(GPUFrameStep.UploadResourceStep::preparedImagePlan)
-        .flatMap(GPUPreparedImageFrameResourcePlan::bindingRequests)
+        .mapNotNull(GPUFrameStep.UploadResourceStep::imageResourcePlan)
+        .flatMap(GPUImageFrameResourcePlan::bindingRequests)
         .associate { binding -> binding.packetId to transform(binding) }
     return rebuilt(
         steps = steps.map { step ->
             when (step) {
                 is GPUFrameStep.UploadResourceStep -> {
-                    val plan = step.preparedImagePlan
+                    val plan = step.imageResourcePlan
                     if (plan == null) {
                         step
                     } else {
@@ -1334,7 +1334,7 @@ private fun GPUFramePlan.withPreparedImageBindingMutation(
                             destination = step.destination,
                             layout = step.layout,
                             sourceTaskIds = step.sourceTaskIds,
-                            preparedImagePlan = plan.copy(
+                            imageResourcePlan = plan.copy(
                                 bindingRequests = plan.bindingRequests.map { binding ->
                                     transformedByPacketId.getValue(binding.packetId)
                                 },

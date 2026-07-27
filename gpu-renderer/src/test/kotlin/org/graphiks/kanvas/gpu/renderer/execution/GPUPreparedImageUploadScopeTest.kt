@@ -36,15 +36,15 @@ class GPUPreparedImageUploadScopeTest {
     @Test
     fun `prepared image upload keeps texture destination kind through frame linearization`() {
         val capabilities = capabilities()
-        val plan = preparedImagePlan(capabilities)
+        val plan = imageResourcePlan(capabilities)
         val upload = GPUTask.Upload(
-            taskId = plan.uploadTaskId,
+            taskId = GPUTaskID("task.upload.image"),
             recordingId = GPURecordingID("recording.prepared-image"),
             phase = GPUTaskPhase.Upload,
             staging = plan.stagingRef,
             destination = plan.frameTextureRef,
             layout = plan.uploadTaskLayout,
-            preparedImagePlan = plan,
+            imageResourcePlan = plan,
         )
 
         assertEquals(GPUUploadDestinationKind.Texture, upload.destinationKind)
@@ -55,21 +55,21 @@ class GPUPreparedImageUploadScopeTest {
         assertEquals(plan.stagingRef, uploadStep.staging)
         assertEquals(plan.frameTextureRef, uploadStep.destination)
         assertEquals(plan.uploadTaskLayout, uploadStep.layout)
-        assertEquals(plan, uploadStep.preparedImagePlan)
+        assertEquals(plan, uploadStep.imageResourcePlan)
     }
 
     @Test
     fun `pure preflight seals texture upload data and destination without native allocation`() {
         val capabilities = capabilities()
-        val plan = preparedImagePlan(capabilities)
+        val plan = imageResourcePlan(capabilities)
         val upload = GPUTask.Upload(
-            taskId = plan.uploadTaskId,
+            taskId = GPUTaskID("task.upload.image"),
             recordingId = GPURecordingID("recording.prepared-image"),
             phase = GPUTaskPhase.Upload,
             staging = plan.stagingRef,
             destination = plan.frameTextureRef,
             layout = plan.uploadTaskLayout,
-            preparedImagePlan = plan,
+            imageResourcePlan = plan,
         )
         val framePlan = GPUFramePlanner.plan(taskList(capabilities, upload, plan))
         val provider = GPUConcreteResourceProvider()
@@ -141,7 +141,7 @@ class GPUPreparedImageUploadScopeTest {
         prepared.rollback.execute()
     }
 
-    private fun preparedImagePlan(capabilities: GPUCapabilities) =
+    private fun imageResourcePlan(capabilities: GPUCapabilities) =
         buildPreparedImageFrameResourcePlan(
             artifact = (GPUPreparedImageArtifactFactory.prepare(
                 GPUPreparedImageSourceInput(
@@ -163,13 +163,12 @@ class GPUPreparedImageUploadScopeTest {
             bindingLayoutHash = "layout.image",
             capabilities = capabilities,
             frameIdentity = "frame.upload-scope",
-            uploadTaskId = GPUTaskID("task.upload.image"),
         )
 
     private fun taskList(
         capabilities: GPUCapabilities,
         task: GPUTask,
-        plan: org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan,
+        plan: org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan,
     ): GPUTaskList {
         val frameId = GPUFrameID(41)
         val generation = GPUDeviceGenerationID(7)

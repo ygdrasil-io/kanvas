@@ -43,8 +43,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
@@ -263,7 +263,7 @@ sealed interface GPUFrameStep {
         val sampleContinuation: GPUSampleContinuationRequest? = null,
         val depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = null,
         preparedImageBindingsByPacketId:
-            Map<GPUDrawPacketID, GPUPreparedImageBindingRequest> = emptyMap(),
+            Map<GPUDrawPacketID, GPUImageBindingRequest> = emptyMap(),
     ) : GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -272,7 +272,7 @@ sealed interface GPUFrameStep {
             drawPackets.associate { packet -> packet.packetId to packet.frameProvenance },
         )
         val preparedImageBindingsByPacketId:
-            Map<GPUDrawPacketID, GPUPreparedImageBindingRequest> =
+            Map<GPUDrawPacketID, GPUImageBindingRequest> =
             immutableMap(preparedImageBindingsByPacketId)
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
@@ -347,18 +347,18 @@ sealed interface GPUFrameStep {
         val destination: GPUFrameResourceRef,
         val layout: GPUUploadLayout,
         sourceTaskIds: List<GPUTaskID>,
-        val preparedImagePlan: GPUPreparedImageFrameResourcePlan? = null,
+        val imageResourcePlan: GPUImageFrameResourcePlan? = null,
         val destinationKind: GPUUploadDestinationKind =
-            if (preparedImagePlan == null) GPUUploadDestinationKind.Buffer else GPUUploadDestinationKind.Texture,
+            if (imageResourcePlan == null) GPUUploadDestinationKind.Buffer else GPUUploadDestinationKind.Texture,
     ) : GPUFrameStep {
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
 
         init {
-            require((preparedImagePlan != null) == (destinationKind == GPUUploadDestinationKind.Texture)) {
+            require((imageResourcePlan != null) == (destinationKind == GPUUploadDestinationKind.Texture)) {
                 "Texture frame uploads require an exact prepared-image plan; buffer uploads forbid one"
             }
-            preparedImagePlan?.let { plan ->
+            imageResourcePlan?.let { plan ->
                 require(staging == plan.stagingRef &&
                     destination == plan.frameTextureRef &&
                     layout == plan.uploadTaskLayout
@@ -928,7 +928,7 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
             long("bytesPerRow", value.layout.bytesPerRow)
             int("rowsPerImage", value.layout.rowsPerImage)
             long("byteSize", value.layout.byteSize)
-            nullable("preparedImagePlan", value.preparedImagePlan) { preparedImagePlan(it) }
+            nullable("preparedImagePlan", value.imageResourcePlan) { imageResourcePlan(it) }
         }
         is GPUFrameStep.CopyResourceStep -> {
             resourceRef("source", value.source)
@@ -994,7 +994,7 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
     }
 }
 
-private fun CanonicalHashSink.preparedImagePlan(value: GPUPreparedImageFrameResourcePlan) {
+private fun CanonicalHashSink.imageResourcePlan(value: GPUImageFrameResourcePlan) {
     tag("GPUPreparedImageFrameResourcePlan")
     string("stagingRef", value.stagingRef.value)
     string("textureRef", value.textureRef.value)
@@ -1017,10 +1017,9 @@ private fun CanonicalHashSink.preparedImagePlan(value: GPUPreparedImageFrameReso
     list("bindingRequests", value.bindingRequests) { preparedImageBinding(it) }
     list("preparationRequests", value.preparationRequests) { preparationRequest(it) }
     list("memoryAllocations", value.memoryAllocations) { memoryAllocation(it) }
-    string("uploadTaskId", value.uploadTaskId.value)
 }
 
-private fun CanonicalHashSink.preparedImageBinding(value: GPUPreparedImageBindingRequest) {
+private fun CanonicalHashSink.preparedImageBinding(value: GPUImageBindingRequest) {
     tag("GPUPreparedImageBindingRequest")
     string("packetId", value.packetId)
     string("artifactKey", value.artifactKey.value)
@@ -1554,7 +1553,7 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
             "upload kind=${destinationKind.name} staging=${staging.value} destination=${destination.value} " +
                 "offset=${layout.sourceOffsetBytes} bytesPerRow=${layout.bytesPerRow} " +
                 "rowsPerImage=${layout.rowsPerImage} bytes=${layout.byteSize} " +
-                "preparedImagePlan=${preparedImagePlan?.stableDump() ?: "none"}"
+                "preparedImagePlan=${imageResourcePlan?.stableDump() ?: "none"}"
         is GPUFrameStep.CopyResourceStep ->
             "copy source=${source.value} destination=${destination.value} " +
                 "regions=${regions.joinToString(";") { it.stableDump() }}"
@@ -1591,7 +1590,7 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
     return "step index=$index kind=${executionKind.name} tasks=$tasks $body"
 }
 
-private fun GPUPreparedImageFrameResourcePlan.stableDump(): String =
+private fun GPUImageFrameResourcePlan.stableDump(): String =
     "{staging=${stagingRef.value},texture=${textureRef.value},frameTexture=${frameTextureRef.value}," +
         "uniform=${uniformRef.value},textureDescriptor=${textureDescriptor.stableDump()}," +
         "upload={sourceBytesPerRow=${uploadLayout.sourceBytesPerRow}," +
@@ -1614,9 +1613,9 @@ private fun GPUPreparedImageFrameResourcePlan.stableDump(): String =
             "$index:{label=${allocation.label},category=${allocation.category.name}," +
                 "bytes=${allocation.bytes},kind=${allocation.resourceKind.name}," +
                 "extent=${allocation.extent ?: "none"}}"
-        }.joinToString(";").ifEmpty { "none" }},uploadTask=${uploadTaskId.value}}"
+        }.joinToString(";").ifEmpty { "none" }}}"
 
-private fun GPUPreparedImageBindingRequest.stableDump(): String =
+private fun GPUImageBindingRequest.stableDump(): String =
     "{packet=$packetId,artifact=${artifactKey.value},texture=${texture.stableDump()}," +
         "view={descriptorHash=${view.textureDescriptorHash},dimension=${view.viewDimension}," +
         "mips=${view.mipRange.first}..${view.mipRange.last}," +

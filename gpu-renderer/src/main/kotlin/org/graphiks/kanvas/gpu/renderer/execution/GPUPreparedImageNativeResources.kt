@@ -16,8 +16,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureViewDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.preparedImageDescriptorHash
@@ -47,12 +47,12 @@ internal data class GPUPreparedImageNativeBindingKeys(
 )
 
 internal interface GPUPreparedImageNativeHandleFactory {
-    fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture
-    fun createTextureView(texture: GPUTexture, request: GPUPreparedImageFrameResourcePlan): GPUTextureView
+    fun createTexture(request: GPUImageFrameResourcePlan): GPUTexture
+    fun createTextureView(texture: GPUTexture, request: GPUImageFrameResourcePlan): GPUTextureView
     fun createSampler(descriptor: GPUSamplerDescriptor): GPUSampler
     fun createUniformBuffer(size: Long): GPUBuffer
     fun createBindGroup(
-        request: GPUPreparedImageBindingRequest,
+        request: GPUImageBindingRequest,
         uniformBuffer: GPUBuffer,
         textureView: GPUTextureView,
         sampler: GPUSampler,
@@ -67,7 +67,7 @@ internal interface GPUPreparedImageNativeResourceSet : AutoCloseable {
 }
 
 internal data class GPUPreparedImageNativePreflightRequest(
-    val resourcePlan: GPUPreparedImageFrameResourcePlan,
+    val resourcePlan: GPUImageFrameResourcePlan,
     val artifactKey: GPUImageUploadArtifactKey,
     val capabilities: GPUCapabilities,
     val expectedDeviceGeneration: Long,
@@ -254,7 +254,7 @@ internal object GPUPreparedImageNativeResourcePreflighter {
     }
 }
 
-internal fun GPUPreparedImageFrameResourcePlan.preparedImageNativeBindingKeys(
+internal fun GPUImageFrameResourcePlan.preparedImageNativeBindingKeys(
     deviceGeneration: Long,
 ): GPUPreparedImageNativeBindingKeys {
     require(deviceGeneration >= 0L)
@@ -391,7 +391,7 @@ private class GPUPreparedImageNativeResourceSetImpl(
     }
 }
 
-private fun GPUPreparedImageFrameResourcePlan.hasExactUploadLayout(): Boolean {
+private fun GPUImageFrameResourcePlan.hasExactUploadLayout(): Boolean {
     val expectedLogicalBytesPerRow =
         exactMultiplyOrNull(textureDescriptor.width.toLong(), 4L) ?: return false
     val expectedUploadBytes =
@@ -423,7 +423,7 @@ private fun GPUPreparedImageFrameResourcePlan.hasExactUploadLayout(): Boolean {
         uploadTaskLayout.byteSize == expectedUploadBytes
 }
 
-private fun GPUPreparedImageFrameResourcePlan.hasExactStagingPreparation(): Boolean {
+private fun GPUImageFrameResourcePlan.hasExactStagingPreparation(): Boolean {
     val staging = preparationRequests.singleOrNull { it.resource == stagingRef } ?: return false
     val descriptor = staging.descriptor as? GPUFrameBufferDescriptor ?: return false
     return staging.role == GPUFrameResourceRole.UploadStaging &&
@@ -434,7 +434,7 @@ private fun GPUPreparedImageFrameResourcePlan.hasExactStagingPreparation(): Bool
         descriptor.alignmentBytes == 4L
 }
 
-private fun GPUPreparedImageFrameResourcePlan.hasExactUniformPreparation(
+private fun GPUImageFrameResourcePlan.hasExactUniformPreparation(
     requiredAlignment: Long,
     expectedSize: Long,
 ): Boolean {
@@ -452,7 +452,7 @@ private fun GPUPreparedImageFrameResourcePlan.hasExactUniformPreparation(
 }
 
 private fun GPUFrameTextureDescriptor.matches(
-    plan: GPUPreparedImageFrameResourcePlan,
+    plan: GPUImageFrameResourcePlan,
 ): Boolean =
     logicalBounds.left == 0 &&
         logicalBounds.top == 0 &&
@@ -461,7 +461,7 @@ private fun GPUFrameTextureDescriptor.matches(
         format.value.equals(plan.textureDescriptor.format, ignoreCase = true) &&
         sampleCount == plan.textureDescriptor.sampleCount
 
-private fun GPUPreparedImageFrameResourcePlan.expectedUniformBufferSizeOrNull(): Long? {
+private fun GPUImageFrameResourcePlan.expectedUniformBufferSizeOrNull(): Long? {
     var maximum = 0L
     bindingRequests.forEach { binding ->
         val end = exactAddOrNull(
@@ -473,7 +473,7 @@ private fun GPUPreparedImageFrameResourcePlan.expectedUniformBufferSizeOrNull():
     return maximum
 }
 
-private fun GPUPreparedImageFrameResourcePlan.expectedTextureByteSizeOrNull(): Long? {
+private fun GPUImageFrameResourcePlan.expectedTextureByteSizeOrNull(): Long? {
     val pixels =
         exactMultiplyOrNull(textureDescriptor.width.toLong(), textureDescriptor.height.toLong())
             ?: return null

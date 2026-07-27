@@ -33,11 +33,11 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingInput
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingInput
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
-import org.graphiks.kanvas.gpu.renderer.resources.buildPreparedImageFrameResourcePlanFromBindings
+import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFromBindings
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
@@ -55,6 +55,12 @@ sealed interface GPUPreparedSurfaceFrameResult {
     data class Recorded(val taskList: GPUTaskList) : GPUPreparedSurfaceFrameResult
     data class Refused(val diagnostic: GPUDiagnostic) : GPUPreparedSurfaceFrameResult
 }
+
+/** Recording-owned association between task identity and a handle-free resource plan. */
+internal data class GPURecordedImageUpload(
+    val taskId: GPUTaskID,
+    val resources: GPUImageFrameResourcePlan,
+)
 
 /**
  * Builds a handle-free prepared frame while keeping semantic/resource authorities immutable.
@@ -205,7 +211,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 request.semanticsByCommandId.getValue(packet.commandIdValue)
                     as GPUDrawSemanticPayload.SampledImage
         }
-        val imagePlans = imageSemantics.values
+        val recordedImageUploads = imageSemantics.values
             .groupBy { semantic -> semantic.artifact.key }
             .toSortedMap(compareBy { key -> key.value })
             .values
@@ -217,24 +223,30 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         "One prepared-image artifact key must identify one exact immutable byte artifact.",
                     )
                 }
-                buildPreparedImageFrameResourcePlanFromBindings(
-                    artifact = artifact,
-                    bindingInputs = semantics.map { semantic ->
-                        GPUPreparedImageBindingInput(
-                            packetId = packetForSemantic(packets, semantic).packetId.value,
-                            sampling = semantic.sampling,
-                        )
-                    },
-                    bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
-                    capabilities = request.capabilities,
-                    frameIdentity = request.baseTaskList.frameId.value.toString(),
-                    uploadTaskId = GPUTaskID(
+                GPURecordedImageUpload(
+                    taskId = GPUTaskID(
                         "task.prepared-surface.image-upload.${request.baseTaskList.frameId.value}.$index",
+                    ),
+                    resources = buildImageFrameResourcePlanFromBindings(
+                        artifact = artifact,
+                        bindingInputs = semantics.map { semantic ->
+                            GPUImageBindingInput(
+                                packetId = packetForSemantic(packets, semantic).packetId.value,
+                                sampling = semantic.sampling,
+                            )
+                        },
+                        bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
+                        capabilities = request.capabilities,
+                        frameIdentity = request.baseTaskList.frameId.value.toString(),
                     ),
                 )
             }
+        val imagePlans = recordedImageUploads.map(GPURecordedImageUpload::resources)
         val imagePlanByArtifactKey = imagePlans.associateBy { plan ->
             plan.bindingRequests.first().artifactKey
+        }
+        val imageUploadByArtifactKey = recordedImageUploads.associateBy { upload ->
+            upload.resources.bindingRequests.first().artifactKey
         }
 
         val readbackRequest = request.readbackRequestId?.let { requestId ->
@@ -362,15 +374,16 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             phase = GPUTaskPhase.Prepare,
             requests = preparations,
         )
-        val uploads = imagePlans.map { plan ->
+        val uploads = recordedImageUploads.map { recordedUpload ->
+            val plan = recordedUpload.resources
             GPUTask.Upload(
-                taskId = plan.uploadTaskId,
+                taskId = recordedUpload.taskId,
                 recordingId = recordingId,
                 phase = GPUTaskPhase.Upload,
                 staging = plan.stagingRef,
                 destination = plan.frameTextureRef,
                 layout = plan.uploadTaskLayout,
-                preparedImagePlan = plan,
+                imageResourcePlan = plan,
             )
         }
         val baseRenderByPacketId = baseRenders.flatMap { render ->
@@ -476,7 +489,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             )
             render.drawPackets
                 .mapNotNull { packet -> packet.semanticPayload as? GPUDrawSemanticPayload.SampledImage }
-                .map { semantic -> imagePlanByArtifactKey.getValue(semantic.artifact.key).uploadTaskId }
+                .map { semantic -> imageUploadByArtifactKey.getValue(semantic.artifact.key).taskId }
                 .distinct()
                 .forEach { uploadTaskId ->
                     dependencies += dependency(

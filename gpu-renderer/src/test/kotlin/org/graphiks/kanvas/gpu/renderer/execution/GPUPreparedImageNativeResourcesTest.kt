@@ -28,28 +28,27 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
-import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingInput
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingInput
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
-import org.graphiks.kanvas.gpu.renderer.resources.buildPreparedImageFrameResourcePlanFromBindings
+import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFromBindings
 
 class GPUPreparedImageNativeResourcesTest {
     @Test
     fun `native keys split upload sampler binding and uniform offsets`() {
         val fixture = fixture(
             listOf(
-                GPUPreparedImageBindingInput("packet.nearest.a", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.nearest.b", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.nearest.a", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.nearest.b", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
             ),
         )
         val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
@@ -96,8 +95,8 @@ class GPUPreparedImageNativeResourcesTest {
     fun `same sampler shares binding key while uniforms keep distinct aligned offsets`() {
         val fixture = fixture(
             listOf(
-                GPUPreparedImageBindingInput("packet.tint.a", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.tint.b", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.tint.a", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.tint.b", GPUPreparedImageSampling.Nearest),
             ),
         )
         val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
@@ -118,7 +117,7 @@ class GPUPreparedImageNativeResourcesTest {
 
     @Test
     fun `device generation changes upload sampler and binding keys`() {
-        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val fixture = fixture(listOf(GPUImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
         val first = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
             GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
         )
@@ -141,7 +140,7 @@ class GPUPreparedImageNativeResourcesTest {
 
     @Test
     fun `all attachment usage limit owner and generation mismatches refuse before factory`() {
-        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val fixture = fixture(listOf(GPUImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
         val badUsage = fixture.plan.copy(
             textureDescriptor = fixture.plan.textureDescriptor.copy(usageLabels = setOf("copy_dst")),
         )
@@ -181,7 +180,7 @@ class GPUPreparedImageNativeResourcesTest {
     fun `foreign binding layout refuses before native handles`() {
         val fixture = fixture(
             bindings = listOf(
-                GPUPreparedImageBindingInput(
+                GPUImageBindingInput(
                     "packet.foreign-layout",
                     GPUPreparedImageSampling.Nearest,
                 ),
@@ -203,7 +202,7 @@ class GPUPreparedImageNativeResourcesTest {
     @Test
     fun `missing binding preserves canonical refusal through preflight`() {
         val fixture = fixture(
-            listOf(GPUPreparedImageBindingInput("packet.missing", GPUPreparedImageSampling.Nearest)),
+            listOf(GPUImageBindingInput("packet.missing", GPUPreparedImageSampling.Nearest)),
         )
 
         val result = GPUPreparedImageNativeResourcePreflighter.preflight(
@@ -221,7 +220,7 @@ class GPUPreparedImageNativeResourcesTest {
     @Test
     fun `incompatible copy row alignment refuses before native handles`() {
         val fixture = fixture(
-            listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)),
+            listOf(GPUImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)),
         )
         val factory = RecordingFactory()
 
@@ -242,7 +241,7 @@ class GPUPreparedImageNativeResourcesTest {
 
     @Test
     fun `seal refuses incoherent staging uniform limits and upload layout`() {
-        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val fixture = fixture(listOf(GPUImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
         val staging = fixture.plan.preparationRequests.single { it.resource == fixture.plan.stagingRef }
         val uniform = fixture.plan.preparationRequests.single { it.resource == fixture.plan.uniformRef }
         fun planWithPreparation(replacement: GPUResourcePreparationRequest) = fixture.plan.copy(
@@ -306,7 +305,7 @@ class GPUPreparedImageNativeResourcesTest {
 
     @Test
     fun `seal revalidates zero padding after adversarial payload corruption`() {
-        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val fixture = fixture(listOf(GPUImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
         val uploadBytesField = fixture.plan.uploadLayout.javaClass.getDeclaredField("uploadBytes")
         uploadBytesField.isAccessible = true
         val privateUploadBytes = uploadBytesField.get(fixture.plan.uploadLayout) as ByteArray
@@ -323,8 +322,8 @@ class GPUPreparedImageNativeResourcesTest {
     fun `seal refuses bindings whose texture views disagree`() {
         val fixture = fixture(
             listOf(
-                GPUPreparedImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
             ),
         )
         val changedBindings = fixture.plan.bindingRequests.mapIndexed { index, binding ->
@@ -348,8 +347,8 @@ class GPUPreparedImageNativeResourcesTest {
     fun `seal refuses a negative aligned dynamic uniform offset`() {
         val fixture = fixture(
             listOf(
-                GPUPreparedImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
             ),
         )
         val changedBindings = fixture.plan.bindingRequests.mapIndexed { index, binding ->
@@ -371,7 +370,7 @@ class GPUPreparedImageNativeResourcesTest {
 
     @Test
     fun `seal converts dynamic uniform range overflow into stable refusal`() {
-        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val fixture = fixture(listOf(GPUImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
         val overflowBinding = fixture.plan.bindingRequests.single().let { binding ->
             binding.copy(
                 uniformAllocation = binding.uniformAllocation.copy(
@@ -396,8 +395,8 @@ class GPUPreparedImageNativeResourcesTest {
     fun `seal refuses a common view whose texture descriptor hash is foreign`() {
         val fixture = fixture(
             listOf(
-                GPUPreparedImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.a", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.b", GPUPreparedImageSampling.Linear),
             ),
         )
         val changedBindings = fixture.plan.bindingRequests.map { binding ->
@@ -421,8 +420,8 @@ class GPUPreparedImageNativeResourcesTest {
     fun `partial factory failure closes every created handle once in reverse order`() {
         val fixture = fixture(
             listOf(
-                GPUPreparedImageBindingInput("packet.nearest", GPUPreparedImageSampling.Nearest),
-                GPUPreparedImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
+                GPUImageBindingInput("packet.nearest", GPUPreparedImageSampling.Nearest),
+                GPUImageBindingInput("packet.linear", GPUPreparedImageSampling.Linear),
             ),
         )
         val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
@@ -441,7 +440,7 @@ class GPUPreparedImageNativeResourcesTest {
 
     @Test
     fun `close failures aggregate in reverse order and a second close never retries handles`() {
-        val fixture = fixture(listOf(GPUPreparedImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
+        val fixture = fixture(listOf(GPUImageBindingInput("packet.image", GPUPreparedImageSampling.Nearest)))
         val seal = assertIs<GPUPreparedImageNativePreflightResult.Sealed>(
             GPUPreparedImageNativeResourcePreflighter.preflight(fixture.request),
         )
@@ -467,7 +466,7 @@ class GPUPreparedImageNativeResourcesTest {
     }
 
     private fun fixture(
-        bindings: List<GPUPreparedImageBindingInput>,
+        bindings: List<GPUImageBindingInput>,
         bindingLayoutHash: String =
             "prepared-image.group0.dynamic-uniform-texture-sampler.v1",
     ): Fixture {
@@ -488,13 +487,12 @@ class GPUPreparedImageNativeResourcesTest {
             ),
         ) as GPUPreparedImageArtifactResult.Ready).artifact
         val caps = capabilities()
-        val plan = buildPreparedImageFrameResourcePlanFromBindings(
+        val plan = buildImageFrameResourcePlanFromBindings(
             artifact = artifact,
             bindingInputs = bindings,
             bindingLayoutHash = bindingLayoutHash,
             capabilities = caps,
             frameIdentity = "frame.native-resources",
-            uploadTaskId = GPUTaskID("task.upload.image"),
         )
         return Fixture(
             artifact.key,
@@ -531,7 +529,7 @@ class GPUPreparedImageNativeResourcesTest {
 
     private data class Fixture(
         val artifactKey: GPUImageUploadArtifactKey,
-        val plan: GPUPreparedImageFrameResourcePlan,
+        val plan: GPUImageFrameResourcePlan,
         val request: GPUPreparedImageNativePreflightRequest,
     )
 
@@ -548,14 +546,14 @@ class GPUPreparedImageNativeResourcesTest {
         var bindGroupCreates = 0
         val createdLabels = mutableListOf<String>()
 
-        override fun createTexture(request: GPUPreparedImageFrameResourcePlan): GPUTexture {
+        override fun createTexture(request: GPUImageFrameResourcePlan): GPUTexture {
             textureCreates += 1
             return handle("texture")
         }
 
         override fun createTextureView(
             texture: GPUTexture,
-            request: GPUPreparedImageFrameResourcePlan,
+            request: GPUImageFrameResourcePlan,
         ): GPUTextureView {
             textureViewCreates += 1
             return handle("texture-view")
@@ -572,7 +570,7 @@ class GPUPreparedImageNativeResourcesTest {
         }
 
         override fun createBindGroup(
-            request: GPUPreparedImageBindingRequest,
+            request: GPUImageBindingRequest,
             uniformBuffer: GPUBuffer,
             textureView: GPUTextureView,
             sampler: GPUSampler,

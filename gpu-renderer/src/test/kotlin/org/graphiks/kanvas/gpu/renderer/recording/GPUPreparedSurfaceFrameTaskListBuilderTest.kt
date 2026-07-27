@@ -86,8 +86,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUploadLayout
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
@@ -257,7 +257,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         ).taskList
         val upload = taskList.tasks.filterIsInstance<GPUTask.Upload>().single()
         val planField = upload.javaClass.declaredFields.singleOrNull {
-            it.name == "preparedImagePlan"
+            it.name == "imageResourcePlan"
         }
         assertNotNull(planField, "Upload must retain its exact prepared-image resource plan")
         planField.isAccessible = true
@@ -396,11 +396,11 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         val framePlan = GPUFramePlanner.plan(taskList)
         val uploadStep = framePlan.steps.filterIsInstance<GPUFrameStep.UploadResourceStep>().single()
         val uploadPlanField = uploadStep.javaClass.declaredFields.singleOrNull {
-            it.name == "preparedImagePlan"
+            it.name == "imageResourcePlan"
         }
         assertNotNull(uploadPlanField, "Frame upload step must retain its prepared-image plan")
         uploadPlanField.isAccessible = true
-        assertSame(uploadTask.preparedImagePlan, uploadPlanField.get(uploadStep))
+        assertSame(uploadTask.imageResourcePlan, uploadPlanField.get(uploadStep))
         val renderStep = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
         val bindingsField = renderStep.javaClass.declaredFields.singleOrNull {
             it.name == "preparedImageBindingsByPacketId"
@@ -505,7 +505,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         val scopes = nominalScopes
         assertTrue(scopes.isEmpty(), "Early sampled-image refusal must not publish nominal scopes")
         val resource = requireNotNull(
-            taskList.tasks.filterIsInstance<GPUTask.Upload>().single().preparedImagePlan,
+            taskList.tasks.filterIsInstance<GPUTask.Upload>().single().imageResourcePlan,
         )
         val semantics = renderPackets.map { packet ->
             val nominal = assertIs<GPUDrawSemanticPayload.SampledImage>(packet.semanticPayload)
@@ -750,7 +750,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         val upload = framePlan.steps.filterIsInstance<GPUFrameStep.UploadResourceStep>().single()
         val packetId = render.drawPackets.single().packetId
         val binding = render.preparedImageBindingsByPacketId.getValue(packetId)
-        val resourcePlan = requireNotNull(upload.preparedImagePlan)
+        val resourcePlan = requireNotNull(upload.imageResourcePlan)
         val uploadBytes = resourcePlan.uploadLayout.bytesForUpload()
         val changedUploadBytes = uploadBytes.copyOf().also { bytes ->
             bytes[0] = (bytes[0].toInt() xor 0x7f).toByte()
@@ -1126,7 +1126,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
 
     private fun GPUTask.Render.rebuilt(
         preparedImageBindingsByPacketId:
-            Map<GPUDrawPacketID, org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest>,
+            Map<GPUDrawPacketID, org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest>,
     ) = GPUTask.Render(
         taskId = taskId,
         recordingId = recordingId,
@@ -1145,7 +1145,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
     )
 
     private fun GPUFrameStep.RenderPassStep.rebuilt(
-        preparedImageBindingsByPacketId: Map<GPUDrawPacketID, GPUPreparedImageBindingRequest>,
+        preparedImageBindingsByPacketId: Map<GPUDrawPacketID, GPUImageBindingRequest>,
         drawPackets: List<GPUDrawPacket> = this.drawPackets,
     ) = GPUFrameStep.RenderPassStep(
         target = target,
@@ -1160,16 +1160,16 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
     )
 
     private fun GPUFrameStep.UploadResourceStep.rebuilt(
-        preparedImagePlan: GPUPreparedImageFrameResourcePlan,
+        imageResourcePlan: GPUImageFrameResourcePlan,
     ) = GPUFrameStep.UploadResourceStep(
         staging = staging,
         destination = destination,
         layout = layout,
         sourceTaskIds = sourceTaskIds,
-        preparedImagePlan = preparedImagePlan,
+        imageResourcePlan = imageResourcePlan,
     )
 
-    private fun GPUPreparedImageFrameResourcePlan.rebuilt(
+    private fun GPUImageFrameResourcePlan.rebuilt(
         textureDescriptor:
             org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor = this.textureDescriptor,
         uploadLayout: GPUPreparedImageUploadLayout = this.uploadLayout,

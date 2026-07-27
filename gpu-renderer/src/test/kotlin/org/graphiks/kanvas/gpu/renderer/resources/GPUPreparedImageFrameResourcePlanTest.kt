@@ -18,7 +18,6 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProvenance
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
-import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 
 class GPUPreparedImageFrameResourcePlanTest {
     @Test
@@ -68,7 +67,6 @@ class GPUPreparedImageFrameResourcePlanTest {
             bindingLayoutHash = "texture-sampler-tint.v1",
             capabilities = capabilities(),
             frameIdentity = "frame-17",
-            uploadTaskId = GPUTaskID("task.image.upload"),
         )
 
         assertEquals(3, plan.uploadLayout.sourceBytesPerRow)
@@ -118,7 +116,6 @@ class GPUPreparedImageFrameResourcePlanTest {
             bindingLayoutHash = "texture-sampler-tint.v1",
             capabilities = capabilities(),
             frameIdentity = "frame-18",
-            uploadTaskId = GPUTaskID("task.image.upload"),
         )
 
         assertEquals(12, plan.uploadLayout.sourceBytesPerRow)
@@ -142,7 +139,6 @@ class GPUPreparedImageFrameResourcePlanTest {
             bindingLayoutHash = "texture-sampler-tint.v1",
             capabilities = capabilities(),
             frameIdentity = "frame-immutable",
-            uploadTaskId = GPUTaskID("task.image.upload"),
         )
         val originalBytes = plan.uploadLayout.bytesForUpload()
         val callerBytes = plan.uploadLayout.bytesForUpload().also { it[0] = 99 }
@@ -151,7 +147,7 @@ class GPUPreparedImageFrameResourcePlanTest {
         assertContentEquals(originalBytes, plan.uploadLayout.bytesForUpload())
         assertFails {
             @Suppress("UNCHECKED_CAST")
-            (plan.bindingRequests as MutableList<GPUPreparedImageBindingRequest>)[0] =
+            (plan.bindingRequests as MutableList<GPUImageBindingRequest>)[0] =
                 plan.bindingRequests.single().copy(packetId = "mutated")
         }
         assertFails {
@@ -179,7 +175,6 @@ class GPUPreparedImageFrameResourcePlanTest {
             bindingLayoutHash = "texture-sampler-tint.v1",
             capabilities = capabilities(),
             frameIdentity = "frame-data-class",
-            uploadTaskId = GPUTaskID("task.image.upload"),
         )
         val descriptorUsage = template.textureDescriptor.usageLabels.toMutableSet()
         val samplerRequirements = mutableSetOf("sampler.requirement")
@@ -207,7 +202,7 @@ class GPUPreparedImageFrameResourcePlanTest {
             }
         }.toMutableList()
         val callerAllocations = template.memoryAllocations.toMutableList()
-        val plan = GPUPreparedImageFrameResourcePlan(
+        val plan = GPUImageFrameResourcePlan(
             artifact = sourceArtifact,
             stagingRef = template.stagingRef,
             textureRef = template.textureRef,
@@ -227,7 +222,6 @@ class GPUPreparedImageFrameResourcePlanTest {
             bindingRequests = callerBindings,
             preparationRequests = callerPreparations,
             memoryAllocations = callerAllocations,
-            uploadTaskId = template.uploadTaskId,
         )
         val copied = plan.copy()
         val (
@@ -241,7 +235,10 @@ class GPUPreparedImageFrameResourcePlanTest {
             componentBindingRequests,
             componentPreparationRequests,
             componentMemoryAllocations,
-            componentUploadTaskId,
+            componentArtifactKey,
+            componentArtifactWidth,
+            componentArtifactHeight,
+            componentArtifactContentHash,
         ) = plan
 
         assertEquals(plan, copied)
@@ -251,7 +248,7 @@ class GPUPreparedImageFrameResourcePlanTest {
         assertEquals(sourceArtifact.contentHash, copied.artifactContentHash)
         assertEquals(plan.hashCode(), copied.hashCode())
         assertNotSame(plan, copied)
-        assertTrue(plan.toString().startsWith("GPUPreparedImageFrameResourcePlan("))
+        assertTrue(plan.toString().startsWith("GPUImageFrameResourcePlan("))
         assertEquals(
             listOf(
                 plan.stagingRef,
@@ -264,7 +261,10 @@ class GPUPreparedImageFrameResourcePlanTest {
                 plan.bindingRequests,
                 plan.preparationRequests,
                 plan.memoryAllocations,
-                plan.uploadTaskId,
+                plan.artifactKey,
+                plan.artifactWidth,
+                plan.artifactHeight,
+                plan.artifactContentHash,
             ),
             listOf(
                 componentStagingRef,
@@ -277,7 +277,10 @@ class GPUPreparedImageFrameResourcePlanTest {
                 componentBindingRequests,
                 componentPreparationRequests,
                 componentMemoryAllocations,
-                componentUploadTaskId,
+                componentArtifactKey,
+                componentArtifactWidth,
+                componentArtifactHeight,
+                componentArtifactContentHash,
             ),
         )
 

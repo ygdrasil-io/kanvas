@@ -42,8 +42,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageBindingRequest
-import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
@@ -735,7 +735,7 @@ sealed interface GPUTask {
         override val compositeMembership: GPUTaskCompositeMembership? = null,
         val depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = null,
         preparedImageBindingsByPacketId:
-            Map<GPUDrawPacketID, GPUPreparedImageBindingRequest> = emptyMap(),
+            Map<GPUDrawPacketID, GPUImageBindingRequest> = emptyMap(),
     ) : GPUTask {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -749,7 +749,7 @@ sealed interface GPUTask {
         val frameProvenanceByPacketId: Map<GPUDrawPacketID, GPUFrameProvenance> =
             immutableMap(drawPackets.associate { packet -> packet.packetId to packet.frameProvenance })
         val preparedImageBindingsByPacketId:
-            Map<GPUDrawPacketID, GPUPreparedImageBindingRequest> =
+            Map<GPUDrawPacketID, GPUImageBindingRequest> =
             immutableMap(preparedImageBindingsByPacketId)
 
         init {
@@ -818,15 +818,15 @@ sealed interface GPUTask {
         val staging: GPUFrameBufferRef,
         val destination: GPUFrameResourceRef,
         val layout: GPUUploadLayout,
-        val preparedImagePlan: GPUPreparedImageFrameResourcePlan? = null,
+        val imageResourcePlan: GPUImageFrameResourcePlan? = null,
         val destinationKind: GPUUploadDestinationKind =
-            if (preparedImagePlan == null) GPUUploadDestinationKind.Buffer else GPUUploadDestinationKind.Texture,
+            if (imageResourcePlan == null) GPUUploadDestinationKind.Buffer else GPUUploadDestinationKind.Texture,
     ) : GPUTask {
         init {
-            require((preparedImagePlan != null) == (destinationKind == GPUUploadDestinationKind.Texture)) {
+            require((imageResourcePlan != null) == (destinationKind == GPUUploadDestinationKind.Texture)) {
                 "Texture uploads require an exact prepared-image plan; buffer uploads forbid one"
             }
-            preparedImagePlan?.let { plan ->
+            imageResourcePlan?.let { plan ->
                 require(staging == plan.stagingRef &&
                     destination == plan.frameTextureRef &&
                     layout == plan.uploadTaskLayout
