@@ -113,6 +113,17 @@ class GPUPreparedDrawImageLowererTest {
         clip = ClipStack.WideOpen,
     )
 
+    private fun assertPositions(
+        expected: List<Pair<Float, Float>>,
+        actual: List<Pair<Float, Float>>,
+    ) {
+        assertEquals(expected.size, actual.size)
+        expected.zip(actual).forEachIndexed { index, (want, got) ->
+            assertEquals(want.first, got.first, 0.0001f, "x at vertex $index")
+            assertEquals(want.second, got.second, 0.0001f, "y at vertex $index")
+        }
+    }
+
     @Test
     fun `snapshot of pixels before mutation by caller`() {
         val image = rgbaImage()
@@ -167,6 +178,60 @@ class GPUPreparedDrawImageLowererTest {
         val key1 = result1.command.preparedImage!!.artifact.key
         val key2 = result2.command.preparedImage!!.artifact.key
         assertEquals(key1, key2)
+    }
+
+    @Test
+    fun `RGBA command keeps logical premul facts while artifact owns straight upload bytes`() {
+        val image = rgbaImage(r = 64, g = 32, b = 16, a = 128)
+        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+            GPUPreparedDrawImageLowerer.lower(
+                drawImage(image),
+                GPUDrawCommandID(0),
+                0,
+                GPUFrameProvenance.None,
+                target(),
+                RenderConfig.DEFAULT,
+                capabilities(),
+            ),
+        )
+
+        val normalized = assertIs<NormalizedDrawCommand.DrawImageRect>(result.command.normalized)
+        val artifact = result.command.preparedImage!!.artifact
+        assertEquals("RGBA8Unorm", normalized.pixelsFormat)
+        assertEquals("Premul", normalized.pixelsAlphaType)
+        assertEquals("srgb", normalized.pixelsColorProfileLabel)
+        assertEquals(artifact.contentHash, normalized.pixelsContentHash)
+        assertEquals("prepared-surface-artifact", normalized.pixelsProvenance)
+        assertContentEquals(
+            byteArrayOf(128.toByte(), 64, 32, 128.toByte()),
+            artifact.tightRgba8BytesForUpload().copyOfRange(0, 4),
+        )
+    }
+
+    @Test
+    fun `A8 command keeps logical facts while artifact owns linear coverage bytes`() {
+        val image = a8Image(alpha = 200)
+        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+            GPUPreparedDrawImageLowerer.lower(
+                drawImage(image),
+                GPUDrawCommandID(0),
+                0,
+                GPUFrameProvenance.None,
+                target(),
+                RenderConfig.DEFAULT,
+                capabilities(),
+            ),
+        )
+
+        val normalized = assertIs<NormalizedDrawCommand.DrawImageRect>(result.command.normalized)
+        val artifact = result.command.preparedImage!!.artifact
+        assertEquals("RGBA8Unorm", normalized.pixelsFormat)
+        assertEquals("Premul", normalized.pixelsAlphaType)
+        assertTrue(artifact.alphaOnly)
+        assertContentEquals(
+            byteArrayOf(200.toByte(), 200.toByte(), 200.toByte(), 200.toByte()),
+            artifact.tightRgba8BytesForUpload().copyOfRange(0, 4),
+        )
     }
 
     @Test
@@ -317,7 +382,10 @@ class GPUPreparedDrawImageLowererTest {
             ),
         )
         val geometry = result.command.preparedImage!!.geometry
-        assertEquals(4, geometry.vertices.size)
+        assertPositions(
+            listOf(0f to 0f, 0f to 10f, -10f to 10f, -10f to 0f),
+            geometry.vertices.map { it.x to it.y },
+        )
     }
 
     @Test
@@ -337,7 +405,10 @@ class GPUPreparedDrawImageLowererTest {
             ),
         )
         val geometry = result.command.preparedImage!!.geometry
-        assertEquals(4, geometry.vertices.size)
+        assertPositions(
+            listOf(-1f to 2f, -5f to 2f, -5f to 8f, -1f to 8f),
+            geometry.vertices.map { it.x to it.y },
+        )
     }
 
     @Test
@@ -358,7 +429,34 @@ class GPUPreparedDrawImageLowererTest {
         )
         val geometry = result.command.preparedImage!!.geometry
         assertEquals(GPUPreparedImageGeometryClass.Quad, geometry.geometryClass)
-        assertEquals(4, geometry.vertices.size)
+        assertPositions(
+            listOf(15f to 10f, 35f to 10f, 45f to 30f, 25f to 30f),
+            geometry.vertices.map { it.x to it.y },
+        )
+    }
+
+    @Test
+    fun `composed transform order is scale then rotation then translation`() {
+        val image = rgbaImage(width = 2, height = 2)
+        val dst = Rect.fromLTRB(1f, 2f, 3f, 4f)
+        val transform =
+            Matrix33.translate(10f, 20f) * Matrix33.rotate(90f) * Matrix33.scale(2f, 3f)
+        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+            GPUPreparedDrawImageLowerer.lower(
+                drawImage(image, dst = dst, transform = transform),
+                GPUDrawCommandID(0),
+                0,
+                GPUFrameProvenance.None,
+                target(),
+                RenderConfig.DEFAULT,
+                capabilities(),
+            ),
+        )
+
+        assertPositions(
+            listOf(4f to 22f, 4f to 26f, -2f to 26f, -2f to 22f),
+            result.command.preparedImage!!.geometry.vertices.map { it.x to it.y },
+        )
     }
 
     @Test
@@ -579,6 +677,7 @@ class GPUPreparedDrawImageLowererTest {
             ),
         )
         assertEquals(provenance, result.command.provenance)
+        assertEquals(provenance, result.command.normalized.source.frameProvenance)
     }
 
     @Test

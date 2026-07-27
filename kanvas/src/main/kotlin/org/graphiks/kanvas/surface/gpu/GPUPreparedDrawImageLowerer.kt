@@ -48,6 +48,14 @@ import org.graphiks.kanvas.types.r
 import kotlin.math.max
 import kotlin.math.min
 
+/**
+ * Physical prepared-image authority attached to the logical normalized image command.
+ *
+ * [NormalizedDrawCommand.DrawImageRect] keeps the analysis-facing decoded-pixel contract
+ * (`RGBA8Unorm`, sRGB profile, premultiplied alpha). The artifact below separately owns the
+ * physical upload contract: straight encoded sRGB in `RGBA8UnormSrgb` for color images, or
+ * linear `RGBA8Unorm` coverage for A8 images.
+ */
 data class GPUPreparedImageDrawFacts(
     val artifact: GPUPreparedImageUploadArtifact,
     val sampling: GPUPreparedImageSampling,
@@ -73,8 +81,7 @@ internal object GPUPreparedDrawImageLowerer {
     ): GPUPreparedDrawImageLowering {
         val image = operation.image
 
-        val pixels = image.pixels?.copyOf()
-        if (pixels == null && image.width > 0 && image.height > 0) {
+        if (image.pixels == null && image.width > 0 && image.height > 0) {
             return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.PIXELS_MISSING,
                 mapOf(
@@ -261,7 +268,11 @@ internal object GPUPreparedDrawImageLowerer {
                 dependsOnDestination = false,
                 requiresBarrier = false,
             ),
-            source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawImage"),
+            source = GPUCommandSource(
+                adapter = "kanvas-surface",
+                operation = "drawImage",
+                frameProvenance = provenance,
+            ),
             blend = blendFacts,
             samplingFilterMode = samplingFilterMode,
             pixelsWidth = artifact.width,
