@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.commands
 
+import java.security.MessageDigest
 import java.util.Collections
+import java.util.IdentityHashMap
 import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
 import org.graphiks.kanvas.glyph.gpu.GPUColorGlyphLayerPlan
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
@@ -188,9 +190,17 @@ enum class GPUPreparedMaterialUnsupportedReason(
         "unsupported.material.mapping.shader_graph_cycle",
         "Prepared mapping refuses a cyclic shader graph",
     ),
+    SHADER_GRAPH_DEPTH(
+        "unsupported.material.mapping.shader_graph_depth",
+        "Prepared mapping refuses a shader graph beyond its active-depth safety budget",
+    ),
     COLOR_FILTER_GRAPH_CYCLE(
         "unsupported.material.mapping.color_filter_graph_cycle",
         "Prepared mapping refuses a cyclic color-filter graph",
+    ),
+    COLOR_FILTER_GRAPH_DEPTH(
+        "unsupported.material.mapping.color_filter_graph_depth",
+        "Prepared mapping refuses a color-filter graph beyond its active-depth safety budget",
     ),
     LOCAL_MATRIX(
         "unsupported.material.mapping.local_matrix",
@@ -552,18 +562,26 @@ sealed interface GPUMaterialDescriptor {
      * compatibility facade (see AGENTS.md); real GPU support is gated by
      * KGPU-M11-008.
      */
-    class RuntimeEffect(
+    class RuntimeEffect private constructor(
         val effectId: String = "",
         val descriptorVersion: Int = 1,
-        uniforms: Map<String, GPURuntimeEffectUniformValue> = emptyMap(),
-        children: Map<String, GPUMaterialDescriptor> = emptyMap(),
+        private val uniformSnapshot: LinkedHashMap<String, GPURuntimeEffectUniformValue>,
+        private val childSnapshot: LinkedHashMap<String, GPUMaterialDescriptor>,
+        @Suppress("UNUSED_PARAMETER")
+        snapshotToken: GPUMaterialDescriptorSnapshotToken,
     ) : GPUMaterialDescriptor {
-        private val uniformSnapshot =
-            LinkedHashMap(uniforms)
-        private val childSnapshot =
-            LinkedHashMap(
-                children.mapValues { (_, child) -> child.deepSnapshot() },
-            )
+        constructor(
+            effectId: String = "",
+            descriptorVersion: Int = 1,
+            uniforms: Map<String, GPURuntimeEffectUniformValue> = emptyMap(),
+            children: Map<String, GPUMaterialDescriptor> = emptyMap(),
+        ) : this(
+            effectId = effectId,
+            descriptorVersion = descriptorVersion,
+            uniformSnapshot = LinkedHashMap(uniforms),
+            childSnapshot = children.deepSnapshotMap(),
+            snapshotToken = GPUMaterialDescriptorSnapshotToken,
+        )
 
         val uniforms: Map<String, GPURuntimeEffectUniformValue>
             get() = Collections.unmodifiableMap(LinkedHashMap(uniformSnapshot))
@@ -576,8 +594,8 @@ sealed interface GPUMaterialDescriptor {
         fun copy(
             effectId: String = this.effectId,
             descriptorVersion: Int = this.descriptorVersion,
-            uniforms: Map<String, GPURuntimeEffectUniformValue> = this.uniforms,
-            children: Map<String, GPUMaterialDescriptor> = this.children,
+            uniforms: Map<String, GPURuntimeEffectUniformValue> = uniformSnapshot,
+            children: Map<String, GPUMaterialDescriptor> = childSnapshot,
         ): RuntimeEffect =
             RuntimeEffect(effectId, descriptorVersion, uniforms, children)
 
@@ -589,42 +607,65 @@ sealed interface GPUMaterialDescriptor {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other !is RuntimeEffect) return false
-            if (
-                effectId != other.effectId ||
-                descriptorVersion != other.descriptorVersion ||
-                uniformSnapshot != other.uniformSnapshot ||
-                childSnapshot.keys != other.childSnapshot.keys
-            ) {
-                return false
-            }
-            return childSnapshot.all { (name, child) ->
-                child.deepEquals(other.childSnapshot.getValue(name))
-            }
+            return GPUMaterialDescriptorEquality().equal(this, other)
         }
 
-        override fun hashCode(): Int {
+        override fun hashCode(): Int =
+            GPUMaterialDescriptorHasher().hash(this)
+
+        override fun toString(): String =
+            GPUMaterialDescriptorCanonicalizer().text(this)
+
+        internal fun valueEqualsWith(
+            other: RuntimeEffect,
+            equalChild: (GPUMaterialDescriptor, GPUMaterialDescriptor) -> Boolean,
+        ): Boolean =
+            effectId == other.effectId &&
+                descriptorVersion == other.descriptorVersion &&
+                uniformSnapshot == other.uniformSnapshot &&
+                childSnapshot.keys == other.childSnapshot.keys &&
+                childSnapshot.all { (name, child) ->
+                    equalChild(child, other.childSnapshot.getValue(name))
+                }
+
+        internal fun valueHashWith(
+            hashChild: (GPUMaterialDescriptor) -> Int,
+        ): Int {
             var result = effectId.hashCode()
             result = 31 * result + descriptorVersion
             result = 31 * result + uniformSnapshot.hashCode()
             result = 31 * result + childSnapshot.entries.sumOf { (name, child) ->
-                name.hashCode() xor child.deepHashCode()
+                name.hashCode() xor hashChild(child)
             }
             return result
         }
 
-        override fun toString(): String =
+        internal fun canonicalTextWith(
+            childIdentity: (GPUMaterialDescriptor) -> String,
+        ): String =
             "RuntimeEffect(" +
-                "effectId=$effectId, " +
+                "effectId=${effectId.canonicalValue()}, " +
                 "descriptorVersion=$descriptorVersion, " +
-                "uniforms=${uniformSnapshot.deterministicUniformString()}, " +
-                "children=${childSnapshot.deterministicChildString()}" +
+                "uniforms=${uniformSnapshot.canonicalUniformString()}, " +
+                "children=${childSnapshot.canonicalChildIdentityString(childIdentity)}" +
                 ")"
+
+        internal fun snapshotWith(
+            snapshotChild: (GPUMaterialDescriptor) -> GPUMaterialDescriptor,
+        ): RuntimeEffect =
+            RuntimeEffect(
+                effectId = effectId,
+                descriptorVersion = descriptorVersion,
+                uniformSnapshot = LinkedHashMap(uniformSnapshot),
+                childSnapshot = LinkedHashMap(
+                    childSnapshot.mapValues { (_, child) -> snapshotChild(child) },
+                ),
+                snapshotToken = GPUMaterialDescriptorSnapshotToken,
+            )
 
         private fun immutableChildSnapshot(): Map<String, GPUMaterialDescriptor> =
             Collections.unmodifiableMap(
-                LinkedHashMap(
-                    childSnapshot.mapValues { (_, child) -> child.deepSnapshot() },
-                ),
+                childSnapshot.deepSnapshotMap(),
             )
     }
 
@@ -645,13 +686,103 @@ sealed interface GPUMaterialDescriptor {
      * [source] retains an exactly mapped base when one exists; it is evidence
      * only and is never compiled as a substitute for the refused operation.
      */
-    data class Unsupported(
+    class Unsupported private constructor(
         val reason: GPUPreparedMaterialUnsupportedReason,
         val originalKind: GPUMaterialKind,
-        val source: GPUMaterialDescriptor? = null,
-        val evidence: GPUPreparedMaterialUnsupportedEvidence? = null,
+        private val sourceSnapshot: GPUMaterialDescriptor?,
+        private val evidenceSnapshot: GPUPreparedMaterialUnsupportedEvidence?,
+        @Suppress("UNUSED_PARAMETER")
+        snapshotToken: GPUMaterialDescriptorSnapshotToken,
     ) : GPUMaterialDescriptor {
+        constructor(
+            reason: GPUPreparedMaterialUnsupportedReason,
+            originalKind: GPUMaterialKind,
+            source: GPUMaterialDescriptor? = null,
+            evidence: GPUPreparedMaterialUnsupportedEvidence? = null,
+        ) : this(
+            reason = reason,
+            originalKind = originalKind,
+            sourceSnapshot = source?.deepSnapshot(),
+            evidenceSnapshot = evidence?.deepSnapshot(),
+            snapshotToken = GPUMaterialDescriptorSnapshotToken,
+        )
+
+        val source: GPUMaterialDescriptor?
+            get() = sourceSnapshot?.deepSnapshot()
+
+        val evidence: GPUPreparedMaterialUnsupportedEvidence?
+            get() = evidenceSnapshot?.deepSnapshot()
+
         override val kind: GPUMaterialKind = originalKind
+
+        fun copy(
+            reason: GPUPreparedMaterialUnsupportedReason = this.reason,
+            originalKind: GPUMaterialKind = this.originalKind,
+            source: GPUMaterialDescriptor? = sourceSnapshot,
+            evidence: GPUPreparedMaterialUnsupportedEvidence? = evidenceSnapshot,
+        ): Unsupported =
+            Unsupported(reason, originalKind, source, evidence)
+
+        operator fun component1(): GPUPreparedMaterialUnsupportedReason = reason
+        operator fun component2(): GPUMaterialKind = originalKind
+        operator fun component3(): GPUMaterialDescriptor? = source
+        operator fun component4(): GPUPreparedMaterialUnsupportedEvidence? = evidence
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Unsupported) return false
+            return GPUMaterialDescriptorEquality().equal(this, other)
+        }
+
+        override fun hashCode(): Int =
+            GPUMaterialDescriptorHasher().hash(this)
+
+        override fun toString(): String =
+            GPUMaterialDescriptorCanonicalizer().text(this)
+
+        internal fun valueEqualsWith(
+            other: Unsupported,
+            equalChild: (GPUMaterialDescriptor, GPUMaterialDescriptor) -> Boolean,
+        ): Boolean =
+            reason == other.reason &&
+                originalKind == other.originalKind &&
+                when {
+                    sourceSnapshot == null -> other.sourceSnapshot == null
+                    other.sourceSnapshot == null -> false
+                    else -> equalChild(sourceSnapshot, other.sourceSnapshot)
+                } &&
+                evidenceSnapshot == other.evidenceSnapshot
+
+        internal fun valueHashWith(
+            hashChild: (GPUMaterialDescriptor) -> Int,
+        ): Int {
+            var result = reason.hashCode()
+            result = 31 * result + originalKind.hashCode()
+            result = 31 * result + (sourceSnapshot?.let(hashChild) ?: 0)
+            result = 31 * result + (evidenceSnapshot?.hashCode() ?: 0)
+            return result
+        }
+
+        internal fun canonicalTextWith(
+            childIdentity: (GPUMaterialDescriptor) -> String,
+        ): String =
+            "Unsupported(" +
+                "reason=$reason, " +
+                "originalKind=$originalKind, " +
+                "source=${sourceSnapshot?.let(childIdentity)}, " +
+                "evidence=${evidenceSnapshot?.canonicalString()}" +
+                ")"
+
+        internal fun snapshotWith(
+            snapshotChild: (GPUMaterialDescriptor) -> GPUMaterialDescriptor,
+        ): Unsupported =
+            Unsupported(
+                reason = reason,
+                originalKind = originalKind,
+                sourceSnapshot = sourceSnapshot?.let(snapshotChild),
+                evidenceSnapshot = evidenceSnapshot?.deepSnapshot(),
+                snapshotToken = GPUMaterialDescriptorSnapshotToken,
+            )
     }
 }
 
@@ -707,144 +838,308 @@ sealed interface GPUPreparedMaterialUnsupportedEvidence {
     }
 }
 
+private object GPUMaterialDescriptorSnapshotToken
+
 private fun GPUMaterialDescriptor.deepSnapshot(): GPUMaterialDescriptor =
-    when (this) {
-        is GPUMaterialDescriptor.SolidColor -> copy()
-        is GPUMaterialDescriptor.LinearGradient -> copy(
-            allStopPositions = allStopPositions?.copyOf(),
-            allStopColors = allStopColors?.copyOf(),
-        )
-        is GPUMaterialDescriptor.RadialGradient -> copy(
-            allStopPositions = allStopPositions?.copyOf(),
-            allStopColors = allStopColors?.copyOf(),
-        )
-        is GPUMaterialDescriptor.SweepGradient -> copy(
-            allStopPositions = allStopPositions?.copyOf(),
-            allStopColors = allStopColors?.copyOf(),
-        )
-        is GPUMaterialDescriptor.ConicalGradient -> copy(
-            allStopPositions = allStopPositions?.copyOf(),
-            allStopColors = allStopColors?.copyOf(),
-        )
-        is GPUMaterialDescriptor.ImageDraw -> copy(rgbaPixels = rgbaPixels.copyOf())
-        is GPUMaterialDescriptor.RuntimeEffect ->
-            GPUMaterialDescriptor.RuntimeEffect(
-                effectId = effectId,
-                descriptorVersion = descriptorVersion,
-                uniforms = uniforms,
-                children = children,
+    GPUMaterialDescriptorSnapshotter().snapshot(this)
+
+private fun Map<String, GPUMaterialDescriptor>.deepSnapshotMap():
+    LinkedHashMap<String, GPUMaterialDescriptor> {
+    val snapshotter = GPUMaterialDescriptorSnapshotter()
+    return LinkedHashMap<String, GPUMaterialDescriptor>().also { result ->
+        forEach { (name, child) ->
+            result[name] = snapshotter.snapshot(child)
+        }
+    }
+}
+
+private class GPUMaterialDescriptorSnapshotter {
+    private val snapshots =
+        IdentityHashMap<GPUMaterialDescriptor, GPUMaterialDescriptor>()
+
+    fun snapshot(descriptor: GPUMaterialDescriptor): GPUMaterialDescriptor {
+        snapshots[descriptor]?.let { return it }
+        val result = when (descriptor) {
+            is GPUMaterialDescriptor.SolidColor -> descriptor.copy()
+            is GPUMaterialDescriptor.LinearGradient -> descriptor.copy(
+                allStopPositions = descriptor.allStopPositions?.copyOf(),
+                allStopColors = descriptor.allStopColors?.copyOf(),
             )
-        is GPUMaterialDescriptor.BlendShader -> copy(
-            dst = dst.deepSnapshot(),
-            src = src.deepSnapshot(),
-            uniformBytes = uniformBytes.copyOf(),
-        )
-        is GPUMaterialDescriptor.Unsupported -> copy(
-            source = source?.deepSnapshot(),
-            evidence = evidence?.deepSnapshot(),
-        )
-    }
-
-private fun GPUMaterialDescriptor.deepEquals(other: GPUMaterialDescriptor): Boolean =
-    when {
-        this is GPUMaterialDescriptor.SolidColor && other is GPUMaterialDescriptor.SolidColor ->
-            this == other
-        this is GPUMaterialDescriptor.LinearGradient && other is GPUMaterialDescriptor.LinearGradient ->
-            copy(allStopPositions = null, allStopColors = null) ==
-                other.copy(allStopPositions = null, allStopColors = null) &&
-                allStopPositions.contentEqualsNullable(other.allStopPositions) &&
-                allStopColors.contentEqualsNullable(other.allStopColors)
-        this is GPUMaterialDescriptor.RadialGradient && other is GPUMaterialDescriptor.RadialGradient ->
-            copy(allStopPositions = null, allStopColors = null) ==
-                other.copy(allStopPositions = null, allStopColors = null) &&
-                allStopPositions.contentEqualsNullable(other.allStopPositions) &&
-                allStopColors.contentEqualsNullable(other.allStopColors)
-        this is GPUMaterialDescriptor.SweepGradient && other is GPUMaterialDescriptor.SweepGradient ->
-            copy(allStopPositions = null, allStopColors = null) ==
-                other.copy(allStopPositions = null, allStopColors = null) &&
-                allStopPositions.contentEqualsNullable(other.allStopPositions) &&
-                allStopColors.contentEqualsNullable(other.allStopColors)
-        this is GPUMaterialDescriptor.ConicalGradient && other is GPUMaterialDescriptor.ConicalGradient ->
-            copy(allStopPositions = null, allStopColors = null) ==
-                other.copy(allStopPositions = null, allStopColors = null) &&
-                allStopPositions.contentEqualsNullable(other.allStopPositions) &&
-                allStopColors.contentEqualsNullable(other.allStopColors)
-        this is GPUMaterialDescriptor.ImageDraw && other is GPUMaterialDescriptor.ImageDraw ->
-            copy(rgbaPixels = DEEP_COMPARE_EMPTY_BYTES) ==
-                other.copy(rgbaPixels = DEEP_COMPARE_EMPTY_BYTES) &&
-                rgbaPixels.contentEquals(other.rgbaPixels)
-        this is GPUMaterialDescriptor.RuntimeEffect && other is GPUMaterialDescriptor.RuntimeEffect ->
-            this == other
-        this is GPUMaterialDescriptor.BlendShader && other is GPUMaterialDescriptor.BlendShader ->
-            mode == other.mode &&
-                wgslCombined == other.wgslCombined &&
-                uniformBytes.contentEquals(other.uniformBytes) &&
-                dst.deepEquals(other.dst) &&
-                src.deepEquals(other.src)
-        this is GPUMaterialDescriptor.Unsupported && other is GPUMaterialDescriptor.Unsupported ->
-            reason == other.reason &&
-                originalKind == other.originalKind &&
-                source.deepEqualsNullable(other.source) &&
-                evidence == other.evidence
-        else -> false
-    }
-
-private fun GPUMaterialDescriptor.deepHashCode(): Int =
-    when (this) {
-        is GPUMaterialDescriptor.SolidColor -> hashCode()
-        is GPUMaterialDescriptor.LinearGradient ->
-            31 * (
-                31 * copy(allStopPositions = null, allStopColors = null).hashCode() +
-                    (allStopPositions?.contentHashCode() ?: 0)
-                ) + (allStopColors?.contentHashCode() ?: 0)
-        is GPUMaterialDescriptor.RadialGradient ->
-            31 * (
-                31 * copy(allStopPositions = null, allStopColors = null).hashCode() +
-                    (allStopPositions?.contentHashCode() ?: 0)
-                ) + (allStopColors?.contentHashCode() ?: 0)
-        is GPUMaterialDescriptor.SweepGradient ->
-            31 * (
-                31 * copy(allStopPositions = null, allStopColors = null).hashCode() +
-                    (allStopPositions?.contentHashCode() ?: 0)
-                ) + (allStopColors?.contentHashCode() ?: 0)
-        is GPUMaterialDescriptor.ConicalGradient ->
-            31 * (
-                31 * copy(allStopPositions = null, allStopColors = null).hashCode() +
-                    (allStopPositions?.contentHashCode() ?: 0)
-                ) + (allStopColors?.contentHashCode() ?: 0)
-        is GPUMaterialDescriptor.ImageDraw ->
-            31 * copy(rgbaPixels = DEEP_COMPARE_EMPTY_BYTES).hashCode() +
-                rgbaPixels.contentHashCode()
-        is GPUMaterialDescriptor.RuntimeEffect -> hashCode()
-        is GPUMaterialDescriptor.BlendShader -> {
-            var result = mode.hashCode()
-            result = 31 * result + dst.deepHashCode()
-            result = 31 * result + src.deepHashCode()
-            result = 31 * result + wgslCombined.hashCode()
-            result = 31 * result + uniformBytes.contentHashCode()
-            result
+            is GPUMaterialDescriptor.RadialGradient -> descriptor.copy(
+                allStopPositions = descriptor.allStopPositions?.copyOf(),
+                allStopColors = descriptor.allStopColors?.copyOf(),
+            )
+            is GPUMaterialDescriptor.SweepGradient -> descriptor.copy(
+                allStopPositions = descriptor.allStopPositions?.copyOf(),
+                allStopColors = descriptor.allStopColors?.copyOf(),
+            )
+            is GPUMaterialDescriptor.ConicalGradient -> descriptor.copy(
+                allStopPositions = descriptor.allStopPositions?.copyOf(),
+                allStopColors = descriptor.allStopColors?.copyOf(),
+            )
+            is GPUMaterialDescriptor.ImageDraw ->
+                descriptor.copy(rgbaPixels = descriptor.rgbaPixels.copyOf())
+            is GPUMaterialDescriptor.RuntimeEffect ->
+                descriptor.snapshotWith(::snapshot)
+            is GPUMaterialDescriptor.BlendShader -> descriptor.copy(
+                dst = snapshot(descriptor.dst),
+                src = snapshot(descriptor.src),
+                uniformBytes = descriptor.uniformBytes.copyOf(),
+            )
+            is GPUMaterialDescriptor.Unsupported ->
+                descriptor.snapshotWith(::snapshot)
         }
-        is GPUMaterialDescriptor.Unsupported -> {
-            var result = reason.hashCode()
-            result = 31 * result + originalKind.hashCode()
-            result = 31 * result + (source?.deepHashCode() ?: 0)
-            result = 31 * result + (evidence?.hashCode() ?: 0)
-            result
-        }
+        snapshots[descriptor] = result
+        return result
     }
+}
+
+private class GPUMaterialDescriptorEquality {
+    private val results =
+        IdentityHashMap<
+            GPUMaterialDescriptor,
+            IdentityHashMap<GPUMaterialDescriptor, Boolean>,
+            >()
+
+    fun equal(
+        left: GPUMaterialDescriptor,
+        right: GPUMaterialDescriptor,
+    ): Boolean {
+        if (left === right) return true
+        results[left]?.get(right)?.let { return it }
+        val result = when {
+            left is GPUMaterialDescriptor.SolidColor &&
+                right is GPUMaterialDescriptor.SolidColor ->
+                left == right
+            left is GPUMaterialDescriptor.LinearGradient &&
+                right is GPUMaterialDescriptor.LinearGradient ->
+                left.copy(allStopPositions = null, allStopColors = null) ==
+                    right.copy(allStopPositions = null, allStopColors = null) &&
+                    left.allStopPositions.contentEqualsNullable(right.allStopPositions) &&
+                    left.allStopColors.contentEqualsNullable(right.allStopColors)
+            left is GPUMaterialDescriptor.RadialGradient &&
+                right is GPUMaterialDescriptor.RadialGradient ->
+                left.copy(allStopPositions = null, allStopColors = null) ==
+                    right.copy(allStopPositions = null, allStopColors = null) &&
+                    left.allStopPositions.contentEqualsNullable(right.allStopPositions) &&
+                    left.allStopColors.contentEqualsNullable(right.allStopColors)
+            left is GPUMaterialDescriptor.SweepGradient &&
+                right is GPUMaterialDescriptor.SweepGradient ->
+                left.copy(allStopPositions = null, allStopColors = null) ==
+                    right.copy(allStopPositions = null, allStopColors = null) &&
+                    left.allStopPositions.contentEqualsNullable(right.allStopPositions) &&
+                    left.allStopColors.contentEqualsNullable(right.allStopColors)
+            left is GPUMaterialDescriptor.ConicalGradient &&
+                right is GPUMaterialDescriptor.ConicalGradient ->
+                left.copy(allStopPositions = null, allStopColors = null) ==
+                    right.copy(allStopPositions = null, allStopColors = null) &&
+                    left.allStopPositions.contentEqualsNullable(right.allStopPositions) &&
+                    left.allStopColors.contentEqualsNullable(right.allStopColors)
+            left is GPUMaterialDescriptor.ImageDraw &&
+                right is GPUMaterialDescriptor.ImageDraw ->
+                left.copy(rgbaPixels = DEEP_COMPARE_EMPTY_BYTES) ==
+                    right.copy(rgbaPixels = DEEP_COMPARE_EMPTY_BYTES) &&
+                    left.rgbaPixels.contentEquals(right.rgbaPixels)
+            left is GPUMaterialDescriptor.RuntimeEffect &&
+                right is GPUMaterialDescriptor.RuntimeEffect ->
+                left.valueEqualsWith(right, ::equal)
+            left is GPUMaterialDescriptor.BlendShader &&
+                right is GPUMaterialDescriptor.BlendShader ->
+                left.mode == right.mode &&
+                    left.wgslCombined == right.wgslCombined &&
+                    left.uniformBytes.contentEquals(right.uniformBytes) &&
+                    equal(left.dst, right.dst) &&
+                    equal(left.src, right.src)
+            left is GPUMaterialDescriptor.Unsupported &&
+                right is GPUMaterialDescriptor.Unsupported ->
+                left.valueEqualsWith(right, ::equal)
+            else -> false
+        }
+        results.getOrPut(left) { IdentityHashMap() }[right] = result
+        return result
+    }
+}
+
+private class GPUMaterialDescriptorHasher {
+    private val hashes = IdentityHashMap<GPUMaterialDescriptor, Int>()
+
+    fun hash(descriptor: GPUMaterialDescriptor): Int {
+        hashes[descriptor]?.let { return it }
+        val result = when (descriptor) {
+            is GPUMaterialDescriptor.SolidColor -> descriptor.hashCode()
+            is GPUMaterialDescriptor.LinearGradient ->
+                31 * (
+                    31 * descriptor.copy(
+                        allStopPositions = null,
+                        allStopColors = null,
+                    ).hashCode() +
+                        (descriptor.allStopPositions?.contentHashCode() ?: 0)
+                    ) + (descriptor.allStopColors?.contentHashCode() ?: 0)
+            is GPUMaterialDescriptor.RadialGradient ->
+                31 * (
+                    31 * descriptor.copy(
+                        allStopPositions = null,
+                        allStopColors = null,
+                    ).hashCode() +
+                        (descriptor.allStopPositions?.contentHashCode() ?: 0)
+                    ) + (descriptor.allStopColors?.contentHashCode() ?: 0)
+            is GPUMaterialDescriptor.SweepGradient ->
+                31 * (
+                    31 * descriptor.copy(
+                        allStopPositions = null,
+                        allStopColors = null,
+                    ).hashCode() +
+                        (descriptor.allStopPositions?.contentHashCode() ?: 0)
+                    ) + (descriptor.allStopColors?.contentHashCode() ?: 0)
+            is GPUMaterialDescriptor.ConicalGradient ->
+                31 * (
+                    31 * descriptor.copy(
+                        allStopPositions = null,
+                        allStopColors = null,
+                    ).hashCode() +
+                        (descriptor.allStopPositions?.contentHashCode() ?: 0)
+                    ) + (descriptor.allStopColors?.contentHashCode() ?: 0)
+            is GPUMaterialDescriptor.ImageDraw ->
+                31 * descriptor.copy(rgbaPixels = DEEP_COMPARE_EMPTY_BYTES).hashCode() +
+                    descriptor.rgbaPixels.contentHashCode()
+            is GPUMaterialDescriptor.RuntimeEffect ->
+                descriptor.valueHashWith(::hash)
+            is GPUMaterialDescriptor.BlendShader -> {
+                var value = descriptor.mode.hashCode()
+                value = 31 * value + hash(descriptor.dst)
+                value = 31 * value + hash(descriptor.src)
+                value = 31 * value + descriptor.wgslCombined.hashCode()
+                value = 31 * value + descriptor.uniformBytes.contentHashCode()
+                value
+            }
+            is GPUMaterialDescriptor.Unsupported ->
+                descriptor.valueHashWith(::hash)
+        }
+        hashes[descriptor] = result
+        return result
+    }
+}
+
+private data class GPUMaterialDescriptorCanonicalForm(
+    val text: String,
+    val identity: String,
+)
+
+private class GPUMaterialDescriptorCanonicalizer {
+    private val forms =
+        IdentityHashMap<GPUMaterialDescriptor, GPUMaterialDescriptorCanonicalForm>()
+
+    fun text(descriptor: GPUMaterialDescriptor): String = form(descriptor).text
+
+    private fun identity(descriptor: GPUMaterialDescriptor): String =
+        form(descriptor).identity
+
+    private fun form(
+        descriptor: GPUMaterialDescriptor,
+    ): GPUMaterialDescriptorCanonicalForm {
+        forms[descriptor]?.let { return it }
+        val text = when (descriptor) {
+            is GPUMaterialDescriptor.SolidColor ->
+                "SolidColor(" +
+                    "r=${descriptor.r.canonicalValue()}, " +
+                    "g=${descriptor.g.canonicalValue()}, " +
+                    "b=${descriptor.b.canonicalValue()}, " +
+                    "a=${descriptor.a.canonicalValue()}" +
+                    ")"
+            is GPUMaterialDescriptor.LinearGradient ->
+                "LinearGradient(" +
+                    "start=(${descriptor.startX.canonicalValue()}," +
+                    "${descriptor.startY.canonicalValue()}), " +
+                    "end=(${descriptor.endX.canonicalValue()}," +
+                    "${descriptor.endY.canonicalValue()}), " +
+                    "startColor=${descriptor.startColorCanonicalValue()}, " +
+                    "endColor=${descriptor.endColorCanonicalValue()}, " +
+                    "tileMode=${descriptor.tileMode.canonicalValue()}, " +
+                    "positions=${descriptor.allStopPositions.canonicalValue()}, " +
+                    "colors=${descriptor.allStopColors.canonicalValue()}, " +
+                    "snippetSourceHash=${descriptor.snippetSourceHash.canonicalNullableValue()}, " +
+                    "fragmentEntryPoint=${descriptor.fragmentEntryPoint.canonicalNullableValue()}" +
+                    ")"
+            is GPUMaterialDescriptor.RadialGradient ->
+                "RadialGradient(" +
+                    "center=(${descriptor.centerX.canonicalValue()}," +
+                    "${descriptor.centerY.canonicalValue()}), " +
+                    "radius=${descriptor.radius.canonicalValue()}, " +
+                    "startColor=${descriptor.startColorCanonicalValue()}, " +
+                    "endColor=${descriptor.endColorCanonicalValue()}, " +
+                    "tileMode=${descriptor.tileMode.canonicalValue()}, " +
+                    "positions=${descriptor.allStopPositions.canonicalValue()}, " +
+                    "colors=${descriptor.allStopColors.canonicalValue()}, " +
+                    "snippetSourceHash=${descriptor.snippetSourceHash.canonicalNullableValue()}, " +
+                    "fragmentEntryPoint=${descriptor.fragmentEntryPoint.canonicalNullableValue()}" +
+                    ")"
+            is GPUMaterialDescriptor.SweepGradient ->
+                "SweepGradient(" +
+                    "center=(${descriptor.centerX.canonicalValue()}," +
+                    "${descriptor.centerY.canonicalValue()}), " +
+                    "angles=(${descriptor.startAngle.canonicalValue()}," +
+                    "${descriptor.endAngle.canonicalValue()}), " +
+                    "startColor=${descriptor.startColorCanonicalValue()}, " +
+                    "endColor=${descriptor.endColorCanonicalValue()}, " +
+                    "tileMode=${descriptor.tileMode.canonicalValue()}, " +
+                    "positions=${descriptor.allStopPositions.canonicalValue()}, " +
+                    "colors=${descriptor.allStopColors.canonicalValue()}, " +
+                    "snippetSourceHash=${descriptor.snippetSourceHash.canonicalNullableValue()}, " +
+                    "fragmentEntryPoint=${descriptor.fragmentEntryPoint.canonicalNullableValue()}" +
+                    ")"
+            is GPUMaterialDescriptor.ConicalGradient ->
+                "ConicalGradient(" +
+                    "start=(${descriptor.startX.canonicalValue()}," +
+                    "${descriptor.startY.canonicalValue()}," +
+                    "${descriptor.startRadius.canonicalValue()}), " +
+                    "end=(${descriptor.endX.canonicalValue()}," +
+                    "${descriptor.endY.canonicalValue()}," +
+                    "${descriptor.endRadius.canonicalValue()}), " +
+                    "startColor=${descriptor.startColorCanonicalValue()}, " +
+                    "endColor=${descriptor.endColorCanonicalValue()}, " +
+                    "tileMode=${descriptor.tileMode.canonicalValue()}, " +
+                    "positions=${descriptor.allStopPositions.canonicalValue()}, " +
+                    "colors=${descriptor.allStopColors.canonicalValue()}, " +
+                    "snippetSourceHash=${descriptor.snippetSourceHash.canonicalNullableValue()}, " +
+                    "fragmentEntryPoint=${descriptor.fragmentEntryPoint.canonicalNullableValue()}" +
+                    ")"
+            is GPUMaterialDescriptor.ImageDraw ->
+                "ImageDraw(" +
+                    "source=${descriptor.imageSourceId.canonicalValue()}, " +
+                    "size=${descriptor.imageWidth}x${descriptor.imageHeight}, " +
+                    "pixels=${descriptor.rgbaPixels.canonicalValue()}, " +
+                    "sampling=${descriptor.samplingFilterMode.canonicalValue()}, " +
+                    "alphaOnly=${descriptor.alphaOnly}, " +
+                    "tint=(${descriptor.tintR.canonicalValue()}," +
+                    "${descriptor.tintG.canonicalValue()}," +
+                    "${descriptor.tintB.canonicalValue()}," +
+                    "${descriptor.tintA.canonicalValue()})" +
+                    ")"
+            is GPUMaterialDescriptor.RuntimeEffect ->
+                descriptor.canonicalTextWith(::identity)
+            is GPUMaterialDescriptor.BlendShader ->
+                "BlendShader(" +
+                    "mode=${descriptor.mode.canonicalValue()}, " +
+                    "dst=${identity(descriptor.dst)}, " +
+                    "src=${identity(descriptor.src)}, " +
+                    "wgslCombined=${descriptor.wgslCombined.canonicalValue()}, " +
+                    "uniformBytes=${descriptor.uniformBytes.canonicalValue()}" +
+                    ")"
+            is GPUMaterialDescriptor.Unsupported ->
+                descriptor.canonicalTextWith(::identity)
+        }
+        return GPUMaterialDescriptorCanonicalForm(
+            text = text,
+            identity = "sha256:${text.sha256Hex()}",
+        ).also { forms[descriptor] = it }
+    }
+}
 
 private fun FloatArray?.contentEqualsNullable(other: FloatArray?): Boolean =
     when {
         this == null -> other == null
         other == null -> false
         else -> contentEquals(other)
-    }
-
-private fun GPUMaterialDescriptor?.deepEqualsNullable(other: GPUMaterialDescriptor?): Boolean =
-    when {
-        this == null -> other == null
-        other == null -> false
-        else -> deepEquals(other)
     }
 
 private fun Map<String, GPURuntimeEffectUniformValue>.deterministicUniformString(): String =
@@ -868,11 +1163,6 @@ private fun GPUPreparedMaterialUnsupportedEvidence.deepSnapshot():
             )
     }
 
-private fun Map<String, GPUMaterialDescriptor>.deterministicChildString(): String =
-    keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
-        "$name=${getValue(name).deterministicString()}"
-    }
-
 private fun GPURuntimeEffectUniformValue.deterministicString(): String =
     when (this) {
         is GPURuntimeEffectUniformValue.Float1 -> "Float1($value)"
@@ -884,52 +1174,120 @@ private fun GPURuntimeEffectUniformValue.deterministicString(): String =
         is GPURuntimeEffectUniformValue.Matrix4x4 -> "Matrix4x4($values)"
     }
 
-private fun GPUMaterialDescriptor.deterministicString(): String =
-    when (this) {
-        is GPUMaterialDescriptor.SolidColor ->
-            "SolidColor(r=$r, g=$g, b=$b, a=$a)"
-        is GPUMaterialDescriptor.LinearGradient ->
-            "LinearGradient(start=($startX,$startY), end=($endX,$endY), " +
-                "startColor=($startR,$startG,$startB,$startA), " +
-                "endColor=($endR,$endG,$endB,$endA), tileMode=$tileMode, " +
-                "positions=${allStopPositions?.contentToString()}, " +
-                "colors=${allStopColors?.contentToString()}, " +
-                "snippetSourceHash=$snippetSourceHash, fragmentEntryPoint=$fragmentEntryPoint)"
-        is GPUMaterialDescriptor.RadialGradient ->
-            "RadialGradient(center=($centerX,$centerY), radius=$radius, " +
-                "startColor=($startR,$startG,$startB,$startA), " +
-                "endColor=($endR,$endG,$endB,$endA), tileMode=$tileMode, " +
-                "positions=${allStopPositions?.contentToString()}, " +
-                "colors=${allStopColors?.contentToString()}, " +
-                "snippetSourceHash=$snippetSourceHash, fragmentEntryPoint=$fragmentEntryPoint)"
-        is GPUMaterialDescriptor.SweepGradient ->
-            "SweepGradient(center=($centerX,$centerY), angles=($startAngle,$endAngle), " +
-                "startColor=($startR,$startG,$startB,$startA), " +
-                "endColor=($endR,$endG,$endB,$endA), tileMode=$tileMode, " +
-                "positions=${allStopPositions?.contentToString()}, " +
-                "colors=${allStopColors?.contentToString()}, " +
-                "snippetSourceHash=$snippetSourceHash, fragmentEntryPoint=$fragmentEntryPoint)"
-        is GPUMaterialDescriptor.ConicalGradient ->
-            "ConicalGradient(start=($startX,$startY,$startRadius), " +
-                "end=($endX,$endY,$endRadius), " +
-                "startColor=($startR,$startG,$startB,$startA), " +
-                "endColor=($endR,$endG,$endB,$endA), tileMode=$tileMode, " +
-                "positions=${allStopPositions?.contentToString()}, " +
-                "colors=${allStopColors?.contentToString()}, " +
-                "snippetSourceHash=$snippetSourceHash, fragmentEntryPoint=$fragmentEntryPoint)"
-        is GPUMaterialDescriptor.ImageDraw ->
-            "ImageDraw(source=$imageSourceId, size=${imageWidth}x$imageHeight, " +
-                "pixels=${rgbaPixels.contentToString()}, sampling=$samplingFilterMode, " +
-                "alphaOnly=$alphaOnly, tint=($tintR,$tintG,$tintB,$tintA))"
-        is GPUMaterialDescriptor.RuntimeEffect -> toString()
-        is GPUMaterialDescriptor.BlendShader ->
-            "BlendShader(mode=$mode, dst=${dst.deterministicString()}, " +
-                "src=${src.deterministicString()}, wgslCombined=$wgslCombined, " +
-                "uniformBytes=${uniformBytes.contentToString()})"
-        is GPUMaterialDescriptor.Unsupported ->
-            "Unsupported(reason=$reason, originalKind=$originalKind, " +
-                "source=${source?.deterministicString()}, evidence=$evidence)"
+private fun Map<String, GPURuntimeEffectUniformValue>.canonicalUniformString(): String =
+    keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
+        "${name.canonicalValue()}=${getValue(name).canonicalString()}"
     }
+
+private fun Map<String, GPUMaterialDescriptor>.canonicalChildIdentityString(
+    childIdentity: (GPUMaterialDescriptor) -> String,
+): String =
+    keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
+        "${name.canonicalValue()}=${childIdentity(getValue(name))}"
+    }
+
+private fun GPUPreparedMaterialUnsupportedEvidence.canonicalString(): String =
+    when (this) {
+        is GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter ->
+            "RuntimeColorFilter(" +
+                "effectId=${effectId.canonicalValue()}, " +
+                "uniforms=${uniforms.canonicalUniformString()}, " +
+                "childIdentities=${childIdentities.canonicalStringMap()}" +
+                ")"
+    }
+
+private fun Map<String, String>.canonicalStringMap(): String =
+    keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
+        "${name.canonicalValue()}=${getValue(name).canonicalValue()}"
+    }
+
+private fun GPURuntimeEffectUniformValue.canonicalString(): String =
+    when (this) {
+        is GPURuntimeEffectUniformValue.Float1 ->
+            "Float1(${value.canonicalValue()})"
+        is GPURuntimeEffectUniformValue.Float2 ->
+            "Float2(${x.canonicalValue()},${y.canonicalValue()})"
+        is GPURuntimeEffectUniformValue.Float3 ->
+            "Float3(${x.canonicalValue()},${y.canonicalValue()},${z.canonicalValue()})"
+        is GPURuntimeEffectUniformValue.Float4 ->
+            "Float4(" +
+                "${x.canonicalValue()},${y.canonicalValue()}," +
+                "${z.canonicalValue()},${w.canonicalValue()}" +
+                ")"
+        is GPURuntimeEffectUniformValue.Int1 -> "Int1($value)"
+        is GPURuntimeEffectUniformValue.Matrix3x3 ->
+            "Matrix3x3(${values.canonicalFloatList()})"
+        is GPURuntimeEffectUniformValue.Matrix4x4 ->
+            "Matrix4x4(${values.canonicalFloatList()})"
+    }
+
+private fun GPUMaterialDescriptor.LinearGradient.startColorCanonicalValue(): String =
+    "(${startR.canonicalValue()},${startG.canonicalValue()}," +
+        "${startB.canonicalValue()},${startA.canonicalValue()})"
+
+private fun GPUMaterialDescriptor.LinearGradient.endColorCanonicalValue(): String =
+    "(${endR.canonicalValue()},${endG.canonicalValue()}," +
+        "${endB.canonicalValue()},${endA.canonicalValue()})"
+
+private fun GPUMaterialDescriptor.RadialGradient.startColorCanonicalValue(): String =
+    "(${startR.canonicalValue()},${startG.canonicalValue()}," +
+        "${startB.canonicalValue()},${startA.canonicalValue()})"
+
+private fun GPUMaterialDescriptor.RadialGradient.endColorCanonicalValue(): String =
+    "(${endR.canonicalValue()},${endG.canonicalValue()}," +
+        "${endB.canonicalValue()},${endA.canonicalValue()})"
+
+private fun GPUMaterialDescriptor.SweepGradient.startColorCanonicalValue(): String =
+    "(${startR.canonicalValue()},${startG.canonicalValue()}," +
+        "${startB.canonicalValue()},${startA.canonicalValue()})"
+
+private fun GPUMaterialDescriptor.SweepGradient.endColorCanonicalValue(): String =
+    "(${endR.canonicalValue()},${endG.canonicalValue()}," +
+        "${endB.canonicalValue()},${endA.canonicalValue()})"
+
+private fun GPUMaterialDescriptor.ConicalGradient.startColorCanonicalValue(): String =
+    "(${startR.canonicalValue()},${startG.canonicalValue()}," +
+        "${startB.canonicalValue()},${startA.canonicalValue()})"
+
+private fun GPUMaterialDescriptor.ConicalGradient.endColorCanonicalValue(): String =
+    "(${endR.canonicalValue()},${endG.canonicalValue()}," +
+        "${endB.canonicalValue()},${endA.canonicalValue()})"
+
+private fun Float.canonicalValue(): String =
+    Integer.toUnsignedString(java.lang.Float.floatToIntBits(this), 16)
+        .padStart(8, '0')
+
+private fun FloatArray?.canonicalValue(): String =
+    this?.joinToString(prefix = "[", postfix = "]") { it.canonicalValue() }
+        ?: "null"
+
+private fun List<Float>.canonicalFloatList(): String =
+    joinToString(prefix = "[", postfix = "]") { it.canonicalValue() }
+
+private fun ByteArray.canonicalValue(): String =
+    joinToString(prefix = "[", postfix = "]") { byte ->
+        Integer.toHexString(byte.toInt() and 0xff).padStart(2, '0')
+    }
+
+private fun String.canonicalValue(): String =
+    buildString(length * 4 + 16) {
+        append("utf16:")
+        append(this@canonicalValue.length)
+        append(':')
+        this@canonicalValue.forEach { character ->
+            append(character.code.toString(16).padStart(4, '0'))
+        }
+    }
+
+private fun String?.canonicalNullableValue(): String =
+    this?.let { "value:${it.canonicalValue()}" } ?: "null"
+
+private fun String.sha256Hex(): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(toByteArray(Charsets.UTF_8))
+        .joinToString(separator = "") { byte ->
+            Integer.toHexString(byte.toInt() and 0xff).padStart(2, '0')
+        }
 
 private val DEEP_COMPARE_EMPTY_BYTES = byteArrayOf()
 

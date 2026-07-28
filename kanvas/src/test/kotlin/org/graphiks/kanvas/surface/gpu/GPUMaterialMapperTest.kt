@@ -468,6 +468,75 @@ class GPUMaterialMapperTest {
     }
 
     @Test
+    fun `prepared unsupported gradient and image sources have immutable content value semantics`() {
+        fun runtimeFilter(): ColorFilter.RuntimeEffect =
+            ColorFilter.RuntimeEffect(
+                effect = testRuntimeEffect("runtime.filter.value-source"),
+                uniforms = UniformBlock.EMPTY,
+                children = emptyMap(),
+            )
+
+        fun gradientRefusal(): GPUMaterialDescriptor.Unsupported =
+            assertIs(
+                Paint(
+                    shader = Shader.LinearGradient(
+                        start = Point(0f, 0f),
+                        end = Point(10f, 0f),
+                        stops = listOf(
+                            GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 0.25f)),
+                            GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 0.75f)),
+                        ),
+                    ),
+                    colorFilter = runtimeFilter(),
+                ).toPreparedMaterialMapping().descriptor,
+            )
+
+        fun imageRefusal(pixels: ByteArray): GPUMaterialDescriptor.Unsupported =
+            assertIs(
+                Paint(
+                    shader = imageShader(
+                        sourceId = "immutable-refusal",
+                        pixels = pixels,
+                    ),
+                    colorFilter = runtimeFilter(),
+                ).toPreparedMaterialMapping().descriptor,
+            )
+
+        val firstGradient = gradientRefusal()
+        val equalGradient = gradientRefusal()
+        val gradientHash = firstGradient.hashCode()
+        val gradientString = firstGradient.toString()
+        assertEquals(equalGradient, firstGradient)
+        assertEquals(equalGradient.hashCode(), firstGradient.hashCode())
+        assertEquals(equalGradient.toString(), firstGradient.toString())
+
+        val escapedGradient =
+            assertIs<GPUMaterialDescriptor.LinearGradient>(firstGradient.source)
+        escapedGradient.allStopPositions!!.fill(99f)
+        escapedGradient.allStopColors!!.fill(99f)
+        assertEquals(equalGradient, firstGradient)
+        assertEquals(gradientHash, firstGradient.hashCode())
+        assertEquals(gradientString, firstGradient.toString())
+
+        val callerPixels = byteArrayOf(1, 2, 3, 4)
+        val firstImage = imageRefusal(callerPixels)
+        val equalImage = imageRefusal(byteArrayOf(1, 2, 3, 4))
+        val imageHash = firstImage.hashCode()
+        val imageString = firstImage.toString()
+        callerPixels.fill(99)
+        assertEquals(equalImage, firstImage)
+        assertEquals(equalImage.hashCode(), firstImage.hashCode())
+        assertEquals(equalImage.toString(), firstImage.toString())
+
+        assertIs<GPUMaterialDescriptor.ImageDraw>(firstImage.source)
+            .rgbaPixels
+            .fill(88)
+        assertEquals(equalImage, firstImage)
+        assertEquals(imageHash, firstImage.hashCode())
+        assertEquals(imageString, firstImage.toString())
+    }
+
+    @Test
     fun `prepared shader mapping refuses identity cycles and permits a shared acyclic dag`() {
         val selfChildren = linkedMapOf<String, Shader>()
         val self = Shader.RuntimeEffect(
@@ -598,6 +667,116 @@ class GPUMaterialMapperTest {
         assertEquals(
             evidence.childIdentities.getValue("left"),
             evidence.childIdentities.getValue("right"),
+        )
+    }
+
+    @Test
+    fun `prepared shader depth budget returns a typed refusal only beyond the boundary`() {
+        assertIs<GPUMaterialDescriptor.RuntimeEffect>(
+            Paint(
+                shader = shaderRuntimeChain(PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        val tooDeep = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = shaderRuntimeChain(
+                    PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH + 1,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_DEPTH,
+            tooDeep.reason,
+        )
+    }
+
+    @Test
+    fun `prepared color filter depth budget returns a typed refusal only beyond the boundary`() {
+        val boundary = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                colorFilter = colorFilterRuntimeChain(
+                    PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+            boundary.reason,
+        )
+
+        val tooDeep = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                colorFilter = colorFilterRuntimeChain(
+                    PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH + 1,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_DEPTH,
+            tooDeep.reason,
+        )
+    }
+
+    @Test
+    fun `prepared shader cycle refusal outranks an earlier depth refusal`() {
+        val cycleChildren = linkedMapOf<String, Shader>()
+        val cycle = Shader.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.shader.mixed-cycle"),
+            uniforms = UniformBlock.EMPTY,
+            children = cycleChildren,
+        )
+        cycleChildren["self"] = cycle
+
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.RuntimeEffect(
+                    effect = testRuntimeEffect("runtime.shader.mixed-root"),
+                    uniforms = UniformBlock.EMPTY,
+                    children = linkedMapOf(
+                        "a-deep" to shaderRuntimeChain(
+                            PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH,
+                        ),
+                        "z-cycle" to cycle,
+                    ),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_CYCLE,
+            descriptor.reason,
+        )
+    }
+
+    @Test
+    fun `prepared color filter cycle refusal outranks an earlier depth refusal`() {
+        val cycleChildren = linkedMapOf<String, ColorFilter>()
+        val cycle = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.mixed-cycle"),
+            uniforms = UniformBlock.EMPTY,
+            children = cycleChildren,
+        )
+        cycleChildren["self"] = cycle
+
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                colorFilter = ColorFilter.RuntimeEffect(
+                    effect = testRuntimeEffect("runtime.filter.mixed-root"),
+                    uniforms = UniformBlock.EMPTY,
+                    children = linkedMapOf(
+                        "a-deep" to colorFilterRuntimeChain(
+                            PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH,
+                        ),
+                        "z-cycle" to cycle,
+                    ),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
+            descriptor.reason,
         )
     }
 
@@ -819,6 +998,34 @@ class GPUMaterialMapperTest {
             uniformLayout = UniformLayout(emptyList()),
             children = emptyList(),
         )
+
+    private fun shaderRuntimeChain(activeDepth: Int): Shader {
+        require(activeDepth >= 1)
+        var shader: Shader = Shader.SolidColor(Color.RED)
+        repeat(activeDepth - 1) { index ->
+            val child = shader
+            shader = Shader.RuntimeEffect(
+                effect = testRuntimeEffect("runtime.shader.depth-$index"),
+                uniforms = UniformBlock.EMPTY,
+                children = mapOf("child" to child),
+            )
+        }
+        return shader
+    }
+
+    private fun colorFilterRuntimeChain(activeDepth: Int): ColorFilter {
+        require(activeDepth >= 1)
+        var filter: ColorFilter = ColorFilter.Luma
+        repeat(activeDepth - 1) { index ->
+            val child = filter
+            filter = ColorFilter.RuntimeEffect(
+                effect = testRuntimeEffect("runtime.filter.depth-$index"),
+                uniforms = UniformBlock.EMPTY,
+                children = mapOf("child" to child),
+            )
+        }
+        return filter
+    }
 
     private fun runtimeColorFilterEvidence(
         effectId: String,

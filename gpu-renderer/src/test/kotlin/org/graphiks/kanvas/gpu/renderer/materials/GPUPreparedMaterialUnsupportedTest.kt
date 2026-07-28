@@ -34,7 +34,7 @@ class GPUPreparedMaterialUnsupportedTest {
     }
 
     @Test
-    fun `cycle refusals and runtime color filter evidence stay fail closed in the compiler`() {
+    fun `graph refusals and runtime color filter evidence stay fail closed in the compiler`() {
         val evidence = GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
             effectId = "must.not.compile",
             uniforms = mapOf(
@@ -51,6 +51,14 @@ class GPUPreparedMaterialUnsupportedTest {
             ),
             GPUMaterialDescriptor.Unsupported(
                 reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
+                originalKind = GPUMaterialKind.SolidColor,
+            ),
+            GPUMaterialDescriptor.Unsupported(
+                reason = GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_DEPTH,
+                originalKind = GPUMaterialKind.RuntimeEffect,
+            ),
+            GPUMaterialDescriptor.Unsupported(
+                reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_DEPTH,
                 originalKind = GPUMaterialKind.SolidColor,
             ),
             GPUMaterialDescriptor.Unsupported(
