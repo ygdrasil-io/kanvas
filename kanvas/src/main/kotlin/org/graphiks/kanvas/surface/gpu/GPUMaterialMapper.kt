@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.ArrayDeque
 import java.util.Collections
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
@@ -40,6 +41,12 @@ internal const val PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH = 64
 
 internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping {
     val shader = shader
+    val paintColorFilter = colorFilter
+    val graphRefusalReason = analyzePreparedMaterialGraph(
+        shader = shader,
+        paintColorFilter = paintColorFilter,
+    )
+    val colorFilterFingerprinter = PreparedColorFilterFingerprinter()
     val base = if (shader == null) {
         GPUMaterialDescriptor.SolidColor(
             r = color.r,
@@ -48,7 +55,7 @@ internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping {
             a = color.a,
         )
     } else {
-        shader.toPreparedMaterial()
+        shader.toPreparedMaterial(colorFilterFingerprinter)
     }
     val tinted = if (base is GPUMaterialDescriptor.ImageDraw && base.alphaOnly) {
         base.copy(
@@ -60,13 +67,17 @@ internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping {
     } else {
         base
     }
-    val mapped = colorFilter?.let { filter ->
-        tinted.withPreparedColorFilter(filter)
+    val mapped = paintColorFilter?.let { filter ->
+        tinted.withPreparedColorFilter(filter, colorFilterFingerprinter)
     } ?: tinted
-    val descriptor = if (mapped is GPUMaterialDescriptor.ImageDraw && mapped.alphaOnly) {
-        mapped.copy(tintA = 1f)
+    val globallyPrioritized = mapped.withPreparedGraphRefusal(graphRefusalReason)
+    val descriptor = if (
+        globallyPrioritized is GPUMaterialDescriptor.ImageDraw &&
+        globallyPrioritized.alphaOnly
+    ) {
+        globallyPrioritized.copy(tintA = 1f)
     } else {
-        mapped
+        globallyPrioritized
     }
     val paintAlpha = if (shader == null && descriptor is GPUMaterialDescriptor.SolidColor) {
         1f
@@ -306,21 +317,28 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
     is Shader.CoordClamp -> this.shader.toMaterial()
 }
 
-private fun Shader.toPreparedMaterial(): GPUMaterialDescriptor =
-    PreparedShaderMapper().map(this)
+private fun Shader.toPreparedMaterial(
+    colorFilterFingerprinter: PreparedColorFilterFingerprinter,
+): GPUMaterialDescriptor =
+    PreparedShaderMapper(colorFilterFingerprinter).map(this)
 
-private class PreparedShaderMapper {
+private class PreparedShaderMapper(
+    val colorFilterFingerprinter: PreparedColorFilterFingerprinter,
+) {
     private val active =
         Collections.newSetFromMap(IdentityHashMap<Shader, Boolean>())
+    private val completed =
+        IdentityHashMap<Shader, GPUMaterialDescriptor>()
 
     fun map(shader: Shader): GPUMaterialDescriptor {
+        completed[shader]?.let { return it }
         if (!active.add(shader)) {
             return preparedUnsupported(
                 reason = GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_CYCLE,
                 originalKind = shader.materialKind(),
             )
         }
-        return try {
+        val descriptor = try {
             if (active.size > PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH) {
                 preparedUnsupported(
                     reason = GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_DEPTH,
@@ -332,6 +350,8 @@ private class PreparedShaderMapper {
         } finally {
             active.remove(shader)
         }
+        completed[shader] = descriptor
+        return descriptor
     }
 }
 
@@ -408,7 +428,7 @@ private fun Shader.toPreparedMaterial(
     is Shader.WithColorFilter -> {
         val source = mapper.map(shader)
         source.preparedGraphTraversalRefusalOrNull()
-            ?: source.withPreparedColorFilter(filter)
+            ?: source.withPreparedColorFilter(filter, mapper.colorFilterFingerprinter)
     }
     is Shader.WithWorkingColorSpace -> {
         val source = mapper.map(shader)
@@ -496,11 +516,12 @@ private fun Shader.Image.toPreparedImageMaterial(): GPUMaterialDescriptor {
 
 private fun GPUMaterialDescriptor.withPreparedColorFilter(
     filter: ColorFilter,
+    fingerprinter: PreparedColorFilterFingerprinter,
 ): GPUMaterialDescriptor {
     preparedGraphTraversalRefusalOrNull()?.let { return it }
     if (filter is ColorFilter.RuntimeEffect) {
         return when (
-            val result = PreparedColorFilterFingerprinter().runtimeEvidence(filter)
+            val result = fingerprinter.runtimeEvidence(filter)
         ) {
             PreparedColorFilterEvidenceResult.Cycle ->
                 preparedUnsupported(
@@ -524,7 +545,7 @@ private fun GPUMaterialDescriptor.withPreparedColorFilter(
             )
         }
     }
-    when (PreparedColorFilterFingerprinter().fingerprintResult(filter)) {
+    when (fingerprinter.fingerprintResult(filter)) {
         PreparedColorFilterFingerprint.Cycle ->
             return preparedUnsupported(
                 reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
@@ -550,6 +571,167 @@ private fun GPUMaterialDescriptor.withPreparedColorFilter(
         source = this,
     )
 }
+
+private sealed interface PreparedGraphAnalysis {
+    data object Ready : PreparedGraphAnalysis
+    data object Cycle : PreparedGraphAnalysis
+    data object Depth : PreparedGraphAnalysis
+}
+
+private enum class PreparedGraphVisitState {
+    Visiting,
+    Complete,
+}
+
+private data class PreparedGraphFrame<T : Any>(
+    val node: T,
+    val children: List<T>,
+    var nextChildIndex: Int = 0,
+    var maxChildDepth: Int = 0,
+)
+
+private fun analyzePreparedMaterialGraph(
+    shader: Shader?,
+    paintColorFilter: ColorFilter?,
+): GPUPreparedMaterialUnsupportedReason? {
+    val colorFilterRoots = ArrayList<ColorFilter>()
+    paintColorFilter?.let(colorFilterRoots::add)
+    val shaderAnalysis = if (shader == null) {
+        PreparedGraphAnalysis.Ready
+    } else {
+        analyzePreparedGraph(
+            roots = listOf(shader),
+            childrenOf = Shader::preparedGraphChildren,
+            onDiscovered = { discovered ->
+                if (discovered is Shader.WithColorFilter) {
+                    colorFilterRoots += discovered.filter
+                }
+            },
+        )
+    }
+    if (shaderAnalysis == PreparedGraphAnalysis.Cycle) {
+        return GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_CYCLE
+    }
+
+    val colorFilterAnalysis = analyzePreparedGraph(
+        roots = colorFilterRoots,
+        childrenOf = ColorFilter::preparedGraphChildren,
+    )
+    return when {
+        colorFilterAnalysis == PreparedGraphAnalysis.Cycle ->
+            GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE
+        shaderAnalysis == PreparedGraphAnalysis.Depth ->
+            GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_DEPTH
+        colorFilterAnalysis == PreparedGraphAnalysis.Depth ->
+            GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_DEPTH
+        else -> null
+    }
+}
+
+private fun <T : Any> analyzePreparedGraph(
+    roots: Iterable<T>,
+    childrenOf: (T) -> List<T>,
+    onDiscovered: (T) -> Unit = {},
+): PreparedGraphAnalysis {
+    val states = IdentityHashMap<T, PreparedGraphVisitState>()
+    val depths = IdentityHashMap<T, Int>()
+    val stack = ArrayDeque<PreparedGraphFrame<T>>()
+    var maxRootDepth = 0
+
+    fun push(node: T) {
+        states[node] = PreparedGraphVisitState.Visiting
+        onDiscovered(node)
+        stack.addLast(
+            PreparedGraphFrame(
+                node = node,
+                children = childrenOf(node),
+            ),
+        )
+    }
+
+    for (root in roots) {
+        when (states[root]) {
+            PreparedGraphVisitState.Visiting ->
+                return PreparedGraphAnalysis.Cycle
+            PreparedGraphVisitState.Complete -> {
+                maxRootDepth = maxOf(maxRootDepth, depths.getValue(root))
+            }
+            null -> push(root)
+        }
+        while (stack.isNotEmpty()) {
+            val frame = stack.peekLast()
+            if (frame.nextChildIndex < frame.children.size) {
+                val child = frame.children[frame.nextChildIndex++]
+                when (states[child]) {
+                    PreparedGraphVisitState.Visiting ->
+                        return PreparedGraphAnalysis.Cycle
+                    PreparedGraphVisitState.Complete ->
+                        frame.maxChildDepth = maxOf(
+                            frame.maxChildDepth,
+                            depths.getValue(child),
+                        )
+                    null -> push(child)
+                }
+            } else {
+                val depth = if (frame.maxChildDepth == Int.MAX_VALUE) {
+                    Int.MAX_VALUE
+                } else {
+                    frame.maxChildDepth + 1
+                }
+                depths[frame.node] = depth
+                states[frame.node] = PreparedGraphVisitState.Complete
+                stack.removeLast()
+                stack.peekLast()?.let { parent ->
+                    parent.maxChildDepth = maxOf(parent.maxChildDepth, depth)
+                }
+            }
+        }
+        maxRootDepth = maxOf(maxRootDepth, depths.getValue(root))
+    }
+
+    return if (maxRootDepth > PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH) {
+        PreparedGraphAnalysis.Depth
+    } else {
+        PreparedGraphAnalysis.Ready
+    }
+}
+
+private fun Shader.preparedGraphChildren(): List<Shader> =
+    when (this) {
+        is Shader.Blend -> listOf(dst, src)
+        is Shader.RuntimeEffect -> children.values.toList()
+        is Shader.WithLocalMatrix -> listOf(shader)
+        is Shader.WithColorFilter -> listOf(shader)
+        is Shader.WithWorkingColorSpace -> listOf(shader)
+        is Shader.CoordClamp -> listOf(shader)
+        is Shader.SolidColor,
+        is Shader.LinearGradient,
+        is Shader.RadialGradient,
+        is Shader.SweepGradient,
+        is Shader.ConicalGradient,
+        is Shader.Image,
+        is Shader.PerlinNoise,
+        is Shader.FractalNoise,
+        -> emptyList()
+    }
+
+private fun ColorFilter.preparedGraphChildren(): List<ColorFilter> =
+    when (this) {
+        is ColorFilter.Compose -> listOf(outer, inner)
+        is ColorFilter.Lerp -> listOf(dst, src)
+        is ColorFilter.RuntimeEffect -> children.values.toList()
+        is ColorFilter.Matrix,
+        is ColorFilter.Blend,
+        is ColorFilter.Table,
+        is ColorFilter.Lighting,
+        ColorFilter.SRGBToLinear,
+        ColorFilter.LinearToSRGB,
+        is ColorFilter.HSLAMatrix,
+        ColorFilter.HighContrast,
+        ColorFilter.Luma,
+        ColorFilter.Overdraw,
+        -> emptyList()
+    }
 
 private fun Shader.materialKind(): GPUMaterialKind {
     var current = this
@@ -586,6 +768,19 @@ private fun preparedUnsupported(
         source = source,
         evidence = evidence,
     )
+
+private fun GPUMaterialDescriptor.withPreparedGraphRefusal(
+    reason: GPUPreparedMaterialUnsupportedReason?,
+): GPUMaterialDescriptor {
+    if (reason == null) return this
+    val currentRefusal = preparedGraphTraversalRefusalOrNull()
+    if (currentRefusal?.reason == reason) return this
+    return preparedUnsupported(
+        reason = reason,
+        originalKind = kind,
+        source = this,
+    )
+}
 
 private fun GPUMaterialDescriptor.preparedGraphTraversalRefusalOrNull():
     GPUMaterialDescriptor.Unsupported? =
@@ -644,41 +839,55 @@ private sealed interface PreparedColorFilterChildrenFingerprint {
 private class PreparedColorFilterFingerprinter {
     private val active =
         Collections.newSetFromMap(IdentityHashMap<ColorFilter, Boolean>())
+    private val completedFingerprints =
+        IdentityHashMap<ColorFilter, PreparedColorFilterFingerprint.Ready>()
+    private val completedEvidence =
+        IdentityHashMap<
+            ColorFilter.RuntimeEffect,
+            PreparedColorFilterEvidenceResult.Ready,
+            >()
 
     fun runtimeEvidence(
         filter: ColorFilter.RuntimeEffect,
     ): PreparedColorFilterEvidenceResult {
+        completedEvidence[filter]?.let { return it }
         if (!active.add(filter)) return PreparedColorFilterEvidenceResult.Cycle
-        return try {
+        val result = try {
             if (active.size > PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH) {
-                return PreparedColorFilterEvidenceResult.Depth
-            }
-            val uniforms = filter.uniforms.toGPUUniformValues()
-            when (val children = fingerprintChildren(filter.children)) {
-                PreparedColorFilterChildrenFingerprint.Cycle ->
-                    PreparedColorFilterEvidenceResult.Cycle
-                PreparedColorFilterChildrenFingerprint.Depth ->
-                    PreparedColorFilterEvidenceResult.Depth
-                is PreparedColorFilterChildrenFingerprint.Ready ->
-                    PreparedColorFilterEvidenceResult.Ready(
-                        GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
-                            effectId = filter.effect.id,
-                            uniforms = uniforms,
-                            childIdentities = children.identities,
-                        ),
-                    )
+                PreparedColorFilterEvidenceResult.Depth
+            } else {
+                val uniforms = filter.uniforms.toGPUUniformValues()
+                when (val children = fingerprintChildren(filter.children)) {
+                    PreparedColorFilterChildrenFingerprint.Cycle ->
+                        PreparedColorFilterEvidenceResult.Cycle
+                    PreparedColorFilterChildrenFingerprint.Depth ->
+                        PreparedColorFilterEvidenceResult.Depth
+                    is PreparedColorFilterChildrenFingerprint.Ready ->
+                        PreparedColorFilterEvidenceResult.Ready(
+                            GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
+                                effectId = filter.effect.id,
+                                uniforms = uniforms,
+                                childIdentities = children.identities,
+                            ),
+                        )
+                }
             }
         } finally {
             active.remove(filter)
         }
+        if (result is PreparedColorFilterEvidenceResult.Ready) {
+            completedEvidence[filter] = result
+        }
+        return result
     }
 
     fun fingerprintResult(filter: ColorFilter): PreparedColorFilterFingerprint =
         fingerprint(filter)
 
     private fun fingerprint(filter: ColorFilter): PreparedColorFilterFingerprint {
+        completedFingerprints[filter]?.let { return it }
         if (!active.add(filter)) return PreparedColorFilterFingerprint.Cycle
-        return try {
+        val result = try {
             if (active.size > PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH) {
                 PreparedColorFilterFingerprint.Depth
             } else {
@@ -687,6 +896,10 @@ private class PreparedColorFilterFingerprinter {
         } finally {
             active.remove(filter)
         }
+        if (result is PreparedColorFilterFingerprint.Ready) {
+            completedFingerprints[filter] = result
+        }
+        return result
     }
 
     private fun fingerprintActive(

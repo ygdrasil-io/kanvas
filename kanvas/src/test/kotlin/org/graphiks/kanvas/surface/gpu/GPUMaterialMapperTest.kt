@@ -1,5 +1,8 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertEquals
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFailsWith
@@ -719,6 +722,88 @@ class GPUMaterialMapperTest {
     }
 
     @Test
+    fun `prepared shader cycle behind the depth boundary outranks depth`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = shaderRuntimeCycleBehindDepth(
+                    activeDepth = PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH + 1,
+                    ancestorIndex = PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH / 2,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_CYCLE,
+            descriptor.reason,
+        )
+    }
+
+    @Test
+    fun `prepared color filter cycle behind the depth boundary outranks depth`() {
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                colorFilter = colorFilterRuntimeCycleBehindDepth(
+                    activeDepth = PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH + 1,
+                    ancestorIndex = PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH / 2,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
+            descriptor.reason,
+        )
+    }
+
+    @Test
+    fun `prepared shader mapping bounds a depth sixty shared diamond`() {
+        val (shared, duplicated) = assertCompletesWithin(
+            description = "shader diamond mapping",
+        ) {
+            val sharedRoot = shaderRuntimeDiamondRoot(
+                childDepth = PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH - 5,
+                shareRootChild = true,
+            )
+            val duplicatedRoot = shaderRuntimeDiamondRoot(
+                childDepth = PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH - 5,
+                shareRootChild = false,
+            )
+            Paint(shader = sharedRoot).toPreparedMaterialMapping().descriptor to
+                Paint(shader = duplicatedRoot).toPreparedMaterialMapping().descriptor
+        }
+
+        assertEquals(duplicated, shared)
+        assertEquals(duplicated.hashCode(), shared.hashCode())
+        assertEquals(duplicated.toString(), shared.toString())
+    }
+
+    @Test
+    fun `prepared runtime color filter evidence bounds a depth sixty shared diamond`() {
+        val (shared, duplicated) = assertCompletesWithin(
+            description = "runtime color filter evidence diamond",
+        ) {
+            val sharedRoot = colorFilterRuntimeDiamondRoot(
+                childDepth = PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH - 5,
+                shareRootChild = true,
+            )
+            val duplicatedRoot = colorFilterRuntimeDiamondRoot(
+                childDepth = PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH - 5,
+                shareRootChild = false,
+            )
+            runtimeColorFilterEvidence(sharedRoot) to
+                runtimeColorFilterEvidence(duplicatedRoot)
+        }
+
+        assertEquals(duplicated, shared)
+        assertEquals(duplicated.hashCode(), shared.hashCode())
+        assertEquals(duplicated.toString(), shared.toString())
+        assertEquals(
+            shared.childIdentities.getValue("left"),
+            shared.childIdentities.getValue("right"),
+        )
+    }
+
+    @Test
     fun `prepared shader cycle refusal outranks an earlier depth refusal`() {
         val cycleChildren = linkedMapOf<String, Shader>()
         val cycle = Shader.RuntimeEffect(
@@ -776,6 +861,83 @@ class GPUMaterialMapperTest {
 
         assertEquals(
             GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
+            descriptor.reason,
+        )
+    }
+
+    @Test
+    fun `global material cycle in paint color filter outranks shader depth`() {
+        val cycleChildren = linkedMapOf<String, ColorFilter>()
+        val cycle = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.paint-cross-type-cycle"),
+            uniforms = UniformBlock.EMPTY,
+            children = cycleChildren,
+        )
+        cycleChildren["self"] = cycle
+
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = shaderRuntimeChain(
+                    PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH + 1,
+                ),
+                colorFilter = cycle,
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
+            descriptor.reason,
+        )
+    }
+
+    @Test
+    fun `global material cycle in shader wrapper color filter outranks shader depth`() {
+        val cycleChildren = linkedMapOf<String, ColorFilter>()
+        val cycle = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.wrapper-cross-type-cycle"),
+            uniforms = UniformBlock.EMPTY,
+            children = cycleChildren,
+        )
+        cycleChildren["self"] = cycle
+
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.WithColorFilter(
+                    shader = shaderRuntimeChain(
+                        PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH,
+                    ),
+                    filter = cycle,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
+            descriptor.reason,
+        )
+    }
+
+    @Test
+    fun `global material shader cycle outranks paint color filter depth`() {
+        val cycleChildren = linkedMapOf<String, Shader>()
+        val cycle = Shader.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.shader.paint-cross-type-cycle"),
+            uniforms = UniformBlock.EMPTY,
+            children = cycleChildren,
+        )
+        cycleChildren["self"] = cycle
+
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = cycle,
+                colorFilter = colorFilterRuntimeChain(
+                    PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH + 1,
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_CYCLE,
             descriptor.reason,
         )
     }
@@ -1027,6 +1189,120 @@ class GPUMaterialMapperTest {
         return filter
     }
 
+    private fun shaderRuntimeCycleBehindDepth(
+        activeDepth: Int,
+        ancestorIndex: Int,
+    ): Shader {
+        require(activeDepth >= 2)
+        require(ancestorIndex in 0 until activeDepth - 1)
+        val children = List(activeDepth) { linkedMapOf<String, Shader>() }
+        val nodes = List(activeDepth) { index ->
+            Shader.RuntimeEffect(
+                effect = testRuntimeEffect("runtime.shader.deep-cycle-$index"),
+                uniforms = UniformBlock.EMPTY,
+                children = children[index],
+            )
+        }
+        repeat(activeDepth - 1) { index ->
+            children[index]["next"] = nodes[index + 1]
+        }
+        children.last()["back"] = nodes[ancestorIndex]
+        return nodes.first()
+    }
+
+    private fun colorFilterRuntimeCycleBehindDepth(
+        activeDepth: Int,
+        ancestorIndex: Int,
+    ): ColorFilter {
+        require(activeDepth >= 2)
+        require(ancestorIndex in 0 until activeDepth - 1)
+        val children =
+            List(activeDepth) { linkedMapOf<String, ColorFilter>() }
+        val nodes = List(activeDepth) { index ->
+            ColorFilter.RuntimeEffect(
+                effect = testRuntimeEffect("runtime.filter.deep-cycle-$index"),
+                uniforms = UniformBlock.EMPTY,
+                children = children[index],
+            )
+        }
+        repeat(activeDepth - 1) { index ->
+            children[index]["next"] = nodes[index + 1]
+        }
+        children.last()["back"] = nodes[ancestorIndex]
+        return nodes.first()
+    }
+
+    private fun shaderRuntimeDiamondRoot(
+        childDepth: Int,
+        shareRootChild: Boolean,
+    ): Shader.RuntimeEffect {
+        val left = shaderRuntimeDiamond(childDepth)
+        val right = if (shareRootChild) left else shaderRuntimeDiamond(childDepth)
+        return Shader.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.shader.diamond-root"),
+            uniforms = UniformBlock.EMPTY,
+            children = linkedMapOf("left" to left, "right" to right),
+        )
+    }
+
+    private fun shaderRuntimeDiamond(depth: Int): Shader {
+        var shader: Shader = Shader.SolidColor(Color.RED)
+        repeat(depth) { index ->
+            val sharedChild = shader
+            shader = Shader.RuntimeEffect(
+                effect = testRuntimeEffect("runtime.shader.diamond-$index"),
+                uniforms = UniformBlock.EMPTY,
+                children = linkedMapOf(
+                    "left" to sharedChild,
+                    "right" to sharedChild,
+                ),
+            )
+        }
+        return shader
+    }
+
+    private fun colorFilterRuntimeDiamondRoot(
+        childDepth: Int,
+        shareRootChild: Boolean,
+    ): ColorFilter.RuntimeEffect {
+        val left = colorFilterRuntimeDiamond(childDepth)
+        val right = if (shareRootChild) {
+            left
+        } else {
+            colorFilterRuntimeDiamond(childDepth)
+        }
+        return ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.diamond-root"),
+            uniforms = UniformBlock.EMPTY,
+            children = linkedMapOf("left" to left, "right" to right),
+        )
+    }
+
+    private fun colorFilterRuntimeDiamond(depth: Int): ColorFilter {
+        var filter: ColorFilter = ColorFilter.Luma
+        repeat(depth) { index ->
+            val sharedChild = filter
+            filter = ColorFilter.RuntimeEffect(
+                effect = testRuntimeEffect("runtime.filter.diamond-$index"),
+                uniforms = UniformBlock.EMPTY,
+                children = linkedMapOf(
+                    "left" to sharedChild,
+                    "right" to sharedChild,
+                ),
+            )
+        }
+        return filter
+    }
+
+    private fun runtimeColorFilterEvidence(
+        filter: ColorFilter.RuntimeEffect,
+    ): GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter =
+        assertIs(
+            assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(colorFilter = filter).toPreparedMaterialMapping().descriptor,
+            ).evidence,
+        )
+
     private fun runtimeColorFilterEvidence(
         effectId: String,
         amount: Float,
@@ -1043,6 +1319,40 @@ class GPUMaterialMapperTest {
                 Paint(colorFilter = filter).toPreparedMaterialMapping().descriptor,
             ).evidence,
         )
+    }
+
+    private fun <T : Any> assertCompletesWithin(
+        description: String,
+        timeoutSeconds: Long = 5,
+        block: () -> T,
+    ): T {
+        val completed = CountDownLatch(1)
+        val value = AtomicReference<T>()
+        val failure = AtomicReference<Throwable?>()
+        Thread(
+            {
+                try {
+                    value.set(block())
+                } catch (caught: Throwable) {
+                    failure.set(caught)
+                } finally {
+                    completed.countDown()
+                }
+            },
+            "prepared-material-$description",
+        ).apply {
+            isDaemon = true
+            start()
+        }
+
+        assertTrue(
+            completed.await(timeoutSeconds, TimeUnit.SECONDS),
+            "$description did not complete within $timeoutSeconds seconds",
+        )
+        failure.get()?.let { throw it }
+        return checkNotNull(value.get()) {
+            "$description completed without a value"
+        }
     }
 
     private companion object {

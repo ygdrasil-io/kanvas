@@ -831,9 +831,9 @@ sealed interface GPUPreparedMaterialUnsupportedEvidence {
 
         override fun toString(): String =
             "RuntimeColorFilter(" +
-                "effectId=$effectId, " +
-                "uniforms=${uniformSnapshot.deterministicUniformString()}, " +
-                "childIdentities=${childIdentitySnapshot.deterministicString()}" +
+                "effectId=${effectId.canonicalValue()}, " +
+                "uniforms=${uniformSnapshot.canonicalUniformString()}, " +
+                "childIdentities=${childIdentitySnapshot.canonicalStringMap()}" +
                 ")"
     }
 }
@@ -1142,16 +1142,6 @@ private fun FloatArray?.contentEqualsNullable(other: FloatArray?): Boolean =
         else -> contentEquals(other)
     }
 
-private fun Map<String, GPURuntimeEffectUniformValue>.deterministicUniformString(): String =
-    keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
-        "$name=${getValue(name).deterministicString()}"
-    }
-
-private fun Map<String, String>.deterministicString(): String =
-    keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
-        "$name=${getValue(name)}"
-    }
-
 private fun GPUPreparedMaterialUnsupportedEvidence.deepSnapshot():
     GPUPreparedMaterialUnsupportedEvidence =
     when (this) {
@@ -1161,17 +1151,6 @@ private fun GPUPreparedMaterialUnsupportedEvidence.deepSnapshot():
                 uniforms = uniforms,
                 childIdentities = childIdentities,
             )
-    }
-
-private fun GPURuntimeEffectUniformValue.deterministicString(): String =
-    when (this) {
-        is GPURuntimeEffectUniformValue.Float1 -> "Float1($value)"
-        is GPURuntimeEffectUniformValue.Float2 -> "Float2($x, $y)"
-        is GPURuntimeEffectUniformValue.Float3 -> "Float3($x, $y, $z)"
-        is GPURuntimeEffectUniformValue.Float4 -> "Float4($x, $y, $z, $w)"
-        is GPURuntimeEffectUniformValue.Int1 -> "Int1($value)"
-        is GPURuntimeEffectUniformValue.Matrix3x3 -> "Matrix3x3($values)"
-        is GPURuntimeEffectUniformValue.Matrix4x4 -> "Matrix4x4($values)"
     }
 
 private fun Map<String, GPURuntimeEffectUniformValue>.canonicalUniformString(): String =

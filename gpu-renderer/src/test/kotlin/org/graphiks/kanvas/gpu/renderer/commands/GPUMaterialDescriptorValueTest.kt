@@ -9,6 +9,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class GPUMaterialDescriptorValueTest {
@@ -178,6 +179,31 @@ class GPUMaterialDescriptorValueTest {
             @Suppress("UNCHECKED_CAST")
             (evidence.childIdentities as MutableMap<String, String>).clear()
         }
+    }
+
+    @Test
+    fun `runtime color filter evidence string distinguishes separator content`() {
+        val splitFields =
+            GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
+                effectId = "runtime.filter",
+                uniforms = linkedMapOf(
+                    "a" to GPURuntimeEffectUniformValue.Float1(1f),
+                    "b" to GPURuntimeEffectUniformValue.Float1(2f),
+                ),
+                childIdentities = emptyMap(),
+            )
+        val embeddedSeparator =
+            GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
+                effectId = "runtime.filter",
+                uniforms = mapOf(
+                    "a=Float1(1.0), b" to
+                        GPURuntimeEffectUniformValue.Float1(2f),
+                ),
+                childIdentities = emptyMap(),
+            )
+
+        assertNotEquals(splitFields, embeddedSeparator)
+        assertNotEquals(splitFields.toString(), embeddedSeparator.toString())
     }
 
     @Test
