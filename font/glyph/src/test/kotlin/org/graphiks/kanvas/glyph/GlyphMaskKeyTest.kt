@@ -89,6 +89,19 @@ class GlyphMaskKeyTest {
     }
 
     @Test
+    fun `mask key snapshots mutable strike variation coordinates`() {
+        val variation = linkedMapOf("wght" to 400f)
+        val key = maskKey(strikeKey = strikeKey(variation = variation))
+        val originalPreimage = key.canonicalPreimage()
+        val originalHash = key.sha256()
+
+        variation["wght"] = 700f
+
+        assertEquals(originalPreimage, key.canonicalPreimage())
+        assertEquals(originalHash, key.sha256())
+    }
+
+    @Test
     fun `mask key canonical preimage includes all fields`() {
         val blurKey = GlyphMaskBlurKey(
             style = GlyphMaskBlurStyle.OUTER,

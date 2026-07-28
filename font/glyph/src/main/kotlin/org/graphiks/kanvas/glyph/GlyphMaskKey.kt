@@ -58,6 +58,9 @@ data class GlyphMaskKey(
     val rasterizerVersion: String = "a8-nonzero-4x4-v1",
     val blur: GlyphMaskBlurKey? = null,
 ) {
+    private val strikeKeySha256: String =
+        strikeKey.preimageSha256(strikeKey.glyphId ?: 0)
+
     init {
         require(faceIndex >= 0) { "Face index must be non-negative, but was $faceIndex." }
         require(sourceOutlineSha256.length == 64) {
@@ -75,7 +78,7 @@ data class GlyphMaskKey(
      */
     fun canonicalPreimage(): String = buildString {
         append("{")
-        append("\"strikeKey\": ").append(strikeKey.preimageSha256(strikeKey.glyphId ?: 0))
+        append("\"strikeKey\": ").append(strikeKeySha256)
         append(", \"faceIndex\": ").append(faceIndex)
         append(", \"sourceOutlineSha256\": \"").append(sourceOutlineSha256).append("\"")
         append(", \"rasterizerVersion\": \"").append(rasterizerVersion).append("\"")
