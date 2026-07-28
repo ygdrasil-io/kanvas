@@ -15,6 +15,29 @@ import org.graphiks.kanvas.types.g
 import org.graphiks.kanvas.types.r
 import kotlin.math.pow
 
+data class GPUPreparedMaterialMapping(
+    val descriptor: GPUMaterialDescriptor,
+    val paintAlpha: Float,
+)
+
+internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping {
+    val mapped = toMaterial()
+    val descriptor = if (mapped is GPUMaterialDescriptor.ImageDraw && mapped.alphaOnly) {
+        mapped.copy(tintA = 1f)
+    } else {
+        mapped
+    }
+    val paintAlpha = if (shader == null && descriptor is GPUMaterialDescriptor.SolidColor) {
+        1f
+    } else {
+        color.a
+    }
+    return GPUPreparedMaterialMapping(
+        descriptor = descriptor,
+        paintAlpha = paintAlpha,
+    )
+}
+
 internal fun Paint.toMaterial(): GPUMaterialDescriptor {
     val shader = this.shader
     val base = if (shader != null) {
@@ -152,8 +175,7 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
                 uniformBytes = org.graphiks.kanvas.gpu.renderer.materials.BlendWgslBuilder.packUniforms(dstDesc, srcDesc, modeStr),
             )
         } else {
-            // fallback: use src shader only (drop the blend)
-            srcDesc
+            desc
         }
     }
     is Shader.RuntimeEffect -> {

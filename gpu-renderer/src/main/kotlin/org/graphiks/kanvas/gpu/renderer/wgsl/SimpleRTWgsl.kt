@@ -1,5 +1,13 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
+internal const val SimpleRTEffectId: String = "runtime.simple_rt"
+internal const val SimpleRTDescriptorVersion: Int = 1
+internal const val SimpleRTUniformSchemaHash: String = "schema:simple_rt:v1"
+internal const val SimpleRTUniformBlockSizeBytes: Int = 16
+internal const val SimpleRTBindingPlanHash: String = "binding:simple_rt:v1"
+internal const val SimpleRTModuleHash: String = "module:simple_rt:v1"
+internal const val SimpleRTReflectionHash: String = "reflection:simple_rt:v1"
+
 const val SimpleRTWgsl: String = """
 struct SimpleRTUniform {
     gColor: vec4<f32>,

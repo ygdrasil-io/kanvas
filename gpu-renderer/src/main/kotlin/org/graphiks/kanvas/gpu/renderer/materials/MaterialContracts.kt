@@ -42,6 +42,8 @@ enum class GPUMaterialSourceKind {
     ImageShader,
     /** Registered runtime effect source. */
     RuntimeEffect,
+    /** Two admitted child material sources combined by a registered blend formula. */
+    ShaderBlend,
     /** Unsupported source that must route to refusal. */
     Unsupported,
 }
