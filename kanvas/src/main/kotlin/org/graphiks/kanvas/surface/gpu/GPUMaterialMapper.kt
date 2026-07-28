@@ -1,10 +1,14 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.Collections
+import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedEvidence
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedReason
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
 import org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
@@ -294,7 +298,31 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
     is Shader.CoordClamp -> this.shader.toMaterial()
 }
 
-private fun Shader.toPreparedMaterial(): GPUMaterialDescriptor = when (this) {
+private fun Shader.toPreparedMaterial(): GPUMaterialDescriptor =
+    PreparedShaderMapper().map(this)
+
+private class PreparedShaderMapper {
+    private val active =
+        Collections.newSetFromMap(IdentityHashMap<Shader, Boolean>())
+
+    fun map(shader: Shader): GPUMaterialDescriptor {
+        if (!active.add(shader)) {
+            return preparedUnsupported(
+                reason = GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_CYCLE,
+                originalKind = shader.materialKind(),
+            )
+        }
+        return try {
+            shader.toPreparedMaterial(this)
+        } finally {
+            active.remove(shader)
+        }
+    }
+}
+
+private fun Shader.toPreparedMaterial(
+    mapper: PreparedShaderMapper,
+): GPUMaterialDescriptor = when (this) {
     is Shader.SolidColor -> toMaterial()
     is Shader.LinearGradient ->
         if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
@@ -334,38 +362,57 @@ private fun Shader.toPreparedMaterial(): GPUMaterialDescriptor = when (this) {
         }
     is Shader.Image -> toPreparedImageMaterial()
     is Shader.Blend -> {
-        val dstDesc = dst.toPreparedMaterial()
-        val srcDesc = src.toPreparedMaterial()
-        GPUMaterialDescriptor.BlendShader(
-            mode = mode.name,
-            dst = dstDesc,
-            src = srcDesc,
-        )
+        val dstDesc = mapper.map(dst)
+        val srcDesc = mapper.map(src)
+        listOf(dstDesc, srcDesc).firstPreparedGraphCycle()
+            ?: GPUMaterialDescriptor.BlendShader(
+                mode = mode.name,
+                dst = dstDesc,
+                src = srcDesc,
+            )
     }
-    is Shader.RuntimeEffect ->
-        GPUMaterialDescriptor.RuntimeEffect(
-            effectId = effect.id,
-            descriptorVersion = 1,
-            uniforms = uniforms.toGPUUniformValues(),
-            children = children.mapValues { (_, child) -> child.toPreparedMaterial() },
-        )
-    is Shader.WithLocalMatrix -> preparedUnsupported(
-        reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
-        originalKind = shader.materialKind(),
-        source = shader.toPreparedMaterial(),
-    )
-    is Shader.WithColorFilter ->
-        shader.toPreparedMaterial().withPreparedColorFilter(filter)
-    is Shader.WithWorkingColorSpace -> preparedUnsupported(
-        reason = GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE,
-        originalKind = shader.materialKind(),
-        source = shader.toPreparedMaterial(),
-    )
-    is Shader.CoordClamp -> preparedUnsupported(
-        reason = GPUPreparedMaterialUnsupportedReason.COORDINATE_CLAMP,
-        originalKind = shader.materialKind(),
-        source = shader.toPreparedMaterial(),
-    )
+    is Shader.RuntimeEffect -> {
+        val mappedChildren = children.mapValues { (_, child) -> mapper.map(child) }
+        mappedChildren.values.firstPreparedGraphCycle()
+            ?: GPUMaterialDescriptor.RuntimeEffect(
+                effectId = effect.id,
+                descriptorVersion = 1,
+                uniforms = uniforms.toGPUUniformValues(),
+                children = mappedChildren,
+            )
+    }
+    is Shader.WithLocalMatrix -> {
+        val source = mapper.map(shader)
+        source.preparedGraphCycleOrNull()
+            ?: preparedUnsupported(
+                reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+                originalKind = shader.materialKind(),
+                source = source,
+            )
+    }
+    is Shader.WithColorFilter -> {
+        val source = mapper.map(shader)
+        source.preparedGraphCycleOrNull()
+            ?: source.withPreparedColorFilter(filter)
+    }
+    is Shader.WithWorkingColorSpace -> {
+        val source = mapper.map(shader)
+        source.preparedGraphCycleOrNull()
+            ?: preparedUnsupported(
+                reason = GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE,
+                originalKind = shader.materialKind(),
+                source = source,
+            )
+    }
+    is Shader.CoordClamp -> {
+        val source = mapper.map(shader)
+        source.preparedGraphCycleOrNull()
+            ?: preparedUnsupported(
+                reason = GPUPreparedMaterialUnsupportedReason.COORDINATE_CLAMP,
+                originalKind = shader.materialKind(),
+                source = source,
+            )
+    }
     is Shader.PerlinNoise -> preparedUnsupported(
         GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
         GPUMaterialKind.SolidColor,
@@ -435,14 +482,35 @@ private fun Shader.Image.toPreparedImageMaterial(): GPUMaterialDescriptor {
 private fun GPUMaterialDescriptor.withPreparedColorFilter(
     filter: ColorFilter,
 ): GPUMaterialDescriptor {
-    if (this is GPUMaterialDescriptor.Unsupported) return this
+    preparedGraphCycleOrNull()?.let { return it }
     if (filter is ColorFilter.RuntimeEffect) {
+        return when (
+            val result = PreparedColorFilterFingerprinter().runtimeEvidence(filter)
+        ) {
+            PreparedColorFilterEvidenceResult.Cycle ->
+                preparedUnsupported(
+                    reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
+                    originalKind = kind,
+                    source = this,
+                )
+            is PreparedColorFilterEvidenceResult.Ready ->
+                preparedUnsupported(
+                    reason =
+                        GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+                    originalKind = kind,
+                    source = this,
+                    evidence = result.evidence,
+                )
+        }
+    }
+    if (PreparedColorFilterFingerprinter().containsCycle(filter)) {
         return preparedUnsupported(
-            reason = GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+            reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
             originalKind = kind,
             source = this,
         )
     }
+    if (this is GPUMaterialDescriptor.Unsupported) return this
     withGradientColorFilter(filter)?.let { return it }
     if (this is GPUMaterialDescriptor.SolidColor) {
         filter.applyTo(this)?.let { return it.toSolidColor() }
@@ -476,12 +544,277 @@ private fun preparedUnsupported(
     reason: GPUPreparedMaterialUnsupportedReason,
     originalKind: GPUMaterialKind,
     source: GPUMaterialDescriptor? = null,
+    evidence: GPUPreparedMaterialUnsupportedEvidence? = null,
 ): GPUMaterialDescriptor.Unsupported =
     GPUMaterialDescriptor.Unsupported(
         reason = reason,
         originalKind = originalKind,
         source = source,
+        evidence = evidence,
     )
+
+private fun GPUMaterialDescriptor.preparedGraphCycleOrNull():
+    GPUMaterialDescriptor.Unsupported? =
+    (this as? GPUMaterialDescriptor.Unsupported)
+        ?.takeIf {
+            it.reason == GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_CYCLE ||
+                it.reason == GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE
+        }
+
+private fun Collection<GPUMaterialDescriptor>.firstPreparedGraphCycle():
+    GPUMaterialDescriptor.Unsupported? =
+    firstNotNullOfOrNull { it.preparedGraphCycleOrNull() }
+
+private sealed interface PreparedColorFilterEvidenceResult {
+    data class Ready(
+        val evidence: GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter,
+    ) : PreparedColorFilterEvidenceResult
+
+    data object Cycle : PreparedColorFilterEvidenceResult
+}
+
+private sealed interface PreparedColorFilterFingerprint {
+    data class Ready(val identity: String) : PreparedColorFilterFingerprint
+    data object Cycle : PreparedColorFilterFingerprint
+}
+
+private sealed interface PreparedColorFilterChildrenFingerprint {
+    data class Ready(
+        val identities: Map<String, String>,
+    ) : PreparedColorFilterChildrenFingerprint
+
+    data object Cycle : PreparedColorFilterChildrenFingerprint
+}
+
+@OptIn(ExperimentalUnsignedTypes::class)
+private class PreparedColorFilterFingerprinter {
+    private val active =
+        Collections.newSetFromMap(IdentityHashMap<ColorFilter, Boolean>())
+
+    fun runtimeEvidence(
+        filter: ColorFilter.RuntimeEffect,
+    ): PreparedColorFilterEvidenceResult {
+        if (!active.add(filter)) return PreparedColorFilterEvidenceResult.Cycle
+        return try {
+            val uniforms = filter.uniforms.toGPUUniformValues()
+            when (val children = fingerprintChildren(filter.children)) {
+                PreparedColorFilterChildrenFingerprint.Cycle ->
+                    PreparedColorFilterEvidenceResult.Cycle
+                is PreparedColorFilterChildrenFingerprint.Ready ->
+                    PreparedColorFilterEvidenceResult.Ready(
+                        GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
+                            effectId = filter.effect.id,
+                            uniforms = uniforms,
+                            childIdentities = children.identities,
+                        ),
+                    )
+            }
+        } finally {
+            active.remove(filter)
+        }
+    }
+
+    fun containsCycle(filter: ColorFilter): Boolean =
+        fingerprint(filter) == PreparedColorFilterFingerprint.Cycle
+
+    private fun fingerprint(filter: ColorFilter): PreparedColorFilterFingerprint {
+        if (!active.add(filter)) return PreparedColorFilterFingerprint.Cycle
+        return try {
+            fingerprintActive(filter)
+        } finally {
+            active.remove(filter)
+        }
+    }
+
+    private fun fingerprintActive(
+        filter: ColorFilter,
+    ): PreparedColorFilterFingerprint =
+        when (filter) {
+            is ColorFilter.Matrix ->
+                readyIdentity("Matrix") {
+                    floats("values", filter.values)
+                }
+            is ColorFilter.Blend ->
+                readyIdentity("Blend") {
+                    long("color", filter.color.packed.toLong())
+                    text("mode", filter.mode.name)
+                }
+            is ColorFilter.Compose ->
+                fingerprintBinary(
+                    type = "Compose",
+                    firstName = "outer",
+                    first = filter.outer,
+                    secondName = "inner",
+                    second = filter.inner,
+                )
+            is ColorFilter.Table ->
+                readyIdentity("Table") {
+                    bytes(
+                        "table",
+                        ByteArray(filter.table.size) { index ->
+                            filter.table[index].toByte()
+                        },
+                    )
+                }
+            is ColorFilter.Lighting ->
+                readyIdentity("Lighting") {
+                    long("mul", filter.mul.packed.toLong())
+                    long("add", filter.add.packed.toLong())
+                }
+            ColorFilter.SRGBToLinear -> readyIdentity("SRGBToLinear")
+            ColorFilter.LinearToSRGB -> readyIdentity("LinearToSRGB")
+            is ColorFilter.HSLAMatrix ->
+                readyIdentity("HSLAMatrix") {
+                    floats("values", filter.values)
+                }
+            is ColorFilter.Lerp ->
+                fingerprintBinary(
+                    type = "Lerp",
+                    firstName = "dst",
+                    first = filter.dst,
+                    secondName = "src",
+                    second = filter.src,
+                ) { floatBits("t", filter.t) }
+            ColorFilter.HighContrast -> readyIdentity("HighContrast")
+            ColorFilter.Luma -> readyIdentity("Luma")
+            ColorFilter.Overdraw -> readyIdentity("Overdraw")
+            is ColorFilter.RuntimeEffect -> {
+                val uniforms = filter.uniforms.toGPUUniformValues()
+                when (val children = fingerprintChildren(filter.children)) {
+                    PreparedColorFilterChildrenFingerprint.Cycle ->
+                        PreparedColorFilterFingerprint.Cycle
+                    is PreparedColorFilterChildrenFingerprint.Ready ->
+                        readyIdentity("RuntimeEffect") {
+                            text("effectId", filter.effect.id)
+                            typedUniforms("uniforms", uniforms)
+                            childIdentities("children", children.identities)
+                        }
+                }
+            }
+        }
+
+    private fun fingerprintBinary(
+        type: String,
+        firstName: String,
+        first: ColorFilter,
+        secondName: String,
+        second: ColorFilter,
+        additionalFields: CanonicalIdentityEncoder.() -> Unit = {},
+    ): PreparedColorFilterFingerprint {
+        val firstIdentity =
+            (fingerprint(first) as? PreparedColorFilterFingerprint.Ready)?.identity
+                ?: return PreparedColorFilterFingerprint.Cycle
+        val secondIdentity =
+            (fingerprint(second) as? PreparedColorFilterFingerprint.Ready)?.identity
+                ?: return PreparedColorFilterFingerprint.Cycle
+        return readyIdentity(type) {
+            additionalFields()
+            text(firstName, firstIdentity)
+            text(secondName, secondIdentity)
+        }
+    }
+
+    private fun fingerprintChildren(
+        children: Map<String, ColorFilter>,
+    ): PreparedColorFilterChildrenFingerprint {
+        val identities = linkedMapOf<String, String>()
+        children.keys.sorted().forEach { name ->
+            when (val child = fingerprint(children.getValue(name))) {
+                PreparedColorFilterFingerprint.Cycle ->
+                    return PreparedColorFilterChildrenFingerprint.Cycle
+                is PreparedColorFilterFingerprint.Ready ->
+                    identities[name] = child.identity
+            }
+        }
+        return PreparedColorFilterChildrenFingerprint.Ready(identities)
+    }
+
+    private fun readyIdentity(
+        type: String,
+        fields: CanonicalIdentityEncoder.() -> Unit = {},
+    ): PreparedColorFilterFingerprint.Ready {
+        val encoder =
+            CanonicalIdentityEncoder(PREPARED_COLOR_FILTER_IDENTITY_DOMAIN)
+                .text("type", type)
+        encoder.fields()
+        return PreparedColorFilterFingerprint.Ready(encoder.digestIdentity())
+    }
+}
+
+private fun CanonicalIdentityEncoder.floats(
+    name: String,
+    values: FloatArray,
+): CanonicalIdentityEncoder {
+    int("$name.count", values.size)
+    values.forEachIndexed { index, value ->
+        floatBits("$name[$index]", value)
+    }
+    return this
+}
+
+private fun CanonicalIdentityEncoder.typedUniforms(
+    name: String,
+    uniforms: Map<String, GPURuntimeEffectUniformValue>,
+): CanonicalIdentityEncoder {
+    int("$name.count", uniforms.size)
+    uniforms.keys.sorted().forEachIndexed { index, uniformName ->
+        val field = "$name[$index]"
+        text("$field.name", uniformName)
+        when (val value = uniforms.getValue(uniformName)) {
+            is GPURuntimeEffectUniformValue.Float1 -> {
+                text("$field.type", "Float1")
+                floatBits("$field.value", value.value)
+            }
+            is GPURuntimeEffectUniformValue.Float2 -> {
+                text("$field.type", "Float2")
+                floatBits("$field.x", value.x)
+                floatBits("$field.y", value.y)
+            }
+            is GPURuntimeEffectUniformValue.Float3 -> {
+                text("$field.type", "Float3")
+                floatBits("$field.x", value.x)
+                floatBits("$field.y", value.y)
+                floatBits("$field.z", value.z)
+            }
+            is GPURuntimeEffectUniformValue.Float4 -> {
+                text("$field.type", "Float4")
+                floatBits("$field.x", value.x)
+                floatBits("$field.y", value.y)
+                floatBits("$field.z", value.z)
+                floatBits("$field.w", value.w)
+            }
+            is GPURuntimeEffectUniformValue.Int1 -> {
+                text("$field.type", "Int1")
+                int("$field.value", value.value)
+            }
+            is GPURuntimeEffectUniformValue.Matrix3x3 -> {
+                text("$field.type", "Matrix3x3")
+                value.values.forEachIndexed { valueIndex, component ->
+                    floatBits("$field.value[$valueIndex]", component)
+                }
+            }
+            is GPURuntimeEffectUniformValue.Matrix4x4 -> {
+                text("$field.type", "Matrix4x4")
+                value.values.forEachIndexed { valueIndex, component ->
+                    floatBits("$field.value[$valueIndex]", component)
+                }
+            }
+        }
+    }
+    return this
+}
+
+private fun CanonicalIdentityEncoder.childIdentities(
+    name: String,
+    identities: Map<String, String>,
+): CanonicalIdentityEncoder {
+    int("$name.count", identities.size)
+    identities.keys.sorted().forEachIndexed { index, childName ->
+        text("$name[$index].name", childName)
+        text("$name[$index].identity", identities.getValue(childName))
+    }
+    return this
+}
 
 private fun UniformBlock.toGPUUniformValues(): Map<String, GPURuntimeEffectUniformValue> =
     entries.mapValues { (_, value) ->
@@ -511,6 +844,9 @@ private fun UniformBlock.toGPUUniformValues(): Map<String, GPURuntimeEffectUnifo
                 GPURuntimeEffectUniformValue.Matrix4x4(value.values.toList())
         }
     }
+
+private const val PREPARED_COLOR_FILTER_IDENTITY_DOMAIN =
+    "prepared-runtime-color-filter-child-v1"
 
 /**
  * Expands non-RGBA image pixels to RGBA for GPU upload.

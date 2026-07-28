@@ -2,9 +2,12 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.test.assertEquals
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedEvidence
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedReason
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.image.AlphaType
@@ -298,6 +301,307 @@ class GPUMaterialMapperTest {
     }
 
     @Test
+    fun `prepared runtime color filter retains exact immutable canonical refusal evidence`() {
+        val matrixUniform = FloatArray(16) { index -> index.toFloat() }
+        val childMatrix = FloatArray(20) { index -> index.toFloat() / 10f }
+        val childMap = linkedMapOf<String, ColorFilter>(
+            "input" to ColorFilter.Compose(
+                outer = ColorFilter.Matrix(childMatrix),
+                inner = ColorFilter.Blend(Color.BLUE, BlendMode.SRC_OVER),
+            ),
+        )
+        val filter = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.exact"),
+            uniforms = UniformBlock {
+                float1("amount", 0.25f)
+                mat4x4("transform", matrixUniform)
+            },
+            children = childMap,
+        )
+        val equivalent = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.exact"),
+            uniforms = UniformBlock {
+                float1("amount", 0.25f)
+                mat4x4("transform", FloatArray(16) { index -> index.toFloat() })
+            },
+            children = mapOf(
+                "input" to ColorFilter.Compose(
+                    outer = ColorFilter.Matrix(
+                        FloatArray(20) { index -> index.toFloat() / 10f },
+                    ),
+                    inner = ColorFilter.Blend(Color.BLUE, BlendMode.SRC_OVER),
+                ),
+            ),
+        )
+
+        val unsupported = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(colorFilter = filter).toPreparedMaterialMapping().descriptor,
+        )
+        val evidence = assertIs<GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter>(
+            unsupported.evidence,
+        )
+        val equivalentEvidence =
+            assertIs<GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter>(
+                assertIs<GPUMaterialDescriptor.Unsupported>(
+                    Paint(colorFilter = equivalent).toPreparedMaterialMapping().descriptor,
+                ).evidence,
+            )
+
+        assertEquals("runtime.filter.exact", evidence.effectId)
+        assertEquals(
+            GPURuntimeEffectUniformValue.Float1(0.25f),
+            evidence.uniforms.getValue("amount"),
+        )
+        assertEquals(setOf("input"), evidence.childIdentities.keys)
+        assertTrue(evidence.childIdentities.getValue("input").matches(SHA256_IDENTITY))
+        assertEquals(evidence, equivalentEvidence)
+        assertEquals(evidence.hashCode(), equivalentEvidence.hashCode())
+
+        val comparisonBaseline = runtimeColorFilterEvidence(
+            effectId = "runtime.filter.exact",
+            amount = 0.25f,
+            childName = "input",
+            child = ColorFilter.Luma,
+        )
+        val differingEvidence = listOf(
+            runtimeColorFilterEvidence(
+                effectId = "runtime.filter.other",
+                amount = 0.25f,
+                childName = "input",
+                child = ColorFilter.Luma,
+            ),
+            runtimeColorFilterEvidence(
+                effectId = "runtime.filter.exact",
+                amount = 0.5f,
+                childName = "input",
+                child = ColorFilter.Luma,
+            ),
+            runtimeColorFilterEvidence(
+                effectId = "runtime.filter.exact",
+                amount = 0.25f,
+                childName = "mask",
+                child = ColorFilter.Luma,
+            ),
+            runtimeColorFilterEvidence(
+                effectId = "runtime.filter.exact",
+                amount = 0.25f,
+                childName = "input",
+                child = ColorFilter.Overdraw,
+            ),
+        )
+        differingEvidence.forEach { other ->
+            assertNotEquals(comparisonBaseline, other)
+        }
+        val nestedBaseline = runtimeColorFilterEvidence(
+            effectId = "runtime.filter.exact",
+            amount = 0.25f,
+            childName = "input",
+            child = ColorFilter.Compose(
+                outer = ColorFilter.Matrix(FloatArray(20) { it.toFloat() }),
+                inner = ColorFilter.Luma,
+            ),
+        )
+        val changedDescendant = runtimeColorFilterEvidence(
+            effectId = "runtime.filter.exact",
+            amount = 0.25f,
+            childName = "input",
+            child = ColorFilter.Compose(
+                outer = ColorFilter.Matrix(FloatArray(20) { it.toFloat() }),
+                inner = ColorFilter.Overdraw,
+            ),
+        )
+        assertNotEquals(nestedBaseline, changedDescendant)
+
+        val retainedUniform = evidence.uniforms.getValue("transform")
+        val retainedChildIdentity = evidence.childIdentities.getValue("input")
+        matrixUniform.fill(99f)
+        childMatrix.fill(99f)
+        childMap.clear()
+
+        assertEquals(
+            (0 until 16).map(Int::toFloat),
+            assertIs<GPURuntimeEffectUniformValue.Matrix4x4>(retainedUniform).values,
+        )
+        assertEquals(retainedChildIdentity, evidence.childIdentities.getValue("input"))
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
+            (evidence.uniforms as MutableMap<String, GPURuntimeEffectUniformValue>).clear()
+        }
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
+            (evidence.childIdentities as MutableMap<String, String>).clear()
+        }
+    }
+
+    @Test
+    fun `prepared runtime color filter wraps an already unsupported base with exact evidence`() {
+        val filter = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.unsupported-base"),
+            uniforms = UniformBlock { int1("mode", 7) },
+            children = mapOf("input" to ColorFilter.SRGBToLinear),
+        )
+
+        val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+            Paint(
+                shader = Shader.WithLocalMatrix(
+                    Shader.SolidColor(Color.RED),
+                    Matrix33.identity(),
+                ),
+                colorFilter = filter,
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+            descriptor.reason,
+        )
+        val evidence = assertIs<GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter>(
+            descriptor.evidence,
+        )
+        assertEquals("runtime.filter.unsupported-base", evidence.effectId)
+        assertEquals(GPURuntimeEffectUniformValue.Int1(7), evidence.uniforms.getValue("mode"))
+        assertEquals(setOf("input"), evidence.childIdentities.keys)
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+            assertIs<GPUMaterialDescriptor.Unsupported>(descriptor.source).reason,
+        )
+    }
+
+    @Test
+    fun `prepared shader mapping refuses identity cycles and permits a shared acyclic dag`() {
+        val selfChildren = linkedMapOf<String, Shader>()
+        val self = Shader.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.shader.self"),
+            uniforms = UniformBlock.EMPTY,
+            children = selfChildren,
+        )
+        selfChildren["self"] = self
+
+        val leftChildren = linkedMapOf<String, Shader>()
+        val rightChildren = linkedMapOf<String, Shader>()
+        val left = Shader.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.shader.left"),
+            uniforms = UniformBlock.EMPTY,
+            children = leftChildren,
+        )
+        val right = Shader.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.shader.right"),
+            uniforms = UniformBlock.EMPTY,
+            children = rightChildren,
+        )
+        leftChildren["right"] = right
+        rightChildren["left"] = left
+
+        listOf(self, left).forEach { cyclic ->
+            val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(
+                    shader = Shader.Blend(
+                        mode = BlendMode.SRC_OVER,
+                        dst = Shader.SolidColor(Color.BLACK),
+                        src = cyclic,
+                    ),
+                ).toPreparedMaterialMapping().descriptor,
+            )
+            assertEquals(
+                GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_CYCLE,
+                descriptor.reason,
+            )
+        }
+
+        val shared = Shader.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.shader.shared"),
+            uniforms = UniformBlock { float1("amount", 0.5f) },
+        )
+        val dag = assertIs<GPUMaterialDescriptor.RuntimeEffect>(
+            Paint(
+                shader = Shader.RuntimeEffect(
+                    effect = testRuntimeEffect("runtime.shader.parent"),
+                    uniforms = UniformBlock.EMPTY,
+                    children = linkedMapOf("left" to shared, "right" to shared),
+                ),
+            ).toPreparedMaterialMapping().descriptor,
+        )
+
+        assertEquals(setOf("left", "right"), dag.children.keys)
+        assertEquals(dag.children.getValue("left"), dag.children.getValue("right"))
+    }
+
+    @Test
+    fun `prepared runtime color filter evidence refuses identity cycles and permits a shared dag`() {
+        val selfChildren = linkedMapOf<String, ColorFilter>()
+        val self = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.self"),
+            uniforms = UniformBlock.EMPTY,
+            children = selfChildren,
+        )
+        selfChildren["self"] = self
+
+        val leftChildren = linkedMapOf<String, ColorFilter>()
+        val rightChildren = linkedMapOf<String, ColorFilter>()
+        val left = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.left"),
+            uniforms = UniformBlock.EMPTY,
+            children = leftChildren,
+        )
+        val right = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.right"),
+            uniforms = UniformBlock.EMPTY,
+            children = rightChildren,
+        )
+        leftChildren["right"] = right
+        rightChildren["left"] = left
+
+        listOf(self, left).forEach { cyclic ->
+            val descriptor = assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(colorFilter = cyclic).toPreparedMaterialMapping().descriptor,
+            )
+            assertEquals(
+                GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
+                descriptor.reason,
+            )
+        }
+
+        val nestedChildren = linkedMapOf<String, ColorFilter>()
+        val nestedRuntime = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.nested-cycle"),
+            uniforms = UniformBlock.EMPTY,
+            children = nestedChildren,
+        )
+        val nestedRoot = ColorFilter.Compose(
+            outer = nestedRuntime,
+            inner = ColorFilter.Luma,
+        )
+        nestedChildren["root"] = nestedRoot
+        assertEquals(
+            GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
+            assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(colorFilter = nestedRoot).toPreparedMaterialMapping().descriptor,
+            ).reason,
+        )
+
+        val shared = ColorFilter.Compose(
+            outer = ColorFilter.Matrix(FloatArray(20) { index -> index.toFloat() }),
+            inner = ColorFilter.Luma,
+        )
+        val dag = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.filter.dag"),
+            uniforms = UniformBlock.EMPTY,
+            children = linkedMapOf("left" to shared, "right" to shared),
+        )
+        val evidence = assertIs<GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter>(
+            assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(colorFilter = dag).toPreparedMaterialMapping().descriptor,
+            ).evidence,
+        )
+
+        assertEquals(setOf("left", "right"), evidence.childIdentities.keys)
+        assertEquals(
+            evidence.childIdentities.getValue("left"),
+            evidence.childIdentities.getValue("right"),
+        )
+    }
+
+    @Test
     fun `prepared image conversion proves channels alpha and supported metadata`() {
         val a8 = assertIs<GPUMaterialDescriptor.ImageDraw>(
             Paint(
@@ -515,4 +819,26 @@ class GPUMaterialMapperTest {
             uniformLayout = UniformLayout(emptyList()),
             children = emptyList(),
         )
+
+    private fun runtimeColorFilterEvidence(
+        effectId: String,
+        amount: Float,
+        childName: String,
+        child: ColorFilter,
+    ): GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter {
+        val filter = ColorFilter.RuntimeEffect(
+            effect = testRuntimeEffect(effectId),
+            uniforms = UniformBlock { float1("amount", amount) },
+            children = mapOf(childName to child),
+        )
+        return assertIs(
+            assertIs<GPUMaterialDescriptor.Unsupported>(
+                Paint(colorFilter = filter).toPreparedMaterialMapping().descriptor,
+            ).evidence,
+        )
+    }
+
+    private companion object {
+        val SHA256_IDENTITY = Regex("""sha256:[0-9a-f]{64}""")
+    }
 }

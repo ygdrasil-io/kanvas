@@ -9,7 +9,7 @@ import java.security.MessageDigest
  * length-delimited before hashing, so caller text can contain arbitrary
  * separators without changing field boundaries.
  */
-internal class CanonicalIdentityEncoder(
+class CanonicalIdentityEncoder(
     private val domain: String,
 ) {
     private val fields = mutableListOf<CanonicalIdentityField>()

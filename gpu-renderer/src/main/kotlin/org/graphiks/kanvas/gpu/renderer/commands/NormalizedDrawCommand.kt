@@ -184,6 +184,14 @@ enum class GPUPreparedMaterialUnsupportedReason(
         "unsupported.material.mapping.color_filter",
         "Prepared mapping cannot apply this color filter exactly",
     ),
+    SHADER_GRAPH_CYCLE(
+        "unsupported.material.mapping.shader_graph_cycle",
+        "Prepared mapping refuses a cyclic shader graph",
+    ),
+    COLOR_FILTER_GRAPH_CYCLE(
+        "unsupported.material.mapping.color_filter_graph_cycle",
+        "Prepared mapping refuses a cyclic color-filter graph",
+    ),
     LOCAL_MATRIX(
         "unsupported.material.mapping.local_matrix",
         "Prepared mapping does not implement shader local matrices",
@@ -641,8 +649,61 @@ sealed interface GPUMaterialDescriptor {
         val reason: GPUPreparedMaterialUnsupportedReason,
         val originalKind: GPUMaterialKind,
         val source: GPUMaterialDescriptor? = null,
+        val evidence: GPUPreparedMaterialUnsupportedEvidence? = null,
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = originalKind
+    }
+}
+
+/**
+ * Closed, immutable evidence retained for a prepared-mapping refusal.
+ *
+ * Evidence is diagnostic identity only. The prepared compiler never treats it
+ * as executable source or as a replacement for [GPUMaterialDescriptor.Unsupported.source].
+ */
+sealed interface GPUPreparedMaterialUnsupportedEvidence {
+    /**
+     * Exact identity evidence for an unsupported runtime-effect color filter.
+     *
+     * Child values are canonical identities of each complete child-filter
+     * graph, keyed by the exact runtime-effect child name.
+     */
+    class RuntimeColorFilter(
+        val effectId: String,
+        uniforms: Map<String, GPURuntimeEffectUniformValue>,
+        childIdentities: Map<String, String>,
+    ) : GPUPreparedMaterialUnsupportedEvidence {
+        private val uniformSnapshot = LinkedHashMap(uniforms)
+        private val childIdentitySnapshot = LinkedHashMap(childIdentities)
+
+        val uniforms: Map<String, GPURuntimeEffectUniformValue>
+            get() = Collections.unmodifiableMap(LinkedHashMap(uniformSnapshot))
+
+        val childIdentities: Map<String, String>
+            get() = Collections.unmodifiableMap(LinkedHashMap(childIdentitySnapshot))
+
+        override fun equals(other: Any?): Boolean =
+            this === other ||
+                (
+                    other is RuntimeColorFilter &&
+                        effectId == other.effectId &&
+                        uniformSnapshot == other.uniformSnapshot &&
+                        childIdentitySnapshot == other.childIdentitySnapshot
+                    )
+
+        override fun hashCode(): Int {
+            var result = effectId.hashCode()
+            result = 31 * result + uniformSnapshot.hashCode()
+            result = 31 * result + childIdentitySnapshot.hashCode()
+            return result
+        }
+
+        override fun toString(): String =
+            "RuntimeColorFilter(" +
+                "effectId=$effectId, " +
+                "uniforms=${uniformSnapshot.deterministicUniformString()}, " +
+                "childIdentities=${childIdentitySnapshot.deterministicString()}" +
+                ")"
     }
 }
 
@@ -678,7 +739,10 @@ private fun GPUMaterialDescriptor.deepSnapshot(): GPUMaterialDescriptor =
             src = src.deepSnapshot(),
             uniformBytes = uniformBytes.copyOf(),
         )
-        is GPUMaterialDescriptor.Unsupported -> copy(source = source?.deepSnapshot())
+        is GPUMaterialDescriptor.Unsupported -> copy(
+            source = source?.deepSnapshot(),
+            evidence = evidence?.deepSnapshot(),
+        )
     }
 
 private fun GPUMaterialDescriptor.deepEquals(other: GPUMaterialDescriptor): Boolean =
@@ -720,7 +784,8 @@ private fun GPUMaterialDescriptor.deepEquals(other: GPUMaterialDescriptor): Bool
         this is GPUMaterialDescriptor.Unsupported && other is GPUMaterialDescriptor.Unsupported ->
             reason == other.reason &&
                 originalKind == other.originalKind &&
-                source.deepEqualsNullable(other.source)
+                source.deepEqualsNullable(other.source) &&
+                evidence == other.evidence
         else -> false
     }
 
@@ -763,6 +828,7 @@ private fun GPUMaterialDescriptor.deepHashCode(): Int =
             var result = reason.hashCode()
             result = 31 * result + originalKind.hashCode()
             result = 31 * result + (source?.deepHashCode() ?: 0)
+            result = 31 * result + (evidence?.hashCode() ?: 0)
             result
         }
     }
@@ -784,6 +850,22 @@ private fun GPUMaterialDescriptor?.deepEqualsNullable(other: GPUMaterialDescript
 private fun Map<String, GPURuntimeEffectUniformValue>.deterministicUniformString(): String =
     keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
         "$name=${getValue(name).deterministicString()}"
+    }
+
+private fun Map<String, String>.deterministicString(): String =
+    keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
+        "$name=${getValue(name)}"
+    }
+
+private fun GPUPreparedMaterialUnsupportedEvidence.deepSnapshot():
+    GPUPreparedMaterialUnsupportedEvidence =
+    when (this) {
+        is GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter ->
+            GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
+                effectId = effectId,
+                uniforms = uniforms,
+                childIdentities = childIdentities,
+            )
     }
 
 private fun Map<String, GPUMaterialDescriptor>.deterministicChildString(): String =
@@ -846,7 +928,7 @@ private fun GPUMaterialDescriptor.deterministicString(): String =
                 "uniformBytes=${uniformBytes.contentToString()})"
         is GPUMaterialDescriptor.Unsupported ->
             "Unsupported(reason=$reason, originalKind=$originalKind, " +
-                "source=${source?.deterministicString()})"
+                "source=${source?.deterministicString()}, evidence=$evidence)"
     }
 
 private val DEEP_COMPARE_EMPTY_BYTES = byteArrayOf()

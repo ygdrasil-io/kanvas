@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.commands
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 
@@ -99,6 +100,80 @@ class GPUMaterialDescriptorValueTest {
         assertContentEquals(byteArrayOf(1, 2, 3, 4), retainedImage.rgbaPixels)
         assertContentEquals(byteArrayOf(5, 6, 7, 8), retainedBlend.uniformBytes)
         assertEquals(equalDescriptor, descriptor)
+    }
+
+    @Test
+    fun `runtime color filter refusal evidence has recursive immutable value semantics`() {
+        val uniforms = linkedMapOf<String, GPURuntimeEffectUniformValue>(
+            "amount" to GPURuntimeEffectUniformValue.Float1(0.5f),
+        )
+        val childIdentities = linkedMapOf(
+            "input" to "sha256:${"a".repeat(64)}",
+        )
+        val descriptor = GPUMaterialDescriptor.RuntimeEffect(
+            effectId = "runtime.parent",
+            children = mapOf(
+                "refused" to GPUMaterialDescriptor.Unsupported(
+                    reason =
+                        GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+                    originalKind = GPUMaterialKind.SolidColor,
+                    source = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f),
+                    evidence = GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
+                        effectId = "runtime.filter",
+                        uniforms = uniforms,
+                        childIdentities = childIdentities,
+                    ),
+                ),
+            ),
+        )
+        val equalDescriptor = GPUMaterialDescriptor.RuntimeEffect(
+            effectId = "runtime.parent",
+            children = mapOf(
+                "refused" to GPUMaterialDescriptor.Unsupported(
+                    reason =
+                        GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+                    originalKind = GPUMaterialKind.SolidColor,
+                    source = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f),
+                    evidence = GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
+                        effectId = "runtime.filter",
+                        uniforms = mapOf(
+                            "amount" to GPURuntimeEffectUniformValue.Float1(0.5f),
+                        ),
+                        childIdentities = mapOf(
+                            "input" to "sha256:${"a".repeat(64)}",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        uniforms.clear()
+        childIdentities.clear()
+
+        assertEquals(equalDescriptor, descriptor)
+        assertEquals(equalDescriptor.hashCode(), descriptor.hashCode())
+        assertEquals(equalDescriptor.toString(), descriptor.toString())
+
+        val refused = assertIs<GPUMaterialDescriptor.Unsupported>(
+            descriptor.children.getValue("refused"),
+        )
+        val evidence =
+            assertIs<GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter>(
+                refused.evidence,
+            )
+        assertEquals(
+            GPURuntimeEffectUniformValue.Float1(0.5f),
+            evidence.uniforms.getValue("amount"),
+        )
+        assertEquals("sha256:${"a".repeat(64)}", evidence.childIdentities.getValue("input"))
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
+            (evidence.uniforms as MutableMap<String, GPURuntimeEffectUniformValue>).clear()
+        }
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
+            (evidence.childIdentities as MutableMap<String, String>).clear()
+        }
     }
 
     private fun nestedBlend(
