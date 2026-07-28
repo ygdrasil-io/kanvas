@@ -73,7 +73,7 @@ internal object GPUPreparedImageGridLowerer {
             )
         }
         validateNineDestinationGrid(operation)?.let { return it }
-        validateGridBlender(operation.paint)?.let { return it }
+        validateGridPaint(operation.paint)?.let { return it }
         val resolvedPaint = operation.paint.withResolvedGridBlender()
         val artifact = when (val prepared = GPUPreparedSurfaceImageSource.prepare(operation.image)) {
             is GPUPreparedImageArtifactResult.Ready -> prepared.artifact
@@ -144,7 +144,7 @@ internal object GPUPreparedImageGridLowerer {
             context = context,
             geometryCode = GPUPreparedImageRefusalCodes.LATTICE_GEOMETRY,
         )?.let { return it }
-        validateGridBlender(operation.paint)?.let { return it }
+        validateGridPaint(operation.paint)?.let { return it }
         val resolvedPaint = operation.paint.withResolvedGridBlender()
         validateSampling(operation.sampling)?.let { return it }
 
@@ -360,18 +360,27 @@ internal object GPUPreparedImageGridLowerer {
         }
     }
 
-    private fun validateGridBlender(
+    private fun validateGridPaint(
         paint: Paint?,
-    ): GPUPreparedImageGridLowering.Refused? = when (paint?.blender) {
-        null,
-        is Blender.Mode,
-        -> null
-        is Blender.Arithmetic -> refused(
-            code = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
-            operationIndex = -1,
-            reason = "unsupported_blender",
-            extraFacts = mapOf("blenderKind" to "Arithmetic"),
-        )
+    ): GPUPreparedImageGridLowering.Refused? {
+        paint.unsupportedPreparedImagePaintEffectOrNull()?.let { paintField ->
+            return GPUPreparedImageGridLowering.Refused(
+                code = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                operationIndex = -1,
+                facts = preparedImagePaintEffectRefusalFacts(paintField),
+            )
+        }
+        return when (paint?.blender) {
+            null,
+            is Blender.Mode,
+            -> null
+            is Blender.Arithmetic -> refused(
+                code = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                operationIndex = -1,
+                reason = "unsupported_blender",
+                extraFacts = mapOf("blenderKind" to "Arithmetic"),
+            )
+        }
     }
 
     private fun Paint?.withResolvedGridBlender(): Paint? = when (val blender = this?.blender) {

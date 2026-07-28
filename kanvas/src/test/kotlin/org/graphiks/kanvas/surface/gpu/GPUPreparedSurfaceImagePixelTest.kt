@@ -196,7 +196,6 @@ class GPUPreparedSurfaceImagePixelTest {
             "prepared.surface.direct",
             result.evidence.routeMarker.stableLabel,
         )
-        assertTrue(result.evidence.routeMarker.stableLabel != "legacy.surface.prepared.family.images")
 
         assertPixelExact(result.rgba, 64, 0, 0, listOf(188, 0, 0, 128))
         assertPixelExact(result.rgba, 64, 3, 0, listOf(255, 0, 0, 255))

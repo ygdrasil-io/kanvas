@@ -243,6 +243,34 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `exact image only boundary reaches native materialization without a core envelope`() {
+        val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.ImageOnly)
+        val events = mutableListOf<String>()
+        val adapter = GPURuntimeResourceAdapter()
+        val resources = GPUConcreteResourceProvider(leaseFactory = adapter)
+        val materializer = CapturingPreparedNativeMaterializer()
+        try {
+            val result = preflighter(
+                resources = resources,
+                completion = RecordingCompletionProvider(events),
+                surface = RecordingSurfaceProvider(events),
+                context = fixture.context,
+                capabilities = fixture.capabilities,
+                nativeBoundary = adapter.bindNativeFrameBoundary(resources, materializer),
+            ).preflight(fixture.framePlan)
+
+            val refused = assertIs<GPUFramePreflightResult.Refused>(result)
+            assertEquals("test.prepared-surface.boundary", refused.diagnostic.code.value)
+            assertEquals(1, materializer.materializeCallCount)
+            assertSame(fixture.framePlan, materializer.capturedFramePlan)
+            assertFalse("ticket:reserve" in events)
+            assertFalse(events.any { event -> event.startsWith("surface:") })
+        } finally {
+            adapter.close()
+        }
+    }
+
+    @Test
     fun `unmarked native materializer cannot admit the sealed mixed route`() {
         val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed)
         val events = mutableListOf<String>()

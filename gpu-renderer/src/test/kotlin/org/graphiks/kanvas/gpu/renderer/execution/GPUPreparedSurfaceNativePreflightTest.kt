@@ -258,6 +258,36 @@ class GPUPreparedSurfaceNativePreflightTest {
     }
 
     @Test
+    fun `accepted image only preflight retains one image run and no core route`() {
+        val input = capturedPreparedSurfaceInputs(PreparedSurfaceFixtureShape.ImageOnly)
+
+        val result = GPUPreparedSurfaceNativePreflight().validate(
+            input.framePlan,
+            input.encoderPlan,
+            input.resources,
+            input.shaderContract,
+            input.generationSeal,
+        )
+
+        val accepted = assertIs<GPUPreparedSurfaceNativePreflightResult.Accepted>(
+            result,
+            result.toString(),
+        )
+        val image = assertIs<GPUPreparedSurfaceNativeRunPlan.Image>(
+            accepted.plan.orderedRuns.single(),
+        ).plan
+        assertEquals(1, accepted.plan.imageFrames.size)
+        assertEquals(1, image.packets.size)
+        assertTrue(
+            accepted.plan.orderedRuns.none { it is GPUPreparedSurfaceNativeRunPlan.Core },
+        )
+        assertEquals(
+            input.encoderPlan.scopes.map { it.sourceStepIndex },
+            accepted.plan.exactScopeKeys.map { it.sourceStepIndex },
+        )
+    }
+
+    @Test
     fun `mixed encoder plan refuses substituted identity scope envelope labels and operand topology`() {
         val input = capturedPreparedSurfaceInputs(
             PreparedSurfaceFixtureShape.Mixed,
@@ -787,11 +817,6 @@ class GPUPreparedSurfaceNativePreflightTest {
             ),
             "invalid.prepared-surface.encoder-plan" to input.copy(
                 encoderPlan = input.encoderPlan.withMissingCoreRoute(input.framePlan),
-            ),
-            "unsupported.prepared-surface.semantic-shape" to input.copy(
-                framePlan = preparedSurfacePreflightFixture(
-                    PreparedSurfaceFixtureShape.ImageOnly,
-                ).framePlan,
             ),
         )
 

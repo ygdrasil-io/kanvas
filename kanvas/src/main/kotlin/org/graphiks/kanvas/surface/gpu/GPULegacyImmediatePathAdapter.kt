@@ -4,7 +4,6 @@ import org.graphiks.kanvas.canvas.DisplayOp
 
 /** Drawing families deliberately left on the temporary immediate renderer after Slice 12A. */
 enum class LegacyDisplayOpFamily {
-    Images,
     Text,
     Vertices,
     Composites,
@@ -43,19 +42,12 @@ class GPULegacyImmediatePathAdapter {
 
     companion object {
         val allowedFamilies: Set<LegacyDisplayOpFamily> = setOf(
-            LegacyDisplayOpFamily.Images,
             LegacyDisplayOpFamily.Text,
             LegacyDisplayOpFamily.Vertices,
             LegacyDisplayOpFamily.Composites,
         )
 
         fun familyOrNull(operation: DisplayOp): LegacyDisplayOpFamily? = when (operation) {
-            is DisplayOp.DrawImage,
-            is DisplayOp.DrawImageNine,
-            is DisplayOp.DrawImageLattice,
-            is DisplayOp.DrawAtlas,
-            -> LegacyDisplayOpFamily.Images
-
             is DisplayOp.DrawText -> LegacyDisplayOpFamily.Text
 
             is DisplayOp.DrawVertices,
@@ -75,6 +67,10 @@ class GPULegacyImmediatePathAdapter {
             is DisplayOp.DrawRRect,
             is DisplayOp.DrawDRRect,
             is DisplayOp.DrawPath,
+            is DisplayOp.DrawImage,
+            is DisplayOp.DrawImageNine,
+            is DisplayOp.DrawImageLattice,
+            is DisplayOp.DrawAtlas,
             is DisplayOp.SetTransform,
             is DisplayOp.SetClip,
             is DisplayOp.Annotation,

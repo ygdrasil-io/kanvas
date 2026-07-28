@@ -273,11 +273,13 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
         val coreRoutes = this.orderedRuns
             .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Core>()
             .map { run -> run.plan.routeSeal as GPUCorePrimitiveNativeScopeRouteSeal.Routes }
-        require(coreRoutes.map { route -> route.uniformSlabSeal }.distinct().size == 1 &&
-            coreRoutes.flatMap { route -> route.commandIds } ==
-            coreRoutes.first().uniformSlabSeal.commandIds
-        ) {
-            "Mixed CorePrimitive runs must exactly partition one frame-global uniform slab"
+        if (coreRoutes.isNotEmpty()) {
+            require(coreRoutes.map { route -> route.uniformSlabSeal }.distinct().size == 1 &&
+                coreRoutes.flatMap { route -> route.commandIds } ==
+                coreRoutes.first().uniformSlabSeal.commandIds
+            ) {
+                "Prepared CorePrimitive runs must exactly partition one frame-global uniform slab"
+            }
         }
     }
 }
@@ -325,7 +327,8 @@ internal class GPUPreparedSurfaceNativePreflight(
         val semanticTypes = semantics.filterNotNull()
             .map(GPUDrawSemanticPayload::canonicalType)
             .toSet()
-        if (semanticTypes != setOf("CorePrimitive", "SampledImage") ||
+        if ("SampledImage" !in semanticTypes ||
+            semanticTypes.any { it != "CorePrimitive" && it != "SampledImage" } ||
             renders.any { render ->
                 render.drawPackets
                     .mapNotNull(GPUDrawPacket::semanticPayload)
@@ -335,7 +338,7 @@ internal class GPUPreparedSurfaceNativePreflight(
         ) {
             return refused(
                 "unsupported.prepared-surface.semantic-shape",
-                "The mixed route accepts only homogeneous ordered CorePrimitive and SampledImage runs.",
+                "The prepared surface route accepts only homogeneous ordered CorePrimitive and SampledImage runs.",
             )
         }
         if (framePlan.steps.any {

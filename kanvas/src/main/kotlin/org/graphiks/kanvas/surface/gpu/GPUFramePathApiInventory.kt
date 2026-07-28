@@ -153,6 +153,7 @@ object GPUFramePathApiInventory {
                 targetBounds = targetBounds,
                 semanticsByCommandId = semantics,
                 readbackRequestId = readbackRequestId,
+                targetFormat = GPUColorFormat(inventory.target.colorFormat),
             ),
         )
     }

@@ -235,7 +235,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
-    fun `prepared image nine hard scissor refuses the whole expanded frame exactly`() {
+    fun `prepared image nine hard scissor applies to every expanded packet exactly`() {
         val image = imageNine("builder-nine-scissor-refusal")
         val operation = DisplayOp.DrawImageNine(
             image = image,
@@ -249,12 +249,26 @@ class GPUPreparedSurfaceFrameBuilderTest {
             ),
         )
 
-        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
             GPUPreparedSurfaceFrameBuilder.build(imageRequest(listOf(operation))),
         )
-
-        assertEquals("unsupported.surface.prepared.image-clip", refused.diagnostic.code.value)
-        assertEquals("0", refused.diagnostic.facts["commandId"])
+        val packets = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        assertEquals(9, packets.size)
+        assertTrue(
+            packets.all {
+                it.clipCoveragePlan ==
+                    GPUClipCoveragePlan.Scissor(
+                        org.graphiks.kanvas.gpu.renderer.clips.GPUBounds(6f, 7f, 18f, 16f),
+                    )
+            },
+        )
+        assertTrue(
+            packets.all {
+                it.clipExecutionPlan ==
+                    GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(6, 7, 18, 16))
+            },
+        )
     }
 
     @Test

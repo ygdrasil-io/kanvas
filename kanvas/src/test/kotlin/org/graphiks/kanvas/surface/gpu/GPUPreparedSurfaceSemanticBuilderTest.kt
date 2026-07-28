@@ -88,10 +88,10 @@ class GPUPreparedSurfaceSemanticBuilderTest {
     }
 
     @Test
-    fun `native bitmap image step is refused until it has its own prepared semantic route`() {
+    fun `native bitmap capability cannot replace the prepared sampled image semantic`() {
         val fixture = mixedFixture(nativeImage = true)
 
-        val refused = assertIs<GPUPreparedSurfaceSemanticGatherResult.Refused>(
+        val gathered = assertIs<GPUPreparedSurfaceSemanticGatherResult.Gathered>(
             GPUPreparedSurfaceSemanticBuilder.gather(
                 visualCommands = fixture.visuals,
                 recording = fixture.recording,
@@ -101,7 +101,9 @@ class GPUPreparedSurfaceSemanticBuilderTest {
             ),
         )
 
-        assertEquals("invalid.surface.prepared.image-recording-authority", refused.diagnostic.code.value)
+        assertIs<GPUDrawSemanticPayload.SampledImage>(
+            gathered.semanticsByCommandId.getValue(1),
+        )
     }
 
     private fun mixedFixture(nativeImage: Boolean = false): MixedFixture {
@@ -130,45 +132,11 @@ class GPUPreparedSurfaceSemanticBuilderTest {
             RenderConfig.DEFAULT,
             capabilities(nativeImage),
         )
-        val artifact = (
-            GPUPreparedSurfaceImageSource.prepare(image) as GPUPreparedImageArtifactResult.Ready
-            ).artifact
-        val coreFirst = initial.visualCommands.first()
-        val coreLast = initial.visualCommands.last().let { visual ->
-            val command = visual.normalized as NormalizedDrawCommand.FillRect
-            visual.copy(
-                normalized = command.copy(
-                    commandId = GPUDrawCommandID(2),
-                    ordering = GPUOrderingFacts(2, false, false),
-                ),
-            )
+        val imageVisual = initial.visualCommands.single { visual ->
+            visual.normalized.commandId == GPUDrawCommandID(1)
         }
-        val imageCommand = (operations[1] as DisplayOp.DrawImage)
-            .toImageRectCommand(GPUDrawCommandID(1), GPUTargetFacts(32, 24, "rgba8unorm"))
-            .copy(
-                material = (
-                    (operations[1] as DisplayOp.DrawImage)
-                        .toImageRectCommand(GPUDrawCommandID(1), GPUTargetFacts(32, 24, "rgba8unorm"))
-                        .material as GPUMaterialDescriptor.ImageDraw
-                    ).copy(rgbaPixels = artifact.tightRgba8BytesForUpload()),
-                pixelsRowBytes = 12,
-                pixelsGeneration = artifact.sourceGeneration,
-                pixelsContentHash = artifact.contentHash,
-                pixelsProvenance = "semantic-builder-test",
-                ordering = GPUOrderingFacts(1, false, false),
-            )
-        val imageVisual = coreFirst.copy(
-            normalized = imageCommand,
-            targetSpaceBounds = imageCommand.bounds,
-        )
-        val visuals = listOf(coreFirst, imageVisual, coreLast)
-        val recorder = GPURecorder(
-            GPURecordingID("prepared-surface-semantics"),
-            GPUFrameID(23),
-            capabilities(nativeImage),
-        )
-        visuals.forEach { recorder.record(it.normalized) }
-        return MixedFixture(visuals, recorder.close(), artifact)
+        val artifact = requireNotNull(imageVisual.preparedImage).artifact
+        return MixedFixture(initial.visualCommands, initial.recording, artifact)
     }
 
     private fun rect(left: Float) = DisplayOp.DrawRect(

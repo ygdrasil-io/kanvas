@@ -94,13 +94,13 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
     }
 
     @Test
-    fun `dispatcher keeps pure sampled image outside the admitted native routes`() {
-        val route = selectWgpu4kPreparedFramePayloadRoute(
-            listOf(GPUDrawSemanticPayload.SampledImage::class),
+    fun `dispatcher selects pure sampled image through the prepared surface route`() {
+        assertEquals(
+            GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed,
+            selectWgpu4kPreparedFramePayloadRoute(
+                listOf(GPUDrawSemanticPayload.SampledImage::class),
+            ),
         )
-
-        val refused = assertIs<GPUWgpu4kPreparedFramePayloadRoute.Refused>(route)
-        assertEquals("unsupported.native-frame-payload.semantic-shape", refused.code)
     }
 
     @Test

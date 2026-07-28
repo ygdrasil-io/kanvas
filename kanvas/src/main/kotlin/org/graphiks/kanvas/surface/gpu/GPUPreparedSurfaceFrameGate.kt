@@ -41,6 +41,10 @@ internal object GPUPreparedSurfaceFrameGate {
                 is DisplayOp.DrawRRect,
                 is DisplayOp.DrawDRRect,
                 is DisplayOp.DrawPath,
+                is DisplayOp.DrawImage,
+                is DisplayOp.DrawImageNine,
+                is DisplayOp.DrawImageLattice,
+                is DisplayOp.DrawAtlas,
                 -> hasVisual = true
 
                 is DisplayOp.SetTransform,
@@ -53,10 +57,6 @@ internal object GPUPreparedSurfaceFrameGate {
                     operationIndex = operationIndex,
                 )
 
-                is DisplayOp.DrawImage,
-                is DisplayOp.DrawImageNine,
-                is DisplayOp.DrawImageLattice,
-                is DisplayOp.DrawAtlas,
                 is DisplayOp.DrawText,
                 is DisplayOp.DrawVertices,
                 is DisplayOp.DrawMesh,
@@ -87,7 +87,6 @@ internal object GPUPreparedSurfaceFrameGate {
 }
 
 private fun LegacyDisplayOpFamily.preparedSurfaceCode(): String = when (this) {
-    LegacyDisplayOpFamily.Images -> "legacy.surface.prepared.family.images"
     LegacyDisplayOpFamily.Text -> "legacy.surface.prepared.family.text"
     LegacyDisplayOpFamily.Vertices -> "legacy.surface.prepared.family.vertices"
     LegacyDisplayOpFamily.Composites -> "legacy.surface.prepared.family.composites"

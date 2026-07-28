@@ -1,44 +1,123 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.concurrent.CompletableFuture
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeTelemetry
+import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
+import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneNativeCounters
+import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
+import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
+import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
+import org.graphiks.kanvas.image.AlphaType
+import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceProductRouterTest {
     @Test
-    fun `gate legacy and BGRA never call the execution port`() {
+    fun `non-image gate legacy and BGRA never call the execution port`() {
         var calls = 0
         val port = GPUPreparedSurfaceExecutionPort {
             calls++
             error("must not execute")
         }
-        val image = Image.placeholder(1, 1)
-        val imageOp = DisplayOp.DrawImage(image, RECT, RECT, null, Matrix33.identity(), ClipStack.WideOpen)
 
-        val imageRoute = GPUPreparedSurfaceProductRouter.route(
-            listOf(imageOp), 4, 4, PixelFormat.RGBA8, RenderConfig.DEFAULT, port,
+        val compositeRoute = GPUPreparedSurfaceProductRouter.route(
+            listOf(DisplayOp.BeginLayer(null, null)),
+            4,
+            4,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+            port,
         )
         val bgraRoute = GPUPreparedSurfaceProductRouter.route(
             listOf(rect()), 4, 4, PixelFormat.BGRA8, RenderConfig.DEFAULT, port,
         )
 
-        assertEquals("legacy.surface.prepared.family.images", assertIs<GPUPreparedSurfaceProductRoute.Legacy>(imageRoute).code)
+        assertEquals(
+            "legacy.surface.prepared.family.composites",
+            assertIs<GPUPreparedSurfaceProductRoute.Legacy>(compositeRoute).code,
+        )
         assertEquals("legacy.surface.prepared.pixel-format.bgra8", assertIs<GPUPreparedSurfaceProductRoute.Legacy>(bgraRoute).code)
         assertEquals(0, calls)
+    }
+
+    @Test
+    fun `every valid image family completes through actual prepared execution`() {
+        preparedProductImageOperations().forEach { (operation, expectedVisualCount) ->
+            val harness = PreparedProductExecutionHarness(width = 8, height = 8)
+
+            val route = GPUPreparedSurfaceProductRouter.route(
+                listOf(operation),
+                8,
+                8,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+                harness.port,
+            )
+
+            val prepared = assertIs<GPUPreparedSurfaceProductRoute.Prepared>(
+                route,
+                operation::class.simpleName,
+            )
+            assertEquals(expectedVisualCount, prepared.result.stats.opsDispatched)
+            assertContentEquals(harness.expectedRgba.toUByteArray(), prepared.result.pixels)
+            assertEquals(1, harness.backend.prepareCalls)
+            assertEquals(1, harness.backend.session.submitCalls)
+            assertTrue(prepared.evidence.routeMarker == GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect)
+        }
+    }
+
+    @Test
+    fun `every invalid image family preserves its exact prepared refusal as terminal`() {
+        val invalid = preparedProductImage(
+            sourceId = "product-invalid-image",
+            pixels = null,
+        )
+
+        preparedProductImageOperations(invalid).forEach { (operation, _) ->
+            val harness = PreparedProductExecutionHarness(width = 8, height = 8)
+
+            val route = GPUPreparedSurfaceProductRouter.route(
+                listOf(operation),
+                8,
+                8,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+                harness.port,
+            )
+
+            val terminal = assertIs<GPUPreparedSurfaceProductRoute.Terminal>(
+                route,
+                operation::class.simpleName,
+            )
+            assertEquals(GPUPreparedImageRefusalCodes.PIXELS_MISSING, terminal.diagnostic.code.value)
+            assertEquals(0, harness.backend.prepareCalls)
+            assertEquals(0, harness.backend.session.submitCalls)
+        }
     }
 
     @Test
@@ -153,4 +232,167 @@ class GPUPreparedSurfaceProductRouterTest {
     private companion object {
         val RECT = Rect.fromLTRB(0f, 0f, 4f, 4f)
     }
+}
+
+internal class PreparedProductExecutionHarness(
+    width: Int,
+    height: Int,
+) {
+    val expectedRgba = ByteArray(width * height * 4) { index -> (index + 1).toByte() }
+    val backend = PreparedProductBackend(expectedRgba)
+    val port: GPUPreparedSurfaceExecutionPort = GPUPreparedSurfaceFrameExecutor(
+        GPUPreparedSurfaceBackendPortFactory { backend },
+    )
+}
+
+internal class PreparedProductBackend(
+    rgba: ByteArray,
+) : GPUPreparedSurfaceBackendPort {
+    override val capabilities: GPUCapabilities = preparedProductCapabilities()
+    override val deviceGeneration = GPUDeviceGenerationID(101)
+    override val runtimeTelemetry = GPUBackendRuntimeTelemetry()
+    val session = PreparedProductSession(rgba)
+    var prepareCalls = 0
+        private set
+
+    override fun prepare(request: GPUOffscreenTargetRequest): GPUPreparedSurfaceSessionPort {
+        prepareCalls++
+        return session
+    }
+
+    override fun close() = Unit
+}
+
+internal class PreparedProductSession(
+    rgba: ByteArray,
+) : GPUPreparedSurfaceSessionPort {
+    private val ownedRgba = rgba.copyOf()
+    var submitCalls = 0
+        private set
+    private var counterReads = 0
+    private var closed = false
+
+    override fun submit(
+        taskList: GPUTaskList,
+        readbackId: GPUReadbackRequestID,
+    ): GPUPreparedSurfaceSubmission {
+        submitCalls++
+        val attempt = GPUFrameAttemptID("prepared-product-execution")
+        return GPUPreparedSurfaceSubmission(
+            attemptId = attempt,
+            immediateState = GPUPreparedSurfaceImmediateState.Submitted,
+            completion = CompletableFuture.completedFuture(
+                GPUPreparedSurfaceCompletion(
+                    attemptId = attempt,
+                    outcome = GPUFrameStructuralOutcome.Succeeded,
+                    diagnostic = null,
+                    outputKind = GPUPreparedSurfaceOutputKind.ReadbackRgba,
+                    readbackId = readbackId,
+                    rgba = ownedRgba,
+                ),
+            ),
+        )
+    }
+
+    override fun counters(): GPUPreparedSceneNativeCounters {
+        counterReads++
+        return when {
+            closed -> completedCounters().copy(targetCloses = 1)
+            counterReads == 1 -> GPUPreparedSceneNativeCounters(targetCreations = 1)
+            else -> completedCounters()
+        }
+    }
+
+    override fun close() {
+        closed = true
+    }
+
+    private fun completedCounters() = GPUPreparedSceneNativeCounters(
+        targetCreations = 1,
+        frameCoordinatorCreations = 1,
+        encoders = 1,
+        commandBuffers = 1,
+        submits = 1,
+        readbackCopies = 1,
+        renderPasses = 1,
+        draws = 1,
+        pipelineBinds = 1,
+        retentionRegistrations = 1,
+        retentionCompletions = 1,
+        distinctRetentionTickets = 1,
+    )
+}
+
+internal fun preparedProductImageOperations(
+    image: Image = preparedProductImage(),
+): List<Pair<DisplayOp, Int>> {
+    val clip = ClipStack.WideOpen
+    return listOf(
+        DisplayOp.DrawImage(
+            image,
+            Rect.fromLTRB(0f, 0f, 4f, 4f),
+            Rect.fromLTRB(0f, 0f, 4f, 4f),
+            null,
+            Matrix33.identity(),
+            clip,
+        ) to 1,
+        DisplayOp.DrawImageNine(
+            image,
+            Rect.fromLTRB(1f, 1f, 3f, 3f),
+            Rect.fromLTRB(0f, 0f, 8f, 8f),
+            null,
+            Matrix33.identity(),
+            clip,
+        ) to 9,
+        DisplayOp.DrawImageLattice(
+            image,
+            Lattice(listOf(2), listOf(2)),
+            Rect.fromLTRB(0f, 0f, 8f, 8f),
+            null,
+            Matrix33.identity(),
+            clip,
+        ) to 4,
+        DisplayOp.DrawAtlas(
+            image,
+            listOf(Matrix33.identity()),
+            listOf(Rect.fromLTRB(0f, 0f, 2f, 2f)),
+            listOf(Color.WHITE),
+            BlendMode.SRC_OVER,
+            Paint.fill(Color.WHITE),
+            Matrix33.identity(),
+            clip,
+        ) to 1,
+    )
+}
+
+internal fun preparedProductImage(
+    sourceId: String = "prepared-product-image",
+    pixels: ByteArray? = ByteArray(4 * 4 * 4) { 0xff.toByte() },
+) = Image(
+    width = 4,
+    height = 4,
+    colorType = ColorType.RGBA_8888,
+    sourceId = sourceId,
+    pixels = pixels,
+    alphaType = AlphaType.PREMUL,
+)
+
+private fun preparedProductCapabilities(): GPUCapabilities {
+    val base = GPUProductFlagConfig().buildCapabilities()
+    return GPUCapabilities(
+        implementation = base.implementation,
+        facts = base.facts,
+        knownUnsupportedFacts = base.knownUnsupportedFacts,
+        snapshotId = "${base.snapshotId}:prepared-product-route",
+        limits = GPULimits(
+            maxTextureDimension2D = 8192,
+            copyBytesPerRowAlignment = 256,
+            minUniformBufferOffsetAlignment = 256,
+            maxBufferSize = 1L shl 30,
+            maxDynamicUniformBuffersPerPipelineLayout = 1,
+        ),
+        textureFormatSampleSupport = base.textureFormatSampleSupport,
+        rendererFeatures = base.rendererFeatures,
+        copyAsDrawCapability = base.copyAsDrawCapability,
+    )
 }

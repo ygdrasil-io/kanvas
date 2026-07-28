@@ -1,8 +1,10 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.SCISSOR_NATIVE
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
@@ -36,6 +38,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
 import org.graphiks.kanvas.gpu.renderer.recording.buildPreparedImageGeometry
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
@@ -95,6 +98,12 @@ internal object GPUPreparedDrawImageLowerer {
                     "blendMode" to blendMode.name,
                     "supportedBlendMode" to BlendMode.SRC_OVER.name,
                 ),
+            )
+        }
+        operation.paint.unsupportedPreparedImagePaintEffectOrNull()?.let { paintField ->
+            return GPUPreparedDrawImageLowering.Refused(
+                GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                preparedImagePaintEffectRefusalFacts(paintField),
             )
         }
 
@@ -220,6 +229,21 @@ internal object GPUPreparedDrawImageLowerer {
                 prepared.facts + mapOf("sourceId" to image.sourceId),
             )
         }
+        val clipPlans = when (
+            val classified = classifyPreparedDrawImageClip(
+                operation.clip,
+                GPUPreparedImageLoweringContext(
+                    provenance = provenance,
+                    target = target,
+                    config = config,
+                    capabilities = capabilities,
+                ),
+            )
+        ) {
+            is GPUPreparedDrawImageClipClassification.Ready -> classified
+            is GPUPreparedDrawImageClipClassification.Refused ->
+                return GPUPreparedDrawImageLowering.Refused(classified.code, classified.facts)
+        }
 
         val samplingFilterMode = when (sampling) {
             GPUPreparedImageSampling.Nearest -> "nearest"
@@ -315,28 +339,12 @@ internal object GPUPreparedDrawImageLowerer {
             pixelsProvenance = "prepared-surface-artifact",
         )
 
-        val clipCoverage = if (normalized.clip.coverageRequest == null) {
-            GPUClipCoveragePlan.NoClip
-        } else {
-            GPUClipCoveragePlan.Refused(
-                "unsupported.clip.prepared_image_execution_unclassified",
-            )
-        }
-        val clipExecution = if (clipCoverage == GPUClipCoveragePlan.NoClip) {
-            GPUClipExecutionPlan.NoClip
-        } else {
-            GPUClipExecutionPlan.Refused(
-                code = "unsupported.clip.prepared_image_execution_unclassified",
-                message = "Prepared image clip execution must be classified before recording.",
-            )
-        }
-
         val visual = GPUFramePathVisualCommand(
             normalized = normalized,
             targetSpaceBounds = bounds,
             geometryCoverage = GPUCoverageConsumption.FullOrScissor,
-            clipCoverage = clipCoverage,
-            clipExecutionPlan = clipExecution,
+            clipCoverage = clipPlans.coverage,
+            clipExecutionPlan = clipPlans.execution,
             blendPlan = blendPlan,
             provenance = provenance,
             preparedImage = GPUPreparedImageDrawFacts(
@@ -350,3 +358,105 @@ internal object GPUPreparedDrawImageLowerer {
         return GPUPreparedDrawImageLowering.Ready(visual)
     }
 }
+
+internal fun Paint?.unsupportedPreparedImagePaintEffectOrNull(): String? = when {
+    this?.colorFilter != null -> "colorFilter"
+    this?.maskFilter != null -> "maskFilter"
+    this?.imageFilter != null -> "imageFilter"
+    else -> null
+}
+
+internal fun preparedImagePaintEffectRefusalFacts(paintField: String): Map<String, String> =
+    mapOf(
+        "reason" to "unsupported_paint_effect",
+        "paintField" to paintField,
+    )
+
+private sealed interface GPUPreparedDrawImageClipClassification {
+    data class Ready(
+        val coverage: GPUClipCoveragePlan,
+        val execution: GPUClipExecutionPlan,
+    ) : GPUPreparedDrawImageClipClassification
+
+    data class Refused(
+        val code: String = "unsupported.surface.prepared.image-clip",
+        val facts: Map<String, String>,
+    ) : GPUPreparedDrawImageClipClassification
+}
+
+private fun classifyPreparedDrawImageClip(
+    clip: ClipStack,
+    context: GPUPreparedImageLoweringContext,
+): GPUPreparedDrawImageClipClassification {
+    if (clip == ClipStack.WideOpen) {
+        return GPUPreparedDrawImageClipClassification.Ready(
+            coverage = GPUClipCoveragePlan.NoClip,
+            execution = GPUClipExecutionPlan.NoClip,
+        )
+    }
+    if (clip is ClipStack.Complex) {
+        return refusedPreparedDrawImageClip("unsupported_clip_plan")
+    }
+    val request = clip.toGPUClipFacts(context.target).coverageRequest
+        ?: return refusedPreparedDrawImageClip("missing_clip_request")
+    val maxTextureDimension2D = context.capabilities.limits?.maxTextureDimension2D
+        ?: maxOf(context.target.width, context.target.height).toLong()
+    val coverage = GPUClipCoveragePlanner.plan(
+        request = request,
+        config = context.config,
+        maxTextureDimension2D = maxTextureDimension2D.coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt(),
+    )
+    if (coverage !is GPUClipCoveragePlan.Scissor ||
+        !context.capabilities.supportsPreparedDrawImageScissor()
+    ) {
+        return refusedPreparedDrawImageClip("unsupported_clip_plan")
+    }
+    val coordinates = listOf(
+        coverage.bounds.left,
+        coverage.bounds.top,
+        coverage.bounds.right,
+        coverage.bounds.bottom,
+    )
+    if (coordinates.any { !it.isFinite() || it.toInt().toFloat() != it } ||
+        coverage.bounds.right < coverage.bounds.left ||
+        coverage.bounds.bottom < coverage.bounds.top
+    ) {
+        return refusedPreparedDrawImageClip("invalid_scissor")
+    }
+    val left = coverage.bounds.left.toInt().coerceIn(0, context.target.width)
+    val top = coverage.bounds.top.toInt().coerceIn(0, context.target.height)
+    val right = coverage.bounds.right.toInt().coerceIn(0, context.target.width)
+    val bottom = coverage.bounds.bottom.toInt().coerceIn(0, context.target.height)
+    if (right <= left || bottom <= top) {
+        return refusedPreparedDrawImageClip("empty_scissor")
+    }
+    return GPUPreparedDrawImageClipClassification.Ready(
+        coverage = GPUClipCoveragePlan.Scissor(
+            org.graphiks.kanvas.gpu.renderer.clips.GPUBounds(
+                left.toFloat(),
+                top.toFloat(),
+                right.toFloat(),
+                bottom.toFloat(),
+            ),
+        ),
+        execution = GPUClipExecutionPlan.ScissorOnly(
+            GPUPixelBounds(left, top, right, bottom),
+        ),
+    )
+}
+
+private fun refusedPreparedDrawImageClip(
+    reason: String,
+): GPUPreparedDrawImageClipClassification.Refused =
+    GPUPreparedDrawImageClipClassification.Refused(
+        facts = mapOf("reason" to reason),
+    )
+
+private fun GPUCapabilities.supportsPreparedDrawImageScissor(): Boolean =
+    knownUnsupportedFacts.none { fact -> fact.name == SCISSOR_NATIVE } &&
+        facts.any { fact ->
+            fact.name == SCISSOR_NATIVE &&
+                fact.value == "supported" &&
+                fact.affectsValidity
+        }

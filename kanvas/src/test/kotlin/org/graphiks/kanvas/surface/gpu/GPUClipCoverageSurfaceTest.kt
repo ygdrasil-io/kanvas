@@ -7,6 +7,8 @@ import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
@@ -47,6 +49,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlin.test.assertFailsWith
 
+private const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
+
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUClipCoverageSurfaceTest {
     @AfterEach
@@ -55,7 +59,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex difference clip renders core shapes and image through S G composition`() {
+    fun `complex difference clip with image is terminal before the frame enters legacy`() {
         requireWebGpu()
         val surface = Surface(32, 32)
         surface.canvas {
@@ -71,21 +75,9 @@ class GPUClipCoverageSurfaceTest {
             restore()
         }
 
-        val result = surface.render()
-        assertRgbaNear(result.pixels, 32, 4, 4, Color.RED)
-        assertRgbaNear(result.pixels, 32, 16, 16, Color.TRANSPARENT)
-        assertRgbaNear(result.pixels, 32, 28, 16, Color.BLUE)
-        assertRgbaNear(result.pixels, 32, 14, 22, Color.RED)
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(
-            result.diagnostics.entries.any { it.code.startsWith("route:clip:DrawImage") },
-            result.diagnostics.entries.toString(),
-        )
-        assertTrue(
-            result.diagnostics.entries.any { entry ->
-                entry.facts.any { fact -> fact.key == "clip.strategy" && fact.value == "alpha-mask" }
-            },
-            result.diagnostics.entries.toString(),
+        assertPreparedImageTerminal(
+            expectedCode = PREPARED_IMAGE_CLIP_REFUSAL,
+            block = surface::render,
         )
     }
 
@@ -401,7 +393,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `alpha mask image uses destination rect geometry independent of sampled alpha`() {
+    fun `unsupported image blend refuses before alpha mask image clip lowering`() {
         requireWebGpu()
         val transparentImage = Image.fromPixels(
             width = 1,
@@ -409,8 +401,9 @@ class GPUClipCoverageSurfaceTest {
             pixels = byteArrayOf(0, 0, 0, 0),
             colorType = ColorType.RGBA_8888,
             sourceId = "coverage-plane-transparent-image",
+            alphaType = AlphaType.PREMUL,
         )
-        val result = Surface(16, 16).run {
+        val surface = Surface(16, 16).apply {
             canvas {
                 drawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE))
                 save()
@@ -423,12 +416,12 @@ class GPUClipCoverageSurfaceTest {
                 )
                 restore()
             }
-            render()
         }
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertRgbaNear(result.pixels, 16, 3, 3, Color.TRANSPARENT)
-        assertRgbaNear(result.pixels, 16, 7, 7, Color.WHITE)
+        assertPreparedImageTerminal(
+            expectedCode = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+            block = surface::render,
+        )
     }
 
     @Test
@@ -486,7 +479,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `core complex clip routes render image through destination rect coverage`() {
+    fun `core frame with complex clipped image is terminal atomically`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(
@@ -512,22 +505,17 @@ class GPUClipCoverageSurfaceTest {
                 clip,
             ),
         )
-        val trace = GPUClipRouteTrace()
-
-        val result = renderViaGpu(
-            buffer = StaticDisplayListBuffer(ops),
-            width = 32,
-            height = 32,
-            format = PixelFormat.RGBA8,
-            config = RenderConfig.DEFAULT,
-            routeTrace = trace,
-        )
-
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(4, trace.logicalDrawCount)
-        assertEquals(4, trace.sourceThenCompositeCount)
-        assertEquals(0, trace.directComplexClipDispatches)
-        assertRgbaNear(result.pixels, 32, 24, 24, Color.BLUE)
+        assertPreparedImageTerminal(
+            expectedCode = PREPARED_IMAGE_CLIP_REFUSAL,
+        ) {
+            renderViaGpu(
+                buffer = StaticDisplayListBuffer(ops),
+                width = 32,
+                height = 32,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+            )
+        }
     }
 
     @Test
@@ -831,65 +819,59 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `complex clip image nine uses per cell destination rect coverage`() {
+    fun `complex clip image nine is an exact prepared clip refusal`() {
         requireWebGpu()
         val image = opaqueImage(size = 3)
 
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
-                    DisplayOp.DrawImageNine(
-                        image,
-                        Rect(1f, 1f, 2f, 2f),
-                        Rect(2f, 2f, 14f, 14f),
-                        null,
-                        Matrix33.identity(),
-                        complexFullClip(),
+        assertPreparedImageTerminal(PREPARED_IMAGE_CLIP_REFUSAL) {
+            renderViaGpu(
+                StaticDisplayListBuffer(
+                    listOf(
+                        DisplayOp.DrawImageNine(
+                            image,
+                            Rect(1f, 1f, 2f, 2f),
+                            Rect(2f, 2f, 14f, 14f),
+                            null,
+                            Matrix33.identity(),
+                            complexFullClip(),
+                        ),
                     ),
                 ),
-            ),
-            32,
-            32,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
-
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.any { it.code.startsWith("route:clip:DrawImageNine") })
-        assertVisibleAt(result.pixels, 32, 3, 3)
-        assertVisibleAt(result.pixels, 32, 12, 12)
+                32,
+                32,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+            )
+        }
     }
 
     @Test
-    fun `complex clip atlas uses sprite destination rect coverage`() {
+    fun `complex clip atlas is an exact prepared clip refusal`() {
         requireWebGpu()
         val image = opaqueImage(size = 3)
 
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
-                    DisplayOp.DrawAtlas(
-                        atlas = image,
-                        transforms = listOf(Matrix33.translate(2f, 20f), Matrix33.translate(18f, 20f)),
-                        texRects = listOf(Rect(0f, 0f, 3f, 3f), Rect(0f, 0f, 3f, 3f)),
-                        colors = null,
-                        blendMode = BlendMode.SRC_OVER,
-                        paint = null,
-                        transform = Matrix33.identity(),
-                        clip = complexFullClip(),
+        assertPreparedImageTerminal(PREPARED_IMAGE_CLIP_REFUSAL) {
+            renderViaGpu(
+                StaticDisplayListBuffer(
+                    listOf(
+                        DisplayOp.DrawAtlas(
+                            atlas = image,
+                            transforms = listOf(Matrix33.translate(2f, 20f), Matrix33.translate(18f, 20f)),
+                            texRects = listOf(Rect(0f, 0f, 3f, 3f), Rect(0f, 0f, 3f, 3f)),
+                            colors = null,
+                            blendMode = BlendMode.SRC_OVER,
+                            paint = null,
+                            transform = Matrix33.identity(),
+                            clip = complexFullClip(),
+                        ),
                     ),
                 ),
-            ),
-            32,
-            32,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
-
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.any { it.code.startsWith("route:clip:DrawAtlas") })
-        assertVisibleAt(result.pixels, 32, 3, 21)
-        assertVisibleAt(result.pixels, 32, 19, 21)
+                32,
+                32,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+            )
+        }
     }
 
     @Test
@@ -1318,6 +1300,14 @@ class GPUClipCoverageSurfaceTest {
         runtime!!.close()
     }
 
+    private fun assertPreparedImageTerminal(
+        expectedCode: String,
+        block: () -> Any?,
+    ) {
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> { block() }
+        assertEquals(expectedCode, failure.diagnostic.code.value)
+    }
+
     private fun assertRgbaNear(
         pixels: UByteArray,
         width: Int,
@@ -1471,6 +1461,7 @@ class GPUClipCoverageSurfaceTest {
         pixels = byteArrayOf(0, 0, 0xff.toByte(), 0xff.toByte()),
         colorType = ColorType.RGBA_8888,
         sourceId = "clip-blue-pixel",
+        alphaType = AlphaType.PREMUL,
     )
 
     private fun bgraBluePixel(): Image = Image.fromPixels(
@@ -1479,6 +1470,7 @@ class GPUClipCoverageSurfaceTest {
         pixels = byteArrayOf(0xff.toByte(), 0, 0, 0xff.toByte()),
         colorType = ColorType.BGRA_8888,
         sourceId = "clip-bgra-blue-pixel",
+        alphaType = AlphaType.PREMUL,
     )
 
     private fun opaqueImage(size: Int): Image = Image.fromPixels(
@@ -1487,6 +1479,7 @@ class GPUClipCoverageSurfaceTest {
         pixels = ByteArray(size * size * 4) { index -> if (index % 4 == 3) 0xff.toByte() else 0x7f },
         colorType = ColorType.RGBA_8888,
         sourceId = "clip-opaque-$size",
+        alphaType = AlphaType.PREMUL,
     )
 
     private fun texturedScissorTriangle(): Vertices = Vertices(
@@ -1503,6 +1496,7 @@ class GPUClipCoverageSurfaceTest {
                 pixels = byteArrayOf(0, 0, 0, 0xff.toByte()),
                 colorType = ColorType.RGBA_8888,
                 sourceId = "clip-scissor-black",
+                alphaType = AlphaType.PREMUL,
             ),
         ),
         blendMode = BlendMode.DARKEN,

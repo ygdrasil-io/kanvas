@@ -10,6 +10,8 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.SCISSOR_NATIVE
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
@@ -17,6 +19,10 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
@@ -26,9 +32,13 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -46,7 +56,15 @@ class GPUPreparedDrawImageLowererTest {
             adapterName = "mock",
             deviceName = "mock-device",
         ),
-        facts = emptyList(),
+        facts = listOf(
+            GPUCapabilityFact(
+                name = SCISSOR_NATIVE,
+                source = "test",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "test:$SCISSOR_NATIVE",
+            ),
+        ),
         knownUnsupportedFacts = emptyList(),
         snapshotId = "fp04-lowerer-test",
         limits = GPULimits(
@@ -650,14 +668,39 @@ class GPUPreparedDrawImageLowererTest {
     }
 
     @Test
-    fun `clip preserved for non-wide-open clip`() {
+    fun `integral device clip lowers to one exact prepared image scissor`() {
         val image = rgbaImage()
-        val rectPath = org.graphiks.kanvas.geometry.Path().apply {
-            moveTo(0f, 0f)
-            lineTo(100f, 0f)
-            lineTo(100f, 100f)
-            close()
-        }
+        val clip = ClipStack.DeviceRect(
+            Rect.fromLTRB(4f, 6f, 52f, 48f),
+            antiAlias = false,
+        )
+        val operation = drawImage(image).copy(clip = clip)
+
+        val ready = assertIs<GPUPreparedDrawImageLowering.Ready>(
+            GPUPreparedDrawImageLowerer.lower(
+                operation,
+                GPUDrawCommandID(0),
+                0,
+                GPUFrameProvenance.None,
+                target(),
+                RenderConfig.DEFAULT,
+                capabilities(),
+            ),
+        )
+
+        assertEquals(
+            GPUClipCoveragePlan.Scissor(GPUBounds(4f, 6f, 52f, 48f)),
+            ready.command.clipCoverage,
+        )
+        assertEquals(
+            GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(4, 6, 52, 48)),
+            ready.command.clipExecutionPlan,
+        )
+    }
+
+    @Test
+    fun `complex clip refuses the prepared image before recording`() {
+        val image = rgbaImage()
         val clipped = ClipStack.Complex(
             listOf(
                 org.graphiks.kanvas.canvas.ClipStackOp.RectOp(
@@ -675,7 +718,7 @@ class GPUPreparedDrawImageLowererTest {
             transform = Matrix33.identity(),
             clip = clipped,
         )
-        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+        val refused = assertIs<GPUPreparedDrawImageLowering.Refused>(
             GPUPreparedDrawImageLowerer.lower(
                 op,
                 GPUDrawCommandID(0),
@@ -686,7 +729,8 @@ class GPUPreparedDrawImageLowererTest {
                 capabilities(),
             ),
         )
-        assertNotNull(result.command.clipCoverage)
+        assertEquals("unsupported.surface.prepared.image-clip", refused.code)
+        assertEquals("unsupported_clip_plan", refused.facts["reason"])
     }
 
     @Test
@@ -707,6 +751,38 @@ class GPUPreparedDrawImageLowererTest {
         assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, result.code)
         assertEquals(BlendMode.MULTIPLY.name, result.facts["blendMode"])
         assertEquals(BlendMode.SRC_OVER.name, result.facts["supportedBlendMode"])
+    }
+
+    @Test
+    fun `paint effects without prepared image bindings refuse before recording`() {
+        val image = rgbaImage()
+        val paints = listOf(
+            "colorFilter" to Paint(colorFilter = ColorFilter.HighContrast),
+            "maskFilter" to Paint(
+                maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma = 1f),
+            ),
+            "imageFilter" to Paint(
+                imageFilter = ImageFilter.Blur(1f, 1f),
+            ),
+        )
+
+        paints.forEachIndexed { index, (paintField, paint) ->
+            val refused = assertIs<GPUPreparedDrawImageLowering.Refused>(
+                GPUPreparedDrawImageLowerer.lower(
+                    drawImage(image, paint = paint),
+                    GPUDrawCommandID(index),
+                    index,
+                    GPUFrameProvenance.None,
+                    target(),
+                    RenderConfig.DEFAULT,
+                    capabilities(),
+                ),
+                paintField,
+            )
+            assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.code, paintField)
+            assertEquals("unsupported_paint_effect", refused.facts["reason"], paintField)
+            assertEquals(paintField, refused.facts["paintField"], paintField)
+        }
     }
 
     @Test

@@ -98,24 +98,28 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             val corePlans = accepted.orderedRuns.mapNotNull { run ->
                 (run as? GPUPreparedSurfaceNativeRunPlan.Core)?.plan
             }
-            coreMaterializer = GPUWgpu4kCorePrimitiveRenderRunMaterializer(
-                queue,
-                corePrimitiveCache,
-                corePrimitiveLimits,
-            )
-            val coreReady = when (
-                val result = coreMaterializer.materializeAcceptedRuns(
-                    corePlans,
-                    targetTexture,
-                    targetView,
-                    generationSeal,
+            val coreReady = if (corePlans.isEmpty()) {
+                null
+            } else {
+                coreMaterializer = GPUWgpu4kCorePrimitiveRenderRunMaterializer(
+                    queue,
+                    corePrimitiveCache,
+                    corePrimitiveLimits,
                 )
-            ) {
-                is GPUCorePrimitiveRenderRunMaterialization.Ready -> result
-                is GPUCorePrimitiveRenderRunMaterialization.Refused ->
-                    throw PreparedSurfaceMaterializationFailure(result.code, result.message)
+                when (
+                    val result = coreMaterializer.materializeAcceptedRuns(
+                        corePlans,
+                        targetTexture,
+                        targetView,
+                        generationSeal,
+                    )
+                ) {
+                    is GPUCorePrimitiveRenderRunMaterialization.Ready -> result
+                    is GPUCorePrimitiveRenderRunMaterialization.Refused ->
+                        throw PreparedSurfaceMaterializationFailure(result.code, result.message)
+                }
             }
-            coreLifecycle = coreReady.leaseLifecycle
+            coreLifecycle = coreReady?.leaseLifecycle
 
             val imageRuns = accepted.orderedRuns.mapNotNull { run ->
                 (run as? GPUPreparedSurfaceNativeRunPlan.Image)?.plan
@@ -260,7 +264,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             }
 
             val operandsByStep = (
-                coreReady.renderOperands +
+                coreReady?.renderOperands.orEmpty() +
                     finalImageOperands +
                     listOfNotNull(readbackOperand, surfaceOperand)
                 ).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
@@ -321,7 +325,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 ),
                 leaseLifecycle = coreLifecycle,
                 pathDepthStencilViewAuthority =
-                    coreReady.pathDepthStencilViewAuthority,
+                    coreReady?.pathDepthStencilViewAuthority.orEmpty(),
             )
             val draft = GPUPreparedNativeFrameDraft(payload)
             setupLedger.transferAll()

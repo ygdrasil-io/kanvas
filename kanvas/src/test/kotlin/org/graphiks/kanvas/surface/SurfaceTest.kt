@@ -83,7 +83,14 @@ class SurfaceTest {
     @Test
     fun `drawImage produces non-blank pixels`() {
         val pixels = ByteArray(10 * 10 * 4) { 255.toByte() }
-        val img = Image.fromPixels(10, 10, pixels, ColorType.RGBA_8888, "test-white")
+        val img = Image.fromPixels(
+            10,
+            10,
+            pixels,
+            ColorType.RGBA_8888,
+            "test-white",
+            AlphaType.PREMUL,
+        )
         val surface = Surface(100, 100)
         surface.canvas {
             drawImage(img, Rect.fromLTRB(0f, 0f, 10f, 10f))

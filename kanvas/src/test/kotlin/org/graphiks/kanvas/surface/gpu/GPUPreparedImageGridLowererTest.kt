@@ -24,6 +24,7 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Blender
+import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.surface.RenderConfig
@@ -206,6 +207,32 @@ class GPUPreparedImageGridLowererTest {
         assertTrue(ready.commands.all { it.normalized is NormalizedDrawCommand.FillRect })
         assertTrue(ready.commands.all { it.preparedImage == null })
         assertTrue(ready.commands.all { it.normalized.blend.mode == GPUBlendMode.PLUS })
+    }
+
+    @Test
+    fun `fixed color only lattice refuses an unbound image filter transactionally`() {
+        val operation = DisplayOp.DrawImageLattice(
+            image = imageNine(),
+            lattice = Lattice(
+                xDivs = listOf(2),
+                yDivs = emptyList(),
+                colors = listOf(Color.GREEN, Color.BLUE),
+                flags = listOf(LatticeFlags.FIXED_COLOR, LatticeFlags.FIXED_COLOR),
+            ),
+            dst = Rect.fromLTRB(0f, 0f, 12f, 6f),
+            paint = Paint(imageFilter = ImageFilter.Blur(1f, 1f)),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        val refused = assertIs<GPUPreparedImageGridLowering.Refused>(
+            GPUPreparedImageGridLowerer.lowerLattice(operation, 0, 0, context()),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.code)
+        assertEquals(-1, refused.operationIndex)
+        assertEquals("unsupported_paint_effect", refused.facts["reason"])
+        assertEquals("imageFilter", refused.facts["paintField"])
     }
 
     @Test

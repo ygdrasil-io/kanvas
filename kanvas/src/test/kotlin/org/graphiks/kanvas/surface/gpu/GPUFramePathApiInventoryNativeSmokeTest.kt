@@ -35,6 +35,9 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val readbackId = GPUReadbackRequestID("readback.inventory-core-primitive.rect-affine")
         val halfRed = Color.fromRGBA(1f, 0f, 0f, 0.5f)
         val halfGreen = Color.fromRGBA(0f, 1f, 0f, 0.5f)
+        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+        )
         val inventory = GPUFramePathApiInventory.plan(
             operations = listOf(
                 DisplayOp.DrawRect(
@@ -50,7 +53,7 @@ class GPUFramePathApiInventoryNativeSmokeTest {
                     ClipStack.WideOpen,
                 ),
             ),
-            target = GPUTargetFacts(32, 32, "rgba8unorm"),
+            target = GPUTargetFacts(32, 32, colorMapping.physicalFormat.value),
             config = RenderConfig.DEFAULT,
             capabilities = capabilities,
             deviceGeneration = generation,
@@ -66,10 +69,6 @@ class GPUFramePathApiInventoryNativeSmokeTest {
         val framePlan = GPUFramePlanner.plan(prepared)
         val renderPass = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
         assertEquals(2, renderPass.drawPackets.size)
-        val colorMapping = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
-            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
-        )
-
         val session = backend.prepareSceneFrameSession(
             GPUOffscreenTargetRequest(
                 width = 32,
@@ -91,10 +90,11 @@ class GPUFramePathApiInventoryNativeSmokeTest {
             val bytes = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
 
             // This proves DisplayOp -> inventory -> canonical native frame. It is not yet the active Surface route.
-            // Color.fromRGBA quantizes 0.5 to 128/255 before SrcOver, hence the exact blended alpha 192.
-            assertPixelEquals(bytes, 6, 8, listOf(128, 0, 0, 128))
-            // The later affine half-green draw blends over red, proving draw order and Y orientation.
-            assertPixelEquals(bytes, 13, 8, listOf(64, 128, 0, 192))
+            // The canonical sRGB target encodes the 0.5 linear red channel as 188; alpha stays linear.
+            assertPixelEquals(bytes, 6, 8, listOf(188, 0, 0, 128))
+            // The later affine half-green draw produces linear-premul (0.25, 0.5, 0, 0.75),
+            // encoded by the attachment as (137, 188, 0, 192).
+            assertPixelEquals(bytes, 13, 8, listOf(137, 188, 0, 192))
             // Outside the rect scissor and where a vertically mirrored affine draw would appear.
             assertPixelEquals(bytes, 3, 8, listOf(0, 0, 0, 0))
             assertPixelEquals(bytes, 13, 23, listOf(0, 0, 0, 0))

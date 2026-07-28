@@ -40,7 +40,11 @@ internal object GPUPreparedSurfaceProductRouter {
             GPUPreparedSurfaceExecutionRequest(candidate, width, height),
         )) {
             is GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused ->
-                GPUPreparedSurfaceProductRoute.Legacy(execution.diagnostic.code.value)
+                if (candidate.operations.any(DisplayOp::isPreparedImageOperation)) {
+                    GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
+                } else {
+                    GPUPreparedSurfaceProductRoute.Legacy(execution.diagnostic.code.value)
+                }
             is GPUPreparedSurfaceExecutionResult.TerminalFailure ->
                 GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
             is GPUPreparedSurfaceExecutionResult.Succeeded -> success(width, height, execution)
@@ -91,4 +95,13 @@ internal object GPUPreparedSurfaceProductRouter {
             facts = mapOf("field" to field, "value" to value),
         ),
     )
+}
+
+private fun DisplayOp.isPreparedImageOperation(): Boolean = when (this) {
+    is DisplayOp.DrawImage,
+    is DisplayOp.DrawImageNine,
+    is DisplayOp.DrawImageLattice,
+    is DisplayOp.DrawAtlas,
+    -> true
+    else -> false
 }

@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.Diagnostics
@@ -31,46 +32,75 @@ import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceProductEntryTest {
     @Test
-    fun `trace records exactly one handle-free decision and cannot alter routing`() {
+    fun `admitted image executes prepared and trace failure never invokes legacy`() {
         val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
         var legacyCalls = 0
         val legacy = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
             legacyCalls++
             LEGACY_RESULT
         }
+        val harness = PreparedProductExecutionHarness(width = 8, height = 8)
 
         val result = GPUPreparedSurfaceProductEntry.render(
             operations = listOf(image()),
-            width = 1,
-            height = 1,
+            width = 8,
+            height = 8,
             format = PixelFormat.RGBA8,
             config = RenderConfig.DEFAULT,
-            executionPort = GPUPreparedSurfaceExecutionPort { error("gate must refuse before execution") },
+            executionPort = harness.port,
             legacyPort = legacy,
             trace = GPUPreparedSurfaceRouteTrace { decisions += it },
         )
 
-        assertSame(LEGACY_RESULT, result)
-        assertEquals(1, legacyCalls)
+        assertEquals(harness.expectedRgba.toUByteArray().toList(), result.pixels.toList())
+        assertEquals(0, legacyCalls)
         assertEquals(1, decisions.size)
-        assertEquals(
-            "legacy.surface.prepared.family.images",
-            assertIs<GPUPreparedSurfaceRouteDecision.Legacy>(decisions.single()).code,
-        )
+        assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single())
 
+        val failingTraceHarness = PreparedProductExecutionHarness(width = 8, height = 8)
         val resultWithFailingTrace = GPUPreparedSurfaceProductEntry.render(
             operations = listOf(image()),
-            width = 1,
-            height = 1,
+            width = 8,
+            height = 8,
             format = PixelFormat.RGBA8,
             config = RenderConfig.DEFAULT,
-            executionPort = GPUPreparedSurfaceExecutionPort { error("gate must refuse before execution") },
+            executionPort = failingTraceHarness.port,
             legacyPort = legacy,
             trace = GPUPreparedSurfaceRouteTrace { throw IllegalStateException("observer failure") },
         )
 
-        assertSame(LEGACY_RESULT, resultWithFailingTrace)
-        assertEquals(2, legacyCalls)
+        assertEquals(failingTraceHarness.expectedRgba.toUByteArray().toList(), resultWithFailingTrace.pixels.toList())
+        assertEquals(0, legacyCalls)
+    }
+
+    @Test
+    fun `invalid admitted image raises its exact prepared terminal and never invokes legacy`() {
+        val invalidImage = preparedProductImage(
+            sourceId = "entry-invalid-image",
+            pixels = null,
+        )
+        val harness = PreparedProductExecutionHarness(width = 8, height = 8)
+        var legacyCalls = 0
+
+        val failure = kotlin.runCatching {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = listOf(preparedProductImageOperations(invalidImage).first().first),
+                width = 8,
+                height = 8,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort = harness.port,
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    LEGACY_RESULT
+                },
+            )
+        }.exceptionOrNull()
+
+        val typed = assertIs<GPUPreparedSurfaceTerminalException>(failure)
+        assertEquals(GPUPreparedImageRefusalCodes.PIXELS_MISSING, typed.diagnostic.code.value)
+        assertEquals(0, harness.backend.prepareCalls)
+        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -133,7 +163,7 @@ class GPUPreparedSurfaceProductEntryTest {
             { renderPrepared(execution, legacy) },
             {
                 GPUPreparedSurfaceProductEntry.render(
-                    operations = listOf(image()),
+                    operations = listOf(DisplayOp.BeginLayer(null, null)),
                     width = 1,
                     height = 1,
                     format = PixelFormat.RGBA8,
@@ -230,14 +260,7 @@ class GPUPreparedSurfaceProductEntryTest {
         ClipStack.WideOpen,
     )
 
-    private fun image() = DisplayOp.DrawImage(
-        Image.placeholder(1, 1),
-        RECT,
-        RECT,
-        null,
-        Matrix33.identity(),
-        ClipStack.WideOpen,
-    )
+    private fun image() = preparedProductImageOperations().first().first
 
     private fun diagnostic(code: String, message: String) = GPUDiagnostic(
         GPUDiagnosticCode(code),

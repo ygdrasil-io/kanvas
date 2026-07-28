@@ -187,7 +187,8 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             GPUWgpu4kPreparedFramePayloadRoute.RegisteredUniformRect
         distinct == listOf(GPUDrawSemanticPayload.SeparableBlurRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.SeparableBlurRect
-        distinct.size == 2 &&
+        distinct == listOf(GPUDrawSemanticPayload.SampledImage::class) ||
+            distinct.size == 2 &&
             distinct.toSet() == setOf(
                 GPUDrawSemanticPayload.CorePrimitive::class,
                 GPUDrawSemanticPayload.SampledImage::class,

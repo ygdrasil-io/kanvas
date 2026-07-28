@@ -279,6 +279,15 @@ internal object GPUPreparedAtlasLowerer {
         atlas: org.graphiks.kanvas.image.Image,
     ): ResolvedAtlasPaint {
         val base = this ?: Paint()
+        base.unsupportedPreparedImagePaintEffectOrNull()?.let { paintField ->
+            return ResolvedAtlasPaint.Refused(
+                GPUPreparedAtlasLowering.Refused(
+                    code = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                    spriteIndex = null,
+                    facts = preparedImagePaintEffectRefusalFacts(paintField),
+                ),
+            )
+        }
         val destinationBlend = when (val blender = base.blender) {
             null -> base.blendMode
             is Blender.Mode -> blender.mode

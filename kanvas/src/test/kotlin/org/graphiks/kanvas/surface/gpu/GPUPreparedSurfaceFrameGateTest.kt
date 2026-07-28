@@ -83,7 +83,7 @@ class GPUPreparedSurfaceFrameGateTest {
         val flush = DisplayOp.FlushAndSnapshot(RECT)
         val cases = listOf(
             listOf(DisplayOp.SetTransform(Matrix33.identity()), visual, image, flush, text) to
-                Expected.Legacy("legacy.surface.prepared.family.images", 2, LegacyDisplayOpFamily.Images),
+                Expected.Legacy("legacy.surface.prepared.flush-snapshot", 3, null),
             listOf(visual, flush, image) to
                 Expected.Legacy("legacy.surface.prepared.flush-snapshot", 1, null),
         )
@@ -160,9 +160,7 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(visualRect(), visual),
             Fixture(DisplayOp.DrawRRect(RRect(RECT, radius = 1f), PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawPath(path, PAINT, MATRIX, CLIP), visual),
-            Fixture(DisplayOp.DrawImage(image, RECT, RECT, null, MATRIX, CLIP), legacy(
-                "legacy.surface.prepared.family.images", LegacyDisplayOpFamily.Images,
-            )),
+            Fixture(DisplayOp.DrawImage(image, RECT, RECT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawText(TextBlob(emptyList()), 0f, 0f, PAINT, MATRIX, CLIP), legacy(
                 "legacy.surface.prepared.family.text", LegacyDisplayOpFamily.Text,
             )),
@@ -183,12 +181,8 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.DrawPoint(1f, 1f, PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawPoints(PointMode.POINTS, listOf(Point(1f, 1f)), PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawDRRect(RRect(RECT, radius = 1f), RRect(INNER_RECT, radius = 1f), PAINT, MATRIX, CLIP), visual),
-            Fixture(DisplayOp.DrawImageNine(image, INNER_RECT, RECT, null, MATRIX, CLIP), legacy(
-                "legacy.surface.prepared.family.images", LegacyDisplayOpFamily.Images,
-            )),
-            Fixture(DisplayOp.DrawImageLattice(image, Lattice(emptyList(), emptyList()), RECT, null, MATRIX, CLIP), legacy(
-                "legacy.surface.prepared.family.images", LegacyDisplayOpFamily.Images,
-            )),
+            Fixture(DisplayOp.DrawImageNine(image, INNER_RECT, RECT, null, MATRIX, CLIP), visual),
+            Fixture(DisplayOp.DrawImageLattice(image, Lattice(emptyList(), emptyList()), RECT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawPicture(Picture(RECT, emptyList()), null, MATRIX, CLIP), legacy(
                 "legacy.surface.prepared.family.composites", LegacyDisplayOpFamily.Composites,
             )),
@@ -198,9 +192,7 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.DrawMesh(Mesh(vertices, bounds = RECT), PAINT, null, MATRIX, CLIP), legacy(
                 "legacy.surface.prepared.family.vertices", LegacyDisplayOpFamily.Vertices,
             )),
-            Fixture(DisplayOp.DrawAtlas(image, emptyList(), emptyList(), null, BlendMode.SRC_OVER, null, MATRIX, CLIP), legacy(
-                "legacy.surface.prepared.family.images", LegacyDisplayOpFamily.Images,
-            )),
+            Fixture(DisplayOp.DrawAtlas(image, emptyList(), emptyList(), null, BlendMode.SRC_OVER, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.Annotation(RECT, "key", "value"), Expected.Legacy(
                 "legacy.surface.prepared.empty-frame", null, null,
             )),

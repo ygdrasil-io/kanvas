@@ -211,7 +211,7 @@ Acceptance:
 
 ### FP-04 — Prepared image route
 
-Status: `in_progress`
+Status: `completed`
 
 Goal: migrate image, image-nine, lattice, and atlas Surface operations to the
 common prepared frame route, including texture and sampler ownership.
@@ -261,11 +261,19 @@ Current state:
     no blocking finding;
   - the fresh complete `:gpu-renderer:test --rerun-tasks` run passed
     2,485/2,485 tests with zero failure or error;
-- Task 7 remains `in_progress`: the pure `DrawImage` lowerer is reviewed and
-  tested on its integration branch, but direct builder/inventory wiring and
-  native `GPUPreparedSurfaceProductNativeSmokeTest` evidence are not yet
-  integrated;
-- product routing and the image legacy allowlist remain unchanged.
+- Tasks 7-9 completed direct DrawImage, image-nine, lattice, affine atlas,
+  pixel/refusal evidence, builder/inventory wiring, and native product smoke;
+- Task 10 atomically admits all four image families to the whole-frame
+  prepared product route, makes every post-admission refusal terminal, removes
+  the image legacy family/allowlist/diagnostic, and supports image-only native
+  frames without a synthetic CorePrimitive draw;
+- the fresh Task 10 focused manifests pass 100/100 GPU tests and 149/149
+  Kanvas tests;
+- the final module aggregates contain no image failure: the sole GPU failure
+  is the pre-existing Task 9 package-boundary import baseline, and all 52
+  Kanvas failures are DrawPath/DrawDRRect core baselines;
+- final cutover evidence and bounded nonclaims are recorded in
+  `fp-04-prepared-image-route.md`.
 
 Acceptance:
 

@@ -4214,7 +4214,8 @@ internal class GPUFramePreflighter(
             .filterNotNull()
             .map(GPUDrawSemanticPayload::canonicalType)
             .toSet()
-        return semanticTypes == setOf("CorePrimitive", "SampledImage")
+        return "SampledImage" in semanticTypes &&
+            semanticTypes.all { it == "CorePrimitive" || it == "SampledImage" }
     }
 
     private fun validateCorePrimitiveSemanticPayload(

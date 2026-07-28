@@ -4,6 +4,7 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotEquals
@@ -55,6 +56,7 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
+import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
@@ -2065,10 +2067,9 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `slice 12A families are absent from the closed legacy allowlist`() {
+    fun `prepared image families are absent while remaining legacy families stay closed`() {
         assertEquals(
             setOf(
-                LegacyDisplayOpFamily.Images,
                 LegacyDisplayOpFamily.Text,
                 LegacyDisplayOpFamily.Vertices,
                 LegacyDisplayOpFamily.Composites,
@@ -2083,10 +2084,15 @@ class GPUFramePathApiInventoryTest {
             Matrix33.identity(),
             org.graphiks.kanvas.canvas.ClipStack.WideOpen,
         )))
-        assertTrue(adapter.accepts(legacyImageOp()))
-        adapter.recordInvocation(legacyImageOp())
-        assertEquals(1, adapter.dump().invocationCount)
-        assertEquals(mapOf(LegacyDisplayOpFamily.Images to 1), adapter.dump().invocationsByFamily)
+        imageOperations().forEach { operation ->
+            assertFalse(adapter.accepts(operation), operation::class.simpleName)
+            assertEquals(null, GPULegacyImmediatePathAdapter.familyOrNull(operation))
+            assertFailsWith<IllegalArgumentException> {
+                adapter.recordInvocation(operation)
+            }
+        }
+        assertEquals(0, adapter.dump().invocationCount)
+        assertEquals(emptyMap(), adapter.dump().invocationsByFamily)
     }
 
     private fun target(width: Int = 32, height: Int = 32) =
@@ -2186,20 +2192,49 @@ class GPUFramePathApiInventoryTest {
         close()
     }
 
-    private fun legacyImageOp(): DisplayOp.DrawImage {
+    private fun imageOperations(): List<DisplayOp> {
         val image = org.graphiks.kanvas.image.Image.fromPixels(
-            1,
-            1,
-            byteArrayOf(0, 0, 0, 0),
-            sourceId = "legacy-boundary",
+            4,
+            4,
+            ByteArray(4 * 4 * 4) { 0xff.toByte() },
+            sourceId = "prepared-image-boundary",
         )
-        return DisplayOp.DrawImage(
-            image,
-            Rect.fromLTRB(0f, 0f, 1f, 1f),
-            Rect.fromLTRB(0f, 0f, 1f, 1f),
-            null,
-            Matrix33.identity(),
-            org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+        val clip = org.graphiks.kanvas.canvas.ClipStack.WideOpen
+        return listOf(
+            DisplayOp.DrawImage(
+                image,
+                Rect.fromLTRB(0f, 0f, 4f, 4f),
+                Rect.fromLTRB(0f, 0f, 4f, 4f),
+                null,
+                Matrix33.identity(),
+                clip,
+            ),
+            DisplayOp.DrawImageNine(
+                image,
+                Rect.fromLTRB(1f, 1f, 3f, 3f),
+                Rect.fromLTRB(0f, 0f, 8f, 8f),
+                null,
+                Matrix33.identity(),
+                clip,
+            ),
+            DisplayOp.DrawImageLattice(
+                image,
+                Lattice(listOf(2), listOf(2)),
+                Rect.fromLTRB(0f, 0f, 8f, 8f),
+                null,
+                Matrix33.identity(),
+                clip,
+            ),
+            DisplayOp.DrawAtlas(
+                image,
+                listOf(Matrix33.identity()),
+                listOf(Rect.fromLTRB(0f, 0f, 2f, 2f)),
+                listOf(Color.WHITE),
+                BlendMode.SRC_OVER,
+                Paint.fill(Color.WHITE),
+                Matrix33.identity(),
+                clip,
+            ),
         )
     }
 }

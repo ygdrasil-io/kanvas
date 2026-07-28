@@ -117,6 +117,50 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
+    fun `image only product frame executes prepared without a synthetic core draw`() {
+        val source = image(
+            width = GPUPreparedImageTestFixtures.rgbaPremul2x2Width,
+            height = GPUPreparedImageTestFixtures.rgbaPremul2x2Height,
+            colorType = GPUPreparedImageTestFixtures.rgbaPremul2x2ColorType,
+            sourceId = "product-image-only",
+            pixels = GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes,
+        )
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+
+        val result = renderViaGpu(
+            buffer = StaticDisplayListBuffer(
+                listOf(
+                    drawImage(
+                        source,
+                        Rect.fromLTRB(1f, 1f, 3f, 3f),
+                        SamplingOptions.NEAREST,
+                    ),
+                ),
+            ),
+            width = 4,
+            height = 4,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            preparedRouteTrace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+
+        val prepared = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(
+            decisions.single(),
+            decisions.single().toString(),
+        )
+        assertEquals(
+            GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
+            prepared.evidence.routeMarker,
+        )
+        assertEquals(1, result.stats.opsDispatched)
+        assertPixel(result.pixels.toByteArray(), 4, 0, 0, listOf(0, 0, 0, 0))
+        assertPixel(result.pixels.toByteArray(), 4, 1, 1, listOf(188, 0, 0, 128))
+        assertPixel(result.pixels.toByteArray(), 4, 2, 1, listOf(0, 188, 0, 128))
+        assertPixel(result.pixels.toByteArray(), 4, 1, 2, listOf(0, 0, 188, 128))
+        assertPixel(result.pixels.toByteArray(), 4, 2, 2, listOf(188, 188, 188, 128))
+    }
+
+    @Test
     fun `direct prepared image frame preserves native pixels ordering and ownership`() {
         val rgba = image(
             width = GPUPreparedImageTestFixtures.rgbaPremul2x2Width,
@@ -297,7 +341,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
-    fun `direct affine atlas executes exact integral scissor and keeps the product gate closed`() {
+    fun `direct affine atlas executes exact integral scissor through the product gate`() {
         val atlas = image(
             width = GPUPreparedImageTestFixtures.atlas4x4Width,
             height = GPUPreparedImageTestFixtures.atlas4x4Height,
@@ -336,12 +380,10 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertEquals(null, inventory.preparedRefusal)
         assertEquals(0, inventory.legacyDump.invocationCount)
         assertTrue(inventory.visualCommands.any { it.normalized.source.operation == "drawAtlas" })
-        assertEquals(
-            "legacy.surface.prepared.family.images",
-            assertIs<GPUPreparedSurfaceEligibility.Legacy>(
-                GPUPreparedSurfaceFrameGate.classify(operations, RenderConfig.DEFAULT),
-            ).code,
+        val candidate = assertIs<GPUPreparedSurfaceEligibility.Candidate>(
+            GPUPreparedSurfaceFrameGate.classify(operations, RenderConfig.DEFAULT),
         )
+        assertEquals(operations, candidate.operations)
 
         val color = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
             RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),

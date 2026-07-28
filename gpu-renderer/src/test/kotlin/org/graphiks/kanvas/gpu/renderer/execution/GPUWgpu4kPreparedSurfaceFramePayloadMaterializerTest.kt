@@ -27,6 +27,42 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 
 class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
     @Test
+    fun `image only materializer emits the exact upload render and readback partition`() {
+        val fixture = fixture(PreparedSurfaceFixtureShape.ImageOnly)
+        try {
+            val result = fixture.materialize()
+            val materialized = assertIs<
+                GPUPreparedNativeFramePayloadMaterialization.Materialized
+                >(result, result.toString())
+            val payload = materialized.draft.payload
+
+            assertEquals(
+                fixture.input.encoderPlan.scopes.map { it.sourceStepIndex },
+                payload.scopeOperands.map { it.sourceStepIndex },
+            )
+            assertEquals(
+                listOf(
+                    GPUPreparedNativeScopeOperand.TextureUpload::class,
+                    GPUPreparedNativeScopeOperand.Render::class,
+                    GPUPreparedNativeScopeOperand.Readback::class,
+                ),
+                payload.scopeOperands.map { it::class },
+            )
+            val render = assertIs<GPUPreparedNativeScopeOperand.Render>(
+                payload.scopeOperands[1],
+            )
+            assertTrue(
+                render.semanticPayloads.all { it is GPUDrawSemanticPayload.SampledImage },
+            )
+            assertEquals(null, payload.leaseLifecycle)
+            assertTrue(payload.pathDepthStencilViewAuthority.isEmpty())
+            assertTrue(materialized.draft.disposeBeforeRegistration())
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `mixed materializer composes both lattices in the exact full encoder order`() {
         listOf(
             PreparedSurfaceFixtureShape.CoreImageCore,
