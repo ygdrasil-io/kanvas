@@ -133,6 +133,38 @@ class GPUFramePlannerExecutionSemanticsTest {
     }
 
     @Test
+    fun `path destination no op cover remains paired to reset stencil without elision`() {
+        val producer = packet(
+            commandId = 30,
+            pipeline = "pipeline.path.producer",
+            blendPlan = executableBlend(),
+            packetId = "packet.path.producer",
+            role = GPUDrawPacketRole.PathStencilProducer,
+        )
+        val cover = packet(
+            commandId = 30,
+            pipeline = "pipeline.path.cover",
+            blendPlan = GPUBlendPlan.NoOp(GPUBlendMode.DST, "destination is unchanged"),
+            packetId = "packet.path.cover",
+            role = GPUDrawPacketRole.PathStencilCover,
+            sortKey = 31L,
+        )
+        val pathTask = renderTaskWithPackets(
+            taskId = "task.render.path-destination",
+            packets = listOf(producer, cover),
+        )
+
+        val plan = GPUFramePlanner.plan(taskList(listOf(pathTask)))
+
+        val render = assertIs<GPUFrameStep.RenderPassStep>(plan.steps.single())
+        assertEquals(
+            listOf(GPUDrawPacketRole.PathStencilProducer, GPUDrawPacketRole.PathStencilCover),
+            render.drawPackets.map(GPUDrawPacket::role),
+        )
+        assertEquals(emptyList(), plan.elidedNoOpDraws)
+    }
+
+    @Test
     fun `target state changes between render tasks cut the render pass`() {
         val first = renderTask(
             taskId = "task.render.target-state.1",
@@ -261,6 +293,18 @@ class GPUFramePlannerExecutionSemanticsTest {
         targetStateHash: String = "target.scene.rgba8",
     ): GPUTask.Render {
         val packet = packet(commandId, pipeline, blendPlan, targetStateHash)
+        return renderTaskWithPackets(taskId, listOf(packet), loadStore)
+    }
+
+    private fun renderTaskWithPackets(
+        taskId: String,
+        packets: List<GPUDrawPacket>,
+        loadStore: GPULoadStorePlan = GPULoadStorePlan("load", GPUStorePlan.Store),
+    ): GPUTask.Render {
+        val eligibility = GPUPassBatchEligibility(
+            kind = GPUPassBatchKind.SolidFill,
+            queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
+        )
         return GPUTask.Render(
             taskId = GPUTaskID(taskId),
             recordingId = GPURecordingID("recording.a"),
@@ -268,13 +312,8 @@ class GPUFramePlannerExecutionSemanticsTest {
             target = GPUFrameTargetRef("target.scene"),
             loadStore = loadStore,
             samplePlan = GPUSamplePlan.SingleSampleFrame,
-            drawPackets = listOf(packet),
-            batchEligibilityByPacketId = mapOf(
-                packet.packetId to GPUPassBatchEligibility(
-                    kind = GPUPassBatchKind.SolidFill,
-                    queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
-                ),
-            ),
+            drawPackets = packets,
+            batchEligibilityByPacketId = packets.associate { it.packetId to eligibility },
         )
     }
 
@@ -283,20 +322,23 @@ class GPUFramePlannerExecutionSemanticsTest {
         pipeline: String,
         blendPlan: GPUBlendPlan,
         targetStateHash: String = "target.scene.rgba8",
+        packetId: String = "packet.$commandId",
+        role: GPUDrawPacketRole = GPUDrawPacketRole.Shading,
+        sortKey: Long = commandId.toLong(),
     ): GPUDrawPacket =
         GPUDrawPacket(
-            packetId = GPUDrawPacketID("packet.$commandId"),
+            packetId = GPUDrawPacketID(packetId),
             commandIdValue = commandId,
             analysisRecordId = "analysis.$commandId",
             passId = "pass.command.$commandId",
             layerId = "root",
             bindingListId = "bindings.$commandId",
             insertionReasonCode = "paint-order",
-            sortKey = commandId.toLong(),
-            sortKeyPreimage = "paint-order:$commandId",
+            sortKey = sortKey,
+            sortKeyPreimage = "paint-order:$sortKey",
             renderStepId = GPURenderStepID("rect.fill"),
             renderStepVersion = 1,
-            role = GPUDrawPacketRole.Shading,
+            role = role,
             blendPlan = blendPlan,
             renderPipelineKey = GPURenderPipelineKey(pipeline),
             bindingLayoutHash = "layout.rect",

@@ -68,6 +68,7 @@ internal data class GPUWgpu4kCorePrimitiveRenderPipelineIdentity(
     val frontFace: String,
     val cullMode: String,
     val program: GPUWgpu4kCorePrimitivePipelineProgram,
+    val blendProgram: GPUWgpu4kCorePrimitiveBlendProgram = program.defaultBlendProgram(),
 ) {
     init {
         require(targetFormat.isNotBlank() && sampleCount > 0)

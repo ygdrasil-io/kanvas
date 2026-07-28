@@ -35,6 +35,97 @@ import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveDirectPathDepthStenc
 import org.graphiks.kanvas.gpu.renderer.passes.coverageMaskStructuralProgramOrNull
 import org.graphiks.kanvas.gpu.renderer.passes.pathStencilStructuralProgramOrNull
 
+/** Closed, handle-free fixed-function state consumed by native CorePrimitive pipelines. */
+internal enum class GPUWgpu4kCorePrimitiveBlendProgram(
+    val mode: GPUBlendMode?,
+    val colorSourceFactor: String?,
+    val colorDestinationFactor: String?,
+    val colorOperation: String?,
+    val alphaSourceFactor: String?,
+    val alphaDestinationFactor: String?,
+    val alphaOperation: String?,
+) {
+    ColorWriteNone(null, null, null, null, null, null, null),
+    DestinationNoOp(GPUBlendMode.DST, null, null, null, null, null, null),
+    PremulClear(GPUBlendMode.CLEAR, "zero", "zero", "add", "zero", "zero", "add"),
+    PremulSrc(GPUBlendMode.SRC, "one", "zero", "add", "one", "zero", "add"),
+    PremulSrcOver(
+        GPUBlendMode.SRC_OVER,
+        "one",
+        "one-minus-src-alpha",
+        "add",
+        "one",
+        "one-minus-src-alpha",
+        "add",
+    ),
+    PremulDstOver(
+        GPUBlendMode.DST_OVER,
+        "one-minus-dst-alpha",
+        "one",
+        "add",
+        "one-minus-dst-alpha",
+        "one",
+        "add",
+    ),
+    PremulSrcIn(GPUBlendMode.SRC_IN, "dst-alpha", "zero", "add", "dst-alpha", "zero", "add"),
+    PremulDstIn(GPUBlendMode.DST_IN, "zero", "src-alpha", "add", "zero", "src-alpha", "add"),
+    PremulSrcOut(
+        GPUBlendMode.SRC_OUT,
+        "one-minus-dst-alpha",
+        "zero",
+        "add",
+        "one-minus-dst-alpha",
+        "zero",
+        "add",
+    ),
+    PremulDstOut(
+        GPUBlendMode.DST_OUT,
+        "zero",
+        "one-minus-src-alpha",
+        "add",
+        "zero",
+        "one-minus-src-alpha",
+        "add",
+    ),
+    PremulSrcAtop(
+        GPUBlendMode.SRC_ATOP,
+        "dst-alpha",
+        "one-minus-src-alpha",
+        "add",
+        "dst-alpha",
+        "one-minus-src-alpha",
+        "add",
+    ),
+    PremulDstAtop(
+        GPUBlendMode.DST_ATOP,
+        "one-minus-dst-alpha",
+        "src-alpha",
+        "add",
+        "one-minus-dst-alpha",
+        "src-alpha",
+        "add",
+    ),
+    PremulXor(
+        GPUBlendMode.XOR,
+        "one-minus-dst-alpha",
+        "one-minus-src-alpha",
+        "add",
+        "one-minus-dst-alpha",
+        "one-minus-src-alpha",
+        "add",
+    ),
+    PremulModulate(GPUBlendMode.MODULATE, "zero", "src", "add", "zero", "src-alpha", "add"),
+    PremulScreen(
+        GPUBlendMode.SCREEN,
+        "one",
+        "one-minus-src",
+        "add",
+        "one",
+        "one-minus-src-alpha",
+        "add",
+    ),
+}
+
 /** Closed native programs materialized by the bounded CorePrimitive WebGPU lane. */
 internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
     DirectSrcOver,
@@ -75,9 +166,9 @@ internal sealed interface GPUWgpu4kCorePrimitivePipelineMapping {
 }
 
 /**
- * Consumes the handle-free structural authority and accepts only one of the twenty-one exact native
- * descriptors. Dynamic geometry, bounds, scissor, load/store, and stencil reference never enter
- * this identity.
+ * Consumes the handle-free structural authority and accepts only a closed native program plus its
+ * exact fixed-function blend program. Dynamic geometry, bounds, scissor, load/store, and stencil
+ * reference never enter this identity.
  */
 internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
     structuralKey: GPUCorePrimitiveRenderPipelineStructuralKey,
@@ -93,6 +184,10 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
         ?: return GPUWgpu4kCorePrimitivePipelineMapping.Refused(
             "CorePrimitive structural state is not one exact native program.",
         )
+    val blendProgram = structuralKey.nativeBlendProgramOrNull(program)
+        ?: return GPUWgpu4kCorePrimitivePipelineMapping.Refused(
+            "CorePrimitive structural blend is not one exact native program.",
+        )
     return GPUWgpu4kCorePrimitivePipelineMapping.Mapped(
         GPUWgpu4kCorePrimitiveRenderPipelineIdentity(
             targetFormat = structuralKey.colorFormat.stableIdentity,
@@ -101,6 +196,7 @@ internal fun mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(
             frontFace = "ccw",
             cullMode = "none",
             program = program,
+            blendProgram = blendProgram,
         ),
         componentIdentity = when {
             program.isAnalyticShape() ->
@@ -177,7 +273,7 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None -> null
             shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.PathStencil ||
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
-                !blend.isCanonicalPremulSrcOver() -> null
+                blend.nativePathCoverBlendProgramOrNull() == null -> null
             depthStencil.pathStencilStructuralProgramOrNull() ==
                 GPUCorePrimitivePathStencilStructuralProgram.CoverRegular ->
                 GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular
@@ -234,6 +330,60 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
                 GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskConsumerNearest
             else -> null
         }
+    }
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeBlendProgramOrNull(
+    program: GPUWgpu4kCorePrimitivePipelineProgram,
+): GPUWgpu4kCorePrimitiveBlendProgram? = when {
+    program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding ||
+        program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd ||
+        program.isClipStencilProducer() ->
+        GPUWgpu4kCorePrimitiveBlendProgram.ColorWriteNone.takeIf {
+            blend == GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone
+        }
+    program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular ||
+        program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse ->
+        blend.nativePathCoverBlendProgramOrNull()
+    program == GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect ||
+        program == GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect ->
+        GPUWgpu4kCorePrimitiveBlendProgram.PremulDstIn.takeIf {
+            blend.fixedNativeBlendProgramOrNull() ==
+                GPUWgpu4kCorePrimitiveBlendProgram.PremulDstIn
+        }
+    program == GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference ||
+        program == GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference ->
+        GPUWgpu4kCorePrimitiveBlendProgram.PremulDstOut.takeIf {
+            blend.fixedNativeBlendProgramOrNull() ==
+                GPUWgpu4kCorePrimitiveBlendProgram.PremulDstOut
+        }
+    else -> GPUWgpu4kCorePrimitiveBlendProgram.PremulSrcOver.takeIf {
+        blend.isCanonicalPremulSrcOver()
+    }
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.nativePathCoverBlendProgramOrNull():
+    GPUWgpu4kCorePrimitiveBlendProgram? = when (this) {
+    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed -> fixedNativeBlendProgramOrNull()
+    is GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp ->
+        GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp.takeIf { mode == GPUBlendMode.DST }
+    else -> null
+}
+
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Blend.fixedNativeBlendProgramOrNull():
+    GPUWgpu4kCorePrimitiveBlendProgram? {
+    val fixed = this as? GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed ?: return null
+    return GPUWgpu4kCorePrimitiveBlendProgram.entries.singleOrNull { candidate ->
+        candidate.mode == fixed.mode &&
+            candidate.colorSourceFactor != null &&
+            fixed.sourceCoverage == GPUSourceCoverageEncoding.None &&
+            fixed.state.color.sourceFactor == candidate.colorSourceFactor &&
+            fixed.state.color.destinationFactor == candidate.colorDestinationFactor &&
+            fixed.state.color.operation == candidate.colorOperation &&
+            fixed.state.alpha.sourceFactor == candidate.alphaSourceFactor &&
+            fixed.state.alpha.destinationFactor == candidate.alphaDestinationFactor &&
+            fixed.state.alpha.operation == candidate.alphaOperation &&
+            fixed.state.writeMask == "rgba"
     }
 }
 
@@ -390,10 +540,13 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
                     },
                     blend = when {
                         producer -> null
-                        coverageMaskProducer -> identity.program.coverageMaskProducerBlendState()
-                        else -> premulSrcOverBlendState()
+                        else -> identity.blendProgram.toWgpuBlendStateOrNull()
                     },
-                    writeMask = if (producer) GPUColorWrite.None else GPUColorWrite.All,
+                    writeMask = if (identity.blendProgram.writesColor()) {
+                        GPUColorWrite.All
+                    } else {
+                        GPUColorWrite.None
+                    },
                 ),
             ),
         ),
@@ -406,7 +559,46 @@ internal fun isSupportedCorePrimitiveRenderPipelineIdentity(
     (identity.sampleCount == 1 ||
         identity.sampleCount == 4 && identity.program.supportsFourSamples()) &&
     identity.topology == "triangle-list" && identity.frontFace == "ccw" &&
-    identity.cullMode == "none"
+    identity.cullMode == "none" && identity.hasCompatibleBlendProgram()
+
+private fun GPUWgpu4kCorePrimitiveRenderPipelineIdentity.hasCompatibleBlendProgram(): Boolean =
+    when (program) {
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse,
+        -> blendProgram == GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp ||
+            blendProgram.mode in setOf(
+                GPUBlendMode.CLEAR,
+                GPUBlendMode.SRC,
+                GPUBlendMode.SRC_OVER,
+                GPUBlendMode.DST_OVER,
+                GPUBlendMode.SRC_IN,
+                GPUBlendMode.DST_IN,
+                GPUBlendMode.SRC_OUT,
+                GPUBlendMode.DST_OUT,
+                GPUBlendMode.SRC_ATOP,
+                GPUBlendMode.DST_ATOP,
+                GPUBlendMode.XOR,
+                GPUBlendMode.MODULATE,
+                GPUBlendMode.SCREEN,
+            )
+        else -> blendProgram == program.defaultBlendProgram()
+    }
+
+internal fun GPUWgpu4kCorePrimitivePipelineProgram.defaultBlendProgram():
+    GPUWgpu4kCorePrimitiveBlendProgram = when (this) {
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd,
+    GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerWinding,
+    GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerEvenOdd,
+    -> GPUWgpu4kCorePrimitiveBlendProgram.ColorWriteNone
+    GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
+    GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect,
+    -> GPUWgpu4kCorePrimitiveBlendProgram.PremulDstIn
+    GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference,
+    GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference,
+    -> GPUWgpu4kCorePrimitiveBlendProgram.PremulDstOut
+    else -> GPUWgpu4kCorePrimitiveBlendProgram.PremulSrcOver
+}
 
 private fun GPUWgpu4kCorePrimitivePipelineProgram.supportsFourSamples(): Boolean = when (this) {
     GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOver,
@@ -544,19 +736,6 @@ private fun face(
     pass: GPUStencilOperation,
 ) = StencilFaceState(compare, fail, depthFail, pass)
 
-private fun premulSrcOverBlendState() = BlendState(
-    color = BlendComponent(
-        GPUBlendOperation.Add,
-        GPUBlendFactor.One,
-        GPUBlendFactor.OneMinusSrcAlpha,
-    ),
-    alpha = BlendComponent(
-        GPUBlendOperation.Add,
-        GPUBlendFactor.One,
-        GPUBlendFactor.OneMinusSrcAlpha,
-    ),
-)
-
 private fun GPUWgpu4kCorePrimitivePipelineProgram.coverageMaskProducerFragmentEntryPoint(): String =
     when (this) {
         GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
@@ -568,18 +747,39 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.coverageMaskProducerFragmentEn
         else -> error("$this is not a coverage-mask producer")
     }
 
-private fun GPUWgpu4kCorePrimitivePipelineProgram.coverageMaskProducerBlendState(): BlendState {
-    val destinationFactor = when (this) {
-        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect,
-        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect,
-        -> GPUBlendFactor.SrcAlpha
-        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectDifference,
-        GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectDifference,
-        -> GPUBlendFactor.OneMinusSrcAlpha
-        else -> error("$this is not a coverage-mask producer")
-    }
+private fun GPUWgpu4kCorePrimitiveBlendProgram.writesColor(): Boolean =
+    this != GPUWgpu4kCorePrimitiveBlendProgram.ColorWriteNone &&
+        this != GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp
+
+private fun GPUWgpu4kCorePrimitiveBlendProgram.toWgpuBlendStateOrNull(): BlendState? {
+    if (!writesColor()) return null
     return BlendState(
-        color = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.Zero, destinationFactor),
-        alpha = BlendComponent(GPUBlendOperation.Add, GPUBlendFactor.Zero, destinationFactor),
+        color = BlendComponent(
+            requireNotNull(colorOperation).toWgpuBlendOperation(),
+            requireNotNull(colorSourceFactor).toWgpuBlendFactor(),
+            requireNotNull(colorDestinationFactor).toWgpuBlendFactor(),
+        ),
+        alpha = BlendComponent(
+            requireNotNull(alphaOperation).toWgpuBlendOperation(),
+            requireNotNull(alphaSourceFactor).toWgpuBlendFactor(),
+            requireNotNull(alphaDestinationFactor).toWgpuBlendFactor(),
+        ),
     )
+}
+
+private fun String.toWgpuBlendFactor(): GPUBlendFactor = when (this) {
+    "zero" -> GPUBlendFactor.Zero
+    "one" -> GPUBlendFactor.One
+    "src" -> GPUBlendFactor.Src
+    "one-minus-src" -> GPUBlendFactor.OneMinusSrc
+    "src-alpha" -> GPUBlendFactor.SrcAlpha
+    "one-minus-src-alpha" -> GPUBlendFactor.OneMinusSrcAlpha
+    "dst-alpha" -> GPUBlendFactor.DstAlpha
+    "one-minus-dst-alpha" -> GPUBlendFactor.OneMinusDstAlpha
+    else -> error("Unsupported CorePrimitive fixed-function blend factor: $this")
+}
+
+private fun String.toWgpuBlendOperation(): GPUBlendOperation = when (this) {
+    "add" -> GPUBlendOperation.Add
+    else -> error("Unsupported CorePrimitive fixed-function blend operation: $this")
 }

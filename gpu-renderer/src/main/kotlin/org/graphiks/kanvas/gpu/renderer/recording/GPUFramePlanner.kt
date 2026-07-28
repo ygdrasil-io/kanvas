@@ -722,7 +722,7 @@ object GPUFramePlanner {
                     diagnostics += refusal
                     return@forEach
                 }
-                if (task.drawPackets.all { it.blendPlan is GPUBlendPlan.NoOp }) {
+                if (task.drawPackets.all { packet -> packet.isElidableNoOp() }) {
                     return@forEach
                 }
 
@@ -741,7 +741,7 @@ object GPUFramePlanner {
                             steps += operation.toStep(taskList.capabilitySeal)
                         }
                     }
-                    if (packet.blendPlan !is GPUBlendPlan.NoOp) {
+                    if (!packet.isElidableNoOp()) {
                         slicePackets += packet
                     }
                 }
@@ -965,6 +965,13 @@ object GPUFramePlanner {
         -> false
     }
 
+    /**
+     * A path cover still owns the stencil test/reset even when its color blend is destination-only.
+     * All other destination-only packets remain ordinary auditable no-op elisions.
+     */
+    private fun GPUDrawPacket.isElidableNoOp(): Boolean =
+        blendPlan is GPUBlendPlan.NoOp && role != GPUDrawPacketRole.PathStencilCover
+
     private fun ScheduledDestinationOperation.hasUnsafeWrite(
         orderedTasks: List<GPUTask>,
     ): Boolean = orderedTasks.withIndex().any { (taskIndex, candidate) ->
@@ -1039,6 +1046,7 @@ object GPUFramePlanner {
     private fun List<GPUTask>.elidedNoOpDraws(): List<GPUFrameElidedNoOpDraw> =
         filterIsInstance<GPUTask.Render>().flatMap { task ->
             task.drawPackets.mapNotNull { packet ->
+                if (!packet.isElidableNoOp()) return@mapNotNull null
                 val noOp = packet.blendPlan as? GPUBlendPlan.NoOp ?: return@mapNotNull null
                 GPUFrameElidedNoOpDraw(
                     taskId = task.taskId,

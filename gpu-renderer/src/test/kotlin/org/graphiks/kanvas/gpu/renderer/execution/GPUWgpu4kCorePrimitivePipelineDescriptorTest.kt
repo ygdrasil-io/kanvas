@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticShapeUnif
 import io.ygdrasil.webgpu.ColorTargetState
 import io.ygdrasil.webgpu.DepthStencilState
 import io.ygdrasil.webgpu.GPUBlendFactor
+import io.ygdrasil.webgpu.GPUBlendOperation
 import io.ygdrasil.webgpu.GPUBindGroupLayout
 import io.ygdrasil.webgpu.GPUColorWrite
 import io.ygdrasil.webgpu.GPUCompareFunction
@@ -41,6 +42,233 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 
 class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
+    @Test
+    fun `indexed path covers map every admitted fixed blend to distinct exact descriptors`() {
+        data class Case(
+            val mode: GPUBlendMode,
+            val colorSource: String,
+            val colorDestination: String,
+            val alphaSource: String,
+            val alphaDestination: String,
+            val expectedColorSource: GPUBlendFactor,
+            val expectedColorDestination: GPUBlendFactor,
+            val expectedAlphaSource: GPUBlendFactor,
+            val expectedAlphaDestination: GPUBlendFactor,
+        )
+
+        val cases = listOf(
+            Case(
+                GPUBlendMode.CLEAR,
+                "zero",
+                "zero",
+                "zero",
+                "zero",
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.Zero,
+            ),
+            Case(
+                GPUBlendMode.SRC,
+                "one",
+                "zero",
+                "one",
+                "zero",
+                GPUBlendFactor.One,
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.One,
+                GPUBlendFactor.Zero,
+            ),
+            Case(
+                GPUBlendMode.DST_OVER,
+                "one-minus-dst-alpha",
+                "one",
+                "one-minus-dst-alpha",
+                "one",
+                GPUBlendFactor.OneMinusDstAlpha,
+                GPUBlendFactor.One,
+                GPUBlendFactor.OneMinusDstAlpha,
+                GPUBlendFactor.One,
+            ),
+            Case(
+                GPUBlendMode.SRC_IN,
+                "dst-alpha",
+                "zero",
+                "dst-alpha",
+                "zero",
+                GPUBlendFactor.DstAlpha,
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.DstAlpha,
+                GPUBlendFactor.Zero,
+            ),
+            Case(
+                GPUBlendMode.DST_IN,
+                "zero",
+                "src-alpha",
+                "zero",
+                "src-alpha",
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.SrcAlpha,
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.SrcAlpha,
+            ),
+            Case(
+                GPUBlendMode.SRC_OUT,
+                "one-minus-dst-alpha",
+                "zero",
+                "one-minus-dst-alpha",
+                "zero",
+                GPUBlendFactor.OneMinusDstAlpha,
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.OneMinusDstAlpha,
+                GPUBlendFactor.Zero,
+            ),
+            Case(
+                GPUBlendMode.DST_OUT,
+                "zero",
+                "one-minus-src-alpha",
+                "zero",
+                "one-minus-src-alpha",
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.OneMinusSrcAlpha,
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.OneMinusSrcAlpha,
+            ),
+            Case(
+                GPUBlendMode.SRC_ATOP,
+                "dst-alpha",
+                "one-minus-src-alpha",
+                "dst-alpha",
+                "one-minus-src-alpha",
+                GPUBlendFactor.DstAlpha,
+                GPUBlendFactor.OneMinusSrcAlpha,
+                GPUBlendFactor.DstAlpha,
+                GPUBlendFactor.OneMinusSrcAlpha,
+            ),
+            Case(
+                GPUBlendMode.DST_ATOP,
+                "one-minus-dst-alpha",
+                "src-alpha",
+                "one-minus-dst-alpha",
+                "src-alpha",
+                GPUBlendFactor.OneMinusDstAlpha,
+                GPUBlendFactor.SrcAlpha,
+                GPUBlendFactor.OneMinusDstAlpha,
+                GPUBlendFactor.SrcAlpha,
+            ),
+            Case(
+                GPUBlendMode.XOR,
+                "one-minus-dst-alpha",
+                "one-minus-src-alpha",
+                "one-minus-dst-alpha",
+                "one-minus-src-alpha",
+                GPUBlendFactor.OneMinusDstAlpha,
+                GPUBlendFactor.OneMinusSrcAlpha,
+                GPUBlendFactor.OneMinusDstAlpha,
+                GPUBlendFactor.OneMinusSrcAlpha,
+            ),
+            Case(
+                GPUBlendMode.MODULATE,
+                "zero",
+                "src",
+                "zero",
+                "src-alpha",
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.Src,
+                GPUBlendFactor.Zero,
+                GPUBlendFactor.SrcAlpha,
+            ),
+            Case(
+                GPUBlendMode.SCREEN,
+                "one",
+                "one-minus-src",
+                "one",
+                "one-minus-src-alpha",
+                GPUBlendFactor.One,
+                GPUBlendFactor.OneMinusSrc,
+                GPUBlendFactor.One,
+                GPUBlendFactor.OneMinusSrcAlpha,
+            ),
+        )
+        val identities = linkedSetOf<GPUWgpu4kCorePrimitiveRenderPipelineIdentity>()
+
+        cases.forEach { case ->
+            listOf(regularCover(), inverseCover()).forEach { stencil ->
+                val key = pathKey(stencil, cover = true).copy(
+                    blend = fixedBlend(
+                        mode = case.mode,
+                        colorSource = case.colorSource,
+                        colorDestination = case.colorDestination,
+                        alphaSource = case.alphaSource,
+                        alphaDestination = case.alphaDestination,
+                    ),
+                )
+                val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                    mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+                    case.mode.name,
+                )
+                identities += mapped.identity
+                val target = assertIs<ColorTargetState>(
+                    requireNotNull(
+                        corePrimitiveWgpu4kRenderPipelineDescriptor(
+                            mapped.identity,
+                            shader,
+                            pipelineLayout,
+                        ).fragment,
+                    ).targets.single(),
+                )
+                val blend = requireNotNull(target.blend)
+
+                assertEquals(GPUColorWrite.All, target.writeMask, case.mode.name)
+                assertEquals(GPUBlendOperation.Add, blend.color.operation, case.mode.name)
+                assertEquals(case.expectedColorSource, blend.color.srcFactor, case.mode.name)
+                assertEquals(case.expectedColorDestination, blend.color.dstFactor, case.mode.name)
+                assertEquals(GPUBlendOperation.Add, blend.alpha.operation, case.mode.name)
+                assertEquals(case.expectedAlphaSource, blend.alpha.srcFactor, case.mode.name)
+                assertEquals(case.expectedAlphaDestination, blend.alpha.dstFactor, case.mode.name)
+            }
+        }
+
+        assertEquals(cases.size * 2, identities.size)
+        val malformed = pathKey(regularCover(), cover = true).copy(
+            blend = fixedBlend(
+                mode = GPUBlendMode.SRC,
+                colorSource = "one",
+                colorDestination = "one",
+                alphaSource = "one",
+                alphaDestination = "zero",
+            ),
+        )
+        assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Refused>(
+            mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(malformed),
+        )
+    }
+
+    @Test
+    fun `indexed destination no op cover keeps stencil reset while disabling color writes`() {
+        val identities = listOf(regularCover(), inverseCover()).map { stencil ->
+            val key = pathKey(stencil, cover = true).copy(
+                blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp(GPUBlendMode.DST),
+            )
+            val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+            )
+            val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(
+                mapped.identity,
+                shader,
+                pipelineLayout,
+            )
+            val target = assertIs<ColorTargetState>(requireNotNull(descriptor.fragment).targets.single())
+
+            assertNull(target.blend)
+            assertEquals(GPUColorWrite.None, target.writeMask)
+            assertTrue(requireNotNull(descriptor.depthStencil).stencilWriteMask != 0u)
+            mapped.identity
+        }
+
+        assertNotEquals(identities[0], identities[1])
+    }
+
     @Test
     fun `scene sRGB structural authority maps exact native target while mask producer stays unorm`() {
         val sceneKeys = listOf(
@@ -913,6 +1141,23 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             stateId = "src-over",
             color = GPUFixedFunctionBlendComponent("one", "one-minus-src-alpha", "add"),
             alpha = GPUFixedFunctionBlendComponent("one", "one-minus-src-alpha", "add"),
+            writeMask = "rgba",
+        ),
+    )
+
+    private fun fixedBlend(
+        mode: GPUBlendMode,
+        colorSource: String,
+        colorDestination: String,
+        alphaSource: String,
+        alphaDestination: String,
+    ) = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.Fixed(
+        mode = mode,
+        sourceCoverage = GPUSourceCoverageEncoding.None,
+        state = GPUFixedFunctionBlendState(
+            stateId = "test-${mode.gpuLabel}",
+            color = GPUFixedFunctionBlendComponent(colorSource, colorDestination, "add"),
+            alpha = GPUFixedFunctionBlendComponent(alphaSource, alphaDestination, "add"),
             writeMask = "rgba",
         ),
     )
