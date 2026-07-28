@@ -28,7 +28,12 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.Blender
+import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
@@ -117,6 +122,86 @@ class GPUPreparedSurfaceProductRouterTest {
             assertEquals(GPUPreparedImageRefusalCodes.PIXELS_MISSING, terminal.diagnostic.code.value)
             assertEquals(0, harness.backend.prepareCalls)
             assertEquals(0, harness.backend.session.submitCalls)
+        }
+    }
+
+    @Test
+    fun `direct image blender refusals are terminal before native preparation`() {
+        val cases = listOf(
+            Paint(blender = Blender.Arithmetic(0f, 1f, 1f, 0f)) to
+                mapOf(
+                    "reason" to "unsupported_blender",
+                    "blenderKind" to "Arithmetic",
+                    "boundary" to "surface",
+                    "commandId" to "0",
+                    "operationIndex" to "0",
+                ),
+            Paint(blender = Blender.Mode(BlendMode.MULTIPLY)) to
+                mapOf(
+                    "sourceId" to "prepared-product-image",
+                    "blendMode" to BlendMode.MULTIPLY.name,
+                    "supportedBlendMode" to BlendMode.SRC_OVER.name,
+                    "boundary" to "surface",
+                    "commandId" to "0",
+                    "operationIndex" to "0",
+                ),
+        )
+
+        cases.forEach { (paint, expectedFacts) ->
+            val harness = PreparedProductExecutionHarness(width = 8, height = 8)
+            val operation = preparedProductImageOperations(paint = paint)
+                .single { (candidate, _) -> candidate is DisplayOp.DrawImage }
+                .first
+
+            val route = GPUPreparedSurfaceProductRouter.route(
+                listOf(operation),
+                8,
+                8,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+                harness.port,
+            )
+
+            val terminal = assertIs<GPUPreparedSurfaceProductRoute.Terminal>(route)
+            assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, terminal.diagnostic.code.value)
+            assertEquals(expectedFacts, terminal.diagnostic.facts)
+            assertEquals(0, harness.backend.prepareCalls)
+            assertEquals(0, harness.backend.session.submitCalls)
+        }
+    }
+
+    @Test
+    fun `paint effects across every image family are terminal before native preparation`() {
+        val paints = listOf(
+            Paint(colorFilter = ColorFilter.HighContrast),
+            Paint(maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma = 1f)),
+            Paint(imageFilter = ImageFilter.Blur(1f, 1f)),
+        )
+
+        paints.forEach { paint ->
+            preparedProductImageOperations(paint = paint).forEach { (operation, _) ->
+                val harness = PreparedProductExecutionHarness(width = 8, height = 8)
+
+                val route = GPUPreparedSurfaceProductRouter.route(
+                    listOf(operation),
+                    8,
+                    8,
+                    PixelFormat.RGBA8,
+                    RenderConfig.DEFAULT,
+                    harness.port,
+                )
+
+                val terminal = assertIs<GPUPreparedSurfaceProductRoute.Terminal>(
+                    route,
+                    operation::class.simpleName,
+                )
+                assertEquals(
+                    GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                    terminal.diagnostic.code.value,
+                )
+                assertEquals(0, harness.backend.prepareCalls)
+                assertEquals(0, harness.backend.session.submitCalls)
+            }
         }
     }
 
@@ -325,6 +410,7 @@ internal class PreparedProductSession(
 
 internal fun preparedProductImageOperations(
     image: Image = preparedProductImage(),
+    paint: Paint? = null,
 ): List<Pair<DisplayOp, Int>> {
     val clip = ClipStack.WideOpen
     return listOf(
@@ -332,7 +418,7 @@ internal fun preparedProductImageOperations(
             image,
             Rect.fromLTRB(0f, 0f, 4f, 4f),
             Rect.fromLTRB(0f, 0f, 4f, 4f),
-            null,
+            paint,
             Matrix33.identity(),
             clip,
         ) to 1,
@@ -340,7 +426,7 @@ internal fun preparedProductImageOperations(
             image,
             Rect.fromLTRB(1f, 1f, 3f, 3f),
             Rect.fromLTRB(0f, 0f, 8f, 8f),
-            null,
+            paint,
             Matrix33.identity(),
             clip,
         ) to 9,
@@ -348,7 +434,7 @@ internal fun preparedProductImageOperations(
             image,
             Lattice(listOf(2), listOf(2)),
             Rect.fromLTRB(0f, 0f, 8f, 8f),
-            null,
+            paint,
             Matrix33.identity(),
             clip,
         ) to 4,
@@ -358,7 +444,7 @@ internal fun preparedProductImageOperations(
             listOf(Rect.fromLTRB(0f, 0f, 2f, 2f)),
             listOf(Color.WHITE),
             BlendMode.SRC_OVER,
-            Paint.fill(Color.WHITE),
+            paint ?: Paint.fill(Color.WHITE),
             Matrix33.identity(),
             clip,
         ) to 1,

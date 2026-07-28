@@ -27,12 +27,20 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Blender
+import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.ImageFilter
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.Arguments
+import org.junit.jupiter.params.provider.MethodSource
+import java.util.stream.Stream
 
 class GPUPreparedAtlasLowererTest {
     @Test
@@ -451,6 +459,37 @@ class GPUPreparedAtlasLowererTest {
         }
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("unsupportedAtlasPaintEffects")
+    fun `atlas paint effects refuse exactly before any command prefix`(
+        paintField: String,
+        paint: Paint,
+    ) {
+        val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
+            GPUPreparedAtlasLowerer.lower(
+                atlasOperation(
+                    transforms = listOf(Matrix33.identity(), Matrix33.identity()),
+                    texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
+                    colors = listOf(Color.RED, Color.GREEN),
+                    paint = paint,
+                ),
+                0,
+                0,
+                context(),
+            ),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.code)
+        assertEquals(null, refused.spriteIndex)
+        assertEquals(
+            mapOf(
+                "reason" to "unsupported_paint_effect",
+                "paintField" to paintField,
+            ),
+            refused.facts,
+        )
+    }
+
     private fun atlasOperation(
         transforms: List<Matrix33>,
         texRects: List<Rect>,
@@ -518,4 +557,22 @@ class GPUPreparedAtlasLowererTest {
             rendererFeatures = setOf(GPURendererFeature.RenderPass),
         ),
     )
+
+    companion object {
+        @JvmStatic
+        fun unsupportedAtlasPaintEffects(): Stream<Arguments> = Stream.of(
+            Arguments.of(
+                "colorFilter",
+                Paint(colorFilter = ColorFilter.HighContrast),
+            ),
+            Arguments.of(
+                "maskFilter",
+                Paint(maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma = 1f)),
+            ),
+            Arguments.of(
+                "imageFilter",
+                Paint(imageFilter = ImageFilter.Blur(1f, 1f)),
+            ),
+        )
+    }
 }

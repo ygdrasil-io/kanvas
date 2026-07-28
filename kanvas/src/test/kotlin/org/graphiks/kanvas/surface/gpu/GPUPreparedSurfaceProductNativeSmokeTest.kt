@@ -152,6 +152,8 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
             prepared.evidence.routeMarker,
         )
+        assertEquals(1L, prepared.evidence.submits)
+        assertEquals(0, prepared.evidence.activeNativePayloads)
         assertEquals(1, result.stats.opsDispatched)
         assertPixel(result.pixels.toByteArray(), 4, 0, 0, listOf(0, 0, 0, 0))
         assertPixel(result.pixels.toByteArray(), 4, 1, 1, listOf(188, 0, 0, 128))

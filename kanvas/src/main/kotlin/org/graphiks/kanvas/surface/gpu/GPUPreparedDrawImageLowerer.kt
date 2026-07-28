@@ -38,6 +38,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
 import org.graphiks.kanvas.gpu.renderer.recording.buildPreparedImageGeometry
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
@@ -89,7 +90,23 @@ internal object GPUPreparedDrawImageLowerer {
         preparedArtifact: GPUPreparedImageUploadArtifact? = null,
     ): GPUPreparedDrawImageLowering {
         val image = operation.image
-        val blendMode = operation.paint?.blendMode ?: BlendMode.SRC_OVER
+        operation.paint.unsupportedPreparedImagePaintEffectOrNull()?.let { paintField ->
+            return GPUPreparedDrawImageLowering.Refused(
+                GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                preparedImagePaintEffectRefusalFacts(paintField),
+            )
+        }
+        val blendMode = when (val blender = operation.paint?.blender) {
+            null -> operation.paint?.blendMode ?: BlendMode.SRC_OVER
+            is Blender.Mode -> blender.mode
+            is Blender.Arithmetic -> return GPUPreparedDrawImageLowering.Refused(
+                GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                mapOf(
+                    "reason" to "unsupported_blender",
+                    "blenderKind" to "Arithmetic",
+                ),
+            )
+        }
         if (blendMode != BlendMode.SRC_OVER) {
             return GPUPreparedDrawImageLowering.Refused(
                 GPUPreparedImageRefusalCodes.NATIVE_BINDING,
@@ -98,12 +115,6 @@ internal object GPUPreparedDrawImageLowerer {
                     "blendMode" to blendMode.name,
                     "supportedBlendMode" to BlendMode.SRC_OVER.name,
                 ),
-            )
-        }
-        operation.paint.unsupportedPreparedImagePaintEffectOrNull()?.let { paintField ->
-            return GPUPreparedDrawImageLowering.Refused(
-                GPUPreparedImageRefusalCodes.NATIVE_BINDING,
-                preparedImagePaintEffectRefusalFacts(paintField),
             )
         }
 

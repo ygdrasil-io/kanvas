@@ -25,6 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
@@ -32,6 +33,7 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
@@ -751,6 +753,89 @@ class GPUPreparedDrawImageLowererTest {
         assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, result.code)
         assertEquals(BlendMode.MULTIPLY.name, result.facts["blendMode"])
         assertEquals(BlendMode.SRC_OVER.name, result.facts["supportedBlendMode"])
+    }
+
+    @Test
+    fun `mode blender overrides legacy blend mode before direct image validation`() {
+        val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+            GPUPreparedDrawImageLowerer.lower(
+                drawImage(
+                    rgbaImage(),
+                    paint = Paint.fill(Color.WHITE).copy(
+                        blendMode = BlendMode.MULTIPLY,
+                        blender = Blender.Mode(BlendMode.SRC_OVER),
+                    ),
+                ),
+                GPUDrawCommandID(0),
+                0,
+                GPUFrameProvenance.None,
+                target(),
+                RenderConfig.DEFAULT,
+                capabilities(),
+            ),
+        )
+
+        assertEquals(GPUBlendMode.SRC_OVER, result.command.normalized.blend.mode)
+    }
+
+    @Test
+    fun `non SrcOver mode blender is an exact direct image refusal`() {
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
+            GPUPreparedDrawImageLowerer.lower(
+                drawImage(
+                    rgbaImage(),
+                    paint = Paint.fill(Color.WHITE).copy(
+                        blendMode = BlendMode.SRC_OVER,
+                        blender = Blender.Mode(BlendMode.MULTIPLY),
+                    ),
+                ),
+                GPUDrawCommandID(0),
+                0,
+                GPUFrameProvenance.None,
+                target(),
+                RenderConfig.DEFAULT,
+                capabilities(),
+            ),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, result.code)
+        assertEquals(
+            mapOf(
+                "sourceId" to "test-rgba",
+                "blendMode" to BlendMode.MULTIPLY.name,
+                "supportedBlendMode" to BlendMode.SRC_OVER.name,
+            ),
+            result.facts,
+        )
+    }
+
+    @Test
+    fun `arithmetic blender is an exact direct image refusal`() {
+        val result = assertIs<GPUPreparedDrawImageLowering.Refused>(
+            GPUPreparedDrawImageLowerer.lower(
+                drawImage(
+                    rgbaImage(),
+                    paint = Paint.fill(Color.WHITE).copy(
+                        blender = Blender.Arithmetic(0f, 1f, 1f, 0f),
+                    ),
+                ),
+                GPUDrawCommandID(0),
+                0,
+                GPUFrameProvenance.None,
+                target(),
+                RenderConfig.DEFAULT,
+                capabilities(),
+            ),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, result.code)
+        assertEquals(
+            mapOf(
+                "reason" to "unsupported_blender",
+                "blenderKind" to "Arithmetic",
+            ),
+            result.facts,
+        )
     }
 
     @Test

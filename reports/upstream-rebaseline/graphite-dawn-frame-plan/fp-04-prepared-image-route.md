@@ -19,7 +19,10 @@ The implementation chain used by this cutover is:
 - affine atlas and image evidence: `0414290a1`;
 - atlas review repairs through the Task 9 head: `0f61b130f`;
 - atomic product admission and this evidence: the commit containing this
-  report, with subject `feat(surface): activate prepared image routing`.
+  report, with subject `feat(surface): activate prepared image routing`;
+- post-cutover Blender authority and refusal evidence repair: the commit
+  containing this update, with subject
+  `fix(surface): honor prepared image blender authority`.
 
 The earlier resource, ABI, cache, and sRGB acceptance evidence remains in
 `fp-04-task-5-review.md` and `fp-04-srgb-store.md`. This report records the
@@ -212,11 +215,17 @@ with `unsupported.surface.prepared.image-clip`. Unbound image paint effects
 `reason=unsupported_paint_effect` and the exact `paintField`. These operations
 are FP-07 nonclaims, not silently ignored effects.
 
+Direct DrawImage resolves destination composition from `paint.blender` before
+the legacy `paint.blendMode` field. `Blender.Mode(SRC_OVER)` is accepted even
+when the legacy field differs; other resolved modes retain the exact
+native-binding refusal. `Blender.Arithmetic` terminates with
+`reason=unsupported_blender` and `blenderKind=Arithmetic`.
+
 The refusal matrix preserves one code through source preparation, Surface
 mapping, recording, preflight, and the product terminal exception. Texture
 limit, invalid WGSL, generation, binding, mixed late-surface, invalid clip,
 invalid atlas blend, and paint-effect tests assert refusal before native
-factory/session allocation. The product-entry tests use the real executor and
+session preparation. The product-entry tests use the real executor and
 prove the legacy port remains untouched.
 
 ## TDD and current validation
@@ -241,6 +250,13 @@ RED run failed 3/3 and the GREEN run passed 3/3 after exact hard-scissor
 classification was added; complex, fractional-AA, invalid, and empty clips
 remain exact terminal refusals.
 
+Post-cutover review found that direct DrawImage ignored `paint.blender`. The
+focused RED run executed 58 tests with exactly four expected failures; the
+same three classes passed 58/58 after the minimal authority repair. The Atlas
+paint-effect contract is parameterized over all three unbound effect fields,
+and product-router coverage exercises all twelve effect/family combinations
+plus both direct Blender refusal shapes before native session preparation.
+
 Final focused GPU validation:
 
 | Suite | Passed |
@@ -261,18 +277,19 @@ Final focused Kanvas validation:
 | Suite | Passed |
 |---|---:|
 | `GPUPreparedImageSourceTest` | 2/2 |
-| `GPUPreparedDrawImageLowererTest` | 33/33 |
+| `GPUPreparedDrawImageLowererTest` | 36/36 |
 | `GPUPreparedImageGridLowererTest` | 11/11 |
-| `GPUPreparedAtlasLowererTest` | 11/11 |
+| `GPUPreparedAtlasLowererTest` | 14/14 |
 | `GPUPreparedSurfaceImagePixelTest` | 1/1 |
 | `GPUPreparedImageRefusalMatrixTest` | 3/3 |
 | `GPUPreparedSurfaceFrameGateTest` | 5/5 |
-| `GPUPreparedSurfaceProductRouterTest` | 6/6 |
+| `GPUPreparedSurfaceProductRouterTest` | 8/8 |
 | `GPUPreparedSurfaceProductEntryTest` | 6/6 |
 | `GPUFramePathApiInventoryTest` | 63/63 |
 | `GPUPreparedSurfaceProductNativeSmokeTest` | 8/8 |
 
-Result: **149/149**, zero failure, zero skip.
+Result: **157/157**, zero failure, zero skip. Together with the focused
+gpu-renderer group, FP-04 validation is **257/257**.
 
 The expanded affected-suite group also passed:
 
@@ -285,15 +302,16 @@ GPUFramePathApiInventoryNativeSmokeTest       1/1
 ```
 
 The image rows in `GPUAllApiBlendSurfaceTest` execute 16 prepared pixel cases,
-332 exact terminal-refusal cases with unchanged destination/no legacy, and
-116 explicit saveLayer legacy pixel cases. Every image row passes.
+332 exact terminal-refusal cases with one Terminal decision, no destination
+readback snapshot, and no Legacy decision, plus 116 explicit saveLayer legacy
+pixel cases. Every image row passes.
 
 Module aggregate truth is recorded without converting unrelated failures into
 green results:
 
 - `:gpu-renderer:test`: 2,500 tests, 2,499 passed, one pre-existing Task 9
   package-boundary failure for execution imports of clip semantic contracts;
-- `:kanvas:test`: 2,700 tests, 2,648 passed, 52 failures, all confined to
+- `:kanvas:test`: 2,708 tests, 2,656 passed, 52 failures, all confined to
   `GPUAllApiBlendSurfaceTest` DrawPath (26) and DrawDRRect (26) core baselines.
 
 No aggregate failure belongs to an image route, pixel, alpha, gate, router,
