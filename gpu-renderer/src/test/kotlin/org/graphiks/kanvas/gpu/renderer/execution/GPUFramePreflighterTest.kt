@@ -74,6 +74,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersect
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticIntersectionUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskUniformSlabSeal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPreparedImageClipAuthorityValidation
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchAdjacency
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
@@ -268,6 +269,82 @@ class GPUFramePreflighterTest {
         } finally {
             adapter.close()
         }
+    }
+
+    @Test
+    fun `prepared image scissor authority refusal keeps its exact diagnostic`() {
+        val diagnostic = requireNotNull(
+            preparedImageClipPreflightDiagnostic(
+                GPUPreparedImageClipAuthorityValidation.ScissorAuthorityMismatch,
+                hasScissor = false,
+            ),
+        )
+
+        assertEquals(
+            "invalid.preflight.prepared_image_scissor_authority",
+            diagnostic.code.value,
+        )
+        assertEquals(
+            "Prepared sampled-image packet and semantic scissor authorities differ.",
+            diagnostic.message,
+        )
+    }
+
+    @Test
+    fun `prepared image coverage refusal keeps its exact diagnostic`() {
+        val diagnostic = requireNotNull(
+            preparedImageClipPreflightDiagnostic(
+                GPUPreparedImageClipAuthorityValidation.CoverageMismatch,
+                hasScissor = false,
+            ),
+        )
+
+        assertEquals(
+            "invalid.preflight.prepared_image_scissor_coverage",
+            diagnostic.code.value,
+        )
+        assertEquals(
+            "Prepared sampled-image scissor must retain one exact coverage plan.",
+            diagnostic.message,
+        )
+    }
+
+    @Test
+    fun `prepared image active scissor execution refusal keeps its exact diagnostic`() {
+        val diagnostic = requireNotNull(
+            preparedImageClipPreflightDiagnostic(
+                GPUPreparedImageClipAuthorityValidation.ExecutionMismatch,
+                hasScissor = true,
+            ),
+        )
+
+        assertEquals(
+            "invalid.preflight.prepared_image_scissor_execution",
+            diagnostic.code.value,
+        )
+        assertEquals(
+            "Prepared sampled-image scissor must retain one exact native execution plan.",
+            diagnostic.message,
+        )
+    }
+
+    @Test
+    fun `prepared image wide open execution refusal keeps its distinct exact diagnostic`() {
+        val diagnostic = requireNotNull(
+            preparedImageClipPreflightDiagnostic(
+                GPUPreparedImageClipAuthorityValidation.ExecutionMismatch,
+                hasScissor = false,
+            ),
+        )
+
+        assertEquals(
+            "invalid.preflight.prepared_image_scissor_execution",
+            diagnostic.code.value,
+        )
+        assertEquals(
+            "Wide-open prepared sampled images must retain the no-clip execution plan.",
+            diagnostic.message,
+        )
     }
 
     @Test

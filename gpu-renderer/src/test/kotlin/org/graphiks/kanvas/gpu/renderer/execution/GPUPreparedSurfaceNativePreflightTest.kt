@@ -1100,6 +1100,10 @@ class GPUPreparedSurfaceNativePreflightTest {
                 ),
             )
             assertEquals("invalid.prepared-surface.image-scissor-authority", refused.code)
+            assertEquals(
+                "Prepared-image packet, semantic, and scene-target clip authorities must be exact.",
+                refused.message,
+            )
         }
     }
 }

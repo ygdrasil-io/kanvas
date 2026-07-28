@@ -4129,33 +4129,13 @@ internal class GPUFramePreflighter(
     private fun validatePreparedSampledImageScissor(
         packet: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.SampledImage,
-    ): GPUDiagnostic? = when (
-        packet.validatePreparedImageClipAuthority(
+    ): GPUDiagnostic? = preparedImageClipPreflightDiagnostic(
+        validation = packet.validatePreparedImageClipAuthority(
             semantic.targetBounds,
             semantic.scissorBounds,
-        )
-    ) {
-        GPUPreparedImageClipAuthorityValidation.Accepted -> null
-        GPUPreparedImageClipAuthorityValidation.ScissorAuthorityMismatch ->
-            diagnostic(
-                "invalid.preflight.prepared_image_scissor_authority",
-                "Prepared sampled-image packet and semantic scissor authorities differ.",
-            )
-        GPUPreparedImageClipAuthorityValidation.CoverageMismatch ->
-            diagnostic(
-                "invalid.preflight.prepared_image_scissor_coverage",
-                "Prepared sampled-image scissor must retain one exact coverage plan.",
-            )
-        GPUPreparedImageClipAuthorityValidation.ExecutionMismatch ->
-            diagnostic(
-                "invalid.preflight.prepared_image_scissor_execution",
-                if (semantic.scissorBounds != semantic.targetBounds) {
-                    "Prepared sampled-image scissor must retain one exact native execution plan."
-                } else {
-                    "Wide-open prepared sampled images must retain the no-clip execution plan."
-                },
-            )
-    }
+        ),
+        hasScissor = semantic.scissorBounds != semantic.targetBounds,
+    )
 
     private fun hasExactPreparedSurfaceMixedNativeBoundary(
         framePlan: GPUFramePlan,
@@ -5670,6 +5650,33 @@ internal fun gpuSurfaceAcquisitionDiagnostic(status: GPUSurfaceAcquisitionStatus
 
 private fun diagnostic(code: String, message: String, facts: Map<String, String> = emptyMap()): GPUDiagnostic =
     preflightDiagnostic(code, message, facts)
+
+/** Maps the passive prepared-image clip handoff to the stable execution refusal contract. */
+internal fun preparedImageClipPreflightDiagnostic(
+    validation: GPUPreparedImageClipAuthorityValidation,
+    hasScissor: Boolean,
+): GPUDiagnostic? = when (validation) {
+    GPUPreparedImageClipAuthorityValidation.Accepted -> null
+    GPUPreparedImageClipAuthorityValidation.ScissorAuthorityMismatch ->
+        diagnostic(
+            "invalid.preflight.prepared_image_scissor_authority",
+            "Prepared sampled-image packet and semantic scissor authorities differ.",
+        )
+    GPUPreparedImageClipAuthorityValidation.CoverageMismatch ->
+        diagnostic(
+            "invalid.preflight.prepared_image_scissor_coverage",
+            "Prepared sampled-image scissor must retain one exact coverage plan.",
+        )
+    GPUPreparedImageClipAuthorityValidation.ExecutionMismatch ->
+        diagnostic(
+            "invalid.preflight.prepared_image_scissor_execution",
+            if (hasScissor) {
+                "Prepared sampled-image scissor must retain one exact native execution plan."
+            } else {
+                "Wide-open prepared sampled images must retain the no-clip execution plan."
+            },
+        )
+}
 
 private fun referencedResources(framePlan: GPUFramePlan): Set<GPUFrameResourceRef> =
     framePlan.steps.flatMap(::referencedResources).toSet()
