@@ -37,16 +37,14 @@ class GPUPreparedMaterialSampledResource internal constructor(
 
     val contentHash: String = sha256Hex(rgba8Snapshot)
 
-    val resourceKey: String = "sampled-material:" + sha256Hex(
-        buildList {
-            add("prepared-material-sampled-resource-v1")
-            add("width=$width")
-            add("height=$height")
-            add("sampling=$samplingFilterMode")
-            add("alphaOnly=$alphaOnly")
-            add("content=$contentHash")
-        }.joinToString("\n").encodeToByteArray(),
-    )
+    val resourceKey: String = "sampled-material:" +
+        CanonicalIdentityEncoder("prepared-material-sampled-resource-v2")
+            .int("width", width)
+            .int("height", height)
+            .text("samplingFilterMode", samplingFilterMode)
+            .boolean("alphaOnly", alphaOnly)
+            .text("contentHash", contentHash)
+            .digestHex()
 
     init {
         require(width > 0 && height > 0) {
@@ -115,7 +113,7 @@ object GPUPreparedMaterialProgramCompiler {
                 return refused(result.code, result.sourceKind, result.message)
         }
         val reflectedAbiFacts = when (
-            val validation = validateFinalModule(prepared.wgslSource, prepared.entryPoint)
+            val validation = validateFinalModule(prepared)
         ) {
             is FinalModuleValidation.Ready -> validation.abiFacts
             is FinalModuleValidation.Refused ->
@@ -133,35 +131,29 @@ object GPUPreparedMaterialProgramCompiler {
         }
         val sourceHash = sha256Hex(prepared.wgslSource.encodeToByteArray())
         val materialKey = "material:prepared:${prepared.sourceKind.name.lowercase()}:" +
-            sha256Hex(
-                buildList {
-                    add("prepared-material-key-v1")
-                    add("sourceKind=${prepared.sourceKind}")
-                    add("sourceHash=$sourceHash")
-                    add("entryPoint=${prepared.entryPoint}")
-                    add("uniformLayout=${prepared.uniformLayoutHash}")
-                    add("capability=${context.capabilityClass}")
-                    add("target=${context.targetFormatClass}")
-                    add("dictionary=${context.dictionaryVersion}")
-                    add("uniformBytes=${sha256Hex(prepared.uniformBytes)}")
-                    add("paintAlphaBits=${paintAlpha.toRawBits().toUInt().toString(16)}")
-                    addAll(prepared.keyFacts)
-                    addAll(resourceFacts)
-                }.joinToString("\n").encodeToByteArray(),
-            )
-        val abiHash = "sha256:" + sha256Hex(
-            buildList {
-                add("prepared-material-abi-v1")
-                add("sourceKind=${prepared.sourceKind}")
-                add("sourceHash=$sourceHash")
-                add("entryPoint=${prepared.entryPoint}")
-                add("uniformLayout=${prepared.uniformLayoutHash}")
-                add("uniformByteCount=${uniformSnapshot.size}")
-                add("sampledResourceCount=${resourceSnapshot.size}")
-                addAll(prepared.abiFacts)
-                addAll(reflectedAbiFacts)
-            }.joinToString("\n").encodeToByteArray(),
-        )
+            CanonicalIdentityEncoder("prepared-material-key-v2")
+                .text("sourceKind", prepared.sourceKind.name)
+                .text("sourceHash", sourceHash)
+                .text("entryPoint", prepared.entryPoint)
+                .text("uniformLayout", prepared.uniformLayoutHash)
+                .text("capabilityClass", context.capabilityClass)
+                .text("targetFormatClass", context.targetFormatClass)
+                .text("dictionaryVersion", context.dictionaryVersion)
+                .text("uniformBytesHash", sha256Hex(prepared.uniformBytes))
+                .floatBits("paintAlpha", paintAlpha)
+                .texts("keyFacts", prepared.keyFacts)
+                .texts("sampledResourceFacts", resourceFacts)
+                .digestHex()
+        val abiHash = CanonicalIdentityEncoder("prepared-material-abi-v2")
+            .text("sourceKind", prepared.sourceKind.name)
+            .text("sourceHash", sourceHash)
+            .text("entryPoint", prepared.entryPoint)
+            .text("uniformLayout", prepared.uniformLayoutHash)
+            .int("uniformByteCount", uniformSnapshot.size)
+            .int("sampledResourceCount", resourceSnapshot.size)
+            .texts("registeredAbiFacts", prepared.abiFacts)
+            .texts("reflectedAbiFacts", reflectedAbiFacts)
+            .digestIdentity()
 
         return GPUPreparedMaterialProgramResult.Ready(
             GPUPreparedMaterialProgram(
@@ -191,6 +183,11 @@ object GPUPreparedMaterialProgramCompiler {
             is GPUMaterialDescriptor.ImageDraw -> prepareImage(descriptor, context)
             is GPUMaterialDescriptor.RuntimeEffect -> prepareRuntimeEffect(descriptor, context)
             is GPUMaterialDescriptor.BlendShader -> prepareBlend(descriptor, context)
+            is GPUMaterialDescriptor.Unsupported -> refusedSource(
+                code = descriptor.reason.diagnosticCode,
+                sourceKind = descriptor.sourceKind(),
+                message = descriptor.reason.diagnosticMessage,
+            )
         }
 
     private fun prepareSolid(
@@ -230,6 +227,7 @@ object GPUPreparedMaterialProgramCompiler {
                 sampledResources = emptyList(),
                 sourceKind = GPUMaterialSourceKind.SolidColor,
                 uniformLayoutHash = GPUSolidMaterialDictionary.SolidMaterialLayoutHash,
+                abiExpectation = solidAbiExpectation(),
                 keyFacts = listOf(
                     "lowererKey=${lowererKey.value}",
                     "solidSemantics=straight-rgba-f32",
@@ -290,6 +288,7 @@ object GPUPreparedMaterialProgramCompiler {
                 sampledResources = emptyList(),
                 sourceKind = GPUMaterialSourceKind.Gradient,
                 uniformLayoutHash = shader.uniformLayoutHash,
+                abiExpectation = gradientAbiExpectation(normalized),
                 keyFacts = listOf(
                     "lowererKey=${lowererKey.value}",
                     "gradientFamily=${normalized.kind}",
@@ -367,6 +366,7 @@ object GPUPreparedMaterialProgramCompiler {
                 sampledResources = listOf(sampled),
                 sourceKind = GPUMaterialSourceKind.ImageShader,
                 uniformLayoutHash = IMAGE_UNIFORM_LAYOUT_HASH,
+                abiExpectation = imageAbiExpectation(),
                 keyFacts = listOf(
                     "lowererKey=${lowererKey.value}",
                     "imageAlphaOnly=${descriptor.alphaOnly}",
@@ -427,6 +427,7 @@ object GPUPreparedMaterialProgramCompiler {
                 sampledResources = emptyList(),
                 sourceKind = GPUMaterialSourceKind.RuntimeEffect,
                 uniformLayoutHash = program.uniformSchemaHash,
+                abiExpectation = runtimeEffectAbiExpectation(program),
                 keyFacts = listOf(
                     "lowererKey=${lowererKey.value}",
                     "runtimeEffect=${program.effectId}@${program.descriptorVersion}",
@@ -463,6 +464,14 @@ object GPUPreparedMaterialProgramCompiler {
         descriptor: GPUMaterialDescriptor.BlendShader,
         context: GPUMaterialLoweringContext,
     ): PreparedSourceResult {
+        if (
+            descriptor.dst is GPUMaterialDescriptor.ImageDraw ||
+            descriptor.src is GPUMaterialDescriptor.ImageDraw
+        ) {
+            return blendRefusal(
+                "Prepared blend image children are refused until tint, alpha and resources are proven",
+            )
+        }
         if (!GPUBlendShaderLowering.canHandle(descriptor)) {
             return blendRefusal("Blend shader children are not supported by common lowering")
         }
@@ -525,6 +534,7 @@ object GPUPreparedMaterialProgramCompiler {
                 sourceKind = GPUMaterialSourceKind.ShaderBlend,
                 uniformLayoutHash = "layout:blend-material:${mode.gpuLabel}:" +
                     "${destination.uniformLayoutHash}:${source.uniformLayoutHash}:v1",
+                abiExpectation = blendAbiExpectation(descriptor.dst, descriptor.src),
                 keyFacts = listOf(
                     "blendMode=${mode.gpuLabel}",
                     "blendPlan=${blendPlan::class.simpleName}",
@@ -535,10 +545,9 @@ object GPUPreparedMaterialProgramCompiler {
         )
     }
 
-    private fun validateFinalModule(
-        source: String,
-        entryPoint: String,
-    ): FinalModuleValidation {
+    private fun validateFinalModule(prepared: PreparedSource): FinalModuleValidation {
+        val source = prepared.wgslSource
+        val entryPoint = prepared.entryPoint
         val parsed = runCatching { parseWgslResult(source) }
             .getOrElse { failure ->
                 return FinalModuleValidation.Refused(
@@ -566,7 +575,10 @@ object GPUPreparedMaterialProgramCompiler {
         }.getOrElse { failure ->
             return FinalModuleValidation.Refused(
                 "wgsl4k reflection failed: ${failure::class.simpleName.orEmpty()}",
-            )
+                )
+            }
+        prepared.abiExpectation.mismatch(report, prepared.uniformBytes.size)?.let { message ->
+            return FinalModuleValidation.Refused(message)
         }
         val abiFacts = buildList {
             report.entryPoints.sortedWith(compareBy({ it.name }, { it.stage }))
@@ -674,25 +686,333 @@ private data class PreparedSource(
     val sampledResources: List<GPUPreparedMaterialSampledResource>,
     val sourceKind: GPUMaterialSourceKind,
     val uniformLayoutHash: String,
+    val abiExpectation: PreparedModuleAbiExpectation,
     val keyFacts: List<String>,
     val abiFacts: List<String> = emptyList(),
 ) {
-    fun materialShapeIdentity(): String = sha256Hex(
-        buildList {
-            add("prepared-material-shape-v1")
-            add("sourceKind=$sourceKind")
-            add("sourceHash=${sha256Hex(wgslSource.encodeToByteArray())}")
-            add("entryPoint=$entryPoint")
-            add("uniformLayout=$uniformLayoutHash")
-            add("uniformByteCount=${uniformBytes.size}")
-            add("uniformBytes=${sha256Hex(uniformBytes)}")
-            addAll(keyFacts)
-            sampledResources.forEachIndexed { index, resource ->
-                resource.identityFacts().forEach { fact -> add("resource[$index].$fact") }
-            }
-        }.joinToString("\n").encodeToByteArray(),
-    )
+    fun materialShapeIdentity(): String {
+        val resourceFacts = sampledResources.flatMapIndexed { index, resource ->
+            resource.identityFacts().map { fact -> "resource[$index].$fact" }
+        }
+        return CanonicalIdentityEncoder("prepared-material-shape-v2")
+            .text("sourceKind", sourceKind.name)
+            .text("sourceHash", sha256Hex(wgslSource.encodeToByteArray()))
+            .text("entryPoint", entryPoint)
+            .text("uniformLayout", uniformLayoutHash)
+            .int("uniformByteCount", uniformBytes.size)
+            .text("uniformBytesHash", sha256Hex(uniformBytes))
+            .texts("keyFacts", keyFacts)
+            .texts("sampledResourceFacts", resourceFacts)
+            .digestHex()
+    }
 }
+
+internal data class PreparedModuleAbiExpectation(
+    val bindings: List<PreparedAbiBinding>,
+    val uniformLayout: PreparedAbiLayout,
+) {
+    fun mismatch(
+        report: org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport,
+        uniformPayloadSize: Int,
+    ): String? {
+        val expectedEntries = listOf(
+            "fs_main" to "fragment",
+            "vs_main" to "vertex",
+        )
+        val actualEntries = report.entryPoints
+            .map { entry -> entry.name to entry.stage }
+            .sortedWith(compareBy({ it.first }, { it.second }))
+        if (actualEntries != expectedEntries) {
+            return "Prepared material entry-point stages do not match the registered ABI"
+        }
+        if (!report.validation.success || report.unsupportedFeatures.isNotEmpty()) {
+            return "Prepared material reflection did not prove a supported ABI"
+        }
+        val actualBindings = report.bindings
+            .map { binding ->
+                PreparedAbiBinding(
+                    group = binding.group,
+                    binding = binding.binding,
+                    resourceKind = binding.resourceKind,
+                    access = binding.access,
+                    sampleType = binding.sampleType,
+                    viewDimension = binding.viewDimension,
+                    storageFormat = binding.storageFormat,
+                    minBindingSize = binding.minBindingSize,
+                )
+            }
+            .sortedWith(compareBy({ it.group }, { it.binding }))
+        if (actualBindings != bindings.sortedWith(compareBy({ it.group }, { it.binding }))) {
+            return "Prepared material resource topology does not match the registered ABI"
+        }
+        val uniformLayouts = report.layouts.filter { layout -> layout.addressSpace == "uniform" }
+        if (report.layouts.size != 1 || uniformLayouts.size != 1) {
+            return "Prepared material must reflect exactly one registered uniform layout"
+        }
+        val actualLayout = uniformLayouts.single().let { layout ->
+            PreparedAbiLayout(
+                size = layout.size,
+                alignment = layout.alignment,
+                members = layout.members.map { member ->
+                    PreparedAbiMember(
+                        name = member.name,
+                        type = member.type,
+                        offset = member.offset,
+                        size = member.size,
+                        alignment = member.alignment,
+                        stride = member.stride,
+                    )
+                },
+            )
+        }
+        if (actualLayout != uniformLayout) {
+            return "Prepared material uniform layout does not match the registered ABI"
+        }
+        if (uniformPayloadSize != uniformLayout.size) {
+            return "Prepared material uniform payload size does not match the reflected ABI"
+        }
+        return null
+    }
+}
+
+internal data class PreparedAbiBinding(
+    val group: Int,
+    val binding: Int,
+    val resourceKind: String,
+    val access: String?,
+    val sampleType: String? = null,
+    val viewDimension: String? = null,
+    val storageFormat: String? = null,
+    val minBindingSize: Int? = null,
+)
+
+internal data class PreparedAbiLayout(
+    val size: Int,
+    val alignment: Int,
+    val members: List<PreparedAbiMember>,
+)
+
+internal data class PreparedAbiMember(
+    val name: String,
+    val type: String,
+    val offset: Int,
+    val size: Int,
+    val alignment: Int,
+    val stride: Int? = null,
+)
+
+private fun solidAbiExpectation(): PreparedModuleAbiExpectation =
+    uniformAbiExpectation(
+        group = 1,
+        binding = 0,
+        size = 16,
+        members = listOf(vec4Member("color", 0)),
+    )
+
+private fun gradientAbiExpectation(
+    descriptor: GPUMaterialDescriptor,
+): PreparedModuleAbiExpectation {
+    val stopData = PreparedAbiMember(
+        name = "stopData",
+        type = "array<vec4<f32>, 32>",
+        offset = when (descriptor) {
+            is GPUMaterialDescriptor.RadialGradient -> 16
+            is GPUMaterialDescriptor.LinearGradient,
+            is GPUMaterialDescriptor.SweepGradient,
+            -> 32
+            is GPUMaterialDescriptor.ConicalGradient -> 48
+            else -> error("Not a gradient descriptor")
+        },
+        size = 512,
+        alignment = 16,
+        stride = 16,
+    )
+    val members = when (descriptor) {
+        is GPUMaterialDescriptor.LinearGradient -> listOf(
+            vec2Member("start", 0),
+            vec2Member("end", 8),
+            u32Member("count", 16),
+            stopData,
+        )
+        is GPUMaterialDescriptor.RadialGradient -> listOf(
+            vec2Member("center", 0),
+            f32Member("radius", 8),
+            u32Member("count", 12),
+            stopData,
+        )
+        is GPUMaterialDescriptor.SweepGradient -> listOf(
+            vec2Member("center", 0),
+            f32Member("startAngle", 8),
+            f32Member("endAngle", 12),
+            u32Member("count", 16),
+            stopData,
+        )
+        is GPUMaterialDescriptor.ConicalGradient -> listOf(
+            vec2Member("start", 0),
+            vec2Member("end", 8),
+            f32Member("r1", 16),
+            f32Member("r2", 20),
+            u32Member("count", 24),
+            u32Member("_pad0", 28),
+            u32Member("_pad1", 32),
+            u32Member("_pad2", 36),
+            u32Member("_pad3", 40),
+            u32Member("_pad4", 44),
+            stopData,
+        )
+    }
+    val size = stopData.offset + stopData.size
+    return uniformAbiExpectation(group = 0, binding = 0, size = size, members = members)
+}
+
+private fun imageAbiExpectation(): PreparedModuleAbiExpectation =
+    uniformAbiExpectation(
+        group = 1,
+        binding = 0,
+        size = 32,
+        members = listOf(
+            vec4Member("tint", 0),
+            PreparedAbiMember("flags", "vec4<u32>", 16, 16, 16),
+        ),
+        resourceBindings = listOf(
+            PreparedAbiBinding(
+                group = 1,
+                binding = 1,
+                resourceKind = "sampledTexture",
+                access = "read",
+                sampleType = "float",
+                viewDimension = "2d",
+            ),
+            PreparedAbiBinding(
+                group = 1,
+                binding = 2,
+                resourceKind = "sampler",
+                access = "read",
+            ),
+        ),
+    )
+
+private fun runtimeEffectAbiExpectation(
+    program: GPUPreparedRuntimeEffectProgram,
+): PreparedModuleAbiExpectation =
+    PreparedModuleAbiExpectation(
+        bindings = program.bindings.map { binding ->
+            PreparedAbiBinding(
+                group = binding.group,
+                binding = binding.binding,
+                resourceKind = binding.resourceKind,
+                access = "read",
+                minBindingSize = binding.minBindingSizeBytes,
+            )
+        },
+        uniformLayout = PreparedAbiLayout(
+            size = program.uniformBlockSizeBytes,
+            alignment = program.uniformFields.maxOfOrNull { field -> field.alignmentBytes } ?: 1,
+            members = program.uniformFields.map { field ->
+                PreparedAbiMember(
+                    name = field.name,
+                    type = field.type.wgslTypeName(),
+                    offset = field.offsetBytes,
+                    size = field.sizeBytes,
+                    alignment = field.alignmentBytes,
+                    stride = field.strideBytes,
+                )
+            },
+        ),
+    )
+
+private fun blendAbiExpectation(
+    destination: GPUMaterialDescriptor,
+    source: GPUMaterialDescriptor,
+): PreparedModuleAbiExpectation {
+    val members = buildList {
+        addAll(blendChildAbiMembers("dst", destination, 0))
+        addAll(blendChildAbiMembers("src", source, 48))
+        add(u32Member("_pad0", 96))
+        add(u32Member("_pad1", 100))
+        add(u32Member("_pad2", 104))
+    }
+    return uniformAbiExpectation(group = 0, binding = 0, size = 112, members = members)
+}
+
+private fun blendChildAbiMembers(
+    prefix: String,
+    child: GPUMaterialDescriptor,
+    baseOffset: Int,
+): List<PreparedAbiMember> =
+    when (child) {
+        is GPUMaterialDescriptor.LinearGradient -> listOf(
+            vec2Member("${prefix}_start", baseOffset),
+            vec2Member("${prefix}_end", baseOffset + 8),
+            vec4Member("${prefix}_color", baseOffset + 16),
+            vec4Member("${prefix}_pad", baseOffset + 32),
+        )
+        is GPUMaterialDescriptor.RadialGradient -> listOf(
+            vec2Member("${prefix}_center", baseOffset),
+            f32Member("${prefix}_radius", baseOffset + 8),
+            f32Member("${prefix}_pad0", baseOffset + 12),
+            vec4Member("${prefix}_color", baseOffset + 16),
+            vec4Member("${prefix}_pad", baseOffset + 32),
+        )
+        is GPUMaterialDescriptor.SweepGradient -> listOf(
+            vec2Member("${prefix}_center", baseOffset),
+            f32Member("${prefix}_startAngle", baseOffset + 8),
+            f32Member("${prefix}_endAngle", baseOffset + 12),
+            vec4Member("${prefix}_color", baseOffset + 16),
+            vec4Member("${prefix}_pad", baseOffset + 32),
+        )
+        is GPUMaterialDescriptor.SolidColor,
+        is GPUMaterialDescriptor.ImageDraw,
+        -> listOf(
+            vec4Member("${prefix}_color", baseOffset),
+            vec4Member("${prefix}_pad", baseOffset + 16),
+            vec4Member("${prefix}_pad2", baseOffset + 32),
+        )
+        else -> error("Unsupported blend child ABI: ${child.kind}")
+    }
+
+private fun uniformAbiExpectation(
+    group: Int,
+    binding: Int,
+    size: Int,
+    members: List<PreparedAbiMember>,
+    resourceBindings: List<PreparedAbiBinding> = emptyList(),
+): PreparedModuleAbiExpectation =
+    PreparedModuleAbiExpectation(
+        bindings = listOf(
+            PreparedAbiBinding(
+                group = group,
+                binding = binding,
+                resourceKind = "uniformBuffer",
+                access = "read",
+                minBindingSize = size,
+            ),
+        ) + resourceBindings,
+        uniformLayout = PreparedAbiLayout(size = size, alignment = 16, members = members),
+    )
+
+private fun vec2Member(name: String, offset: Int): PreparedAbiMember =
+    PreparedAbiMember(name, "vec2<f32>", offset, 8, 8)
+
+private fun vec4Member(name: String, offset: Int): PreparedAbiMember =
+    PreparedAbiMember(name, "vec4<f32>", offset, 16, 16)
+
+private fun f32Member(name: String, offset: Int): PreparedAbiMember =
+    PreparedAbiMember(name, "f32", offset, 4, 4)
+
+private fun u32Member(name: String, offset: Int): PreparedAbiMember =
+    PreparedAbiMember(name, "u32", offset, 4, 4)
+
+private fun GPUPreparedRuntimeEffectUniformType.wgslTypeName(): String =
+    when (this) {
+        GPUPreparedRuntimeEffectUniformType.Float1 -> "f32"
+        GPUPreparedRuntimeEffectUniformType.Float2 -> "vec2<f32>"
+        GPUPreparedRuntimeEffectUniformType.Float3 -> "vec3<f32>"
+        GPUPreparedRuntimeEffectUniformType.Float4 -> "vec4<f32>"
+        GPUPreparedRuntimeEffectUniformType.Int1 -> "i32"
+        GPUPreparedRuntimeEffectUniformType.Matrix3x3 -> "mat3x3<f32>"
+        GPUPreparedRuntimeEffectUniformType.Matrix4x4 -> "mat4x4<f32>"
+    }
 
 private sealed interface PreparedSourceResult {
     data class Ready(val source: PreparedSource) : PreparedSourceResult
@@ -903,6 +1223,21 @@ private fun GPUMaterialDescriptor.sourceKind(): GPUMaterialSourceKind = when (th
     is GPUMaterialDescriptor.ImageDraw -> GPUMaterialSourceKind.ImageShader
     is GPUMaterialDescriptor.RuntimeEffect -> GPUMaterialSourceKind.RuntimeEffect
     is GPUMaterialDescriptor.BlendShader -> GPUMaterialSourceKind.ShaderBlend
+    is GPUMaterialDescriptor.Unsupported -> when (kind) {
+        org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind.SolidColor ->
+            GPUMaterialSourceKind.SolidColor
+        org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind.LinearGradient,
+        org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind.RadialGradient,
+        org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind.SweepGradient,
+        org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind.TwoPointConical,
+        -> GPUMaterialSourceKind.Gradient
+        org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind.ImageDraw ->
+            GPUMaterialSourceKind.ImageShader
+        org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind.RuntimeEffect ->
+            GPUMaterialSourceKind.RuntimeEffect
+        org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind.ShaderBlend ->
+            GPUMaterialSourceKind.ShaderBlend
+    }
 }
 
 private fun normalizeGradientStops(descriptor: GPUMaterialDescriptor): GPUMaterialDescriptor? {
@@ -1042,9 +1377,10 @@ private fun GPUMaterialDescriptor.toGradientSourceDescriptor(): GPUMaterialSourc
             stopStore = GPUGradientStopStorePlan(
                 stopCount = stops.size,
                 storageKind = "uniform-array-16",
-                payloadHash = sha256Hex(
-                    positions.toByteArray() + colors.toByteArray(),
-                ),
+                payloadHash = CanonicalIdentityEncoder("prepared-gradient-stop-payload-v2")
+                    .bytes("positions", positions.toByteArray())
+                    .bytes("colors", colors.toByteArray())
+                    .digestHex(),
             ),
             tileMode = when (tileModeLabel()) {
                 "clamp" -> GPUMaterialTileMode.Clamp
@@ -1092,18 +1428,15 @@ private fun GPUMaterialDescriptor.deriveGradientMaterialKey(
 }
 
 private fun GPUMaterialDescriptor.hasExactBlendChildShape(): Boolean = when (this) {
-    is GPUMaterialDescriptor.LinearGradient ->
-        (allStopPositions?.size ?: 2) == 2 && (allStopColors?.size ?: 8) == 8
-    is GPUMaterialDescriptor.RadialGradient ->
-        (allStopPositions?.size ?: 2) == 2 && (allStopColors?.size ?: 8) == 8
-    is GPUMaterialDescriptor.SweepGradient ->
-        (allStopPositions?.size ?: 2) == 2 && (allStopColors?.size ?: 8) == 8
-    is GPUMaterialDescriptor.SolidColor,
-    is GPUMaterialDescriptor.ImageDraw,
-    -> true
+    is GPUMaterialDescriptor.SolidColor -> true
+    is GPUMaterialDescriptor.LinearGradient,
+    is GPUMaterialDescriptor.RadialGradient,
+    is GPUMaterialDescriptor.SweepGradient,
     is GPUMaterialDescriptor.ConicalGradient,
+    is GPUMaterialDescriptor.ImageDraw,
     is GPUMaterialDescriptor.RuntimeEffect,
     is GPUMaterialDescriptor.BlendShader,
+    is GPUMaterialDescriptor.Unsupported,
     -> false
 }
 
@@ -1152,7 +1485,7 @@ private fun imageMaterialWgsl(): String = """
     fn fs_main(input: PreparedMaterialVertexOutput) -> @location(0) vec4<f32> {
         let sampled = bitmap_shader_clamp(input.uv);
         if (imageMaterial.flags.x != 0u) {
-            return sampled.r * imageMaterial.tint;
+            return sampled.a * imageMaterial.tint;
         }
         let source = vec4f(sampled.rgb * sampled.a, sampled.a);
         return vec4f(

@@ -384,6 +384,7 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
             },
             allStopPositions = desc.allStopPositions,
             allStopColors = desc.allStopColors,
+            headerSize = 16,
         )
     }
 
@@ -413,7 +414,7 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
         val n = allStopPositions?.size ?: 2
         val bufferSize = headerSize + MAX_STOPS_WGSL * BYTES_PER_STOP
         val bb = java.nio.ByteBuffer.allocate(bufferSize)
-            .order(java.nio.ByteOrder.nativeOrder())
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
         geometryPacker(bb)
         for (i in 0 until MAX_STOPS_WGSL) {
             if (i < n) {

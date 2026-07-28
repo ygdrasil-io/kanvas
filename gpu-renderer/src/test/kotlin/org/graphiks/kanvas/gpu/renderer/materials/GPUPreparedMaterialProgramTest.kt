@@ -66,6 +66,64 @@ class GPUPreparedMaterialProgramTest {
     }
 
     @Test
+    fun `prepared blend refuses image and every gradient fact its builder would lose`() {
+        val image = supportedImageShaderDescriptor()
+        val tintedAlphaImage = supportedImageShaderDescriptor(alphaOnly = true, tintR = 0.4f)
+        val gradient = linearGradientDescriptor()
+        val refusedChildren = listOf(
+            image,
+            tintedAlphaImage,
+            gradient,
+            gradient.copy(tileMode = "repeat"),
+            gradient.copy(tileMode = "mirror"),
+            gradient.copy(tileMode = "decal"),
+            gradient.copy(allStopPositions = floatArrayOf(0.2f, 0.8f)),
+            gradient.copy(
+                allStopColors = floatArrayOf(
+                    0f, 1f, 0f, 0.5f,
+                    1f, 1f, 0f, 0.25f,
+                ),
+            ),
+        )
+
+        refusedChildren.forEach { child ->
+            val descriptor = GPUMaterialDescriptor.BlendShader(
+                mode = "SRC_OVER",
+                dst = solidDescriptor(),
+                src = child,
+            )
+            val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+                compiler.compile(descriptor, 0.5f, context),
+                child.toString(),
+            )
+            assertEquals("unsupported.material.blend_shader", refused.code)
+        }
+    }
+
+    @Test
+    fun `prepared blend retains the exact admitted two solid child payload`() {
+        val descriptor = supportedBlendShaderDescriptor()
+        val ready = assertIs<GPUPreparedMaterialProgramResult.Ready>(
+            compiler.compile(descriptor, 0.625f, context),
+        ).program
+        val bytes = ready.uniformBytes
+
+        assertEquals(112, bytes.size)
+        assertEquals(0.625f, ready.paintAlpha)
+        assertEquals(
+            solidDescriptor().let { listOf(it.r * it.a, it.g * it.a, it.b * it.a, it.a) }
+                .map(Float::toRawBits),
+            bytes.take(16).toLittleEndianFloats().map(Float::toRawBits),
+        )
+        assertEquals(
+            (descriptor.src as GPUMaterialDescriptor.SolidColor).let {
+                listOf(it.r * it.a, it.g * it.a, it.b * it.a, it.a)
+            }.map(Float::toRawBits),
+            bytes.drop(48).take(16).toLittleEndianFloats().map(Float::toRawBits),
+        )
+    }
+
+    @Test
     fun `paint alpha must be finite and within the unit interval`() {
         listOf(-0.01f, 1.01f, Float.NaN, Float.POSITIVE_INFINITY).forEach { alpha ->
             val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
@@ -136,6 +194,20 @@ class GPUPreparedMaterialProgramTest {
     }
 
     @Test
+    fun `alpha-only image shader consumes the uploaded alpha channel`() {
+        val program = ready(
+            supportedImageShaderDescriptor(
+                pixels = byteArrayOf(0, 0, 0, 0x80.toByte()),
+                alphaOnly = true,
+            ),
+            paintAlpha = 1f,
+        )
+
+        assertTrue(program.wgslSource.contains("sampled.a * imageMaterial.tint"))
+        assertTrue(!program.wgslSource.contains("sampled.r * imageMaterial.tint"))
+    }
+
+    @Test
     fun `image validation refuses invalid dimensions and exact RGBA byte length`() {
         val invalid = listOf(
             supportedImageShaderDescriptor(width = 0),
@@ -201,6 +273,136 @@ class GPUPreparedMaterialProgramTest {
     }
 
     @Test
+    fun `prepared payloads exactly match reflected ABI sizes offsets bindings and little endian bytes`() {
+        data class ExpectedAbi(
+            val descriptor: GPUMaterialDescriptor,
+            val byteSize: Int,
+            val bindingKinds: List<Triple<Int, Int, String>>,
+            val memberOffsets: Map<String, Int>,
+        )
+
+        val expected = listOf(
+            ExpectedAbi(
+                solidDescriptor(),
+                16,
+                listOf(Triple(1, 0, "uniformBuffer")),
+                mapOf("color" to 0),
+            ),
+            ExpectedAbi(
+                linearGradientDescriptor(),
+                544,
+                listOf(Triple(0, 0, "uniformBuffer")),
+                mapOf("start" to 0, "end" to 8, "count" to 16, "stopData" to 32),
+            ),
+            ExpectedAbi(
+                radialGradientDescriptor(),
+                528,
+                listOf(Triple(0, 0, "uniformBuffer")),
+                mapOf("center" to 0, "radius" to 8, "count" to 12, "stopData" to 16),
+            ),
+            ExpectedAbi(
+                sweepGradientDescriptor(),
+                544,
+                listOf(Triple(0, 0, "uniformBuffer")),
+                mapOf(
+                    "center" to 0,
+                    "startAngle" to 8,
+                    "endAngle" to 12,
+                    "count" to 16,
+                    "stopData" to 32,
+                ),
+            ),
+            ExpectedAbi(
+                conicalGradientDescriptor(),
+                560,
+                listOf(Triple(0, 0, "uniformBuffer")),
+                mapOf(
+                    "start" to 0,
+                    "end" to 8,
+                    "r1" to 16,
+                    "r2" to 20,
+                    "count" to 24,
+                    "stopData" to 48,
+                ),
+            ),
+            ExpectedAbi(
+                supportedBlendShaderDescriptor(),
+                112,
+                listOf(Triple(0, 0, "uniformBuffer")),
+                mapOf(
+                    "dst_color" to 0,
+                    "dst_pad" to 16,
+                    "dst_pad2" to 32,
+                    "src_color" to 48,
+                    "src_pad" to 64,
+                    "src_pad2" to 80,
+                    "_pad0" to 96,
+                    "_pad1" to 100,
+                    "_pad2" to 104,
+                ),
+            ),
+            ExpectedAbi(
+                registeredRuntimeEffectDescriptor(),
+                16,
+                listOf(Triple(1, 0, "uniformBuffer")),
+                mapOf("gColor" to 0),
+            ),
+            ExpectedAbi(
+                supportedImageShaderDescriptor(),
+                32,
+                listOf(
+                    Triple(1, 0, "uniformBuffer"),
+                    Triple(1, 1, "sampledTexture"),
+                    Triple(1, 2, "sampler"),
+                ),
+                mapOf("tint" to 0, "flags" to 16),
+            ),
+        )
+
+        expected.forEach { fixture ->
+            val program = ready(fixture.descriptor, paintAlpha = 1f)
+            val parsed = KanvasWGSLValidator().parse(program.wgslSource)
+            val report = requireNotNull(KanvasWGSLReflectionProvider().reflect(parsed).report)
+            val layout = report.layouts.single { it.addressSpace == "uniform" }
+            val fragmentEntries = report.entryPoints.filter { it.name == program.entryPoint }
+
+            assertEquals(
+                listOf("fragment"),
+                fragmentEntries.map { it.stage },
+                fixture.descriptor.kind.toString(),
+            )
+            assertEquals(fixture.byteSize, layout.size, fixture.descriptor.kind.toString())
+            assertEquals(fixture.byteSize, program.uniformBytes.size, fixture.descriptor.kind.toString())
+            assertEquals(
+                fixture.memberOffsets,
+                layout.members.associate { it.name to it.offset }
+                    .filterKeys(fixture.memberOffsets::containsKey),
+                fixture.descriptor.kind.toString(),
+            )
+            assertEquals(
+                fixture.bindingKinds,
+                report.bindings.map { Triple(it.group, it.binding, it.resourceKind) },
+                fixture.descriptor.kind.toString(),
+            )
+            assertEquals(
+                fixture.byteSize,
+                report.bindings.single { it.resourceKind == "uniformBuffer" }.minBindingSize,
+                fixture.descriptor.kind.toString(),
+            )
+        }
+
+        val distinctive = Float.fromBits(0x3f123456)
+        val bytes = ready(
+            linearGradientDescriptor().copy(startX = distinctive),
+            paintAlpha = 1f,
+        ).uniformBytes
+        assertEquals(
+            listOf(0x56, 0x34, 0x12, 0x3f),
+            bytes.take(Float.SIZE_BYTES),
+        )
+    }
+
+    @Test
     fun `material key separates exact uniform payload paint alpha and full hash width`() {
         val firstSolid = ready(solidDescriptor(), paintAlpha = 1f)
         val secondSolid = ready(
@@ -226,6 +428,29 @@ class GPUPreparedMaterialProgramTest {
             )
             assertTrue(program.abiHash.matches(Regex("sha256:[0-9a-f]{64}")), program.abiHash)
         }
+    }
+
+    @Test
+    fun `material key encoding separates adversarial newline and equals field boundaries`() {
+        val firstContext = context.copy(
+            capabilityClass = "webgpu\ntarget=forged",
+            targetFormatClass = "rgba8unorm",
+            dictionaryVersion = "dictionary=stable|v1",
+        )
+        val secondContext = context.copy(
+            capabilityClass = "webgpu",
+            targetFormatClass = "forged\ntarget=rgba8unorm",
+            dictionaryVersion = "dictionary=stable|v1",
+        )
+        val first = assertIs<GPUPreparedMaterialProgramResult.Ready>(
+            compiler.compile(solidDescriptor(), 1f, firstContext),
+        ).program
+        val second = assertIs<GPUPreparedMaterialProgramResult.Ready>(
+            compiler.compile(solidDescriptor(), 1f, secondContext),
+        ).program
+
+        assertNotEquals(first.materialKey, second.materialKey)
+        assertEquals(first.abiHash, second.abiHash)
     }
 
     @Test
@@ -527,7 +752,7 @@ class GPUPreparedMaterialProgramTest {
         GPUMaterialDescriptor.BlendShader(
             mode = "SRC_OVER",
             dst = solidDescriptor(),
-            src = linearGradientDescriptor(),
+            src = solidDescriptor().copy(r = 0.8f, g = 0.3f, b = 0.1f, a = 0.6f),
         )
 
     private fun unsupportedBlendShaderDescriptor() =
@@ -573,4 +798,11 @@ class GPUPreparedMaterialProgramTest {
             tintB = 0.75f,
             tintA = 0.6f,
         )
+
+    private fun List<Int>.toLittleEndianFloats(): List<Float> =
+        chunked(Float.SIZE_BYTES).map { chunk ->
+            java.nio.ByteBuffer.wrap(chunk.map(Int::toByte).toByteArray())
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                .float
+        }
 }

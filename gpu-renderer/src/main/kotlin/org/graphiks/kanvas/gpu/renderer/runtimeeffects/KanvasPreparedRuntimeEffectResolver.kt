@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
-import java.security.MessageDigest
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectBinding
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolution
@@ -15,7 +17,10 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformBlockSizeBytes
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformSchemaHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.reflectionFactsHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
+import org.graphiks.kanvas.gpu.renderer.wgsl.wgslModuleContentHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.wgslSourceContentHash
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 
@@ -154,6 +159,24 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
         descriptorProgramMismatch(program, descriptor)?.let { message ->
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(message)
         }
+        val expectedSourceHash = wgslSourceContentHash(program.wgslSource)
+        val expectedModuleHash = wgslModuleContentHash(
+            source = program.wgslSource,
+            sourceFunction = program.sourceFunction,
+        )
+        if (program.sourceHash != expectedSourceHash) {
+            return GPUPreparedRuntimeEffectProgramValidation.Invalid(
+                "Runtime-effect source hash is not derived from WGSL content",
+            )
+        }
+        if (
+            program.moduleHash != expectedModuleHash ||
+            descriptor.wgslPlan.moduleHash != expectedModuleHash
+        ) {
+            return GPUPreparedRuntimeEffectProgramValidation.Invalid(
+                "Runtime-effect module hash is not derived from WGSL content",
+            )
+        }
         val oracle = runCatching { cpuOracle.evaluate() }.getOrElse { failure ->
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                 "Runtime-effect CPU behavior failed: ${failure::class.simpleName.orEmpty()}",
@@ -163,6 +186,9 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                 "Runtime-effect CPU behavior does not match the descriptor",
             )
+        }
+        validateMaterialCPUBehavior(descriptor, cpuOracle)?.let { message ->
+            return GPUPreparedRuntimeEffectProgramValidation.Invalid(message)
         }
 
         val report = try {
@@ -199,8 +225,59 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
         reflectedAbiMismatch(program, descriptor, report)?.let { message ->
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(message)
         }
+        val reflectedHash = report.reflectionFactsHash()
+        if (
+            program.reflectionHash != reflectedHash ||
+            descriptor.wgslPlan.reflectionHash != reflectedHash
+        ) {
+            return GPUPreparedRuntimeEffectProgramValidation.Invalid(
+                "Runtime-effect reflection hash is not derived from reflected ABI facts",
+            )
+        }
         return GPUPreparedRuntimeEffectProgramValidation.Valid
     }
+}
+
+private fun validateMaterialCPUBehavior(
+    descriptor: GPURuntimeEffectDescriptor,
+    cpuOracle: GPURuntimeEffectCPUOracle,
+): String? {
+    if (descriptor.id != SimpleRTDescriptor.effectId) {
+        return "Runtime-effect CPU behavior has no registered validation fixtures"
+    }
+    val fixtures = listOf(
+        listOf(0.125f, 0.375f, 0.625f, 0.875f),
+        listOf(0.9f, 0.7f, 0.3f, 0.1f),
+    )
+    for (fixture in fixtures) {
+        val uniformBytes = ByteBuffer.allocate(SimpleRTUniformBlockSizeBytes)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .apply { fixture.forEach { value -> putFloat(value) } }
+            .array()
+        val result = runCatching {
+            cpuOracle.evaluateMaterial(
+                GPURuntimeEffectMaterialEvaluationInput(
+                    uniformBytes = uniformBytes,
+                    localPositionX = 0.25f,
+                    localPositionY = 0.75f,
+                ),
+            )
+        }.getOrElse { failure ->
+            return "Runtime-effect material CPU behavior failed: ${failure::class.simpleName.orEmpty()}"
+        }
+        val color = result as? GPURuntimeEffectMaterialEvaluationResult.Color
+            ?: return "Runtime-effect material CPU behavior is unavailable"
+        if (
+            listOf(color.r, color.g, color.b, color.a).map(Float::toRawBits) !=
+            fixture.map(Float::toRawBits)
+        ) {
+            return "Runtime-effect material CPU behavior does not match registered fixtures"
+        }
+        if (!SHA256_IDENTITY.matches(color.evidenceHash)) {
+            return "Runtime-effect material CPU evidence is not content-derived"
+        }
+    }
+    return null
 }
 
 private fun descriptorProgramMismatch(
@@ -340,18 +417,16 @@ private fun sourceDeclaresFunction(source: String, function: String): Boolean =
 
 private fun preparedRuntimeEffectRouteContractHash(
     descriptor: GPURuntimeEffectDescriptor,
-): String {
-    val preimage = buildList {
-        add("prepared-runtime-effect-route-v1")
-        add("effect=${descriptor.id.value}@${descriptor.version.value}")
-        add("uniform=${descriptor.uniformSchema.schemaHash}")
-        add("bindings=${descriptor.resources.bindingPlanHash}")
-        add("module=${descriptor.wgslPlan.moduleHash}")
-        add("entry=${descriptor.wgslPlan.entryPoint}")
-        add("reflection=${descriptor.wgslPlan.reflectionHash}")
-    }.joinToString("\n")
-    val digest = MessageDigest.getInstance("SHA-256").digest(preimage.encodeToByteArray())
-    return "sha256:" + digest.joinToString("") { byte -> "%02x".format(byte) }
-}
+): String =
+    CanonicalIdentityEncoder("prepared-runtime-effect-route-v2")
+        .text("effectId", descriptor.id.value)
+        .int("descriptorVersion", descriptor.version.value)
+        .text("uniformSchemaHash", descriptor.uniformSchema.schemaHash)
+        .text("bindingPlanHash", descriptor.resources.bindingPlanHash)
+        .text("moduleHash", descriptor.wgslPlan.moduleHash)
+        .text("entryPoint", descriptor.wgslPlan.entryPoint)
+        .text("reflectionHash", descriptor.wgslPlan.reflectionHash)
+        .digestIdentity()
 
 private val DESCRIPTOR_FIELD = Regex("""^([^:]+):(.+)@(\d+):(\d+)$""")
+private val SHA256_IDENTITY = Regex("""^sha256:[0-9a-f]{64}$""")

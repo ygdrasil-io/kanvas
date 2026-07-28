@@ -54,8 +54,8 @@ ${blendFormula}
     }
 
     fun packUniforms(dst: GPUMaterialDescriptor, src: GPUMaterialDescriptor, mode: String): ByteArray {
-        val bb = java.nio.ByteBuffer.allocate(64 + (32 * 2))
-            .order(java.nio.ByteOrder.nativeOrder())
+        val bb = java.nio.ByteBuffer.allocate(BLEND_UNIFORM_SIZE_BYTES)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN)
         packChild("dst", dst, bb)
         packChild("src", src, bb)
         bb.putInt(0); bb.putInt(0); bb.putInt(0)
@@ -184,4 +184,6 @@ ${blendFormula}
         return if (c <= 0.04045f) c / 12.92f
         else ((c + 0.055f) / 1.055f).pow(2.4f)
     }
+
+    private const val BLEND_UNIFORM_SIZE_BYTES = 112
 }

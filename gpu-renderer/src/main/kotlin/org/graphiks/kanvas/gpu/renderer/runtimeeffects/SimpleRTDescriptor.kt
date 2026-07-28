@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
-import java.security.MessageDigest
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
@@ -208,14 +210,60 @@ object SimpleRTCPUOracle : GPURuntimeEffectCPUOracle {
             effectId = SimpleRTDescriptor.effectId,
             evidenceHash = runtimeEffectOracleEvidenceHash(SimpleRTDescriptor.effectId, SimpleRTDescriptor.descriptorVersion),
         )
+
+    override fun evaluateMaterial(
+        input: GPURuntimeEffectMaterialEvaluationInput,
+    ): GPURuntimeEffectMaterialEvaluationResult {
+        val uniformBytes = input.uniformBytes
+        if (uniformBytes.size != SimpleRTUniformBlockSizeBytes) {
+            return GPURuntimeEffectMaterialEvaluationResult.Unsupported(
+                GPURuntimeEffectMaterialEvaluationRefusal.PAYLOAD_SIZE,
+            )
+        }
+        val values = ByteBuffer.wrap(uniformBytes)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .let { buffer -> List(4) { buffer.float } }
+        if (
+            values.any { value -> !value.isFinite() } ||
+            !input.localPositionX.isFinite() ||
+            !input.localPositionY.isFinite()
+        ) {
+            return GPURuntimeEffectMaterialEvaluationResult.Unsupported(
+                GPURuntimeEffectMaterialEvaluationRefusal.NON_FINITE_INPUT,
+            )
+        }
+        return GPURuntimeEffectMaterialEvaluationResult.Color(
+            r = values[0],
+            g = values[1],
+            b = values[2],
+            a = values[3],
+            evidenceHash = materialEvaluationEvidenceHash(input, values),
+        )
+    }
+}
+
+private fun materialEvaluationEvidenceHash(
+    input: GPURuntimeEffectMaterialEvaluationInput,
+    output: List<Float>,
+): String {
+    val bytes = ByteBuffer.allocate(8 + input.uniformBytes.size + output.size * Float.SIZE_BYTES)
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .putFloat(input.localPositionX)
+        .putFloat(input.localPositionY)
+        .put(input.uniformBytes)
+        .apply { output.forEach(::putFloat) }
+        .array()
+    return CanonicalIdentityEncoder("runtime-effect-material-evaluation-v2")
+        .bytes("inputAndOutput", bytes)
+        .digestIdentity()
 }
 
 private fun runtimeEffectOracleEvidenceHash(
     id: GPURuntimeEffectID,
     version: GPURuntimeEffectDescriptorVersion,
 ): String {
-    val input = "runtime-effect-cpu-oracle-v1:${id.value}:${version.value}"
-    val digest = MessageDigest.getInstance("SHA-256")
-    val hash = digest.digest(input.toByteArray(Charsets.UTF_8))
-    return "sha256:" + hash.joinToString("") { "%02x".format(it) }
+    return CanonicalIdentityEncoder("runtime-effect-cpu-oracle-v2")
+        .text("effectId", id.value)
+        .int("descriptorVersion", version.value)
+        .digestIdentity()
 }

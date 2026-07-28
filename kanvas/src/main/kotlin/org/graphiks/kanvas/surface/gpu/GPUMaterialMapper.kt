@@ -1,7 +1,10 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedReason
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
+import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
@@ -24,10 +27,30 @@ data class GPUPreparedMaterialMapping(
 )
 
 internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping {
-    val mapped = mapMaterial(
-        shaderMapper = { shader -> shader.toPreparedMaterial() },
-        preserveRuntimePayload = true,
-    )
+    val shader = shader
+    val base = if (shader == null) {
+        GPUMaterialDescriptor.SolidColor(
+            r = color.r,
+            g = color.g,
+            b = color.b,
+            a = color.a,
+        )
+    } else {
+        shader.toPreparedMaterial()
+    }
+    val tinted = if (base is GPUMaterialDescriptor.ImageDraw && base.alphaOnly) {
+        base.copy(
+            tintR = color.r,
+            tintG = color.g,
+            tintB = color.b,
+            tintA = 1f,
+        )
+    } else {
+        base
+    }
+    val mapped = colorFilter?.let { filter ->
+        tinted.withPreparedColorFilter(filter)
+    } ?: tinted
     val descriptor = if (mapped is GPUMaterialDescriptor.ImageDraw && mapped.alphaOnly) {
         mapped.copy(tintA = 1f)
     } else {
@@ -272,24 +295,52 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
 }
 
 private fun Shader.toPreparedMaterial(): GPUMaterialDescriptor = when (this) {
+    is Shader.SolidColor -> toMaterial()
+    is Shader.LinearGradient ->
+        if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
+            toMaterial()
+        } else {
+            preparedUnsupported(
+                GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
+                GPUMaterialKind.LinearGradient,
+            )
+        }
+    is Shader.RadialGradient ->
+        if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
+            toMaterial()
+        } else {
+            preparedUnsupported(
+                GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
+                GPUMaterialKind.RadialGradient,
+            )
+        }
+    is Shader.SweepGradient ->
+        if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
+            toMaterial()
+        } else {
+            preparedUnsupported(
+                GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
+                GPUMaterialKind.SweepGradient,
+            )
+        }
+    is Shader.ConicalGradient ->
+        if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
+            toMaterial()
+        } else {
+            preparedUnsupported(
+                GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
+                GPUMaterialKind.TwoPointConical,
+            )
+        }
+    is Shader.Image -> toPreparedImageMaterial()
     is Shader.Blend -> {
         val dstDesc = dst.toPreparedMaterial()
         val srcDesc = src.toPreparedMaterial()
-        val descriptor = GPUMaterialDescriptor.BlendShader(
+        GPUMaterialDescriptor.BlendShader(
             mode = mode.name,
             dst = dstDesc,
             src = srcDesc,
         )
-        if (org.graphiks.kanvas.gpu.renderer.materials.GPUBlendShaderLowering.canHandle(descriptor)) {
-            descriptor.copy(
-                wgslCombined = org.graphiks.kanvas.gpu.renderer.materials.BlendWgslBuilder
-                    .buildWgsl(dstDesc, srcDesc, mode.name),
-                uniformBytes = org.graphiks.kanvas.gpu.renderer.materials.BlendWgslBuilder
-                    .packUniforms(dstDesc, srcDesc, mode.name),
-            )
-        } else {
-            descriptor
-        }
     }
     is Shader.RuntimeEffect ->
         GPUMaterialDescriptor.RuntimeEffect(
@@ -298,15 +349,139 @@ private fun Shader.toPreparedMaterial(): GPUMaterialDescriptor = when (this) {
             uniforms = uniforms.toGPUUniformValues(),
             children = children.mapValues { (_, child) -> child.toPreparedMaterial() },
         )
-    is Shader.WithLocalMatrix -> shader.toPreparedMaterial()
+    is Shader.WithLocalMatrix -> preparedUnsupported(
+        reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
+        originalKind = shader.materialKind(),
+        source = shader.toPreparedMaterial(),
+    )
     is Shader.WithColorFilter ->
-        shader.toPreparedMaterial().let { material ->
-            material.withGradientColorFilter(filter) ?: material
-        }
-    is Shader.WithWorkingColorSpace -> shader.toPreparedMaterial()
-    is Shader.CoordClamp -> shader.toPreparedMaterial()
-    else -> toMaterial()
+        shader.toPreparedMaterial().withPreparedColorFilter(filter)
+    is Shader.WithWorkingColorSpace -> preparedUnsupported(
+        reason = GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE,
+        originalKind = shader.materialKind(),
+        source = shader.toPreparedMaterial(),
+    )
+    is Shader.CoordClamp -> preparedUnsupported(
+        reason = GPUPreparedMaterialUnsupportedReason.COORDINATE_CLAMP,
+        originalKind = shader.materialKind(),
+        source = shader.toPreparedMaterial(),
+    )
+    is Shader.PerlinNoise -> preparedUnsupported(
+        GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
+        GPUMaterialKind.SolidColor,
+    )
+    is Shader.FractalNoise -> preparedUnsupported(
+        GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
+        GPUMaterialKind.SolidColor,
+    )
 }
+
+private fun Shader.Image.toPreparedImageMaterial(): GPUMaterialDescriptor {
+    if (
+        tileModeX != org.graphiks.kanvas.paint.TileMode.CLAMP ||
+        tileModeY != org.graphiks.kanvas.paint.TileMode.CLAMP
+    ) {
+        return preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.IMAGE_TILE_MODE,
+            GPUMaterialKind.ImageDraw,
+        )
+    }
+    val filterMode = when (sampling) {
+        is SamplingOptions.NEAREST -> "nearest"
+        is SamplingOptions.LINEAR -> "linear"
+        is SamplingOptions.Cubic ->
+            return preparedUnsupported(
+                GPUPreparedMaterialUnsupportedReason.IMAGE_CUBIC_SAMPLING,
+                GPUMaterialKind.ImageDraw,
+            )
+    }
+    if (
+        image.colorType != ColorType.RGBA_8888 &&
+        image.colorType != ColorType.BGRA_8888 &&
+        image.colorType != ColorType.ALPHA_8
+    ) {
+        return preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
+            GPUMaterialKind.ImageDraw,
+        )
+    }
+    if (image.alphaType == AlphaType.PREMUL || image.alphaType == AlphaType.UNKNOWN) {
+        return preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.IMAGE_ALPHA_TYPE,
+            GPUMaterialKind.ImageDraw,
+        )
+    }
+    if (image.colorSpace != org.graphiks.kanvas.types.ColorSpace.SRGB) {
+        return preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_SPACE,
+            GPUMaterialKind.ImageDraw,
+        )
+    }
+    val rgbaPixels = image.expandToPreparedRgba()
+        ?: return preparedUnsupported(
+            GPUPreparedMaterialUnsupportedReason.IMAGE_PIXEL_PAYLOAD,
+            GPUMaterialKind.ImageDraw,
+        )
+    return GPUMaterialDescriptor.ImageDraw(
+        imageSourceId = image.sourceId,
+        imageWidth = image.width,
+        imageHeight = image.height,
+        rgbaPixels = rgbaPixels,
+        samplingFilterMode = filterMode,
+        alphaOnly = image.colorType == ColorType.ALPHA_8,
+    )
+}
+
+private fun GPUMaterialDescriptor.withPreparedColorFilter(
+    filter: ColorFilter,
+): GPUMaterialDescriptor {
+    if (this is GPUMaterialDescriptor.Unsupported) return this
+    if (filter is ColorFilter.RuntimeEffect) {
+        return preparedUnsupported(
+            reason = GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+            originalKind = kind,
+            source = this,
+        )
+    }
+    withGradientColorFilter(filter)?.let { return it }
+    if (this is GPUMaterialDescriptor.SolidColor) {
+        filter.applyTo(this)?.let { return it.toSolidColor() }
+    }
+    return preparedUnsupported(
+        reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER,
+        originalKind = kind,
+        source = this,
+    )
+}
+
+private fun Shader.materialKind(): GPUMaterialKind = when (this) {
+    is Shader.SolidColor -> GPUMaterialKind.SolidColor
+    is Shader.LinearGradient -> GPUMaterialKind.LinearGradient
+    is Shader.RadialGradient -> GPUMaterialKind.RadialGradient
+    is Shader.SweepGradient -> GPUMaterialKind.SweepGradient
+    is Shader.ConicalGradient -> GPUMaterialKind.TwoPointConical
+    is Shader.Image -> GPUMaterialKind.ImageDraw
+    is Shader.RuntimeEffect -> GPUMaterialKind.RuntimeEffect
+    is Shader.Blend -> GPUMaterialKind.ShaderBlend
+    is Shader.WithLocalMatrix -> shader.materialKind()
+    is Shader.WithColorFilter -> shader.materialKind()
+    is Shader.WithWorkingColorSpace -> shader.materialKind()
+    is Shader.CoordClamp -> shader.materialKind()
+    is Shader.PerlinNoise,
+    is Shader.FractalNoise,
+    -> GPUMaterialKind.SolidColor
+}
+
+private fun preparedUnsupported(
+    reason: GPUPreparedMaterialUnsupportedReason,
+    originalKind: GPUMaterialKind,
+    source: GPUMaterialDescriptor? = null,
+): GPUMaterialDescriptor.Unsupported =
+    GPUMaterialDescriptor.Unsupported(
+        reason = reason,
+        originalKind = originalKind,
+        source = source,
+    )
 
 private fun UniformBlock.toGPUUniformValues(): Map<String, GPURuntimeEffectUniformValue> =
     entries.mapValues { (_, value) ->
@@ -367,6 +542,60 @@ private fun org.graphiks.kanvas.image.Image.expandToRgba(): ByteArray {
         return rgba
     }
     return pixels
+}
+
+private fun org.graphiks.kanvas.image.Image.expandToPreparedRgba(): ByteArray? {
+    val source = pixels ?: return null
+    val expectedSourceSize = exactImageByteCount(width, height, colorType.bytesPerPixel)
+        ?: return null
+    val expectedOutputSize = exactImageByteCount(width, height, 4)
+        ?: return null
+    if (source.size != expectedSourceSize) return null
+
+    val rgba = when (colorType) {
+        ColorType.RGBA_8888 -> source.copyOf()
+        ColorType.BGRA_8888 -> source.copyOf().also { output ->
+            for (offset in output.indices step 4) {
+                val blue = output[offset]
+                output[offset] = output[offset + 2]
+                output[offset + 2] = blue
+            }
+        }
+        ColorType.ALPHA_8 -> ByteArray(expectedOutputSize).also { output ->
+            for (index in source.indices) {
+                val outputOffset = index * 4
+                output[outputOffset] = 0
+                output[outputOffset + 1] = 0
+                output[outputOffset + 2] = 0
+                output[outputOffset + 3] = source[index]
+            }
+        }
+        else -> return null
+    }
+    if (alphaType == AlphaType.OPAQUE) {
+        for (offset in 3 until rgba.size step 4) {
+            rgba[offset] = 0xff.toByte()
+        }
+    }
+    return rgba
+}
+
+private fun exactImageByteCount(
+    width: Int,
+    height: Int,
+    bytesPerPixel: Int,
+): Int? {
+    if (width <= 0 || height <= 0 || bytesPerPixel <= 0) return null
+    val count = try {
+        Math.multiplyExact(
+            Math.multiplyExact(width.toLong(), height.toLong()),
+            bytesPerPixel.toLong(),
+        )
+    } catch (_: ArithmeticException) {
+        return null
+    }
+    if (count > Int.MAX_VALUE) return null
+    return count.toInt()
 }
 
 private data class Rgba(

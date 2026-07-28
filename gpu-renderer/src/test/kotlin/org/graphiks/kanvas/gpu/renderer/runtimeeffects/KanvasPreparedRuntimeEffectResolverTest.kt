@@ -1,7 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectBinding
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformField
@@ -16,6 +20,47 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 
 class KanvasPreparedRuntimeEffectResolverTest {
     private val descriptor = SimpleRTDescriptor.createDescriptor()
+
+    @Test
+    fun `simple runtime CPU behavior decodes two nontrivial little endian colors`() {
+        val first = assertIs<GPURuntimeEffectMaterialEvaluationResult.Color>(
+            SimpleRTCPUOracle.evaluateMaterial(
+                materialInput(0.125f, 0.375f, 0.625f, 0.875f),
+            ),
+        )
+        val second = assertIs<GPURuntimeEffectMaterialEvaluationResult.Color>(
+            SimpleRTCPUOracle.evaluateMaterial(
+                materialInput(0.9f, 0.7f, 0.3f, 0.1f),
+            ),
+        )
+
+        assertColorBits(listOf(0.125f, 0.375f, 0.625f, 0.875f), first)
+        assertColorBits(listOf(0.9f, 0.7f, 0.3f, 0.1f), second)
+        assertNotEquals(first.evidenceHash, second.evidenceHash)
+    }
+
+    @Test
+    fun `simple runtime CPU behavior rejects wrong payload size and nonfinite channels`() {
+        val wrongSize = SimpleRTCPUOracle.evaluateMaterial(
+            GPURuntimeEffectMaterialEvaluationInput(
+                uniformBytes = ByteArray(12),
+                localPositionX = 0.25f,
+                localPositionY = 0.75f,
+            ),
+        )
+        val nonFinite = SimpleRTCPUOracle.evaluateMaterial(
+            materialInput(Float.NaN, 0.25f, 0.5f, 1f),
+        )
+
+        assertEquals(
+            GPURuntimeEffectMaterialEvaluationRefusal.PAYLOAD_SIZE,
+            assertIs<GPURuntimeEffectMaterialEvaluationResult.Unsupported>(wrongSize).reason,
+        )
+        assertEquals(
+            GPURuntimeEffectMaterialEvaluationRefusal.NON_FINITE_INPUT,
+            assertIs<GPURuntimeEffectMaterialEvaluationResult.Unsupported>(nonFinite).reason,
+        )
+    }
 
     @Test
     fun `canonical registered program has CPU behavior and parser reflected ABI`() {
@@ -71,18 +116,52 @@ class KanvasPreparedRuntimeEffectResolverTest {
         assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(reflectionMismatch)
     }
 
+    @Test
+    fun `semantic WGSL mutation with unchanged ABI and copied labels is refused`() {
+        val mutation = SimpleRTWgsl.replace(
+            "return uSimpleRT.gColor;",
+            "return vec4<f32>(uSimpleRT.gColor.bgra);",
+        )
+
+        val validation = KanvasPreparedRuntimeEffectProgramValidator().validate(
+            program = simpleProgram(wgslSource = mutation),
+            descriptor = descriptor,
+            cpuOracle = SimpleRTCPUOracle,
+        )
+
+        assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(validation)
+    }
+
+    @Test
+    fun `copied false content and reflection hashes cannot expose a ready program`() {
+        val validation = KanvasPreparedRuntimeEffectProgramValidator().validate(
+            program = simpleProgram(
+                sourceHash = "sha256:${"0".repeat(64)}",
+                moduleHash = "sha256:${"1".repeat(64)}",
+                reflectionHash = "sha256:${"2".repeat(64)}",
+            ),
+            descriptor = descriptor,
+            cpuOracle = SimpleRTCPUOracle,
+        )
+
+        assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(validation)
+    }
+
     private fun simpleProgram(
         wgslSource: String = SimpleRTWgsl,
         sourceFunction: String = SimpleRTEntryPoint,
+        sourceHash: String = SimpleRTSourceHash,
+        moduleHash: String = SimpleRTModuleHash,
+        reflectionHash: String = SimpleRTReflectionHash,
     ): GPUPreparedRuntimeEffectProgram =
         GPUPreparedRuntimeEffectProgram(
             effectId = SimpleRTDescriptor.effectId.value,
             descriptorVersion = SimpleRTDescriptor.descriptorVersion.value,
             wgslSource = wgslSource,
             sourceFunction = sourceFunction,
-            sourceHash = SimpleRTSourceHash,
-            moduleHash = SimpleRTModuleHash,
-            reflectionHash = SimpleRTReflectionHash,
+            sourceHash = sourceHash,
+            moduleHash = moduleHash,
+            reflectionHash = reflectionHash,
             uniformSchemaHash = SimpleRTUniformSchemaHash,
             uniformBlockSizeBytes = 16,
             uniformFields = listOf(
@@ -105,4 +184,31 @@ class KanvasPreparedRuntimeEffectResolverTest {
             bindingPlanHash = SimpleRTBindingPlanHash,
             routeContractHash = "route:simple_rt:test",
         )
+
+    private fun materialInput(
+        r: Float,
+        g: Float,
+        b: Float,
+        a: Float,
+    ): GPURuntimeEffectMaterialEvaluationInput =
+        GPURuntimeEffectMaterialEvaluationInput(
+            uniformBytes = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
+                putFloat(r)
+                putFloat(g)
+                putFloat(b)
+                putFloat(a)
+            }.array(),
+            localPositionX = 0.25f,
+            localPositionY = 0.75f,
+        )
+
+    private fun assertColorBits(
+        expected: List<Float>,
+        actual: GPURuntimeEffectMaterialEvaluationResult.Color,
+    ) {
+        assertEquals(
+            expected.map(Float::toRawBits),
+            listOf(actual.r, actual.g, actual.b, actual.a).map(Float::toRawBits),
+        )
+    }
 }

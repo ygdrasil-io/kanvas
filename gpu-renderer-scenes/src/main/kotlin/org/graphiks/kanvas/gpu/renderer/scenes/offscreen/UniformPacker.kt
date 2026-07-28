@@ -15,7 +15,7 @@ object UniformPacker {
     const val bitmapSnippetEntryPoint: String = BitmapShaderClampEntryPoint
 
     /** Snippet identity wired into the runtime-effect uniform ABI (SimpleRTWgsl, M21). */
-    const val simpleRtSnippetSourceHash: String = SimpleRTSourceHash
+    val simpleRtSnippetSourceHash: String = SimpleRTSourceHash
     const val simpleRtSnippetEntryPoint: String = SimpleRTEntryPoint
 
     fun solidColorBytes(color: SceneColor): ByteArray {

@@ -131,6 +131,48 @@ data class GPURuntimeEffectWGSLEvidence(
 interface GPURuntimeEffectCPUOracle {
     /** Evaluates reference output for evidence, not product fallback. */
     fun evaluate(): GPURuntimeEffectOracleResult = TODO("Wire GPURuntimeEffectCPUOracle to explicit validation-only evidence")
+
+    /** Evaluates one concrete material input for validation evidence, never as product fallback. */
+    fun evaluateMaterial(
+        input: GPURuntimeEffectMaterialEvaluationInput,
+    ): GPURuntimeEffectMaterialEvaluationResult =
+        GPURuntimeEffectMaterialEvaluationResult.Unsupported(
+            GPURuntimeEffectMaterialEvaluationRefusal.IMPLEMENTATION_UNAVAILABLE,
+        )
+}
+
+/** Immutable input to a runtime-effect CPU reference implementation. */
+class GPURuntimeEffectMaterialEvaluationInput(
+    uniformBytes: ByteArray,
+    val localPositionX: Float,
+    val localPositionY: Float,
+) {
+    private val uniformSnapshot = uniformBytes.copyOf()
+
+    val uniformBytes: ByteArray
+        get() = uniformSnapshot.copyOf()
+}
+
+/** Closed refusal reasons for runtime-effect CPU reference evaluation. */
+enum class GPURuntimeEffectMaterialEvaluationRefusal {
+    IMPLEMENTATION_UNAVAILABLE,
+    PAYLOAD_SIZE,
+    NON_FINITE_INPUT,
+}
+
+/** Concrete result from a runtime-effect CPU reference implementation. */
+sealed interface GPURuntimeEffectMaterialEvaluationResult {
+    data class Color(
+        val r: Float,
+        val g: Float,
+        val b: Float,
+        val a: Float,
+        val evidenceHash: String,
+    ) : GPURuntimeEffectMaterialEvaluationResult
+
+    data class Unsupported(
+        val reason: GPURuntimeEffectMaterialEvaluationRefusal,
+    ) : GPURuntimeEffectMaterialEvaluationResult
 }
 
 /** CPU oracle result used only for validation evidence. */

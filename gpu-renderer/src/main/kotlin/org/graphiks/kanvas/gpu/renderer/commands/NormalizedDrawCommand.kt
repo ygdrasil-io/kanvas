@@ -143,6 +143,65 @@ enum class GPUMaterialKind {
     ShaderBlend,
 }
 
+/** Closed prepared-mapping refusal reasons; no caller-provided diagnostic text is accepted. */
+enum class GPUPreparedMaterialUnsupportedReason(
+    val diagnosticCode: String,
+    val diagnosticMessage: String,
+) {
+    IMAGE_CUBIC_SAMPLING(
+        "unsupported.material.mapping.image_cubic_sampling",
+        "Prepared image mapping does not implement cubic sampling",
+    ),
+    IMAGE_TILE_MODE(
+        "unsupported.material.mapping.image_tile_mode",
+        "Prepared image mapping only implements clamp/clamp tile modes",
+    ),
+    IMAGE_COLOR_TYPE(
+        "unsupported.material.mapping.image_color_type",
+        "Prepared image mapping cannot convert this color type exactly",
+    ),
+    IMAGE_ALPHA_TYPE(
+        "unsupported.material.mapping.image_alpha_type",
+        "Prepared image mapping cannot preserve this alpha type exactly",
+    ),
+    IMAGE_COLOR_SPACE(
+        "unsupported.material.mapping.image_color_space",
+        "Prepared image mapping cannot preserve this color space exactly",
+    ),
+    IMAGE_PIXEL_PAYLOAD(
+        "unsupported.material.mapping.image_pixel_payload",
+        "Prepared image mapping requires safe dimensions and an exact pixel payload",
+    ),
+    GRADIENT_INTERPOLATION(
+        "unsupported.material.mapping.gradient_interpolation",
+        "Prepared gradient mapping only implements sRGB interpolation",
+    ),
+    RUNTIME_COLOR_FILTER_PLACEMENT(
+        "unsupported.material.mapping.runtime_color_filter_placement",
+        "Prepared mapping does not implement runtime-effect color-filter placement",
+    ),
+    COLOR_FILTER(
+        "unsupported.material.mapping.color_filter",
+        "Prepared mapping cannot apply this color filter exactly",
+    ),
+    LOCAL_MATRIX(
+        "unsupported.material.mapping.local_matrix",
+        "Prepared mapping does not implement shader local matrices",
+    ),
+    WORKING_COLOR_SPACE(
+        "unsupported.material.mapping.working_color_space",
+        "Prepared mapping does not implement working color-space wrappers",
+    ),
+    COORDINATE_CLAMP(
+        "unsupported.material.mapping.coordinate_clamp",
+        "Prepared mapping does not implement coordinate-clamp wrappers",
+    ),
+    NOISE_SHADER(
+        "unsupported.material.mapping.noise_shader",
+        "Prepared mapping does not implement this noise shader",
+    ),
+}
+
 /** Rectangle geometry in local command coordinates. */
 data class GPURect(
     val left: Float,
@@ -491,12 +550,74 @@ sealed interface GPUMaterialDescriptor {
         uniforms: Map<String, GPURuntimeEffectUniformValue> = emptyMap(),
         children: Map<String, GPUMaterialDescriptor> = emptyMap(),
     ) : GPUMaterialDescriptor {
-        val uniforms: Map<String, GPURuntimeEffectUniformValue> =
-            Collections.unmodifiableMap(LinkedHashMap(uniforms))
-        val children: Map<String, GPUMaterialDescriptor> =
-            Collections.unmodifiableMap(LinkedHashMap(children))
+        private val uniformSnapshot =
+            LinkedHashMap(uniforms)
+        private val childSnapshot =
+            LinkedHashMap(
+                children.mapValues { (_, child) -> child.deepSnapshot() },
+            )
+
+        val uniforms: Map<String, GPURuntimeEffectUniformValue>
+            get() = Collections.unmodifiableMap(LinkedHashMap(uniformSnapshot))
+
+        val children: Map<String, GPUMaterialDescriptor>
+            get() = immutableChildSnapshot()
 
         override val kind: GPUMaterialKind = GPUMaterialKind.RuntimeEffect
+
+        fun copy(
+            effectId: String = this.effectId,
+            descriptorVersion: Int = this.descriptorVersion,
+            uniforms: Map<String, GPURuntimeEffectUniformValue> = this.uniforms,
+            children: Map<String, GPUMaterialDescriptor> = this.children,
+        ): RuntimeEffect =
+            RuntimeEffect(effectId, descriptorVersion, uniforms, children)
+
+        operator fun component1(): String = effectId
+        operator fun component2(): Int = descriptorVersion
+        operator fun component3(): Map<String, GPURuntimeEffectUniformValue> = uniforms
+        operator fun component4(): Map<String, GPUMaterialDescriptor> = children
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is RuntimeEffect) return false
+            if (
+                effectId != other.effectId ||
+                descriptorVersion != other.descriptorVersion ||
+                uniformSnapshot != other.uniformSnapshot ||
+                childSnapshot.keys != other.childSnapshot.keys
+            ) {
+                return false
+            }
+            return childSnapshot.all { (name, child) ->
+                child.deepEquals(other.childSnapshot.getValue(name))
+            }
+        }
+
+        override fun hashCode(): Int {
+            var result = effectId.hashCode()
+            result = 31 * result + descriptorVersion
+            result = 31 * result + uniformSnapshot.hashCode()
+            result = 31 * result + childSnapshot.entries.sumOf { (name, child) ->
+                name.hashCode() xor child.deepHashCode()
+            }
+            return result
+        }
+
+        override fun toString(): String =
+            "RuntimeEffect(" +
+                "effectId=$effectId, " +
+                "descriptorVersion=$descriptorVersion, " +
+                "uniforms=${uniformSnapshot.deterministicUniformString()}, " +
+                "children=${childSnapshot.deterministicChildString()}" +
+                ")"
+
+        private fun immutableChildSnapshot(): Map<String, GPUMaterialDescriptor> =
+            Collections.unmodifiableMap(
+                LinkedHashMap(
+                    childSnapshot.mapValues { (_, child) -> child.deepSnapshot() },
+                ),
+            )
     }
 
     /** Blend shader descriptor combining two child shaders via a blend mode. */
@@ -509,7 +630,226 @@ sealed interface GPUMaterialDescriptor {
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.ShaderBlend
     }
+
+    /**
+     * Typed fail-closed marker emitted only by the prepared mapper.
+     *
+     * [source] retains an exactly mapped base when one exists; it is evidence
+     * only and is never compiled as a substitute for the refused operation.
+     */
+    data class Unsupported(
+        val reason: GPUPreparedMaterialUnsupportedReason,
+        val originalKind: GPUMaterialKind,
+        val source: GPUMaterialDescriptor? = null,
+    ) : GPUMaterialDescriptor {
+        override val kind: GPUMaterialKind = originalKind
+    }
 }
+
+private fun GPUMaterialDescriptor.deepSnapshot(): GPUMaterialDescriptor =
+    when (this) {
+        is GPUMaterialDescriptor.SolidColor -> copy()
+        is GPUMaterialDescriptor.LinearGradient -> copy(
+            allStopPositions = allStopPositions?.copyOf(),
+            allStopColors = allStopColors?.copyOf(),
+        )
+        is GPUMaterialDescriptor.RadialGradient -> copy(
+            allStopPositions = allStopPositions?.copyOf(),
+            allStopColors = allStopColors?.copyOf(),
+        )
+        is GPUMaterialDescriptor.SweepGradient -> copy(
+            allStopPositions = allStopPositions?.copyOf(),
+            allStopColors = allStopColors?.copyOf(),
+        )
+        is GPUMaterialDescriptor.ConicalGradient -> copy(
+            allStopPositions = allStopPositions?.copyOf(),
+            allStopColors = allStopColors?.copyOf(),
+        )
+        is GPUMaterialDescriptor.ImageDraw -> copy(rgbaPixels = rgbaPixels.copyOf())
+        is GPUMaterialDescriptor.RuntimeEffect ->
+            GPUMaterialDescriptor.RuntimeEffect(
+                effectId = effectId,
+                descriptorVersion = descriptorVersion,
+                uniforms = uniforms,
+                children = children,
+            )
+        is GPUMaterialDescriptor.BlendShader -> copy(
+            dst = dst.deepSnapshot(),
+            src = src.deepSnapshot(),
+            uniformBytes = uniformBytes.copyOf(),
+        )
+        is GPUMaterialDescriptor.Unsupported -> copy(source = source?.deepSnapshot())
+    }
+
+private fun GPUMaterialDescriptor.deepEquals(other: GPUMaterialDescriptor): Boolean =
+    when {
+        this is GPUMaterialDescriptor.SolidColor && other is GPUMaterialDescriptor.SolidColor ->
+            this == other
+        this is GPUMaterialDescriptor.LinearGradient && other is GPUMaterialDescriptor.LinearGradient ->
+            copy(allStopPositions = null, allStopColors = null) ==
+                other.copy(allStopPositions = null, allStopColors = null) &&
+                allStopPositions.contentEqualsNullable(other.allStopPositions) &&
+                allStopColors.contentEqualsNullable(other.allStopColors)
+        this is GPUMaterialDescriptor.RadialGradient && other is GPUMaterialDescriptor.RadialGradient ->
+            copy(allStopPositions = null, allStopColors = null) ==
+                other.copy(allStopPositions = null, allStopColors = null) &&
+                allStopPositions.contentEqualsNullable(other.allStopPositions) &&
+                allStopColors.contentEqualsNullable(other.allStopColors)
+        this is GPUMaterialDescriptor.SweepGradient && other is GPUMaterialDescriptor.SweepGradient ->
+            copy(allStopPositions = null, allStopColors = null) ==
+                other.copy(allStopPositions = null, allStopColors = null) &&
+                allStopPositions.contentEqualsNullable(other.allStopPositions) &&
+                allStopColors.contentEqualsNullable(other.allStopColors)
+        this is GPUMaterialDescriptor.ConicalGradient && other is GPUMaterialDescriptor.ConicalGradient ->
+            copy(allStopPositions = null, allStopColors = null) ==
+                other.copy(allStopPositions = null, allStopColors = null) &&
+                allStopPositions.contentEqualsNullable(other.allStopPositions) &&
+                allStopColors.contentEqualsNullable(other.allStopColors)
+        this is GPUMaterialDescriptor.ImageDraw && other is GPUMaterialDescriptor.ImageDraw ->
+            copy(rgbaPixels = DEEP_COMPARE_EMPTY_BYTES) ==
+                other.copy(rgbaPixels = DEEP_COMPARE_EMPTY_BYTES) &&
+                rgbaPixels.contentEquals(other.rgbaPixels)
+        this is GPUMaterialDescriptor.RuntimeEffect && other is GPUMaterialDescriptor.RuntimeEffect ->
+            this == other
+        this is GPUMaterialDescriptor.BlendShader && other is GPUMaterialDescriptor.BlendShader ->
+            mode == other.mode &&
+                wgslCombined == other.wgslCombined &&
+                uniformBytes.contentEquals(other.uniformBytes) &&
+                dst.deepEquals(other.dst) &&
+                src.deepEquals(other.src)
+        this is GPUMaterialDescriptor.Unsupported && other is GPUMaterialDescriptor.Unsupported ->
+            reason == other.reason &&
+                originalKind == other.originalKind &&
+                source.deepEqualsNullable(other.source)
+        else -> false
+    }
+
+private fun GPUMaterialDescriptor.deepHashCode(): Int =
+    when (this) {
+        is GPUMaterialDescriptor.SolidColor -> hashCode()
+        is GPUMaterialDescriptor.LinearGradient ->
+            31 * (
+                31 * copy(allStopPositions = null, allStopColors = null).hashCode() +
+                    (allStopPositions?.contentHashCode() ?: 0)
+                ) + (allStopColors?.contentHashCode() ?: 0)
+        is GPUMaterialDescriptor.RadialGradient ->
+            31 * (
+                31 * copy(allStopPositions = null, allStopColors = null).hashCode() +
+                    (allStopPositions?.contentHashCode() ?: 0)
+                ) + (allStopColors?.contentHashCode() ?: 0)
+        is GPUMaterialDescriptor.SweepGradient ->
+            31 * (
+                31 * copy(allStopPositions = null, allStopColors = null).hashCode() +
+                    (allStopPositions?.contentHashCode() ?: 0)
+                ) + (allStopColors?.contentHashCode() ?: 0)
+        is GPUMaterialDescriptor.ConicalGradient ->
+            31 * (
+                31 * copy(allStopPositions = null, allStopColors = null).hashCode() +
+                    (allStopPositions?.contentHashCode() ?: 0)
+                ) + (allStopColors?.contentHashCode() ?: 0)
+        is GPUMaterialDescriptor.ImageDraw ->
+            31 * copy(rgbaPixels = DEEP_COMPARE_EMPTY_BYTES).hashCode() +
+                rgbaPixels.contentHashCode()
+        is GPUMaterialDescriptor.RuntimeEffect -> hashCode()
+        is GPUMaterialDescriptor.BlendShader -> {
+            var result = mode.hashCode()
+            result = 31 * result + dst.deepHashCode()
+            result = 31 * result + src.deepHashCode()
+            result = 31 * result + wgslCombined.hashCode()
+            result = 31 * result + uniformBytes.contentHashCode()
+            result
+        }
+        is GPUMaterialDescriptor.Unsupported -> {
+            var result = reason.hashCode()
+            result = 31 * result + originalKind.hashCode()
+            result = 31 * result + (source?.deepHashCode() ?: 0)
+            result
+        }
+    }
+
+private fun FloatArray?.contentEqualsNullable(other: FloatArray?): Boolean =
+    when {
+        this == null -> other == null
+        other == null -> false
+        else -> contentEquals(other)
+    }
+
+private fun GPUMaterialDescriptor?.deepEqualsNullable(other: GPUMaterialDescriptor?): Boolean =
+    when {
+        this == null -> other == null
+        other == null -> false
+        else -> deepEquals(other)
+    }
+
+private fun Map<String, GPURuntimeEffectUniformValue>.deterministicUniformString(): String =
+    keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
+        "$name=${getValue(name).deterministicString()}"
+    }
+
+private fun Map<String, GPUMaterialDescriptor>.deterministicChildString(): String =
+    keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
+        "$name=${getValue(name).deterministicString()}"
+    }
+
+private fun GPURuntimeEffectUniformValue.deterministicString(): String =
+    when (this) {
+        is GPURuntimeEffectUniformValue.Float1 -> "Float1($value)"
+        is GPURuntimeEffectUniformValue.Float2 -> "Float2($x, $y)"
+        is GPURuntimeEffectUniformValue.Float3 -> "Float3($x, $y, $z)"
+        is GPURuntimeEffectUniformValue.Float4 -> "Float4($x, $y, $z, $w)"
+        is GPURuntimeEffectUniformValue.Int1 -> "Int1($value)"
+        is GPURuntimeEffectUniformValue.Matrix3x3 -> "Matrix3x3($values)"
+        is GPURuntimeEffectUniformValue.Matrix4x4 -> "Matrix4x4($values)"
+    }
+
+private fun GPUMaterialDescriptor.deterministicString(): String =
+    when (this) {
+        is GPUMaterialDescriptor.SolidColor ->
+            "SolidColor(r=$r, g=$g, b=$b, a=$a)"
+        is GPUMaterialDescriptor.LinearGradient ->
+            "LinearGradient(start=($startX,$startY), end=($endX,$endY), " +
+                "startColor=($startR,$startG,$startB,$startA), " +
+                "endColor=($endR,$endG,$endB,$endA), tileMode=$tileMode, " +
+                "positions=${allStopPositions?.contentToString()}, " +
+                "colors=${allStopColors?.contentToString()}, " +
+                "snippetSourceHash=$snippetSourceHash, fragmentEntryPoint=$fragmentEntryPoint)"
+        is GPUMaterialDescriptor.RadialGradient ->
+            "RadialGradient(center=($centerX,$centerY), radius=$radius, " +
+                "startColor=($startR,$startG,$startB,$startA), " +
+                "endColor=($endR,$endG,$endB,$endA), tileMode=$tileMode, " +
+                "positions=${allStopPositions?.contentToString()}, " +
+                "colors=${allStopColors?.contentToString()}, " +
+                "snippetSourceHash=$snippetSourceHash, fragmentEntryPoint=$fragmentEntryPoint)"
+        is GPUMaterialDescriptor.SweepGradient ->
+            "SweepGradient(center=($centerX,$centerY), angles=($startAngle,$endAngle), " +
+                "startColor=($startR,$startG,$startB,$startA), " +
+                "endColor=($endR,$endG,$endB,$endA), tileMode=$tileMode, " +
+                "positions=${allStopPositions?.contentToString()}, " +
+                "colors=${allStopColors?.contentToString()}, " +
+                "snippetSourceHash=$snippetSourceHash, fragmentEntryPoint=$fragmentEntryPoint)"
+        is GPUMaterialDescriptor.ConicalGradient ->
+            "ConicalGradient(start=($startX,$startY,$startRadius), " +
+                "end=($endX,$endY,$endRadius), " +
+                "startColor=($startR,$startG,$startB,$startA), " +
+                "endColor=($endR,$endG,$endB,$endA), tileMode=$tileMode, " +
+                "positions=${allStopPositions?.contentToString()}, " +
+                "colors=${allStopColors?.contentToString()}, " +
+                "snippetSourceHash=$snippetSourceHash, fragmentEntryPoint=$fragmentEntryPoint)"
+        is GPUMaterialDescriptor.ImageDraw ->
+            "ImageDraw(source=$imageSourceId, size=${imageWidth}x$imageHeight, " +
+                "pixels=${rgbaPixels.contentToString()}, sampling=$samplingFilterMode, " +
+                "alphaOnly=$alphaOnly, tint=($tintR,$tintG,$tintB,$tintA))"
+        is GPUMaterialDescriptor.RuntimeEffect -> toString()
+        is GPUMaterialDescriptor.BlendShader ->
+            "BlendShader(mode=$mode, dst=${dst.deterministicString()}, " +
+                "src=${src.deterministicString()}, wgslCombined=$wgslCombined, " +
+                "uniformBytes=${uniformBytes.contentToString()})"
+        is GPUMaterialDescriptor.Unsupported ->
+            "Unsupported(reason=$reason, originalKind=$originalKind, " +
+                "source=${source?.deterministicString()})"
+    }
+
+private val DEEP_COMPARE_EMPTY_BYTES = byteArrayOf()
 
 /**
  * Typed runtime-effect uniform value captured before registered-program lookup.
