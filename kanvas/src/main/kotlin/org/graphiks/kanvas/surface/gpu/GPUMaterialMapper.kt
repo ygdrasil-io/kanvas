@@ -4,6 +4,7 @@ import java.util.ArrayDeque
 import java.util.Collections
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptorAssemblySession
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedEvidence
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedReason
@@ -39,7 +40,12 @@ data class GPUPreparedMaterialMapping(
  */
 internal const val PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH = 64
 
-internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping {
+internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping =
+    toPreparedMaterialMapping(GPUMaterialDescriptorAssemblySession())
+
+internal fun Paint.toPreparedMaterialMapping(
+    descriptorAssembly: GPUMaterialDescriptorAssemblySession,
+): GPUPreparedMaterialMapping {
     val shader = shader
     val paintColorFilter = colorFilter
     val graphRefusalReason = analyzePreparedMaterialGraph(
@@ -55,7 +61,7 @@ internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping {
             a = color.a,
         )
     } else {
-        shader.toPreparedMaterial(colorFilterFingerprinter)
+        shader.toPreparedMaterial(colorFilterFingerprinter, descriptorAssembly)
     }
     val tinted = if (base is GPUMaterialDescriptor.ImageDraw && base.alphaOnly) {
         base.copy(
@@ -68,9 +74,16 @@ internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping {
         base
     }
     val mapped = paintColorFilter?.let { filter ->
-        tinted.withPreparedColorFilter(filter, colorFilterFingerprinter)
+        tinted.withPreparedColorFilter(
+            filter,
+            colorFilterFingerprinter,
+            descriptorAssembly,
+        )
     } ?: tinted
-    val globallyPrioritized = mapped.withPreparedGraphRefusal(graphRefusalReason)
+    val globallyPrioritized = mapped.withPreparedGraphRefusal(
+        graphRefusalReason,
+        descriptorAssembly,
+    )
     val descriptor = if (
         globallyPrioritized is GPUMaterialDescriptor.ImageDraw &&
         globallyPrioritized.alphaOnly
@@ -319,11 +332,13 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
 
 private fun Shader.toPreparedMaterial(
     colorFilterFingerprinter: PreparedColorFilterFingerprinter,
+    descriptorAssembly: GPUMaterialDescriptorAssemblySession,
 ): GPUMaterialDescriptor =
-    PreparedShaderMapper(colorFilterFingerprinter).map(this)
+    PreparedShaderMapper(colorFilterFingerprinter, descriptorAssembly).map(this)
 
 private class PreparedShaderMapper(
     val colorFilterFingerprinter: PreparedColorFilterFingerprinter,
+    val descriptorAssembly: GPUMaterialDescriptorAssemblySession,
 ) {
     private val active =
         Collections.newSetFromMap(IdentityHashMap<Shader, Boolean>())
@@ -333,14 +348,14 @@ private class PreparedShaderMapper(
     fun map(shader: Shader): GPUMaterialDescriptor {
         completed[shader]?.let { return it }
         if (!active.add(shader)) {
-            return preparedUnsupported(
+            return descriptorAssembly.preparedUnsupported(
                 reason = GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_CYCLE,
                 originalKind = shader.materialKind(),
             )
         }
         val descriptor = try {
             if (active.size > PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH) {
-                preparedUnsupported(
+                descriptorAssembly.preparedUnsupported(
                     reason = GPUPreparedMaterialUnsupportedReason.SHADER_GRAPH_DEPTH,
                     originalKind = shader.materialKind(),
                 )
@@ -363,7 +378,7 @@ private fun Shader.toPreparedMaterial(
         if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
             toMaterial()
         } else {
-            preparedUnsupported(
+            mapper.descriptorAssembly.preparedUnsupported(
                 GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
                 GPUMaterialKind.LinearGradient,
             )
@@ -372,7 +387,7 @@ private fun Shader.toPreparedMaterial(
         if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
             toMaterial()
         } else {
-            preparedUnsupported(
+            mapper.descriptorAssembly.preparedUnsupported(
                 GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
                 GPUMaterialKind.RadialGradient,
             )
@@ -381,7 +396,7 @@ private fun Shader.toPreparedMaterial(
         if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
             toMaterial()
         } else {
-            preparedUnsupported(
+            mapper.descriptorAssembly.preparedUnsupported(
                 GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
                 GPUMaterialKind.SweepGradient,
             )
@@ -390,17 +405,17 @@ private fun Shader.toPreparedMaterial(
         if (interpolation == org.graphiks.kanvas.paint.ColorSpaceInterpolation.SRGB) {
             toMaterial()
         } else {
-            preparedUnsupported(
+            mapper.descriptorAssembly.preparedUnsupported(
                 GPUPreparedMaterialUnsupportedReason.GRADIENT_INTERPOLATION,
                 GPUMaterialKind.TwoPointConical,
             )
         }
-    is Shader.Image -> toPreparedImageMaterial()
+    is Shader.Image -> toPreparedImageMaterial(mapper.descriptorAssembly)
     is Shader.Blend -> {
         val dstDesc = mapper.map(dst)
         val srcDesc = mapper.map(src)
         listOf(dstDesc, srcDesc).highestPriorityPreparedGraphTraversalRefusal()
-            ?: GPUMaterialDescriptor.BlendShader(
+            ?: mapper.descriptorAssembly.blendShader(
                 mode = mode.name,
                 dst = dstDesc,
                 src = srcDesc,
@@ -409,7 +424,7 @@ private fun Shader.toPreparedMaterial(
     is Shader.RuntimeEffect -> {
         val mappedChildren = children.mapValues { (_, child) -> mapper.map(child) }
         mappedChildren.values.highestPriorityPreparedGraphTraversalRefusal()
-            ?: GPUMaterialDescriptor.RuntimeEffect(
+            ?: mapper.descriptorAssembly.runtimeEffect(
                 effectId = effect.id,
                 descriptorVersion = 1,
                 uniforms = uniforms.toGPUUniformValues(),
@@ -419,7 +434,7 @@ private fun Shader.toPreparedMaterial(
     is Shader.WithLocalMatrix -> {
         val source = mapper.map(shader)
         source.preparedGraphTraversalRefusalOrNull()
-            ?: preparedUnsupported(
+            ?: mapper.descriptorAssembly.preparedUnsupported(
                 reason = GPUPreparedMaterialUnsupportedReason.LOCAL_MATRIX,
                 originalKind = shader.materialKind(),
                 source = source,
@@ -428,12 +443,16 @@ private fun Shader.toPreparedMaterial(
     is Shader.WithColorFilter -> {
         val source = mapper.map(shader)
         source.preparedGraphTraversalRefusalOrNull()
-            ?: source.withPreparedColorFilter(filter, mapper.colorFilterFingerprinter)
+            ?: source.withPreparedColorFilter(
+                filter,
+                mapper.colorFilterFingerprinter,
+                mapper.descriptorAssembly,
+            )
     }
     is Shader.WithWorkingColorSpace -> {
         val source = mapper.map(shader)
         source.preparedGraphTraversalRefusalOrNull()
-            ?: preparedUnsupported(
+            ?: mapper.descriptorAssembly.preparedUnsupported(
                 reason = GPUPreparedMaterialUnsupportedReason.WORKING_COLOR_SPACE,
                 originalKind = shader.materialKind(),
                 source = source,
@@ -442,28 +461,30 @@ private fun Shader.toPreparedMaterial(
     is Shader.CoordClamp -> {
         val source = mapper.map(shader)
         source.preparedGraphTraversalRefusalOrNull()
-            ?: preparedUnsupported(
+            ?: mapper.descriptorAssembly.preparedUnsupported(
                 reason = GPUPreparedMaterialUnsupportedReason.COORDINATE_CLAMP,
                 originalKind = shader.materialKind(),
                 source = source,
             )
     }
-    is Shader.PerlinNoise -> preparedUnsupported(
+    is Shader.PerlinNoise -> mapper.descriptorAssembly.preparedUnsupported(
         GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
         GPUMaterialKind.SolidColor,
     )
-    is Shader.FractalNoise -> preparedUnsupported(
+    is Shader.FractalNoise -> mapper.descriptorAssembly.preparedUnsupported(
         GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
         GPUMaterialKind.SolidColor,
     )
 }
 
-private fun Shader.Image.toPreparedImageMaterial(): GPUMaterialDescriptor {
+private fun Shader.Image.toPreparedImageMaterial(
+    descriptorAssembly: GPUMaterialDescriptorAssemblySession,
+): GPUMaterialDescriptor {
     if (
         tileModeX != org.graphiks.kanvas.paint.TileMode.CLAMP ||
         tileModeY != org.graphiks.kanvas.paint.TileMode.CLAMP
     ) {
-        return preparedUnsupported(
+        return descriptorAssembly.preparedUnsupported(
             GPUPreparedMaterialUnsupportedReason.IMAGE_TILE_MODE,
             GPUMaterialKind.ImageDraw,
         )
@@ -472,7 +493,7 @@ private fun Shader.Image.toPreparedImageMaterial(): GPUMaterialDescriptor {
         is SamplingOptions.NEAREST -> "nearest"
         is SamplingOptions.LINEAR -> "linear"
         is SamplingOptions.Cubic ->
-            return preparedUnsupported(
+            return descriptorAssembly.preparedUnsupported(
                 GPUPreparedMaterialUnsupportedReason.IMAGE_CUBIC_SAMPLING,
                 GPUMaterialKind.ImageDraw,
             )
@@ -482,25 +503,25 @@ private fun Shader.Image.toPreparedImageMaterial(): GPUMaterialDescriptor {
         image.colorType != ColorType.BGRA_8888 &&
         image.colorType != ColorType.ALPHA_8
     ) {
-        return preparedUnsupported(
+        return descriptorAssembly.preparedUnsupported(
             GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_TYPE,
             GPUMaterialKind.ImageDraw,
         )
     }
     if (image.alphaType == AlphaType.PREMUL || image.alphaType == AlphaType.UNKNOWN) {
-        return preparedUnsupported(
+        return descriptorAssembly.preparedUnsupported(
             GPUPreparedMaterialUnsupportedReason.IMAGE_ALPHA_TYPE,
             GPUMaterialKind.ImageDraw,
         )
     }
     if (image.colorSpace != org.graphiks.kanvas.types.ColorSpace.SRGB) {
-        return preparedUnsupported(
+        return descriptorAssembly.preparedUnsupported(
             GPUPreparedMaterialUnsupportedReason.IMAGE_COLOR_SPACE,
             GPUMaterialKind.ImageDraw,
         )
     }
     val rgbaPixels = image.expandToPreparedRgba()
-        ?: return preparedUnsupported(
+        ?: return descriptorAssembly.preparedUnsupported(
             GPUPreparedMaterialUnsupportedReason.IMAGE_PIXEL_PAYLOAD,
             GPUMaterialKind.ImageDraw,
         )
@@ -517,6 +538,7 @@ private fun Shader.Image.toPreparedImageMaterial(): GPUMaterialDescriptor {
 private fun GPUMaterialDescriptor.withPreparedColorFilter(
     filter: ColorFilter,
     fingerprinter: PreparedColorFilterFingerprinter,
+    descriptorAssembly: GPUMaterialDescriptorAssemblySession,
 ): GPUMaterialDescriptor {
     preparedGraphTraversalRefusalOrNull()?.let { return it }
     if (filter is ColorFilter.RuntimeEffect) {
@@ -524,19 +546,19 @@ private fun GPUMaterialDescriptor.withPreparedColorFilter(
             val result = fingerprinter.runtimeEvidence(filter)
         ) {
             PreparedColorFilterEvidenceResult.Cycle ->
-                preparedUnsupported(
+                descriptorAssembly.preparedUnsupported(
                     reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
                     originalKind = kind,
                     source = this,
                 )
             PreparedColorFilterEvidenceResult.Depth ->
-                preparedUnsupported(
+                descriptorAssembly.preparedUnsupported(
                     reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_DEPTH,
                     originalKind = kind,
                     source = this,
                 )
             is PreparedColorFilterEvidenceResult.Ready ->
-                preparedUnsupported(
+                descriptorAssembly.preparedUnsupported(
                     reason =
                         GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
                     originalKind = kind,
@@ -547,13 +569,13 @@ private fun GPUMaterialDescriptor.withPreparedColorFilter(
     }
     when (fingerprinter.fingerprintResult(filter)) {
         PreparedColorFilterFingerprint.Cycle ->
-            return preparedUnsupported(
+            return descriptorAssembly.preparedUnsupported(
                 reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_CYCLE,
                 originalKind = kind,
                 source = this,
             )
         PreparedColorFilterFingerprint.Depth ->
-            return preparedUnsupported(
+            return descriptorAssembly.preparedUnsupported(
                 reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER_GRAPH_DEPTH,
                 originalKind = kind,
                 source = this,
@@ -565,7 +587,7 @@ private fun GPUMaterialDescriptor.withPreparedColorFilter(
     if (this is GPUMaterialDescriptor.SolidColor) {
         filter.applyTo(this)?.let { return it.toSolidColor() }
     }
-    return preparedUnsupported(
+    return descriptorAssembly.preparedUnsupported(
         reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER,
         originalKind = kind,
         source = this,
@@ -756,13 +778,13 @@ private fun Shader.materialKind(): GPUMaterialKind {
     }
 }
 
-private fun preparedUnsupported(
+private fun GPUMaterialDescriptorAssemblySession.preparedUnsupported(
     reason: GPUPreparedMaterialUnsupportedReason,
     originalKind: GPUMaterialKind,
     source: GPUMaterialDescriptor? = null,
     evidence: GPUPreparedMaterialUnsupportedEvidence? = null,
 ): GPUMaterialDescriptor.Unsupported =
-    GPUMaterialDescriptor.Unsupported(
+    unsupported(
         reason = reason,
         originalKind = originalKind,
         source = source,
@@ -771,11 +793,12 @@ private fun preparedUnsupported(
 
 private fun GPUMaterialDescriptor.withPreparedGraphRefusal(
     reason: GPUPreparedMaterialUnsupportedReason?,
+    descriptorAssembly: GPUMaterialDescriptorAssemblySession,
 ): GPUMaterialDescriptor {
     if (reason == null) return this
     val currentRefusal = preparedGraphTraversalRefusalOrNull()
     if (currentRefusal?.reason == reason) return this
-    return preparedUnsupported(
+    return descriptorAssembly.preparedUnsupported(
         reason = reason,
         originalKind = kind,
         source = this,

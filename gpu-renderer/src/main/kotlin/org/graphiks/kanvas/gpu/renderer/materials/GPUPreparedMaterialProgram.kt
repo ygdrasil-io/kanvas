@@ -464,9 +464,11 @@ object GPUPreparedMaterialProgramCompiler {
         descriptor: GPUMaterialDescriptor.BlendShader,
         context: GPUMaterialLoweringContext,
     ): PreparedSourceResult {
+        val destinationDescriptor = descriptor.storedDst
+        val sourceDescriptor = descriptor.storedSrc
         if (
-            descriptor.dst is GPUMaterialDescriptor.ImageDraw ||
-            descriptor.src is GPUMaterialDescriptor.ImageDraw
+            destinationDescriptor is GPUMaterialDescriptor.ImageDraw ||
+            sourceDescriptor is GPUMaterialDescriptor.ImageDraw
         ) {
             return blendRefusal(
                 "Prepared blend image children are refused until tint, alpha and resources are proven",
@@ -497,27 +499,38 @@ object GPUPreparedMaterialProgramCompiler {
             return blendRefusal(blendPlan.diagnostic.message)
         }
 
-        val destination = when (val result = prepareSource(descriptor.dst, context)) {
+        val destination = when (val result = prepareSource(destinationDescriptor, context)) {
             is PreparedSourceResult.Ready -> result.source
             is PreparedSourceResult.Refused ->
                 return blendRefusal("Destination child refused: ${result.code}")
         }
-        val source = when (val result = prepareSource(descriptor.src, context)) {
+        val source = when (val result = prepareSource(sourceDescriptor, context)) {
             is PreparedSourceResult.Ready -> result.source
             is PreparedSourceResult.Refused ->
                 return blendRefusal("Source child refused: ${result.code}")
         }
-        if (!descriptor.dst.hasExactBlendChildShape() || !descriptor.src.hasExactBlendChildShape()) {
+        if (
+            !destinationDescriptor.hasExactBlendChildShape() ||
+            !sourceDescriptor.hasExactBlendChildShape()
+        ) {
             return blendRefusal("Blend shader child shape would lose source semantics")
         }
 
         val wgsl = runCatching {
-            BlendWgslBuilder.buildWgsl(descriptor.dst, descriptor.src, mode.name)
+            BlendWgslBuilder.buildWgsl(
+                destinationDescriptor,
+                sourceDescriptor,
+                mode.name,
+            )
         }.getOrElse { failure ->
             return blendRefusal("Blend WGSL construction failed: ${failure::class.simpleName}")
         }
         val uniforms = runCatching {
-            BlendWgslBuilder.packUniforms(descriptor.dst, descriptor.src, mode.name)
+            BlendWgslBuilder.packUniforms(
+                destinationDescriptor,
+                sourceDescriptor,
+                mode.name,
+            )
         }.getOrElse { failure ->
             return blendRefusal("Blend uniform packing failed: ${failure::class.simpleName}")
         }
@@ -534,7 +547,10 @@ object GPUPreparedMaterialProgramCompiler {
                 sourceKind = GPUMaterialSourceKind.ShaderBlend,
                 uniformLayoutHash = "layout:blend-material:${mode.gpuLabel}:" +
                     "${destination.uniformLayoutHash}:${source.uniformLayoutHash}:v1",
-                abiExpectation = blendAbiExpectation(descriptor.dst, descriptor.src),
+                abiExpectation = blendAbiExpectation(
+                    destinationDescriptor,
+                    sourceDescriptor,
+                ),
                 keyFacts = listOf(
                     "blendMode=${mode.gpuLabel}",
                     "blendPlan=${blendPlan::class.simpleName}",

@@ -7,6 +7,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptorAssemblySession
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.SpiralRTDescriptor
@@ -98,6 +99,34 @@ class GPUPreparedMaterialProgramTest {
             )
             assertEquals("unsupported.material.blend_shader", refused.code)
         }
+    }
+
+    @Test
+    fun `prepared assembly aliasing preserves material keys and abi`() {
+        val sharedSession = GPUMaterialDescriptorAssemblySession()
+        val sharedChild = solidDescriptor()
+        val shared = sharedSession.blendShader(
+            mode = "SRC_OVER",
+            dst = sharedChild,
+            src = sharedChild,
+        )
+        val independentSession = GPUMaterialDescriptorAssemblySession()
+        val independent = independentSession.blendShader(
+            mode = "SRC_OVER",
+            dst = solidDescriptor(),
+            src = solidDescriptor(),
+        )
+
+        assertEquals(independent, shared)
+        assertEquals(independent.hashCode(), shared.hashCode())
+        assertEquals(independent.toString(), shared.toString())
+
+        val sharedProgram = ready(shared, paintAlpha = 0.75f)
+        val independentProgram = ready(independent, paintAlpha = 0.75f)
+        assertEquals(independentProgram.materialKey, sharedProgram.materialKey)
+        assertEquals(independentProgram.abiHash, sharedProgram.abiHash)
+        assertEquals(independentProgram.uniformBytes, sharedProgram.uniformBytes)
+        assertEquals(independentProgram.wgslSource, sharedProgram.wgslSource)
     }
 
     @Test

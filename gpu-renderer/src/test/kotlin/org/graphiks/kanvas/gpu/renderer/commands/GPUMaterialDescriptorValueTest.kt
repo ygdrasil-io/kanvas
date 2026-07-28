@@ -108,6 +108,69 @@ class GPUMaterialDescriptorValueTest {
     }
 
     @Test
+    fun `blend shader public constructor recursively snapshots caller mutations`() {
+        val positions = floatArrayOf(0f, 1f)
+        val colors = floatArrayOf(
+            1f, 0f, 0f, 0.25f,
+            0f, 0f, 1f, 0.75f,
+        )
+        val pixels = byteArrayOf(1, 2, 3, 4)
+        val blendBytes = byteArrayOf(5, 6, 7, 8)
+        val descriptor = nestedBlend(positions, colors, pixels, blendBytes)
+        val expected = nestedBlend(
+            floatArrayOf(0f, 1f),
+            floatArrayOf(
+                1f, 0f, 0f, 0.25f,
+                0f, 0f, 1f, 0.75f,
+            ),
+            byteArrayOf(1, 2, 3, 4),
+            byteArrayOf(5, 6, 7, 8),
+        )
+        val initialHash = descriptor.hashCode()
+        val initialText = descriptor.toString()
+
+        positions.fill(99f)
+        colors.fill(99f)
+        pixels.fill(99)
+        blendBytes.fill(99)
+
+        assertEquals(expected, descriptor)
+        assertEquals(initialHash, descriptor.hashCode())
+        assertEquals(initialText, descriptor.toString())
+
+        assertIs<GPUMaterialDescriptor.LinearGradient>(descriptor.dst)
+            .allStopPositions!!
+            .fill(88f)
+        assertIs<GPUMaterialDescriptor.LinearGradient>(descriptor.dst)
+            .allStopColors!!
+            .fill(88f)
+        assertIs<GPUMaterialDescriptor.ImageDraw>(descriptor.src)
+            .rgbaPixels
+            .fill(88)
+        descriptor.uniformBytes.fill(88)
+
+        assertEquals(expected, descriptor)
+        assertEquals(initialHash, descriptor.hashCode())
+        assertEquals(initialText, descriptor.toString())
+        assertEquals(descriptor, descriptor.copy())
+        assertEquals("SRC_OVER", descriptor.component1())
+        assertContentEquals(
+            floatArrayOf(0f, 1f),
+            assertIs<GPUMaterialDescriptor.LinearGradient>(
+                descriptor.component2(),
+            ).allStopPositions,
+        )
+        assertContentEquals(
+            byteArrayOf(1, 2, 3, 4),
+            assertIs<GPUMaterialDescriptor.ImageDraw>(
+                descriptor.component3(),
+            ).rgbaPixels,
+        )
+        assertEquals("nested-wgsl", descriptor.component4())
+        assertContentEquals(byteArrayOf(5, 6, 7, 8), descriptor.component5())
+    }
+
+    @Test
     fun `runtime color filter refusal evidence has recursive immutable value semantics`() {
         val uniforms = linkedMapOf<String, GPURuntimeEffectUniformValue>(
             "amount" to GPURuntimeEffectUniformValue.Float1(0.5f),
@@ -414,6 +477,246 @@ class GPUMaterialDescriptorValueTest {
         )
     }
 
+    @Test
+    fun `prepared assembly snapshots each layered dag source identity once`() {
+        val session = GPUMaterialDescriptorAssemblySession()
+        val graph = layeredRuntimeDag { effectId, children ->
+            session.runtimeEffect(
+                effectId = effectId,
+                children = children,
+            )
+        }
+
+        assertIs<GPUMaterialDescriptor.RuntimeEffect>(graph.root)
+        assertEquals(
+            GPUMaterialDescriptorSnapshotStatistics(
+                assembledDescriptorCount = 13,
+                assembledChildEdgeCount = 33,
+                sourceSnapshotCount = 1,
+                evidenceSnapshotCount = 0,
+            ),
+            session.snapshotStatistics,
+        )
+    }
+
+    @Test
+    fun `prepared assembly snapshots runtime blend unsupported and evidence defensively`() {
+        val positions = floatArrayOf(0f, 1f)
+        val colors = floatArrayOf(
+            1f, 0f, 0f, 0.25f,
+            0f, 0f, 1f, 0.75f,
+        )
+        val pixels = byteArrayOf(1, 2, 3, 4)
+        val blendBytes = byteArrayOf(5, 6, 7, 8)
+        val runtimeUniforms = linkedMapOf<String, GPURuntimeEffectUniformValue>(
+            "amount" to GPURuntimeEffectUniformValue.Float1(0.75f),
+        )
+        val evidenceUniforms = linkedMapOf<String, GPURuntimeEffectUniformValue>(
+            "amount" to GPURuntimeEffectUniformValue.Float1(0.5f),
+        )
+        val evidenceChildren = linkedMapOf(
+            "input" to "sha256:${"a".repeat(64)}",
+        )
+        val session = GPUMaterialDescriptorAssemblySession()
+        val runtime = session.runtimeEffect(
+            effectId = "runtime.session",
+            uniforms = runtimeUniforms,
+            children = mapOf(
+                "image" to GPUMaterialDescriptor.ImageDraw(
+                    imageSourceId = "nested",
+                    imageWidth = 1,
+                    imageHeight = 1,
+                    rgbaPixels = pixels,
+                ),
+            ),
+        )
+        val blend = session.blendShader(
+            mode = "SRC_OVER",
+            dst = GPUMaterialDescriptor.LinearGradient(
+                startX = 0f,
+                startY = 0f,
+                endX = 1f,
+                endY = 1f,
+                startR = 1f,
+                startG = 0f,
+                startB = 0f,
+                startA = 0.25f,
+                endR = 0f,
+                endG = 0f,
+                endB = 1f,
+                endA = 0.75f,
+                allStopPositions = positions,
+                allStopColors = colors,
+            ),
+            src = runtime,
+            wgslCombined = "session-wgsl",
+            uniformBytes = blendBytes,
+        )
+        val evidence = GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
+            effectId = "runtime.filter",
+            uniforms = evidenceUniforms,
+            childIdentities = evidenceChildren,
+        )
+        val descriptor = session.unsupported(
+            reason = GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+            originalKind = GPUMaterialKind.ShaderBlend,
+            source = blend,
+            evidence = evidence,
+        )
+        val expected = GPUMaterialDescriptor.Unsupported(
+            reason = GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+            originalKind = GPUMaterialKind.ShaderBlend,
+            source = GPUMaterialDescriptor.BlendShader(
+                mode = "SRC_OVER",
+                dst = GPUMaterialDescriptor.LinearGradient(
+                    startX = 0f,
+                    startY = 0f,
+                    endX = 1f,
+                    endY = 1f,
+                    startR = 1f,
+                    startG = 0f,
+                    startB = 0f,
+                    startA = 0.25f,
+                    endR = 0f,
+                    endG = 0f,
+                    endB = 1f,
+                    endA = 0.75f,
+                    allStopPositions = floatArrayOf(0f, 1f),
+                    allStopColors = floatArrayOf(
+                        1f, 0f, 0f, 0.25f,
+                        0f, 0f, 1f, 0.75f,
+                    ),
+                ),
+                src = GPUMaterialDescriptor.RuntimeEffect(
+                    effectId = "runtime.session",
+                    uniforms = mapOf(
+                        "amount" to GPURuntimeEffectUniformValue.Float1(0.75f),
+                    ),
+                    children = mapOf(
+                        "image" to GPUMaterialDescriptor.ImageDraw(
+                            imageSourceId = "nested",
+                            imageWidth = 1,
+                            imageHeight = 1,
+                            rgbaPixels = byteArrayOf(1, 2, 3, 4),
+                        ),
+                    ),
+                ),
+                wgslCombined = "session-wgsl",
+                uniformBytes = byteArrayOf(5, 6, 7, 8),
+            ),
+            evidence = GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
+                effectId = "runtime.filter",
+                uniforms = mapOf(
+                    "amount" to GPURuntimeEffectUniformValue.Float1(0.5f),
+                ),
+                childIdentities = mapOf(
+                    "input" to "sha256:${"a".repeat(64)}",
+                ),
+            ),
+        )
+        val initialHash = descriptor.hashCode()
+        val initialText = descriptor.toString()
+
+        positions.fill(99f)
+        colors.fill(99f)
+        pixels.fill(99)
+        blendBytes.fill(99)
+        runtimeUniforms.clear()
+        evidenceUniforms.clear()
+        evidenceChildren.clear()
+
+        assertEquals(expected, descriptor)
+        assertEquals(initialHash, descriptor.hashCode())
+        assertEquals(initialText, descriptor.toString())
+        assertEquals(
+            GPUMaterialDescriptorSnapshotStatistics(
+                assembledDescriptorCount = 3,
+                assembledChildEdgeCount = 4,
+                sourceSnapshotCount = 2,
+                evidenceSnapshotCount = 1,
+            ),
+            session.snapshotStatistics,
+        )
+
+        val escapedBlend = assertIs<GPUMaterialDescriptor.BlendShader>(descriptor.source)
+        assertIs<GPUMaterialDescriptor.LinearGradient>(escapedBlend.dst)
+            .allStopPositions!!
+            .fill(88f)
+        assertIs<GPUMaterialDescriptor.RuntimeEffect>(escapedBlend.src)
+            .children
+            .values
+            .forEach { child ->
+                assertIs<GPUMaterialDescriptor.ImageDraw>(child).rgbaPixels.fill(88)
+            }
+        escapedBlend.uniformBytes.fill(88)
+
+        assertEquals(expected, descriptor)
+        assertEquals(initialHash, descriptor.hashCode())
+        assertEquals(initialText, descriptor.toString())
+    }
+
+    @Test
+    fun `prepared assembly snapshots shared foreign session evidence once`() {
+        val evidence = GPUPreparedMaterialUnsupportedEvidence.RuntimeColorFilter(
+            effectId = "runtime.foreign-evidence",
+            uniforms = mapOf(
+                "amount" to GPURuntimeEffectUniformValue.Float1(0.5f),
+            ),
+            childIdentities = mapOf(
+                "input" to "sha256:${"b".repeat(64)}",
+            ),
+        )
+        val foreignSession = GPUMaterialDescriptorAssemblySession()
+        val first = foreignSession.unsupported(
+            reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER,
+            originalKind = GPUMaterialKind.SolidColor,
+            evidence = evidence,
+        )
+        val second = foreignSession.unsupported(
+            reason = GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+            originalKind = GPUMaterialKind.SolidColor,
+            evidence = evidence,
+        )
+
+        val receivingSession = GPUMaterialDescriptorAssemblySession()
+        val received = receivingSession.runtimeEffect(
+            effectId = "runtime.receiving",
+            children = linkedMapOf(
+                "first" to first,
+                "second" to second,
+            ),
+        )
+
+        assertEquals(
+            GPUMaterialDescriptor.RuntimeEffect(
+                effectId = "runtime.receiving",
+                children = linkedMapOf(
+                    "first" to GPUMaterialDescriptor.Unsupported(
+                        reason = GPUPreparedMaterialUnsupportedReason.COLOR_FILTER,
+                        originalKind = GPUMaterialKind.SolidColor,
+                        evidence = evidence,
+                    ),
+                    "second" to GPUMaterialDescriptor.Unsupported(
+                        reason =
+                            GPUPreparedMaterialUnsupportedReason.RUNTIME_COLOR_FILTER_PLACEMENT,
+                        originalKind = GPUMaterialKind.SolidColor,
+                        evidence = evidence,
+                    ),
+                ),
+            ),
+            received,
+        )
+        assertEquals(
+            GPUMaterialDescriptorSnapshotStatistics(
+                assembledDescriptorCount = 1,
+                assembledChildEdgeCount = 2,
+                sourceSnapshotCount = 2,
+                evidenceSnapshotCount = 1,
+            ),
+            receivingSession.snapshotStatistics,
+        )
+    }
+
     private fun runtimeDiamond(depth: Int): GPUMaterialDescriptor {
         var descriptor: GPUMaterialDescriptor =
             GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f)
@@ -430,6 +733,43 @@ class GPUMaterialDescriptorValueTest {
         }
         return descriptor
     }
+
+    private fun layeredRuntimeDag(
+        runtimeEffect: (
+            effectId: String,
+            children: Map<String, GPUMaterialDescriptor>,
+        ) -> GPUMaterialDescriptor.RuntimeEffect,
+    ): LayeredRuntimeDag {
+        var previous = listOf<GPUMaterialDescriptor>(
+            GPUMaterialDescriptor.SolidColor(0.25f, 0.5f, 0.75f, 1f),
+        )
+        val width = 3
+        val layerCount = 4
+        repeat(layerCount) { layer ->
+            previous = List(width) { node ->
+                runtimeEffect(
+                    "runtime.layer.$layer.$node",
+                    previous.mapIndexed { childIndex, child ->
+                        "child-$childIndex" to child
+                    }.toMap(LinkedHashMap()),
+                )
+            }
+        }
+        val root = runtimeEffect(
+            "runtime.layer.root",
+            previous.mapIndexed { index, child -> "root-$index" to child }
+                .toMap(LinkedHashMap()),
+        )
+        return LayeredRuntimeDag(
+            root = root,
+            logicalDescriptorCount = 1 + width * layerCount + 1,
+        )
+    }
+
+    private data class LayeredRuntimeDag(
+        val root: GPUMaterialDescriptor.RuntimeEffect,
+        val logicalDescriptorCount: Int,
+    )
 
     private fun nestedBlend(
         positions: FloatArray,

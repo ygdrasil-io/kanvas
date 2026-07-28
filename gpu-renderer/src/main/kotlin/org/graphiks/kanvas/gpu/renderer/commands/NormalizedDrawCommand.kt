@@ -567,6 +567,7 @@ sealed interface GPUMaterialDescriptor {
         val descriptorVersion: Int = 1,
         private val uniformSnapshot: LinkedHashMap<String, GPURuntimeEffectUniformValue>,
         private val childSnapshot: LinkedHashMap<String, GPUMaterialDescriptor>,
+        private val assemblyToken: GPUMaterialDescriptorAssemblyToken?,
         @Suppress("UNUSED_PARAMETER")
         snapshotToken: GPUMaterialDescriptorSnapshotToken,
     ) : GPUMaterialDescriptor {
@@ -580,6 +581,7 @@ sealed interface GPUMaterialDescriptor {
             descriptorVersion = descriptorVersion,
             uniformSnapshot = LinkedHashMap(uniforms),
             childSnapshot = children.deepSnapshotMap(),
+            assemblyToken = null,
             snapshotToken = GPUMaterialDescriptorSnapshotToken,
         )
 
@@ -660,24 +662,184 @@ sealed interface GPUMaterialDescriptor {
                 childSnapshot = LinkedHashMap(
                     childSnapshot.mapValues { (_, child) -> snapshotChild(child) },
                 ),
+                assemblyToken = null,
                 snapshotToken = GPUMaterialDescriptorSnapshotToken,
             )
+
+        internal fun wasAssembledWith(
+            token: GPUMaterialDescriptorAssemblyToken,
+        ): Boolean = assemblyToken === token
 
         private fun immutableChildSnapshot(): Map<String, GPUMaterialDescriptor> =
             Collections.unmodifiableMap(
                 childSnapshot.deepSnapshotMap(),
             )
+
+        internal companion object {
+            fun assembled(
+                effectId: String,
+                descriptorVersion: Int,
+                uniforms: Map<String, GPURuntimeEffectUniformValue>,
+                children: LinkedHashMap<String, GPUMaterialDescriptor>,
+                token: GPUMaterialDescriptorAssemblyToken,
+            ): RuntimeEffect =
+                RuntimeEffect(
+                    effectId = effectId,
+                    descriptorVersion = descriptorVersion,
+                    uniformSnapshot = LinkedHashMap(uniforms),
+                    childSnapshot = children,
+                    assemblyToken = token,
+                    snapshotToken = GPUMaterialDescriptorSnapshotToken,
+                )
+        }
     }
 
-    /** Blend shader descriptor combining two child shaders via a blend mode. */
-    data class BlendShader(
+    /**
+     * Blend shader descriptor combining two defensively snapshotted child shaders.
+     *
+     * This is intentionally no longer Kotlin `data class` metadata: private
+     * snapshot storage is required to keep the public child and byte getters
+     * defensive. The prior constructor, getters, `copy`, `component1` through
+     * `component5`, and value-method JVM signatures remain available.
+     */
+    class BlendShader private constructor(
         val mode: String,
-        val dst: GPUMaterialDescriptor,
-        val src: GPUMaterialDescriptor,
-        val wgslCombined: String = "",
-        val uniformBytes: ByteArray = byteArrayOf(),
+        private val dstSnapshot: GPUMaterialDescriptor,
+        private val srcSnapshot: GPUMaterialDescriptor,
+        val wgslCombined: String,
+        private val uniformByteSnapshot: ByteArray,
+        private val assemblyToken: GPUMaterialDescriptorAssemblyToken?,
+        @Suppress("UNUSED_PARAMETER")
+        snapshotToken: GPUMaterialDescriptorSnapshotToken,
     ) : GPUMaterialDescriptor {
+        constructor(
+            mode: String,
+            dst: GPUMaterialDescriptor,
+            src: GPUMaterialDescriptor,
+            wgslCombined: String = "",
+            uniformBytes: ByteArray = byteArrayOf(),
+        ) : this(
+            mode = mode,
+            dstSnapshot = dst.deepSnapshot(),
+            srcSnapshot = src.deepSnapshot(),
+            wgslCombined = wgslCombined,
+            uniformByteSnapshot = uniformBytes.copyOf(),
+            assemblyToken = null,
+            snapshotToken = GPUMaterialDescriptorSnapshotToken,
+        )
+
+        val dst: GPUMaterialDescriptor
+            get() = dstSnapshot.deepSnapshot()
+
+        val src: GPUMaterialDescriptor
+            get() = srcSnapshot.deepSnapshot()
+
+        val uniformBytes: ByteArray
+            get() = uniformByteSnapshot.copyOf()
+
         override val kind: GPUMaterialKind = GPUMaterialKind.ShaderBlend
+
+        fun copy(
+            mode: String = this.mode,
+            dst: GPUMaterialDescriptor = dstSnapshot,
+            src: GPUMaterialDescriptor = srcSnapshot,
+            wgslCombined: String = this.wgslCombined,
+            uniformBytes: ByteArray = uniformByteSnapshot,
+        ): BlendShader =
+            BlendShader(mode, dst, src, wgslCombined, uniformBytes)
+
+        operator fun component1(): String = mode
+        operator fun component2(): GPUMaterialDescriptor = dst
+        operator fun component3(): GPUMaterialDescriptor = src
+        operator fun component4(): String = wgslCombined
+        operator fun component5(): ByteArray = uniformBytes
+
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is BlendShader) return false
+            return GPUMaterialDescriptorEquality().equal(this, other)
+        }
+
+        override fun hashCode(): Int =
+            GPUMaterialDescriptorHasher().hash(this)
+
+        override fun toString(): String =
+            GPUMaterialDescriptorCanonicalizer().text(this)
+
+        internal val storedDst: GPUMaterialDescriptor
+            get() = dstSnapshot
+
+        internal val storedSrc: GPUMaterialDescriptor
+            get() = srcSnapshot
+
+        internal fun valueEqualsWith(
+            other: BlendShader,
+            equalChild: (GPUMaterialDescriptor, GPUMaterialDescriptor) -> Boolean,
+        ): Boolean =
+            mode == other.mode &&
+                wgslCombined == other.wgslCombined &&
+                uniformByteSnapshot.contentEquals(other.uniformByteSnapshot) &&
+                equalChild(dstSnapshot, other.dstSnapshot) &&
+                equalChild(srcSnapshot, other.srcSnapshot)
+
+        internal fun valueHashWith(
+            hashChild: (GPUMaterialDescriptor) -> Int,
+        ): Int {
+            var result = mode.hashCode()
+            result = 31 * result + hashChild(dstSnapshot)
+            result = 31 * result + hashChild(srcSnapshot)
+            result = 31 * result + wgslCombined.hashCode()
+            result = 31 * result + uniformByteSnapshot.contentHashCode()
+            return result
+        }
+
+        internal fun canonicalTextWith(
+            childIdentity: (GPUMaterialDescriptor) -> String,
+        ): String =
+            "BlendShader(" +
+                "mode=${mode.canonicalValue()}, " +
+                "dst=${childIdentity(dstSnapshot)}, " +
+                "src=${childIdentity(srcSnapshot)}, " +
+                "wgslCombined=${wgslCombined.canonicalValue()}, " +
+                "uniformBytes=${uniformByteSnapshot.canonicalValue()}" +
+                ")"
+
+        internal fun snapshotWith(
+            snapshotChild: (GPUMaterialDescriptor) -> GPUMaterialDescriptor,
+        ): BlendShader =
+            BlendShader(
+                mode = mode,
+                dstSnapshot = snapshotChild(dstSnapshot),
+                srcSnapshot = snapshotChild(srcSnapshot),
+                wgslCombined = wgslCombined,
+                uniformByteSnapshot = uniformByteSnapshot.copyOf(),
+                assemblyToken = null,
+                snapshotToken = GPUMaterialDescriptorSnapshotToken,
+            )
+
+        internal fun wasAssembledWith(
+            token: GPUMaterialDescriptorAssemblyToken,
+        ): Boolean = assemblyToken === token
+
+        internal companion object {
+            fun assembled(
+                mode: String,
+                dst: GPUMaterialDescriptor,
+                src: GPUMaterialDescriptor,
+                wgslCombined: String,
+                uniformBytes: ByteArray,
+                token: GPUMaterialDescriptorAssemblyToken,
+            ): BlendShader =
+                BlendShader(
+                    mode = mode,
+                    dstSnapshot = dst,
+                    srcSnapshot = src,
+                    wgslCombined = wgslCombined,
+                    uniformByteSnapshot = uniformBytes.copyOf(),
+                    assemblyToken = token,
+                    snapshotToken = GPUMaterialDescriptorSnapshotToken,
+                )
+        }
     }
 
     /**
@@ -691,6 +853,7 @@ sealed interface GPUMaterialDescriptor {
         val originalKind: GPUMaterialKind,
         private val sourceSnapshot: GPUMaterialDescriptor?,
         private val evidenceSnapshot: GPUPreparedMaterialUnsupportedEvidence?,
+        private val assemblyToken: GPUMaterialDescriptorAssemblyToken?,
         @Suppress("UNUSED_PARAMETER")
         snapshotToken: GPUMaterialDescriptorSnapshotToken,
     ) : GPUMaterialDescriptor {
@@ -704,6 +867,7 @@ sealed interface GPUMaterialDescriptor {
             originalKind = originalKind,
             sourceSnapshot = source?.deepSnapshot(),
             evidenceSnapshot = evidence?.deepSnapshot(),
+            assemblyToken = null,
             snapshotToken = GPUMaterialDescriptorSnapshotToken,
         )
 
@@ -775,14 +939,40 @@ sealed interface GPUMaterialDescriptor {
 
         internal fun snapshotWith(
             snapshotChild: (GPUMaterialDescriptor) -> GPUMaterialDescriptor,
+            snapshotEvidence: (
+                GPUPreparedMaterialUnsupportedEvidence,
+            ) -> GPUPreparedMaterialUnsupportedEvidence,
         ): Unsupported =
             Unsupported(
                 reason = reason,
                 originalKind = originalKind,
                 sourceSnapshot = sourceSnapshot?.let(snapshotChild),
-                evidenceSnapshot = evidenceSnapshot?.deepSnapshot(),
+                evidenceSnapshot = evidenceSnapshot?.let(snapshotEvidence),
+                assemblyToken = null,
                 snapshotToken = GPUMaterialDescriptorSnapshotToken,
             )
+
+        internal fun wasAssembledWith(
+            token: GPUMaterialDescriptorAssemblyToken,
+        ): Boolean = assemblyToken === token
+
+        internal companion object {
+            fun assembled(
+                reason: GPUPreparedMaterialUnsupportedReason,
+                originalKind: GPUMaterialKind,
+                source: GPUMaterialDescriptor?,
+                evidence: GPUPreparedMaterialUnsupportedEvidence?,
+                token: GPUMaterialDescriptorAssemblyToken,
+            ): Unsupported =
+                Unsupported(
+                    reason = reason,
+                    originalKind = originalKind,
+                    sourceSnapshot = source,
+                    evidenceSnapshot = evidence,
+                    assemblyToken = token,
+                    snapshotToken = GPUMaterialDescriptorSnapshotToken,
+                )
+        }
     }
 }
 
@@ -838,6 +1028,121 @@ sealed interface GPUPreparedMaterialUnsupportedEvidence {
     }
 }
 
+/**
+ * One defensive descriptor-assembly operation.
+ *
+ * Arbitrary caller descriptors are snapshotted through one identity cache.
+ * Only deeply defensive composites created by this exact session may bypass
+ * another recursive snapshot.
+ *
+ * A session is a single-threaded, one-operation authority. Create it at the
+ * start of one prepared mapping operation, do not share it across threads or
+ * operations, and discard it when that operation completes.
+ */
+class GPUMaterialDescriptorAssemblySession {
+    private val token = GPUMaterialDescriptorAssemblyToken()
+    private val snapshotter = GPUMaterialDescriptorSnapshotter()
+    private var assembledDescriptorCount = 0
+    private var assembledChildEdgeCount = 0
+
+    fun runtimeEffect(
+        effectId: String = "",
+        descriptorVersion: Int = 1,
+        uniforms: Map<String, GPURuntimeEffectUniformValue> = emptyMap(),
+        children: Map<String, GPUMaterialDescriptor> = emptyMap(),
+    ): GPUMaterialDescriptor.RuntimeEffect {
+        val childSnapshots = LinkedHashMap<String, GPUMaterialDescriptor>()
+        children.forEach { (name, child) ->
+            childSnapshots[name] = snapshotForAssembly(child)
+        }
+        assembledDescriptorCount += 1
+        assembledChildEdgeCount += children.size
+        return GPUMaterialDescriptor.RuntimeEffect.assembled(
+            effectId = effectId,
+            descriptorVersion = descriptorVersion,
+            uniforms = uniforms,
+            children = childSnapshots,
+            token = token,
+        )
+    }
+
+    fun blendShader(
+        mode: String,
+        dst: GPUMaterialDescriptor,
+        src: GPUMaterialDescriptor,
+        wgslCombined: String = "",
+        uniformBytes: ByteArray = byteArrayOf(),
+    ): GPUMaterialDescriptor.BlendShader {
+        val destinationSnapshot = snapshotForAssembly(dst)
+        val sourceSnapshot = snapshotForAssembly(src)
+        assembledDescriptorCount += 1
+        assembledChildEdgeCount += 2
+        return GPUMaterialDescriptor.BlendShader.assembled(
+            mode = mode,
+            dst = destinationSnapshot,
+            src = sourceSnapshot,
+            wgslCombined = wgslCombined,
+            uniformBytes = uniformBytes,
+            token = token,
+        )
+    }
+
+    fun unsupported(
+        reason: GPUPreparedMaterialUnsupportedReason,
+        originalKind: GPUMaterialKind,
+        source: GPUMaterialDescriptor? = null,
+        evidence: GPUPreparedMaterialUnsupportedEvidence? = null,
+    ): GPUMaterialDescriptor.Unsupported {
+        val sourceSnapshot = source?.let(::snapshotForAssembly)
+        val evidenceSnapshot = evidence?.let(snapshotter::snapshotEvidence)
+        assembledDescriptorCount += 1
+        if (source != null) assembledChildEdgeCount += 1
+        return GPUMaterialDescriptor.Unsupported.assembled(
+            reason = reason,
+            originalKind = originalKind,
+            source = sourceSnapshot,
+            evidence = evidenceSnapshot,
+            token = token,
+        )
+    }
+
+    internal val snapshotStatistics: GPUMaterialDescriptorSnapshotStatistics
+        get() = GPUMaterialDescriptorSnapshotStatistics(
+            assembledDescriptorCount = assembledDescriptorCount,
+            assembledChildEdgeCount = assembledChildEdgeCount,
+            sourceSnapshotCount = snapshotter.snapshotCount,
+            evidenceSnapshotCount = snapshotter.evidenceSnapshotCount,
+        )
+
+    private fun snapshotForAssembly(
+        descriptor: GPUMaterialDescriptor,
+    ): GPUMaterialDescriptor =
+        if (descriptor.wasAssembledWith(token)) {
+            descriptor
+        } else {
+            snapshotter.snapshot(descriptor)
+        }
+}
+
+internal data class GPUMaterialDescriptorSnapshotStatistics(
+    val assembledDescriptorCount: Int,
+    val assembledChildEdgeCount: Int,
+    val sourceSnapshotCount: Int,
+    val evidenceSnapshotCount: Int,
+)
+
+internal class GPUMaterialDescriptorAssemblyToken
+
+private fun GPUMaterialDescriptor.wasAssembledWith(
+    token: GPUMaterialDescriptorAssemblyToken,
+): Boolean =
+    when (this) {
+        is GPUMaterialDescriptor.RuntimeEffect -> wasAssembledWith(token)
+        is GPUMaterialDescriptor.BlendShader -> wasAssembledWith(token)
+        is GPUMaterialDescriptor.Unsupported -> wasAssembledWith(token)
+        else -> false
+    }
+
 private object GPUMaterialDescriptorSnapshotToken
 
 private fun GPUMaterialDescriptor.deepSnapshot(): GPUMaterialDescriptor =
@@ -856,9 +1161,19 @@ private fun Map<String, GPUMaterialDescriptor>.deepSnapshotMap():
 private class GPUMaterialDescriptorSnapshotter {
     private val snapshots =
         IdentityHashMap<GPUMaterialDescriptor, GPUMaterialDescriptor>()
+    private val evidenceSnapshots =
+        IdentityHashMap<
+            GPUPreparedMaterialUnsupportedEvidence,
+            GPUPreparedMaterialUnsupportedEvidence,
+            >()
+    var snapshotCount: Int = 0
+        private set
+    var evidenceSnapshotCount: Int = 0
+        private set
 
     fun snapshot(descriptor: GPUMaterialDescriptor): GPUMaterialDescriptor {
         snapshots[descriptor]?.let { return it }
+        snapshotCount += 1
         val result = when (descriptor) {
             is GPUMaterialDescriptor.SolidColor -> descriptor.copy()
             is GPUMaterialDescriptor.LinearGradient -> descriptor.copy(
@@ -881,16 +1196,21 @@ private class GPUMaterialDescriptorSnapshotter {
                 descriptor.copy(rgbaPixels = descriptor.rgbaPixels.copyOf())
             is GPUMaterialDescriptor.RuntimeEffect ->
                 descriptor.snapshotWith(::snapshot)
-            is GPUMaterialDescriptor.BlendShader -> descriptor.copy(
-                dst = snapshot(descriptor.dst),
-                src = snapshot(descriptor.src),
-                uniformBytes = descriptor.uniformBytes.copyOf(),
-            )
-            is GPUMaterialDescriptor.Unsupported ->
+            is GPUMaterialDescriptor.BlendShader ->
                 descriptor.snapshotWith(::snapshot)
+            is GPUMaterialDescriptor.Unsupported ->
+                descriptor.snapshotWith(::snapshot, ::snapshotEvidence)
         }
         snapshots[descriptor] = result
         return result
+    }
+
+    fun snapshotEvidence(
+        evidence: GPUPreparedMaterialUnsupportedEvidence,
+    ): GPUPreparedMaterialUnsupportedEvidence {
+        evidenceSnapshots[evidence]?.let { return it }
+        evidenceSnapshotCount += 1
+        return evidence.deepSnapshot().also { evidenceSnapshots[evidence] = it }
     }
 }
 
@@ -945,11 +1265,7 @@ private class GPUMaterialDescriptorEquality {
                 left.valueEqualsWith(right, ::equal)
             left is GPUMaterialDescriptor.BlendShader &&
                 right is GPUMaterialDescriptor.BlendShader ->
-                left.mode == right.mode &&
-                    left.wgslCombined == right.wgslCombined &&
-                    left.uniformBytes.contentEquals(right.uniformBytes) &&
-                    equal(left.dst, right.dst) &&
-                    equal(left.src, right.src)
+                left.valueEqualsWith(right, ::equal)
             left is GPUMaterialDescriptor.Unsupported &&
                 right is GPUMaterialDescriptor.Unsupported ->
                 left.valueEqualsWith(right, ::equal)
@@ -1004,14 +1320,8 @@ private class GPUMaterialDescriptorHasher {
                     descriptor.rgbaPixels.contentHashCode()
             is GPUMaterialDescriptor.RuntimeEffect ->
                 descriptor.valueHashWith(::hash)
-            is GPUMaterialDescriptor.BlendShader -> {
-                var value = descriptor.mode.hashCode()
-                value = 31 * value + hash(descriptor.dst)
-                value = 31 * value + hash(descriptor.src)
-                value = 31 * value + descriptor.wgslCombined.hashCode()
-                value = 31 * value + descriptor.uniformBytes.contentHashCode()
-                value
-            }
+            is GPUMaterialDescriptor.BlendShader ->
+                descriptor.valueHashWith(::hash)
             is GPUMaterialDescriptor.Unsupported ->
                 descriptor.valueHashWith(::hash)
         }
@@ -1118,13 +1428,7 @@ private class GPUMaterialDescriptorCanonicalizer {
             is GPUMaterialDescriptor.RuntimeEffect ->
                 descriptor.canonicalTextWith(::identity)
             is GPUMaterialDescriptor.BlendShader ->
-                "BlendShader(" +
-                    "mode=${descriptor.mode.canonicalValue()}, " +
-                    "dst=${identity(descriptor.dst)}, " +
-                    "src=${identity(descriptor.src)}, " +
-                    "wgslCombined=${descriptor.wgslCombined.canonicalValue()}, " +
-                    "uniformBytes=${descriptor.uniformBytes.canonicalValue()}" +
-                    ")"
+                descriptor.canonicalTextWith(::identity)
             is GPUMaterialDescriptor.Unsupported ->
                 descriptor.canonicalTextWith(::identity)
         }

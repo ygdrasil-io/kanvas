@@ -10,6 +10,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptorAssemblySession
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedEvidence
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedReason
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
@@ -778,6 +779,22 @@ class GPUMaterialMapperTest {
     }
 
     @Test
+    fun `prepared mapper preserves a layered shared dag through one assembly session`() {
+        val session = GPUMaterialDescriptorAssemblySession()
+        val shared = Paint(
+            shader = layeredRuntimeShaderDag(),
+        ).toPreparedMaterialMapping(session).descriptor
+        val independent = Paint(
+            shader = layeredRuntimeShaderDag(),
+        ).toPreparedMaterialMapping().descriptor
+
+        assertIs<GPUMaterialDescriptor.RuntimeEffect>(shared)
+        assertEquals(independent, shared)
+        assertEquals(independent.hashCode(), shared.hashCode())
+        assertEquals(independent.toString(), shared.toString())
+    }
+
+    @Test
     fun `prepared runtime color filter evidence bounds a depth sixty shared diamond`() {
         val (shared, duplicated) = assertCompletesWithin(
             description = "runtime color filter evidence diamond",
@@ -1259,6 +1276,28 @@ class GPUMaterialMapperTest {
             )
         }
         return shader
+    }
+
+    private fun layeredRuntimeShaderDag(): Shader.RuntimeEffect {
+        var previous = listOf<Shader>(Shader.SolidColor(Color.RED))
+        val width = 3
+        repeat(4) { layer ->
+            previous = List(width) { node ->
+                Shader.RuntimeEffect(
+                    effect = testRuntimeEffect("runtime.shader.layer.$layer.$node"),
+                    uniforms = UniformBlock.EMPTY,
+                    children = previous.mapIndexed { index, child ->
+                        "child-$index" to child
+                    }.toMap(LinkedHashMap()),
+                )
+            }
+        }
+        return Shader.RuntimeEffect(
+            effect = testRuntimeEffect("runtime.shader.layer.root"),
+            uniforms = UniformBlock.EMPTY,
+            children = previous.mapIndexed { index, child -> "root-$index" to child }
+                .toMap(LinkedHashMap()),
+        )
     }
 
     private fun colorFilterRuntimeDiamondRoot(

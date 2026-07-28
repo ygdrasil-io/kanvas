@@ -404,11 +404,13 @@ internal fun GPUBackendRenderRecorder.dispatchFillRect(
         }
         is GPUMaterialDescriptor.BlendShader -> {
             if (material.wgslCombined.isNotBlank()) {
-                val imageChild = when {
-                    material.dst is GPUMaterialDescriptor.ImageDraw -> material.dst as GPUMaterialDescriptor.ImageDraw
-                    material.src is GPUMaterialDescriptor.ImageDraw -> material.src as GPUMaterialDescriptor.ImageDraw
-                    else -> null
-                }
+                val destination = material.dst
+                val imageChild =
+                    if (destination is GPUMaterialDescriptor.ImageDraw) {
+                        destination
+                    } else {
+                        material.src as? GPUMaterialDescriptor.ImageDraw
+                    }
                 if (imageChild != null && imageChild.rgbaPixels.isNotEmpty()) {
                     textureDimensionsRefusalReasonOrNull(imageChild.imageWidth, imageChild.imageHeight)?.let { reason ->
                         refuse(reason)
