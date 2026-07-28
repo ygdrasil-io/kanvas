@@ -297,7 +297,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
-    fun `direct affine atlas has prepared route pixels and closed product gate evidence`() {
+    fun `direct affine atlas executes exact integral scissor and keeps the product gate closed`() {
         val atlas = image(
             width = GPUPreparedImageTestFixtures.atlas4x4Width,
             height = GPUPreparedImageTestFixtures.atlas4x4Height,
@@ -321,7 +321,10 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 blendMode = BlendMode.SRC,
                 paint = Paint.fill(Color.WHITE),
                 transform = Matrix33.identity(),
-                clip = ClipStack.WideOpen,
+                clip = ClipStack.DeviceRect(
+                    rect = Rect.fromLTRB(3f, 2f, 11f, 4f),
+                    antiAlias = false,
+                ),
             ),
         )
         val inventory = GPUFramePathApiInventory.plan(
@@ -361,9 +364,93 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             execution.toString(),
         )
 
+        assertPixel(result.rgba, 16, 2, 3, listOf(0, 0, 0, 0))
         assertPixel(result.rgba, 16, 3, 3, listOf(0, 0, 255, 255))
-        assertPixel(result.rgba, 16, 11, 3, listOf(255, 0, 0, 255))
+        assertPixel(result.rgba, 16, 10, 3, listOf(255, 0, 0, 255))
+        assertPixel(result.rgba, 16, 11, 3, listOf(0, 0, 0, 0))
         assertPixel(result.rgba, 16, 13, 13, listOf(0, 255, 0, 255))
+        assertEquals("prepared.surface.direct", result.evidence.routeMarker.stableLabel)
+        assertEquals(1L, result.evidence.submits)
+        assertEquals(0, result.evidence.activeNativePayloads)
+    }
+
+    @Test
+    fun `direct A8 atlas executes all five source modes with zero half and full coverage`() {
+        val atlas = image(
+            width = GPUPreparedImageTestFixtures.a8_3x1Width,
+            height = GPUPreparedImageTestFixtures.a8_3x1Height,
+            colorType = GPUPreparedImageTestFixtures.a8_3x1ColorType,
+            sourceId = "native-a8-atlas-modes",
+            pixels = GPUPreparedImageTestFixtures.a8_3x1Bytes,
+        )
+        val modes = listOf(
+            BlendMode.SRC,
+            BlendMode.DST,
+            BlendMode.SRC_OVER,
+            BlendMode.PLUS,
+            BlendMode.MODULATE,
+        )
+        val operations = buildList {
+            add(rect(Rect.fromLTRB(6f, 10f, 8f, 12f), Color.GREEN))
+            modes.forEachIndexed { index, mode ->
+                add(
+                    DisplayOp.DrawAtlas(
+                        atlas = atlas,
+                        transforms = listOf(Matrix33.translate(0f, (index * 2).toFloat())),
+                        texRects = listOf(Rect.fromLTRB(0f, 0f, 3f, 1f)),
+                        colors = listOf(Color.fromArgb(128, 255, 0, 0)),
+                        blendMode = mode,
+                        paint = Paint.fill(Color.WHITE),
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.WideOpen,
+                    ),
+                )
+            }
+        }
+        val color = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+        )
+
+        val execution = GPUPreparedSurfaceFrameExecutor(
+            GPUPreparedSurfaceNativeBackendPortFactory,
+        ).execute(
+            GPUPreparedSurfaceExecutionRequest(
+                candidate = GPUPreparedSurfaceEligibility.Candidate(
+                    operations = operations,
+                    config = RenderConfig.DEFAULT,
+                    color = color,
+                ),
+                width = 8,
+                height = 12,
+            ),
+        )
+        val result = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            execution,
+            execution.toString(),
+        )
+        val halfCoverage = listOf(
+            listOf(137, 0, 0, 64),
+            listOf(188, 188, 188, 128),
+            listOf(188, 137, 137, 128),
+            listOf(188, 188, 188, 128),
+            listOf(137, 0, 0, 64),
+        )
+        val fullCoverage = listOf(
+            listOf(188, 0, 0, 128),
+            listOf(255, 255, 255, 255),
+            listOf(255, 188, 188, 255),
+            listOf(255, 255, 255, 255),
+            listOf(188, 0, 0, 128),
+        )
+
+        modes.indices.forEach { index ->
+            val y = index * 2
+            assertPixel(result.rgba, 8, 0, y, listOf(0, 0, 0, 0))
+            assertPixelWithinOne(result.rgba, 8, 1, y, halfCoverage[index])
+            assertPixelWithinOne(result.rgba, 8, 2, y, fullCoverage[index])
+        }
+        assertPixel(result.rgba, 8, 7, 11, listOf(0, 255, 0, 255))
+        assertEquals("prepared.surface.direct", result.evidence.routeMarker.stableLabel)
         assertEquals(1L, result.evidence.submits)
         assertEquals(0, result.evidence.activeNativePayloads)
     }
@@ -420,6 +507,22 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     ) {
         val offset = (y * width + x) * 4
         assertEquals(expected, (0..3).map { bytes[offset + it].toInt() and 0xff }, "pixel ($x,$y)")
+    }
+
+    private fun assertPixelWithinOne(
+        bytes: ByteArray,
+        width: Int,
+        x: Int,
+        y: Int,
+        expected: List<Int>,
+    ) {
+        val offset = (y * width + x) * 4
+        val actual = bytes.copyOfRange(offset, offset + 4)
+        val expectedBytes = expected.map(Int::toByte).toByteArray()
+        assertTrue(
+            GPUPreparedImagePixelOracle.maxChannelDelta(actual, expectedBytes) <= 1,
+            "pixel ($x,$y) expected=$expected actual=${actual.map { it.toInt() and 0xff }}",
+        )
     }
 
     private class StaticDisplayListBuffer(

@@ -1,9 +1,14 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.SCISSOR_NATIVE
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
@@ -81,6 +86,10 @@ internal object GPUPreparedAtlasLowerer {
                 )
             }
         }
+        val clipPlans = when (val classified = operation.classifyPreparedAtlasClip(context)) {
+            is PreparedAtlasClipClassification.Ready -> classified
+            is PreparedAtlasClipClassification.Refused -> return classified.refusal
+        }
 
         val artifact = when (val prepared = GPUPreparedSurfaceImageSource.prepare(operation.atlas)) {
             is GPUPreparedImageArtifactResult.Ready -> prepared.artifact
@@ -124,6 +133,7 @@ internal object GPUPreparedAtlasLowerer {
                     temporary += lowered.command.withAtlasFacts(
                         atlasColor = atlasColor,
                         atlasSourceBlend = atlasSourceBlend.takeIf { atlasColor != null },
+                        clipPlans = clipPlans,
                     )
                 }
             }
@@ -306,12 +316,19 @@ internal object GPUPreparedAtlasLowerer {
     private fun GPUFramePathVisualCommand.withAtlasFacts(
         atlasColor: List<Float>?,
         atlasSourceBlend: GPUPreparedAtlasSourceBlend?,
+        clipPlans: PreparedAtlasClipClassification.Ready,
     ): GPUFramePathVisualCommand {
         val prepared = requireNotNull(preparedImage)
         return copy(
             normalized = (normalized as NormalizedDrawCommand.DrawImageRect).copy(
                 source = normalized.source.copy(operation = "drawAtlas"),
+                clip = normalized.clip.copy(
+                    coveragePlan = clipPlans.coverage,
+                    executionPlan = clipPlans.execution,
+                ),
             ),
+            clipCoverage = clipPlans.coverage,
+            clipExecutionPlan = clipPlans.execution,
             preparedImage = prepared.copy(
                 atlasColorPremultipliedRgba = atlasColor,
                 atlasSourceBlend = atlasSourceBlend,
@@ -343,6 +360,68 @@ internal object GPUPreparedAtlasLowerer {
         b * a,
         a,
     )
+
+    private fun DisplayOp.DrawAtlas.classifyPreparedAtlasClip(
+        context: GPUPreparedImageLoweringContext,
+    ): PreparedAtlasClipClassification {
+        if (clip == ClipStack.WideOpen) {
+            return PreparedAtlasClipClassification.Ready(
+                coverage = GPUClipCoveragePlan.NoClip,
+                execution = GPUClipExecutionPlan.NoClip,
+            )
+        }
+        if (clip is ClipStack.Complex) {
+            return unsupportedPreparedAtlasClip("unsupported_clip_plan")
+        }
+        val request = clip.toGPUClipFacts(context.target).coverageRequest
+            ?: return unsupportedPreparedAtlasClip("missing_clip_request")
+        val maxTextureDimension2D = context.capabilities.limits?.maxTextureDimension2D
+            ?: maxOf(context.target.width, context.target.height).toLong()
+        val coverage = GPUClipCoveragePlanner.plan(
+            request = request,
+            config = context.config,
+            maxTextureDimension2D = maxTextureDimension2D.coerceAtMost(Int.MAX_VALUE.toLong())
+                .toInt(),
+        )
+        if (coverage !is GPUClipCoveragePlan.Scissor ||
+            !context.capabilities.supportsPreparedAtlasScissor()
+        ) {
+            return unsupportedPreparedAtlasClip("unsupported_clip_plan")
+        }
+        val left = coverage.bounds.left.toInt().coerceIn(0, context.target.width)
+        val top = coverage.bounds.top.toInt().coerceIn(0, context.target.height)
+        val right = coverage.bounds.right.toInt().coerceIn(0, context.target.width)
+        val bottom = coverage.bounds.bottom.toInt().coerceIn(0, context.target.height)
+        if (right <= left || bottom <= top) {
+            return unsupportedPreparedAtlasClip("empty_scissor")
+        }
+        return PreparedAtlasClipClassification.Ready(
+            coverage = coverage,
+            execution = GPUClipExecutionPlan.ScissorOnly(
+                GPUPixelBounds(left, top, right, bottom),
+            ),
+        )
+    }
+
+    private fun DisplayOp.DrawAtlas.unsupportedPreparedAtlasClip(
+        reason: String,
+    ): PreparedAtlasClipClassification.Refused =
+        PreparedAtlasClipClassification.Refused(
+            refused(
+                code = "unsupported.surface.prepared.image-clip",
+                spriteIndex = null,
+                reason = reason,
+            ),
+        )
+
+    private fun org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+        .supportsPreparedAtlasScissor(): Boolean =
+        knownUnsupportedFacts.none { fact -> fact.name == SCISSOR_NATIVE } &&
+            facts.any { fact ->
+                fact.name == SCISSOR_NATIVE &&
+                    fact.value == "supported" &&
+                    fact.affectsValidity
+            }
 
     private fun Rect.isFiniteRect(): Boolean =
         left.isFinite() && top.isFinite() && right.isFinite() && bottom.isFinite()
@@ -377,6 +456,17 @@ internal object GPUPreparedAtlasLowerer {
         spriteIndex = spriteIndex,
         facts = mapOf("reason" to reason) + extraFacts,
     )
+}
+
+private sealed interface PreparedAtlasClipClassification {
+    data class Ready(
+        val coverage: GPUClipCoveragePlan,
+        val execution: GPUClipExecutionPlan,
+    ) : PreparedAtlasClipClassification
+
+    data class Refused(
+        val refusal: GPUPreparedAtlasLowering.Refused,
+    ) : PreparedAtlasClipClassification
 }
 
 private sealed interface ResolvedAtlasPaint {

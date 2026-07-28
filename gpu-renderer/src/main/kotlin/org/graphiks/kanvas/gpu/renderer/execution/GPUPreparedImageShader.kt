@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedAtlasSourceBlend
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -24,6 +25,17 @@ internal data class GPUPreparedImageBindingLayoutContract(
     val textureBinding: Int,
     val samplerBinding: Int,
 )
+
+internal sealed interface GPUPreparedImageShaderValidationResult {
+    data class Ready(
+        val bindingLayout: GPUPreparedImageBindingLayoutContract,
+    ) : GPUPreparedImageShaderValidationResult
+
+    data class Refused(
+        val code: String,
+        val facts: Map<String, String>,
+    ) : GPUPreparedImageShaderValidationResult
+}
 
 internal data class GPUPreparedImageUniformInput(
     val positions: List<Pair<Float, Float>>,
@@ -94,17 +106,23 @@ internal fun preparedImageA8AtlasOracle(
     require(coverage.isFinite() && coverage in 0f..1f)
     require(tintPremultipliedRgba.isPremultipliedRgba())
     require(atlasColorPremultipliedRgba.isPremultipliedRgba())
-    val source = atlasColorPremultipliedRgba.map { it * coverage }
-    val destination = tintPremultipliedRgba
-    return when (blend) {
-        GPUPreparedAtlasSourceBlend.Src -> source
+    val destination = OPAQUE_WHITE_RGBA
+    val combined = when (blend) {
+        GPUPreparedAtlasSourceBlend.Src -> atlasColorPremultipliedRgba
         GPUPreparedAtlasSourceBlend.Dst -> destination
         GPUPreparedAtlasSourceBlend.SrcOver ->
-            source.zip(destination).map { (src, dst) -> src + dst * (1f - source[3]) }
+            atlasColorPremultipliedRgba.zip(destination).map { (src, dst) ->
+                src + dst * (1f - atlasColorPremultipliedRgba[3])
+            }
         GPUPreparedAtlasSourceBlend.Plus ->
-            source.zip(destination).map { (src, dst) -> (src + dst).coerceAtMost(1f) }
+            atlasColorPremultipliedRgba.zip(destination).map { (src, dst) ->
+                (src + dst).coerceAtMost(1f)
+            }
         GPUPreparedAtlasSourceBlend.Modulate ->
-            source.zip(destination).map { (src, dst) -> src * dst }
+            atlasColorPremultipliedRgba.zip(destination).map { (src, dst) -> src * dst }
+    }
+    return combined.zip(tintPremultipliedRgba).map { (color, tint) ->
+        color * tint * coverage
     }
 }
 
@@ -120,14 +138,28 @@ internal fun preparedImageShaderContract(): GPUPreparedImageShaderContract {
 internal fun preparedImageBindingLayoutContract(): GPUPreparedImageBindingLayoutContract =
     PREPARED_IMAGE_BINDING_LAYOUT_CONTRACT
 
-private val PREPARED_IMAGE_BINDING_LAYOUT_CONTRACT: GPUPreparedImageBindingLayoutContract by lazy {
-    val parsed = KanvasWGSLValidator().parse(GPU_PREPARED_IMAGE_WGSL)
-    require(parsed.syntaxErrors.isEmpty()) {
-        "Prepared-image WGSL parser validation failed: ${parsed.syntaxErrors.joinToString()}"
+internal fun validatePreparedImageShader(
+    source: String,
+): GPUPreparedImageShaderValidationResult {
+    fun refused(reason: String): GPUPreparedImageShaderValidationResult.Refused =
+        GPUPreparedImageShaderValidationResult.Refused(
+            code = GPUPreparedImageRefusalCodes.WGSL_VALIDATION,
+            facts = mapOf(
+                "boundary" to "wgsl-validation",
+                "reason" to reason,
+            ),
+        )
+
+    val parsed = runCatching { KanvasWGSLValidator().parse(source) }
+        .getOrElse { failure ->
+            return refused("parser_exception:${failure::class.simpleName.orEmpty()}")
+        }
+    if (parsed.syntaxErrors.isNotEmpty()) {
+        return refused("syntax_errors:${parsed.syntaxErrors.size}")
     }
-    val reflected = requireNotNull(KanvasWGSLReflectionProvider().reflect(parsed).report) {
-        "Prepared-image WGSL requires parser-backed reflection"
-    }
+    val reflected = runCatching {
+        KanvasWGSLReflectionProvider().reflect(parsed).report
+    }.getOrNull() ?: return refused("reflection_unavailable")
     val expected = listOf(
         Triple(
             GPUPreparedImageBindingLayoutTopology.GROUP,
@@ -145,29 +177,41 @@ private val PREPARED_IMAGE_BINDING_LAYOUT_CONTRACT: GPUPreparedImageBindingLayou
             "sampler",
         ),
     )
-    require(reflected.bindings.map { Triple(it.group, it.binding, it.resourceKind) } == expected) {
-        "Prepared-image WGSL reflected bindings do not match the closed group-0 ABI"
+    if (reflected.bindings.map { Triple(it.group, it.binding, it.resourceKind) } != expected) {
+        return refused("binding_layout")
     }
     val uniformMinBindingSize =
-        requireNotNull(reflected.bindings.first().minBindingSize).toLong()
-    require(
-        uniformMinBindingSize ==
-            GPUPreparedImageBindingLayoutTopology.UNIFORM_MIN_BINDING_SIZE_BYTES.toLong(),
+        reflected.bindings.first().minBindingSize?.toLong()
+            ?: return refused("uniform_size_missing")
+    if (
+        uniformMinBindingSize !=
+        GPUPreparedImageBindingLayoutTopology.UNIFORM_MIN_BINDING_SIZE_BYTES.toLong()
     ) {
-        "Prepared-image WGSL reflected uniform size does not match ABI112"
+        return refused("uniform_size")
     }
     val bindingDump = reflected.bindings.joinToString(";") {
         "${it.group}:${it.binding}:${it.name}:${it.resourceKind}:${it.minBindingSize ?: 0}"
     }
-    return@lazy GPUPreparedImageBindingLayoutContract(
-        identity = GPUPreparedImageBindingLayoutTopology.IDENTITY,
-        reflectedBindingsHash = sha256(bindingDump.encodeToByteArray()),
-        uniformMinBindingSize = uniformMinBindingSize,
-        group = GPUPreparedImageBindingLayoutTopology.GROUP,
-        uniformBinding = GPUPreparedImageBindingLayoutTopology.UNIFORM_BINDING,
-        textureBinding = GPUPreparedImageBindingLayoutTopology.TEXTURE_BINDING,
-        samplerBinding = GPUPreparedImageBindingLayoutTopology.SAMPLER_BINDING,
+    return GPUPreparedImageShaderValidationResult.Ready(
+        bindingLayout = GPUPreparedImageBindingLayoutContract(
+            identity = GPUPreparedImageBindingLayoutTopology.IDENTITY,
+            reflectedBindingsHash = sha256(bindingDump.encodeToByteArray()),
+            uniformMinBindingSize = uniformMinBindingSize,
+            group = GPUPreparedImageBindingLayoutTopology.GROUP,
+            uniformBinding = GPUPreparedImageBindingLayoutTopology.UNIFORM_BINDING,
+            textureBinding = GPUPreparedImageBindingLayoutTopology.TEXTURE_BINDING,
+            samplerBinding = GPUPreparedImageBindingLayoutTopology.SAMPLER_BINDING,
+        ),
     )
+}
+
+private val PREPARED_IMAGE_BINDING_LAYOUT_CONTRACT: GPUPreparedImageBindingLayoutContract by lazy {
+    when (val validation = validatePreparedImageShader(GPU_PREPARED_IMAGE_WGSL)) {
+        is GPUPreparedImageShaderValidationResult.Ready -> validation.bindingLayout
+        is GPUPreparedImageShaderValidationResult.Refused -> error(
+            "Prepared-image WGSL validation failed: ${validation.facts}",
+        )
+    }
 }
 
 internal val GPU_PREPARED_IMAGE_WGSL: String = """
@@ -231,23 +275,26 @@ internal val GPU_PREPARED_IMAGE_WGSL: String = """
             return vec4<f32>(combined.rgb * image.tint.rgb, combined.a * image.tint.a);
         }
         let coverage = sampled.r;
-        if (image.flags.y == 0u) {
-            return image.tint * coverage;
-        }
-        let source = image.atlas_color * coverage;
+        var combined = vec4<f32>(1.0);
         if (image.flags.y == 1u) {
-            return source;
+            combined = image.atlas_color;
         }
         if (image.flags.y == 2u) {
-            return image.tint;
+            combined = vec4<f32>(1.0);
         }
         if (image.flags.y == 3u) {
-            return atlas_source_over(source, image.tint);
+            combined = atlas_source_over(image.atlas_color, vec4<f32>(1.0));
         }
         if (image.flags.y == 4u) {
-            return min(source + image.tint, vec4<f32>(1.0));
+            combined = min(image.atlas_color + vec4<f32>(1.0), vec4<f32>(1.0));
         }
-        return source * image.tint;
+        if (image.flags.y == 5u) {
+            combined = image.atlas_color * vec4<f32>(1.0);
+        }
+        return vec4<f32>(
+            combined.rgb * image.tint.rgb * coverage,
+            combined.a * image.tint.a * coverage,
+        );
     }
 """.trimIndent()
 
@@ -261,6 +308,7 @@ private val GPUPreparedAtlasSourceBlend.wireCode: Int
     }
 
 private val ZERO_RGBA = listOf(0f, 0f, 0f, 0f)
+private val OPAQUE_WHITE_RGBA = listOf(1f, 1f, 1f, 1f)
 
 private fun List<Pair<Float, Float>>.flattenPairs(): List<Float> =
     flatMap { (first, second) -> listOf(first, second) }

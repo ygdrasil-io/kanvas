@@ -15,20 +15,6 @@ data class ImageRefusalCase(
     val apiFamily: String,
     val input: GPUPreparedImageSourceInput,
     val expectedCode: String,
-    val testableNow: Boolean = true,
-    val futureBoundaries: List<String> = emptyList(),
-    val requiresZeroAlloc: Boolean = true,
-    val requiresNoFallback: Boolean = true,
-)
-
-data class ImageSamplingRefusalCase(
-    val name: String,
-    val apiFamily: String,
-    val expectedCode: String,
-    val samplingFact: String,
-    val futureBoundaries: List<String>,
-    val requiresZeroAlloc: Boolean = true,
-    val requiresNoFallback: Boolean = true,
 )
 
 data class AtlasBlendCase(
@@ -210,121 +196,6 @@ object GPUPreparedImageRefusalMatrix {
         expectedCode = GPUPreparedImageRefusalCodes.UPLOAD_BUDGET_EXCEEDED,
     )
 
-    val futureSourceBoundaryCases: List<ImageSamplingRefusalCase> = listOf(
-        ImageSamplingRefusalCase(
-            name = "cubic sampling",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice",
-            expectedCode = GPUPreparedImageRefusalCodes.SAMPLING_CUBIC,
-            samplingFact = "filterMode=cubic",
-            futureBoundaries = listOf("DrawImageLowerer", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "anisotropic sampling",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice",
-            expectedCode = GPUPreparedImageRefusalCodes.SAMPLING_ANISOTROPIC,
-            samplingFact = "anisotropy>1",
-            futureBoundaries = listOf("SamplerBoundaryPlanner", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "sampler anisotropy < 1",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice",
-            expectedCode = GPUPreparedImageRefusalCodes.SAMPLING_ANISOTROPIC,
-            samplingFact = "anisotropy<1",
-            futureBoundaries = listOf("SamplerBoundaryPlanner", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "repeat tile mode",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice",
-            expectedCode = GPUPreparedImageRefusalCodes.TILE_MODE,
-            samplingFact = "tileModeX=repeat",
-            futureBoundaries = listOf("SamplerBoundaryPlanner", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "mirror tile mode",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice",
-            expectedCode = GPUPreparedImageRefusalCodes.TILE_MODE,
-            samplingFact = "tileModeX=mirror",
-            futureBoundaries = listOf("SamplerBoundaryPlanner", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "decal tile mode",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice",
-            expectedCode = GPUPreparedImageRefusalCodes.TILE_MODE,
-            samplingFact = "tileModeX=decal",
-            futureBoundaries = listOf("SamplerBoundaryPlanner", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "perspective sampling",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice",
-            expectedCode = GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
-            samplingFact = "coordinateTransformClass=perspective",
-            futureBoundaries = listOf("DrawImageLowerer", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "singular transform",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice",
-            expectedCode = GPUPreparedImageRefusalCodes.PERSPECTIVE_SAMPLING,
-            samplingFact = "coordinateTransformClass=singular",
-            futureBoundaries = listOf("DrawImageLowerer", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "mip required",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice",
-            expectedCode = GPUPreparedImageRefusalCodes.MIP_REQUIRED,
-            samplingFact = "mipmapMode=linear",
-            futureBoundaries = listOf("SamplerBoundaryPlanner", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "nine geometry invalid",
-            apiFamily = "drawImageNine",
-            expectedCode = GPUPreparedImageRefusalCodes.NINE_GEOMETRY,
-            samplingFact = "invalid center dimensions",
-            futureBoundaries = listOf("ImageGridLowerer", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "lattice geometry invalid",
-            apiFamily = "drawImageLattice",
-            expectedCode = GPUPreparedImageRefusalCodes.LATTICE_GEOMETRY,
-            samplingFact = "invalid lattice dimensions",
-            futureBoundaries = listOf("ImageGridLowerer", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "atlas array lengths mismatch",
-            apiFamily = "drawAtlas",
-            expectedCode = GPUPreparedImageRefusalCodes.ATLAS_ARRAY_LENGTHS,
-            samplingFact = "transforms.size != texRects.size",
-            futureBoundaries = listOf("AtlasLowerer", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "image texture limit",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice, drawAtlas",
-            expectedCode = GPUPreparedImageRefusalCodes.TEXTURE_LIMIT,
-            samplingFact = "device texture budget exceeded",
-            futureBoundaries = listOf("ResourcePlan", "Surface", "recording", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "native binding incomplete",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice, drawAtlas",
-            expectedCode = GPUPreparedImageRefusalCodes.NATIVE_BINDING,
-            samplingFact = "incomplete bind group layout",
-            futureBoundaries = listOf("Materializer", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "WGSL validation failure",
-            apiFamily = "drawImage, drawImageNine, drawImageLattice, drawAtlas",
-            expectedCode = GPUPreparedImageRefusalCodes.WGSL_VALIDATION,
-            samplingFact = "shader compilation failure",
-            futureBoundaries = listOf("ShaderCache", "preflight"),
-        ),
-        ImageSamplingRefusalCase(
-            name = "atlas geometry invalid",
-            apiFamily = "drawAtlas",
-            expectedCode = GPUPreparedImageRefusalCodes.ATLAS_GEOMETRY,
-            samplingFact = "invalid sprite rect",
-            futureBoundaries = listOf("AtlasLowerer", "Surface", "recording", "preflight"),
-        ),
-    )
-
     val atlasBlendCases: List<AtlasBlendCase> = listOf(
         AtlasBlendCase(BlendMode.SRC, accepted = true, refusalCode = null),
         AtlasBlendCase(BlendMode.DST, accepted = true, refusalCode = null),
@@ -362,8 +233,4 @@ object GPUPreparedImageRefusalMatrix {
         .map { it.blendMode }
         .toSet()
 
-    val allRefusalCodesCurrentlyTestable: Set<String> = sourceRefusalCases
-        .filter { it.testableNow }
-        .map { it.expectedCode }
-        .toSet() + uploadBudgetCase.expectedCode
 }

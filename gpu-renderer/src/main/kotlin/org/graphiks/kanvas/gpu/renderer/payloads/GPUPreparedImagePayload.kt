@@ -78,6 +78,11 @@ internal class GPUPreparedImagePayloadSnapshot(input: GPUPreparedImagePayloadInp
     val scissorBounds: GPUPixelBounds = input.scissorBounds
     val blendPlanIdentity: String = input.blendPlanIdentity
     val frameProvenance: GPUFrameProvenance = input.frameProvenance
+    val artifactUploadFormat: String = artifact.preparedImageUploadFormat()
+    val artifactUploadEncoding: String =
+        artifact.colorUploadEncoding?.name ?: "CoverageLinear"
+    val shaderInterpretation: String =
+        preparedSdrColorContract().shaderInterpretation.value
 
     fun toInput(): GPUPreparedImagePayloadInput = GPUPreparedImagePayloadInput(
         payloadRef = payloadRef,
@@ -129,6 +134,9 @@ internal const val GPU_PREPARED_IMAGE_RENDER_STEP_IDENTITY = "image.draw.texture
 internal val GPU_PREPARED_IMAGE_TARGET_FORMAT: String =
     preparedSdrColorContract().targetTextureFormat.preparedImageFormatLabel()
 internal val GPU_PREPARED_IMAGE_FIXED_INDICES: List<Int> = listOf(0, 1, 2, 0, 2, 3)
+
+internal fun preparedImageScissorAuthority(bounds: GPUPixelBounds): String =
+    "prepared-image-scissor.${bounds.left}.${bounds.top}.${bounds.right}.${bounds.bottom}"
 
 internal fun GPUPreparedImagePayloadInput.pipelineKey(): GPUPreparedImagePipelineKey = GPUPreparedImagePipelineKey(
     destinationBlendState = blendPlanIdentity,

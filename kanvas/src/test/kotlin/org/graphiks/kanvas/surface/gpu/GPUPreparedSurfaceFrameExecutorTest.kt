@@ -542,6 +542,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
     private fun evidence() = GPUPreparedSurfaceExecutionEvidence(
         1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1,
         0, 0, 0, 1, 1, 0, 1,
+        GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
     )
 
     private class FakeBackend(

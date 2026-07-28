@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
@@ -84,6 +85,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.validateCorePrimitiveClipProdu
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveClipStencilPreparedCandidateValidation
 import org.graphiks.kanvas.gpu.renderer.recording.validateCorePrimitiveClipStencilPreparedCandidate
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDepthStencilByteSize
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveCoverageMaskConsumerUniformBytes
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveCoverageMaskProducerUniformBytes
@@ -4117,11 +4119,49 @@ internal class GPUFramePreflighter(
                         "Prepared sampled-image semantics have no executable native materialization route.",
                     )
                 } else {
-                    null
+                    validatePreparedSampledImageScissor(packet, semantic)
                 }
             is GPUDrawSemanticPayload.ColorGlyph ->
                 validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
         }
+    }
+
+    private fun validatePreparedSampledImageScissor(
+        packet: GPUDrawPacket,
+        semantic: GPUDrawSemanticPayload.SampledImage,
+    ): GPUDiagnostic? {
+        val hasScissor = semantic.scissorBounds != semantic.targetBounds
+        val expectedAuthority = if (hasScissor) {
+            preparedImageScissorAuthority(semantic.scissorBounds)
+        } else {
+            null
+        }
+        if (packet.scissorBoundsHash != expectedAuthority) {
+            return diagnostic(
+                "invalid.preflight.prepared_image_scissor_authority",
+                "Prepared sampled-image packet and semantic scissor authorities differ.",
+            )
+        }
+        val exactExecution = packet.clipExecutionPlan
+        if (
+            hasScissor &&
+            (
+                exactExecution !is GPUClipExecutionPlan.ScissorOnly ||
+                    exactExecution.scissor != semantic.scissorBounds
+            )
+        ) {
+            return diagnostic(
+                "invalid.preflight.prepared_image_scissor_execution",
+                "Prepared sampled-image scissor must retain one exact native execution plan.",
+            )
+        }
+        if (!hasScissor && exactExecution != GPUClipExecutionPlan.NoClip) {
+            return diagnostic(
+                "invalid.preflight.prepared_image_scissor_execution",
+                "Wide-open prepared sampled images must retain the no-clip execution plan.",
+            )
+        }
+        return null
     }
 
     private fun hasExactPreparedSurfaceMixedNativeBoundary(

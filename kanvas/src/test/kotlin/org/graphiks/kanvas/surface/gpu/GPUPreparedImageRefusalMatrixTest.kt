@@ -26,19 +26,20 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedImageRefusalMatrixTest {
     @Test
-    fun `stable source table classifies every row before any native allocation`() {
-        val fakeNative = FakeNativeHandleCounter()
+    fun `artifact authority emits the stable code and boundary for every source row`() {
         val rows = GPUPreparedImageRefusalMatrix.sourceRefusalCases +
             GPUPreparedImageRefusalMatrix.uploadBudgetCase
 
@@ -54,15 +55,7 @@ class GPUPreparedImageRefusalMatrixTest {
             )
             assertEquals(row.expectedCode, refused.code, row.name)
             assertEquals("artifact", refused.facts["boundary"], row.name)
-            assertTrue(row.requiresZeroAlloc, row.name)
-            assertTrue(row.requiresNoFallback, row.name)
         }
-
-        assertEquals(0, fakeNative.handles)
-        assertEquals(
-            GPUPreparedImageRefusalMatrix.allRefusalCodesCurrentlyTestable,
-            rows.map(ImageRefusalCase::expectedCode).toSet(),
-        )
     }
 
     @Test
@@ -207,6 +200,48 @@ class GPUPreparedImageRefusalMatrixTest {
                     GPUPreparedImageRefusalCodes.ATLAS_GEOMETRY,
                 ),
             )
+            add(
+                RuntimeRefusalCase(
+                    "nine-geometry",
+                    DisplayOp.DrawImageNine(
+                        image = image,
+                        center = Rect.fromLTRB(3f, 0f, 2f, 2f),
+                        dst = Rect.fromLTRB(0f, 0f, 8f, 8f),
+                        paint = null,
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.WideOpen,
+                    ),
+                    GPUPreparedImageRefusalCodes.NINE_GEOMETRY,
+                ),
+            )
+            add(
+                RuntimeRefusalCase(
+                    "lattice-geometry",
+                    DisplayOp.DrawImageLattice(
+                        image = image,
+                        lattice = Lattice(
+                            xDivs = listOf(image.width + 1),
+                            yDivs = emptyList(),
+                        ),
+                        dst = Rect.fromLTRB(0f, 0f, 8f, 8f),
+                        paint = null,
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.WideOpen,
+                    ),
+                    GPUPreparedImageRefusalCodes.LATTICE_GEOMETRY,
+                ),
+            )
+            add(
+                RuntimeRefusalCase(
+                    "native-binding",
+                    atlas(image).copy(
+                        paint = Paint.fill(Color.WHITE).copy(
+                            blender = Blender.Arithmetic(0f, 1f, 1f, 0f),
+                        ),
+                    ),
+                    GPUPreparedImageRefusalCodes.NATIVE_BINDING,
+                ),
+            )
             GPUPreparedImageRefusalMatrix.atlasBlendCases
                 .filterNot(AtlasBlendCase::accepted)
                 .forEach { blend ->
@@ -242,12 +277,21 @@ class GPUPreparedImageRefusalMatrixTest {
                 ),
                 row.name,
             )
+            val backend = RefusalBackend(capabilities)
+            val execution = assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
+                GPUPreparedSurfaceFrameExecutor(
+                    backendFactory = GPUPreparedSurfaceBackendPortFactory { backend },
+                ).execute(executionRequest(listOf(row.operation))),
+                row.name,
+            )
 
             assertEquals(row.code, inventory.preparedRefusal?.code, "${row.name}:recording")
+            assertTrue(inventory.visualCommands.isEmpty(), "${row.name}:transaction")
             assertEquals(row.code, preflight.diagnostic.code.value, "${row.name}:preflight")
             assertEquals(row.code, surface.diagnostic.code.value, "${row.name}:surface")
+            assertEquals(row.code, execution.diagnostic.code.value, "${row.name}:executor")
             assertEquals(0, inventory.legacyDump.invocationCount, "${row.name}:fallback")
-            assertTrue(inventory.visualCommands.isEmpty(), "${row.name}:transaction")
+            assertEquals(0, backend.prepareCalls, "${row.name}:native session")
         }
     }
 
@@ -347,10 +391,6 @@ class GPUPreparedImageRefusalMatrixTest {
         val operation: DisplayOp,
         val code: String,
     )
-
-    private class FakeNativeHandleCounter {
-        var handles: Int = 0
-    }
 
     private class RefusalBackend(
         override val capabilities: GPUCapabilities,

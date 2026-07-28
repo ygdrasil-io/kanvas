@@ -109,6 +109,48 @@ class GPUPreparedSurfaceFrameBuilderTest {
     }
 
     @Test
+    fun `prepared atlas materializes one exact integral scissor without changing sprite order`() {
+        val atlas = atlasImage("builder-atlas-scissor")
+        val operation = DisplayOp.DrawAtlas(
+            atlas = atlas,
+            transforms = listOf(
+                Matrix33.translate(2f, 3f),
+                Matrix33.translate(12f, 5f),
+            ),
+            texRects = listOf(
+                Rect.fromLTRB(0f, 0f, 2f, 2f),
+                Rect.fromLTRB(2f, 0f, 4f, 2f),
+            ),
+            colors = listOf(Color.RED, Color.GREEN),
+            blendMode = BlendMode.SRC,
+            paint = Paint.fill(Color.WHITE),
+            transform = Matrix33.identity(),
+            clip = ClipStack.DeviceRect(
+                rect = Rect.fromLTRB(4f, 6f, 14f, 15f),
+                antiAlias = false,
+            ),
+        )
+
+        val build = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(imageRequest(listOf(operation))),
+        )
+        val packets = build.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+        val semantics = packets.map { packet ->
+            assertIs<GPUDrawSemanticPayload.SampledImage>(packet.semanticPayload)
+        }
+
+        assertEquals(listOf(0, 1), packets.map(GPUDrawPacket::commandIdValue))
+        assertEquals(2, build.visualOperationCount)
+        assertEquals(1, packets.map(GPUDrawPacket::scissorBoundsHash).toSet().size)
+        assertTrue(packets.all { it.scissorBoundsHash != null })
+        assertEquals(
+            listOf(GPUPixelBounds(4, 6, 14, 15), GPUPixelBounds(4, 6, 14, 15)),
+            semantics.map(GPUDrawSemanticPayload.SampledImage::scissorBounds),
+        )
+    }
+
+    @Test
     fun `prepared image nine expands to nine ordered packets with one artifact upload`() {
         val image = imageNine("builder-nine")
         val operation = DisplayOp.DrawImageNine(

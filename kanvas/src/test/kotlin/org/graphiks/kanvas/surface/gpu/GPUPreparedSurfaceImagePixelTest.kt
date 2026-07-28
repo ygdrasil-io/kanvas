@@ -4,7 +4,6 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -157,11 +156,6 @@ class GPUPreparedSurfaceImagePixelTest {
 
         assertEquals(null, inventory.preparedRefusal)
         assertEquals(0, inventory.legacyDump.invocationCount)
-        assertEquals(
-            "prepared.surface.image.direct",
-            preparedRouteMarker(inventory),
-        )
-        assertNotEquals("legacy.surface.prepared.family.images", preparedRouteMarker(inventory))
         assertTrue(inventory.visualCommands.any { it.normalized.source.operation == "drawAtlas" })
 
         val buildResult = GPUPreparedSurfaceFrameBuilder.build(
@@ -175,12 +169,8 @@ class GPUPreparedSurfaceImagePixelTest {
             .flatMap(GPUTask.Render::drawPackets)
             .mapNotNull(GPUDrawPacket::semanticPayload)
             .filterIsInstance<GPUDrawSemanticPayload.SampledImage>()
-        val dumps = semantics.map(GPUDrawSemanticPayload.SampledImage::stableDumpLine)
-        assertTrue(dumps.any { "artifactUploadFormat=RGBA8UnormSrgb" in it })
-        assertTrue(dumps.any { "artifactUploadFormat=RGBA8Unorm " in it })
-        assertTrue(dumps.all { "targetFormat=RGBA8UnormSrgb" in it })
-        assertTrue(dumps.all { "shaderInterpretation=linear-premul" in it })
-        assertTrue(dumps.any { "artifactUploadEncoding=StraightEncodedSrgb" in it })
+        val colorSemantic = semantics.first { !it.artifact.alphaOnly }
+        val coverageSemantic = semantics.first { it.artifact.alphaOnly }
 
         val color = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
             RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
@@ -202,6 +192,11 @@ class GPUPreparedSurfaceImagePixelTest {
             execution,
             execution.toString(),
         )
+        assertEquals(
+            "prepared.surface.direct",
+            result.evidence.routeMarker.stableLabel,
+        )
+        assertTrue(result.evidence.routeMarker.stableLabel != "legacy.surface.prepared.family.images")
 
         assertPixelExact(result.rgba, 64, 0, 0, listOf(188, 0, 0, 128))
         assertPixelExact(result.rgba, 64, 3, 0, listOf(255, 0, 0, 255))
@@ -224,24 +219,26 @@ class GPUPreparedSurfaceImagePixelTest {
         assertPixelExact(result.rgba, 64, 46, 5, listOf(255, 0, 0, 255))
         assertPixelExact(result.rgba, 64, 43, 9, listOf(0, 255, 0, 255))
         assertPixelExact(result.rgba, 64, 46, 9, listOf(255, 255, 255, 255))
-        assertEquals(1L, result.evidence.submits)
-        assertEquals(0, result.evidence.activeNativePayloads)
-        assertEquals(0, result.evidence.outputOwnedNativePayloads)
-        assertEquals(0, result.evidence.quarantinedNativePayloads)
-    }
-
-    @Test
-    fun `pixel evidence publishes the closed SDR contract and one LSB oracle limit`() {
-        val dump = listOf(
-            "source.color=RGBA8UnormSrgb",
-            "source.coverage=RGBA8Unorm",
-            "source.colorUploadEncoding=StraightEncodedSrgb",
-            "target=RGBA8UnormSrgb",
-            "shaderInterpretation=linear-premul",
-            "attachmentSrgbConversion=true",
-            "oracleMaxChannelDelta<=1",
+        val linearExpected =
+            byteArrayOf(188.toByte(), 188.toByte(), 188.toByte(), 255.toByte())
+        val linearOffset = (10 * 4)
+        val oracleMaxChannelDelta = GPUPreparedImagePixelOracle.maxChannelDelta(
+            result.rgba.copyOfRange(linearOffset, linearOffset + 4),
+            linearExpected,
+        )
+        val colorContractDiagnostic = build.taskList.diagnostics.single {
+            it.code.value == "info.recording.prepared_image_color_contract"
+        }
+        val actualSdrDump = listOf(
+            "source.color=${colorSemantic.artifactUploadFormat}",
+            "source.coverage=${coverageSemantic.artifactUploadFormat}",
+            "source.colorUploadEncoding=${colorSemantic.artifactUploadEncoding}",
+            "target=${colorSemantic.pipelineKey.targetFormat}",
+            "shaderInterpretation=${colorSemantic.shaderInterpretation}",
+            "attachmentSrgbConversion=" +
+                colorContractDiagnostic.facts.getValue("image.attachment.srgbConversion"),
+            "oracleMaxChannelDelta=$oracleMaxChannelDelta limit<=1",
         ).joinToString(separator = "\n")
-
         assertEquals(
             """
             source.color=RGBA8UnormSrgb
@@ -250,21 +247,15 @@ class GPUPreparedSurfaceImagePixelTest {
             target=RGBA8UnormSrgb
             shaderInterpretation=linear-premul
             attachmentSrgbConversion=true
-            oracleMaxChannelDelta<=1
+            oracleMaxChannelDelta=0 limit<=1
             """.trimIndent(),
-            dump,
+            actualSdrDump,
         )
+        assertEquals(1L, result.evidence.submits)
+        assertEquals(0, result.evidence.activeNativePayloads)
+        assertEquals(0, result.evidence.outputOwnedNativePayloads)
+        assertEquals(0, result.evidence.quarantinedNativePayloads)
     }
-
-    private fun preparedRouteMarker(inventory: GPUFramePathInventoryPlan): String =
-        if (inventory.preparedRefusal == null &&
-            inventory.legacyDump.invocationCount == 0 &&
-            inventory.visualCommands.isNotEmpty()
-        ) {
-            "prepared.surface.image.direct"
-        } else {
-            "legacy.surface.prepared.family.images"
-        }
 
     private fun buildRequest(
         operations: List<DisplayOp>,

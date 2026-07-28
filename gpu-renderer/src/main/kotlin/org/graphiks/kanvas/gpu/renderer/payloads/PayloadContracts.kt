@@ -1126,6 +1126,9 @@ sealed interface GPUDrawSemanticPayload {
         val blendPlanIdentity = snapshot.blendPlanIdentity
         val frameProvenance = snapshot.frameProvenance
         val pipelineKey: GPUPreparedImagePipelineKey = snapshot.toInput().pipelineKey()
+        val artifactUploadFormat: String = snapshot.artifactUploadFormat
+        val artifactUploadEncoding: String = snapshot.artifactUploadEncoding
+        val shaderInterpretation: String = snapshot.shaderInterpretation
         val canonicalHash: String = snapshot.toInput().canonicalHash()
 
         fun stableDumpLine(): String = snapshot.toInput().stableDumpLine(canonicalHash)

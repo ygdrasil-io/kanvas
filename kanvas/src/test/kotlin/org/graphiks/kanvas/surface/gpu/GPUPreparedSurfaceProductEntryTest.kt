@@ -277,6 +277,7 @@ class GPUPreparedSurfaceProductEntryTest {
             retentionCompletions = 1,
             retentionQuarantines = 0,
             distinctRetentionTickets = 1,
+            routeMarker = GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
         )
     }
 }

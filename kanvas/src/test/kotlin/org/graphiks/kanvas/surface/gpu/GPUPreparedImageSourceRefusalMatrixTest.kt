@@ -13,15 +13,14 @@ import kotlin.test.assertTrue
 class GPUPreparedImageSourceRefusalMatrixTest {
 
     @Test
-    fun `every testable source refusal case produces its exact stable code`() {
-        for (case in GPUPreparedImageRefusalMatrix.sourceRefusalCases.filter { it.testableNow }) {
+    fun `every source refusal case produces its exact stable code`() {
+        for (case in GPUPreparedImageRefusalMatrix.sourceRefusalCases) {
             val result = GPUPreparedImageArtifactFactory.prepare(case.input)
 
-            assertIs<GPUPreparedImageArtifactResult.Refused>(
+            val refused = assertIs<GPUPreparedImageArtifactResult.Refused>(
                 result,
                 "case ${case.name}: expected Refused, got ${result::class.simpleName}",
             )
-            val refused = result as GPUPreparedImageArtifactResult.Refused
 
             assertEquals(
                 case.expectedCode,
@@ -33,7 +32,7 @@ class GPUPreparedImageSourceRefusalMatrixTest {
     }
 
     @Test
-    fun `upload budget exceeded case refuses before allocation`() {
+    fun `upload budget exceeded case emits the canonical artifact refusal`() {
         val case = GPUPreparedImageRefusalMatrix.uploadBudgetCase
         val result = GPUPreparedImageArtifactFactory.prepare(case.input, maxUploadBytes = 0)
 
@@ -95,29 +94,6 @@ class GPUPreparedImageSourceRefusalMatrixTest {
                 "blend mode ${case.blendMode} should be accepted (null refusal)",
             )
         }
-    }
-
-    @Test
-    fun `all 29 refusal codes in GPUPreparedImageRefusalCodes ALL are present in the matrix`() {
-        val covered = GPUPreparedImageRefusalMatrix.sourceRefusalCases
-            .filter { it.testableNow }
-            .map { it.expectedCode }
-            .toMutableSet()
-        covered.add(GPUPreparedImageRefusalMatrix.uploadBudgetCase.expectedCode)
-        covered.addAll(
-            GPUPreparedImageRefusalMatrix.futureSourceBoundaryCases.map { it.expectedCode },
-        )
-        covered.addAll(
-            GPUPreparedImageRefusalMatrix.atlasBlendCases
-                .filter { !it.accepted }
-                .mapNotNull { it.refusalCode },
-        )
-
-        assertEquals(
-            GPUPreparedImageRefusalCodes.ALL,
-            covered,
-            "matrix must cover every refusal code in GPUPreparedImageRefusalCodes.ALL",
-        )
     }
 
     @Test

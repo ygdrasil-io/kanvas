@@ -7,13 +7,17 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
-import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.SCISSOR_NATIVE
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -24,7 +28,6 @@ import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.Paint
-import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -284,14 +287,9 @@ class GPUPreparedAtlasLowererTest {
 
     @Test
     fun `sprite color paint alpha clip destination blend and order are each applied once`() {
-        val clip = ClipStack.Complex(
-            listOf(
-                ClipStackOp.RectOp(
-                    Rect.fromLTRB(2f, 3f, 31f, 37f),
-                    ClipOp.INTERSECT,
-                    false,
-                ),
-            ),
+        val clip = ClipStack.DeviceRect(
+            rect = Rect.fromLTRB(2f, 3f, 31f, 37f),
+            antiAlias = false,
         )
         val paint = Paint.fill(Color.fromArgb(128, 255, 255, 255)).copy(
             blendMode = BlendMode.PLUS,
@@ -331,7 +329,49 @@ class GPUPreparedAtlasLowererTest {
         )
         assertEquals(GPUPreparedAtlasSourceBlend.Modulate, prepared.atlasSourceBlend)
         assertEquals(command.clip, visual.normalized.clip)
-        assertTrue(command.clip.coverageRequest != null)
+        assertEquals(
+            GPUClipCoveragePlan.Scissor(
+                org.graphiks.kanvas.gpu.renderer.clips.GPUBounds(2f, 3f, 31f, 37f),
+            ),
+            visual.clipCoverage,
+        )
+        assertEquals(
+            GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(2, 3, 31, 37)),
+            visual.clipExecutionPlan,
+        )
+        assertEquals(visual.clipCoverage, command.clip.coveragePlan)
+        assertEquals(visual.clipExecutionPlan, command.clip.executionPlan)
+    }
+
+    @Test
+    fun `antialiased and complex atlas clips refuse the whole logical operation`() {
+        val invalidClips = listOf(
+            ClipStack.DeviceRect(
+                rect = Rect.fromLTRB(2f, 3f, 31f, 37f),
+                antiAlias = true,
+            ),
+            ClipStack.Complex(emptyList()),
+        )
+
+        invalidClips.forEach { clip ->
+            val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
+                GPUPreparedAtlasLowerer.lower(
+                    atlasOperation(
+                        transforms = listOf(Matrix33.identity(), Matrix33.translate(8f, 0f)),
+                        texRects = listOf(quadrant(0, 0), quadrant(1, 0)),
+                        colors = listOf(Color.RED, Color.GREEN),
+                        clip = clip,
+                    ),
+                    11,
+                    19,
+                    context(),
+                ),
+            )
+
+            assertEquals("unsupported.surface.prepared.image-clip", refused.code)
+            assertEquals(null, refused.spriteIndex)
+            assertEquals("unsupported_clip_plan", refused.facts["reason"])
+        }
     }
 
     @Test
@@ -406,7 +446,15 @@ class GPUPreparedAtlasLowererTest {
                 adapterName = "mock",
                 deviceName = "mock-device",
             ),
-            facts = emptyList(),
+            facts = listOf(
+                GPUCapabilityFact(
+                    name = SCISSOR_NATIVE,
+                    source = "test",
+                    value = "supported",
+                    affectsValidity = true,
+                    evidenceLabel = "test:$SCISSOR_NATIVE",
+                ),
+            ),
             knownUnsupportedFacts = emptyList(),
             snapshotId = "task-9-atlas-lowerer",
             limits = GPULimits(

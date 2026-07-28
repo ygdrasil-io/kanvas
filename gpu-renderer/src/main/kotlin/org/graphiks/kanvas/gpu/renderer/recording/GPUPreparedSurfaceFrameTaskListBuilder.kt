@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
+import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
@@ -858,13 +859,38 @@ private fun GPUDrawPacket.withSemantic(
     resourceSlot = resourceSlot,
     semanticPayload = semantic,
     vertexSourceLabel = vertexSourceLabel,
-    scissorBoundsHash = scissorBoundsHash,
+    scissorBoundsHash = when (semantic) {
+        is GPUDrawSemanticPayload.SampledImage
+            if semantic.scissorBounds != semantic.targetBounds ->
+            preparedImageScissorAuthority(semantic.scissorBounds)
+        is GPUDrawSemanticPayload.SampledImage -> null
+        else -> scissorBoundsHash
+    },
     targetStateHash = targetStateHash,
     originalPaintOrder = originalPaintOrder,
     resourceGeneration = resourceGeneration,
     frameProvenance = frameProvenance,
-    clipCoveragePlan = clipCoverageOverride,
-    clipExecutionPlan = clipExecutionOverride,
+    clipCoveragePlan = when (semantic) {
+        is GPUDrawSemanticPayload.SampledImage
+            if semantic.scissorBounds != semantic.targetBounds ->
+            GPUClipCoveragePlan.Scissor(
+                org.graphiks.kanvas.gpu.renderer.clips.GPUBounds(
+                    semantic.scissorBounds.left.toFloat(),
+                    semantic.scissorBounds.top.toFloat(),
+                    semantic.scissorBounds.right.toFloat(),
+                    semantic.scissorBounds.bottom.toFloat(),
+                ),
+            )
+        is GPUDrawSemanticPayload.SampledImage -> GPUClipCoveragePlan.NoClip
+        else -> clipCoverageOverride
+    },
+    clipExecutionPlan = when (semantic) {
+        is GPUDrawSemanticPayload.SampledImage
+            if semantic.scissorBounds != semantic.targetBounds ->
+            GPUClipExecutionPlan.ScissorOnly(semantic.scissorBounds)
+        is GPUDrawSemanticPayload.SampledImage -> GPUClipExecutionPlan.NoClip
+        else -> clipExecutionOverride
+    },
     diagnostics = diagnostics,
     clipProducerAuthority = clipProducerAuthority,
 )

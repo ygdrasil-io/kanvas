@@ -35,6 +35,12 @@ internal data class GPUPreparedSurfaceExecutionRequest(
     val height: Int,
 )
 
+internal enum class GPUPreparedSurfaceExecutionRouteMarker(
+    val stableLabel: String,
+) {
+    PreparedSurfaceDirect("prepared.surface.direct"),
+}
+
 internal data class GPUPreparedSurfaceExecutionEvidence(
     val targetCreations: Long,
     val targetCloses: Long,
@@ -56,6 +62,7 @@ internal data class GPUPreparedSurfaceExecutionEvidence(
     val retentionCompletions: Long,
     val retentionQuarantines: Long,
     val distinctRetentionTickets: Int,
+    val routeMarker: GPUPreparedSurfaceExecutionRouteMarker,
 )
 
 internal sealed interface GPUPreparedSurfaceExecutionResult {
@@ -426,6 +433,7 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 retentionCompletions = afterClose.retentionCompletions,
                 retentionQuarantines = afterClose.retentionQuarantines,
                 distinctRetentionTickets = afterClose.distinctRetentionTickets,
+                routeMarker = GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
             )
             check(evidence.frameCoordinatorCreations == 1L)
             check(evidence.encoders == 1L)
