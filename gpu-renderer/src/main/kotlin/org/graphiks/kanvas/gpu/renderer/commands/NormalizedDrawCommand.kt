@@ -279,6 +279,8 @@ data class GPUClipFacts(
                 coordinates.all { coordinate ->
                     coordinate.isFinite() && coordinate.toInt().toFloat() == coordinate
                 } &&
+                    bounds.left >= 0f &&
+                    bounds.top >= 0f &&
                     bounds.right >= bounds.left &&
                     bounds.bottom >= bounds.top
             val pixelBounds = if (hasExactPixelBounds) {

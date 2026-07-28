@@ -13,6 +13,8 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
@@ -35,6 +37,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPathFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedBlurStyle
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterGraphDescriptor
@@ -49,6 +52,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_CAPABILITY
 import org.graphiks.kanvas.gpu.renderer.payloads.CORE_PRIMITIVE_AFFINE_FILL_RECT_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectRouteAuthority
+import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.sealedDeviceGeometryInput
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSamplingPlan
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
@@ -115,6 +119,66 @@ class FirstRoutePlannerTest {
             GPUPreparedImageRefusalCodes.PIXELS_MISSING,
             refusal(base.copy(pixelsProvenance = "")),
         )
+    }
+
+    @Test
+    fun `draw image device scissor is total clamped and typed for invalid bounds`() {
+        val target = GPUTargetFacts(64, 64, "rgba8unorm")
+        fun command(bounds: GPUBounds) = GPUDrawImageRectCommandBuilder.build(
+            commandId = GPUDrawCommandID(73),
+            imageSourceId = IMAGE_DRAW_SOURCE_ID,
+            src = GPURect(0f, 0f, 2f, 2f),
+            dst = GPURect(2f, 3f, 18f, 21f),
+            target = target,
+            material = GPUMaterialDescriptor.ImageDraw(IMAGE_DRAW_SOURCE_ID, 2, 2),
+            clip = GPUClipFacts.deviceRect(bounds),
+            pixelsWidth = IMAGE_DRAW_PIXELS_WIDTH,
+            pixelsHeight = IMAGE_DRAW_PIXELS_HEIGHT,
+            pixelsFormat = IMAGE_DRAW_PIXELS_FORMAT,
+            pixelsRowBytes = IMAGE_DRAW_PIXELS_ROW_BYTES,
+            pixelsAlphaType = IMAGE_DRAW_PIXELS_ALPHA,
+            pixelsColorProfileLabel = IMAGE_DRAW_PIXELS_COLOR_PROFILE,
+            pixelsOrientationState = IMAGE_DRAW_PIXELS_ORIENTATION,
+            pixelsGeneration = IMAGE_DRAW_PIXELS_GENERATION,
+            pixelsContentHash = IMAGE_DRAW_PIXELS_CONTENT_HASH,
+            pixelsProvenance = IMAGE_DRAW_PIXELS_PROVENANCE,
+        )
+        val planner = GPUFirstRoutePlanner(firstSliceWithScissorCapabilities())
+        val accepted = listOf(
+            GPUBounds(-4f, 5f, 16f, 17f) to GPUPixelBounds(0, 5, 16, 17),
+            GPUBounds(60f, 5f, 80f, 17f) to GPUPixelBounds(60, 5, 64, 17),
+        )
+
+        accepted.forEach { (bounds, expected) ->
+            val plan = planner.plan(command(bounds))
+            assertIs<GPURouteDecision.Prepared>(plan.routeDecision)
+            val packet = plan.pass.drawPackets.single()
+            assertEquals(preparedImageScissorAuthority(expected), packet.scissorBoundsHash)
+            assertEquals(
+                GPUClipCoveragePlan.Scissor(
+                    GPUBounds(
+                        expected.left.toFloat(),
+                        expected.top.toFloat(),
+                        expected.right.toFloat(),
+                        expected.bottom.toFloat(),
+                    ),
+                ),
+                packet.clipCoveragePlan,
+            )
+            assertEquals(GPUClipExecutionPlan.ScissorOnly(expected), packet.clipExecutionPlan)
+        }
+
+        val refused = listOf(
+            GPUBounds(16f, 5f, 4f, 17f) to "unsupported.clip.scissor_invalid",
+            GPUBounds(4f, 5f, Float.POSITIVE_INFINITY, 17f) to
+                "unsupported.bounds.non_finite",
+            GPUBounds(70f, 5f, 80f, 17f) to "unsupported.clip.scissor_empty",
+        )
+        refused.forEach { (bounds, code) ->
+            val plan = planner.plan(command(bounds))
+            assertEquals(code, assertIs<GPURouteDecision.Refused>(plan.routeDecision).diagnostic.code)
+            assertTrue(plan.pass.drawPackets.isEmpty())
+        }
     }
 
     @Test

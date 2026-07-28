@@ -17,6 +17,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
@@ -148,6 +150,55 @@ class GPUPreparedSurfaceFrameBuilderTest {
             listOf(GPUPixelBounds(4, 6, 14, 15), GPUPixelBounds(4, 6, 14, 15)),
             semantics.map(GPUDrawSemanticPayload.SampledImage::scissorBounds),
         )
+    }
+
+    @Test
+    fun `prepared atlas clamps target scissor and refuses invalid bounds before tasks`() {
+        fun atlasWithClip(rect: Rect) = DisplayOp.DrawAtlas(
+            atlas = atlasImage("builder-atlas-scissor-total"),
+            transforms = listOf(Matrix33.translate(2f, 3f)),
+            texRects = listOf(Rect.fromLTRB(0f, 0f, 2f, 2f)),
+            colors = listOf(Color.RED),
+            blendMode = BlendMode.SRC,
+            paint = Paint.fill(Color.WHITE),
+            transform = Matrix33.identity(),
+            clip = ClipStack.DeviceRect(rect, antiAlias = false),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                imageRequest(listOf(atlasWithClip(Rect.fromLTRB(-4f, 6f, 40f, 30f)))),
+            ),
+        )
+        val packet = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .single()
+        val semantic = assertIs<GPUDrawSemanticPayload.SampledImage>(packet.semanticPayload)
+        assertEquals(GPUPixelBounds(0, 6, 32, 24), semantic.scissorBounds)
+        assertEquals(
+            GPUClipCoveragePlan.Scissor(
+                org.graphiks.kanvas.gpu.renderer.clips.GPUBounds(0f, 6f, 32f, 24f),
+            ),
+            packet.clipCoveragePlan,
+        )
+        assertEquals(
+            GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(0, 6, 32, 24)),
+            packet.clipExecutionPlan,
+        )
+
+        val invalid = listOf(
+            Rect.fromLTRB(16f, 6f, 4f, 15f),
+            Rect.fromLTRB(4f, 6f, Float.POSITIVE_INFINITY, 15f),
+            Rect.fromLTRB(40f, 6f, 50f, 15f),
+        )
+        invalid.forEach { rect ->
+            val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
+                GPUPreparedSurfaceFrameBuilder.build(
+                    imageRequest(listOf(atlasWithClip(rect))),
+                ),
+            )
+            assertEquals("unsupported.surface.prepared.image-clip", refused.diagnostic.code.value)
+        }
     }
 
     @Test

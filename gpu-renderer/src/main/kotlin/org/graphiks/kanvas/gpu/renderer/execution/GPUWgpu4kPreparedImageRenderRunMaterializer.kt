@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import java.security.MessageDigest
 import java.util.IdentityHashMap
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
@@ -108,6 +109,7 @@ internal sealed interface GPUPreparedRenderRunMaterialization {
 internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
     private val sessionCache: GPUWgpu4kPreparedImageSessionCache,
     private val handleFactory: GPUPreparedImageNativeHandleFactory,
+    private val capabilities: GPUCapabilities,
 ) {
     fun materializeAcceptedRun(
         plan: GPUPreparedImageRenderRunPlan,
@@ -120,6 +122,7 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
                 facts = mapOf("boundary" to "native"),
             )
         }
+        preflightResources(plan.resources, actualDeviceGeneration)?.let { return it }
         val pipelineByKey = when (
             val acquired = sessionCache.acquireBatch(
                 plan.packets.map(GPUDrawSemanticPayload.SampledImage::pipelineKey),
@@ -291,6 +294,10 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
         runs: List<GPUPreparedSurfaceImageRenderRunPlan>,
         actualDeviceGeneration: GPUDeviceGenerationID,
     ): GPUPreparedRenderRunMaterialization {
+        preflightResources(
+            imageFrames.map(GPUPreparedSurfaceImageFramePlan::resourcePlan),
+            actualDeviceGeneration,
+        )?.let { return it }
         val pipelineByKey = when (
             val acquired = sessionCache.acquireBatch(
                 runs.flatMap { run ->
@@ -464,6 +471,41 @@ internal class GPUWgpu4kPreparedImageRenderRunMaterializer(
         } catch (failure: Throwable) {
             return failedPreparedImageMaterialization(created, failure)
         }
+    }
+
+    private fun preflightResources(
+        resources: List<GPUImageFrameResourcePlan>,
+        actualDeviceGeneration: GPUDeviceGenerationID,
+    ): GPUPreparedRenderRunMaterialization.Refused? {
+        resources.forEach { resource ->
+            val request = GPUPreparedImageNativePreflightRequest(
+                resourcePlan = resource,
+                artifactKey = resource.artifactKey,
+                capabilities = capabilities,
+                expectedDeviceGeneration = actualDeviceGeneration.value,
+                actualDeviceGeneration = actualDeviceGeneration.value,
+                expectedResourceGeneration = 0L,
+                actualResourceGeneration = 0L,
+                expectedOwner = PREPARED_IMAGE_MATERIALIZER_OWNER,
+                actualOwner = PREPARED_IMAGE_MATERIALIZER_OWNER,
+            )
+            when (val result = GPUPreparedImageNativeResourcePreflighter.preflight(request)) {
+                is GPUPreparedImageNativePreflightResult.Refused -> {
+                    return GPUPreparedRenderRunMaterialization.Refused(
+                        code = result.reasonCode,
+                        message =
+                            "Prepared-image native resource preflight refused before cache or handle allocation.",
+                        facts = result.facts,
+                    )
+                }
+                is GPUPreparedImageNativePreflightResult.Sealed -> Unit
+            }
+        }
+        return null
+    }
+
+    private companion object {
+        const val PREPARED_IMAGE_MATERIALIZER_OWNER = "prepared-image-render-run-materializer"
     }
 }
 

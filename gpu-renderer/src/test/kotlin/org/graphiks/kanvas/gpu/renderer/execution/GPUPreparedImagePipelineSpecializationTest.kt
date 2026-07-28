@@ -38,7 +38,11 @@ class GPUPreparedImagePipelineSpecializationTest {
         val native = MeasuringDevice()
         val cache = GPUWgpu4kPreparedImageSessionCache(native.device, generation)
         val factory = RecordingPreparedImageHandleFactory()
-        val materializer = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+        val materializer = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            factory,
+            preparedImageCapabilities(),
+        )
         val seenPipelines = IdentityHashMap<Any, Boolean>()
         val semanticHashes = linkedSetOf<String>()
         val preChangeKeys = linkedSetOf<PreChangeKey>()

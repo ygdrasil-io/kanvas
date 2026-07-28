@@ -456,7 +456,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
-    fun `direct RGBA atlas applies nontrivial atlas color and paint tint once in all source modes`() {
+    fun `direct RGBA atlas ignores paint RGB and applies paint alpha once in all source modes`() {
         val atlas = image(
             width = 1,
             height = 1,
@@ -471,21 +471,32 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             BlendMode.PLUS,
             BlendMode.MODULATE,
         )
+        val paints = listOf(
+            Paint.fill(Color.fromArgb(192, 128, 64, 160)),
+            Paint.fill(Color.fromArgb(192, 32, 224, 96)),
+        )
         val operations = buildList {
             add(rect(Rect.fromLTRB(2f, 10f, 4f, 12f), Color.GREEN))
             modes.forEachIndexed { index, mode ->
-                add(
-                    DisplayOp.DrawAtlas(
-                        atlas = atlas,
-                        transforms = listOf(Matrix33.translate(0f, (index * 2).toFloat())),
-                        texRects = listOf(Rect.fromLTRB(0f, 0f, 1f, 1f)),
-                        colors = listOf(Color.fromArgb(176, 80, 160, 48)),
-                        blendMode = mode,
-                        paint = Paint.fill(Color.fromArgb(192, 128, 64, 160)),
-                        transform = Matrix33.identity(),
-                        clip = ClipStack.WideOpen,
-                    ),
-                )
+                paints.forEachIndexed { paintIndex, paint ->
+                    add(
+                        DisplayOp.DrawAtlas(
+                            atlas = atlas,
+                            transforms = listOf(
+                                Matrix33.translate(
+                                    paintIndex.toFloat(),
+                                    (index * 2).toFloat(),
+                                ),
+                            ),
+                            texRects = listOf(Rect.fromLTRB(0f, 0f, 1f, 1f)),
+                            colors = listOf(Color.fromArgb(176, 80, 160, 48)),
+                            blendMode = mode,
+                            paint = paint,
+                            transform = Matrix33.identity(),
+                            clip = ClipStack.WideOpen,
+                        ),
+                    )
+                }
             }
         }
         val color = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
@@ -508,15 +519,16 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             ),
         )
         val expected = listOf(
-            listOf(81, 81, 70, 133),
-            listOf(78, 23, 17, 120),
-            listOf(91, 82, 71, 170),
-            listOf(110, 85, 73, 192),
-            listOf(34, 12, 2, 83),
+            listOf(112, 155, 88, 133),
+            listOf(108, 52, 24, 120),
+            listOf(126, 157, 89, 170),
+            listOf(152, 162, 92, 192),
+            listOf(51, 33, 4, 83),
         )
 
         modes.indices.forEach { index ->
             assertPixelWithinOne(result.rgba, 4, 0, index * 2, expected[index])
+            assertPixelWithinOne(result.rgba, 4, 1, index * 2, expected[index])
         }
         assertPixel(result.rgba, 4, 3, 11, listOf(0, 255, 0, 255))
         assertEquals("prepared.surface.direct", result.evidence.routeMarker.stableLabel)

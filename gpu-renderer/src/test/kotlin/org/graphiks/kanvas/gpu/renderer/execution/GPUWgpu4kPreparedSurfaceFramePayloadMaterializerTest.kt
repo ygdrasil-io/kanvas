@@ -146,6 +146,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             corePrimitiveCache = coreCache,
             preparedImageCache = imageCache,
             preparedImageHandleFactory = GPUWgpu4kPreparedImageNativeHandleFactory(native.device),
+            preparedImageCapabilities = preparedImageCapabilities(),
             surfaceBlitCache = surfaceCache,
             corePrimitiveLimits = LIMITS,
         )
@@ -711,6 +712,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             corePrimitiveCache = coreCache,
             preparedImageCache = imageCache,
             preparedImageHandleFactory = selectedImageFactory,
+            preparedImageCapabilities = preparedImageCapabilities(),
             surfaceBlitCache = surfaceCache,
             surfaceTargetResolver = GPUAcquiredSurfaceNativeTargetResolver {
                 if (!surfaceTargetAvailable) {

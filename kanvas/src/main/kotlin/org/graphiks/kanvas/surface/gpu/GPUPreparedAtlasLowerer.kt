@@ -388,6 +388,18 @@ internal object GPUPreparedAtlasLowerer {
         ) {
             return unsupportedPreparedAtlasClip("unsupported_clip_plan")
         }
+        val coordinates = listOf(
+            coverage.bounds.left,
+            coverage.bounds.top,
+            coverage.bounds.right,
+            coverage.bounds.bottom,
+        )
+        if (coordinates.any { !it.isFinite() || it.toInt().toFloat() != it } ||
+            coverage.bounds.right < coverage.bounds.left ||
+            coverage.bounds.bottom < coverage.bounds.top
+        ) {
+            return unsupportedPreparedAtlasClip("invalid_scissor")
+        }
         val left = coverage.bounds.left.toInt().coerceIn(0, context.target.width)
         val top = coverage.bounds.top.toInt().coerceIn(0, context.target.height)
         val right = coverage.bounds.right.toInt().coerceIn(0, context.target.width)
@@ -396,7 +408,14 @@ internal object GPUPreparedAtlasLowerer {
             return unsupportedPreparedAtlasClip("empty_scissor")
         }
         return PreparedAtlasClipClassification.Ready(
-            coverage = coverage,
+            coverage = GPUClipCoveragePlan.Scissor(
+                org.graphiks.kanvas.gpu.renderer.clips.GPUBounds(
+                    left.toFloat(),
+                    top.toFloat(),
+                    right.toFloat(),
+                    bottom.toFloat(),
+                ),
+            ),
             execution = GPUClipExecutionPlan.ScissorOnly(
                 GPUPixelBounds(left, top, right, bottom),
             ),

@@ -344,6 +344,57 @@ class GPUPreparedAtlasLowererTest {
     }
 
     @Test
+    fun `atlas device scissor clamps to target and invalid bounds refuse without escaping`() {
+        val ready = assertIs<GPUPreparedAtlasLowering.Ready>(
+            GPUPreparedAtlasLowerer.lower(
+                atlasOperation(
+                    transforms = listOf(Matrix33.identity()),
+                    texRects = listOf(quadrant(0, 0)),
+                    clip = ClipStack.DeviceRect(
+                        Rect.fromLTRB(-4f, 3f, 70f, 37f),
+                        antiAlias = false,
+                    ),
+                ),
+                0,
+                0,
+                context(),
+            ),
+        )
+        val visual = ready.commands.single()
+        assertEquals(
+            GPUClipCoveragePlan.Scissor(
+                org.graphiks.kanvas.gpu.renderer.clips.GPUBounds(0f, 3f, 64f, 37f),
+            ),
+            visual.clipCoverage,
+        )
+        assertEquals(
+            GPUClipExecutionPlan.ScissorOnly(GPUPixelBounds(0, 3, 64, 37)),
+            visual.clipExecutionPlan,
+        )
+
+        val invalid = listOf(
+            Rect.fromLTRB(16f, 3f, 4f, 37f),
+            Rect.fromLTRB(4f, 3f, Float.POSITIVE_INFINITY, 37f),
+            Rect.fromLTRB(70f, 3f, 80f, 37f),
+        )
+        invalid.forEach { rect ->
+            val refused = assertIs<GPUPreparedAtlasLowering.Refused>(
+                GPUPreparedAtlasLowerer.lower(
+                    atlasOperation(
+                        transforms = listOf(Matrix33.identity()),
+                        texRects = listOf(quadrant(0, 0)),
+                        clip = ClipStack.DeviceRect(rect, antiAlias = false),
+                    ),
+                    0,
+                    0,
+                    context(),
+                ),
+            )
+            assertEquals("unsupported.surface.prepared.image-clip", refused.code)
+        }
+    }
+
+    @Test
     fun `antialiased and complex atlas clips refuse the whole logical operation`() {
         val invalidClips = listOf(
             ClipStack.DeviceRect(

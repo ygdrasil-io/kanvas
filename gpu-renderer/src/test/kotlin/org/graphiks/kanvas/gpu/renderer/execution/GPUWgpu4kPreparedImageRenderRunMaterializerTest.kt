@@ -53,6 +53,46 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
     @Test
+    fun `texture limit refuses through the real materializer before exact factory or device allocation`() {
+        val generation = GPUDeviceGenerationID(171)
+        val nativeDevice = RecordingPreparedImageDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(nativeDevice.device, generation)
+        val factory = RecordingPreparedImageHandleFactory()
+        val artifact = preparedImageArtifact(pixelSeed = 19)
+        val resource = preparedImageResource(artifact, "packet.texture-limit")
+        val capabilities = preparedImageCapabilities().copy(
+            limits = requireNotNull(preparedImageCapabilities().limits).copy(
+                maxTextureDimension2D = 1,
+            ),
+        )
+        val plan = preparedImageRenderRunPlan(
+            sourceScopeIndices = listOf(1, 2),
+            packets = listOf(
+                preparedImageSemantic(
+                    artifact,
+                    GPUPreparedImageSampling.Nearest,
+                    1f,
+                ),
+            ),
+            resources = listOf(resource),
+            uniformAllocations = resource.bindingRequests.map { it.uniformAllocation },
+        )
+
+        val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(
+            GPUWgpu4kPreparedImageRenderRunMaterializer(
+                cache,
+                factory,
+                capabilities,
+            ).materializeAcceptedRun(plan, generation),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.TEXTURE_LIMIT, refused.code)
+        assertEquals(0, factory.handleCreates)
+        assertEquals(0, nativeDevice.handleCreates)
+        cache.close()
+    }
+
+    @Test
     fun `pipeline cache warms once while every equivalent frame recreates its owned image handles`() {
         val generation = GPUDeviceGenerationID(170)
         val nativeDevice = RecordingPreparedImageDevice()
@@ -81,6 +121,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             GPUWgpu4kPreparedImageRenderRunMaterializer(
                 cache,
                 GPUWgpu4kPreparedImageNativeHandleFactory(nativeDevice.device, counters),
+                preparedImageCapabilities(),
             ).materializeAcceptedRun(plan, generation),
         )
         first.ownedResources.single().close()
@@ -90,6 +131,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             GPUWgpu4kPreparedImageRenderRunMaterializer(
                 cache,
                 GPUWgpu4kPreparedImageNativeHandleFactory(nativeDevice.device, counters),
+                preparedImageCapabilities(),
             ).materializeAcceptedRun(plan, generation),
         )
         second.ownedResources.single().close()
@@ -207,7 +249,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             GPUPreparedImageUniformAllocation("packet.nearest.b", 256L, 112L),
             GPUPreparedImageUniformAllocation("packet.linear", 512L, 112L),
         )
-        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            factory,
+            preparedImageCapabilities(),
+        )
             .materializeAcceptedRun(
                 preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2),
@@ -308,7 +354,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             "packet.artifact.second",
         )
 
-        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            factory,
+            preparedImageCapabilities(),
+        )
             .materializeAcceptedRun(
                 preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2, 3),
@@ -354,7 +404,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val artifact = preparedImageArtifact(pixelSeed = 71)
         val resource = preparedImageResource(artifact, "packet.generation-mismatch")
 
-        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            factory,
+            preparedImageCapabilities(),
+        )
             .materializeAcceptedRun(
                 preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2),
@@ -419,7 +473,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             frameIdentity = "frame.atomic-pipeline-refusal",
         )
 
-        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            factory,
+            preparedImageCapabilities(),
+        )
             .materializeAcceptedRun(
                 preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2),
@@ -457,7 +515,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             )
         }
 
-        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            factory,
+            preparedImageCapabilities(),
+        )
             .materializeAcceptedRun(
                 preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2),
@@ -508,7 +570,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         }
         val resource = preparedImageResource(artifact, "packet.foreign-pipeline")
 
-        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            factory,
+            preparedImageCapabilities(),
+        )
             .materializeAcceptedRun(
                 preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2),
@@ -558,6 +624,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
             cache,
             handleFactory,
+            preparedImageCapabilities(),
         ).materializeAcceptedRun(
             preparedImageRenderRunPlan(
                 sourceScopeIndices = listOf(1, 2),
@@ -597,6 +664,7 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
             cache,
             RecordingPreparedImageHandleFactory(),
+            preparedImageCapabilities(),
         ).materializeAcceptedRun(
             GPUPreparedImageRenderRunPlan(
                 sourceScopeIndices = listOf(4, 9),
@@ -693,7 +761,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         )
         val factory = RecordingPreparedImageHandleFactory()
 
-        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            factory,
+            preparedImageCapabilities(),
+        )
             .materializeAcceptedRun(
                 preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2),
@@ -745,7 +817,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         )
         val factory = RecordingPreparedImageHandleFactory()
 
-        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            factory,
+            preparedImageCapabilities(),
+        )
             .materializeAcceptedRun(
                 preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2),
@@ -948,7 +1024,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         )
         val factory = SharingPreparedImageHandleFactory()
         val artifact = preparedImageArtifact(pixelSeed = 81)
-        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(cache, factory)
+        val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+            cache,
+            factory,
+            preparedImageCapabilities(),
+        )
             .materializeAcceptedRun(
                 preparedImageRenderRunPlan(
                     sourceScopeIndices = listOf(1, 2),
@@ -1129,6 +1209,7 @@ private fun assertPreparedImageRefusal(
     val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
         cache,
         RecordingPreparedImageHandleFactory(),
+        preparedImageCapabilities(),
     ).materializeAcceptedRun(plan, GPUDeviceGenerationID(29))
 
     assertEquals(code, assertIs<GPUPreparedRenderRunMaterialization.Refused>(result).code)
@@ -1165,7 +1246,7 @@ private fun preparedImageSemantic(
         ),
     )
 
-private fun preparedImageCapabilities() = GPUCapabilities(
+internal fun preparedImageCapabilities() = GPUCapabilities(
     implementation = GPUImplementationIdentity("GPU", "test", "adapter", "device"),
     facts = emptyList(),
     snapshotId = "task5-materializer",

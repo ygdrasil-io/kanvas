@@ -621,6 +621,35 @@ class GPUPreparedDrawImageLowererTest {
     }
 
     @Test
+    fun `RGBA paint RGB is neutral while equal nontrivial alpha stays exact`() {
+        val image = rgbaImage()
+        val paints = listOf(
+            Paint.fill(Color.fromArgb(192, 128, 64, 160)),
+            Paint.fill(Color.fromArgb(192, 32, 224, 96)),
+        )
+
+        val tints = paints.mapIndexed { index, paint ->
+            val result = assertIs<GPUPreparedDrawImageLowering.Ready>(
+                GPUPreparedDrawImageLowerer.lower(
+                    drawImage(image, paint = paint),
+                    GPUDrawCommandID(index),
+                    index,
+                    GPUFrameProvenance.None,
+                    target(),
+                    RenderConfig.DEFAULT,
+                    capabilities(),
+                ),
+            )
+            result.command.preparedImage!!.tintPremultipliedRgba
+        }
+
+        val alpha = 192f / 255f
+        val expected = listOf(alpha, alpha, alpha, alpha)
+        assertEquals(expected, tints[0])
+        assertEquals(expected, tints[1])
+    }
+
+    @Test
     fun `clip preserved for non-wide-open clip`() {
         val image = rgbaImage()
         val rectPath = org.graphiks.kanvas.geometry.Path().apply {

@@ -6,6 +6,7 @@ import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPUTextureFormat
 import java.util.IdentityHashMap
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
@@ -27,6 +28,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
     private val corePrimitiveCache: GPUWgpu4kCorePrimitiveSessionCache,
     private val preparedImageCache: GPUWgpu4kPreparedImageSessionCache,
     private val preparedImageHandleFactory: GPUPreparedImageNativeHandleFactory,
+    private val preparedImageCapabilities: GPUCapabilities,
     private val surfaceBlitCache: GPUWgpu4kSurfaceBlitSessionCache,
     private val surfaceTargetResolver: GPUAcquiredSurfaceNativeTargetResolver =
         GPUAcquiredSurfaceNativeTargetResolver.Unavailable,
@@ -122,6 +124,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
                     preparedImageCache,
                     preparedImageHandleFactory,
+                    preparedImageCapabilities,
                 ).materializeAcceptedFrame(
                     accepted.imageFrames,
                     imageRuns,

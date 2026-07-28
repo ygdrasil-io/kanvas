@@ -1420,6 +1420,7 @@ private class WgpuBackendSession(
                                 glfw.wgpuContext.device,
                                 preparedImageNativeCounters,
                             ),
+                        preparedImageCapabilities = capabilities,
                         surfaceBlitCache = surfaceBlitCache,
                         surfaceTargetResolver = surfaceTargetResolver,
                         corePrimitiveLimits = backendLimits,

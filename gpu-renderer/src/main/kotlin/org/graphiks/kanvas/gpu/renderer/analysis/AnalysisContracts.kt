@@ -16,6 +16,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterRenderNodePlanner
@@ -1054,8 +1056,8 @@ class GPUFirstRoutePlanner(
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
             frameProvenance = command.source.frameProvenance,
-            clipCoveragePlan = command.clip.coveragePlan,
-            clipExecutionPlan = command.clip.executionPlan,
+            clipCoveragePlan = command.canonicalClipCoveragePlan(),
+            clipExecutionPlan = command.canonicalClipExecutionPlan(),
         )
 
         return GPUFirstRoutePlan(
@@ -1112,8 +1114,8 @@ class GPUFirstRoutePlanner(
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
             frameProvenance = command.source.frameProvenance,
-            clipCoveragePlan = command.clip.coveragePlan,
-            clipExecutionPlan = command.clip.executionPlan,
+            clipCoveragePlan = command.canonicalClipCoveragePlan(),
+            clipExecutionPlan = command.canonicalClipExecutionPlan(),
         )
 
         return GPUFirstRoutePlan(
@@ -1166,7 +1168,7 @@ class GPUFirstRoutePlanner(
 
     /** Returns the canonical DrawImageRect refusal code, or null when analysis may keep a candidate. */
     private fun NormalizedDrawCommand.DrawImageRect.refusalCode(): String? =
-        coordinateRefusalCode() ?: when {
+        coordinateRefusalCode() ?: deviceScissorRefusalCode() ?: when {
             stroke -> "unsupported.stroke.unimplemented"
             src.left.isNaN() || src.top.isNaN() || src.right.isNaN() || src.bottom.isNaN() ->
                 "unsupported.image.src_rect_nan"
@@ -2120,17 +2122,69 @@ private fun NormalizedDrawCommand.DrawImageRect.coordinateRefusalCode(): String?
 /** Returns the scissor bounds hash for DrawImageRect, or null for wide-open clips. */
 private fun NormalizedDrawCommand.DrawImageRect.scissorBoundsHash(): String? =
     when (clip.kind) {
-        GPUClipKind.DeviceRect -> preparedImageScissorAuthority(
-            GPUPixelBounds(
-                clip.bounds.left.toInt(),
-                clip.bounds.top.toInt(),
-                clip.bounds.right.toInt(),
-                clip.bounds.bottom.toInt(),
-            ),
-        )
+        GPUClipKind.DeviceRect -> preparedImageScissorAuthority(requireNotNull(canonicalDeviceScissor()))
         GPUClipKind.WideOpen,
         GPUClipKind.ComplexStack,
         -> null
+    }
+
+/** Returns the target-intersected integral device scissor accepted by DrawImageRect. */
+private fun NormalizedDrawCommand.DrawImageRect.canonicalDeviceScissor(): GPUPixelBounds? {
+    if (clip.kind != GPUClipKind.DeviceRect) return null
+    val values = listOf(clip.bounds.left, clip.bounds.top, clip.bounds.right, clip.bounds.bottom)
+    if (values.any { !it.isFinite() || it.toInt().toFloat() != it } ||
+        clip.bounds.right < clip.bounds.left ||
+        clip.bounds.bottom < clip.bounds.top
+    ) {
+        return null
+    }
+    val left = clip.bounds.left.toInt().coerceIn(0, layer.target.width)
+    val top = clip.bounds.top.toInt().coerceIn(0, layer.target.height)
+    val right = clip.bounds.right.toInt().coerceIn(0, layer.target.width)
+    val bottom = clip.bounds.bottom.toInt().coerceIn(0, layer.target.height)
+    return if (right <= left || bottom <= top) {
+        null
+    } else {
+        GPUPixelBounds(left, top, right, bottom)
+    }
+}
+
+/** Returns a stable refusal for a malformed or target-empty DrawImageRect scissor. */
+private fun NormalizedDrawCommand.DrawImageRect.deviceScissorRefusalCode(): String? {
+    if (clip.kind != GPUClipKind.DeviceRect) return null
+    val values = listOf(clip.bounds.left, clip.bounds.top, clip.bounds.right, clip.bounds.bottom)
+    if (values.any { !it.isFinite() }) return null
+    if (values.any { it.toInt().toFloat() != it } ||
+        clip.bounds.right < clip.bounds.left ||
+        clip.bounds.bottom < clip.bounds.top
+    ) {
+        return "unsupported.clip.scissor_invalid"
+    }
+    return if (canonicalDeviceScissor() == null) "unsupported.clip.scissor_empty" else null
+}
+
+/** Returns target-intersected coverage matching the accepted DrawImageRect scissor authority. */
+private fun NormalizedDrawCommand.DrawImageRect.canonicalClipCoveragePlan(): GPUClipCoveragePlan? =
+    if (clip.kind == GPUClipKind.DeviceRect) {
+        val scissor = requireNotNull(canonicalDeviceScissor())
+        GPUClipCoveragePlan.Scissor(
+            GPUBounds(
+                scissor.left.toFloat(),
+                scissor.top.toFloat(),
+                scissor.right.toFloat(),
+                scissor.bottom.toFloat(),
+            ),
+        )
+    } else {
+        clip.coveragePlan
+    }
+
+/** Returns target-intersected execution matching the accepted DrawImageRect scissor authority. */
+private fun NormalizedDrawCommand.DrawImageRect.canonicalClipExecutionPlan(): GPUClipExecutionPlan? =
+    if (clip.kind == GPUClipKind.DeviceRect) {
+        GPUClipExecutionPlan.ScissorOnly(requireNotNull(canonicalDeviceScissor()))
+    } else {
+        clip.executionPlan
     }
 
 /** Returns a stable target-state hash for DrawImageRect. */
