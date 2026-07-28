@@ -29,6 +29,7 @@ import io.ygdrasil.webgpu.TextureBindingLayout
 import io.ygdrasil.webgpu.VertexState
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
 
 internal data class GPUPreparedImageCachedPipeline(
@@ -80,6 +81,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
     internal val deviceGeneration: GPUDeviceGenerationID,
     private val counterRecorder: GPUPreparedImageNativeCounterRecorder =
         GPUPreparedImageNativeCounterRecorder(),
+    private val shaderSource: String = GPU_PREPARED_IMAGE_WGSL,
 ) : AutoCloseable {
     private enum class Lifecycle {
         Active,
@@ -139,7 +141,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
         if (canonicalByRawKey.isEmpty()) {
             return GPUPreparedImageCacheBatchAcquire.Ready(emptyMap())
         }
-        ensureInvariants()
+        ensureInvariants()?.let { return it }
         val descriptorLayout = requireNotNull(pipelineLayout)
         val acquiredByRawKey =
             linkedMapOf<GPUPreparedImagePipelineKey, GPUPreparedImageCachedPipeline>()
@@ -206,12 +208,22 @@ internal class GPUWgpu4kPreparedImageSessionCache(
         lifecycle = Lifecycle.Closed
     }
 
-    private fun ensureInvariants() {
-        if (shader != null) return
+    private fun ensureInvariants(): GPUPreparedImageCacheBatchAcquire.Refused? {
+        if (shader != null) return null
+        val validated = when (val validation = validatePreparedImageShader(shaderSource)) {
+            is GPUPreparedImageShaderValidationResult.Ready -> validation
+            is GPUPreparedImageShaderValidationResult.Refused ->
+                return GPUPreparedImageCacheBatchAcquire.Refused(
+                    code = validation.code,
+                    message =
+                        "Prepared-image WGSL validation refused: " +
+                            validation.facts.entries.joinToString(),
+                )
+        }
         val created = mutableListOf<AutoCloseable>()
         try {
-            val bindingLayoutContract = preparedImageBindingLayoutContract()
-            val shaderContract = preparedImageShaderContract()
+            val bindingLayoutContract = validated.bindingLayout
+            val shaderContract = validated.shaderContract
             val reflectedLayout = device.createBindGroupLayout(
                 BindGroupLayoutDescriptor(
                     label =
@@ -248,7 +260,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
             val module = device.createShaderModule(
                 ShaderModuleDescriptor(
                     label = "Kanvas.session.preparedImage.shader",
-                    code = GPU_PREPARED_IMAGE_WGSL,
+                    code = shaderSource,
                 ),
             ).also(created::add)
             val layout = device.createPipelineLayout(
@@ -262,6 +274,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
             pipelineLayout = layout
             contract = shaderContract
             owned += created
+            return null
         } catch (failure: Throwable) {
             owned += created
             try {
@@ -299,7 +312,7 @@ internal class GPUWgpu4kPreparedImageSessionCache(
     private fun canonicalize(
         key: GPUPreparedImagePipelineKey,
     ): GPUPreparedImagePipelineCanonicalization {
-        val bindingLayoutIdentity = preparedImageBindingLayoutContract().identity
+        val bindingLayoutIdentity = GPUPreparedImageBindingLayoutTopology.IDENTITY
         if (key.bindingLayoutHash != bindingLayoutIdentity) {
             return GPUPreparedImagePipelineCanonicalization.Refused(
                 code = GPUPreparedImageRefusalCodes.NATIVE_BINDING,

@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageRequest
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -264,11 +265,39 @@ data class GPUClipFacts(
     companion object {
         /** Returns a wide-open clip bounded by the provided conservative area. */
         fun wideOpen(bounds: GPUBounds): GPUClipFacts =
-            GPUClipFacts(kind = GPUClipKind.WideOpen, bounds = bounds)
+            GPUClipFacts(
+                kind = GPUClipKind.WideOpen,
+                bounds = bounds,
+                coveragePlan = GPUClipCoveragePlan.NoClip,
+                executionPlan = GPUClipExecutionPlan.NoClip,
+            )
 
         /** Returns a single device-rectangle clip for first-route scissor fixtures. */
-        fun deviceRect(bounds: GPUBounds): GPUClipFacts =
-            GPUClipFacts(kind = GPUClipKind.DeviceRect, bounds = bounds)
+        fun deviceRect(bounds: GPUBounds): GPUClipFacts {
+            val coordinates = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
+            val hasExactPixelBounds =
+                coordinates.all { coordinate ->
+                    coordinate.isFinite() && coordinate.toInt().toFloat() == coordinate
+                } &&
+                    bounds.right >= bounds.left &&
+                    bounds.bottom >= bounds.top
+            val pixelBounds = if (hasExactPixelBounds) {
+                GPUPixelBounds(
+                    bounds.left.toInt(),
+                    bounds.top.toInt(),
+                    bounds.right.toInt(),
+                    bounds.bottom.toInt(),
+                )
+            } else {
+                null
+            }
+            return GPUClipFacts(
+                kind = GPUClipKind.DeviceRect,
+                bounds = bounds,
+                coveragePlan = pixelBounds?.let { GPUClipCoveragePlan.Scissor(bounds) },
+                executionPlan = pixelBounds?.let(GPUClipExecutionPlan::ScissorOnly),
+            )
+        }
 
         /** Returns a complex clip stack fact record that must refuse in the first route. */
         fun complexStack(bounds: GPUBounds): GPUClipFacts =

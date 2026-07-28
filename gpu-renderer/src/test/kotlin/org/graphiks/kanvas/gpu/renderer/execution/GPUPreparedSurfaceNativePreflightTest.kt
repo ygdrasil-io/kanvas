@@ -13,6 +13,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
@@ -22,6 +23,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.images.AlphaType
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactFactory
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
@@ -84,6 +86,19 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 
 class GPUPreparedSurfaceNativePreflightTest {
+    @Test
+    fun `invalid WGSL crosses real native preflight as the canonical typed refusal`() {
+        val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed)
+
+        val refused = requireNotNull(
+            GPUPreparedSurfaceNativePreflight("@fragment fn broken(")
+                .validateFramePlan(fixture.framePlan, fixture.context),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.WGSL_VALIDATION, refused.code)
+        assertEquals("wgsl-validation", refused.facts["boundary"])
+    }
+
     @Test
     fun `frame validation late binds prepared packet generation to active target`() {
         val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed)
@@ -1004,7 +1019,150 @@ class GPUPreparedSurfaceNativePreflightTest {
             chain.exactBlitScopeKey.sourceStepIndex,
         )
     }
+
+    @Test
+    fun `frame preflight refuses forged sampled image clip and target authorities`() {
+        val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed)
+        val imagePacket = fixture.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+            .single { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.SampledImage
+            }
+        val semantic = assertIs<GPUDrawSemanticPayload.SampledImage>(
+            imagePacket.semanticPayload,
+        )
+        val forgedScissor = GPUPixelBounds(1, 1, 3, 3)
+        val forgedSemantic = semantic.rebuiltForPreflight(
+            targetBounds = semantic.targetBounds,
+            scissorBounds = forgedScissor,
+        )
+        val forgedTargetSemantic = semantic.rebuiltForPreflight(
+            targetBounds = GPUPixelBounds(0, 0, 8, 8),
+            scissorBounds = GPUPixelBounds(0, 0, 8, 8),
+        )
+        val cases = listOf(
+            fixture.framePlan.withFirstImagePacket {
+                it.rebuiltForPreflight(
+                    scissorBoundsHash = "forged.scissor.authority",
+                )
+            },
+            fixture.framePlan.withFirstImagePacket {
+                it.rebuiltForPreflight(
+                    clipCoveragePlan = GPUClipCoveragePlan.Scissor(
+                        GPUBounds(1f, 1f, 3f, 3f),
+                    ),
+                )
+            },
+            fixture.framePlan.withFirstImagePacket {
+                it.rebuiltForPreflight(
+                    clipExecutionPlan = GPUClipExecutionPlan.ScissorOnly(forgedScissor),
+                )
+            },
+            fixture.framePlan.withFirstImagePacket {
+                it.rebuiltForPreflight(semanticPayload = forgedSemantic)
+            },
+            fixture.framePlan.withFirstImagePacket {
+                it.rebuiltForPreflight(semanticPayload = forgedTargetSemantic)
+            },
+        )
+
+        cases.forEach { forged ->
+            val refused = requireNotNull(
+                GPUPreparedSurfaceNativePreflight().validateFramePlan(
+                    forged,
+                    fixture.context,
+                ),
+            )
+            assertEquals("invalid.prepared-surface.image-scissor-authority", refused.code)
+        }
+    }
 }
+
+private fun GPUDrawSemanticPayload.SampledImage.rebuiltForPreflight(
+    targetBounds: GPUPixelBounds,
+    scissorBounds: GPUPixelBounds,
+): GPUDrawSemanticPayload.SampledImage =
+    GPUPreparedImagePayloadGatherer().gatherSemantic(
+        GPUPreparedImagePayloadInput(
+            payloadRef = payloadRef,
+            artifact = artifact,
+            geometry = geometry,
+            sampling = sampling,
+            tintPremultipliedRgba = tintPremultipliedRgba,
+            atlasColorPremultipliedRgba = atlasColorPremultipliedRgba,
+            atlasSourceBlend = atlasSourceBlend,
+            targetBounds = targetBounds,
+            scissorBounds = scissorBounds,
+            blendPlanIdentity = blendPlanIdentity,
+            frameProvenance = frameProvenance,
+        ),
+    )
+
+private fun GPUFramePlan.withFirstImagePacket(
+    transform: (GPUDrawPacket) -> GPUDrawPacket,
+): GPUFramePlan {
+    var changed = false
+    return withRenderMutation { _, render ->
+        val packets = render.drawPackets.map { packet ->
+            if (!changed && packet.semanticPayload is GPUDrawSemanticPayload.SampledImage) {
+                changed = true
+                transform(packet)
+            } else {
+                packet
+            }
+        }
+        GPUFrameStep.RenderPassStep(
+            target = render.target,
+            loadStore = render.loadStore,
+            samplePlan = render.samplePlan,
+            resourceUses = render.resourceUses,
+            drawPackets = packets,
+            sourceTaskIds = render.sourceTaskIds,
+            batches = render.batches,
+            sampleContinuation = render.sampleContinuation,
+            depthStencilLoadStore = render.depthStencilLoadStore,
+            preparedImageBindingsByPacketId = render.preparedImageBindingsByPacketId,
+        )
+    }.also { check(changed) }
+}
+
+private fun GPUDrawPacket.rebuiltForPreflight(
+    semanticPayload: GPUDrawSemanticPayload? = this.semanticPayload,
+    scissorBoundsHash: String? = this.scissorBoundsHash,
+    clipCoveragePlan: GPUClipCoveragePlan? = this.clipCoveragePlan,
+    clipExecutionPlan: GPUClipExecutionPlan? = this.clipExecutionPlan,
+) = GPUDrawPacket(
+    packetId = packetId,
+    commandIdValue = commandIdValue,
+    analysisRecordId = analysisRecordId,
+    passId = passId,
+    layerId = layerId,
+    bindingListId = bindingListId,
+    insertionReasonCode = insertionReasonCode,
+    sortKey = sortKey,
+    sortKeyPreimage = sortKeyPreimage,
+    renderStepId = renderStepId,
+    renderStepVersion = renderStepVersion,
+    role = role,
+    blendPlan = blendPlan,
+    renderPipelineKey = renderPipelineKey,
+    computePipelineKey = computePipelineKey,
+    bindingLayoutHash = bindingLayoutHash,
+    uniformSlot = uniformSlot,
+    resourceSlot = resourceSlot,
+    semanticPayload = semanticPayload,
+    vertexSourceLabel = vertexSourceLabel,
+    scissorBoundsHash = scissorBoundsHash,
+    targetStateHash = targetStateHash,
+    originalPaintOrder = originalPaintOrder,
+    resourceGeneration = resourceGeneration,
+    frameProvenance = frameProvenance,
+    clipCoveragePlan = clipCoveragePlan,
+    clipExecutionPlan = clipExecutionPlan,
+    diagnostics = diagnostics,
+    clipProducerAuthority = clipProducerAuthority,
+)
 
 internal enum class PreparedSurfaceFixtureShape {
     Mixed,
@@ -1234,7 +1392,9 @@ internal fun capturedPreparedSurfaceInputs(
             framePlan = requireNotNull(capture.capturedFramePlan),
             encoderPlan = requireNotNull(capture.capturedEncoderPlan),
             resources = requireNotNull(capture.capturedResources),
-            shaderContract = preparedImageShaderContract(),
+            shaderContract = assertIs<GPUPreparedImageShaderValidationResult.Ready>(
+                validatePreparedImageShader(GPU_PREPARED_IMAGE_WGSL),
+            ).shaderContract,
             generationSeal = requireNotNull(capture.capturedGenerationSeal),
         )
     } finally {

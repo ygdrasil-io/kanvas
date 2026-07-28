@@ -29,6 +29,7 @@ internal data class GPUPreparedImageBindingLayoutContract(
 internal sealed interface GPUPreparedImageShaderValidationResult {
     data class Ready(
         val bindingLayout: GPUPreparedImageBindingLayoutContract,
+        val shaderContract: GPUPreparedImageShaderContract,
     ) : GPUPreparedImageShaderValidationResult
 
     data class Refused(
@@ -126,18 +127,6 @@ internal fun preparedImageA8AtlasOracle(
     }
 }
 
-internal fun preparedImageShaderContract(): GPUPreparedImageShaderContract {
-    val bindingLayout = preparedImageBindingLayoutContract()
-    return GPUPreparedImageShaderContract(
-        sourceHash = sha256(GPU_PREPARED_IMAGE_WGSL.encodeToByteArray()),
-        bindingLayoutHash = bindingLayout.identity,
-        reflectedBindingsHash = bindingLayout.reflectedBindingsHash,
-    )
-}
-
-internal fun preparedImageBindingLayoutContract(): GPUPreparedImageBindingLayoutContract =
-    PREPARED_IMAGE_BINDING_LAYOUT_CONTRACT
-
 internal fun validatePreparedImageShader(
     source: String,
 ): GPUPreparedImageShaderValidationResult {
@@ -192,26 +181,23 @@ internal fun validatePreparedImageShader(
     val bindingDump = reflected.bindings.joinToString(";") {
         "${it.group}:${it.binding}:${it.name}:${it.resourceKind}:${it.minBindingSize ?: 0}"
     }
+    val bindingLayout = GPUPreparedImageBindingLayoutContract(
+        identity = GPUPreparedImageBindingLayoutTopology.IDENTITY,
+        reflectedBindingsHash = sha256(bindingDump.encodeToByteArray()),
+        uniformMinBindingSize = uniformMinBindingSize,
+        group = GPUPreparedImageBindingLayoutTopology.GROUP,
+        uniformBinding = GPUPreparedImageBindingLayoutTopology.UNIFORM_BINDING,
+        textureBinding = GPUPreparedImageBindingLayoutTopology.TEXTURE_BINDING,
+        samplerBinding = GPUPreparedImageBindingLayoutTopology.SAMPLER_BINDING,
+    )
     return GPUPreparedImageShaderValidationResult.Ready(
-        bindingLayout = GPUPreparedImageBindingLayoutContract(
-            identity = GPUPreparedImageBindingLayoutTopology.IDENTITY,
-            reflectedBindingsHash = sha256(bindingDump.encodeToByteArray()),
-            uniformMinBindingSize = uniformMinBindingSize,
-            group = GPUPreparedImageBindingLayoutTopology.GROUP,
-            uniformBinding = GPUPreparedImageBindingLayoutTopology.UNIFORM_BINDING,
-            textureBinding = GPUPreparedImageBindingLayoutTopology.TEXTURE_BINDING,
-            samplerBinding = GPUPreparedImageBindingLayoutTopology.SAMPLER_BINDING,
+        bindingLayout = bindingLayout,
+        shaderContract = GPUPreparedImageShaderContract(
+            sourceHash = sha256(source.encodeToByteArray()),
+            bindingLayoutHash = bindingLayout.identity,
+            reflectedBindingsHash = bindingLayout.reflectedBindingsHash,
         ),
     )
-}
-
-private val PREPARED_IMAGE_BINDING_LAYOUT_CONTRACT: GPUPreparedImageBindingLayoutContract by lazy {
-    when (val validation = validatePreparedImageShader(GPU_PREPARED_IMAGE_WGSL)) {
-        is GPUPreparedImageShaderValidationResult.Ready -> validation.bindingLayout
-        is GPUPreparedImageShaderValidationResult.Refused -> error(
-            "Prepared-image WGSL validation failed: ${validation.facts}",
-        )
-    }
 }
 
 internal val GPU_PREPARED_IMAGE_WGSL: String = """

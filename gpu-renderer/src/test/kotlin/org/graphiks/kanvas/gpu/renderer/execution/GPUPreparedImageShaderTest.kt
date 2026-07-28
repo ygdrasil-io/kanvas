@@ -41,16 +41,19 @@ class GPUPreparedImageShaderTest {
             report.bindings.map { Triple(it.group, it.binding, it.resourceKind) },
         )
         assertEquals(GPUPreparedImageUniformAbi.BYTE_SIZE, report.bindings[0].minBindingSize)
-        val contract = preparedImageBindingLayoutContract()
+        val ready = assertIs<GPUPreparedImageShaderValidationResult.Ready>(
+            validatePreparedImageShader(GPU_PREPARED_IMAGE_WGSL),
+        )
+        val contract = ready.bindingLayout
         assertEquals(0, contract.group)
         assertEquals(0, contract.uniformBinding)
         assertEquals(1, contract.textureBinding)
         assertEquals(2, contract.samplerBinding)
         assertEquals(112L, contract.uniformMinBindingSize)
-        assertEquals(contract.identity, preparedImageShaderContract().bindingLayoutHash)
+        assertEquals(contract.identity, ready.shaderContract.bindingLayoutHash)
         assertEquals(
             contract.reflectedBindingsHash,
-            preparedImageShaderContract().reflectedBindingsHash,
+            ready.shaderContract.reflectedBindingsHash,
         )
     }
 

@@ -14,6 +14,9 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawImageRectCommandBuilder
@@ -22,6 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.execution.GPUEncoderOperationKind
 import org.graphiks.kanvas.gpu.renderer.execution.GPUCommandEncoderScopePlan
@@ -79,6 +83,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
+import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
@@ -210,6 +215,101 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
                 GPUPreparedSurfaceFrameTaskListBuilder().build(request(base, forged)),
             )
             assertEquals("invalid.recording.prepared_surface_semantics", refused.diagnostic.code.value)
+        }
+    }
+
+    @Test
+    fun `sampled image semantic cannot forge a scissor authority absent from its packet`() {
+        val base = recording(imageCommand(0, 0)).taskList
+        val forgedScissor = GPUPixelBounds(2, 3, 10, 12)
+        val forged = mapOf<Int, GPUDrawSemanticPayload>(
+            0 to imageSemantic(base, commandId = 0, scissorBounds = forgedScissor),
+        )
+
+        val refused = assertIs<GPUPreparedSurfaceFrameResult.Refused>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(request(base, forged)),
+        )
+
+        assertEquals(
+            "invalid.recording.prepared_image_scissor_authority",
+            refused.diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `sampled image packet cannot forge hash coverage execution or NoClip substitution`() {
+        val scissor = GPUPixelBounds(2, 3, 10, 12)
+        val scissorCoverage = GPUClipCoveragePlan.Scissor(
+            GPUBounds(2f, 3f, 10f, 12f),
+        )
+        val base = recording(
+            imageCommand(
+                commandId = 0,
+                paintOrder = 0,
+                clip = GPUClipFacts(
+                    kind = GPUClipKind.DeviceRect,
+                    bounds = GPUBounds(2f, 3f, 10f, 12f),
+                    coveragePlan = scissorCoverage,
+                    executionPlan = GPUClipExecutionPlan.ScissorOnly(scissor),
+                ),
+            ),
+        ).taskList
+        val semantic = imageSemantic(base, commandId = 0, scissorBounds = scissor)
+        val cases = listOf(
+            base.transformPackets { packet ->
+                packet.rebuilt(scissorBoundsHash = "forged.scissor.authority")
+            },
+            base.transformPackets { packet ->
+                packet.rebuilt(clipCoveragePlan = GPUClipCoveragePlan.NoClip)
+            },
+            base.transformPackets { packet ->
+                packet.rebuilt(clipExecutionPlan = GPUClipExecutionPlan.NoClip)
+            },
+            base.transformPackets { packet ->
+                packet.rebuilt(
+                    scissorBoundsHash = null,
+                    clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+                    clipExecutionPlan = GPUClipExecutionPlan.NoClip,
+                )
+            },
+        )
+
+        cases.forEach { forged ->
+            val refused = assertIs<GPUPreparedSurfaceFrameResult.Refused>(
+                GPUPreparedSurfaceFrameTaskListBuilder().build(
+                    request(forged, mapOf(0 to semantic)),
+                ),
+            )
+            assertEquals(
+                "invalid.recording.prepared_image_scissor_authority",
+                refused.diagnostic.code.value,
+            )
+        }
+        assertEquals(preparedImageScissorAuthority(scissor), packet(base, 0).scissorBoundsHash)
+    }
+
+    @Test
+    fun `mip and anisotropic refusals cross recorder and prepared task boundary unchanged`() {
+        val base = imageCommand(0, 0)
+        val cases = listOf(
+            GPUPreparedImageRefusalCodes.MIP_REQUIRED to
+                base.copy(samplingMipmapMode = "linear"),
+            GPUPreparedImageRefusalCodes.SAMPLING_ANISOTROPIC to
+                base.copy(samplingAnisotropy = 4),
+        )
+
+        cases.forEach { (expectedCode, normalized) ->
+            val recorded = rawRecording(normalized).taskList
+            val recordingRefusal = recorded.tasks.filterIsInstance<GPUTask.Refused>().single()
+            val prepared = assertIs<GPUPreparedSurfaceFrameResult.Refused>(
+                GPUPreparedSurfaceFrameTaskListBuilder().build(
+                    request(recorded, emptyMap()),
+                ),
+            )
+
+            assertEquals(expectedCode, recordingRefusal.diagnostic.code.value)
+            assertEquals(expectedCode, prepared.diagnostic.code.value)
+            assertEquals("recording", prepared.diagnostic.facts["boundary"])
         }
     }
 
@@ -1031,6 +1131,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         commandId: Int,
         artifactOverride: GPUDrawSemanticPayload.SampledImage? = null,
         sampling: GPUPreparedImageSampling = GPUPreparedImageSampling.Nearest,
+        scissorBounds: GPUPixelBounds = bounds,
     ): GPUDrawSemanticPayload.SampledImage {
         val packet = packet(base, commandId)
         return GPUPreparedImagePayloadGatherer().gatherSemantic(
@@ -1052,7 +1153,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
                 atlasColorPremultipliedRgba = null,
                 atlasSourceBlend = null,
                 targetBounds = bounds,
-                scissorBounds = bounds,
+                scissorBounds = scissorBounds,
                 blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
                 frameProvenance = packet.frameProvenance,
             ),
@@ -1220,6 +1321,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         passId: String = this.passId,
         renderStepId: GPURenderStepID = this.renderStepId,
         renderPipelineKey: GPURenderPipelineKey? = this.renderPipelineKey,
+        scissorBoundsHash: String? = this.scissorBoundsHash,
         clipCoveragePlan: GPUClipCoveragePlan? = this.clipCoveragePlan,
         clipExecutionPlan: GPUClipExecutionPlan? = this.clipExecutionPlan,
     ) = GPUDrawPacket(
@@ -1263,7 +1365,11 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         source = GPUCommandSource("test", "fillRect", GPUFrameProvenance.GmContent),
     )
 
-    private fun imageCommand(commandId: Int, paintOrder: Int) = GPUDrawImageRectCommandBuilder.build(
+    private fun imageCommand(
+        commandId: Int,
+        paintOrder: Int,
+        clip: GPUClipFacts? = null,
+    ) = GPUDrawImageRectCommandBuilder.build(
         commandId = GPUDrawCommandID(commandId),
         imageSourceId = "shared-image",
         src = GPURect(0f, 0f, 3f, 2f),
@@ -1282,6 +1388,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         pixelsRowBytes = 12,
         pixelsContentHash = artifact().contentHash,
         pixelsProvenance = "test",
+        clip = clip,
         paintOrder = paintOrder,
         source = GPUCommandSource("test", "drawImageRect", GPUFrameProvenance.GmContent),
     )
@@ -1308,6 +1415,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         facts = listOf(
             GPUCapabilityFact("first_slice.fill_rect.native", "test", "supported", true, "test"),
             GPUCapabilityFact("first_slice.draw_image_rect.prepared", "test", "supported", true, "test"),
+            GPUCapabilityFact("first_slice.scissor.native", "test", "supported", true, "test"),
         ),
         snapshotId = "prepared-surface",
         limits = GPULimits(

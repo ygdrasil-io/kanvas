@@ -146,6 +146,42 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 "Prepared images require canonical EncodedPremulSrgb artifact and target authority.",
             )
         }
+        val invalidImageScissorAuthority = packets.firstOrNull { packet ->
+            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
+                GPUDrawSemanticPayload.SampledImage ?: return@firstOrNull false
+            val hasScissor = semantic.scissorBounds != semantic.targetBounds
+            val expectedHash = if (hasScissor) {
+                preparedImageScissorAuthority(semantic.scissorBounds)
+            } else {
+                null
+            }
+            val expectedCoverage = if (hasScissor) {
+                GPUClipCoveragePlan.Scissor(
+                    org.graphiks.kanvas.gpu.renderer.clips.GPUBounds(
+                        semantic.scissorBounds.left.toFloat(),
+                        semantic.scissorBounds.top.toFloat(),
+                        semantic.scissorBounds.right.toFloat(),
+                        semantic.scissorBounds.bottom.toFloat(),
+                    ),
+                )
+            } else {
+                GPUClipCoveragePlan.NoClip
+            }
+            val expectedExecution = if (hasScissor) {
+                GPUClipExecutionPlan.ScissorOnly(semantic.scissorBounds)
+            } else {
+                GPUClipExecutionPlan.NoClip
+            }
+            packet.scissorBoundsHash != expectedHash ||
+                packet.clipCoveragePlan != expectedCoverage ||
+                packet.clipExecutionPlan != expectedExecution
+        }
+        if (invalidImageScissorAuthority != null) {
+            return refused(
+                "invalid.recording.prepared_image_scissor_authority",
+                "Prepared-image packet clip authorities must exactly match the immutable semantic.",
+            )
+        }
 
         val allCore = request.semanticsByCommandId.values
             .all { it is GPUDrawSemanticPayload.CorePrimitive }
@@ -859,38 +895,13 @@ private fun GPUDrawPacket.withSemantic(
     resourceSlot = resourceSlot,
     semanticPayload = semantic,
     vertexSourceLabel = vertexSourceLabel,
-    scissorBoundsHash = when (semantic) {
-        is GPUDrawSemanticPayload.SampledImage
-            if semantic.scissorBounds != semantic.targetBounds ->
-            preparedImageScissorAuthority(semantic.scissorBounds)
-        is GPUDrawSemanticPayload.SampledImage -> null
-        else -> scissorBoundsHash
-    },
+    scissorBoundsHash = scissorBoundsHash,
     targetStateHash = targetStateHash,
     originalPaintOrder = originalPaintOrder,
     resourceGeneration = resourceGeneration,
     frameProvenance = frameProvenance,
-    clipCoveragePlan = when (semantic) {
-        is GPUDrawSemanticPayload.SampledImage
-            if semantic.scissorBounds != semantic.targetBounds ->
-            GPUClipCoveragePlan.Scissor(
-                org.graphiks.kanvas.gpu.renderer.clips.GPUBounds(
-                    semantic.scissorBounds.left.toFloat(),
-                    semantic.scissorBounds.top.toFloat(),
-                    semantic.scissorBounds.right.toFloat(),
-                    semantic.scissorBounds.bottom.toFloat(),
-                ),
-            )
-        is GPUDrawSemanticPayload.SampledImage -> GPUClipCoveragePlan.NoClip
-        else -> clipCoverageOverride
-    },
-    clipExecutionPlan = when (semantic) {
-        is GPUDrawSemanticPayload.SampledImage
-            if semantic.scissorBounds != semantic.targetBounds ->
-            GPUClipExecutionPlan.ScissorOnly(semantic.scissorBounds)
-        is GPUDrawSemanticPayload.SampledImage -> GPUClipExecutionPlan.NoClip
-        else -> clipExecutionOverride
-    },
+    clipCoveragePlan = clipCoverageOverride,
+    clipExecutionPlan = clipExecutionOverride,
     diagnostics = diagnostics,
     clipProducerAuthority = clipProducerAuthority,
 )

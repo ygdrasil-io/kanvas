@@ -159,8 +159,6 @@ class GPUPreparedImageNativeResourcesTest {
             GPUPreparedImageRefusalCodes.NATIVE_GENERATION to
                 fixture.request.copy(actualResourceGeneration = 4),
         )
-        val factory = RecordingFactory()
-
         cases.forEach { (reason, request) ->
             val refused = assertIs<GPUPreparedImageNativePreflightResult.Refused>(
                 GPUPreparedImageNativeResourcePreflighter.preflight(request),
@@ -174,7 +172,6 @@ class GPUPreparedImageNativeResourcesTest {
                 assertEquals("preflight", refused.facts["boundary"])
             }
         }
-        assertEquals(0, factory.createCalls)
     }
 
     @Test

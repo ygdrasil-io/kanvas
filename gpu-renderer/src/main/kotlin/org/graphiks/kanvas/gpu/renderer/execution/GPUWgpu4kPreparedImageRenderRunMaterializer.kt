@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
@@ -566,7 +567,7 @@ internal object GPUPreparedImagePlanValidator {
         plan: GPUPreparedImageRenderRunPlan,
         validateUploadProvenance: Boolean,
     ): Pair<String, String>? {
-        val bindingLayoutIdentity = preparedImageBindingLayoutContract().identity
+        val bindingLayoutIdentity = GPUPreparedImageBindingLayoutTopology.IDENTITY
         if (plan.packets.any { packet ->
                 packet.pipelineKey.bindingLayoutHash != bindingLayoutIdentity
             } ||

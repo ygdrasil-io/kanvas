@@ -23,6 +23,7 @@ import io.ygdrasil.webgpu.GPUTextureViewDimension
 import io.ygdrasil.webgpu.SamplerDescriptor
 import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.TextureViewDescriptor
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
@@ -144,7 +145,7 @@ internal class GPUWgpu4kPreparedImageNativeHandleFactory(
         sampler: GPUSampler,
     ): GPUBindGroup {
         require(
-            request.bindingLayoutHash == preparedImageBindingLayoutContract().identity &&
+            request.bindingLayoutHash == GPUPreparedImageBindingLayoutTopology.IDENTITY &&
                 request.uniformAllocation.size ==
                 GPU_PREPARED_IMAGE_UNIFORM_ALLOCATION_SIZE_BYTES
         ) {

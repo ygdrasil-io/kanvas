@@ -1669,6 +1669,9 @@ object GPUFirstRoutePassBuilder {
         scissorBoundsHash: String?,
         originalPaintOrder: Int,
         targetStateHash: String,
+        frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
+        clipCoveragePlan: GPUClipCoveragePlan? = null,
+        clipExecutionPlan: GPUClipExecutionPlan? = null,
     ): GPUDrawPass =
         acceptedTypedPass(
             passId = "pass.image_draw.$commandIdValue",
@@ -1684,6 +1687,9 @@ object GPUFirstRoutePassBuilder {
             originalPaintOrder = originalPaintOrder,
             targetStateHash = targetStateHash,
             layerScopeId = "root",
+            frameProvenance = frameProvenance,
+            clipCoveragePlan = clipCoveragePlan,
+            clipExecutionPlan = clipExecutionPlan,
         )
 
     /**

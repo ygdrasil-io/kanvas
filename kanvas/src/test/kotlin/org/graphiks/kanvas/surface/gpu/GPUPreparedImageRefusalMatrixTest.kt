@@ -33,6 +33,7 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
+import org.graphiks.kanvas.types.ColorSpace
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
@@ -97,6 +98,55 @@ class GPUPreparedImageRefusalMatrixTest {
                 ),
                 GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
             ),
+            ConstructibleCase(
+                "unknown-alpha",
+                Image(
+                    width = 1,
+                    height = 1,
+                    colorType = ColorType.RGBA_8888,
+                    sourceId = "unknown-alpha",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                    alphaType = AlphaType.UNKNOWN,
+                ),
+                GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
+            ),
+            ConstructibleCase(
+                "display-p3",
+                Image(
+                    width = 1,
+                    height = 1,
+                    colorType = ColorType.RGBA_8888,
+                    sourceId = "display-p3",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                    colorSpace = ColorSpace.DISPLAY_P3,
+                    alphaType = AlphaType.PREMUL,
+                ),
+                GPUPreparedImageRefusalCodes.GAMUT_TRANSFORM,
+            ),
+            ConstructibleCase(
+                "short-pixels",
+                Image(
+                    width = 2,
+                    height = 1,
+                    colorType = ColorType.RGBA_8888,
+                    sourceId = "short-pixels",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                    alphaType = AlphaType.PREMUL,
+                ),
+                GPUPreparedImageRefusalCodes.PIXEL_LENGTH,
+            ),
+            ConstructibleCase(
+                "opaque-alpha-mismatch",
+                Image(
+                    width = 1,
+                    height = 1,
+                    colorType = ColorType.RGBA_8888,
+                    sourceId = "opaque-alpha-mismatch",
+                    pixels = byteArrayOf(1, 2, 3, 4),
+                    alphaType = AlphaType.OPAQUE,
+                ),
+                GPUPreparedImageRefusalCodes.ALPHA_INTERPRETATION,
+            ),
         )
 
         cases.forEach { row ->
@@ -143,6 +193,21 @@ class GPUPreparedImageRefusalMatrixTest {
             assertEquals(0, inventory.legacyDump.invocationCount, "${row.name}:fallback")
             assertEquals(0, backend.prepareCalls, "${row.name}:native handles")
         }
+
+        val zeroWidth = Image(
+            width = 0,
+            height = 1,
+            colorType = ColorType.RGBA_8888,
+            sourceId = "zero-width",
+            pixels = byteArrayOf(),
+            alphaType = AlphaType.PREMUL,
+        )
+        val zeroWidthSource = assertIs<GPUPreparedImageArtifactResult.Refused>(
+            GPUPreparedSurfaceImageSource.prepare(zeroWidth),
+            "zero-width: strongest constructible production envelope",
+        )
+        assertEquals(GPUPreparedImageRefusalCodes.DIMENSIONS, zeroWidthSource.code)
+        assertEquals("artifact", zeroWidthSource.facts["boundary"])
     }
 
     @Test

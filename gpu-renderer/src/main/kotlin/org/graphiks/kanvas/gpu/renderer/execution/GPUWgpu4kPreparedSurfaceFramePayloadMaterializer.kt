@@ -55,12 +55,22 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
         }
         consumed = true
 
+        val shaderContract = when (
+            val validation = validatePreparedImageShader(GPU_PREPARED_IMAGE_WGSL)
+        ) {
+            is GPUPreparedImageShaderValidationResult.Ready -> validation.shaderContract
+            is GPUPreparedImageShaderValidationResult.Refused ->
+                return refused(
+                    validation.code,
+                    "Prepared-image WGSL validation refused before mixed materialization.",
+                )
+        }
         val accepted = when (
             val result = preflight.validate(
                 framePlan,
                 encoderPlan,
                 resources,
-                preparedImageShaderContract(),
+                shaderContract,
                 generationSeal,
             )
         ) {

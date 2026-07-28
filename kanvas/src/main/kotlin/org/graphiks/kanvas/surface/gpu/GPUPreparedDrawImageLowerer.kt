@@ -226,9 +226,9 @@ internal object GPUPreparedDrawImageLowerer {
             GPUPreparedImageSampling.Linear -> "linear"
         }
         val alphaOnly = image.colorType == org.graphiks.kanvas.image.ColorType.ALPHA_8
-        val tintR = if (alphaOnly) operation.paint?.color?.r ?: 0f else 1f
-        val tintG = if (alphaOnly) operation.paint?.color?.g ?: 0f else 1f
-        val tintB = if (alphaOnly) operation.paint?.color?.b ?: 0f else 1f
+        val tintR = operation.paint?.color?.r ?: 1f
+        val tintG = operation.paint?.color?.g ?: 1f
+        val tintB = operation.paint?.color?.b ?: 1f
         val tintA = operation.paint?.color?.a ?: 1f
         val tintPremultipliedRgba = listOf(
             (tintR * tintA).coerceIn(0f, 1f),

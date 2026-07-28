@@ -38,6 +38,7 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageProvenance
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceClass
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingInput
@@ -179,7 +180,7 @@ class GPUWgpu4kPreparedImageNativeHandleFactoryTest {
             bindingInputs = listOf(
                 GPUImageBindingInput("packet.a8", GPUPreparedImageSampling.Linear),
             ),
-            bindingLayoutHash = preparedImageBindingLayoutContract().identity,
+            bindingLayoutHash = GPUPreparedImageBindingLayoutTopology.IDENTITY,
             capabilities = preparedSurfacePreflightFixture(
                 PreparedSurfaceFixtureShape.ImageOnly,
             ).capabilities,

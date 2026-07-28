@@ -7,6 +7,8 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
@@ -4140,6 +4142,24 @@ internal class GPUFramePreflighter(
             return diagnostic(
                 "invalid.preflight.prepared_image_scissor_authority",
                 "Prepared sampled-image packet and semantic scissor authorities differ.",
+            )
+        }
+        val expectedCoverage = if (hasScissor) {
+            GPUClipCoveragePlan.Scissor(
+                GPUBounds(
+                    semantic.scissorBounds.left.toFloat(),
+                    semantic.scissorBounds.top.toFloat(),
+                    semantic.scissorBounds.right.toFloat(),
+                    semantic.scissorBounds.bottom.toFloat(),
+                ),
+            )
+        } else {
+            GPUClipCoveragePlan.NoClip
+        }
+        if (packet.clipCoveragePlan != expectedCoverage) {
+            return diagnostic(
+                "invalid.preflight.prepared_image_scissor_coverage",
+                "Prepared sampled-image scissor must retain one exact coverage plan.",
             )
         }
         val exactExecution = packet.clipExecutionPlan

@@ -375,7 +375,7 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
     }
 
     @Test
-    fun `direct A8 atlas executes all five source modes with zero half and full coverage`() {
+    fun `direct A8 atlas applies nontrivial paint tint and alpha once in all source modes`() {
         val atlas = image(
             width = GPUPreparedImageTestFixtures.a8_3x1Width,
             height = GPUPreparedImageTestFixtures.a8_3x1Height,
@@ -398,9 +398,9 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                         atlas = atlas,
                         transforms = listOf(Matrix33.translate(0f, (index * 2).toFloat())),
                         texRects = listOf(Rect.fromLTRB(0f, 0f, 3f, 1f)),
-                        colors = listOf(Color.fromArgb(128, 255, 0, 0)),
+                        colors = listOf(Color.fromArgb(160, 192, 96, 32)),
                         blendMode = mode,
-                        paint = Paint.fill(Color.WHITE),
+                        paint = Paint.fill(Color.fromArgb(192, 128, 64, 160)),
                         transform = Matrix33.identity(),
                         clip = ClipStack.WideOpen,
                     ),
@@ -429,18 +429,18 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             execution.toString(),
         )
         val halfCoverage = listOf(
-            listOf(137, 0, 0, 64),
-            listOf(188, 188, 188, 128),
-            listOf(188, 137, 137, 128),
-            listOf(188, 188, 188, 128),
-            listOf(137, 0, 0, 64),
+            listOf(84, 41, 37, 60),
+            listOf(121, 87, 134, 96),
+            listOf(111, 68, 92, 96),
+            listOf(121, 87, 134, 96),
+            listOf(84, 41, 37, 60),
         )
         val fullCoverage = listOf(
-            listOf(188, 0, 0, 128),
-            listOf(255, 255, 255, 255),
-            listOf(255, 188, 188, 255),
-            listOf(255, 255, 255, 255),
-            listOf(188, 0, 0, 128),
+            listOf(117, 60, 54, 120),
+            listOf(165, 120, 183, 192),
+            listOf(153, 95, 127, 192),
+            listOf(165, 120, 183, 192),
+            listOf(117, 60, 54, 120),
         )
 
         modes.indices.forEach { index ->
@@ -450,6 +450,75 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
             assertPixelWithinOne(result.rgba, 8, 2, y, fullCoverage[index])
         }
         assertPixel(result.rgba, 8, 7, 11, listOf(0, 255, 0, 255))
+        assertEquals("prepared.surface.direct", result.evidence.routeMarker.stableLabel)
+        assertEquals(1L, result.evidence.submits)
+        assertEquals(0, result.evidence.activeNativePayloads)
+    }
+
+    @Test
+    fun `direct RGBA atlas applies nontrivial atlas color and paint tint once in all source modes`() {
+        val atlas = image(
+            width = 1,
+            height = 1,
+            colorType = ColorType.RGBA_8888,
+            sourceId = "native-rgba-atlas-modes",
+            pixels = byteArrayOf(96, 48, 24, 160.toByte()),
+        )
+        val modes = listOf(
+            BlendMode.SRC,
+            BlendMode.DST,
+            BlendMode.SRC_OVER,
+            BlendMode.PLUS,
+            BlendMode.MODULATE,
+        )
+        val operations = buildList {
+            add(rect(Rect.fromLTRB(2f, 10f, 4f, 12f), Color.GREEN))
+            modes.forEachIndexed { index, mode ->
+                add(
+                    DisplayOp.DrawAtlas(
+                        atlas = atlas,
+                        transforms = listOf(Matrix33.translate(0f, (index * 2).toFloat())),
+                        texRects = listOf(Rect.fromLTRB(0f, 0f, 1f, 1f)),
+                        colors = listOf(Color.fromArgb(176, 80, 160, 48)),
+                        blendMode = mode,
+                        paint = Paint.fill(Color.fromArgb(192, 128, 64, 160)),
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.WideOpen,
+                    ),
+                )
+            }
+        }
+        val color = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+        )
+
+        val result = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            GPUPreparedSurfaceFrameExecutor(
+                GPUPreparedSurfaceNativeBackendPortFactory,
+            ).execute(
+                GPUPreparedSurfaceExecutionRequest(
+                    candidate = GPUPreparedSurfaceEligibility.Candidate(
+                        operations = operations,
+                        config = RenderConfig.DEFAULT,
+                        color = color,
+                    ),
+                    width = 4,
+                    height = 12,
+                ),
+            ),
+        )
+        val expected = listOf(
+            listOf(81, 81, 70, 133),
+            listOf(78, 23, 17, 120),
+            listOf(91, 82, 71, 170),
+            listOf(110, 85, 73, 192),
+            listOf(34, 12, 2, 83),
+        )
+
+        modes.indices.forEach { index ->
+            assertPixelWithinOne(result.rgba, 4, 0, index * 2, expected[index])
+        }
+        assertPixel(result.rgba, 4, 3, 11, listOf(0, 255, 0, 255))
         assertEquals("prepared.surface.direct", result.evidence.routeMarker.stableLabel)
         assertEquals(1L, result.evidence.submits)
         assertEquals(0, result.evidence.activeNativePayloads)

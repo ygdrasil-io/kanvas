@@ -553,10 +553,11 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
             nativeDevice.device,
             GPUDeviceGenerationID(182),
         )
+        val handleFactory = RecordingPreparedImageHandleFactory()
 
         val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
             cache,
-            RecordingPreparedImageHandleFactory(),
+            handleFactory,
         ).materializeAcceptedRun(
             preparedImageRenderRunPlan(
                 sourceScopeIndices = listOf(1, 2),
@@ -574,6 +575,8 @@ class GPUWgpu4kPreparedImageRenderRunMaterializerTest {
         assertEquals(GPUPreparedImageRefusalCodes.NATIVE_BINDING, refused.code)
         assertEquals("native", refused.facts["boundary"])
         assertFalse(refused.code.startsWith("unsupported.surface.prepared.image-source."))
+        assertEquals(0, handleFactory.handleCreates)
+        assertEquals(0, nativeDevice.handleCreates)
         cache.close()
     }
 

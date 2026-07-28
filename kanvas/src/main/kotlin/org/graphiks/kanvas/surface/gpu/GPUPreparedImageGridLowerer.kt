@@ -15,6 +15,7 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
@@ -519,7 +520,7 @@ internal object GPUPreparedImageGridLowerer {
         image: org.graphiks.kanvas.image.Image,
         sampling: SamplingOptions,
     ): Paint {
-        val base = this ?: Paint()
+        val base = this ?: Paint.fill(Color.WHITE)
         return base.copy(shader = Shader.Image(image, sampling = sampling))
     }
 

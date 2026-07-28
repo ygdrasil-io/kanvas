@@ -4,6 +4,9 @@ import java.security.MessageDigest
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
@@ -21,6 +24,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTo
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
+import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
@@ -282,7 +286,11 @@ internal sealed interface GPUPreparedSurfaceNativePreflightResult {
     data class Accepted(val plan: GPUPreparedSurfaceNativePreflightPlan) :
         GPUPreparedSurfaceNativePreflightResult
 
-    data class Refused(val code: String, val message: String) :
+    data class Refused(
+        val code: String,
+        val message: String,
+        val facts: Map<String, String> = emptyMap(),
+    ) :
         GPUPreparedSurfaceNativePreflightResult {
         init {
             require(code.isNotBlank() && message.isNotBlank())
@@ -295,7 +303,9 @@ internal sealed interface GPUPreparedSurfaceNativePreflightResult {
  * evidence already produced by semantic/resource preflight and cannot create a frame, draft,
  * completion ticket, rollback owner, native handle, cache entry, or surface lease.
  */
-internal class GPUPreparedSurfaceNativePreflight {
+internal class GPUPreparedSurfaceNativePreflight(
+    private val shaderSource: String = GPU_PREPARED_IMAGE_WGSL,
+) {
     internal fun validateFramePlan(
         framePlan: GPUFramePlan,
         context: GPUFramePreflightContext? = null,
@@ -441,11 +451,23 @@ internal class GPUPreparedSurfaceNativePreflight {
                 packet to it
             }
         }
+        validateImageScissorAuthority(framePlan, imagePackets)?.let { return it }
+        val shaderContract = when (
+            val validation = validatePreparedImageShader(shaderSource)
+        ) {
+            is GPUPreparedImageShaderValidationResult.Ready -> validation.shaderContract
+            is GPUPreparedImageShaderValidationResult.Refused ->
+                return refused(
+                    validation.code,
+                    "Prepared-image WGSL validation refused before native preflight.",
+                    validation.facts,
+                )
+        }
         return validateImageAuthority(
             framePlan,
             imagePackets,
             imageUploads,
-            preparedImageShaderContract(),
+            shaderContract,
         )
     }
 
@@ -468,7 +490,18 @@ internal class GPUPreparedSurfaceNativePreflight {
         validateExactEncoderPlan(framePlan, encoderPlan, generationSeal)?.let { return it }
         validateResources(framePlan, encoderPlan, resources, generationSeal)?.let { return it }
         validateColorAuthority(framePlan, renders)?.let { return it }
-        if (shaderContract != preparedImageShaderContract()) {
+        val validatedShaderContract = when (
+            val validation = validatePreparedImageShader(shaderSource)
+        ) {
+            is GPUPreparedImageShaderValidationResult.Ready -> validation.shaderContract
+            is GPUPreparedImageShaderValidationResult.Refused ->
+                return refused(
+                    validation.code,
+                    "Prepared-image WGSL validation refused before native preflight.",
+                    validation.facts,
+                )
+        }
+        if (shaderContract != validatedShaderContract) {
             return refused(
                 "invalid.prepared-surface.shader-contract",
                 "Prepared-image WGSL source, reflection, and binding identities must be exact.",
@@ -496,6 +529,7 @@ internal class GPUPreparedSurfaceNativePreflight {
                 packet to it
             }
         }
+        validateImageScissorAuthority(framePlan, imagePackets)?.let { return it }
         validateImageAuthority(
             framePlan,
             imagePackets,
@@ -1271,6 +1305,60 @@ internal class GPUPreparedSurfaceNativePreflight {
         }
         return null
     }
+
+    private fun validateImageScissorAuthority(
+        framePlan: GPUFramePlan,
+        imagePackets: List<Pair<GPUDrawPacket, GPUDrawSemanticPayload.SampledImage>>,
+    ): GPUPreparedSurfaceNativePreflightResult.Refused? {
+        val targetBounds = (
+            framePlan.steps
+                .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+                .singleOrNull { request -> request.role == GPUFrameResourceRole.SceneTarget }
+                ?.descriptor as? GPUFrameTextureDescriptor
+            )?.logicalBounds
+            ?: return refused(
+                "invalid.prepared-surface.image-scissor-authority",
+                "Prepared-image scissor validation requires one exact scene target.",
+            )
+        val mismatch = imagePackets.any { (packet, semantic) ->
+            val hasScissor = semantic.scissorBounds != semantic.targetBounds
+            val expectedHash = if (hasScissor) {
+                preparedImageScissorAuthority(semantic.scissorBounds)
+            } else {
+                null
+            }
+            val expectedCoverage = if (hasScissor) {
+                GPUClipCoveragePlan.Scissor(
+                    GPUBounds(
+                        semantic.scissorBounds.left.toFloat(),
+                        semantic.scissorBounds.top.toFloat(),
+                        semantic.scissorBounds.right.toFloat(),
+                        semantic.scissorBounds.bottom.toFloat(),
+                    ),
+                )
+            } else {
+                GPUClipCoveragePlan.NoClip
+            }
+            val expectedExecution = if (hasScissor) {
+                GPUClipExecutionPlan.ScissorOnly(semantic.scissorBounds)
+            } else {
+                GPUClipExecutionPlan.NoClip
+            }
+            semantic.targetBounds != targetBounds ||
+                packet.scissorBoundsHash != expectedHash ||
+                packet.clipCoveragePlan != expectedCoverage ||
+                packet.clipExecutionPlan != expectedExecution
+        }
+        return if (mismatch) {
+            refused(
+                "invalid.prepared-surface.image-scissor-authority",
+                "Prepared-image packet, semantic, and scene-target clip authorities must be exact.",
+            )
+        } else {
+            null
+        }
+    }
 }
 
 internal object GPUPreparedSurfaceEncoderScopeAuthority {
@@ -1776,7 +1864,8 @@ private fun preparedSurfaceSha256(bytes: ByteArray): String =
 private fun refused(
     code: String,
     message: String,
-) = GPUPreparedSurfaceNativePreflightResult.Refused(code, message)
+    facts: Map<String, String> = emptyMap(),
+) = GPUPreparedSurfaceNativePreflightResult.Refused(code, message, facts)
 
 private inline fun <T> List<T>.anyIndexed(predicate: (Int, T) -> Boolean): Boolean {
     forEachIndexed { index, value ->

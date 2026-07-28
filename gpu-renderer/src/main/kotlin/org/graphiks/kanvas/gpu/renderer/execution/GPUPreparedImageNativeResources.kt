@@ -112,8 +112,19 @@ internal sealed interface GPUPreparedImageNativePreflightResult {
 }
 
 internal object GPUPreparedImageNativeResourcePreflighter {
-    fun preflight(request: GPUPreparedImageNativePreflightRequest): GPUPreparedImageNativePreflightResult {
-        refusalReason(request)?.let {
+    fun preflight(
+        request: GPUPreparedImageNativePreflightRequest,
+        shaderSource: String = GPU_PREPARED_IMAGE_WGSL,
+    ): GPUPreparedImageNativePreflightResult {
+        val shader = when (val validation = validatePreparedImageShader(shaderSource)) {
+            is GPUPreparedImageShaderValidationResult.Ready -> validation
+            is GPUPreparedImageShaderValidationResult.Refused ->
+                return GPUPreparedImageNativePreflightResult.Refused(
+                    reasonCode = validation.code,
+                    facts = validation.facts,
+                )
+        }
+        refusalReason(request, shader.bindingLayout.identity)?.let {
             return GPUPreparedImageNativePreflightResult.Refused(
                 reasonCode = it,
                 facts = mapOf("boundary" to "preflight"),
@@ -131,9 +142,11 @@ internal object GPUPreparedImageNativeResourcePreflighter {
         )
     }
 
-    private fun refusalReason(request: GPUPreparedImageNativePreflightRequest): String? {
+    private fun refusalReason(
+        request: GPUPreparedImageNativePreflightRequest,
+        bindingLayoutIdentity: String,
+    ): String? {
         val plan = request.resourcePlan
-        val bindingLayoutIdentity = preparedImageBindingLayoutContract().identity
         if (plan.bindingRequests.any { binding ->
                 binding.bindingLayoutHash != bindingLayoutIdentity
             }

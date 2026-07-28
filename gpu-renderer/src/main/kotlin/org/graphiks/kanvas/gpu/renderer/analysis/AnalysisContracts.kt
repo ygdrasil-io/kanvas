@@ -16,6 +16,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterRenderNodePlanner
 import org.graphiks.kanvas.gpu.renderer.geometry.GPUDrawPointsDescriptor
@@ -56,6 +57,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveRectTransformTy
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUMaterialPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadGatherPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
+import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
@@ -1051,6 +1053,9 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -1106,6 +1111,9 @@ class GPUFirstRoutePlanner(
             scissorBoundsHash = command.scissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -2112,7 +2120,14 @@ private fun NormalizedDrawCommand.DrawImageRect.coordinateRefusalCode(): String?
 /** Returns the scissor bounds hash for DrawImageRect, or null for wide-open clips. */
 private fun NormalizedDrawCommand.DrawImageRect.scissorBoundsHash(): String? =
     when (clip.kind) {
-        GPUClipKind.DeviceRect -> clip.bounds.stableHash()
+        GPUClipKind.DeviceRect -> preparedImageScissorAuthority(
+            GPUPixelBounds(
+                clip.bounds.left.toInt(),
+                clip.bounds.top.toInt(),
+                clip.bounds.right.toInt(),
+                clip.bounds.bottom.toInt(),
+            ),
+        )
         GPUClipKind.WideOpen,
         GPUClipKind.ComplexStack,
         -> null

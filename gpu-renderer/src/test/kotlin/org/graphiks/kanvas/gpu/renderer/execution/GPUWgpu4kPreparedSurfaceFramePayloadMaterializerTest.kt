@@ -341,6 +341,31 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `WGSL refusal crosses mixed materializer before target borrow or image allocation`() {
+        val fixture = fixture(
+            PreparedSurfaceFixtureShape.CoreImageCore,
+            shaderSource = "@fragment fn broken(",
+        )
+        try {
+            val nativeEventCount = fixture.native.events.size
+            val imageHandleCount = fixture.imageFactory.handleCreates
+
+            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.materialize(),
+            )
+
+            assertEquals(GPUPreparedImageRefusalCodes.WGSL_VALIDATION, refused.code)
+            assertEquals(nativeEventCount, fixture.native.events.size)
+            assertEquals(imageHandleCount, fixture.imageFactory.handleCreates)
+            assertEquals(Triple(1L, 0L, 0L), fixture.targetLifecycle.snapshot())
+            assertEquals(null, refused.retainedDraft)
+            assertEquals(null, refused.retainedCloseOwner)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `permuted image bindings are refused before target borrow or native allocation`() {
         val fixture = fixture(PreparedSurfaceFixtureShape.ImageCoreImage)
         try {
@@ -640,6 +665,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
         failFirstImageClose: Boolean = false,
         surfaceTargetAvailable: Boolean = true,
         surfaceTargetGenerationDelta: Long = 0L,
+        shaderSource: String = GPU_PREPARED_IMAGE_WGSL,
     ): Fixture {
         val input = capturedPreparedSurfaceInputs(
             shape = shape,
@@ -701,6 +727,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
                 }
             },
             corePrimitiveLimits = LIMITS,
+            preflight = GPUPreparedSurfaceNativePreflight(shaderSource),
         )
         return Fixture(
             input,

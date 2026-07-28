@@ -19,6 +19,25 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePipelineKey
 
 class GPUPreparedImageSessionCacheTest {
     @Test
+    fun `invalid WGSL crosses the real cache boundary without creating native handles`() {
+        val generation = GPUDeviceGenerationID(6)
+        val native = TrackingDevice()
+        val cache = GPUWgpu4kPreparedImageSessionCache(
+            device = native.device,
+            deviceGeneration = generation,
+            shaderSource = "@fragment fn broken(",
+        )
+
+        val refused = assertIs<GPUPreparedImageCacheAcquire.Refused>(
+            cache.acquire(PIPELINE_KEY, generation),
+        )
+
+        assertEquals(GPUPreparedImageRefusalCodes.WGSL_VALIDATION, refused.code)
+        assertTrue(native.handles.isEmpty())
+        cache.close()
+    }
+
+    @Test
     fun `failed invariant rollback retains pending ownership and closes it on retry`() {
         val generation = GPUDeviceGenerationID(6)
         val counters = GPUPreparedImageNativeCounterRecorder()
