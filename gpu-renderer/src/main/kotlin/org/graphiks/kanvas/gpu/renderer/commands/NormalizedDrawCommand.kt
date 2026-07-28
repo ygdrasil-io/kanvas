@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.commands
 
+import java.util.Collections
 import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
 import org.graphiks.kanvas.glyph.gpu.GPUColorGlyphLayerPlan
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
@@ -484,10 +485,17 @@ sealed interface GPUMaterialDescriptor {
      * compatibility facade (see AGENTS.md); real GPU support is gated by
      * KGPU-M11-008.
      */
-    data class RuntimeEffect(
+    class RuntimeEffect(
         val effectId: String = "",
         val descriptorVersion: Int = 1,
+        uniforms: Map<String, GPURuntimeEffectUniformValue> = emptyMap(),
+        children: Map<String, GPUMaterialDescriptor> = emptyMap(),
     ) : GPUMaterialDescriptor {
+        val uniforms: Map<String, GPURuntimeEffectUniformValue> =
+            Collections.unmodifiableMap(LinkedHashMap(uniforms))
+        val children: Map<String, GPUMaterialDescriptor> =
+            Collections.unmodifiableMap(LinkedHashMap(children))
+
         override val kind: GPUMaterialKind = GPUMaterialKind.RuntimeEffect
     }
 
@@ -500,6 +508,55 @@ sealed interface GPUMaterialDescriptor {
         val uniformBytes: ByteArray = byteArrayOf(),
     ) : GPUMaterialDescriptor {
         override val kind: GPUMaterialKind = GPUMaterialKind.ShaderBlend
+    }
+}
+
+/**
+ * Typed runtime-effect uniform value captured before registered-program lookup.
+ *
+ * No source text, layout, module hash, or packed byte payload is accepted here;
+ * those facts come only from the registered Kanvas runtime-effect authority.
+ */
+sealed interface GPURuntimeEffectUniformValue {
+    data class Float1(val value: Float) : GPURuntimeEffectUniformValue
+    data class Float2(val x: Float, val y: Float) : GPURuntimeEffectUniformValue
+    data class Float3(val x: Float, val y: Float, val z: Float) : GPURuntimeEffectUniformValue
+    data class Float4(
+        val x: Float,
+        val y: Float,
+        val z: Float,
+        val w: Float,
+    ) : GPURuntimeEffectUniformValue
+    data class Int1(val value: Int) : GPURuntimeEffectUniformValue
+
+    class Matrix3x3(values: List<Float>) : GPURuntimeEffectUniformValue {
+        val values: List<Float> = Collections.unmodifiableList(values.toList())
+
+        init {
+            require(this.values.size == 9) { "Matrix3x3 requires exactly 9 values" }
+        }
+
+        override fun equals(other: Any?): Boolean =
+            other is Matrix3x3 && values == other.values
+
+        override fun hashCode(): Int = values.hashCode()
+
+        override fun toString(): String = "Matrix3x3(values=$values)"
+    }
+
+    class Matrix4x4(values: List<Float>) : GPURuntimeEffectUniformValue {
+        val values: List<Float> = Collections.unmodifiableList(values.toList())
+
+        init {
+            require(this.values.size == 16) { "Matrix4x4 requires exactly 16 values" }
+        }
+
+        override fun equals(other: Any?): Boolean =
+            other is Matrix4x4 && values == other.values
+
+        override fun hashCode(): Int = values.hashCode()
+
+        override fun toString(): String = "Matrix4x4(values=$values)"
     }
 }
 

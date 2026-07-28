@@ -5,6 +5,7 @@ import java.nio.ByteOrder
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
@@ -14,16 +15,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderWgsl
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTBindingPlanHash
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTDescriptorVersion
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEffectId
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTModuleHash
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTReflectionHash
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformBlockSizeBytes
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformSchemaHash
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 
@@ -122,13 +114,16 @@ object GPUPreparedMaterialProgramCompiler {
             is PreparedSourceResult.Refused ->
                 return refused(result.code, result.sourceKind, result.message)
         }
-        val parserDiagnostic = validateFinalModule(prepared.wgslSource, prepared.entryPoint)
-        if (parserDiagnostic != null) {
-            return refused(
-                code = "unsupported.material.wgsl_validation",
-                sourceKind = prepared.sourceKind,
-                message = parserDiagnostic,
-            )
+        val reflectedAbiFacts = when (
+            val validation = validateFinalModule(prepared.wgslSource, prepared.entryPoint)
+        ) {
+            is FinalModuleValidation.Ready -> validation.abiFacts
+            is FinalModuleValidation.Refused ->
+                return refused(
+                    code = "unsupported.material.wgsl_validation",
+                    sourceKind = prepared.sourceKind,
+                    message = validation.message,
+                )
         }
 
         val uniformSnapshot = immutableList(prepared.uniformBytes.map { it.toInt() and 0xff })
@@ -148,6 +143,8 @@ object GPUPreparedMaterialProgramCompiler {
                     add("capability=${context.capabilityClass}")
                     add("target=${context.targetFormatClass}")
                     add("dictionary=${context.dictionaryVersion}")
+                    add("uniformBytes=${sha256Hex(prepared.uniformBytes)}")
+                    add("paintAlphaBits=${paintAlpha.toRawBits().toUInt().toString(16)}")
                     addAll(prepared.keyFacts)
                     addAll(resourceFacts)
                 }.joinToString("\n").encodeToByteArray(),
@@ -160,8 +157,9 @@ object GPUPreparedMaterialProgramCompiler {
                 add("entryPoint=${prepared.entryPoint}")
                 add("uniformLayout=${prepared.uniformLayoutHash}")
                 add("uniformByteCount=${uniformSnapshot.size}")
-                addAll(prepared.keyFacts)
-                addAll(resourceFacts)
+                add("sampledResourceCount=${resourceSnapshot.size}")
+                addAll(prepared.abiFacts)
+                addAll(reflectedAbiFacts)
             }.joinToString("\n").encodeToByteArray(),
         )
 
@@ -385,27 +383,34 @@ object GPUPreparedMaterialProgramCompiler {
         if (descriptor.effectId.isBlank()) {
             return runtimeEffectRefusal("Runtime-effect descriptor ID must not be blank")
         }
-        if (
-            descriptor.effectId != SimpleRTEffectId ||
-            descriptor.descriptorVersion != SimpleRTDescriptorVersion
+        val program = when (
+            val resolution = context.runtimeEffectResolver.resolve(
+                descriptor.effectId,
+                descriptor.descriptorVersion,
+            )
         ) {
-            return runtimeEffectRefusal(
-                "Runtime-effect descriptor is not a registered prepared material program",
+            is GPUPreparedRuntimeEffectResolution.DescriptorUnavailable ->
+                return runtimeEffectRefusal(resolution.message)
+            is GPUPreparedRuntimeEffectResolution.ProgramUnavailable ->
+                return runtimeEffectProgramRefusal(resolution.message)
+            is GPUPreparedRuntimeEffectResolution.Ready -> resolution.program
+        }
+        if (descriptor.children.isNotEmpty()) {
+            return runtimeEffectChildrenRefusal(
+                "Prepared runtime-effect children are not supported by this compiler",
             )
         }
+        val uniformBytes = when (
+            val packing = packRuntimeEffectUniforms(program, descriptor.uniforms)
+        ) {
+            is RuntimeEffectUniformPacking.Ready -> packing.bytes
+            is RuntimeEffectUniformPacking.Refused ->
+                return runtimeEffectUniformRefusal(packing.message)
+        }
         val logicalSource = GPUMaterialSourceDescriptor.RuntimeEffect(
-            effectId = SimpleRTEffectId,
-            descriptorVersion = SimpleRTDescriptorVersion,
-            routeContractHash = sha256Hex(
-                listOf(
-                    SimpleRTEffectId,
-                    SimpleRTDescriptorVersion,
-                    SimpleRTUniformSchemaHash,
-                    SimpleRTBindingPlanHash,
-                    SimpleRTModuleHash,
-                    SimpleRTEntryPoint,
-                ).joinToString("|").encodeToByteArray(),
-            ),
+            effectId = program.effectId,
+            descriptorVersion = program.descriptorVersion,
+            routeContractHash = program.routeContractHash,
         )
         val plan = GPURuntimeEffectMaterialLowering.planSource(logicalSource, context)
         if (plan is GPUMaterialSourcePlan.Refused) {
@@ -416,20 +421,40 @@ object GPUPreparedMaterialProgramCompiler {
 
         return PreparedSourceResult.Ready(
             PreparedSource(
-                wgslSource = wrapMaterialSource(SimpleRTWgsl, SimpleRTEntryPoint),
+                wgslSource = wrapMaterialSource(program.wgslSource, program.sourceFunction),
                 entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
-                uniformBytes = ByteArray(SimpleRTUniformBlockSizeBytes),
+                uniformBytes = uniformBytes,
                 sampledResources = emptyList(),
                 sourceKind = GPUMaterialSourceKind.RuntimeEffect,
-                uniformLayoutHash = SimpleRTUniformSchemaHash,
+                uniformLayoutHash = program.uniformSchemaHash,
                 keyFacts = listOf(
                     "lowererKey=${lowererKey.value}",
-                    "runtimeEffect=$SimpleRTEffectId@$SimpleRTDescriptorVersion",
-                    "runtimeSource=$SimpleRTSourceHash",
-                    "runtimeModule=$SimpleRTModuleHash",
-                    "runtimeReflection=$SimpleRTReflectionHash",
-                    "runtimeBindings=$SimpleRTBindingPlanHash",
+                    "runtimeEffect=${program.effectId}@${program.descriptorVersion}",
+                    "runtimeSource=${program.sourceHash}",
+                    "runtimeModule=${program.moduleHash}",
+                    "runtimeReflection=${program.reflectionHash}",
+                    "runtimeBindings=${program.bindingPlanHash}",
+                    "runtimeRoute=${program.routeContractHash}",
                 ),
+                abiFacts = buildList {
+                    add("runtimeModule=${program.moduleHash}")
+                    add("runtimeReflection=${program.reflectionHash}")
+                    add("runtimeBindings=${program.bindingPlanHash}")
+                    add("runtimeRoute=${program.routeContractHash}")
+                    program.uniformFields.forEachIndexed { index, field ->
+                        add(
+                            "runtimeField[$index]=${field.name}:${field.type}:" +
+                                "${field.offsetBytes}:${field.sizeBytes}:" +
+                                "${field.alignmentBytes}:${field.strideBytes}",
+                        )
+                    }
+                    program.bindings.forEachIndexed { index, binding ->
+                        add(
+                            "runtimeBinding[$index]=${binding.group}:${binding.binding}:" +
+                                "${binding.resourceKind}:${binding.minBindingSizeBytes}",
+                        )
+                    }
+                },
             ),
         )
     }
@@ -510,22 +535,72 @@ object GPUPreparedMaterialProgramCompiler {
         )
     }
 
-    private fun validateFinalModule(source: String, entryPoint: String): String? {
+    private fun validateFinalModule(
+        source: String,
+        entryPoint: String,
+    ): FinalModuleValidation {
         val parsed = runCatching { parseWgslResult(source) }
             .getOrElse { failure ->
-                return "wgsl4k parser failed: ${failure::class.simpleName.orEmpty()}"
+                return FinalModuleValidation.Refused(
+                    "wgsl4k parser failed: ${failure::class.simpleName.orEmpty()}",
+                )
             }
         if (!parsed.isSuccess) {
-            return "wgsl4k parser diagnostics: ${parsed.errors.joinToString { it.message }}"
+            return FinalModuleValidation.Refused(
+                "wgsl4k parser diagnostics: ${parsed.errors.joinToString { it.message }}",
+            )
         }
         val lowered = runCatching { Lowerer().lower(parsed.translationUnit) }
             .getOrElse { failure ->
-                return "wgsl4k lowering failed: ${failure::class.simpleName.orEmpty()}"
+                return FinalModuleValidation.Refused(
+                    "wgsl4k lowering failed: ${failure::class.simpleName.orEmpty()}",
+                )
             }
         if (lowered.entryPoints.none { it.name == entryPoint }) {
-            return "wgsl4k did not expose entry point $entryPoint"
+            return FinalModuleValidation.Refused(
+                "wgsl4k did not expose entry point $entryPoint",
+            )
         }
-        return null
+        val report = runCatching {
+            lowered.reflectWgslModule(sourceId = sha256Hex(source.encodeToByteArray()))
+        }.getOrElse { failure ->
+            return FinalModuleValidation.Refused(
+                "wgsl4k reflection failed: ${failure::class.simpleName.orEmpty()}",
+            )
+        }
+        val abiFacts = buildList {
+            report.entryPoints.sortedWith(compareBy({ it.name }, { it.stage }))
+                .forEachIndexed { index, reflected ->
+                    add(
+                        "entry[$index]=${reflected.name}:${reflected.stage}:" +
+                            "${reflected.workgroupSize}",
+                    )
+                }
+            report.bindings.sortedWith(compareBy({ it.group }, { it.binding }))
+                .forEachIndexed { index, binding ->
+                    add(
+                        "binding[$index]=${binding.group}:${binding.binding}:${binding.name}:" +
+                            "${binding.resourceKind}:${binding.access}:${binding.sampleType}:" +
+                            "${binding.viewDimension}:${binding.storageFormat}:" +
+                            "${binding.minBindingSize}",
+                    )
+                }
+            report.layouts.sortedWith(compareBy({ it.addressSpace }, { it.structName }))
+                .forEachIndexed { layoutIndex, layout ->
+                    add(
+                        "layout[$layoutIndex]=${layout.structName}:${layout.addressSpace}:" +
+                            "${layout.size}:${layout.alignment}",
+                    )
+                    layout.members.forEachIndexed { memberIndex, member ->
+                        add(
+                            "layout[$layoutIndex].member[$memberIndex]=${member.name}:" +
+                                "${member.type}:${member.offset}:${member.size}:" +
+                                "${member.alignment}:${member.stride}",
+                        )
+                    }
+                }
+        }
+        return FinalModuleValidation.Ready(abiFacts)
     }
 
     private fun sampledResource(
@@ -563,6 +638,27 @@ object GPUPreparedMaterialProgramCompiler {
             message,
         )
 
+    private fun runtimeEffectProgramRefusal(message: String): PreparedSourceResult.Refused =
+        refusedSource(
+            "unsupported.material.runtime_effect.wgsl_not_available",
+            GPUMaterialSourceKind.RuntimeEffect,
+            message,
+        )
+
+    private fun runtimeEffectUniformRefusal(message: String): PreparedSourceResult.Refused =
+        refusedSource(
+            "unsupported.material.runtime_effect.uniform_payload",
+            GPUMaterialSourceKind.RuntimeEffect,
+            message,
+        )
+
+    private fun runtimeEffectChildrenRefusal(message: String): PreparedSourceResult.Refused =
+        refusedSource(
+            "unsupported.material.runtime_effect.children",
+            GPUMaterialSourceKind.RuntimeEffect,
+            message,
+        )
+
     private fun blendRefusal(message: String): PreparedSourceResult.Refused =
         refusedSource(
             "unsupported.material.blend_shader",
@@ -579,6 +675,7 @@ private data class PreparedSource(
     val sourceKind: GPUMaterialSourceKind,
     val uniformLayoutHash: String,
     val keyFacts: List<String>,
+    val abiFacts: List<String> = emptyList(),
 ) {
     fun materialShapeIdentity(): String = sha256Hex(
         buildList {
@@ -588,6 +685,7 @@ private data class PreparedSource(
             add("entryPoint=$entryPoint")
             add("uniformLayout=$uniformLayoutHash")
             add("uniformByteCount=${uniformBytes.size}")
+            add("uniformBytes=${sha256Hex(uniformBytes)}")
             addAll(keyFacts)
             sampledResources.forEachIndexed { index, resource ->
                 resource.identityFacts().forEach { fact -> add("resource[$index].$fact") }
@@ -606,9 +704,176 @@ private sealed interface PreparedSourceResult {
     ) : PreparedSourceResult
 }
 
+private sealed interface FinalModuleValidation {
+    data class Ready(val abiFacts: List<String>) : FinalModuleValidation
+    data class Refused(val message: String) : FinalModuleValidation
+}
+
+private sealed interface RuntimeEffectUniformPacking {
+    data class Ready(val bytes: ByteArray) : RuntimeEffectUniformPacking
+    data class Refused(val message: String) : RuntimeEffectUniformPacking
+}
+
 private sealed interface SampledResourceResult {
     data class Ready(val resource: GPUPreparedMaterialSampledResource) : SampledResourceResult
     data class Refused(val message: String) : SampledResourceResult
+}
+
+private fun packRuntimeEffectUniforms(
+    program: GPUPreparedRuntimeEffectProgram,
+    uniforms: Map<String, GPURuntimeEffectUniformValue>,
+): RuntimeEffectUniformPacking {
+    val expectedNames = program.uniformFields.map { it.name }
+    if (
+        uniforms.size != expectedNames.size ||
+        uniforms.keys != expectedNames.toSet()
+    ) {
+        return RuntimeEffectUniformPacking.Refused(
+            "Runtime-effect uniform names must exactly match the registered schema",
+        )
+    }
+    if (program.uniformBlockSizeBytes < 0) {
+        return RuntimeEffectUniformPacking.Refused(
+            "Runtime-effect registered uniform block size is invalid",
+        )
+    }
+    val bytes = ByteArray(program.uniformBlockSizeBytes)
+    val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+    val occupied = mutableListOf<IntRange>()
+
+    for (field in program.uniformFields) {
+        val endExclusive = field.offsetBytes.toLong() + field.sizeBytes.toLong()
+        if (
+            field.name.isBlank() ||
+            field.offsetBytes < 0 ||
+            field.sizeBytes <= 0 ||
+            field.alignmentBytes <= 0 ||
+            field.offsetBytes % field.alignmentBytes != 0 ||
+            endExclusive > bytes.size.toLong()
+        ) {
+            return RuntimeEffectUniformPacking.Refused(
+                "Runtime-effect registered uniform field layout is invalid",
+            )
+        }
+        val range = field.offsetBytes until endExclusive.toInt()
+        if (occupied.any { existing -> existing.first < range.last + 1 && range.first <= existing.last }) {
+            return RuntimeEffectUniformPacking.Refused(
+                "Runtime-effect registered uniform fields overlap",
+            )
+        }
+        occupied += range
+
+        val value = uniforms.getValue(field.name)
+        if (!value.matches(field.type)) {
+            return RuntimeEffectUniformPacking.Refused(
+                "Runtime-effect uniform ${field.name} has the wrong registered type",
+            )
+        }
+        if (!value.hasFiniteFloatPayload()) {
+            return RuntimeEffectUniformPacking.Refused(
+                "Runtime-effect uniform ${field.name} contains non-finite values",
+            )
+        }
+        if (!buffer.writeRegisteredValue(field, value)) {
+            return RuntimeEffectUniformPacking.Refused(
+                "Runtime-effect uniform ${field.name} does not fit its registered field layout",
+            )
+        }
+    }
+    return RuntimeEffectUniformPacking.Ready(bytes)
+}
+
+private fun GPURuntimeEffectUniformValue.matches(
+    type: GPUPreparedRuntimeEffectUniformType,
+): Boolean =
+    when (type) {
+        GPUPreparedRuntimeEffectUniformType.Float1 -> this is GPURuntimeEffectUniformValue.Float1
+        GPUPreparedRuntimeEffectUniformType.Float2 -> this is GPURuntimeEffectUniformValue.Float2
+        GPUPreparedRuntimeEffectUniformType.Float3 -> this is GPURuntimeEffectUniformValue.Float3
+        GPUPreparedRuntimeEffectUniformType.Float4 -> this is GPURuntimeEffectUniformValue.Float4
+        GPUPreparedRuntimeEffectUniformType.Int1 -> this is GPURuntimeEffectUniformValue.Int1
+        GPUPreparedRuntimeEffectUniformType.Matrix3x3 ->
+            this is GPURuntimeEffectUniformValue.Matrix3x3
+        GPUPreparedRuntimeEffectUniformType.Matrix4x4 ->
+            this is GPURuntimeEffectUniformValue.Matrix4x4
+    }
+
+private fun GPURuntimeEffectUniformValue.hasFiniteFloatPayload(): Boolean =
+    when (this) {
+        is GPURuntimeEffectUniformValue.Float1 -> value.isFinite()
+        is GPURuntimeEffectUniformValue.Float2 -> x.isFinite() && y.isFinite()
+        is GPURuntimeEffectUniformValue.Float3 -> x.isFinite() && y.isFinite() && z.isFinite()
+        is GPURuntimeEffectUniformValue.Float4 ->
+            x.isFinite() && y.isFinite() && z.isFinite() && w.isFinite()
+        is GPURuntimeEffectUniformValue.Int1 -> true
+        is GPURuntimeEffectUniformValue.Matrix3x3 -> values.all(Float::isFinite)
+        is GPURuntimeEffectUniformValue.Matrix4x4 -> values.all(Float::isFinite)
+    }
+
+private fun ByteBuffer.writeRegisteredValue(
+    field: GPUPreparedRuntimeEffectUniformField,
+    value: GPURuntimeEffectUniformValue,
+): Boolean {
+    val offset = field.offsetBytes
+    return when (value) {
+        is GPURuntimeEffectUniformValue.Float1 -> {
+            if (field.sizeBytes < 4) return false
+            putFloat(offset, value.value)
+            true
+        }
+        is GPURuntimeEffectUniformValue.Float2 -> {
+            if (field.sizeBytes < 8) return false
+            putFloat(offset, value.x)
+            putFloat(offset + 4, value.y)
+            true
+        }
+        is GPURuntimeEffectUniformValue.Float3 -> {
+            if (field.sizeBytes < 12) return false
+            putFloat(offset, value.x)
+            putFloat(offset + 4, value.y)
+            putFloat(offset + 8, value.z)
+            true
+        }
+        is GPURuntimeEffectUniformValue.Float4 -> {
+            if (field.sizeBytes < 16) return false
+            putFloat(offset, value.x)
+            putFloat(offset + 4, value.y)
+            putFloat(offset + 8, value.z)
+            putFloat(offset + 12, value.w)
+            true
+        }
+        is GPURuntimeEffectUniformValue.Int1 -> {
+            if (field.sizeBytes < 4) return false
+            putInt(offset, value.value)
+            true
+        }
+        is GPURuntimeEffectUniformValue.Matrix3x3 -> {
+            val stride = field.strideBytes ?: 16
+            if (stride < 12 || field.sizeBytes < stride * 3) return false
+            repeat(3) { column ->
+                repeat(3) { row ->
+                    putFloat(
+                        offset + column * stride + row * 4,
+                        value.values[row * 3 + column],
+                    )
+                }
+            }
+            true
+        }
+        is GPURuntimeEffectUniformValue.Matrix4x4 -> {
+            val stride = field.strideBytes ?: 16
+            if (stride < 16 || field.sizeBytes < stride * 4) return false
+            repeat(4) { column ->
+                repeat(4) { row ->
+                    putFloat(
+                        offset + column * stride + row * 4,
+                        value.values[row * 4 + column],
+                    )
+                }
+            }
+            true
+        }
+    }
 }
 
 private fun refusedSource(

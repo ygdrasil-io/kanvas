@@ -3,21 +3,39 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.pipeline.RuntimeEffect
+import org.graphiks.kanvas.pipeline.ShaderModule
+import org.graphiks.kanvas.pipeline.UniformBlock
+import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.b
+import org.graphiks.kanvas.types.g
+import org.graphiks.kanvas.types.r
 import org.junit.jupiter.api.Test
 
 class GPUMaterialMapperTest {
     @Test
-    fun `unsupported blend shader mapping preserves the blend descriptor`() {
-        val dst = imageShader("dst", byteArrayOf(1, 2, 3, 4))
-        val src = imageShader("src", byteArrayOf(5, 6, 7, 8))
+    fun `legacy unsupported blend falls back to source while prepared mapping preserves blend`() {
+        val dst = Shader.ConicalGradient(
+            start = Point(0f, 0f),
+            startRadius = 0f,
+            end = Point(10f, 10f),
+            endRadius = 10f,
+            stops = listOf(
+                GradientStop(0f, Color.fromRGBA(1f, 0f, 0f, 1f)),
+                GradientStop(1f, Color.fromRGBA(0f, 0f, 1f, 1f)),
+            ),
+        )
+        val src = Shader.SolidColor(Color.fromRGBA(0.25f, 0.5f, 0.75f, 1f))
         val paint = Paint(
             shader = Shader.Blend(
                 mode = BlendMode.SRC_OVER,
@@ -26,12 +44,18 @@ class GPUMaterialMapperTest {
             ),
         )
 
-        val mapped = assertIs<GPUMaterialDescriptor.BlendShader>(paint.toMaterial())
+        val legacy = assertIs<GPUMaterialDescriptor.SolidColor>(paint.toMaterial())
+        val prepared = assertIs<GPUMaterialDescriptor.BlendShader>(
+            paint.toPreparedMaterialMapping().descriptor,
+        )
 
-        assertIs<GPUMaterialDescriptor.ImageDraw>(mapped.dst)
-        assertIs<GPUMaterialDescriptor.ImageDraw>(mapped.src)
-        assertEquals("", mapped.wgslCombined)
-        assertEquals(0, mapped.uniformBytes.size)
+        assertEquals(src.color.r, legacy.r)
+        assertEquals(src.color.g, legacy.g)
+        assertEquals(src.color.b, legacy.b)
+        assertIs<GPUMaterialDescriptor.ConicalGradient>(prepared.dst)
+        assertIs<GPUMaterialDescriptor.SolidColor>(prepared.src)
+        assertEquals("", prepared.wgslCombined)
+        assertEquals(0, prepared.uniformBytes.size)
     }
 
     @Test
@@ -80,6 +104,59 @@ class GPUMaterialMapperTest {
         assertEquals(0.75f, descriptor.tintB, 0.002f)
         assertEquals(1f, descriptor.tintA)
         assertEquals(0.5f, mapping.paintAlpha, 0.002f)
+    }
+
+    @Test
+    fun `prepared runtime mapping snapshots exact uniform payload and child facts`() {
+        val matrixValues = FloatArray(16) { index -> index.toFloat() }
+        val childMap = linkedMapOf<String, Shader>(
+            "input" to Shader.SolidColor(Color.RED),
+        )
+        val shader = Shader.RuntimeEffect(
+            effect = RuntimeEffect(
+                id = "runtime.simple_rt",
+                module = ShaderModule.fromSource("registered-only"),
+                uniformLayout = UniformLayout(emptyList()),
+                children = emptyList(),
+            ),
+            uniforms = UniformBlock {
+                float4("gColor", 0.25f, 0.5f, 0.75f, 1f)
+                mat4x4("transform", matrixValues)
+            },
+            children = childMap,
+        )
+
+        val mapping = Paint(shader = shader).toPreparedMaterialMapping()
+        matrixValues.fill(99f)
+        childMap.clear()
+
+        val descriptor = assertIs<GPUMaterialDescriptor.RuntimeEffect>(mapping.descriptor)
+        assertEquals(
+            GPURuntimeEffectUniformValue.Float4(0.25f, 0.5f, 0.75f, 1f),
+            descriptor.uniforms.getValue("gColor"),
+        )
+        val matrix = assertIs<GPURuntimeEffectUniformValue.Matrix4x4>(
+            descriptor.uniforms.getValue("transform"),
+        )
+        assertEquals((0 until 16).map(Int::toFloat), matrix.values)
+        assertIs<GPUMaterialDescriptor.SolidColor>(descriptor.children.getValue("input"))
+    }
+
+    @Test
+    fun `prepared mapping preserves legacy supported color filter behavior`() {
+        val paint = Paint(
+            color = Color.fromRGBA(0.2f, 0.4f, 0.6f, 0.8f),
+            colorFilter = ColorFilter.Matrix(
+                floatArrayOf(
+                    1f, 0f, 0f, 0f, 0f,
+                    0f, 1f, 0f, 0f, 0f,
+                    0f, 0f, 1f, 0f, 0f,
+                    0f, 0f, 0f, 0.5f, 0f,
+                ),
+            ),
+        )
+
+        assertEquals(paint.toMaterial(), paint.toPreparedMaterialMapping().descriptor)
     }
 
     private fun imageShader(

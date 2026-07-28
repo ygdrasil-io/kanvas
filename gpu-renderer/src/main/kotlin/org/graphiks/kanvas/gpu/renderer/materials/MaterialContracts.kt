@@ -232,11 +232,99 @@ data class GPUMaterialDictionary(
     val rootSets: List<GPUMaterialRootSet>,
 )
 
+/** Reflected scalar/vector/matrix type admitted by a registered runtime-effect program. */
+enum class GPUPreparedRuntimeEffectUniformType {
+    Float1,
+    Float2,
+    Float3,
+    Float4,
+    Int1,
+    Matrix3x3,
+    Matrix4x4,
+}
+
+/** Exact reflected field layout owned by a registered runtime-effect program. */
+@ConsistentCopyVisibility
+data class GPUPreparedRuntimeEffectUniformField internal constructor(
+    val name: String,
+    val type: GPUPreparedRuntimeEffectUniformType,
+    val offsetBytes: Int,
+    val sizeBytes: Int,
+    val alignmentBytes: Int,
+    val strideBytes: Int? = null,
+)
+
+/** Exact reflected resource-binding topology owned by a registered runtime-effect program. */
+@ConsistentCopyVisibility
+data class GPUPreparedRuntimeEffectBinding internal constructor(
+    val group: Int,
+    val binding: Int,
+    val resourceKind: String,
+    val minBindingSizeBytes: Int?,
+)
+
+/**
+ * Canonical executable facts for one registered Kanvas runtime effect.
+ *
+ * The constructor is module-internal so consumers cannot inject arbitrary
+ * WGSL, entry points, ABI layouts, or hashes through the public compiler API.
+ */
+@ConsistentCopyVisibility
+data class GPUPreparedRuntimeEffectProgram internal constructor(
+    val effectId: String,
+    val descriptorVersion: Int,
+    val wgslSource: String,
+    val sourceFunction: String,
+    val sourceHash: String,
+    val moduleHash: String,
+    val reflectionHash: String,
+    val uniformSchemaHash: String,
+    val uniformBlockSizeBytes: Int,
+    val uniformFields: List<GPUPreparedRuntimeEffectUniformField>,
+    val bindings: List<GPUPreparedRuntimeEffectBinding>,
+    val bindingPlanHash: String,
+    val routeContractHash: String,
+)
+
+/** Result of resolving a descriptor against registered Kanvas program authority. */
+sealed interface GPUPreparedRuntimeEffectResolution {
+    /** The canonical descriptor is absent or its version differs. */
+    data class DescriptorUnavailable(val message: String) :
+        GPUPreparedRuntimeEffectResolution
+
+    /** The descriptor exists but no fully proven Kotlin/CPU plus WGSL program is available. */
+    data class ProgramUnavailable(val message: String) :
+        GPUPreparedRuntimeEffectResolution
+
+    /** A descriptor-, CPU-, parser-, reflection-, and ABI-validated program. */
+    @ConsistentCopyVisibility
+    data class Ready internal constructor(val program: GPUPreparedRuntimeEffectProgram) :
+        GPUPreparedRuntimeEffectResolution
+}
+
+/** Neutral lookup seam consumed by material lowering without importing runtime-effect ownership. */
+fun interface GPUPreparedRuntimeEffectResolver {
+    fun resolve(effectId: String, descriptorVersion: Int): GPUPreparedRuntimeEffectResolution
+}
+
+/** Fail-closed resolver used by contexts that do not opt into registered runtime effects. */
+object GPUPreparedRuntimeEffectResolverUnavailable : GPUPreparedRuntimeEffectResolver {
+    override fun resolve(
+        effectId: String,
+        descriptorVersion: Int,
+    ): GPUPreparedRuntimeEffectResolution =
+        GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
+            "Registered runtime-effect program resolver is unavailable",
+        )
+}
+
 /** Material lowering context facts. */
 data class GPUMaterialLoweringContext(
     val capabilityClass: String,
     val targetFormatClass: String,
     val dictionaryVersion: String,
+    val runtimeEffectResolver: GPUPreparedRuntimeEffectResolver =
+        GPUPreparedRuntimeEffectResolverUnavailable,
 )
 
 /** Material root set used for assembly. */

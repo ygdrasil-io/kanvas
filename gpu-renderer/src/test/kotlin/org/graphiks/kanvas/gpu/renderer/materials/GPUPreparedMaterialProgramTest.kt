@@ -7,6 +7,9 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.SpiralRTDescriptor
 import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLReflectionProvider
 import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLValidator
 
@@ -16,6 +19,7 @@ class GPUPreparedMaterialProgramTest {
         capabilityClass = "webgpu-test",
         targetFormatClass = "rgba8unorm",
         dictionaryVersion = "material-dictionary:prepared-material:v1",
+        runtimeEffectResolver = KanvasPreparedRuntimeEffectResolver(),
     )
 
     @Test
@@ -196,6 +200,253 @@ class GPUPreparedMaterialProgramTest {
         }
     }
 
+    @Test
+    fun `material key separates exact uniform payload paint alpha and full hash width`() {
+        val firstSolid = ready(solidDescriptor(), paintAlpha = 1f)
+        val secondSolid = ready(
+            GPUMaterialDescriptor.SolidColor(r = 0.5f, g = 0.5f, b = 0.75f, a = 0.8f),
+            paintAlpha = 1f,
+        )
+        val firstGradient = ready(linearGradientDescriptor(), paintAlpha = 1f)
+        val changedGradient = ready(
+            linearGradientDescriptor().copy(
+                allStopColors = floatArrayOf(1f, 0f, 0f, 0.25f, 0f, 1f, 0f, 0.75f),
+            ),
+            paintAlpha = 1f,
+        )
+        val changedPaintAlpha = ready(solidDescriptor(), paintAlpha = 0.5f)
+
+        assertNotEquals(firstSolid.materialKey, secondSolid.materialKey)
+        assertNotEquals(firstGradient.materialKey, changedGradient.materialKey)
+        assertNotEquals(firstSolid.materialKey, changedPaintAlpha.materialKey)
+        listOf(firstSolid, secondSolid, firstGradient, changedGradient, changedPaintAlpha).forEach { program ->
+            assertTrue(
+                program.materialKey.substringAfterLast(':').matches(Regex("[0-9a-f]{64}")),
+                program.materialKey,
+            )
+            assertTrue(program.abiHash.matches(Regex("sha256:[0-9a-f]{64}")), program.abiHash)
+        }
+    }
+
+    @Test
+    fun `material key separates image pixels sampling alpha topology and tint`() {
+        val baseline = ready(
+            supportedImageShaderDescriptor(
+                pixels = byteArrayOf(1, 2, 3, 4),
+                samplingFilterMode = "nearest",
+                alphaOnly = false,
+            ),
+            paintAlpha = 1f,
+        )
+        val changedPixels = ready(
+            supportedImageShaderDescriptor(
+                pixels = byteArrayOf(1, 2, 3, 5),
+                samplingFilterMode = "nearest",
+                alphaOnly = false,
+            ),
+            paintAlpha = 1f,
+        )
+        val changedSampling = ready(
+            supportedImageShaderDescriptor(
+                pixels = byteArrayOf(1, 2, 3, 4),
+                samplingFilterMode = "linear",
+                alphaOnly = false,
+            ),
+            paintAlpha = 1f,
+        )
+        val changedAlphaTopology = ready(
+            supportedImageShaderDescriptor(
+                pixels = byteArrayOf(1, 2, 3, 4),
+                samplingFilterMode = "nearest",
+                alphaOnly = true,
+            ),
+            paintAlpha = 1f,
+        )
+        val changedTint = ready(
+            supportedImageShaderDescriptor(
+                pixels = byteArrayOf(1, 2, 3, 4),
+                samplingFilterMode = "nearest",
+                alphaOnly = false,
+                tintR = 0.5f,
+            ),
+            paintAlpha = 1f,
+        )
+
+        listOf(changedPixels, changedSampling, changedAlphaTopology, changedTint).forEach { changed ->
+            assertNotEquals(baseline.materialKey, changed.materialKey)
+        }
+        assertEquals(baseline.abiHash, changedPixels.abiHash)
+        assertEquals(baseline.abiHash, changedTint.abiHash)
+    }
+
+    @Test
+    fun `abi hash excludes solid and gradient uniform values`() {
+        val firstSolid = ready(solidDescriptor(), paintAlpha = 1f)
+        val secondSolid = ready(
+            GPUMaterialDescriptor.SolidColor(r = 0.5f, g = 0.5f, b = 0.75f, a = 0.8f),
+            paintAlpha = 0.25f,
+        )
+        val firstGradient = ready(linearGradientDescriptor(), paintAlpha = 1f)
+        val secondGradient = ready(
+            linearGradientDescriptor().copy(
+                allStopColors = floatArrayOf(0f, 1f, 0f, 0.25f, 1f, 1f, 0f, 0.75f),
+            ),
+            paintAlpha = 0.25f,
+        )
+
+        assertEquals(firstSolid.abiHash, secondSolid.abiHash)
+        assertEquals(firstGradient.abiHash, secondGradient.abiHash)
+    }
+
+    @Test
+    fun `runtime payload packs exact little endian bytes and changes material key not abi`() {
+        val first = ready(
+            registeredRuntimeEffectDescriptor(
+                GPURuntimeEffectUniformValue.Float4(0.25f, 0.5f, 0.75f, 1f),
+            ),
+            paintAlpha = 1f,
+        )
+        val changed = ready(
+            registeredRuntimeEffectDescriptor(
+                GPURuntimeEffectUniformValue.Float4(0.5f, 0.5f, 0.75f, 1f),
+            ),
+            paintAlpha = 1f,
+        )
+
+        assertEquals(
+            listOf(
+                0x00, 0x00, 0x80, 0x3e,
+                0x00, 0x00, 0x00, 0x3f,
+                0x00, 0x00, 0x40, 0x3f,
+                0x00, 0x00, 0x80, 0x3f,
+            ),
+            first.uniformBytes,
+        )
+        assertNotEquals(first.materialKey, changed.materialKey)
+        assertEquals(first.abiHash, changed.abiHash)
+    }
+
+    @Test
+    fun `runtime payload rejects missing extra and wrong type fields canonically`() {
+        val invalid = listOf(
+            GPUMaterialDescriptor.RuntimeEffect(
+                effectId = "runtime.simple_rt",
+                descriptorVersion = 1,
+                uniforms = emptyMap(),
+            ),
+            GPUMaterialDescriptor.RuntimeEffect(
+                effectId = "runtime.simple_rt",
+                descriptorVersion = 1,
+                uniforms = mapOf(
+                    "gColor" to GPURuntimeEffectUniformValue.Float4(1f, 0f, 0f, 1f),
+                    "extra" to GPURuntimeEffectUniformValue.Float1(2f),
+                ),
+            ),
+            GPUMaterialDescriptor.RuntimeEffect(
+                effectId = "runtime.simple_rt",
+                descriptorVersion = 1,
+                uniforms = mapOf("gColor" to GPURuntimeEffectUniformValue.Float1(1f)),
+            ),
+        )
+
+        invalid.forEach { descriptor ->
+            val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+                compiler.compile(descriptor, 1f, context),
+                descriptor.uniforms.toString(),
+            )
+            assertEquals("unsupported.material.runtime_effect.uniform_payload", refused.code)
+        }
+    }
+
+    @Test
+    fun `runtime child facts are retained and unsupported children refuse canonically`() {
+        val children = linkedMapOf<String, GPUMaterialDescriptor>(
+            "input" to solidDescriptor(),
+        )
+        val descriptor = GPUMaterialDescriptor.RuntimeEffect(
+            effectId = "runtime.simple_rt",
+            descriptorVersion = 1,
+            uniforms = mapOf(
+                "gColor" to GPURuntimeEffectUniformValue.Float4(1f, 0f, 0f, 1f),
+            ),
+            children = children,
+        )
+        children.clear()
+
+        assertEquals(setOf("input"), descriptor.children.keys)
+        val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+            compiler.compile(descriptor, 1f, context),
+        )
+        assertEquals("unsupported.material.runtime_effect.children", refused.code)
+    }
+
+    @Test
+    fun `runtime payload snapshots caller maps and matrix arrays before compile`() {
+        val matrix = MutableList(16) { index -> index.toFloat() }
+        val uniforms = linkedMapOf<String, GPURuntimeEffectUniformValue>(
+            "gColor" to GPURuntimeEffectUniformValue.Float4(0.25f, 0.5f, 0.75f, 1f),
+            "unusedMatrix" to GPURuntimeEffectUniformValue.Matrix4x4(matrix),
+        )
+        val descriptor = GPUMaterialDescriptor.RuntimeEffect(
+            effectId = "runtime.simple_rt",
+            descriptorVersion = 1,
+            uniforms = uniforms,
+        )
+
+        matrix.fill(99f)
+        uniforms.clear()
+
+        val snapshot = assertIs<GPURuntimeEffectUniformValue.Matrix4x4>(
+            descriptor.uniforms.getValue("unusedMatrix"),
+        )
+        assertEquals((0 until 16).map(Int::toFloat), snapshot.values)
+        val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+            compiler.compile(descriptor, 1f, context),
+        )
+        assertEquals("unsupported.material.runtime_effect.uniform_payload", refused.code)
+    }
+
+    @Test
+    fun `runtime descriptor version and registered program availability remain distinct`() {
+        val versionMismatch = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+            compiler.compile(
+                GPUMaterialDescriptor.RuntimeEffect(
+                    effectId = "runtime.simple_rt",
+                    descriptorVersion = 2,
+                    uniforms = mapOf(
+                        "gColor" to GPURuntimeEffectUniformValue.Float4(0f, 0f, 0f, 0f),
+                    ),
+                ),
+                1f,
+                context,
+            ),
+        )
+        val registeredWithoutProgram = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+            compiler.compile(
+                GPUMaterialDescriptor.RuntimeEffect(
+                    effectId = SpiralRTDescriptor.effectId.value,
+                    descriptorVersion = SpiralRTDescriptor.descriptorVersion.value,
+                ),
+                1f,
+                context,
+            ),
+        )
+
+        assertEquals("unsupported.material.runtime_effect.descriptor", versionMismatch.code)
+        assertEquals(
+            "unsupported.material.runtime_effect.wgsl_not_available",
+            registeredWithoutProgram.code,
+        )
+    }
+
+    private fun ready(
+        descriptor: GPUMaterialDescriptor,
+        paintAlpha: Float,
+    ): GPUPreparedMaterialProgram =
+        assertIs<GPUPreparedMaterialProgramResult.Ready>(
+            compiler.compile(descriptor, paintAlpha, context),
+        ).program
+
     private fun solidDescriptor() =
         GPUMaterialDescriptor.SolidColor(r = 0.25f, g = 0.5f, b = 0.75f, a = 0.8f)
 
@@ -286,10 +537,14 @@ class GPUPreparedMaterialProgramTest {
             src = solidDescriptor(),
         )
 
-    private fun registeredRuntimeEffectDescriptor() =
+    private fun registeredRuntimeEffectDescriptor(
+        color: GPURuntimeEffectUniformValue =
+            GPURuntimeEffectUniformValue.Float4(0f, 0f, 0f, 0f),
+    ) =
         GPUMaterialDescriptor.RuntimeEffect(
             effectId = "runtime.simple_rt",
             descriptorVersion = 1,
+            uniforms = mapOf("gColor" to color),
         )
 
     private fun unregisteredRuntimeEffectDescriptor() =
@@ -304,6 +559,7 @@ class GPUPreparedMaterialProgramTest {
         height: Int = 1,
         samplingFilterMode: String = "nearest",
         alphaOnly: Boolean = false,
+        tintR: Float = 0.25f,
     ) =
         GPUMaterialDescriptor.ImageDraw(
             imageSourceId = "prepared-material-image",
@@ -312,7 +568,7 @@ class GPUPreparedMaterialProgramTest {
             rgbaPixels = pixels,
             samplingFilterMode = samplingFilterMode,
             alphaOnly = alphaOnly,
-            tintR = 0.25f,
+            tintR = tintR,
             tintG = 0.5f,
             tintB = 0.75f,
             tintA = 0.6f,

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.ColorFilter
@@ -9,6 +10,8 @@ import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.pipeline.UniformBlock
+import org.graphiks.kanvas.pipeline.UniformValue
 import org.graphiks.kanvas.types.a
 import org.graphiks.kanvas.types.b
 import org.graphiks.kanvas.types.g
@@ -21,7 +24,10 @@ data class GPUPreparedMaterialMapping(
 )
 
 internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping {
-    val mapped = toMaterial()
+    val mapped = mapMaterial(
+        shaderMapper = { shader -> shader.toPreparedMaterial() },
+        preserveRuntimePayload = true,
+    )
     val descriptor = if (mapped is GPUMaterialDescriptor.ImageDraw && mapped.alphaOnly) {
         mapped.copy(tintA = 1f)
     } else {
@@ -38,10 +44,19 @@ internal fun Paint.toPreparedMaterialMapping(): GPUPreparedMaterialMapping {
     )
 }
 
-internal fun Paint.toMaterial(): GPUMaterialDescriptor {
+internal fun Paint.toMaterial(): GPUMaterialDescriptor =
+    mapMaterial(
+        shaderMapper = { shader -> shader.toMaterial() },
+        preserveRuntimePayload = false,
+    )
+
+private fun Paint.mapMaterial(
+    shaderMapper: (Shader) -> GPUMaterialDescriptor,
+    preserveRuntimePayload: Boolean,
+): GPUMaterialDescriptor {
     val shader = this.shader
     val base = if (shader != null) {
-        val material = shader.toMaterial()
+        val material = shaderMapper(shader)
         if (material is GPUMaterialDescriptor.ImageDraw && material.alphaOnly) {
             material.copy(
                 tintR = this.color.r,
@@ -66,6 +81,11 @@ internal fun Paint.toMaterial(): GPUMaterialDescriptor {
         return GPUMaterialDescriptor.RuntimeEffect(
             effectId = cf.effect.id,
             descriptorVersion = 1,
+            uniforms = if (preserveRuntimePayload) {
+                cf.uniforms.toGPUUniformValues()
+            } else {
+                emptyMap()
+            },
         )
     }
     if (cf != null) {
@@ -175,7 +195,7 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
                 uniformBytes = org.graphiks.kanvas.gpu.renderer.materials.BlendWgslBuilder.packUniforms(dstDesc, srcDesc, modeStr),
             )
         } else {
-            desc
+            srcDesc
         }
     }
     is Shader.RuntimeEffect -> {
@@ -250,6 +270,72 @@ internal fun Shader.toMaterial(): GPUMaterialDescriptor = when (this) {
     is Shader.WithWorkingColorSpace -> this.shader.toMaterial()
     is Shader.CoordClamp -> this.shader.toMaterial()
 }
+
+private fun Shader.toPreparedMaterial(): GPUMaterialDescriptor = when (this) {
+    is Shader.Blend -> {
+        val dstDesc = dst.toPreparedMaterial()
+        val srcDesc = src.toPreparedMaterial()
+        val descriptor = GPUMaterialDescriptor.BlendShader(
+            mode = mode.name,
+            dst = dstDesc,
+            src = srcDesc,
+        )
+        if (org.graphiks.kanvas.gpu.renderer.materials.GPUBlendShaderLowering.canHandle(descriptor)) {
+            descriptor.copy(
+                wgslCombined = org.graphiks.kanvas.gpu.renderer.materials.BlendWgslBuilder
+                    .buildWgsl(dstDesc, srcDesc, mode.name),
+                uniformBytes = org.graphiks.kanvas.gpu.renderer.materials.BlendWgslBuilder
+                    .packUniforms(dstDesc, srcDesc, mode.name),
+            )
+        } else {
+            descriptor
+        }
+    }
+    is Shader.RuntimeEffect ->
+        GPUMaterialDescriptor.RuntimeEffect(
+            effectId = effect.id,
+            descriptorVersion = 1,
+            uniforms = uniforms.toGPUUniformValues(),
+            children = children.mapValues { (_, child) -> child.toPreparedMaterial() },
+        )
+    is Shader.WithLocalMatrix -> shader.toPreparedMaterial()
+    is Shader.WithColorFilter ->
+        shader.toPreparedMaterial().let { material ->
+            material.withGradientColorFilter(filter) ?: material
+        }
+    is Shader.WithWorkingColorSpace -> shader.toPreparedMaterial()
+    is Shader.CoordClamp -> shader.toPreparedMaterial()
+    else -> toMaterial()
+}
+
+private fun UniformBlock.toGPUUniformValues(): Map<String, GPURuntimeEffectUniformValue> =
+    entries.mapValues { (_, value) ->
+        when (value) {
+            is UniformValue.F1 -> GPURuntimeEffectUniformValue.Float1(value.v)
+            is UniformValue.F2 -> GPURuntimeEffectUniformValue.Float2(value.x, value.y)
+            is UniformValue.F3 ->
+                GPURuntimeEffectUniformValue.Float3(value.x, value.y, value.z)
+            is UniformValue.F4 ->
+                GPURuntimeEffectUniformValue.Float4(value.x, value.y, value.z, value.w)
+            is UniformValue.I1 -> GPURuntimeEffectUniformValue.Int1(value.v)
+            is UniformValue.M3 ->
+                GPURuntimeEffectUniformValue.Matrix3x3(
+                    listOf(
+                        value.m.scaleX,
+                        value.m.skewX,
+                        value.m.transX,
+                        value.m.skewY,
+                        value.m.scaleY,
+                        value.m.transY,
+                        value.m.persp0,
+                        value.m.persp1,
+                        value.m.persp2,
+                    ),
+                )
+            is UniformValue.M4 ->
+                GPURuntimeEffectUniformValue.Matrix4x4(value.values.toList())
+        }
+    }
 
 /**
  * Expands non-RGBA image pixels to RGBA for GPU upload.
