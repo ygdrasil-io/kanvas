@@ -3344,9 +3344,17 @@ class GlyphSurfaceTest {
 
         assertEquals(first, second, "Repeated rasterization must produce identical masks")
         assertEquals(7, first.glyphId)
-        assertTrue(first.pixels.any { it in 1..254 }, "Must contain intermediate coverage values")
-        assertTrue(0 in first.pixels, "Must contain fully transparent pixels")
-        assertTrue(255 in first.pixels, "Must contain fully opaque pixels")
+        assertEquals(4, first.width)
+        assertEquals(4, first.height)
+        assertEquals(
+            listOf(
+                255, 255, 255, 96,
+                255, 255, 96, 0,
+                255, 96, 0, 0,
+                96, 0, 0, 0,
+            ),
+            first.pixels,
+        )
     }
 
     @Test
@@ -3392,26 +3400,45 @@ class GlyphSurfaceTest {
     }
 
     @Test
-    fun `A8 mask immutable pixels cannot be mutated after generation`() {
-        val generator = object : GlyphMaskGenerator {}
-        val outline = OutlineGlyphRepresentation(
-            glyphId = 10,
-            pathCommands = listOf(
-                "M 1 1",
-                "L 4 1",
-                "L 4 4",
-                "L 1 4",
-                "Z",
-            ),
+    fun `A8 glyph mask snapshots mutable pixel source and preserves summary hash`() {
+        val sourcePixels = mutableListOf(
+            0, 64,
+            128, 255,
         )
-        val key = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655442004")
-        val mask = generator.generate(outline, key)
-        val snapshot = mask.pixels.toList()
+        val mask = A8GlyphMask(
+            glyphId = 10,
+            width = 2,
+            height = 2,
+            pixels = sourcePixels,
+        )
+        val originalSummary = GlyphMaskSummary.fromA8Mask(mask)
 
-        repeat(3) {
-            val repeated = generator.generate(outline, key)
-            assertEquals(snapshot, repeated.pixels, "Caller mutation must not alter stored mask")
-        }
+        sourcePixels.fill(7)
+
+        assertEquals(listOf(0, 64, 128, 255), mask.pixels)
+        assertEquals(originalSummary, GlyphMaskSummary.fromA8Mask(mask))
+    }
+
+    @Test
+    fun `A8 glyph mask snapshots mutable diagnostic source`() {
+        val diagnostic = GlyphRouteDiagnostic(
+            glyphId = 10,
+            route = "text.glyph.mask.A8",
+            message = "fixture diagnostic",
+            severity = "warning",
+        )
+        val sourceDiagnostics = mutableListOf(diagnostic)
+        val mask = A8GlyphMask(
+            glyphId = 10,
+            width = 1,
+            height = 1,
+            pixels = listOf(255),
+            diagnostics = sourceDiagnostics,
+        )
+
+        sourceDiagnostics.clear()
+
+        assertEquals(listOf(diagnostic), mask.diagnostics)
     }
 
     private fun a8Mask(glyphId: Int, width: Int, height: Int): A8GlyphMask =

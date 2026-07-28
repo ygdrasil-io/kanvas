@@ -97,8 +97,36 @@ class GlyphMaskKeyTest {
 
         variation["wght"] = 700f
 
+        assertEquals(mapOf("wght" to 400f), key.strikeKey.variationCoordinates)
         assertEquals(originalPreimage, key.canonicalPreimage())
         assertEquals(originalHash, key.sha256())
+    }
+
+    @Test
+    fun `mask key hash code and hash map lookup survive caller mutation`() {
+        val variation = linkedMapOf("wght" to 400f)
+        val key = maskKey(strikeKey = strikeKey(variation = variation))
+        val originalHashCode = key.hashCode()
+        val cache = hashMapOf(key to "stored-mask")
+
+        variation["wght"] = 700f
+
+        assertEquals(originalHashCode, key.hashCode())
+        assertEquals("stored-mask", cache[key])
+    }
+
+    @Test
+    fun `mask key copy remains equal and canonically identical after caller mutation`() {
+        val variation = linkedMapOf("wght" to 400f)
+        val key = maskKey(strikeKey = strikeKey(variation = variation))
+
+        variation["wght"] = 700f
+        val copied = key.copy()
+
+        assertEquals(key, copied)
+        assertEquals(key.hashCode(), copied.hashCode())
+        assertEquals(key.canonicalPreimage(), copied.canonicalPreimage())
+        assertEquals(key.sha256(), copied.sha256())
     }
 
     @Test

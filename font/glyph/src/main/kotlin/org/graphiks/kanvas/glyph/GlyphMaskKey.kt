@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.glyph
 
 import java.security.MessageDigest
+import java.util.Collections
+import java.util.LinkedHashMap
 import java.util.Locale
 
 /**
@@ -51,15 +53,17 @@ data class GlyphMaskBlurKey(
  * changes when the coverage algorithm is updated.
  * @property blur optional blur parameters applied to the mask before coloring.
  */
-data class GlyphMaskKey(
-    val strikeKey: GlyphStrikeKey,
+class GlyphMaskKey(
+    strikeKey: GlyphStrikeKey,
     val faceIndex: Int,
     val sourceOutlineSha256: String,
     val rasterizerVersion: String = "a8-nonzero-4x4-v1",
     val blur: GlyphMaskBlurKey? = null,
 ) {
+    val strikeKey: GlyphStrikeKey = strikeKey.immutableMaskKeySnapshot()
+
     private val strikeKeySha256: String =
-        strikeKey.preimageSha256(strikeKey.glyphId ?: 0)
+        this.strikeKey.preimageSha256(this.strikeKey.glyphId ?: 0)
 
     init {
         require(faceIndex >= 0) { "Face index must be non-negative, but was $faceIndex." }
@@ -101,6 +105,60 @@ data class GlyphMaskKey(
     fun sha256(): String =
         keySha256(canonicalPreimage().toByteArray(Charsets.UTF_8))
 
+    fun copy(
+        strikeKey: GlyphStrikeKey = this.strikeKey,
+        faceIndex: Int = this.faceIndex,
+        sourceOutlineSha256: String = this.sourceOutlineSha256,
+        rasterizerVersion: String = this.rasterizerVersion,
+        blur: GlyphMaskBlurKey? = this.blur,
+    ): GlyphMaskKey =
+        GlyphMaskKey(
+            strikeKey = strikeKey,
+            faceIndex = faceIndex,
+            sourceOutlineSha256 = sourceOutlineSha256,
+            rasterizerVersion = rasterizerVersion,
+            blur = blur,
+        )
+
+    operator fun component1(): GlyphStrikeKey = strikeKey
+
+    operator fun component2(): Int = faceIndex
+
+    operator fun component3(): String = sourceOutlineSha256
+
+    operator fun component4(): String = rasterizerVersion
+
+    operator fun component5(): GlyphMaskBlurKey? = blur
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is GlyphMaskKey) return false
+
+        return strikeKey == other.strikeKey &&
+            faceIndex == other.faceIndex &&
+            sourceOutlineSha256 == other.sourceOutlineSha256 &&
+            rasterizerVersion == other.rasterizerVersion &&
+            blur == other.blur
+    }
+
+    override fun hashCode(): Int {
+        var result = strikeKey.hashCode()
+        result = 31 * result + faceIndex
+        result = 31 * result + sourceOutlineSha256.hashCode()
+        result = 31 * result + rasterizerVersion.hashCode()
+        result = 31 * result + (blur?.hashCode() ?: 0)
+        return result
+    }
+
+    override fun toString(): String =
+        "GlyphMaskKey(" +
+            "strikeKey=$strikeKey, " +
+            "faceIndex=$faceIndex, " +
+            "sourceOutlineSha256=$sourceOutlineSha256, " +
+            "rasterizerVersion=$rasterizerVersion, " +
+            "blur=$blur" +
+            ")"
+
     companion object {
         private fun keySha256(bytes: ByteArray): String =
             MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { byte ->
@@ -108,3 +166,10 @@ data class GlyphMaskKey(
             }
     }
 }
+
+private fun GlyphStrikeKey.immutableMaskKeySnapshot(): GlyphStrikeKey =
+    copy(
+        variationCoordinates = Collections.unmodifiableMap(
+            LinkedHashMap(variationCoordinates),
+        ),
+    )

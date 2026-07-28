@@ -3,6 +3,7 @@ package org.graphiks.kanvas.glyph
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor
 import java.security.MessageDigest
+import java.util.Collections
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -880,17 +881,104 @@ interface GlyphMaskGenerator {
  * @property sourceOutlineSha256 optional SHA-256 over the source outline facts
  * used to generate this mask.
  */
-data class A8GlyphMask(
+class A8GlyphMask(
     override val glyphId: Int,
     val width: Int,
     val height: Int,
     val left: Int = 0,
     val top: Int = 0,
     val rowBytes: Int = width,
-    val pixels: List<Int> = List(rowBytes * height) { 0 },
-    val diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
+    pixels: List<Int> = List(rowBytes * height) { 0 },
+    diagnostics: List<GlyphRouteDiagnostic> = emptyList(),
     val sourceOutlineSha256: String? = null,
-) : GlyphRepresentation
+) : GlyphRepresentation {
+    val pixels: List<Int> = Collections.unmodifiableList(ArrayList(pixels))
+
+    val diagnostics: List<GlyphRouteDiagnostic> =
+        Collections.unmodifiableList(ArrayList(diagnostics))
+
+    fun copy(
+        glyphId: Int = this.glyphId,
+        width: Int = this.width,
+        height: Int = this.height,
+        left: Int = this.left,
+        top: Int = this.top,
+        rowBytes: Int = this.rowBytes,
+        pixels: List<Int> = this.pixels,
+        diagnostics: List<GlyphRouteDiagnostic> = this.diagnostics,
+        sourceOutlineSha256: String? = this.sourceOutlineSha256,
+    ): A8GlyphMask =
+        A8GlyphMask(
+            glyphId = glyphId,
+            width = width,
+            height = height,
+            left = left,
+            top = top,
+            rowBytes = rowBytes,
+            pixels = pixels,
+            diagnostics = diagnostics,
+            sourceOutlineSha256 = sourceOutlineSha256,
+        )
+
+    operator fun component1(): Int = glyphId
+
+    operator fun component2(): Int = width
+
+    operator fun component3(): Int = height
+
+    operator fun component4(): Int = left
+
+    operator fun component5(): Int = top
+
+    operator fun component6(): Int = rowBytes
+
+    operator fun component7(): List<Int> = pixels
+
+    operator fun component8(): List<GlyphRouteDiagnostic> = diagnostics
+
+    operator fun component9(): String? = sourceOutlineSha256
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is A8GlyphMask) return false
+
+        return glyphId == other.glyphId &&
+            width == other.width &&
+            height == other.height &&
+            left == other.left &&
+            top == other.top &&
+            rowBytes == other.rowBytes &&
+            pixels == other.pixels &&
+            diagnostics == other.diagnostics &&
+            sourceOutlineSha256 == other.sourceOutlineSha256
+    }
+
+    override fun hashCode(): Int {
+        var result = glyphId
+        result = 31 * result + width
+        result = 31 * result + height
+        result = 31 * result + left
+        result = 31 * result + top
+        result = 31 * result + rowBytes
+        result = 31 * result + pixels.hashCode()
+        result = 31 * result + diagnostics.hashCode()
+        result = 31 * result + (sourceOutlineSha256?.hashCode() ?: 0)
+        return result
+    }
+
+    override fun toString(): String =
+        "A8GlyphMask(" +
+            "glyphId=$glyphId, " +
+            "width=$width, " +
+            "height=$height, " +
+            "left=$left, " +
+            "top=$top, " +
+            "rowBytes=$rowBytes, " +
+            "pixels=$pixels, " +
+            "diagnostics=$diagnostics, " +
+            "sourceOutlineSha256=$sourceOutlineSha256" +
+            ")"
+}
 
 /**
  * Deterministic evidence for one CPU-prepared A8 glyph mask.
