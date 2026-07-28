@@ -7,9 +7,6 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
-import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
-import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
-import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
@@ -29,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitivePreparedSemanticA
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskPreparedRouteRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPreparedImageClipAuthorityValidation
 import org.graphiks.kanvas.gpu.renderer.passes.sealGPUCorePrimitiveCoverageMaskPreparedRoute
 import org.graphiks.kanvas.gpu.renderer.passes.snapshotGPUCorePrimitiveCoverageMaskPreparedCandidate
 import org.graphiks.kanvas.gpu.renderer.passes.validateCorePrimitiveCoverageSampleAuthority
@@ -39,6 +37,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveStructuralColorForma
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitivePathStencilRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.corePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.isCorePrimitiveNoClipOrScissorExecution
+import org.graphiks.kanvas.gpu.renderer.passes.validatePreparedImageClipAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatch
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchPlan
@@ -87,7 +86,6 @@ import org.graphiks.kanvas.gpu.renderer.recording.validateCorePrimitiveClipProdu
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitiveClipStencilPreparedCandidateValidation
 import org.graphiks.kanvas.gpu.renderer.recording.validateCorePrimitiveClipStencilPreparedCandidate
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveScissorAuthority
-import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveDepthStencilByteSize
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveCoverageMaskConsumerUniformBytes
 import org.graphiks.kanvas.gpu.renderer.recording.corePrimitiveCoverageMaskProducerUniformBytes
@@ -4131,57 +4129,32 @@ internal class GPUFramePreflighter(
     private fun validatePreparedSampledImageScissor(
         packet: GPUDrawPacket,
         semantic: GPUDrawSemanticPayload.SampledImage,
-    ): GPUDiagnostic? {
-        val hasScissor = semantic.scissorBounds != semantic.targetBounds
-        val expectedAuthority = if (hasScissor) {
-            preparedImageScissorAuthority(semantic.scissorBounds)
-        } else {
-            null
-        }
-        if (packet.scissorBoundsHash != expectedAuthority) {
-            return diagnostic(
+    ): GPUDiagnostic? = when (
+        packet.validatePreparedImageClipAuthority(
+            semantic.targetBounds,
+            semantic.scissorBounds,
+        )
+    ) {
+        GPUPreparedImageClipAuthorityValidation.Accepted -> null
+        GPUPreparedImageClipAuthorityValidation.ScissorAuthorityMismatch ->
+            diagnostic(
                 "invalid.preflight.prepared_image_scissor_authority",
                 "Prepared sampled-image packet and semantic scissor authorities differ.",
             )
-        }
-        val expectedCoverage = if (hasScissor) {
-            GPUClipCoveragePlan.Scissor(
-                GPUBounds(
-                    semantic.scissorBounds.left.toFloat(),
-                    semantic.scissorBounds.top.toFloat(),
-                    semantic.scissorBounds.right.toFloat(),
-                    semantic.scissorBounds.bottom.toFloat(),
-                ),
-            )
-        } else {
-            GPUClipCoveragePlan.NoClip
-        }
-        if (packet.clipCoveragePlan != expectedCoverage) {
-            return diagnostic(
+        GPUPreparedImageClipAuthorityValidation.CoverageMismatch ->
+            diagnostic(
                 "invalid.preflight.prepared_image_scissor_coverage",
                 "Prepared sampled-image scissor must retain one exact coverage plan.",
             )
-        }
-        val exactExecution = packet.clipExecutionPlan
-        if (
-            hasScissor &&
-            (
-                exactExecution !is GPUClipExecutionPlan.ScissorOnly ||
-                    exactExecution.scissor != semantic.scissorBounds
-            )
-        ) {
-            return diagnostic(
+        GPUPreparedImageClipAuthorityValidation.ExecutionMismatch ->
+            diagnostic(
                 "invalid.preflight.prepared_image_scissor_execution",
-                "Prepared sampled-image scissor must retain one exact native execution plan.",
+                if (semantic.scissorBounds != semantic.targetBounds) {
+                    "Prepared sampled-image scissor must retain one exact native execution plan."
+                } else {
+                    "Wide-open prepared sampled images must retain the no-clip execution plan."
+                },
             )
-        }
-        if (!hasScissor && exactExecution != GPUClipExecutionPlan.NoClip) {
-            return diagnostic(
-                "invalid.preflight.prepared_image_scissor_execution",
-                "Wide-open prepared sampled images must retain the no-clip execution plan.",
-            )
-        }
-        return null
     }
 
     private fun hasExactPreparedSurfaceMixedNativeBoundary(

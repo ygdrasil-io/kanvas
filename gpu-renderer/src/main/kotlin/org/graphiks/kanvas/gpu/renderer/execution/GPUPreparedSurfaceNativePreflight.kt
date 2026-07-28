@@ -4,9 +4,6 @@ import java.security.MessageDigest
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
-import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
-import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
-import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
@@ -17,14 +14,15 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPreparedImageClipAuthorityValidation
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.fromBatchPlan
+import org.graphiks.kanvas.gpu.renderer.passes.validatePreparedImageClipAuthority
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
-import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
@@ -1325,33 +1323,11 @@ internal class GPUPreparedSurfaceNativePreflight(
                 "Prepared-image scissor validation requires one exact scene target.",
             )
         val mismatch = imagePackets.any { (packet, semantic) ->
-            val hasScissor = semantic.scissorBounds != semantic.targetBounds
-            val expectedHash = if (hasScissor) {
-                preparedImageScissorAuthority(semantic.scissorBounds)
-            } else {
-                null
-            }
-            val expectedCoverage = if (hasScissor) {
-                GPUClipCoveragePlan.Scissor(
-                    GPUBounds(
-                        semantic.scissorBounds.left.toFloat(),
-                        semantic.scissorBounds.top.toFloat(),
-                        semantic.scissorBounds.right.toFloat(),
-                        semantic.scissorBounds.bottom.toFloat(),
-                    ),
-                )
-            } else {
-                GPUClipCoveragePlan.NoClip
-            }
-            val expectedExecution = if (hasScissor) {
-                GPUClipExecutionPlan.ScissorOnly(semantic.scissorBounds)
-            } else {
-                GPUClipExecutionPlan.NoClip
-            }
             semantic.targetBounds != targetBounds ||
-                packet.scissorBoundsHash != expectedHash ||
-                packet.clipCoveragePlan != expectedCoverage ||
-                packet.clipExecutionPlan != expectedExecution
+                packet.validatePreparedImageClipAuthority(
+                    semantic.targetBounds,
+                    semantic.scissorBounds,
+                ) != GPUPreparedImageClipAuthorityValidation.Accepted
         }
         return if (mismatch) {
             refused(
