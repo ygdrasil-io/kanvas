@@ -5,7 +5,7 @@
   "misses": 1,
   "evictions": 0,
   "residentBytes": 1024,
-  "generationToken": "gen-001"
+  "generation": 1
 
 }, {
   "cacheName": "sdf-atlas",
@@ -14,7 +14,7 @@
   "misses": 2,
   "evictions": 1,
   "residentBytes": 2048,
-  "generationToken": "gen-002"
+  "generation": 2
 
 }],"advisoryBudgets": [{
   "metricName": "cache.resident.bytes",

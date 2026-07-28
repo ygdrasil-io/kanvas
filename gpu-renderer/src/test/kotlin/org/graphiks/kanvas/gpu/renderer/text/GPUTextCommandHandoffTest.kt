@@ -16,11 +16,26 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
 class GPUTextCommandHandoffTest {
+    @Test
+    fun `renderer handoff retains one typed numeric generation`() {
+        val reference = GPUTextArtifactReference(
+            artifactName = "GlyphAtlasArtifact",
+            artifactID = GPUTextArtifactID(Uuid.parse("550e8400-e29b-41d4-a716-446655449001")),
+            generation = GPUTextArtifactGeneration(3),
+            contentFingerprint = "glyph-atlas-sha256",
+            sourceLabel = "TextGPUArtifactBundle.atlases",
+        ).toRendererTextArtifactRef()
+
+        assertEquals(GPUTextArtifactGeneration(3), reference.generation)
+        assertFailsWith<IllegalArgumentException> { GPUTextArtifactGeneration(-1) }
+    }
+
     @Test
     fun `draw text run command carries only dumpable text artifact facts`() {
         val diagnostic = GPUTextDiagnostic(
@@ -33,7 +48,7 @@ class GPUTextCommandHandoffTest {
             artifactType = "GlyphAtlasArtifact",
             artifactId = "artifact-9",
             artifactKeyHash = "glyph-atlas-sha256",
-            generationToken = "atlas-generation-3",
+            generation = GPUTextArtifactGeneration(3),
             routeHint = "AtlasMaskSample",
         )
         val command = NormalizedDrawCommand.DrawTextRun(
@@ -43,7 +58,7 @@ class GPUTextCommandHandoffTest {
             glyphRunDescriptorRefs = listOf("run-7"),
             artifactRefs = listOf(artifactRef),
             artifactKeyHashes = listOf("glyph-atlas-sha256"),
-            atlasGenerationTokens = listOf("atlas-generation-3"),
+            atlasGenerations = listOf(GPUTextArtifactGeneration(3)),
             uploadDependencyFacts = listOf("upload-before-sample"),
             routeDiagnostics = listOf(diagnostic),
             transform = GPUTransformFacts.identity(),
@@ -176,7 +191,7 @@ class GPUTextCommandHandoffTest {
         assertEquals("GlyphAtlasArtifact", rendererReference.artifactType)
         assertEquals("550e8400-e29b-41d4-a716-446655449001", rendererReference.artifactId)
         assertEquals("glyph-atlas-sha256", rendererReference.artifactKeyHash)
-        assertEquals("3", rendererReference.generationToken)
+        assertEquals(GPUTextArtifactGeneration(3), rendererReference.generation)
         assertEquals("AtlasMaskSample", rendererReference.routeHint)
     }
 

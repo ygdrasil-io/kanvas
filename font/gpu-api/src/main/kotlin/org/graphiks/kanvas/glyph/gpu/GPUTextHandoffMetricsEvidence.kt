@@ -18,7 +18,7 @@ fun defaultGPUTextHandoffMetricsJson(): String {
                 misses = 1,
                 evictions = 0,
                 residentBytes = 1024,
-                generationToken = "gen-001",
+                generation = GPUTextArtifactGeneration(1),
             ),
             GPUTextCacheTelemetryRecord(
                 cacheName = "sdf-atlas",
@@ -27,7 +27,7 @@ fun defaultGPUTextHandoffMetricsJson(): String {
                 misses = 2,
                 evictions = 1,
                 residentBytes = 2048,
-                generationToken = "gen-002",
+                generation = GPUTextArtifactGeneration(2),
             ),
         ),
         advisoryBudgets = listOf(

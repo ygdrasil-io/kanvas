@@ -84,7 +84,7 @@ class GPUColorGlyphRoutePlannerTest {
             glyphRunDescriptorRefs = listOf("run-7"),
             artifactRefs = emptyList(),
             artifactKeyHashes = emptyList(),
-            atlasGenerationTokens = emptyList(),
+            atlasGenerations = emptyList(),
             uploadDependencyFacts = emptyList(),
             routeDiagnostics = emptyList(),
             transform = org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts.identity(),

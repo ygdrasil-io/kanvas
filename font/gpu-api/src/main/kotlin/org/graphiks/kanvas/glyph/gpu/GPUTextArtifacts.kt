@@ -118,7 +118,11 @@ value class GPUTextArtifactID(
 @JvmInline
 value class GPUTextArtifactGeneration(
     val value: Int,
-)
+) {
+    init {
+        require(value >= 0) { "GPUTextArtifactGeneration.value must be non-negative." }
+    }
+}
 
 /**
  * Compound key for a pure Kotlin GPU text artifact.

@@ -177,7 +177,7 @@ data class GPUTextCacheTelemetryRecord(
     val misses: Long,
     val evictions: Long,
     val residentBytes: Long,
-    val generationToken: String,
+    val generation: GPUTextArtifactGeneration,
 ) {
     init {
         requireNonBlank(cacheName, "cacheName")
@@ -186,7 +186,6 @@ data class GPUTextCacheTelemetryRecord(
         requireNonNegative(misses, "misses")
         requireNonNegative(evictions, "evictions")
         requireNonNegative(residentBytes, "residentBytes")
-        requireNonBlank(generationToken, "generationToken")
     }
 
     fun toCanonicalJson(): String = buildString {
@@ -197,7 +196,7 @@ data class GPUTextCacheTelemetryRecord(
         appendTextTelemetryJsonField("misses", misses, comma = true)
         appendTextTelemetryJsonField("evictions", evictions, comma = true)
         appendTextTelemetryJsonField("residentBytes", residentBytes, comma = true)
-        appendTextTelemetryJsonField("generationToken", generationToken, comma = false)
+        appendTextTelemetryJsonField("generation", generation.value, comma = false)
         append("\n}")
     }
 }
@@ -348,7 +347,7 @@ private val cacheTelemetryRecordComparator = compareBy<GPUTextCacheTelemetryReco
     { it.misses },
     { it.evictions },
     { it.residentBytes },
-    { it.generationToken },
+    { it.generation.value },
 )
 
 private val advisoryBudgetRecordComparator = compareBy<GPUTextAdvisoryBudgetRecord>(

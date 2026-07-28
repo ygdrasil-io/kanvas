@@ -1,8 +1,10 @@
 package org.graphiks.kanvas.text
 
+import org.graphiks.kanvas.font.FontIdentityAuthority
 import org.graphiks.kanvas.font.FontSource
 import org.graphiks.kanvas.font.FontSourceID
 import org.graphiks.kanvas.font.FontSourceKind
+import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.font.scaler.CFF2Scaler
 import org.graphiks.kanvas.font.scaler.CFFScaler
 import org.graphiks.kanvas.font.scaler.GlyphScaleResult
@@ -14,14 +16,29 @@ import org.graphiks.kanvas.font.scaler.VariationPosition
 import org.graphiks.kanvas.font.sfnt.DefaultOpenTypeFaceParser
 import org.graphiks.kanvas.font.sfnt.OpenTypeFaceData
 import org.graphiks.kanvas.geometry.Path
-import kotlin.uuid.Uuid
 
 class FontTypeface(
-    val fontBytes: ByteArray,
+    fontBytes: ByteArray,
     override val fontName: String = "unknown",
+    val faceIndex: Int = 0,
 ) : Typeface {
+    private val fontBytesSnapshot: ByteArray = fontBytes.copyOf()
+
+    val fontBytes: ByteArray
+        get() = fontBytesSnapshot.copyOf()
+
+    val sourceId: FontSourceID =
+        FontIdentityAuthority.memorySource(fontBytesSnapshot, fontName).sourceId()
+
+    val typefaceId: TypefaceID?
+        get() = parsedFace?.id
+
+    init {
+        require(faceIndex >= 0) { "faceIndex must be non-negative." }
+    }
+
     internal val scaler: GlyphScaler? = try {
-        GlyphScaler.fromBytes(fontBytes)
+        GlyphScaler.fromBytes(fontBytesSnapshot)
     } catch (_: NoClassDefFoundError) {
         null
     } catch (_: ClassNotFoundException) {
@@ -40,11 +57,12 @@ class FontTypeface(
         runCatching {
             DefaultOpenTypeFaceParser().parse(
                 FontSource(
-                    id = FontSourceID(Uuid.parse("10000000-0000-0000-0000-000000000001")),
+                    id = sourceId,
                     kind = FontSourceKind.MEMORY,
                     displayName = fontName,
-                    bytes = fontBytes,
+                    bytes = fontBytesSnapshot,
                 ),
+                faceIndex = faceIndex,
             )
         }.getOrNull()
     }

@@ -41,9 +41,9 @@ class GPUTextA8RoutePlanner {
             materialKeyHash = "pending.material.text",
             renderStepCandidates = listOf(renderStep),
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
-            diagnostics = command.atlasGenerationTokens.map { token ->
+            diagnostics = command.atlasGenerations.map { generation ->
                 GPUAnalysisDiagnostic(
-                    code = "text:atlas_gen=$token",
+                    code = "text:atlas_gen=${generation.value}",
                     recordId = recordId,
                     terminal = false,
                 )
@@ -159,7 +159,7 @@ class GPUTextA8RoutePlanner {
             artifactRefs.isEmpty() -> "unsupported.text.artifact_unregistered"
             artifactRefs.any { ref -> ref.routeHint != null && ref.routeHint !in acceptedRouteHints } ->
                 "unsupported.text.a8_atlas_route_unavailable"
-            atlasGenerationTokens.any { token -> !token.startsWith("atlas-generation-") } ->
+            atlasGenerations != artifactRefs.map { reference -> reference.generation } ->
                 "unsupported.text.atlas_generation_stale"
             uploadDependencyFacts.isEmpty() -> "unsupported.text.upload_plan_missing"
             routeDiagnostics.any { diag -> diag.terminal } ->

@@ -6,6 +6,7 @@ import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
 import org.graphiks.kanvas.font.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.font.handoff.GlyphDescriptor
 import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
@@ -57,7 +58,7 @@ class GPUTextA8RouteAcceptanceTest {
             artifactType = "GlyphAtlasArtifact",
             artifactId = "artifact-1",
             artifactKeyHash = "glyph-atlas-sha256",
-            generationToken = "atlas-generation-1",
+            generation = GPUTextArtifactGeneration(1),
             routeHint = "AtlasMaskSample",
         )
         val command = NormalizedDrawCommand.DrawTextRun(
@@ -68,7 +69,7 @@ class GPUTextA8RouteAcceptanceTest {
             glyphRunDescriptor = descriptor,
             artifactRefs = listOf(artifactRef),
             artifactKeyHashes = listOf("glyph-atlas-sha256"),
-            atlasGenerationTokens = listOf("atlas-generation-1"),
+            atlasGenerations = listOf(GPUTextArtifactGeneration(1)),
             uploadDependencyFacts = listOf("upload-before-sample"),
             routeDiagnostics = emptyList(),
             transform = GPUTransformFacts.identity(),
@@ -122,7 +123,7 @@ class GPUTextA8RouteAcceptanceTest {
             glyphRunDescriptor = descriptor,
             artifactRefs = emptyList(),
             artifactKeyHashes = emptyList(),
-            atlasGenerationTokens = emptyList(),
+            atlasGenerations = emptyList(),
             uploadDependencyFacts = emptyList(),
             routeDiagnostics = emptyList(),
             transform = GPUTransformFacts.identity(),

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.commands
 
 import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
 import org.graphiks.kanvas.glyph.gpu.GPUColorGlyphLayerPlan
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterGraphDescriptor
 import org.graphiks.kanvas.gpu.renderer.filters.GPUFilterSourcePlan
 import org.graphiks.kanvas.gpu.renderer.filters.GPUSimpleFilterBounds
@@ -1082,7 +1083,7 @@ sealed interface NormalizedDrawCommand {
         val colorGlyphPlans: List<GPUColorGlyphLayerPlan> = emptyList(),
         val artifactRefs: List<GPUTextArtifactRef>,
         val artifactKeyHashes: List<String>,
-        val atlasGenerationTokens: List<String>,
+        val atlasGenerations: List<GPUTextArtifactGeneration>,
         val uploadDependencyFacts: List<String>,
         val routeDiagnostics: List<GPUTextDiagnostic>,
         override val transform: GPUTransformFacts,

@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
 import org.graphiks.kanvas.glyph.gpu.GPUColorGlyphLayerPlan
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactReference
 
 /** Text ordering token. */
@@ -193,7 +194,7 @@ data class GPUTextArtifactRef(
     val artifactType: String,
     val artifactId: String,
     val artifactKeyHash: String,
-    val generationToken: String,
+    val generation: GPUTextArtifactGeneration,
     val routeHint: String? = null,
 )
 
@@ -207,7 +208,7 @@ fun GPUTextArtifactReference.toRendererTextArtifactRef(
     artifactType = artifactName,
     artifactId = artifactID.value.toHexDashString(),
     artifactKeyHash = contentFingerprint,
-    generationToken = generation.value.toString(),
+    generation = generation,
     routeHint = routeHint,
 )
 

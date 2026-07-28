@@ -423,11 +423,11 @@ class GPURecorder(
                 add(ref.artifactType)
                 add(ref.artifactId)
                 add(ref.artifactKeyHash)
-                add(ref.generationToken)
+                add(ref.generation.value.toString())
                 ref.routeHint?.let(::add)
             }
             addAll(artifactKeyHashes)
-            addAll(atlasGenerationTokens)
+            atlasGenerations.forEach { generation -> add(generation.value.toString()) }
             addAll(uploadDependencyFacts)
             routeDiagnostics.forEach { textDiagnostic ->
                 add(textDiagnostic.code)

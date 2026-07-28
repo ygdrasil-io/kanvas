@@ -1891,7 +1891,7 @@ internal fun DisplayOp.DrawText.toNormalizedCommand(
         colorGlyphPlans = emptyList(),
         artifactRefs = emptyList(),
         artifactKeyHashes = emptyList(),
-        atlasGenerationTokens = emptyList(),
+        atlasGenerations = emptyList(),
         uploadDependencyFacts = emptyList(),
         routeDiagnostics = emptyList(),
         transform = transform,

@@ -5,6 +5,7 @@ import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
@@ -48,7 +49,7 @@ class GPUTextA8RoutePlannerTest {
         val command = a8DrawTextRunCommand()
         val plan = GPUTextA8RoutePlanner().plan(command)
 
-        assertContains(plan.analysisRecord.diagnostics.map { it.code }, "text:atlas_gen=atlas-generation-3")
+        assertContains(plan.analysisRecord.diagnostics.map { it.code }, "text:atlas_gen=3")
     }
 
     @Test
@@ -89,9 +90,9 @@ class GPUTextA8RoutePlannerTest {
     }
 
     @Test
-    fun `draw text run with stale atlas generation tokens refuses with generation stale`() {
+    fun `draw text run with stale atlas generation refuses with generation stale`() {
         val command = a8DrawTextRunCommand(
-            atlasGenerationTokens = listOf("generation-stale"),
+            atlasGenerations = listOf(GPUTextArtifactGeneration(4)),
         )
         val plan = GPUTextA8RoutePlanner().plan(command)
         assertRefused(plan, "unsupported.text.atlas_generation_stale")
@@ -126,7 +127,7 @@ class GPUTextA8RoutePlannerTest {
 
     private fun a8DrawTextRunCommand(
         artifactRefs: List<GPUTextArtifactRef> = listOf(a8ArtifactRef()),
-        atlasGenerationTokens: List<String> = listOf("atlas-generation-3"),
+        atlasGenerations: List<GPUTextArtifactGeneration> = listOf(GPUTextArtifactGeneration(3)),
         uploadDependencyFacts: List<String> = listOf("upload-before-sample"),
         routeDiagnostics: List<GPUTextDiagnostic> = emptyList(),
     ): NormalizedDrawCommand.DrawTextRun {
@@ -138,7 +139,7 @@ class GPUTextA8RoutePlannerTest {
             glyphRunDescriptorRefs = listOf("run-7"),
             artifactRefs = artifactRefs,
             artifactKeyHashes = artifactRefs.map { it.artifactKeyHash },
-            atlasGenerationTokens = atlasGenerationTokens,
+            atlasGenerations = atlasGenerations,
             uploadDependencyFacts = uploadDependencyFacts,
             routeDiagnostics = routeDiagnostics,
             transform = GPUTransformFacts.identity(),
@@ -160,7 +161,7 @@ class GPUTextA8RoutePlannerTest {
             artifactType = "GlyphAtlasArtifact",
             artifactId = "artifact-9",
             artifactKeyHash = "sha256:a8-atlas",
-            generationToken = "3",
+            generation = GPUTextArtifactGeneration(3),
             routeHint = routeHint,
         )
 }

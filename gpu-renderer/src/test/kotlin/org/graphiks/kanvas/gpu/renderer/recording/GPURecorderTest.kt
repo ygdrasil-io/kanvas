@@ -349,7 +349,7 @@ class GPURecorderTest {
             glyphRunDescriptorRefs = listOf("glyph-run-$commandIdValue"),
             artifactRefs = emptyList(),
             artifactKeyHashes = emptyList(),
-            atlasGenerationTokens = emptyList(),
+            atlasGenerations = emptyList(),
             uploadDependencyFacts = emptyList(),
             routeDiagnostics = emptyList(),
             transform = GPUTransformFacts.identity(),
