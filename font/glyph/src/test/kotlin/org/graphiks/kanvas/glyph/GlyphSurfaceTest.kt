@@ -3326,6 +3326,94 @@ class GlyphSurfaceTest {
         )
     }
 
+    @Test
+    fun `A8 rasterizer emits deterministic intermediate coverage for diagonal edge`() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 7,
+            pathCommands = listOf(
+                "M 0 0",
+                "L 4 0",
+                "L 0 4",
+                "Z",
+            ),
+        )
+        val key = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655442001")
+        val first = generator.generate(outline, key)
+        val second = generator.generate(outline, key)
+
+        assertEquals(first, second, "Repeated rasterization must produce identical masks")
+        assertEquals(7, first.glyphId)
+        assertTrue(first.pixels.any { it in 1..254 }, "Must contain intermediate coverage values")
+        assertTrue(0 in first.pixels, "Must contain fully transparent pixels")
+        assertTrue(255 in first.pixels, "Must contain fully opaque pixels")
+    }
+
+    @Test
+    fun `A8 rasterizer returns identical masks for same outline with same strike`() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 8,
+            pathCommands = listOf(
+                "M 1 1",
+                "L 5 1",
+                "L 5 5",
+                "L 1 5",
+                "Z",
+            ),
+        )
+        val key = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655442002")
+        val mask1 = generator.generate(outline, key)
+        val mask2 = generator.generate(outline, key)
+        assertEquals(mask1, mask2)
+    }
+
+    @Test
+    fun `A8 rasterizer coverage sums are preserved under strike identity`() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 9,
+            pathCommands = listOf(
+                "M 1 1",
+                "L 5 1",
+                "L 5 5",
+                "L 1 5",
+                "Z",
+            ),
+        )
+        val keyA = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655442003")
+            .copy(representationRoute = "text.glyph.mask.A8", maskFormat = "A8")
+        val keyB = keyA.copy(glyphId = 9)
+        val maskA = generator.generate(outline, keyA)
+        val maskB = generator.generate(outline, keyB)
+        assertEquals(maskA.pixels, maskB.pixels)
+        assertEquals(maskA.left, maskB.left)
+        assertEquals(maskA.top, maskB.top)
+    }
+
+    @Test
+    fun `A8 mask immutable pixels cannot be mutated after generation`() {
+        val generator = object : GlyphMaskGenerator {}
+        val outline = OutlineGlyphRepresentation(
+            glyphId = 10,
+            pathCommands = listOf(
+                "M 1 1",
+                "L 4 1",
+                "L 4 4",
+                "L 1 4",
+                "Z",
+            ),
+        )
+        val key = strikeKey(typefaceUuid = "550e8400-e29b-41d4-a716-446655442004")
+        val mask = generator.generate(outline, key)
+        val snapshot = mask.pixels.toList()
+
+        repeat(3) {
+            val repeated = generator.generate(outline, key)
+            assertEquals(snapshot, repeated.pixels, "Caller mutation must not alter stored mask")
+        }
+    }
+
     private fun a8Mask(glyphId: Int, width: Int, height: Int): A8GlyphMask =
         A8GlyphMask(
             glyphId = glyphId,

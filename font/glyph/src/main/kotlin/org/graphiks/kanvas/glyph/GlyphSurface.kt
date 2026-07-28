@@ -3749,6 +3749,8 @@ private fun appendGlyphRouteDiagnosticsInlineJson(diagnostics: List<GlyphRouteDi
 fun List<GlyphRouteDiagnostic>.glyphRouteDiagnosticsSha256(): String =
     glyphSha256(toCanonicalGlyphRouteDiagnosticsJson().toByteArray(Charsets.UTF_8))
 
+private val A8SampleOffsets = doubleArrayOf(0.125, 0.375, 0.625, 0.875)
+
 private const val MaxGlyphPathCommands = 4_096
 private const val MaxGeneratedA8MaskPixels = 16_777_216L
 private const val MaxGeneratedSDFMaskPixels = 16_777_216L
@@ -4017,11 +4019,19 @@ private fun rasterizeOutlineToA8(
 
     val pixels = MutableList(pixelCount.toInt()) { 0 }
     for (row in 0 until height) {
-        val sampleY = top + row + 0.5
         for (column in 0 until width) {
-            val sampleX = left + column + 0.5
-            if (contours.nonZeroContains(sampleX, sampleY)) {
-                pixels[row * width + column] = 255
+            var insideCount = 0
+            for (offsetY in A8SampleOffsets) {
+                val sampleY = top + row + offsetY
+                for (offsetX in A8SampleOffsets) {
+                    val sampleX = left + column + offsetX
+                    if (contours.nonZeroContains(sampleX, sampleY)) {
+                        insideCount++
+                    }
+                }
+            }
+            if (insideCount > 0) {
+                pixels[row * width + column] = ((insideCount * 255) + 8) / 16
             }
         }
     }
