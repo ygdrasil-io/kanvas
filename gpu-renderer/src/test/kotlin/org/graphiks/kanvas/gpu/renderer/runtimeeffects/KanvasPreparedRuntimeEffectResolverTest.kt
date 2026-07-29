@@ -8,6 +8,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectBinding
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectSourceColorContract
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformField
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformType
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTBindingPlanHash
@@ -71,6 +72,44 @@ class KanvasPreparedRuntimeEffectResolverTest {
         )
 
         assertIs<GPUPreparedRuntimeEffectProgramValidation.Valid>(validation)
+        assertEquals(
+            GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba,
+            simpleProgram().sourceColorContract,
+        )
+    }
+
+    @Test
+    fun `runtime source color contract mismatch never exposes a ready program`() {
+        val validation = KanvasPreparedRuntimeEffectProgramValidator().validate(
+            program = simpleProgram().copy(
+                sourceColorContract =
+                    GPUPreparedRuntimeEffectSourceColorContract.LinearPremultipliedRgba,
+            ),
+            descriptor = descriptor,
+            cpuOracle = SimpleRTCPUOracle,
+        )
+
+        assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(validation)
+    }
+
+    @Test
+    fun `runtime source color contract contributes to module binding and route hashes`() {
+        val straight = GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba
+        val premultiplied =
+            GPUPreparedRuntimeEffectSourceColorContract.LinearPremultipliedRgba
+
+        assertNotEquals(
+            preparedRuntimeEffectModuleContractHash(SimpleRTModuleHash, straight),
+            preparedRuntimeEffectModuleContractHash(SimpleRTModuleHash, premultiplied),
+        )
+        assertNotEquals(
+            preparedRuntimeEffectBindingContractHash(SimpleRTBindingPlanHash, straight),
+            preparedRuntimeEffectBindingContractHash(SimpleRTBindingPlanHash, premultiplied),
+        )
+        assertNotEquals(
+            preparedRuntimeEffectRouteContractHash(descriptor, straight),
+            preparedRuntimeEffectRouteContractHash(descriptor, premultiplied),
+        )
     }
 
     @Test
@@ -150,8 +189,13 @@ class KanvasPreparedRuntimeEffectResolverTest {
     private fun simpleProgram(
         wgslSource: String = SimpleRTWgsl,
         sourceFunction: String = SimpleRTEntryPoint,
+        sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract =
+            GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba,
         sourceHash: String = SimpleRTSourceHash,
-        moduleHash: String = SimpleRTModuleHash,
+        moduleHash: String = preparedRuntimeEffectModuleContractHash(
+            wgslModuleHash = SimpleRTModuleHash,
+            sourceColorContract = sourceColorContract,
+        ),
         reflectionHash: String = SimpleRTReflectionHash,
     ): GPUPreparedRuntimeEffectProgram =
         GPUPreparedRuntimeEffectProgram(
@@ -159,6 +203,7 @@ class KanvasPreparedRuntimeEffectResolverTest {
             descriptorVersion = SimpleRTDescriptor.descriptorVersion.value,
             wgslSource = wgslSource,
             sourceFunction = sourceFunction,
+            sourceColorContract = sourceColorContract,
             sourceHash = sourceHash,
             moduleHash = moduleHash,
             reflectionHash = reflectionHash,
@@ -181,8 +226,14 @@ class KanvasPreparedRuntimeEffectResolverTest {
                     minBindingSizeBytes = 16,
                 ),
             ),
-            bindingPlanHash = SimpleRTBindingPlanHash,
-            routeContractHash = "route:simple_rt:test",
+            bindingPlanHash = preparedRuntimeEffectBindingContractHash(
+                descriptorBindingPlanHash = SimpleRTBindingPlanHash,
+                sourceColorContract = sourceColorContract,
+            ),
+            routeContractHash = preparedRuntimeEffectRouteContractHash(
+                descriptor = descriptor,
+                sourceColorContract = sourceColorContract,
+            ),
         )
 
     private fun materialInput(

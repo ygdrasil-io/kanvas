@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectBindin
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolution
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolver
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectSourceColorContract
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformField
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformType
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTBindingPlanHash
@@ -88,6 +89,9 @@ internal data class KanvasPreparedRuntimeEffectProgramCandidate(
  * candidate is still verified against [GPURuntimeEffectRegistry] at lookup.
  */
 internal class KanvasPreparedRuntimeEffectProgramAuthority {
+    private val simpleRTSourceColorContract =
+        GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba
+
     private val candidates = mapOf(
         RuntimeEffectProgramKey(
             id = SimpleRTDescriptor.effectId,
@@ -98,8 +102,12 @@ internal class KanvasPreparedRuntimeEffectProgramAuthority {
                 descriptorVersion = SimpleRTDescriptor.descriptorVersion.value,
                 wgslSource = SimpleRTWgsl,
                 sourceFunction = SimpleRTEntryPoint,
+                sourceColorContract = simpleRTSourceColorContract,
                 sourceHash = SimpleRTSourceHash,
-                moduleHash = SimpleRTModuleHash,
+                moduleHash = preparedRuntimeEffectModuleContractHash(
+                    wgslModuleHash = SimpleRTModuleHash,
+                    sourceColorContract = simpleRTSourceColorContract,
+                ),
                 reflectionHash = SimpleRTReflectionHash,
                 uniformSchemaHash = SimpleRTUniformSchemaHash,
                 uniformBlockSizeBytes = SimpleRTUniformBlockSizeBytes,
@@ -120,9 +128,13 @@ internal class KanvasPreparedRuntimeEffectProgramAuthority {
                         minBindingSizeBytes = SimpleRTUniformBlockSizeBytes,
                     ),
                 ),
-                bindingPlanHash = SimpleRTBindingPlanHash,
+                bindingPlanHash = preparedRuntimeEffectBindingContractHash(
+                    descriptorBindingPlanHash = SimpleRTBindingPlanHash,
+                    sourceColorContract = simpleRTSourceColorContract,
+                ),
                 routeContractHash = preparedRuntimeEffectRouteContractHash(
                     descriptor = SimpleRTDescriptor.createDescriptor(),
+                    sourceColorContract = simpleRTSourceColorContract,
                 ),
             ),
             cpuOracle = SimpleRTCPUOracle,
@@ -160,7 +172,7 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(message)
         }
         val expectedSourceHash = wgslSourceContentHash(program.wgslSource)
-        val expectedModuleHash = wgslModuleContentHash(
+        val expectedWgslModuleHash = wgslModuleContentHash(
             source = program.wgslSource,
             sourceFunction = program.sourceFunction,
         )
@@ -169,9 +181,13 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
                 "Runtime-effect source hash is not derived from WGSL content",
             )
         }
+        val expectedModuleHash = preparedRuntimeEffectModuleContractHash(
+            wgslModuleHash = expectedWgslModuleHash,
+            sourceColorContract = program.sourceColorContract,
+        )
         if (
             program.moduleHash != expectedModuleHash ||
-            descriptor.wgslPlan.moduleHash != expectedModuleHash
+            descriptor.wgslPlan.moduleHash != expectedWgslModuleHash
         ) {
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                 "Runtime-effect module hash is not derived from WGSL content",
@@ -293,11 +309,28 @@ private fun descriptorProgramMismatch(
     if (program.sourceFunction != descriptor.wgslPlan.entryPoint) {
         return "Runtime-effect source function does not match the descriptor entry point"
     }
+    val registeredSourceColorContract = descriptor.registeredSourceColorContract()
+        ?: return "Runtime-effect descriptor has no registered source color contract"
+    if (program.sourceColorContract != registeredSourceColorContract) {
+        return "Runtime-effect source color contract does not match the descriptor"
+    }
+    val expectedModuleHash = preparedRuntimeEffectModuleContractHash(
+        wgslModuleHash = descriptor.wgslPlan.moduleHash,
+        sourceColorContract = registeredSourceColorContract,
+    )
+    val expectedBindingPlanHash = preparedRuntimeEffectBindingContractHash(
+        descriptorBindingPlanHash = descriptor.resources.bindingPlanHash,
+        sourceColorContract = registeredSourceColorContract,
+    )
     if (
-        program.moduleHash != descriptor.wgslPlan.moduleHash ||
+        program.moduleHash != expectedModuleHash ||
         program.reflectionHash != descriptor.wgslPlan.reflectionHash ||
         program.uniformSchemaHash != descriptor.uniformSchema.schemaHash ||
-        program.bindingPlanHash != descriptor.resources.bindingPlanHash
+        program.bindingPlanHash != expectedBindingPlanHash ||
+        program.routeContractHash != preparedRuntimeEffectRouteContractHash(
+            descriptor = descriptor,
+            sourceColorContract = registeredSourceColorContract,
+        )
     ) {
         return "Runtime-effect registered hashes do not match the descriptor"
     }
@@ -415,18 +448,46 @@ private val GPUPreparedRuntimeEffectUniformType.requiredAlignmentBytes: Int
 private fun sourceDeclaresFunction(source: String, function: String): Boolean =
     Regex("""\bfn\s+${Regex.escape(function)}\s*\(""").containsMatchIn(source)
 
-private fun preparedRuntimeEffectRouteContractHash(
+internal fun preparedRuntimeEffectRouteContractHash(
     descriptor: GPURuntimeEffectDescriptor,
+    sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract,
 ): String =
-    CanonicalIdentityEncoder("prepared-runtime-effect-route-v2")
+    CanonicalIdentityEncoder("prepared-runtime-effect-route-v3")
         .text("effectId", descriptor.id.value)
         .int("descriptorVersion", descriptor.version.value)
         .text("uniformSchemaHash", descriptor.uniformSchema.schemaHash)
         .text("bindingPlanHash", descriptor.resources.bindingPlanHash)
         .text("moduleHash", descriptor.wgslPlan.moduleHash)
+        .text("sourceColorContract", sourceColorContract.name)
         .text("entryPoint", descriptor.wgslPlan.entryPoint)
         .text("reflectionHash", descriptor.wgslPlan.reflectionHash)
         .digestIdentity()
+
+internal fun preparedRuntimeEffectModuleContractHash(
+    wgslModuleHash: String,
+    sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract,
+): String =
+    CanonicalIdentityEncoder("prepared-runtime-effect-module-v3")
+        .text("wgslModuleHash", wgslModuleHash)
+        .text("sourceColorContract", sourceColorContract.name)
+        .digestIdentity()
+
+internal fun preparedRuntimeEffectBindingContractHash(
+    descriptorBindingPlanHash: String,
+    sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract,
+): String =
+    CanonicalIdentityEncoder("prepared-runtime-effect-bindings-v3")
+        .text("descriptorBindingPlanHash", descriptorBindingPlanHash)
+        .text("sourceColorContract", sourceColorContract.name)
+        .digestIdentity()
+
+private fun GPURuntimeEffectDescriptor.registeredSourceColorContract():
+    GPUPreparedRuntimeEffectSourceColorContract? =
+    when (id to version) {
+        SimpleRTDescriptor.effectId to SimpleRTDescriptor.descriptorVersion ->
+            GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba
+        else -> null
+    }
 
 private val DESCRIPTOR_FIELD = Regex("""^([^:]+):(.+)@(\d+):(\d+)$""")
 private val SHA256_IDENTITY = Regex("""^sha256:[0-9a-f]{64}$""")

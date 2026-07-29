@@ -304,7 +304,11 @@ class GPUPreparedMaterialProgramTest {
         listOf(
             solidDescriptor(),
             linearGradientDescriptor(),
+            radialGradientDescriptor(),
+            sweepGradientDescriptor(),
+            conicalGradientDescriptor(),
             supportedBlendShaderDescriptor(),
+            registeredRuntimeEffectDescriptor(),
             supportedImageShaderDescriptor(),
         ).forEach { descriptor ->
             val ready = assertIs<GPUPreparedMaterialProgramResult.Ready>(
@@ -317,6 +321,7 @@ class GPUPreparedMaterialProgramTest {
                 report.entryPoints.any { it.name == ready.program.entryPoint },
                 "${descriptor.kind}: ${report.entryPoints}",
             )
+            assertEquals("fs_main", ready.program.entryPoint, descriptor.kind.toString())
         }
     }
 

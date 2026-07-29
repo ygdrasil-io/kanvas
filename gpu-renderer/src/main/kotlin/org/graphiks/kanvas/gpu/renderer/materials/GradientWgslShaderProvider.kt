@@ -5,6 +5,7 @@ import kotlin.math.pow
 
 data class GradientWgslShader(
     val wgslSource: String,
+    val composableDeclarationsWgsl: String,
     val uniformLayoutHash: String,
 )
 
@@ -57,6 +58,7 @@ object GradientWgslShaderProvider {
         val n = desc.allStopPositions?.size ?: 2
         return GradientWgslShader(
             wgslSource = buildLinearWgsl(n, desc.tileMode),
+            composableDeclarationsWgsl = buildLinearWgsl(n, desc.tileMode, composable = true),
             uniformLayoutHash = "layout:linear-gradient-material-block:v1",
         )
     }
@@ -65,6 +67,7 @@ object GradientWgslShaderProvider {
         val n = desc.allStopPositions?.size ?: 2
         return GradientWgslShader(
             wgslSource = buildRadialWgsl(n, desc.tileMode),
+            composableDeclarationsWgsl = buildRadialWgsl(n, desc.tileMode, composable = true),
             uniformLayoutHash = "layout:radial-gradient-material-block:v1",
         )
     }
@@ -73,11 +76,16 @@ object GradientWgslShaderProvider {
         val n = desc.allStopPositions?.size ?: 2
         return GradientWgslShader(
             wgslSource = buildSweepWgsl(n, desc.tileMode),
+            composableDeclarationsWgsl = buildSweepWgsl(n, desc.tileMode, composable = true),
             uniformLayoutHash = "layout:sweep-gradient-material-block:v1",
         )
     }
 
-    private fun buildLinearWgsl(stopCount: Int, tileMode: String): String {
+    private fun buildLinearWgsl(
+        stopCount: Int,
+        tileMode: String,
+        composable: Boolean = false,
+    ): String {
         val (tileFn, decalSuffix) = tileFnForMode(tileMode)
         return buildGradientWgsl(
             preamble = """
@@ -98,10 +106,15 @@ object GradientWgslShaderProvider {
             """.trimIndent(),
             tileFn = tileFn,
             decalSuffix = decalSuffix,
+            composable = composable,
         )
     }
 
-    private fun buildRadialWgsl(stopCount: Int, tileMode: String): String {
+    private fun buildRadialWgsl(
+        stopCount: Int,
+        tileMode: String,
+        composable: Boolean = false,
+    ): String {
         val (tileFn, decalSuffix) = tileFnForMode(tileMode)
         return buildGradientWgsl(
             preamble = """
@@ -121,10 +134,15 @@ object GradientWgslShaderProvider {
             """.trimIndent(),
             tileFn = tileFn,
             decalSuffix = decalSuffix,
+            composable = composable,
         )
     }
 
-    private fun buildSweepWgsl(stopCount: Int, tileMode: String): String {
+    private fun buildSweepWgsl(
+        stopCount: Int,
+        tileMode: String,
+        composable: Boolean = false,
+    ): String {
         val (tileFn, decalSuffix) = tileFnForMode(tileMode)
         return buildGradientWgsl(
             preamble = """
@@ -154,6 +172,7 @@ object GradientWgslShaderProvider {
             """.trimIndent(),
             tileFn = tileFn,
             decalSuffix = decalSuffix,
+            composable = composable,
         )
     }
 
@@ -166,11 +185,46 @@ object GradientWgslShaderProvider {
                 tileFn = tileFn,
                 decalSuffix = decalSuffix,
             ),
+            composableDeclarationsWgsl = buildConicalWgsl(
+                stopCount = n,
+                tileFn = tileFn,
+                decalSuffix = decalSuffix,
+                composable = true,
+            ),
             uniformLayoutHash = "layout:conical-gradient-material-block:v1",
         )
     }
 
-    private fun buildConicalWgsl(stopCount: Int, tileFn: String, decalSuffix: String): String = """
+    private fun buildConicalWgsl(
+        stopCount: Int,
+        tileFn: String,
+        decalSuffix: String,
+        composable: Boolean = false,
+    ): String {
+        val bindingGroup = if (composable) 1 else 0
+        val vertexStage = if (composable) "" else """
+struct VertexOutput {
+    @builtin(position) pos: vec4<f32>,
+}
+
+@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
+    let verts = array<vec2<f32>, 3>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>(3.0, -1.0),
+        vec2<f32>(-1.0, 3.0),
+    );
+    return VertexOutput(vec4<f32>(verts[vi], 0.0, 1.0));
+}
+""".trimIndent()
+        val evaluationStart = if (composable) {
+            """
+fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+    let pos = vec4<f32>(localPosition, 0.0, 1.0);
+""".trimIndent()
+        } else {
+            "@fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {"
+        }
+        return """
 struct GradientBlock {
     start: vec2<f32>,
     end: vec2<f32>,
@@ -184,22 +238,11 @@ struct GradientBlock {
     _pad4: u32,
     stopData: array<vec4<f32>, 32>,
 }
-@group(0) @binding(0) var<uniform> gradient: GradientBlock;
+@group($bindingGroup) @binding(0) var<uniform> gradient: GradientBlock;
 
-struct VertexOutput {
-    @builtin(position) pos: vec4<f32>,
-}
+$vertexStage
 
-@vertex fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
-    let verts = array<vec2<f32>, 3>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>(3.0, -1.0),
-        vec2<f32>(-1.0, 3.0),
-    );
-    return VertexOutput(vec4<f32>(verts[vi], 0.0, 1.0));
-}
-
-@fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+$evaluationStart
     let dx = gradient.end.x - gradient.start.x;
     let dy = gradient.end.y - gradient.start.y;
     let fx = pos.x - gradient.start.x;
@@ -263,6 +306,7 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     return vec4f(pow(mixed_srgb.rgb, vec3f(2.2)), mixed_srgb.a);
 }
 """.trimIndent()
+    }
 
     private fun conicalUniformBytes(desc: GPUMaterialDescriptor.ConicalGradient): ByteArray {
         return packGradientUniforms(
@@ -304,14 +348,10 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
         structFields: String,
         tileFn: String,
         decalSuffix: String = "",
-    ): String = """
-struct GradientBlock {
-    $structFields
-    count: u32,
-    stopData: array<vec4<f32>, 32>,
-}
-@group(0) @binding(0) var<uniform> gradient: GradientBlock;
-
+        composable: Boolean = false,
+    ): String {
+        val bindingGroup = if (composable) 1 else 0
+        val vertexStage = if (composable) "" else """
 struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
 }
@@ -324,8 +364,26 @@ struct VertexOutput {
     );
     return VertexOutput(vec4<f32>(verts[vi], 0.0, 1.0));
 }
+""".trimIndent()
+        val evaluationStart = if (composable) {
+            """
+fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+    let pos = vec4<f32>(localPosition, 0.0, 1.0);
+""".trimIndent()
+        } else {
+            "@fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {"
+        }
+        return """
+struct GradientBlock {
+    $structFields
+    count: u32,
+    stopData: array<vec4<f32>, 32>,
+}
+@group($bindingGroup) @binding(0) var<uniform> gradient: GradientBlock;
 
-@fragment fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+$vertexStage
+
+$evaluationStart
     $preamble
     $tileFn
     var positions: array<vec4<f32>, 16>;
@@ -357,6 +415,7 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
     return vec4f(pow(mixed_srgb.rgb, vec3f(2.2)), mixed_srgb.a);
 }
 """.trimIndent()
+    }
 
     // ---- Uniform packing ----
 

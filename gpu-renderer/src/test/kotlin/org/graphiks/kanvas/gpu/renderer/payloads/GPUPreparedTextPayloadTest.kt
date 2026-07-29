@@ -18,6 +18,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialFragment
 import kotlin.uuid.Uuid
 
 class GPUPreparedTextPayloadTest {
@@ -334,6 +335,7 @@ class GPUPreparedTextPayloadTest {
             materialKey = "material:prepared:solid:unit",
             wgslSource = "@fragment fn prepared_material_fragment() -> @location(0) vec4f { return vec4f(1.0); }",
             entryPoint = "prepared_material_fragment",
+            composableFragment = stubPreparedMaterialFragment(),
             uniformBytes = uniformBytes,
             sampledResources = emptyList(),
             paintAlpha = 0.5f,

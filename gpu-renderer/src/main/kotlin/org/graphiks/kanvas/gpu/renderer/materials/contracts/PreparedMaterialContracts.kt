@@ -67,6 +67,7 @@ data class GPUPreparedMaterialProgram(
     val materialKey: String,
     val wgslSource: String,
     val entryPoint: String,
+    val composableFragment: GPUPreparedMaterialFragment,
     val uniformBytes: List<Int>,
     val sampledResources: List<GPUPreparedMaterialSampledResource>,
     val paintAlpha: Float,

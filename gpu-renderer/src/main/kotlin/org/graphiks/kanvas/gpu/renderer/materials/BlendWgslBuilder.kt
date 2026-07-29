@@ -5,7 +5,24 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import kotlin.math.pow
 
 object BlendWgslBuilder {
-    fun buildWgsl(dst: GPUMaterialDescriptor, src: GPUMaterialDescriptor, mode: String): String {
+    fun buildWgsl(
+        dst: GPUMaterialDescriptor,
+        src: GPUMaterialDescriptor,
+        mode: String,
+    ): String = buildSource(dst, src, mode, composable = false)
+
+    fun buildComposableDeclarationsWgsl(
+        dst: GPUMaterialDescriptor,
+        src: GPUMaterialDescriptor,
+        mode: String,
+    ): String = buildSource(dst, src, mode, composable = true)
+
+    private fun buildSource(
+        dst: GPUMaterialDescriptor,
+        src: GPUMaterialDescriptor,
+        mode: String,
+        composable: Boolean,
+    ): String {
         val dstFields = childFields("dst", dst)
         val srcFields = childFields("src", src)
         val dstEval = childEval("dst", dst)
@@ -19,15 +36,8 @@ object BlendWgslBuilder {
 @group(1) @binding(1) var blend_image_texture: texture_2d<f32>;
 @group(1) @binding(2) var blend_image_sampler: sampler;
 """.trimIndent() else ""
-        return """
-struct BlendBlock {
-    ${dstFields}
-    ${srcFields}
-    _pad0: u32, _pad1: u32, _pad2: u32,
-}
-@group(0) @binding(0) var<uniform> blend: BlendBlock;
-${texDecl}
-
+        val bindingGroup = if (composable) 1 else 0
+        val vertexStage = if (composable) "" else """
 struct VertexOutput {
     @builtin(position) pos: vec4f,
     @location(0) uv: vec2f,
@@ -42,10 +52,29 @@ struct VertexOutput {
     let pos = verts[vi];
     return VertexOutput(vec4f(pos, 0.0, 1.0), vec2f(pos.x * 0.5 + 0.5, 1.0 - (pos.y * 0.5 + 0.5)));
 }
+""".trimIndent()
+        val evaluationStart = if (composable) {
+            """
+fn kanvas_material_source(localPosition: vec2f) -> vec4f {
+    let uv = localPosition;
+""".trimIndent()
+        } else {
+            "@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {"
+        }
+        return """
+struct BlendBlock {
+    ${dstFields}
+    ${srcFields}
+    _pad0: u32, _pad1: u32, _pad2: u32,
+}
+@group($bindingGroup) @binding(0) var<uniform> blend: BlendBlock;
+${texDecl}
+
+$vertexStage
 
 ${blendFormula}
 
-@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+$evaluationStart
     ${dstEval}
     ${srcEval}
     return kanvasBlendPremul(src_result, dst_result);

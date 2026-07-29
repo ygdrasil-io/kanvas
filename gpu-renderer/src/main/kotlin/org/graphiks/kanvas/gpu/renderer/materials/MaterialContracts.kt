@@ -247,6 +247,11 @@ data class GPUPreparedRuntimeEffectBinding internal constructor(
     val minBindingSizeBytes: Int?,
 )
 
+enum class GPUPreparedRuntimeEffectSourceColorContract {
+    LinearStraightRgba,
+    LinearPremultipliedRgba,
+}
+
 /**
  * Canonical executable facts for one registered Kanvas runtime effect.
  *
@@ -259,6 +264,7 @@ data class GPUPreparedRuntimeEffectProgram internal constructor(
     val descriptorVersion: Int,
     val wgslSource: String,
     val sourceFunction: String,
+    val sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract,
     val sourceHash: String,
     val moduleHash: String,
     val reflectionHash: String,

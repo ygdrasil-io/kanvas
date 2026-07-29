@@ -36,6 +36,7 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphAtlasPlacementProofInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphLayerPayloadInput
@@ -440,6 +441,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
                         "@fragment fn prepared_material_fragment() -> @location(0) vec4f { " +
                             "return vec4f(1.0); }",
                     entryPoint = "prepared_material_fragment",
+                    composableFragment = stubPreparedMaterialFragment(),
                     uniformBytes = emptyList(),
                     sampledResources = emptyList(),
                     paintAlpha = 1f,

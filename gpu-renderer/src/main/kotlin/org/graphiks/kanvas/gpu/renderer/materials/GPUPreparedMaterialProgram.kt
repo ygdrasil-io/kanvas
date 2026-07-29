@@ -6,6 +6,11 @@ import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialColorContract
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialCoordinateContract
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialSampledBinding
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialUniformBinding
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
@@ -61,6 +66,72 @@ object GPUPreparedMaterialProgramCompiler {
                     message = validation.message,
                 )
         }
+        val uniformBinding = prepared.uniformBytes.takeIf { it.isNotEmpty() }?.let {
+            GPUPreparedMaterialUniformBinding(minBindingSizeBytes = it.size)
+        }
+        val sampledBindings = canonicalSampledBindings(prepared.sampledResources.size)
+        val evaluationFunctionWgsl = materialEvaluationFunctionWgsl(
+            sourceFunction = prepared.sourceFunction,
+            sourceColorContract = prepared.sourceColorContract,
+        )
+        val composableAbiFacts = when (
+            val validation = validateComposableFragment(
+                prepared = prepared,
+                evaluationFunctionWgsl = evaluationFunctionWgsl,
+                uniformBinding = uniformBinding,
+                sampledBindings = sampledBindings,
+            )
+        ) {
+            is ComposableFragmentValidation.Ready -> validation.abiFacts
+            is ComposableFragmentValidation.Refused ->
+                return refused(
+                    code = "unsupported.material.wgsl_validation",
+                    sourceKind = prepared.sourceKind,
+                    message = validation.message,
+                )
+        }
+        val fragmentSource = prepared.composableDeclarationsWgsl +
+            "\n\n" +
+            evaluationFunctionWgsl
+        val fragmentHash = sha256Hex(fragmentSource.encodeToByteArray())
+        val fragmentAbiHash = CanonicalIdentityEncoder("prepared-material-fragment-abi-v1")
+            .text("evaluationFunction", MATERIAL_EVALUATION_FUNCTION)
+            .text(
+                "colorContract",
+                GPUPreparedMaterialColorContract.LinearPremultipliedRgba.name,
+            )
+            .text(
+                "coordinateContract",
+                GPUPreparedMaterialCoordinateContract.LocalPosition2D.name,
+            )
+            .texts(
+                "uniformBinding",
+                listOfNotNull(
+                    uniformBinding?.let {
+                        "${it.group}:${it.binding}:${it.minBindingSizeBytes}"
+                    },
+                ),
+            )
+            .texts(
+                "sampledBindings",
+                sampledBindings.map {
+                    "${it.resourceIndex}:${it.textureGroup}:${it.textureBinding}:" +
+                        "${it.samplerGroup}:${it.samplerBinding}"
+                },
+            )
+            .texts("reflectedAbiFacts", composableAbiFacts)
+            .digestIdentity()
+        val composableFragment = GPUPreparedMaterialFragment(
+            declarationsWgsl = prepared.composableDeclarationsWgsl,
+            evaluationFunctionWgsl = evaluationFunctionWgsl,
+            evaluationFunction = MATERIAL_EVALUATION_FUNCTION,
+            uniformBinding = uniformBinding,
+            sampledBindings = sampledBindings,
+            colorContract = GPUPreparedMaterialColorContract.LinearPremultipliedRgba,
+            coordinateContract = GPUPreparedMaterialCoordinateContract.LocalPosition2D,
+            fragmentHash = fragmentHash,
+            abiHash = fragmentAbiHash,
+        )
 
         val uniformSnapshot = immutableList(prepared.uniformBytes.map { it.toInt() and 0xff })
         val resourceSnapshot = immutableList(prepared.sampledResources)
@@ -98,6 +169,7 @@ object GPUPreparedMaterialProgramCompiler {
                 materialKey = materialKey,
                 wgslSource = prepared.wgslSource,
                 entryPoint = prepared.entryPoint,
+                composableFragment = composableFragment,
                 uniformBytes = uniformSnapshot,
                 sampledResources = resourceSnapshot,
                 paintAlpha = paintAlpha,
@@ -161,6 +233,9 @@ object GPUPreparedMaterialProgramCompiler {
             PreparedSource(
                 wgslSource = solidMaterialWgsl(),
                 entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
+                composableDeclarationsWgsl = solidComposableDeclarationsWgsl(),
+                sourceFunction = MATERIAL_SOURCE_FUNCTION,
+                sourceColorContract = PreparedSourceColorContract.LinearStraightRgba,
                 uniformBytes = uniforms,
                 sampledResources = emptyList(),
                 sourceKind = GPUMaterialSourceKind.SolidColor,
@@ -222,6 +297,9 @@ object GPUPreparedMaterialProgramCompiler {
             PreparedSource(
                 wgslSource = shader.wgslSource,
                 entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
+                composableDeclarationsWgsl = shader.composableDeclarationsWgsl,
+                sourceFunction = MATERIAL_SOURCE_FUNCTION,
+                sourceColorContract = PreparedSourceColorContract.LinearPremultipliedRgba,
                 uniformBytes = uniformBytes,
                 sampledResources = emptyList(),
                 sourceKind = GPUMaterialSourceKind.Gradient,
@@ -300,6 +378,9 @@ object GPUPreparedMaterialProgramCompiler {
             PreparedSource(
                 wgslSource = imageMaterialWgsl(),
                 entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
+                composableDeclarationsWgsl = imageComposableDeclarationsWgsl(),
+                sourceFunction = MATERIAL_SOURCE_FUNCTION,
+                sourceColorContract = PreparedSourceColorContract.LinearPremultipliedRgba,
                 uniformBytes = uniforms,
                 sampledResources = listOf(sampled),
                 sourceKind = GPUMaterialSourceKind.ImageShader,
@@ -361,6 +442,9 @@ object GPUPreparedMaterialProgramCompiler {
             PreparedSource(
                 wgslSource = wrapMaterialSource(program.wgslSource, program.sourceFunction),
                 entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
+                composableDeclarationsWgsl = runtimeEffectComposableDeclarationsWgsl(program),
+                sourceFunction = MATERIAL_SOURCE_FUNCTION,
+                sourceColorContract = program.sourceColorContract.toPreparedSourceColorContract(),
                 uniformBytes = uniformBytes,
                 sampledResources = emptyList(),
                 sourceKind = GPUMaterialSourceKind.RuntimeEffect,
@@ -369,6 +453,7 @@ object GPUPreparedMaterialProgramCompiler {
                 keyFacts = listOf(
                     "lowererKey=${lowererKey.value}",
                     "runtimeEffect=${program.effectId}@${program.descriptorVersion}",
+                    "runtimeSourceColorContract=${program.sourceColorContract.name}",
                     "runtimeSource=${program.sourceHash}",
                     "runtimeModule=${program.moduleHash}",
                     "runtimeReflection=${program.reflectionHash}",
@@ -380,6 +465,7 @@ object GPUPreparedMaterialProgramCompiler {
                     add("runtimeReflection=${program.reflectionHash}")
                     add("runtimeBindings=${program.bindingPlanHash}")
                     add("runtimeRoute=${program.routeContractHash}")
+                    add("runtimeSourceColorContract=${program.sourceColorContract.name}")
                     program.uniformFields.forEachIndexed { index, field ->
                         add(
                             "runtimeField[$index]=${field.name}:${field.type}:" +
@@ -480,6 +566,13 @@ object GPUPreparedMaterialProgramCompiler {
             PreparedSource(
                 wgslSource = wgsl,
                 entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
+                composableDeclarationsWgsl = BlendWgslBuilder.buildComposableDeclarationsWgsl(
+                    destinationDescriptor,
+                    sourceDescriptor,
+                    mode.name,
+                ),
+                sourceFunction = MATERIAL_SOURCE_FUNCTION,
+                sourceColorContract = PreparedSourceColorContract.LinearPremultipliedRgba,
                 uniformBytes = uniforms,
                 sampledResources = resources,
                 sourceKind = GPUMaterialSourceKind.ShaderBlend,
@@ -569,6 +662,144 @@ object GPUPreparedMaterialProgramCompiler {
         return FinalModuleValidation.Ready(abiFacts)
     }
 
+    private fun validateComposableFragment(
+        prepared: PreparedSource,
+        evaluationFunctionWgsl: String,
+        uniformBinding: GPUPreparedMaterialUniformBinding?,
+        sampledBindings: List<GPUPreparedMaterialSampledBinding>,
+    ): ComposableFragmentValidation {
+        val source = prepared.composableDeclarationsWgsl + "\n\n" + evaluationFunctionWgsl
+        val parsed = runCatching { parseWgslResult(source) }
+            .getOrElse { failure ->
+                return ComposableFragmentValidation.Refused(
+                    "wgsl4k fragment parser failed: ${failure::class.simpleName.orEmpty()}",
+                )
+            }
+        if (!parsed.isSuccess) {
+            return ComposableFragmentValidation.Refused(
+                "wgsl4k fragment parser diagnostics: " +
+                    parsed.errors.joinToString { it.message },
+            )
+        }
+        val lowered = runCatching { Lowerer().lower(parsed.translationUnit) }
+            .getOrElse { failure ->
+                return ComposableFragmentValidation.Refused(
+                    "wgsl4k fragment lowering failed: ${failure::class.simpleName.orEmpty()}",
+                )
+            }
+        val report = runCatching {
+            lowered.reflectWgslModule(sourceId = sha256Hex(source.encodeToByteArray()))
+        }.getOrElse { failure ->
+            return ComposableFragmentValidation.Refused(
+                "wgsl4k fragment reflection failed: ${failure::class.simpleName.orEmpty()}",
+            )
+        }
+        if (
+            !report.validation.success ||
+            report.unsupportedFeatures.isNotEmpty() ||
+            !sourceDeclaresFunction(source, MATERIAL_EVALUATION_FUNCTION)
+        ) {
+            return ComposableFragmentValidation.Refused(
+                "Prepared material fragment did not prove its canonical evaluation function",
+            )
+        }
+        val expectedBindings = buildList {
+            uniformBinding?.let {
+                add(
+                    PreparedAbiBinding(
+                        group = it.group,
+                        binding = it.binding,
+                        resourceKind = "uniformBuffer",
+                        access = "read",
+                        minBindingSize = it.minBindingSizeBytes,
+                    ),
+                )
+            }
+            sampledBindings.forEach {
+                add(
+                    PreparedAbiBinding(
+                        group = it.textureGroup,
+                        binding = it.textureBinding,
+                        resourceKind = "sampledTexture",
+                        access = "read",
+                        sampleType = "float",
+                        viewDimension = "2d",
+                    ),
+                )
+                add(
+                    PreparedAbiBinding(
+                        group = it.samplerGroup,
+                        binding = it.samplerBinding,
+                        resourceKind = "sampler",
+                        access = "read",
+                    ),
+                )
+            }
+        }
+        val actualBindings = report.bindings.map {
+            PreparedAbiBinding(
+                group = it.group,
+                binding = it.binding,
+                resourceKind = it.resourceKind,
+                access = it.access,
+                sampleType = it.sampleType,
+                viewDimension = it.viewDimension,
+                storageFormat = it.storageFormat,
+                minBindingSize = it.minBindingSize,
+            )
+        }
+        if (
+            actualBindings.sortedWith(compareBy({ it.group }, { it.binding })) !=
+            expectedBindings.sortedWith(compareBy({ it.group }, { it.binding }))
+        ) {
+            return ComposableFragmentValidation.Refused(
+                "Prepared material fragment bindings do not match the canonical schema",
+            )
+        }
+        val uniformLayouts = report.layouts.filter { it.addressSpace == "uniform" }
+        if (uniformBinding == null) {
+            if (uniformLayouts.isNotEmpty()) {
+                return ComposableFragmentValidation.Refused(
+                    "Prepared material fragment reflects an unexpected uniform layout",
+                )
+            }
+        } else if (
+            report.layouts.size != 1 ||
+            uniformLayouts.size != 1 ||
+            uniformLayouts.single().size != uniformBinding.minBindingSizeBytes
+        ) {
+            return ComposableFragmentValidation.Refused(
+                "Prepared material fragment uniform layout does not match its binding size",
+            )
+        }
+        val abiFacts = buildList {
+            report.bindings.sortedWith(compareBy({ it.group }, { it.binding }))
+                .forEachIndexed { index, binding ->
+                    add(
+                        "binding[$index]=${binding.group}:${binding.binding}:${binding.name}:" +
+                            "${binding.resourceKind}:${binding.access}:${binding.sampleType}:" +
+                            "${binding.viewDimension}:${binding.storageFormat}:" +
+                            "${binding.minBindingSize}",
+                    )
+                }
+            report.layouts.sortedWith(compareBy({ it.addressSpace }, { it.structName }))
+                .forEachIndexed { layoutIndex, layout ->
+                    add(
+                        "layout[$layoutIndex]=${layout.structName}:${layout.addressSpace}:" +
+                            "${layout.size}:${layout.alignment}",
+                    )
+                    layout.members.forEachIndexed { memberIndex, member ->
+                        add(
+                            "layout[$layoutIndex].member[$memberIndex]=${member.name}:" +
+                                "${member.type}:${member.offset}:${member.size}:" +
+                                "${member.alignment}:${member.stride}",
+                        )
+                    }
+                }
+        }
+        return ComposableFragmentValidation.Ready(abiFacts)
+    }
+
     private fun sampledResource(
         descriptor: GPUMaterialDescriptor.ImageDraw,
     ): SampledResourceResult {
@@ -647,6 +878,9 @@ object GPUPreparedMaterialProgramCompiler {
 private data class PreparedSource(
     val wgslSource: String,
     val entryPoint: String,
+    val composableDeclarationsWgsl: String,
+    val sourceFunction: String,
+    val sourceColorContract: PreparedSourceColorContract,
     val uniformBytes: ByteArray,
     val sampledResources: List<GPUPreparedMaterialSampledResource>,
     val sourceKind: GPUMaterialSourceKind,
@@ -992,6 +1226,16 @@ private sealed interface PreparedSourceResult {
 private sealed interface FinalModuleValidation {
     data class Ready(val abiFacts: List<String>) : FinalModuleValidation
     data class Refused(val message: String) : FinalModuleValidation
+}
+
+private sealed interface ComposableFragmentValidation {
+    data class Ready(val abiFacts: List<String>) : ComposableFragmentValidation
+    data class Refused(val message: String) : ComposableFragmentValidation
+}
+
+private enum class PreparedSourceColorContract {
+    LinearStraightRgba,
+    LinearPremultipliedRgba,
 }
 
 private sealed interface RuntimeEffectUniformPacking {
@@ -1418,6 +1662,17 @@ private fun solidMaterialWgsl(): String = """
     ${materialStageWrapper("solid_source")}
 """.trimIndent()
 
+private fun solidComposableDeclarationsWgsl(): String = """
+    struct SolidMaterialBlock {
+        color: vec4<f32>,
+    }
+    @group(1) @binding(0) var<uniform> solidMaterial: SolidMaterialBlock;
+
+    fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+        return solidMaterial.color;
+    }
+""".trimIndent()
+
 private fun imageMaterialWgsl(): String = """
     struct PreparedMaterialImageUniforms {
         tint: vec4<f32>,
@@ -1460,6 +1715,59 @@ private fun imageMaterialWgsl(): String = """
     }
 """.trimIndent()
 
+private fun imageComposableDeclarationsWgsl(): String = """
+    struct PreparedMaterialImageUniforms {
+        tint: vec4<f32>,
+        flags: vec4<u32>,
+    }
+    @group(1) @binding(0) var<uniform> imageMaterial: PreparedMaterialImageUniforms;
+
+    $BitmapShaderWgsl
+
+    fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+        let sampled = bitmap_shader_clamp(localPosition);
+        if (imageMaterial.flags.x != 0u) {
+            return sampled.a * imageMaterial.tint;
+        }
+        let source = vec4f(sampled.rgb * sampled.a, sampled.a);
+        return vec4f(
+            source.rgb * imageMaterial.tint.rgb,
+            source.a * imageMaterial.tint.a,
+        );
+    }
+""".trimIndent()
+
+private fun runtimeEffectComposableDeclarationsWgsl(
+    program: GPUPreparedRuntimeEffectProgram,
+): String = """
+    ${program.wgslSource}
+
+    fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+        return ${program.sourceFunction}(localPosition);
+    }
+""".trimIndent()
+
+private fun materialEvaluationFunctionWgsl(
+    sourceFunction: String,
+    sourceColorContract: PreparedSourceColorContract,
+): String {
+    val normalization = when (sourceColorContract) {
+        PreparedSourceColorContract.LinearStraightRgba ->
+            "return vec4<f32>(source.rgb * source.a, source.a);"
+        PreparedSourceColorContract.LinearPremultipliedRgba -> "return source;"
+    }
+    return """
+        fn kanvas_normalize_material_to_premul(source: vec4<f32>) -> vec4<f32> {
+            $normalization
+        }
+
+        fn kanvas_evaluate_material(localPosition: vec2<f32>) -> vec4<f32> {
+            let source = $sourceFunction(localPosition);
+            return kanvas_normalize_material_to_premul(source);
+        }
+    """.trimIndent()
+}
+
 private fun wrapMaterialSource(source: String, sourceEntryPoint: String): String =
     "$source\n\n${materialStageWrapper(sourceEntryPoint)}"
 
@@ -1489,6 +1797,31 @@ private fun materialStageWrapper(sourceEntryPoint: String): String = """
     }
 """.trimIndent()
 
+private fun canonicalSampledBindings(
+    sampledResourceCount: Int,
+): List<GPUPreparedMaterialSampledBinding> =
+    List(sampledResourceCount) { resourceIndex ->
+        val textureBinding = Math.addExact(1, Math.multiplyExact(resourceIndex, 2))
+        val samplerBinding = Math.addExact(textureBinding, 1)
+        GPUPreparedMaterialSampledBinding(
+            resourceIndex = resourceIndex,
+            textureBinding = textureBinding,
+            samplerBinding = samplerBinding,
+        )
+    }
+
+private fun GPUPreparedRuntimeEffectSourceColorContract.toPreparedSourceColorContract():
+    PreparedSourceColorContract =
+    when (this) {
+        GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba ->
+            PreparedSourceColorContract.LinearStraightRgba
+        GPUPreparedRuntimeEffectSourceColorContract.LinearPremultipliedRgba ->
+            PreparedSourceColorContract.LinearPremultipliedRgba
+    }
+
+private fun sourceDeclaresFunction(source: String, function: String): Boolean =
+    Regex("""\bfn\s+${Regex.escape(function)}\s*\(""").containsMatchIn(source)
+
 private fun FloatArray.toByteArray(): ByteArray =
     ByteBuffer.allocate(size * Float.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
         forEach(::putFloat)
@@ -1508,6 +1841,8 @@ private fun sha256Hex(bytes: ByteArray): String =
         .joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
 private const val FINAL_FRAGMENT_ENTRY_POINT = "fs_main"
+private const val MATERIAL_SOURCE_FUNCTION = "kanvas_material_source"
+private const val MATERIAL_EVALUATION_FUNCTION = "kanvas_evaluate_material"
 private const val IMAGE_UNIFORM_LAYOUT_HASH = "layout:prepared-material-image:v1"
 private val SUPPORTED_TILE_MODES = setOf("clamp", "repeat", "mirror", "decal")
 private val SUPPORTED_IMAGE_FILTERS = setOf("nearest", "linear")
