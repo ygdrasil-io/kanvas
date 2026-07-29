@@ -88,7 +88,6 @@ class GPUPreparedFilterNormalizer {
         val resultGraph = GPUPreparedFilterGraph(
             nodes = currentNodes.toList(),
             output = output,
-            identity = GPUPreparedFilterGraph.computeIdentity(currentNodes.toList(), output),
         )
 
         return GPUPreparedFilterNormalization(

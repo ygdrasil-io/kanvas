@@ -69,8 +69,9 @@ class GPUPreparedFilterDagValidationTest {
         val n = GPUPreparedFilterNode(gid("n0"), GPUPreparedFilterKind.Offset,
             listOf(GPUPreparedFilterInputRef.ImplicitSource), OffsetParams(1f, 0f), "a")
         val computed = GPUPreparedFilterGraph.computeIdentity(listOf(n), GPUPreparedFilterInputRef.Node(gid("n0")))
-        val graph = GPUPreparedFilterGraph(listOf(n), GPUPreparedFilterInputRef.Node(gid("n0")), "wrong_identity")
-        assertEquals(computed, graph.identity)
+        assertFailsWith<IllegalStateException> {
+            GPUPreparedFilterGraph(listOf(n), GPUPreparedFilterInputRef.Node(gid("n0")), "wrong_identity")
+        }
     }
 
     @Test

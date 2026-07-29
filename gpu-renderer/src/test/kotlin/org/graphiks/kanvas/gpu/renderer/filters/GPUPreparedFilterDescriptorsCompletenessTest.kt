@@ -153,7 +153,6 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
         val graph = GPUPreparedFilterGraph(
             nodes = listOf(n1),
             output = GPUPreparedFilterInputRef.Node(GPUPreparedFilterNodeId("n1")),
-            identity = expected,
         )
         assertEquals(expected, graph.identity)
     }
@@ -169,7 +168,6 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
                         listOf(GPUPreparedFilterInputRef.ImplicitSource), OffsetParams(2f, 0f), "b"),
                 ),
                 output = GPUPreparedFilterInputRef.Node(GPUPreparedFilterNodeId("n1")),
-                identity = "bad",
             )
         }
     }
@@ -183,7 +181,6 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
                         listOf(GPUPreparedFilterInputRef.ImplicitSource), OffsetParams(1f, 0f), "a"),
                 ),
                 output = GPUPreparedFilterInputRef.Node(GPUPreparedFilterNodeId("n_missing")),
-                identity = "bad",
             )
         }
     }

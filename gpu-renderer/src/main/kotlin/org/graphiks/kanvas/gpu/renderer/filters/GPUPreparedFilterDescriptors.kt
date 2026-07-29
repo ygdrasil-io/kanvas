@@ -119,24 +119,26 @@ data class OffsetParams(
 
 class ColorFilterParams(matrix: FloatArray) : GPUPreparedFilterParameters {
 
-    val matrix: FloatArray = matrix.copyOf()
+    private val _matrix: FloatArray = matrix.copyOf()
+
+    val matrix: FloatArray get() = _matrix.copyOf()
 
     init {
-        require(this.matrix.size == 20) { "Color matrix must have exactly 20 entries" }
+        require(this._matrix.size == 20) { "Color matrix must have exactly 20 entries" }
     }
 
     override fun canonicalIdentity(): String =
-        "color_filter:${matrix.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
+        "color_filter:${_matrix.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is ColorFilterParams) return false
-        return matrix.contentEquals(other.matrix)
+        return _matrix.contentEquals(other._matrix)
     }
 
-    override fun hashCode(): Int = matrix.contentHashCode()
+    override fun hashCode(): Int = _matrix.contentHashCode()
 
-    override fun toString(): String = "ColorFilterParams(matrix=${matrix.contentToString()})"
+    override fun toString(): String = "ColorFilterParams(matrix=${_matrix.contentToString()})"
 }
 
 data class BlendParams(val mode: String) : GPUPreparedFilterParameters {
@@ -307,22 +309,24 @@ class MatrixConvolutionParams(
     val tileMode: String,
 ) : GPUPreparedFilterParameters {
 
-    val kernel: FloatArray = kernel.copyOf()
+    private val _kernel: FloatArray = kernel.copyOf()
+
+    val kernel: FloatArray get() = _kernel.copyOf()
 
     init {
         requireFinite(gain, bias, label = "MatrixConvolutionParams")
         require(kernelSizeX > 0 && kernelSizeY > 0) { "kernelSize must be positive" }
-        require(this.kernel.size == kernelSizeX * kernelSizeY) {
-            "kernel size ${this.kernel.size} != $kernelSizeX * $kernelSizeY"
+        require(this._kernel.size == kernelSizeX * kernelSizeY) {
+            "kernel size ${this._kernel.size} != $kernelSizeX * $kernelSizeY"
         }
-        for ((i, v) in this.kernel.withIndex()) {
+        for ((i, v) in this._kernel.withIndex()) {
             require(v.isFinite()) { "MatrixConvolutionParams kernel[$i]: non-finite value $v" }
         }
     }
 
     val kernelHash: String by lazy {
         val digest = MessageDigest.getInstance("SHA-256")
-        this.kernel.forEach { f ->
+        this._kernel.forEach { f ->
             val bits = f.toRawBits()
             digest.update((bits shr 24).toByte())
             digest.update((bits shr 16).toByte())
@@ -635,7 +639,7 @@ data class GPUPreparedFilterNode(
 class GPUPreparedFilterGraph(
     nodes: List<GPUPreparedFilterNode>,
     val output: GPUPreparedFilterInputRef,
-    identity: String,
+    internal val deprecatedIdentity: String = "",
 ) {
     val nodes: List<GPUPreparedFilterNode> = Collections.unmodifiableList(ArrayList(nodes))
 
@@ -647,6 +651,9 @@ class GPUPreparedFilterGraph(
         validateNoCycles(this.nodes)
         val computed = computeIdentity(this.nodes, output)
         this.identity = computed
+        if (deprecatedIdentity.isNotEmpty() && deprecatedIdentity != computed) {
+            error("Provided graph identity '$deprecatedIdentity' does not match computed identity '$computed'")
+        }
     }
 
     private fun validateNoCycles(nodes: List<GPUPreparedFilterNode>) {
