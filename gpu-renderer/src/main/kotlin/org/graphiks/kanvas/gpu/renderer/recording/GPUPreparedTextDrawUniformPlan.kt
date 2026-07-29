@@ -46,12 +46,6 @@ class GPUPreparedTextDrawUniformBufferPlan(
         } catch (error: ArithmeticException) {
             throw IllegalArgumentException("Prepared text draw-uniform stride overflowed.", error)
         }
-        val expectedByteSize = try {
-            Math.multiplyExact(strideBytes, this.slices.size.toLong())
-        } catch (error: ArithmeticException) {
-            throw IllegalArgumentException("Prepared text draw-uniform byte size overflowed.", error)
-        }
-        require(byteSize == expectedByteSize)
         this.slices.forEachIndexed { index, slice ->
             val expectedOffset = try {
                 Math.multiplyExact(strideBytes, index.toLong())
@@ -61,7 +55,18 @@ class GPUPreparedTextDrawUniformBufferPlan(
                     error,
                 )
             }
-            require(slice.offsetBytes == expectedOffset)
+            require(slice.offsetBytes == expectedOffset) {
+                "Prepared text draw-uniform slice[$index] offset ${slice.offsetBytes} " +
+                    "must equal canonical offset $expectedOffset."
+            }
+        }
+        val expectedByteSize = try {
+            Math.multiplyExact(strideBytes, this.slices.size.toLong())
+        } catch (error: ArithmeticException) {
+            throw IllegalArgumentException("Prepared text draw-uniform byte size overflowed.", error)
+        }
+        require(byteSize == expectedByteSize)
+        this.slices.forEach { slice ->
             require(slice.offsetBytes % alignmentBytes == 0L)
             val end = Math.addExact(slice.offsetBytes, slice.sizeBytes)
             require(end <= byteSize)
@@ -70,7 +75,7 @@ class GPUPreparedTextDrawUniformBufferPlan(
                     uploadSnapshot.copyOfRange(slice.offsetBytes.toInt(), end.toInt())
                         .preparedTextSha256(),
             )
-            val strideEnd = Math.addExact(expectedOffset, strideBytes)
+            val strideEnd = Math.addExact(slice.offsetBytes, strideBytes)
             require(
                 (end.toInt() until strideEnd.toInt()).all { paddingIndex ->
                     uploadSnapshot[paddingIndex] == 0.toByte()

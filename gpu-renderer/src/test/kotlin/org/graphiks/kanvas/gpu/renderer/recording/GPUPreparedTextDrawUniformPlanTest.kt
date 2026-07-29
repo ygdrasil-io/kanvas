@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.recording
 
 import java.security.MessageDigest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
@@ -12,18 +13,26 @@ class GPUPreparedTextDrawUniformPlanTest {
     fun `public plan rejects a first slice whose offset is nonzero`() {
         val bytes = ByteArray(512)
 
-        assertFailsWith<IllegalArgumentException> {
+        val failure = assertFailsWith<IllegalArgumentException> {
             plan(bytes = bytes, offsets = listOf(256L))
         }
+        assertEquals(
+            "Prepared text draw-uniform slice[0] offset 256 must equal canonical offset 0.",
+            failure.message,
+        )
     }
 
     @Test
     fun `public plan rejects an aligned hole between ordered slices`() {
         val bytes = ByteArray(768)
 
-        assertFailsWith<IllegalArgumentException> {
+        val failure = assertFailsWith<IllegalArgumentException> {
             plan(bytes = bytes, offsets = listOf(0L, 512L))
         }
+        assertEquals(
+            "Prepared text draw-uniform slice[1] offset 512 must equal canonical offset 256.",
+            failure.message,
+        )
     }
 
     @Test
