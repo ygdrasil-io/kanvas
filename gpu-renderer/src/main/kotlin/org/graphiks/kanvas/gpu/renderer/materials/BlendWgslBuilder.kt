@@ -2,7 +2,6 @@ package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
-import kotlin.math.pow
 
 object BlendWgslBuilder {
     fun buildWgsl(
@@ -159,43 +158,43 @@ $evaluationStart
             is GPUMaterialDescriptor.LinearGradient -> {
                 bb.putFloat(child.startX); bb.putFloat(child.startY)
                 bb.putFloat(child.endX); bb.putFloat(child.endY)
-                bb.putFloat(srgbToLinear(child.startR) * child.startA)
-                bb.putFloat(srgbToLinear(child.startG) * child.startA)
-                bb.putFloat(srgbToLinear(child.startB) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startR) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startG) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startB) * child.startA)
                 bb.putFloat(child.startA)
-                bb.putFloat(srgbToLinear(child.endR) * child.endA)
-                bb.putFloat(srgbToLinear(child.endG) * child.endA)
-                bb.putFloat(srgbToLinear(child.endB) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endR) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endG) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endB) * child.endA)
                 bb.putFloat(child.endA)
             }
             is GPUMaterialDescriptor.RadialGradient -> {
                 bb.putFloat(child.centerX); bb.putFloat(child.centerY)
                 bb.putFloat(child.radius); bb.putFloat(0f) // pad
-                bb.putFloat(srgbToLinear(child.startR) * child.startA)
-                bb.putFloat(srgbToLinear(child.startG) * child.startA)
-                bb.putFloat(srgbToLinear(child.startB) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startR) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startG) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startB) * child.startA)
                 bb.putFloat(child.startA)
-                bb.putFloat(srgbToLinear(child.endR) * child.endA)
-                bb.putFloat(srgbToLinear(child.endG) * child.endA)
-                bb.putFloat(srgbToLinear(child.endB) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endR) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endG) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endB) * child.endA)
                 bb.putFloat(child.endA)
             }
             is GPUMaterialDescriptor.SweepGradient -> {
                 bb.putFloat(child.centerX); bb.putFloat(child.centerY)
                 bb.putFloat(child.startAngle); bb.putFloat(child.endAngle)
-                bb.putFloat(srgbToLinear(child.startR) * child.startA)
-                bb.putFloat(srgbToLinear(child.startG) * child.startA)
-                bb.putFloat(srgbToLinear(child.startB) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startR) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startG) * child.startA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.startB) * child.startA)
                 bb.putFloat(child.startA)
-                bb.putFloat(srgbToLinear(child.endR) * child.endA)
-                bb.putFloat(srgbToLinear(child.endG) * child.endA)
-                bb.putFloat(srgbToLinear(child.endB) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endR) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endG) * child.endA)
+                bb.putFloat(preparedMaterialSrgbToLinear(child.endB) * child.endA)
                 bb.putFloat(child.endA)
             }
             is GPUMaterialDescriptor.SolidColor -> {
-                val r = child.r * child.a
-                val g = child.g * child.a
-                val b = child.b * child.a
+                val r = preparedMaterialSrgbToLinear(child.r) * child.a
+                val g = preparedMaterialSrgbToLinear(child.g) * child.a
+                val b = preparedMaterialSrgbToLinear(child.b) * child.a
                 bb.putFloat(r); bb.putFloat(g); bb.putFloat(b); bb.putFloat(child.a)
                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                 bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
@@ -207,11 +206,6 @@ $evaluationStart
             }
             else -> error("Unsupported blend child: ${child.kind}")
         }
-    }
-
-    private fun srgbToLinear(c: Float): Float {
-        return if (c <= 0.04045f) c / 12.92f
-        else ((c + 0.055f) / 1.055f).pow(2.4f)
     }
 
     private const val BLEND_UNIFORM_SIZE_BYTES = 112

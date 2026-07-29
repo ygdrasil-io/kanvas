@@ -1,7 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
-import kotlin.math.pow
 
 data class GradientWgslShader(
     val wgslSource: String,
@@ -482,9 +481,12 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
                 } ?: (i.toFloat() / (n - 1).coerceAtLeast(1))
                 bb.putFloat(pos); bb.putFloat(0f); bb.putFloat(0f); bb.putFloat(0f)
                 if (allStopColors != null && i * 4 + 3 < allStopColors.size) {
-                    val r = srgbToLinear(allStopColors[i * 4]) * allStopColors[i * 4 + 3]
-                    val g = srgbToLinear(allStopColors[i * 4 + 1]) * allStopColors[i * 4 + 3]
-                    val b = srgbToLinear(allStopColors[i * 4 + 2]) * allStopColors[i * 4 + 3]
+                    val r = preparedMaterialSrgbToLinear(allStopColors[i * 4]) *
+                        allStopColors[i * 4 + 3]
+                    val g = preparedMaterialSrgbToLinear(allStopColors[i * 4 + 1]) *
+                        allStopColors[i * 4 + 3]
+                    val b = preparedMaterialSrgbToLinear(allStopColors[i * 4 + 2]) *
+                        allStopColors[i * 4 + 3]
                     val a = allStopColors[i * 4 + 3]
                     bb.putFloat(r); bb.putFloat(g); bb.putFloat(b); bb.putFloat(a)
                 } else {
@@ -498,8 +500,4 @@ fn sample_stops_at(t: f32, count: u32, positions: ptr<function, array<vec4<f32>,
         return bb.array()
     }
 
-    private fun srgbToLinear(c: Float): Float {
-        return if (c <= 0.04045f) c / 12.92f
-        else ((c + 0.055f) / 1.055f).pow(2.4f)
-    }
 }

@@ -154,7 +154,7 @@ object GPUPreparedMaterialProgramCompiler {
                 g = descriptor.g,
                 b = descriptor.b,
                 a = descriptor.a,
-                colorSpecLabel = "straight-rgba-f32",
+                colorSpecLabel = "srgb-straight-rgba-f32",
             ),
         )
         val loweringContext = context.copy(
@@ -166,11 +166,12 @@ object GPUPreparedMaterialProgramCompiler {
         }
         val accepted = plan as GPUMaterialSourcePlan.Accepted
         val lowererKey = GPUSolidMaterialLowering.deriveMaterialKey(accepted, loweringContext)
+        val alpha = descriptor.a
         val uniforms = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN).apply {
-            putFloat(descriptor.r)
-            putFloat(descriptor.g)
-            putFloat(descriptor.b)
-            putFloat(descriptor.a)
+            putFloat(preparedMaterialSrgbToLinear(descriptor.r) * alpha)
+            putFloat(preparedMaterialSrgbToLinear(descriptor.g) * alpha)
+            putFloat(preparedMaterialSrgbToLinear(descriptor.b) * alpha)
+            putFloat(alpha)
         }.array()
 
         return PreparedSourceResult.Ready(
@@ -179,7 +180,7 @@ object GPUPreparedMaterialProgramCompiler {
                 entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
                 composableDeclarationsWgsl = solidComposableDeclarationsWgsl(),
                 sourceFunction = MATERIAL_SOURCE_FUNCTION,
-                sourceColorContract = PreparedSourceColorContract.LinearStraightRgba,
+                sourceColorContract = PreparedSourceColorContract.LinearPremultipliedRgba,
                 uniformBytes = uniforms,
                 sampledResources = emptyList(),
                 sourceKind = GPUMaterialSourceKind.SolidColor,
@@ -187,7 +188,7 @@ object GPUPreparedMaterialProgramCompiler {
                 abiExpectation = solidAbiExpectation(),
                 keyFacts = listOf(
                     "lowererKey=${lowererKey.value}",
-                    "solidSemantics=straight-rgba-f32",
+                    "solidSemantics=linear-premultiplied-rgba-f32",
                 ),
             ),
         )
@@ -308,9 +309,9 @@ object GPUPreparedMaterialProgramCompiler {
         val lowererKey = GPUBitmapShaderMaterialLowering.deriveMaterialKey(accepted, loweringContext)
         val tintAlpha = descriptor.tintA
         val uniforms = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN).apply {
-            putFloat(descriptor.tintR * tintAlpha)
-            putFloat(descriptor.tintG * tintAlpha)
-            putFloat(descriptor.tintB * tintAlpha)
+            putFloat(preparedMaterialSrgbToLinear(descriptor.tintR) * tintAlpha)
+            putFloat(preparedMaterialSrgbToLinear(descriptor.tintG) * tintAlpha)
+            putFloat(preparedMaterialSrgbToLinear(descriptor.tintB) * tintAlpha)
             putFloat(tintAlpha)
             putInt(if (descriptor.alphaOnly) 1 else 0)
             putInt(0)

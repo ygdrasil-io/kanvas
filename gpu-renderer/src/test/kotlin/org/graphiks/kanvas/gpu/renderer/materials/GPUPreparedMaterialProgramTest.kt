@@ -131,7 +131,7 @@ class GPUPreparedMaterialProgramTest {
     }
 
     @Test
-    fun `prepared blend retains the exact admitted two solid child payload`() {
+    fun `prepared blend retains linear premultiplied two solid child payload`() {
         val descriptor = supportedBlendShaderDescriptor()
         val ready = assertIs<GPUPreparedMaterialProgramResult.Ready>(
             compiler.compile(descriptor, 0.625f, context),
@@ -140,16 +140,13 @@ class GPUPreparedMaterialProgramTest {
 
         assertEquals(112, bytes.size)
         assertEquals(0.625f, ready.paintAlpha)
-        assertEquals(
-            solidDescriptor().let { listOf(it.r * it.a, it.g * it.a, it.b * it.a, it.a) }
-                .map(Float::toRawBits),
-            bytes.take(16).toLittleEndianFloats().map(Float::toRawBits),
+        assertFloatPayload(
+            expected = listOf(0.04070087f, 0.17123291f, 0.41801724f, 0.8f),
+            actual = bytes.take(16).toLittleEndianFloats(),
         )
-        assertEquals(
-            (descriptor.src as GPUMaterialDescriptor.SolidColor).let {
-                listOf(it.r * it.a, it.g * it.a, it.b * it.a, it.a)
-            }.map(Float::toRawBits),
-            bytes.drop(48).take(16).toLittleEndianFloats().map(Float::toRawBits),
+        assertFloatPayload(
+            expected = listOf(0.3622964f, 0.04394338f, 0.006013696f, 0.6f),
+            actual = bytes.drop(48).take(16).toLittleEndianFloats(),
         )
     }
 
@@ -858,4 +855,14 @@ class GPUPreparedMaterialProgramTest {
                 .order(java.nio.ByteOrder.LITTLE_ENDIAN)
                 .float
         }
+
+    private fun assertFloatPayload(
+        expected: List<Float>,
+        actual: List<Float>,
+    ) {
+        assertEquals(expected.size, actual.size)
+        expected.zip(actual).forEachIndexed { index, (expectedValue, actualValue) ->
+            assertEquals(expectedValue, actualValue, 0.000001f, "channel $index")
+        }
+    }
 }

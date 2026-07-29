@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -14,6 +16,9 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptorAssemblySe
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedEvidence
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedReason
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
@@ -122,6 +127,57 @@ class GPUMaterialMapperTest {
         assertEquals(0.75f, descriptor.tintB, 0.002f)
         assertEquals(1f, descriptor.tintA)
         assertEquals(0.5f, mapping.paintAlpha, 0.002f)
+    }
+
+    @Test
+    fun `prepared solid product path converts sRGB before one premultiplication`() {
+        val mapping = Paint(
+            color = Color.fromArgb(a = 128, r = 128, g = 128, b = 128),
+        ).toPreparedMaterialMapping()
+        val program = compilePrepared(mapping)
+        val uniform = program.uniformFloats()
+
+        assertEquals(0.10835351f, uniform[0], 0.000001f)
+        assertEquals(0.10835351f, uniform[1], 0.000001f)
+        assertEquals(0.10835351f, uniform[2], 0.000001f)
+        assertEquals(128f / 255f, uniform[3], 0.000001f)
+        assertEquals(1f, program.paintAlpha)
+        assertTrue("return source;" in program.composableFragment.evaluationFunctionWgsl)
+    }
+
+    @Test
+    fun `prepared blend solid children convert sRGB before one premultiplication`() {
+        val mapping = Paint(
+            shader = Shader.Blend(
+                mode = BlendMode.SRC_OVER,
+                dst = Shader.SolidColor(Color.fromArgb(a = 128, r = 128, g = 128, b = 128)),
+                src = Shader.SolidColor(Color.fromArgb(a = 64, r = 128, g = 128, b = 128)),
+            ),
+        ).toPreparedMaterialMapping()
+        val uniform = compilePrepared(mapping).uniformFloats()
+
+        assertEquals(0.10835351f, uniform[0], 0.000001f)
+        assertEquals(128f / 255f, uniform[3], 0.000001f)
+        assertEquals(0.05417676f, uniform[12], 0.000001f)
+        assertEquals(64f / 255f, uniform[15], 0.000001f)
+    }
+
+    @Test
+    fun `prepared A8 product tint converts sRGB and keeps caller alpha separate`() {
+        val mapping = Paint(
+            color = Color.fromArgb(a = 128, r = 128, g = 128, b = 128),
+            shader = imageShader("midtone-mask", byteArrayOf(0xff.toByte()), ColorType.ALPHA_8),
+        ).toPreparedMaterialMapping()
+        val program = compilePrepared(mapping)
+        val uniform = program.uniformFloats()
+
+        assertEquals(0.2158605f, uniform[0], 0.000001f)
+        assertEquals(0.2158605f, uniform[1], 0.000001f)
+        assertEquals(0.2158605f, uniform[2], 0.000001f)
+        assertEquals(1f, uniform[3])
+        assertEquals(128f / 255f, program.paintAlpha, 0.000001f)
+        assertEquals(0.10835351f, uniform[0] * program.paintAlpha, 0.000001f)
+        assertTrue("return source;" in program.composableFragment.evaluationFunctionWgsl)
     }
 
     @Test
@@ -1393,6 +1449,22 @@ class GPUMaterialMapperTest {
             "$description completed without a value"
         }
     }
+
+    private fun compilePrepared(mapping: GPUPreparedMaterialMapping): GPUPreparedMaterialProgram =
+        assertIs<GPUPreparedMaterialProgramResult.Ready>(
+            GPUPreparedMaterialProgramCompiler.compile(
+                descriptor = mapping.descriptor,
+                paintAlpha = mapping.paintAlpha,
+                context = preparedTextMaterialContext(target(), capabilities()),
+            ),
+        ).program
+
+    private fun GPUPreparedMaterialProgram.uniformFloats(): List<Float> =
+        ByteBuffer.wrap(uniformBytes.map(Int::toByte).toByteArray())
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .let { buffer ->
+                List(uniformBytes.size / Float.SIZE_BYTES) { buffer.float }
+            }
 
     private companion object {
         val SHA256_IDENTITY = Regex("""sha256:[0-9a-f]{64}""")
