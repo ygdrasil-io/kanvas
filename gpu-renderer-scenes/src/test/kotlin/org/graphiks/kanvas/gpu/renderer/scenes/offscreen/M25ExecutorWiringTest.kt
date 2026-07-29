@@ -39,6 +39,7 @@ import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererSceneRegistry
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneBlendMode
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 
 /**
@@ -73,7 +74,7 @@ class M25ExecutorWiringTest {
     @Test
     fun `KGPU-M25-003 runtime effect routes through the registered SimpleRT snippet`() {
         val lines = runtimeEffectWiringDiagnostics()
-        assertTrue(lines.any { it.contains("wgslSnippetSourceHash=fragment:simple_rt:v1") }, lines.toString())
+        assertTrue(lines.any { it.contains("wgslSnippetSourceHash=$SimpleRTSourceHash") }, lines.toString())
         assertTrue(lines.any { it.contains("entryPoint=simple_rt_source") }, lines.toString())
         assertTrue(lines.any { it.contains("uniformPacker=UniformPacker.simpleRtBytes") }, lines.toString())
         assertTrue(lines.any { it.contains("realGpuOutput=true") }, lines.toString())
