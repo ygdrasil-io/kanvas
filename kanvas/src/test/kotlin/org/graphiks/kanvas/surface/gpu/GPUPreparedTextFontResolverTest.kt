@@ -174,6 +174,24 @@ class GPUPreparedTextFontResolverTest {
     }
 
     @Test
+    fun `COLR version zero accepts an independently versioned CPAL one prefix`() {
+        val base = colrFontBytes()
+        val tables = sfntTables(base).toMutableMap()
+        val cpalV1 = checkNotNull(tables["CPAL"]).copyOf()
+        writeU16(cpalV1, 0, 1)
+        tables["CPAL"] = cpalV1
+        val typeface = FontTypeface(
+            sfntFont(base.copyOfRange(0, 4), tables),
+            "colrv0-cpalv1",
+        )
+
+        assertEquals(
+            GPUPreparedTextSourceRepresentation.COLRV0,
+            representation(typeface, glyphId = 2),
+        )
+    }
+
+    @Test
     fun `COLRv0 invalid palette index is not admitted`() {
         val bytes = colrFontBytes()
         val colr = table(bytes, "COLR")

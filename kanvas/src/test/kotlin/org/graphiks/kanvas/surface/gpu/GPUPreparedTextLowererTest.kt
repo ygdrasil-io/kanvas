@@ -1007,6 +1007,7 @@ class GPUPreparedTextLowererTest {
             originX = base.originX,
             originY = base.originY,
             transform = base.transform,
+            clipContentKey = base.clipContentKey,
             clip = base.clip,
             paint = paint,
             material = base.material,

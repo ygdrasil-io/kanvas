@@ -2,6 +2,9 @@ package org.graphiks.kanvas.glyph
 
 import org.graphiks.kanvas.font.TypefaceID
 import org.graphiks.kanvas.glyph.gpu.GPUGlyphRunDescriptor
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasPackingResult
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasRectItem
+import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasRectPacker
 import java.security.MessageDigest
 import java.util.Collections
 import kotlin.math.ceil
@@ -4624,36 +4627,41 @@ private fun packAtlasItems(
     atlasWidth: Int,
     padding: Int,
 ): List<GlyphAtlasPlacement> {
-    val placements = mutableListOf<GlyphAtlasPlacement>()
-    var x = padding
-    var y = padding
-    var rowHeight = 0
-
     items.forEach { item ->
         require(item.width >= 0) { "Glyph ${item.glyphId} width must be non-negative." }
         require(item.height >= 0) { "Glyph ${item.glyphId} height must be non-negative." }
         require(item.width.toLong() + padding.toLong() * 2L <= atlasWidth.toLong()) {
             "Glyph ${item.glyphId} width plus padding exceeds atlas width."
         }
-
-        if (x != padding && x + item.width + padding > atlasWidth) {
-            x = padding
-            y += rowHeight + padding
-            rowHeight = 0
-        }
-
-        placements += GlyphAtlasPlacement(
+    }
+    if (items.isEmpty()) return emptyList()
+    val packed = GPUTextAtlasRectPacker.pack(
+        items = items.mapIndexed { index, item ->
+            GPUTextAtlasRectItem(
+                itemKey = "$index:${item.glyphId}",
+                width = item.width,
+                height = item.height,
+                guardPx = 0,
+            )
+        },
+        pageWidth = atlasWidth,
+        pageHeight = Int.MAX_VALUE,
+        maxPages = 1,
+        outerPaddingPx = padding,
+        interItemPaddingPx = padding,
+    )
+    val ready = packed as? GPUTextAtlasPackingResult.Ready
+        ?: error("Validated row-atlas items must fit the unbounded-height page.")
+    return ready.placements.mapIndexed { index, placement ->
+        val item = items[index]
+        GlyphAtlasPlacement(
             glyphId = item.glyphId,
-            x = x,
-            y = y,
+            x = placement.contentRect.left,
+            y = placement.contentRect.top,
             width = item.width,
             height = item.height,
         )
-        x += item.width + padding
-        rowHeight = maxOf(rowHeight, item.height)
     }
-
-    return placements
 }
 
 /**

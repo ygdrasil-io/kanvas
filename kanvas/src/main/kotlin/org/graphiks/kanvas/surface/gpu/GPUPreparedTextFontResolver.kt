@@ -253,13 +253,7 @@ object GPUPreparedFontTypefaceResolver : GPUPreparedTextFontResolver {
                     org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes.FONT_BYTES_MALFORMED,
                     "Prepared COLRv0 font has no CPAL table",
                 )
-            runCatching {
-                if (colrVersion == 1) {
-                    CPALV0Parser.parseCompatibleV0Prefix(cpalBytes)
-                } else {
-                    CPALV0Parser.parse(cpalBytes)
-                }
-            }.getOrNull()
+            runCatching { parsePreparedTextCompatibleCPAL(cpalBytes) }.getOrNull()
                 ?: return refused(
                     org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes.FONT_BYTES_MALFORMED,
                     "Prepared COLRv0 CPAL table is malformed",
@@ -484,6 +478,15 @@ object GPUPreparedFontTypefaceResolver : GPUPreparedTextFontResolver {
     private fun refused(code: String, message: String): GPUPreparedTextFontResolution.Refused =
         GPUPreparedTextFontResolution.refused(code, message)
 }
+
+/**
+ * One CPAL-prefix authority for prepared text. COLR and CPAL versions are independent:
+ * both CPAL0 and CPAL1 expose the same palette prefix consumed by the COLRv0 route.
+ */
+internal fun parsePreparedTextCompatibleCPAL(
+    bytes: ByteArray,
+): org.graphiks.kanvas.font.colr.CPALTable? =
+    CPALV0Parser.parseCompatibleV0Prefix(bytes)
 
 private data class PreparedTextRepresentationMemoKey(
     val glyphId: Int,

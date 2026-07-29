@@ -355,10 +355,10 @@ object GPUPreparedTextLowerer {
             representations += preparedRepresentation
         }
 
-        val clipSnapshot = when (
+        val clipProof = when (
             val clipResult = validateAndSnapshotPreparedTextClip(operation.clip, target, capabilities)
         ) {
-            is PreparedTextClipResult.Ready -> clipResult.clip
+            is PreparedTextClipResult.Ready -> clipResult
             is PreparedTextClipResult.Refused ->
                 return refused(
                     GPUTextRefusalCodes.CLIP_ROUTE_UNACCEPTED,
@@ -479,7 +479,8 @@ object GPUPreparedTextLowerer {
                 originX = operation.x,
                 originY = operation.y,
                 transform = operation.transform.snapshotForPreparedText(),
-                clip = clipSnapshot,
+                clipContentKey = clipProof.contentKey,
+                clip = clipProof.clip,
                 paint = paint.snapshotForPreparedText(),
                 material = material,
                 blendPlan = blendPlan,
@@ -636,7 +637,10 @@ internal fun preparedTextMaterialContext(
 }
 
 private sealed interface PreparedTextClipResult {
-    data class Ready(val clip: ClipStack) : PreparedTextClipResult
+    data class Ready(
+        val clip: ClipStack,
+        val contentKey: String,
+    ) : PreparedTextClipResult
     data class Refused(val message: String) : PreparedTextClipResult
 }
 
@@ -648,7 +652,12 @@ private fun validateAndSnapshotPreparedTextClip(
     if (clip.perspectiveCaptureRefusal) {
         return PreparedTextClipResult.Refused("Prepared text clip was captured under perspective")
     }
-    if (clip == ClipStack.WideOpen) return PreparedTextClipResult.Ready(ClipStack.WideOpen)
+    if (clip == ClipStack.WideOpen) {
+        return PreparedTextClipResult.Ready(
+            clip = ClipStack.WideOpen,
+            contentKey = "prepared-text-clip:wide-open",
+        )
+    }
     val request = runCatching { clip.toGPUClipFacts(target).coverageRequest }.getOrNull()
         ?: return PreparedTextClipResult.Refused("Prepared text clip has no common coverage request")
     val maxTextureDimension = capabilities.limits?.maxTextureDimension2D
@@ -667,7 +676,10 @@ private fun validateAndSnapshotPreparedTextClip(
     return when (plan) {
         is GPUClipCoveragePlan.Refused ->
             PreparedTextClipResult.Refused("Common clip authority refused ${plan.code}")
-        else -> PreparedTextClipResult.Ready(clip.snapshotForPreparedText())
+        else -> PreparedTextClipResult.Ready(
+            clip = clip.snapshotForPreparedText(),
+            contentKey = request.contentKey,
+        )
     }
 }
 

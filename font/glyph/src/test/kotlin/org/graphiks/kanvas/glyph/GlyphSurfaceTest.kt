@@ -665,6 +665,20 @@ class GlyphSurfaceTest {
     }
 
     @Test
+    fun rowPackerPreservesDegenerateMaskPlacements() {
+        val placements = RowGlyphAtlasPacker(atlasWidth = 8, padding = 1).pack(
+            listOf(
+                a8Mask(glyphId = 20, width = 0, height = 0),
+                a8Mask(glyphId = 21, width = 0, height = 2),
+                a8Mask(glyphId = 22, width = 3, height = 0),
+            ),
+        )
+
+        assertEquals(listOf(0, 0, 3), placements.map { it.width })
+        assertEquals(listOf(0, 2, 0), placements.map { it.height })
+    }
+
+    @Test
     fun rowPackerReportsCapacityDiagnosticWithoutPartialPlacements() {
         val packer = RowGlyphAtlasPacker(atlasWidth = 4, padding = 1)
 

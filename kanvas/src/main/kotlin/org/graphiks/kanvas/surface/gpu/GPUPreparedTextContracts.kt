@@ -131,6 +131,7 @@ class GPUPreparedTextDraw private constructor(
     val originX: Float,
     val originY: Float,
     val transform: Matrix33,
+    val clipContentKey: String,
     clip: ClipStack,
     paint: Paint,
     val material: GPUPreparedMaterialProgram,
@@ -141,6 +142,7 @@ class GPUPreparedTextDraw private constructor(
 ) {
     init {
         require(targetColorFormat.isNotBlank()) { "Prepared text target format must not be blank" }
+        require(clipContentKey.isNotBlank()) { "Prepared text clipContentKey must not be blank" }
         require(capabilitySnapshotHash.isNotBlank()) {
             "Prepared text capability snapshot hash must not be blank"
         }
@@ -171,6 +173,7 @@ class GPUPreparedTextDraw private constructor(
             originX: Float,
             originY: Float,
             transform: Matrix33,
+            clipContentKey: String,
             clip: ClipStack,
             paint: Paint,
             material: GPUPreparedMaterialProgram,
@@ -195,6 +198,7 @@ class GPUPreparedTextDraw private constructor(
                 transform.skewY, transform.scaleY, transform.transY,
                 transform.persp0, transform.persp1, transform.persp2,
             ),
+            clipContentKey = clipContentKey,
             clip = clip,
             paint = paint,
             material = material,
