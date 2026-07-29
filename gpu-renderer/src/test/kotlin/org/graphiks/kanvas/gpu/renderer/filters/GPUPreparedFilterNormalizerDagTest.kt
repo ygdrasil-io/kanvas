@@ -31,7 +31,42 @@ class GPUPreparedFilterNormalizerDagTest {
         val n1 = offsetNode("n1", 2f, 0f)
         val graph = graphWithOutput(listOf(n0, n1), GPUPreparedFilterInputRef.Node(GPUPreparedFilterNodeId("n0")))
         val result = normalizer.normalize(graph, emptyBounds, passthroughColor)
-        assertEquals(GPUPreparedFilterInputRef.Node(GPUPreparedFilterNodeId("n0")), graph.output)
+        assertEquals(GPUPreparedFilterInputRef.Node(GPUPreparedFilterNodeId("n0")), result.graph.output)
+    }
+
+    @Test
+    fun `removed output is rewired to its exact source not the last unrelated node`() {
+        val identity = identityNode("identity", GPUPreparedFilterInputRef.ImplicitSource)
+        val unrelated = blurNode("unrelated", 3f, 3f)
+        val graph = graphWithOutput(
+            listOf(identity, unrelated),
+            GPUPreparedFilterInputRef.Node(GPUPreparedFilterNodeId("identity")),
+        )
+
+        val result = normalizer.normalize(graph, emptyBounds, passthroughColor)
+
+        assertEquals(GPUPreparedFilterInputRef.ImplicitSource, result.graph.output)
+        assertEquals(listOf("unrelated"), result.graph.nodes.map { it.id.value })
+    }
+
+    @Test
+    fun `graph output producer is not folded into a dead consumer`() {
+        val producer = offsetNode("producer", 1f, 0f)
+        val deadConsumer = offsetNode(
+            "dead",
+            2f,
+            0f,
+            GPUPreparedFilterInputRef.Node(producer.id),
+        )
+        val graph = graphWithOutput(
+            listOf(producer, deadConsumer),
+            GPUPreparedFilterInputRef.Node(producer.id),
+        )
+
+        val result = normalizer.normalize(graph, emptyBounds, passthroughColor)
+
+        assertEquals(GPUPreparedFilterInputRef.Node(producer.id), result.graph.output)
+        assertEquals(2, result.graph.nodes.size)
     }
 
     @Test
@@ -67,6 +102,36 @@ class GPUPreparedFilterNormalizerDagTest {
     }
 
     @Test
+    fun `identity removal keeps merge parameter inputs synchronized`() {
+        val identity = identityNode("identity", GPUPreparedFilterInputRef.ImplicitSource)
+        val mergeInputs = listOf(
+            GPUPreparedFilterInputRef.Node(identity.id),
+            GPUPreparedFilterInputRef.TransparentBlack,
+        )
+        val merge = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("merge"),
+            kind = GPUPreparedFilterKind.Merge,
+            inputs = mergeInputs,
+            parameters = MergeParams(mergeInputs),
+            provenance = "test/merge",
+        )
+        val graph = graphWithOutput(
+            listOf(identity, merge),
+            GPUPreparedFilterInputRef.Node(merge.id),
+        )
+
+        val result = normalizer.normalize(graph, emptyBounds, passthroughColor)
+        val normalizedMerge = result.graph.nodes.single()
+        val expectedInputs = listOf(
+            GPUPreparedFilterInputRef.ImplicitSource,
+            GPUPreparedFilterInputRef.TransparentBlack,
+        )
+
+        assertEquals(expectedInputs, normalizedMerge.inputs)
+        assertEquals(expectedInputs, (normalizedMerge.parameters as MergeParams).inputs)
+    }
+
+    @Test
     fun `non-commutative matrix order produces different identity`() {
         val m1 = floatArrayOf(
             0.21f, 0.72f, 0.07f, 0f, 0f,
@@ -87,6 +152,81 @@ class GPUPreparedFilterNormalizerDagTest {
         val nD = colorNode("d", m1)
         val g2 = graphOf(nC, nD)
         assertTrue(g1.identity != g2.identity)
+    }
+
+    @Test
+    fun `color matrices compose in execution order consumer times producer`() {
+        val producerMatrix = identityMatrix().also { it[4] = 1f }
+        val consumerMatrix = identityMatrix().also { it[0] = 2f }
+        val producer = colorNode("producer", producerMatrix)
+        val consumer = GPUPreparedFilterNode(
+            GPUPreparedFilterNodeId("consumer"),
+            GPUPreparedFilterKind.ColorFilter,
+            listOf(GPUPreparedFilterInputRef.Node(producer.id)),
+            ColorFilterParams(consumerMatrix),
+            "test/consumer",
+        )
+        val graph = graphWithOutput(
+            listOf(producer, consumer),
+            GPUPreparedFilterInputRef.Node(consumer.id),
+        )
+
+        val result = normalizer.normalize(graph, emptyBounds, passthroughColor)
+        val matrix = (result.graph.nodes.single().parameters as ColorFilterParams).matrix
+
+        assertEquals(2f, matrix[0])
+        assertEquals(2f, matrix[4])
+    }
+
+    @Test
+    fun `crops with different tile modes are not merged`() {
+        val producer = GPUPreparedFilterNode(
+            GPUPreparedFilterNodeId("producer"),
+            GPUPreparedFilterKind.Crop,
+            listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            CropParams(0f, 0f, 20f, 20f, GPUTileMode.Clamp),
+            "test/producer",
+        )
+        val consumer = GPUPreparedFilterNode(
+            GPUPreparedFilterNodeId("consumer"),
+            GPUPreparedFilterKind.Crop,
+            listOf(GPUPreparedFilterInputRef.Node(producer.id)),
+            CropParams(1f, 1f, 10f, 10f, GPUTileMode.Decal),
+            "test/consumer",
+        )
+        val graph = graphWithOutput(
+            listOf(producer, consumer),
+            GPUPreparedFilterInputRef.Node(consumer.id),
+        )
+
+        val result = normalizer.normalize(graph, emptyBounds, passthroughColor)
+
+        assertEquals(2, result.graph.nodes.size)
+        assertEquals(0, result.rewrites.size)
+    }
+
+    @Test
+    fun `merged node id cannot collide with an existing node id`() {
+        val producer = offsetNode("a", 1f, 0f)
+        val consumer = offsetNode(
+            "b",
+            2f,
+            0f,
+            GPUPreparedFilterInputRef.Node(producer.id),
+        )
+        val preexistingCollision = blurNode("a_b_merged", 3f, 3f)
+        val graph = graphWithOutput(
+            listOf(producer, consumer, preexistingCollision),
+            GPUPreparedFilterInputRef.Node(consumer.id),
+        )
+
+        val result = normalizer.normalize(graph, emptyBounds, passthroughColor)
+
+        assertEquals(result.graph.nodes.size, result.graph.nodes.map { it.id }.distinct().size)
+        assertEquals(
+            GPUPreparedFilterKind.Offset,
+            result.graph.nodes.single { GPUPreparedFilterInputRef.Node(it.id) == result.graph.output }.kind,
+        )
     }
 
     @Test
@@ -143,4 +283,11 @@ class GPUPreparedFilterNormalizerDagTest {
             ColorFilterParams(m.copyOf()), "test/$id")
 
     private fun colorMatrix(v: Float) = floatArrayOf(v,0f,0f,0f,0f, 0f,v,0f,0f,0f, 0f,0f,v,0f,0f, 0f,0f,0f,1f,0f)
+
+    private fun identityMatrix() = floatArrayOf(
+        1f, 0f, 0f, 0f, 0f,
+        0f, 1f, 0f, 0f, 0f,
+        0f, 0f, 1f, 0f, 0f,
+        0f, 0f, 0f, 1f, 0f,
+    )
 }
