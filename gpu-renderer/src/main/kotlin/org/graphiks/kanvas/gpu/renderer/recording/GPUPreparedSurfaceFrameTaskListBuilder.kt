@@ -146,6 +146,65 @@ class GPUPreparedTextMaterialUniformBufferPlan(
     fun bytesForUpload(): ByteArray = uploadSnapshot.copyOf()
 }
 
+/**
+ * Passive immutable Task 8 handoff facts consumed by Task 9 preflight.
+ *
+ * This seal owns no validation and no native resource. It deliberately keeps
+ * the gathered semantic and prepared-material facts independent from the
+ * render binding so preflight can detect late substitution.
+ */
+class GPUPreparedTextBindingPreflightSeal(
+    val semanticCanonicalHash: String,
+    val atlasKey: String,
+    val atlasWidth: Int,
+    val atlasHeight: Int,
+    val atlasRowBytes: Int,
+    val atlasGeneration: Long,
+    val atlasContentHash: String,
+    val pageIndex: Int,
+    val instanceStrideBytes: Int,
+    val firstInstance: Int,
+    val instanceCount: Int,
+    val instanceBufferByteSize: Long,
+    val instanceBufferContentHash: String,
+    val materialUniformOffsetBytes: Long,
+    val materialUniformSizeBytes: Long,
+    val materialKey: String,
+    val materialWgslSourceHash: String,
+    val materialEntryPoint: String,
+    val materialAbiHash: String,
+    val materialUniformContentHash: String,
+    materialSampledResourceFacts: List<String>,
+    val targetBounds: GPUPixelBounds,
+    val scissorBounds: GPUPixelBounds,
+    val clipIdentity: String,
+    val blendPlanIdentity: String,
+    val capabilitySnapshotHash: String,
+) {
+    val materialSampledResourceFacts: List<String> =
+        immutableList(materialSampledResourceFacts)
+
+    init {
+        require(semanticCanonicalHash.isNotBlank())
+        require(atlasKey.isNotBlank())
+        require(atlasWidth > 0 && atlasHeight > 0 && atlasRowBytes >= atlasWidth)
+        require(atlasGeneration >= 0L && atlasContentHash.isNotBlank())
+        require(pageIndex >= 0)
+        require(instanceStrideBytes > 0)
+        require(firstInstance >= 0 && instanceCount > 0)
+        require(instanceBufferByteSize > 0L && instanceBufferContentHash.isNotBlank())
+        require(materialUniformOffsetBytes >= 0L && materialUniformSizeBytes >= 0L)
+        require(materialKey.isNotBlank())
+        require(materialWgslSourceHash.isNotBlank())
+        require(materialEntryPoint.isNotBlank())
+        require(materialAbiHash.isNotBlank())
+        require(materialUniformContentHash.isNotBlank())
+        require(clipIdentity.isNotBlank())
+        require(blendPlanIdentity.isNotBlank())
+        require(capabilitySnapshotHash.isNotBlank())
+    }
+}
+
 /** Exact atlas and frame-global instance range consumed by one ordered prepared-text packet. */
 class GPUPreparedTextRenderBinding(
     val packetId: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID,
@@ -157,6 +216,7 @@ class GPUPreparedTextRenderBinding(
     val materialUniformOffsetBytes: Long,
     val materialUniformSizeBytes: Long,
     materialSampledResourcePlans: List<GPUMaterialTextureFrameResourcePlan>,
+    val preflightSeal: GPUPreparedTextBindingPreflightSeal,
 ) {
     val materialSampledResourcePlans: List<GPUMaterialTextureFrameResourcePlan> =
         immutableList(materialSampledResourcePlans)
@@ -1021,6 +1081,17 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         materialSampledResourcePlans = material.sampledResources.map { resource ->
                             materialUploadByResourceKey.getValue(resource.resourceKey).resources
                         },
+                        preflightSeal = semantic.preparedTextPreflightSeal(
+                            material = material,
+                            atlasResourcePlan = r8UploadByIdentity
+                                .getValue(semantic.exactR8ArtifactIdentity())
+                                .resources,
+                            instanceBufferPlan = textInstanceAssembly.plan,
+                            firstInstance = range.firstInstance,
+                            instanceCount = range.instanceCount,
+                            materialUniformOffsetBytes = materialUniformRange.offsetBytes,
+                            materialUniformSizeBytes = materialUniformRange.sizeBytes,
+                        ),
                     )
                 }.toMap(),
             )
@@ -1852,6 +1923,78 @@ private fun GPUDrawSemanticPayload.preparedTextMaterial() = when (this) {
     is GPUDrawSemanticPayload.TextA8 -> material
     is GPUDrawSemanticPayload.ColorGlyph -> requireNotNull(material)
     else -> error("Only prepared text semantics own prepared material programs")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
+    material: org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram,
+    atlasResourcePlan: GPUR8FrameResourcePlan,
+    instanceBufferPlan: GPUPreparedTextInstanceBufferPlan,
+    firstInstance: Int,
+    instanceCount: Int,
+    materialUniformOffsetBytes: Long,
+    materialUniformSizeBytes: Long,
+): GPUPreparedTextBindingPreflightSeal {
+    val targetBounds: GPUPixelBounds
+    val scissorBounds: GPUPixelBounds
+    val clipIdentity: String
+    val blendPlanIdentity: String
+    val capabilitySnapshotHash: String
+    val canonicalHash: String
+    val pageIndex: Int
+    when (this) {
+        is GPUDrawSemanticPayload.TextA8 -> {
+            targetBounds = this.targetBounds
+            scissorBounds = this.scissorBounds
+            clipIdentity = this.clipIdentity
+            blendPlanIdentity = this.blendPlanIdentity
+            capabilitySnapshotHash = this.capabilitySnapshotHash
+            canonicalHash = this.canonicalHash
+            pageIndex = this.pageIndex
+        }
+        is GPUDrawSemanticPayload.ColorGlyph -> {
+            targetBounds = this.targetBounds
+            scissorBounds = this.scissorBounds
+            clipIdentity = requireNotNull(this.clipIdentity)
+            blendPlanIdentity = requireNotNull(this.blendPlanIdentity)
+            capabilitySnapshotHash = requireNotNull(this.capabilitySnapshotHash)
+            canonicalHash = this.canonicalHash
+            pageIndex = this.instances.first().pageIndex
+        }
+        else -> error("Only prepared text semantics own preflight seals")
+    }
+    return GPUPreparedTextBindingPreflightSeal(
+        semanticCanonicalHash = canonicalHash,
+        atlasKey = atlasResourcePlan.artifactKey,
+        atlasWidth = atlasResourcePlan.artifactWidth,
+        atlasHeight = atlasResourcePlan.artifactHeight,
+        atlasRowBytes = atlasResourcePlan.artifactRowBytes,
+        atlasGeneration = atlasResourcePlan.artifactGeneration,
+        atlasContentHash = atlasResourcePlan.artifactContentHash,
+        pageIndex = pageIndex,
+        instanceStrideBytes = instanceBufferPlan.strideBytes,
+        firstInstance = firstInstance,
+        instanceCount = instanceCount,
+        instanceBufferByteSize = instanceBufferPlan.byteSize,
+        instanceBufferContentHash = instanceBufferPlan.contentHash,
+        materialUniformOffsetBytes = materialUniformOffsetBytes,
+        materialUniformSizeBytes = materialUniformSizeBytes,
+        materialKey = material.materialKey,
+        materialWgslSourceHash = material.wgslSource.toByteArray().sha256Hex(),
+        materialEntryPoint = material.entryPoint,
+        materialAbiHash = material.abiHash,
+        materialUniformContentHash = material.uniformBytes
+            .map(Int::toByte)
+            .toByteArray()
+            .sha256Hex(),
+        materialSampledResourceFacts = material.sampledResources.flatMap { resource ->
+            resource.identityFacts()
+        },
+        targetBounds = targetBounds,
+        scissorBounds = scissorBounds,
+        clipIdentity = clipIdentity,
+        blendPlanIdentity = blendPlanIdentity,
+        capabilitySnapshotHash = capabilitySnapshotHash,
+    )
 }
 
 private fun GPUDrawSemanticPayload.isPreparedTextSemantic(): Boolean =

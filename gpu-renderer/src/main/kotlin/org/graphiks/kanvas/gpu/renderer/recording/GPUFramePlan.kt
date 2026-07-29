@@ -1179,6 +1179,35 @@ private fun CanonicalHashSink.preparedTextBinding(value: GPUPreparedTextRenderBi
         string("textureRef", plan.frameTextureRef.value)
         string("contentHash", plan.contentHash)
     }
+    tag("GPUPreparedTextBindingPreflightSeal")
+    string("semanticCanonicalHash", value.preflightSeal.semanticCanonicalHash)
+    string("sealAtlasKey", value.preflightSeal.atlasKey)
+    int("sealAtlasWidth", value.preflightSeal.atlasWidth)
+    int("sealAtlasHeight", value.preflightSeal.atlasHeight)
+    int("sealAtlasRowBytes", value.preflightSeal.atlasRowBytes)
+    long("sealAtlasGeneration", value.preflightSeal.atlasGeneration)
+    string("sealAtlasContentHash", value.preflightSeal.atlasContentHash)
+    int("sealPageIndex", value.preflightSeal.pageIndex)
+    int("sealInstanceStrideBytes", value.preflightSeal.instanceStrideBytes)
+    int("sealFirstInstance", value.preflightSeal.firstInstance)
+    int("sealInstanceCount", value.preflightSeal.instanceCount)
+    long("sealInstanceBufferByteSize", value.preflightSeal.instanceBufferByteSize)
+    string("sealInstanceBufferContentHash", value.preflightSeal.instanceBufferContentHash)
+    long("sealMaterialUniformOffsetBytes", value.preflightSeal.materialUniformOffsetBytes)
+    long("sealMaterialUniformSizeBytes", value.preflightSeal.materialUniformSizeBytes)
+    string("sealMaterialKey", value.preflightSeal.materialKey)
+    string("sealMaterialWgslSourceHash", value.preflightSeal.materialWgslSourceHash)
+    string("sealMaterialEntryPoint", value.preflightSeal.materialEntryPoint)
+    string("sealMaterialAbiHash", value.preflightSeal.materialAbiHash)
+    string("sealMaterialUniformContentHash", value.preflightSeal.materialUniformContentHash)
+    list("sealMaterialSampledResourceFacts", value.preflightSeal.materialSampledResourceFacts) {
+        string("fact", it)
+    }
+    bounds("sealTargetBounds", value.preflightSeal.targetBounds)
+    bounds("sealScissorBounds", value.preflightSeal.scissorBounds)
+    string("sealClipIdentity", value.preflightSeal.clipIdentity)
+    string("sealBlendPlanIdentity", value.preflightSeal.blendPlanIdentity)
+    string("sealCapabilitySnapshotHash", value.preflightSeal.capabilitySnapshotHash)
 }
 
 private fun CanonicalHashSink.textureDescriptor(name: String, value: GPUTextureDescriptor) {
@@ -1875,7 +1904,24 @@ private fun GPUPreparedTextRenderBinding.stableDump(): String =
         "materialResources=${materialSampledResourcePlans.joinToString(";") { plan ->
             "{key=${plan.resourceKey},texture=${plan.frameTextureRef.value}," +
                 "contentHash=${plan.contentHash}}"
-        }.ifEmpty { "none" }}}"
+        }.ifEmpty { "none" }}," +
+        "preflightSeal={semantic=${preflightSeal.semanticCanonicalHash}," +
+        "atlas=${preflightSeal.atlasKey}@${preflightSeal.atlasGeneration}/" +
+        "${preflightSeal.atlasContentHash}:${preflightSeal.atlasWidth}x" +
+        "${preflightSeal.atlasHeight}:${preflightSeal.atlasRowBytes}," +
+        "page=${preflightSeal.pageIndex}," +
+        "instances=${preflightSeal.firstInstance}+${preflightSeal.instanceCount}@" +
+        "${preflightSeal.instanceStrideBytes}:${preflightSeal.instanceBufferByteSize}/" +
+        "${preflightSeal.instanceBufferContentHash}," +
+        "material=${preflightSeal.materialKey}/${preflightSeal.materialAbiHash}/" +
+        "${preflightSeal.materialEntryPoint}/${preflightSeal.materialWgslSourceHash}," +
+        "uniform=${preflightSeal.materialUniformOffsetBytes}+" +
+        "${preflightSeal.materialUniformSizeBytes}/" +
+        "${preflightSeal.materialUniformContentHash}," +
+        "resources=${preflightSeal.materialSampledResourceFacts.joinToString("|").ifEmpty { "none" }}," +
+        "target=${preflightSeal.targetBounds},scissor=${preflightSeal.scissorBounds}," +
+        "clip=${preflightSeal.clipIdentity},blend=${preflightSeal.blendPlanIdentity}," +
+        "capability=${preflightSeal.capabilitySnapshotHash}}}"
 
 private fun GPUTextureDescriptor.stableDump(): String =
     "{width=$width,height=$height,format=$format," +

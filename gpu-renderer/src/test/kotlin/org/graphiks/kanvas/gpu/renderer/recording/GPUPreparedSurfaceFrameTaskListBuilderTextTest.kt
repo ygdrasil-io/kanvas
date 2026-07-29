@@ -1,11 +1,13 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import io.ygdrasil.webgpu.GPUTextureFormat
 import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
@@ -34,6 +36,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSurfaceNativePreflight
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialLoweringContext
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
@@ -444,6 +447,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
                 targetBounds = BOUNDS,
                 semanticsByCommandId = semantics,
                 readbackRequestId = requestId,
+                targetFormat = GPUColorFormat.RGBA8UnormSrgb,
             ),
         )
 
@@ -493,6 +497,17 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         assertTrue("uploadBytes=" !in textBindingLine.substringAfter("preparedTextBindings="))
         assertTrue("preparations=" !in textBindingLine.substringAfter("preparedTextBindings="))
         assertEquals(plan.stableHash(), GPUFramePlanner.plan(taskList).stableHash())
+        assertNull(
+            GPUPreparedSurfaceNativePreflight().validateFramePlan(
+                framePlan = plan,
+                capabilities = capabilities().let { observed ->
+                    observed.copy(
+                        supportedTextureFormats =
+                            observed.supportedTextureFormats + GPUTextureFormat.R8Unorm,
+                    )
+                },
+            ),
+        )
     }
 
     private fun coreSemantic(commandId: Int): GPUDrawSemanticPayload.CorePrimitive =
@@ -615,7 +630,9 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
                 targetBounds = BOUNDS,
                 scissorBounds = BOUNDS,
                 clipIdentity = "clip:none",
-                blendPlanIdentity = "blend:src-over",
+                blendPlanIdentity = requireNotNull(
+                    packet(commandId, COLOR_GLYPH_RENDER_STEP_IDENTITY).blendPlan,
+                ).canonicalIdentity(),
                 capabilitySnapshotHash = "capability:text",
                 frameProvenance = GPUFrameProvenance.GmContent,
             ),
@@ -647,7 +664,9 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
             targetBounds = BOUNDS,
             scissorBounds = BOUNDS,
             clipIdentity = "clip:none",
-            blendPlanIdentity = "blend:src-over",
+            blendPlanIdentity = requireNotNull(
+                packet(commandId, "text.a8_mask.sample").blendPlan,
+            ).canonicalIdentity(),
             capabilitySnapshotHash = "capability:text",
             frameProvenance = GPUFrameProvenance.GmContent,
         ),

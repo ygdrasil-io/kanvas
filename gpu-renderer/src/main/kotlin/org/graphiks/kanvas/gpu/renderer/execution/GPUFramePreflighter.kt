@@ -164,6 +164,7 @@ internal class GPUFramePreflighter(
         }
         val hasExactPreparedSurfaceMixedBoundary =
             hasExactPreparedSurfaceMixedNativeBoundary(framePlan)
+        var preparedTextPassedPureBoundary = false
         if (!hasExactPreparedSurfaceMixedBoundary &&
             framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
                 .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
@@ -180,15 +181,34 @@ internal class GPUFramePreflighter(
         }
         if (hasExactPreparedSurfaceMixedBoundary) {
             GPUPreparedSurfaceNativePreflight()
-                .validateFramePlan(framePlan, context)
+                .validateFramePlan(framePlan, context, capabilities)
                 ?.let { refused ->
                     return GPUFramePreflightResult.Refused(
                         diagnostic(refused.code, refused.message),
                     )
                 }
+            if (framePlan.steps
+                    .filterIsInstance<GPUFrameStep.RenderPassStep>()
+                    .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+                    .any { packet ->
+                        packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
+                            packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+                    }
+            ) {
+                preparedTextPassedPureBoundary = true
+            }
         }
         val pureValidation = pureValidation(framePlan)
         pureValidation.diagnostic?.let { return GPUFramePreflightResult.Refused(it) }
+        if (preparedTextPassedPureBoundary) {
+            return GPUFramePreflightResult.Refused(
+                diagnostic(
+                    GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
+                    "Prepared-text pure preflight passed; native materialization remains closed " +
+                        "until FP-05 Task 10.",
+                ),
+            )
+        }
         val corePrimitiveDirectRoutes = pureValidation.corePrimitiveDirectRoutes
         val corePrimitivePathStencilRoutes = pureValidation.corePrimitivePathStencilRoutes
         val corePrimitiveNativeScopeRoutes = pureValidation.corePrimitiveNativeScopeRoutes
@@ -4122,13 +4142,21 @@ internal class GPUFramePreflighter(
                     validatePreparedSampledImageScissor(packet, semantic)
                 }
             is GPUDrawSemanticPayload.TextA8 ->
-                diagnostic(
-                    "unsupported.preflight.prepared_text_unmaterialized",
-                    "Prepared text semantics have no executable native materialization route; " +
-                        "native materialization belongs to FP-05 Task 10.",
-                )
+                if (hasExactPreparedSurfaceMixedNativeBoundary(framePlan)) {
+                    null
+                } else {
+                    diagnostic(
+                        GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
+                        "Prepared text semantics have no executable native materialization route; " +
+                            "native materialization belongs to FP-05 Task 10.",
+                    )
+                }
             is GPUDrawSemanticPayload.ColorGlyph ->
-                validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
+                if (hasExactPreparedSurfaceMixedNativeBoundary(framePlan)) {
+                    null
+                } else {
+                    validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
+                }
         }
     }
 
@@ -4168,13 +4196,36 @@ internal class GPUFramePreflighter(
         ) {
             return false
         }
+        if (framePlan.steps
+                .filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .any { render ->
+                    val preparedTextPacketIds = render.drawPackets
+                        .filter { packet ->
+                            packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
+                                packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+                        }
+                        .map(GPUDrawPacket::packetId)
+                        .toSet()
+                    preparedTextPacketIds.isNotEmpty() &&
+                        render.preparedTextBindingsByPacketId.keys != preparedTextPacketIds
+                }
+        ) {
+            return false
+        }
         val semanticTypes = renderSemantics
             .flatten()
             .filterNotNull()
             .map(GPUDrawSemanticPayload::canonicalType)
             .toSet()
-        return "SampledImage" in semanticTypes &&
-            semanticTypes.all { it == "CorePrimitive" || it == "SampledImage" }
+        return semanticTypes.any {
+            it == "SampledImage" || it == "TextA8" || it == "ColorGlyph"
+        } &&
+            semanticTypes.all {
+                it == "CorePrimitive" ||
+                    it == "SampledImage" ||
+                    it == "TextA8" ||
+                    it == "ColorGlyph"
+            }
     }
 
     private fun validateCorePrimitiveSemanticPayload(

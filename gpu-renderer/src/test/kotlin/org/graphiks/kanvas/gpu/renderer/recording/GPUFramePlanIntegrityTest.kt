@@ -1255,29 +1255,65 @@ class GPUFramePlanIntegrityTest {
                     }
                     .array()
                 val contentHash = bytes.sha256ForIntegrityTest()
+                val atlasPlan = buildR8FrameResourcePlan(
+                    artifact = semantic.atlas,
+                    capabilities = integrityCapabilities(),
+                    frameIdentity = "integrity-text",
+                )
+                val instancePlan = GPUPreparedTextInstanceBufferPlan(
+                    bufferRef = GPUFrameBufferRef("buffer.integrity.text.$contentHash"),
+                    strideBytes = GPUTextA8Instance.ENCODED_BYTE_SIZE,
+                    alignmentBytes = 16,
+                    instanceCount = 1,
+                    byteSize = bytes.size.toLong(),
+                    contentHash = contentHash,
+                    uploadBytes = bytes,
+                )
                 mapOf(
                     packet.packetId to GPUPreparedTextRenderBinding(
                         packetId = packet.packetId,
-                        atlasResourcePlan = buildR8FrameResourcePlan(
-                            artifact = semantic.atlas,
-                            capabilities = integrityCapabilities(),
-                            frameIdentity = "integrity-text",
-                        ),
-                        instanceBufferPlan = GPUPreparedTextInstanceBufferPlan(
-                            bufferRef = GPUFrameBufferRef("buffer.integrity.text.$contentHash"),
-                            strideBytes = GPUTextA8Instance.ENCODED_BYTE_SIZE,
-                            alignmentBytes = 16,
-                            instanceCount = 1,
-                            byteSize = bytes.size.toLong(),
-                            contentHash = contentHash,
-                            uploadBytes = bytes,
-                        ),
+                        atlasResourcePlan = atlasPlan,
+                        instanceBufferPlan = instancePlan,
                         firstInstance = 0,
                         instanceCount = 1,
                         materialUniformBufferPlan = null,
                         materialUniformOffsetBytes = 0L,
                         materialUniformSizeBytes = 0L,
                         materialSampledResourcePlans = emptyList(),
+                        preflightSeal = GPUPreparedTextBindingPreflightSeal(
+                            semanticCanonicalHash = semantic.canonicalHash,
+                            atlasKey = atlasPlan.artifactKey,
+                            atlasWidth = atlasPlan.artifactWidth,
+                            atlasHeight = atlasPlan.artifactHeight,
+                            atlasRowBytes = atlasPlan.artifactRowBytes,
+                            atlasGeneration = atlasPlan.artifactGeneration,
+                            atlasContentHash = atlasPlan.artifactContentHash,
+                            pageIndex = semantic.pageIndex,
+                            instanceStrideBytes = instancePlan.strideBytes,
+                            firstInstance = 0,
+                            instanceCount = 1,
+                            instanceBufferByteSize = instancePlan.byteSize,
+                            instanceBufferContentHash = instancePlan.contentHash,
+                            materialUniformOffsetBytes = 0L,
+                            materialUniformSizeBytes = 0L,
+                            materialKey = semantic.material.materialKey,
+                            materialWgslSourceHash = semantic.material.wgslSource
+                                .toByteArray()
+                                .sha256ForIntegrityTest(),
+                            materialEntryPoint = semantic.material.entryPoint,
+                            materialAbiHash = semantic.material.abiHash,
+                            materialUniformContentHash = semantic.material.uniformBytes
+                                .map(Int::toByte)
+                                .toByteArray()
+                                .sha256ForIntegrityTest(),
+                            materialSampledResourceFacts =
+                                semantic.material.sampledResources.flatMap { it.identityFacts() },
+                            targetBounds = semantic.targetBounds,
+                            scissorBounds = semantic.scissorBounds,
+                            clipIdentity = semantic.clipIdentity,
+                            blendPlanIdentity = semantic.blendPlanIdentity,
+                            capabilitySnapshotHash = semantic.capabilitySnapshotHash,
+                        ),
                     ),
                 )
             }

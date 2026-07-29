@@ -1,11 +1,15 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.GPUTextureFormat
 import java.security.MessageDigest
 import java.util.IdentityHashMap
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
@@ -27,15 +31,21 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayout
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputDescriptor
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskDependency
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskUseToken
 import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
@@ -43,6 +53,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedConcreteResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUniformAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingLease
+import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
@@ -50,6 +61,45 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPU_PREPARED_IMAGE_UNIFORM_ALL
 import org.graphiks.kanvas.gpu.renderer.resources.preparedImageDescriptorHash
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+
+/**
+ * Sole canonical authority for the prepared-text preflight refusal surface.
+ *
+ * Tests consume these constants instead of maintaining a parallel string
+ * table. Task 10 may reuse them but must not redefine them.
+ */
+internal object GPUPreparedTextPreflightRefusalCodes {
+    const val PREPARED_TEXT_UNMATERIALIZED =
+        "unsupported.preflight.prepared_text_unmaterialized"
+    const val STALE_ATLAS_GENERATION = "stale.preflight.text.atlas_generation"
+    const val PAGE_BYTES = "invalid.preflight.text.page_bytes"
+    const val PAGE_DIMENSIONS = "invalid.preflight.text.page_dimensions"
+    const val PAGE_ROW_BYTES = "invalid.preflight.text.page_row_bytes"
+    const val R8UNORM = "unsupported.preflight.text.r8unorm"
+    const val INSTANCE_UV = "invalid.preflight.text.instance_uv"
+    const val INSTANCE_STRIDE = "invalid.preflight.text.instance_stride"
+    const val INSTANCE_RANGE_OVERLAP = "invalid.preflight.text.instance_range_overlap"
+    const val INSTANCE_BUFFER_RANGE = "invalid.preflight.text.instance_buffer_range"
+    const val MATERIAL_ABI = "invalid.preflight.text.material_abi"
+    const val WGSL_ENTRY_POINT = "invalid.preflight.text.wgsl_entry_point"
+    const val BINDING_LAYOUT = "invalid.preflight.text.binding_layout"
+    const val MATERIAL_UNIFORMS = "invalid.preflight.text.material_uniforms"
+    const val MATERIAL_RESOURCES = "invalid.preflight.text.material_resources"
+    const val UPLOAD_MISSING = "invalid.preflight.text.upload_missing"
+    const val UPLOAD_DUPLICATE = "invalid.preflight.text.upload_duplicate"
+    const val UPLOAD_ORDER = "invalid.preflight.text.upload_order"
+    const val TARGET = "invalid.preflight.text.target"
+    const val SCISSOR = "invalid.preflight.text.scissor"
+    const val CLIP = "invalid.preflight.text.clip"
+    const val BLEND = "invalid.preflight.text.blend"
+    const val RESOURCE_LIFETIME = "invalid.preflight.text.resource_lifetime"
+    const val DEPENDENCY = "invalid.preflight.text.dependency"
+    const val OPERAND = "invalid.preflight.text.operand"
+    const val OPERAND_OWNERSHIP = "invalid.preflight.text.operand_ownership"
+    const val TEXTURE_LIMIT = "unsupported.preflight.text.texture_limit"
+    const val INSTANCE_BUFFER_LIMIT = "unsupported.preflight.text.instance_buffer_limit"
+    const val COPY_ALIGNMENT = "unsupported.preflight.text.copy_alignment"
+}
 
 private data class GPUPreparedSurfaceArtifactByteEvidence(
     val tightRgba8Bytes: ByteArray,
@@ -309,6 +359,7 @@ internal class GPUPreparedSurfaceNativePreflight(
     internal fun validateFramePlan(
         framePlan: GPUFramePlan,
         context: GPUFramePreflightContext? = null,
+        capabilities: GPUCapabilities? = null,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
         val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         val packets = renders.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
@@ -325,8 +376,12 @@ internal class GPUPreparedSurfaceNativePreflight(
         val semanticTypes = semantics.filterNotNull()
             .map(GPUDrawSemanticPayload::canonicalType)
             .toSet()
-        if ("SampledImage" !in semanticTypes ||
-            semanticTypes.any { it != "CorePrimitive" && it != "SampledImage" } ||
+        if (semanticTypes.any {
+                it != "CorePrimitive" &&
+                    it != "SampledImage" &&
+                    it != "TextA8" &&
+                    it != "ColorGlyph"
+            } ||
             renders.any { render ->
                 render.drawPackets
                     .mapNotNull(GPUDrawPacket::semanticPayload)
@@ -336,7 +391,8 @@ internal class GPUPreparedSurfaceNativePreflight(
         ) {
             return refused(
                 "unsupported.prepared-surface.semantic-shape",
-                "The prepared surface route accepts only homogeneous ordered CorePrimitive and SampledImage runs.",
+                "The prepared surface route accepts only homogeneous ordered CorePrimitive, " +
+                    "SampledImage, TextA8, and ColorGlyph runs.",
             )
         }
         if (framePlan.steps.any {
@@ -429,6 +485,14 @@ internal class GPUPreparedSurfaceNativePreflight(
         }
         validateColorAuthority(framePlan, renders)?.let { return it }
         validateReadbackAndSurface(framePlan, context)?.let { return it }
+        validatePreparedTextAuthority(framePlan, context, capabilities)?.let { return it }
+
+        val imagePackets = packets.mapNotNull { packet ->
+            (packet.semanticPayload as? GPUDrawSemanticPayload.SampledImage)?.let {
+                packet to it
+            }
+        }
+        if (imagePackets.isEmpty()) return null
 
         val uploadSteps = framePlan.steps.withIndex()
             .filter { indexed -> indexed.value is GPUFrameStep.UploadResourceStep }
@@ -438,19 +502,13 @@ internal class GPUPreparedSurfaceNativePreflight(
         val imageUploads = uploadSteps.mapNotNull { (index, step) ->
             step.imageResourcePlan?.let { plan -> Triple(index, step, plan) }
         }
-        if (imageUploads.size != uploadSteps.size ||
-            imageUploads.map { (_, _, plan) -> plan.artifactKey }.distinct().size !=
+        if (imageUploads.map { (_, _, plan) -> plan.artifactKey }.distinct().size !=
             imageUploads.size
         ) {
             return refused(
                 "unsupported.prepared_image.plan_identity",
                 "Every mixed upload scope must retain one unique prepared-image artifact plan.",
             )
-        }
-        val imagePackets = packets.mapNotNull { packet ->
-            (packet.semanticPayload as? GPUDrawSemanticPayload.SampledImage)?.let {
-                packet to it
-            }
         }
         validateImageScissorAuthority(framePlan, imagePackets)?.let { return it }
         val shaderContract = when (
@@ -470,6 +528,794 @@ internal class GPUPreparedSurfaceNativePreflight(
             imageUploads,
             shaderContract,
         )
+    }
+
+    private fun validatePreparedTextAuthority(
+        framePlan: GPUFramePlan,
+        context: GPUFramePreflightContext?,
+        capabilities: GPUCapabilities?,
+    ): GPUPreparedSurfaceNativePreflightResult.Refused? {
+        val textPackets = framePlan.steps
+            .mapIndexedNotNull { index, step ->
+                (step as? GPUFrameStep.RenderPassStep)?.let { index to it }
+            }
+            .flatMap { (renderIndex, render) ->
+                render.drawPackets.mapNotNull { packet ->
+                    val semantic = packet.semanticPayload
+                    if (semantic is GPUDrawSemanticPayload.TextA8 ||
+                        semantic is GPUDrawSemanticPayload.ColorGlyph
+                    ) {
+                        PreparedTextPacketEvidence(renderIndex, render, packet, semantic)
+                    } else {
+                        null
+                    }
+                }
+            }
+        if (textPackets.isEmpty()) return null
+        val bindings = textPackets.map { evidence ->
+            evidence.render.preparedTextBindingsByPacketId[evidence.packet.packetId]
+                ?: return refused(
+                    GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                    "Every prepared-text packet requires one exact immutable binding.",
+                )
+        }
+
+        textPackets.zip(bindings).firstOrNull { (evidence, binding) ->
+            val semanticGeneration = evidence.semantic.preparedTextAtlasGeneration()
+            semanticGeneration != evidence.semantic.preparedTextAtlas().generation ||
+                binding.atlasResourcePlan.artifactGeneration != semanticGeneration ||
+                binding.preflightSeal.atlasGeneration != semanticGeneration ||
+                context?.resourceGenerations?.get(binding.atlasResourcePlan.frameTextureRef)
+                    ?.let { it != semanticGeneration } == true ||
+                context?.resourceGenerations?.get(binding.atlasResourcePlan.stagingRef)
+                    ?.let { it != semanticGeneration } == true
+        }?.let {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.STALE_ATLAS_GENERATION,
+                "Prepared-text atlas generation must match artifact, payload, resource, and frame evidence.",
+            )
+        }
+
+        textPackets.zip(bindings).forEach { (evidence, binding) ->
+            val semantic = evidence.semantic
+            val atlas = semantic.preparedTextAtlas()
+            val plan = binding.atlasResourcePlan
+            val seal = binding.preflightSeal
+            if (atlas.width != plan.artifactWidth ||
+                atlas.height != plan.artifactHeight ||
+                atlas.width != seal.atlasWidth ||
+                atlas.height != seal.atlasHeight
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.PAGE_DIMENSIONS,
+                    "Prepared-text page dimensions changed after recording.",
+                )
+            }
+            if (atlas.rowBytes != plan.artifactRowBytes ||
+                atlas.rowBytes != seal.atlasRowBytes ||
+                atlas.rowBytes < atlas.width
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.PAGE_ROW_BYTES,
+                    "Prepared-text source row bytes changed after recording.",
+                )
+            }
+            val tightBytes = atlas.tightBytesForUpload()
+            if (atlas.contentHash != plan.artifactContentHash ||
+                atlas.contentHash != seal.atlasContentHash ||
+                tightBytes.size.toLong() !=
+                    atlas.rowBytes.toLong() * atlas.height.toLong()
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.PAGE_BYTES,
+                    "Prepared-text page bytes or content hash changed after recording.",
+                )
+            }
+            if (atlas.key != plan.artifactKey ||
+                atlas.key != seal.atlasKey ||
+                semantic.preparedTextPageIndex() != seal.pageIndex
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.PAGE_BYTES,
+                    "Prepared-text page identity changed after recording.",
+                )
+            }
+        }
+
+        capabilities?.let { observed ->
+            if (GPUTextureFormat.R8Unorm !in observed.supportedTextureFormats) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.R8UNORM,
+                    "Prepared text requires observed R8Unorm sampling support.",
+                )
+            }
+        }
+
+        textPackets.forEach { evidence ->
+            if (evidence.semantic.preparedTextInstances().any { instance ->
+                    val uv = instance.uvRect
+                    !uv.left.isFinite() || !uv.top.isFinite() ||
+                        !uv.right.isFinite() || !uv.bottom.isFinite() ||
+                        uv.left < 0f || uv.top < 0f ||
+                        uv.right > 1f || uv.bottom > 1f ||
+                        uv.left >= uv.right || uv.top >= uv.bottom ||
+                        instance.pageIndex != evidence.semantic.preparedTextPageIndex()
+                }
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.INSTANCE_UV,
+                    "Prepared-text instance UVs must be finite, ordered, and inside their page.",
+                )
+            }
+        }
+        if (bindings.any { binding ->
+                val seal = binding.preflightSeal
+                binding.instanceBufferPlan.strideBytes !=
+                    org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance.ENCODED_BYTE_SIZE ||
+                    seal.instanceStrideBytes != binding.instanceBufferPlan.strideBytes
+            }
+        ) {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.INSTANCE_STRIDE,
+                "Prepared-text instance stride must match the canonical A8 record.",
+            )
+        }
+        val ranges = bindings.map { binding ->
+            val seal = binding.preflightSeal
+            seal.firstInstance.toLong() to
+                seal.firstInstance.toLong() + seal.instanceCount.toLong()
+        }
+        if (ranges.indices.any { left ->
+                ((left + 1) until ranges.size).any { right ->
+                    ranges[left].first < ranges[right].second &&
+                        ranges[right].first < ranges[left].second
+                }
+            }
+        ) {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.INSTANCE_RANGE_OVERLAP,
+                "Prepared-text instance ranges must form a non-overlapping partition.",
+            )
+        }
+        if (bindings.any { binding ->
+                val seal = binding.preflightSeal
+                seal.firstInstance != binding.firstInstance ||
+                    seal.instanceCount != binding.instanceCount ||
+                    seal.firstInstance < 0 ||
+                    seal.instanceCount <= 0 ||
+                    seal.firstInstance.toLong() + seal.instanceCount.toLong() >
+                    binding.instanceBufferPlan.instanceCount.toLong() ||
+                    seal.instanceBufferByteSize != binding.instanceBufferPlan.byteSize ||
+                    seal.instanceBufferContentHash != binding.instanceBufferPlan.contentHash
+            }
+        ) {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.INSTANCE_BUFFER_RANGE,
+                "Prepared-text instance ranges must lie inside one exact frame buffer.",
+            )
+        }
+        if (bindings.any { binding ->
+                val seal = binding.preflightSeal
+                seal.materialUniformOffsetBytes != binding.materialUniformOffsetBytes ||
+                    seal.materialUniformSizeBytes != binding.materialUniformSizeBytes
+            }
+        ) {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                "Prepared-text material operand ranges changed after recording.",
+            )
+        }
+
+        textPackets.zip(bindings).forEach { (evidence, binding) ->
+            val semantic = evidence.semantic
+            val material = semantic.preparedTextMaterial()
+            val seal = binding.preflightSeal
+            if (seal.materialKey != material.materialKey ||
+                seal.materialAbiHash != material.abiHash
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.MATERIAL_ABI,
+                    "Prepared-text material identity and ABI changed after compilation.",
+                )
+            }
+            if (seal.materialEntryPoint != material.entryPoint) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.WGSL_ENTRY_POINT,
+                    "Prepared-text WGSL entry point must match the Task 3 compiled program.",
+                )
+            }
+            if (seal.materialWgslSourceHash != material.wgslSource.utf8Sha256()) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.BINDING_LAYOUT,
+                    "Prepared-text WGSL binding topology changed after compilation.",
+                )
+            }
+            if (seal.materialUniformContentHash != material.uniformBytes.byteHash()) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.MATERIAL_UNIFORMS,
+                    "Prepared-text uniform bytes changed after compilation.",
+                )
+            }
+            if (seal.materialSampledResourceFacts !=
+                material.sampledResources.flatMap { resource -> resource.identityFacts() }
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.MATERIAL_RESOURCES,
+                    "Prepared-text sampled resources changed after compilation.",
+                )
+            }
+            val uniformBytes = ByteArray(material.uniformBytes.size) { index ->
+                material.uniformBytes[index].toByte()
+            }
+            val uniformPlan = binding.materialUniformBufferPlan
+            val uniformEnd = binding.materialUniformOffsetBytes +
+                binding.materialUniformSizeBytes
+            if (uniformBytes.isEmpty()) {
+                if (uniformPlan != null ||
+                    binding.materialUniformOffsetBytes != 0L ||
+                    binding.materialUniformSizeBytes != 0L
+                ) {
+                    return refused(
+                        GPUPreparedTextPreflightRefusalCodes.MATERIAL_UNIFORMS,
+                        "A material without uniforms must not retain a uniform-buffer slice.",
+                    )
+                }
+            } else if (uniformPlan == null ||
+                binding.materialUniformSizeBytes != uniformBytes.size.toLong() ||
+                uniformEnd < binding.materialUniformOffsetBytes ||
+                uniformEnd > uniformPlan.byteSize ||
+                !uniformPlan.bytesForUpload()
+                    .copyOfRange(
+                        binding.materialUniformOffsetBytes.toInt(),
+                        uniformEnd.toInt(),
+                    )
+                    .contentEquals(uniformBytes)
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.MATERIAL_UNIFORMS,
+                    "Prepared-text uniform bytes must match their exact frame-global slice.",
+                )
+            }
+            if (binding.materialSampledResourcePlans.size != material.sampledResources.size ||
+                binding.materialSampledResourcePlans.zip(material.sampledResources)
+                    .any { (plan, resource) ->
+                        plan.resourceKey != resource.resourceKey ||
+                            plan.width != resource.width ||
+                            plan.height != resource.height ||
+                            plan.samplingFilterMode != resource.samplingFilterMode ||
+                            plan.alphaOnly != resource.alphaOnly ||
+                            plan.contentHash != resource.contentHash
+                    }
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.MATERIAL_RESOURCES,
+                    "Prepared-text sampled-resource plans must match the compiled program exactly.",
+                )
+            }
+        }
+
+        val r8Uploads = framePlan.steps.mapIndexedNotNull { index, step ->
+            (step as? GPUFrameStep.UploadResourceStep)?.r8ResourcePlan?.let {
+                PreparedTextUploadEvidence(index, it)
+            }
+        }
+        val materialUploads = framePlan.steps.mapIndexedNotNull { index, step ->
+            (step as? GPUFrameStep.UploadResourceStep)?.materialResourcePlan?.let {
+                PreparedTextMaterialUploadEvidence(index, it)
+            }
+        }
+        val requiredPages = bindings.map { it.atlasResourcePlan }
+            .distinctBy { plan ->
+                "${plan.artifactKey}:${plan.artifactGeneration}:${plan.artifactContentHash}"
+            }
+        requiredPages.firstOrNull { required ->
+            r8Uploads.none { upload ->
+                upload.plan.samePreparedTextPageAs(required)
+            }
+        }?.let {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.UPLOAD_MISSING,
+                "Every prepared-text page requires one upload.",
+            )
+        }
+        requiredPages.firstOrNull { required ->
+            r8Uploads.count { upload ->
+                upload.plan.samePreparedTextPageAs(required)
+            } != 1
+        }?.let {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.UPLOAD_DUPLICATE,
+                "Each prepared-text page must be uploaded exactly once.",
+            )
+        }
+        textPackets.zip(bindings).firstOrNull { (evidence, binding) ->
+            val uploadIndex = r8Uploads.single { upload ->
+                upload.plan.samePreparedTextPageAs(binding.atlasResourcePlan)
+            }.sourceStepIndex
+            uploadIndex >= evidence.renderIndex
+        }?.let {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.UPLOAD_ORDER,
+                "Prepared-text uploads must precede every consuming render.",
+            )
+        }
+        val requiredMaterialResources = bindings
+            .flatMap(GPUPreparedTextRenderBinding::materialSampledResourcePlans)
+            .distinctBy { plan -> plan.resourceKey }
+        requiredMaterialResources.firstOrNull { required ->
+            materialUploads.none { upload ->
+                upload.plan.samePreparedMaterialResourceAs(required)
+            }
+        }?.let {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.UPLOAD_MISSING,
+                "Every prepared-text sampled material resource requires one upload.",
+            )
+        }
+        requiredMaterialResources.firstOrNull { required ->
+            materialUploads.count { upload ->
+                upload.plan.samePreparedMaterialResourceAs(required)
+            } != 1
+        }?.let {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.UPLOAD_DUPLICATE,
+                "Each prepared-text sampled material resource must be uploaded exactly once.",
+            )
+        }
+        textPackets.zip(bindings).firstOrNull { (evidence, binding) ->
+            binding.materialSampledResourcePlans.any { required ->
+                materialUploads.single { upload ->
+                    upload.plan.samePreparedMaterialResourceAs(required)
+                }.sourceStepIndex >= evidence.renderIndex
+            }
+        }?.let {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.UPLOAD_ORDER,
+                "Prepared-text sampled material uploads must precede every consumer.",
+            )
+        }
+
+        val targetPreparations = framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+            .associateBy(GPUResourcePreparationRequest::resource)
+        textPackets.zip(bindings).forEach { (evidence, binding) ->
+            val semantic = evidence.semantic
+            val seal = binding.preflightSeal
+            val targetDescriptor = targetPreparations[evidence.render.target]?.descriptor as?
+                GPUFrameTextureDescriptor
+            if (targetDescriptor?.logicalBounds != semantic.preparedTextTargetBounds() ||
+                seal.targetBounds != semantic.preparedTextTargetBounds()
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.TARGET,
+                    "Prepared-text target bounds changed after recording.",
+                )
+            }
+            if (seal.scissorBounds != semantic.preparedTextScissorBounds() ||
+                !semantic.preparedTextScissorBounds()
+                    .isContainedBy(semantic.preparedTextTargetBounds())
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.SCISSOR,
+                    "Prepared-text scissor changed after recording.",
+                )
+            }
+            if (seal.clipIdentity != semantic.preparedTextClipIdentity()) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.CLIP,
+                    "Prepared-text clip authority changed after recording.",
+                )
+            }
+            if (seal.blendPlanIdentity != semantic.preparedTextBlendIdentity() ||
+                evidence.packet.blendPlan?.canonicalIdentity() !=
+                semantic.preparedTextBlendIdentity()
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.BLEND,
+                    "Prepared-text blend authority changed after recording.",
+                )
+            }
+            if (seal.capabilitySnapshotHash != semantic.preparedTextCapabilityHash()) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                    "Prepared-text capability identity changed after recording.",
+                )
+            }
+        }
+
+        val textResources = bindings.flatMap { binding ->
+            buildList {
+                add(binding.atlasResourcePlan.stagingRef)
+                add(binding.atlasResourcePlan.frameTextureRef)
+                add(binding.instanceBufferPlan.bufferRef)
+                binding.materialUniformBufferPlan?.let { add(it.bufferRef) }
+                binding.materialSampledResourcePlans.forEach { resource ->
+                    add(resource.stagingRef)
+                    add(resource.frameTextureRef)
+                }
+            }
+        }.toSet()
+        textPackets.groupBy(PreparedTextPacketEvidence::render).forEach { (render, packetsInRun) ->
+            val runBindings = packetsInRun.map { packet ->
+                render.preparedTextBindingsByPacketId.getValue(packet.packet.packetId)
+            }
+            val expectedUses = buildList {
+                runBindings.map(GPUPreparedTextRenderBinding::atlasResourcePlan)
+                    .distinctBy { plan ->
+                        "${plan.artifactKey}:${plan.artifactGeneration}:${plan.artifactContentHash}"
+                    }
+                    .forEach { plan ->
+                        add(
+                            GPUFrameResourceUse(
+                                plan.frameTextureRef,
+                                GPUFrameResourceRole.GlyphAtlas,
+                                GPUFrameResourceUsage.TextureBinding,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
+                runBindings.map(GPUPreparedTextRenderBinding::instanceBufferPlan)
+                    .distinctBy { plan -> plan.bufferRef }
+                    .forEach { plan ->
+                        add(
+                            GPUFrameResourceUse(
+                                plan.bufferRef,
+                                GPUFrameResourceRole.VertexData,
+                                GPUFrameResourceUsage.Vertex,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
+                runBindings.mapNotNull(GPUPreparedTextRenderBinding::materialUniformBufferPlan)
+                    .distinctBy { plan -> plan.bufferRef }
+                    .forEach { plan ->
+                        add(
+                            GPUFrameResourceUse(
+                                plan.bufferRef,
+                                GPUFrameResourceRole.UniformData,
+                                GPUFrameResourceUsage.Uniform,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
+                runBindings.flatMap(GPUPreparedTextRenderBinding::materialSampledResourcePlans)
+                    .distinctBy { plan -> plan.resourceKey }
+                    .forEach { plan ->
+                        add(
+                            GPUFrameResourceUse(
+                                plan.frameTextureRef,
+                                GPUFrameResourceRole.StorageData,
+                                GPUFrameResourceUsage.TextureBinding,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
+            }
+            if (render.resourceUses != expectedUses) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                    "Prepared-text render operands must form the exact ordered Task 8 partition.",
+                )
+            }
+        }
+        if (textResources.any { resource ->
+                targetPreparations[resource]?.lifetime !=
+                    org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime.FrameLocal
+            }
+        ) {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.RESOURCE_LIFETIME,
+                "Prepared-text atlas, instance, uniform, and material resources must be frame-local.",
+            )
+        }
+        if (bindings.any { binding ->
+                !targetPreparations[binding.atlasResourcePlan.stagingRef]
+                    .matchesPreparedTextOwnership(
+                        GPUFrameResourceRole.UploadStaging,
+                        setOf(GPUFrameResourceUsage.CopySource),
+                    ) ||
+                    !targetPreparations[binding.atlasResourcePlan.frameTextureRef]
+                        .matchesPreparedTextOwnership(
+                            GPUFrameResourceRole.GlyphAtlas,
+                            setOf(
+                                GPUFrameResourceUsage.CopyDestination,
+                                GPUFrameResourceUsage.TextureBinding,
+                            ),
+                        ) ||
+                    !targetPreparations[binding.instanceBufferPlan.bufferRef]
+                        .matchesPreparedTextOwnership(
+                            GPUFrameResourceRole.VertexData,
+                            setOf(
+                                GPUFrameResourceUsage.Vertex,
+                                GPUFrameResourceUsage.CopyDestination,
+                            ),
+                        ) ||
+                    binding.materialUniformBufferPlan?.let { uniform ->
+                        !targetPreparations[uniform.bufferRef]
+                            .matchesPreparedTextOwnership(
+                                GPUFrameResourceRole.UniformData,
+                                setOf(
+                                    GPUFrameResourceUsage.Uniform,
+                                    GPUFrameResourceUsage.CopyDestination,
+                                ),
+                            )
+                    } == true ||
+                    binding.materialSampledResourcePlans.any { resource ->
+                        !targetPreparations[resource.stagingRef]
+                            .matchesPreparedTextOwnership(
+                                GPUFrameResourceRole.UploadStaging,
+                                setOf(GPUFrameResourceUsage.CopySource),
+                            ) ||
+                            !targetPreparations[resource.frameTextureRef]
+                                .matchesPreparedTextOwnership(
+                                    GPUFrameResourceRole.StorageData,
+                                    setOf(
+                                        GPUFrameResourceUsage.CopyDestination,
+                                        GPUFrameResourceUsage.TextureBinding,
+                                    ),
+                                )
+                    }
+            }
+        ) {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.OPERAND_OWNERSHIP,
+                "Prepared-text operands must retain their exact frame-local usage ownership.",
+            )
+        }
+
+        validatePreparedTextDependencies(framePlan)?.let { return it }
+        textPackets.zip(bindings).firstOrNull { (evidence, binding) ->
+            !evidence.semantic.hasPreparedTextCanonicalIntegrity() ||
+                binding.preflightSeal.semanticCanonicalHash !=
+                evidence.semantic.preparedTextCanonicalHash()
+        }?.let {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                "Prepared-text semantic and binding seals must retain one canonical identity.",
+            )
+        }
+
+        capabilities?.limits?.let { limits ->
+            if (requiredPages.any { page ->
+                    page.artifactWidth.toLong() > limits.maxTextureDimension2D ||
+                        page.artifactHeight.toLong() > limits.maxTextureDimension2D
+                }
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.TEXTURE_LIMIT,
+                    "Prepared-text atlas dimensions exceed the observed device limit.",
+                )
+            }
+            if (limits.maxBufferSize?.let { max ->
+                    bindings.any { binding -> binding.instanceBufferPlan.byteSize > max }
+                } == true
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.INSTANCE_BUFFER_LIMIT,
+                    "Prepared-text instance buffer exceeds the observed device limit.",
+                )
+            }
+            if (r8Uploads.any { upload ->
+                    val requiredAlignment = leastCommonMultipleTextOrNull(
+                        256L,
+                        limits.copyBytesPerRowAlignment,
+                    )
+                    requiredAlignment == null ||
+                        upload.plan.uploadTaskLayout.bytesPerRow % requiredAlignment != 0L
+                }
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.COPY_ALIGNMENT,
+                    "Prepared-text copy rows violate the observed WebGPU alignment.",
+                )
+            }
+        }
+        return null
+    }
+
+    private fun validatePreparedTextDependencies(
+        framePlan: GPUFramePlan,
+    ): GPUPreparedSurfaceNativePreflightResult.Refused? {
+        val prepareTaskId = framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .singleOrNull()
+            ?.sourceTaskIds
+            ?.singleOrNull()
+            ?: return refused(
+                GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                "Prepared-text preflight requires one exact resource-preparation task.",
+            )
+        val uploads = framePlan.steps.filterIsInstance<GPUFrameStep.UploadResourceStep>()
+        val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        if (uploads.any { it.sourceTaskIds.size != 1 } ||
+            renders.any { it.sourceTaskIds.size != 1 }
+        ) {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                "Prepared-surface upload and render steps must retain one exact task identity.",
+            )
+        }
+        val imageUploads = uploads.filter { it.imageResourcePlan != null }
+        val r8Uploads = uploads.filter { it.r8ResourcePlan != null }
+        val materialUploads = uploads.filter { it.materialResourcePlan != null }
+        val expected = mutableListOf<GPUTaskDependency>()
+        fun append(
+            from: GPUTaskID,
+            to: GPUTaskID,
+            kind: String,
+            reason: String,
+            token: String,
+        ) {
+            expected += GPUTaskDependency(
+                fromTaskId = from,
+                toTaskId = to,
+                dependencyKind = kind,
+                useToken = GPUTaskUseToken(token),
+                reasonCode = reason,
+            )
+        }
+
+        imageUploads.forEachIndexed { index, upload ->
+            append(
+                prepareTaskId,
+                upload.sourceTaskIds.single(),
+                "prepared-image-resource-order",
+                "prepared.image.prepare-before-upload",
+                "prepared-image.prepare.$index",
+            )
+        }
+        r8Uploads.forEachIndexed { index, upload ->
+            append(
+                prepareTaskId,
+                upload.sourceTaskIds.single(),
+                "prepared-text-resource-order",
+                "prepared.text.prepare-before-upload",
+                "prepared-text.prepare.$index",
+            )
+        }
+        materialUploads.forEachIndexed { index, upload ->
+            append(
+                prepareTaskId,
+                upload.sourceTaskIds.single(),
+                "prepared-text-material-resource-order",
+                "prepared.text.material-prepare-before-upload",
+                "prepared-text.material-prepare.$index",
+            )
+        }
+        renders.forEachIndexed { index, render ->
+            val renderTaskId = render.sourceTaskIds.single()
+            append(
+                prepareTaskId,
+                renderTaskId,
+                "prepared-surface-resource-order",
+                "prepared.surface.prepare-before-consumer",
+                "prepared-surface.prepare.$index",
+            )
+            val imageProducerTaskIds = mutableListOf<GPUTaskID>()
+            render.drawPackets.mapNotNull { packet ->
+                packet.semanticPayload as? GPUDrawSemanticPayload.SampledImage
+            }.forEach { semantic ->
+                imageProducerTaskIds += imageUploads.singleOrNull { upload ->
+                    upload.imageResourcePlan?.artifactKey == semantic.artifact.key
+                }?.sourceTaskIds?.singleOrNull()
+                    ?: return refused(
+                        GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                        "Every prepared-image consumer requires one exact upload producer.",
+                    )
+            }
+            imageProducerTaskIds.distinct().forEach { uploadTaskId ->
+                append(
+                    uploadTaskId,
+                    renderTaskId,
+                    "prepared-image-resource-order",
+                    "prepared.image.upload-before-consumer",
+                    "prepared-image.consumer.${expected.size}",
+                )
+            }
+            val textBindings = render.drawPackets.mapNotNull { packet ->
+                if (packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
+                    packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+                ) {
+                    render.preparedTextBindingsByPacketId[packet.packetId]
+                } else {
+                    null
+                }
+            }
+            if (textBindings.size != render.drawPackets.count { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
+                        packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+                }
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                    "Every prepared-text consumer requires one exact binding dependency.",
+                )
+            }
+            val atlasProducerTaskIds = textBindings.map { binding ->
+                r8Uploads.singleOrNull { upload ->
+                    upload.r8ResourcePlan?.samePreparedTextPageAs(
+                        binding.atlasResourcePlan,
+                    ) == true
+                }?.sourceTaskIds?.singleOrNull()
+                    ?: return refused(
+                        GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                        "Every prepared-text atlas consumer requires one exact upload producer.",
+                    )
+            }.distinct()
+            atlasProducerTaskIds.forEach { uploadTaskId ->
+                append(
+                    uploadTaskId,
+                    renderTaskId,
+                    "prepared-text-resource-order",
+                    "prepared.text.upload-before-consumer",
+                    "prepared-text.consumer.${expected.size}",
+                )
+            }
+            val materialProducerTaskIds = textBindings
+                .flatMap(GPUPreparedTextRenderBinding::materialSampledResourcePlans)
+                .map { required ->
+                    materialUploads.singleOrNull { upload ->
+                        upload.materialResourcePlan?.samePreparedMaterialResourceAs(
+                            required,
+                        ) == true
+                    }?.sourceTaskIds?.singleOrNull()
+                        ?: return refused(
+                            GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                            "Every sampled material consumer requires one exact upload producer.",
+                        )
+                }
+                .distinct()
+            materialProducerTaskIds.forEach { uploadTaskId ->
+                append(
+                    uploadTaskId,
+                    renderTaskId,
+                    "prepared-text-material-resource-order",
+                    "prepared.text.material-upload-before-consumer",
+                    "prepared-text.material-consumer.${expected.size}",
+                )
+            }
+        }
+        renders.zipWithNext().forEachIndexed { index, (from, to) ->
+            append(
+                from.sourceTaskIds.single(),
+                to.sourceTaskIds.single(),
+                "prepared-scene-order",
+                "preserve.prepared-scene.order",
+                "prepared-surface.paint.$index",
+            )
+        }
+        val readbacks = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
+        if (readbacks.size > 1 || readbacks.any { it.sourceTaskIds.size != 1 }) {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                "Prepared-text preflight accepts at most one exact readback task.",
+            )
+        }
+        readbacks.singleOrNull()?.let { readback ->
+            append(
+                renders.lastOrNull()?.sourceTaskIds?.single()
+                    ?: return refused(
+                        GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                        "Prepared-text readback requires a final render producer.",
+                    ),
+                readback.sourceTaskIds.single(),
+                "prepared-surface-readback-order",
+                "prepared.surface.render-before-readback",
+                "prepared-surface.readback",
+            )
+        }
+        if (framePlan.dependencies != expected) {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                "Prepared-text dependencies must be one exact ordered producer-consumer graph.",
+            )
+        }
+        return null
     }
 
     fun validate(
@@ -517,8 +1363,8 @@ internal class GPUPreparedSurfaceNativePreflight(
         val imageUploads = uploadSteps.mapNotNull { (index, step) ->
             step.imageResourcePlan?.let { plan -> Triple(index, step, plan) }
         }
-        if (imageUploads.size != uploadSteps.size ||
-            imageUploads.map { (_, _, plan) -> plan.artifactKey }.distinct().size != imageUploads.size
+        if (imageUploads.map { (_, _, plan) -> plan.artifactKey }.distinct().size !=
+            imageUploads.size
         ) {
             return refused(
                 "unsupported.prepared_image.plan_identity",
@@ -1634,6 +2480,178 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
         }
         val keys = bridges.mapNotNull(::bridgeKey)
         return if (keys.size != bridges.size) emptyList() else target + keys
+    }
+}
+
+private data class PreparedTextPacketEvidence(
+    val renderIndex: Int,
+    val render: GPUFrameStep.RenderPassStep,
+    val packet: GPUDrawPacket,
+    val semantic: GPUDrawSemanticPayload,
+)
+
+private data class PreparedTextUploadEvidence(
+    val sourceStepIndex: Int,
+    val plan: GPUR8FrameResourcePlan,
+)
+
+private data class PreparedTextMaterialUploadEvidence(
+    val sourceStepIndex: Int,
+    val plan:
+        org.graphiks.kanvas.gpu.renderer.resources.GPUMaterialTextureFrameResourcePlan,
+)
+
+private fun GPUDrawSemanticPayload.preparedTextAtlas(): GPUPreparedR8UploadArtifact = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> atlas
+    is GPUDrawSemanticPayload.ColorGlyph -> atlas
+    else -> error("Only prepared-text semantics own an R8 atlas")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextAtlasGeneration(): Long = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> atlasGeneration.value.toLong()
+    is GPUDrawSemanticPayload.ColorGlyph -> atlasGeneration
+    else -> error("Only prepared-text semantics own an atlas generation")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextPageIndex(): Int = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> pageIndex
+    is GPUDrawSemanticPayload.ColorGlyph -> instances.first().pageIndex
+    else -> error("Only prepared-text semantics own a page index")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextInstances() = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> instances
+    is GPUDrawSemanticPayload.ColorGlyph -> instances
+    else -> error("Only prepared-text semantics own instance records")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextMaterial() = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> material
+    is GPUDrawSemanticPayload.ColorGlyph -> requireNotNull(material)
+    else -> error("Only prepared-text semantics own prepared materials")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextTargetBounds(): GPUPixelBounds = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> targetBounds
+    is GPUDrawSemanticPayload.ColorGlyph -> targetBounds
+    else -> error("Only prepared-text semantics own target bounds")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextScissorBounds(): GPUPixelBounds = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> scissorBounds
+    is GPUDrawSemanticPayload.ColorGlyph -> scissorBounds
+    else -> error("Only prepared-text semantics own scissor bounds")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextClipIdentity(): String = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> clipIdentity
+    is GPUDrawSemanticPayload.ColorGlyph -> requireNotNull(clipIdentity)
+    else -> error("Only prepared-text semantics own clip identity")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextBlendIdentity(): String = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> blendPlanIdentity
+    is GPUDrawSemanticPayload.ColorGlyph -> requireNotNull(blendPlanIdentity)
+    else -> error("Only prepared-text semantics own blend identity")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextCapabilityHash(): String = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> capabilitySnapshotHash
+    is GPUDrawSemanticPayload.ColorGlyph -> requireNotNull(capabilitySnapshotHash)
+    else -> error("Only prepared-text semantics own capability identity")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextCanonicalHash(): String = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> canonicalHash
+    is GPUDrawSemanticPayload.ColorGlyph -> canonicalHash
+    else -> error("Only prepared-text semantics own a canonical hash")
+}
+
+private fun GPUDrawSemanticPayload.hasPreparedTextCanonicalIntegrity(): Boolean = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> hasCanonicalHashIntegrity()
+    is GPUDrawSemanticPayload.ColorGlyph -> hasCanonicalHashIntegrity()
+    else -> false
+}
+
+private fun GPUR8FrameResourcePlan.samePreparedTextPageAs(
+    other: GPUR8FrameResourcePlan,
+): Boolean =
+    artifactKey == other.artifactKey &&
+        artifactGeneration == other.artifactGeneration &&
+        artifactContentHash == other.artifactContentHash &&
+        artifactWidth == other.artifactWidth &&
+        artifactHeight == other.artifactHeight &&
+        artifactRowBytes == other.artifactRowBytes
+
+private fun org.graphiks.kanvas.gpu.renderer.resources.GPUMaterialTextureFrameResourcePlan
+    .samePreparedMaterialResourceAs(
+        other:
+            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterialTextureFrameResourcePlan,
+    ): Boolean =
+    resourceKey == other.resourceKey &&
+        width == other.width &&
+        height == other.height &&
+        samplingFilterMode == other.samplingFilterMode &&
+        alphaOnly == other.alphaOnly &&
+        contentHash == other.contentHash &&
+        stagingRef == other.stagingRef &&
+        frameTextureRef == other.frameTextureRef &&
+        uploadTaskLayout == other.uploadTaskLayout
+
+private fun GPUResourcePreparationRequest?.matchesPreparedTextOwnership(
+    expectedRole: GPUFrameResourceRole,
+    expectedUsages: Set<GPUFrameResourceUsage>,
+): Boolean =
+    this != null &&
+        role == expectedRole &&
+        usages == expectedUsages &&
+        lifetime == GPUFrameResourceLifetime.FrameLocal
+
+private fun GPUPixelBounds.isContainedBy(outer: GPUPixelBounds): Boolean =
+    !isEmpty &&
+        left >= outer.left &&
+        top >= outer.top &&
+        right <= outer.right &&
+        bottom <= outer.bottom
+
+private fun String.utf8Sha256(): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(toByteArray(Charsets.UTF_8))
+        .toHexString()
+
+private fun List<Int>.byteHash(): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(ByteArray(size) { index -> this[index].toByte() })
+        .toHexString()
+
+private fun ByteArray.toHexString(): String =
+    buildString(size * 2) {
+        for (byte in this@toHexString) {
+            val value = byte.toInt() and 0xff
+            append(PREPARED_TEXT_LOWER_HEX_DIGITS[value ushr 4])
+            append(PREPARED_TEXT_LOWER_HEX_DIGITS[value and 0x0f])
+        }
+    }
+
+private const val PREPARED_TEXT_LOWER_HEX_DIGITS = "0123456789abcdef"
+
+private fun leastCommonMultipleTextOrNull(left: Long, right: Long): Long? {
+    require(left > 0L && right > 0L)
+    fun greatestCommonDivisor(first: Long, second: Long): Long {
+        var a = first
+        var b = second
+        while (b != 0L) {
+            val remainder = a % b
+            a = b
+            b = remainder
+        }
+        return a
+    }
+    val reduced = left / greatestCommonDivisor(left, right)
+    return if (reduced > Long.MAX_VALUE / right) {
+        null
+    } else {
+        reduced * right
     }
 }
 
