@@ -679,7 +679,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
             "@fragment fn prepared_material_fragment() -> @location(0) vec4f { " +
                 "return vec4f(1.0); }",
         entryPoint = "prepared_material_fragment",
-        composableFragment = stubPreparedMaterialFragment(),
+        composableFragment = stubPreparedMaterialFragment(uniformByteCount = 16),
         uniformBytes = List(16) { index -> index },
         sampledResources = emptyList(),
         paintAlpha = 1f,

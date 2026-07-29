@@ -10,14 +10,10 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolv
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectSourceColorContract
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformField
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformType
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTBindingPlanHash
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTModuleHash
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTReflectionHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformBlockSizeBytes
-import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformSchemaHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.hasMaterialColorFunctionSignature
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectionFactsHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import org.graphiks.kanvas.gpu.renderer.wgsl.wgslModuleContentHash
@@ -89,28 +85,31 @@ internal data class KanvasPreparedRuntimeEffectProgramCandidate(
  * candidate is still verified against [GPURuntimeEffectRegistry] at lookup.
  */
 internal class KanvasPreparedRuntimeEffectProgramAuthority {
+    private val simpleRTDescriptor = SimpleRTDescriptor.createDescriptor()
     private val simpleRTSourceColorContract =
-        GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba
+        requireNotNull(simpleRTDescriptor.sourceColorContract) {
+            "SimpleRT descriptor must register a prepared source color contract"
+        }
 
     private val candidates = mapOf(
         RuntimeEffectProgramKey(
-            id = SimpleRTDescriptor.effectId,
-            version = SimpleRTDescriptor.descriptorVersion,
+            id = simpleRTDescriptor.id,
+            version = simpleRTDescriptor.version,
         ) to KanvasPreparedRuntimeEffectProgramCandidate(
             program = GPUPreparedRuntimeEffectProgram(
-                effectId = SimpleRTDescriptor.effectId.value,
-                descriptorVersion = SimpleRTDescriptor.descriptorVersion.value,
+                effectId = simpleRTDescriptor.id.value,
+                descriptorVersion = simpleRTDescriptor.version.value,
                 wgslSource = SimpleRTWgsl,
-                sourceFunction = SimpleRTEntryPoint,
+                sourceFunction = simpleRTDescriptor.wgslPlan.entryPoint,
                 sourceColorContract = simpleRTSourceColorContract,
                 sourceHash = SimpleRTSourceHash,
                 moduleHash = preparedRuntimeEffectModuleContractHash(
-                    wgslModuleHash = SimpleRTModuleHash,
+                    wgslModuleHash = simpleRTDescriptor.wgslPlan.moduleHash,
                     sourceColorContract = simpleRTSourceColorContract,
                 ),
-                reflectionHash = SimpleRTReflectionHash,
-                uniformSchemaHash = SimpleRTUniformSchemaHash,
-                uniformBlockSizeBytes = SimpleRTUniformBlockSizeBytes,
+                reflectionHash = simpleRTDescriptor.wgslPlan.reflectionHash,
+                uniformSchemaHash = simpleRTDescriptor.uniformSchema.schemaHash,
+                uniformBlockSizeBytes = simpleRTDescriptor.uniformBlockPlan.blockSizeBytes.toInt(),
                 uniformFields = listOf(
                     GPUPreparedRuntimeEffectUniformField(
                         name = "gColor",
@@ -129,11 +128,11 @@ internal class KanvasPreparedRuntimeEffectProgramAuthority {
                     ),
                 ),
                 bindingPlanHash = preparedRuntimeEffectBindingContractHash(
-                    descriptorBindingPlanHash = SimpleRTBindingPlanHash,
+                    descriptorBindingPlanHash = simpleRTDescriptor.resources.bindingPlanHash,
                     sourceColorContract = simpleRTSourceColorContract,
                 ),
                 routeContractHash = preparedRuntimeEffectRouteContractHash(
-                    descriptor = SimpleRTDescriptor.createDescriptor(),
+                    descriptor = simpleRTDescriptor,
                     sourceColorContract = simpleRTSourceColorContract,
                 ),
             ),
@@ -207,7 +206,7 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(message)
         }
 
-        val report = try {
+        val (lowered, report) = try {
             beforeParserUse()
             val parsed = parseWgslResult(program.wgslSource)
             if (!parsed.isSuccess) {
@@ -217,7 +216,7 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
                 )
             }
             val lowered = Lowerer().lower(parsed.translationUnit)
-            lowered.reflectWgslModule(sourceId = program.sourceHash)
+            lowered to lowered.reflectWgslModule(sourceId = program.sourceHash)
         } catch (_: NoClassDefFoundError) {
             return GPUPreparedRuntimeEffectProgramValidation.Unavailable(
                 "wgsl4k parser/reflection is unavailable",
@@ -233,9 +232,9 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
             )
         }
 
-        if (!sourceDeclaresFunction(program.wgslSource, program.sourceFunction)) {
+        if (!lowered.hasMaterialColorFunctionSignature(program.sourceFunction)) {
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
-                "Runtime-effect WGSL does not declare its registered source function",
+                "Runtime-effect WGSL does not prove its registered source function signature",
             )
         }
         reflectedAbiMismatch(program, descriptor, report)?.let { message ->
@@ -309,7 +308,7 @@ private fun descriptorProgramMismatch(
     if (program.sourceFunction != descriptor.wgslPlan.entryPoint) {
         return "Runtime-effect source function does not match the descriptor entry point"
     }
-    val registeredSourceColorContract = descriptor.registeredSourceColorContract()
+    val registeredSourceColorContract = descriptor.sourceColorContract
         ?: return "Runtime-effect descriptor has no registered source color contract"
     if (program.sourceColorContract != registeredSourceColorContract) {
         return "Runtime-effect source color contract does not match the descriptor"
@@ -445,9 +444,6 @@ private val GPUPreparedRuntimeEffectUniformType.requiredAlignmentBytes: Int
         -> 16
     }
 
-private fun sourceDeclaresFunction(source: String, function: String): Boolean =
-    Regex("""\bfn\s+${Regex.escape(function)}\s*\(""").containsMatchIn(source)
-
 internal fun preparedRuntimeEffectRouteContractHash(
     descriptor: GPURuntimeEffectDescriptor,
     sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract,
@@ -480,14 +476,6 @@ internal fun preparedRuntimeEffectBindingContractHash(
         .text("descriptorBindingPlanHash", descriptorBindingPlanHash)
         .text("sourceColorContract", sourceColorContract.name)
         .digestIdentity()
-
-private fun GPURuntimeEffectDescriptor.registeredSourceColorContract():
-    GPUPreparedRuntimeEffectSourceColorContract? =
-    when (id to version) {
-        SimpleRTDescriptor.effectId to SimpleRTDescriptor.descriptorVersion ->
-            GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba
-        else -> null
-    }
 
 private val DESCRIPTOR_FIELD = Regex("""^([^:]+):(.+)@(\d+):(\d+)$""")
 private val SHA256_IDENTITY = Regex("""^sha256:[0-9a-f]{64}$""")

@@ -73,7 +73,7 @@ class KanvasPreparedRuntimeEffectResolverTest {
 
         assertIs<GPUPreparedRuntimeEffectProgramValidation.Valid>(validation)
         assertEquals(
-            GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba,
+            descriptor.sourceColorContract,
             simpleProgram().sourceColorContract,
         )
     }

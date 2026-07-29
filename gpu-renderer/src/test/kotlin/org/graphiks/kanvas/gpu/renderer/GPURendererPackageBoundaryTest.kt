@@ -69,6 +69,10 @@ class GPURendererPackageBoundaryTest {
             payloadSource,
             "import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram",
         )
+        assertContains(
+            contractSource,
+            "class GPUPreparedMaterialProgram internal constructor(",
+        )
         listOf(
             "org.graphiks.kanvas.gpu.renderer.materials.",
             "org.graphiks.kanvas.gpu.renderer.payloads.",

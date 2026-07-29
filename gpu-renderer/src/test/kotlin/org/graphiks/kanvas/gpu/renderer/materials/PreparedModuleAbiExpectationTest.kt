@@ -90,4 +90,26 @@ class PreparedModuleAbiExpectationTest {
             ).mismatch(report, uniformPayloadSize = 16),
         )
     }
+
+    @Test
+    fun `composable gate rejects a constant-size uniform member layout mismatch`() {
+        val constantSizeMismatch = report.layouts.single().copy(
+            members = listOf(
+                report.layouts.single().members.single().copy(
+                    name = "otherColor",
+                    type = "array<f32, 4>",
+                    alignment = 4,
+                    stride = 4,
+                ),
+            ),
+        )
+
+        assertNotNull(
+            composableUniformLayoutMismatch(
+                expected = canonical.uniformLayout,
+                uniformBindingSize = 16,
+                reflectedLayouts = listOf(constantSizeMismatch),
+            ),
+        )
+    }
 }

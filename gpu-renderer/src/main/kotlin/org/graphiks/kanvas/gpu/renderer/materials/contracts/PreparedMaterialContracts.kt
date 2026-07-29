@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.materials.contracts
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 
 /**
  * Passive, handle-free snapshot of one sampled image binding admitted by the
@@ -63,17 +64,50 @@ enum class GPUMaterialSourceKind {
  *
  * This DTO owns no lowering, routing, shader generation, or resource decision.
  */
-data class GPUPreparedMaterialProgram(
+class GPUPreparedMaterialProgram internal constructor(
     val materialKey: String,
     val wgslSource: String,
     val entryPoint: String,
     val composableFragment: GPUPreparedMaterialFragment,
-    val uniformBytes: List<Int>,
-    val sampledResources: List<GPUPreparedMaterialSampledResource>,
+    uniformBytes: List<Int>,
+    sampledResources: List<GPUPreparedMaterialSampledResource>,
     val paintAlpha: Float,
     val sourceKind: GPUMaterialSourceKind,
     val abiHash: String,
-)
+) {
+    val uniformBytes: List<Int> = immutableList(uniformBytes)
+    val sampledResources: List<GPUPreparedMaterialSampledResource> =
+        immutableList(sampledResources)
+
+    init {
+        require(materialKey.isNotBlank()) { "Prepared material key must not be blank" }
+        require(wgslSource.isNotBlank()) { "Prepared material WGSL source must not be blank" }
+        require(entryPoint.isNotBlank()) { "Prepared material entry point must not be blank" }
+        require(this.uniformBytes.all { byte -> byte in 0..255 }) {
+            "Prepared material uniforms must be unsigned bytes"
+        }
+        require(paintAlpha.isFinite() && paintAlpha in 0f..1f) {
+            "Prepared material paint alpha must be finite and normalized"
+        }
+        require(abiHash.isNotBlank()) { "Prepared material ABI hash must not be blank" }
+
+        val uniformBinding = composableFragment.uniformBinding
+        require((uniformBinding == null) == this.uniformBytes.isEmpty()) {
+            "Prepared material fragment uniform topology must match its payload"
+        }
+        uniformBinding?.let { binding ->
+            require(binding.group == 1 && binding.binding == 0) {
+                "Prepared material uniform binding must use canonical group 1 binding 0"
+            }
+            require(binding.minBindingSizeBytes == this.uniformBytes.size) {
+                "Prepared material fragment uniform size must match its payload"
+            }
+        }
+        require(composableFragment.sampledBindings.size == this.sampledResources.size) {
+            "Prepared material fragment sampled topology must match its resources"
+        }
+    }
+}
 
 private fun exactRgbaByteCount(width: Int, height: Int): Long? {
     if (width <= 0 || height <= 0) return null

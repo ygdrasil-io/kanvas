@@ -23,6 +23,32 @@ import kotlin.uuid.Uuid
 
 class GPUPreparedTextPayloadTest {
     @Test
+    fun `prepared material snapshots its uniform bytes before payload gathering`() {
+        val mutableUniforms = mutableListOf(1, 2, 3, 4)
+        val prepared = material(mutableUniforms)
+
+        mutableUniforms.fill(0)
+
+        assertEquals(listOf(1, 2, 3, 4), prepared.uniformBytes)
+        assertTrue(
+            runCatching {
+                @Suppress("UNCHECKED_CAST")
+                (prepared.uniformBytes as MutableList<Int>).clear()
+            }.isFailure,
+        )
+    }
+
+    @Test
+    fun `prepared material rejects a fragment with a different uniform topology`() {
+        assertFailsWith<IllegalArgumentException> {
+            material(
+                uniformBytes = mutableListOf(1, 2, 3, 4),
+                fragmentUniformByteCount = 0,
+            )
+        }
+    }
+
+    @Test
     fun `prepared ColorGlyph consumes padded shared R8 directly and hashes its exact key`() {
         val paddedBytes = byteArrayOf(0x10, 0, 0x20, 0)
         val planKey = artifactKey("550e8400-e29b-41d4-a716-446655440051", "color-plan")
@@ -330,12 +356,15 @@ class GPUPreparedTextPayloadTest {
             contentFingerprint = fingerprint,
         )
 
-    private fun material(uniformBytes: MutableList<Int>): GPUPreparedMaterialProgram =
+    private fun material(
+        uniformBytes: MutableList<Int>,
+        fragmentUniformByteCount: Int = uniformBytes.size,
+    ): GPUPreparedMaterialProgram =
         GPUPreparedMaterialProgram(
             materialKey = "material:prepared:solid:unit",
             wgslSource = "@fragment fn prepared_material_fragment() -> @location(0) vec4f { return vec4f(1.0); }",
             entryPoint = "prepared_material_fragment",
-            composableFragment = stubPreparedMaterialFragment(),
+            composableFragment = stubPreparedMaterialFragment(fragmentUniformByteCount),
             uniformBytes = uniformBytes,
             sampledResources = emptyList(),
             paintAlpha = 0.5f,

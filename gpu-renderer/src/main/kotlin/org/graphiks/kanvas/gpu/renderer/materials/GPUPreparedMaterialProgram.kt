@@ -20,6 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.wgsl.BitmapShaderWgsl
+import org.graphiks.kanvas.gpu.renderer.wgsl.hasMaterialColorFunctionSignature
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
@@ -90,37 +91,13 @@ object GPUPreparedMaterialProgramCompiler {
                     message = validation.message,
                 )
         }
-        val fragmentSource = prepared.composableDeclarationsWgsl +
-            "\n\n" +
-            evaluationFunctionWgsl
-        val fragmentHash = sha256Hex(fragmentSource.encodeToByteArray())
-        val fragmentAbiHash = CanonicalIdentityEncoder("prepared-material-fragment-abi-v1")
-            .text("evaluationFunction", MATERIAL_EVALUATION_FUNCTION)
-            .text(
-                "colorContract",
-                GPUPreparedMaterialColorContract.LinearPremultipliedRgba.name,
-            )
-            .text(
-                "coordinateContract",
-                GPUPreparedMaterialCoordinateContract.LocalPosition2D.name,
-            )
-            .texts(
-                "uniformBinding",
-                listOfNotNull(
-                    uniformBinding?.let {
-                        "${it.group}:${it.binding}:${it.minBindingSizeBytes}"
-                    },
-                ),
-            )
-            .texts(
-                "sampledBindings",
-                sampledBindings.map {
-                    "${it.resourceIndex}:${it.textureGroup}:${it.textureBinding}:" +
-                        "${it.samplerGroup}:${it.samplerBinding}"
-                },
-            )
-            .texts("reflectedAbiFacts", composableAbiFacts)
-            .digestIdentity()
+        val fragmentIdentity = preparedMaterialFragmentIdentity(
+            declarationsWgsl = prepared.composableDeclarationsWgsl,
+            evaluationFunctionWgsl = evaluationFunctionWgsl,
+            uniformBinding = uniformBinding,
+            sampledBindings = sampledBindings,
+            reflectedAbiFacts = composableAbiFacts,
+        )
         val composableFragment = GPUPreparedMaterialFragment(
             declarationsWgsl = prepared.composableDeclarationsWgsl,
             evaluationFunctionWgsl = evaluationFunctionWgsl,
@@ -129,8 +106,8 @@ object GPUPreparedMaterialProgramCompiler {
             sampledBindings = sampledBindings,
             colorContract = GPUPreparedMaterialColorContract.LinearPremultipliedRgba,
             coordinateContract = GPUPreparedMaterialCoordinateContract.LocalPosition2D,
-            fragmentHash = fragmentHash,
-            abiHash = fragmentAbiHash,
+            fragmentHash = fragmentIdentity.fragmentHash,
+            abiHash = fragmentIdentity.abiHash,
         )
 
         val uniformSnapshot = immutableList(prepared.uniformBytes.map { it.toInt() and 0xff })
@@ -697,79 +674,28 @@ object GPUPreparedMaterialProgramCompiler {
         if (
             !report.validation.success ||
             report.unsupportedFeatures.isNotEmpty() ||
-            !sourceDeclaresFunction(source, MATERIAL_EVALUATION_FUNCTION)
+            !lowered.hasMaterialColorFunctionSignature(MATERIAL_EVALUATION_FUNCTION)
         ) {
             return ComposableFragmentValidation.Refused(
                 "Prepared material fragment did not prove its canonical evaluation function",
             )
         }
-        val expectedBindings = buildList {
-            uniformBinding?.let {
-                add(
-                    PreparedAbiBinding(
-                        group = it.group,
-                        binding = it.binding,
-                        resourceKind = "uniformBuffer",
-                        access = "read",
-                        minBindingSize = it.minBindingSizeBytes,
-                    ),
-                )
-            }
-            sampledBindings.forEach {
-                add(
-                    PreparedAbiBinding(
-                        group = it.textureGroup,
-                        binding = it.textureBinding,
-                        resourceKind = "sampledTexture",
-                        access = "read",
-                        sampleType = "float",
-                        viewDimension = "2d",
-                    ),
-                )
-                add(
-                    PreparedAbiBinding(
-                        group = it.samplerGroup,
-                        binding = it.samplerBinding,
-                        resourceKind = "sampler",
-                        access = "read",
-                    ),
-                )
-            }
-        }
-        val actualBindings = report.bindings.map {
-            PreparedAbiBinding(
-                group = it.group,
-                binding = it.binding,
-                resourceKind = it.resourceKind,
-                access = it.access,
-                sampleType = it.sampleType,
-                viewDimension = it.viewDimension,
-                storageFormat = it.storageFormat,
-                minBindingSize = it.minBindingSize,
+        composableBindingMismatch(
+            uniformBinding = uniformBinding,
+            sampledBindings = sampledBindings,
+            reflectedBindings = report.bindings,
+        )?.let { message ->
+            return ComposableFragmentValidation.Refused(
+                message,
             )
         }
-        if (
-            actualBindings.sortedWith(compareBy({ it.group }, { it.binding })) !=
-            expectedBindings.sortedWith(compareBy({ it.group }, { it.binding }))
-        ) {
+        composableUniformLayoutMismatch(
+            expected = prepared.abiExpectation.uniformLayout,
+            uniformBindingSize = uniformBinding?.minBindingSizeBytes,
+            reflectedLayouts = report.layouts,
+        )?.let { message ->
             return ComposableFragmentValidation.Refused(
-                "Prepared material fragment bindings do not match the canonical schema",
-            )
-        }
-        val uniformLayouts = report.layouts.filter { it.addressSpace == "uniform" }
-        if (uniformBinding == null) {
-            if (uniformLayouts.isNotEmpty()) {
-                return ComposableFragmentValidation.Refused(
-                    "Prepared material fragment reflects an unexpected uniform layout",
-                )
-            }
-        } else if (
-            report.layouts.size != 1 ||
-            uniformLayouts.size != 1 ||
-            uniformLayouts.single().size != uniformBinding.minBindingSizeBytes
-        ) {
-            return ComposableFragmentValidation.Refused(
-                "Prepared material fragment uniform layout does not match its binding size",
+                message,
             )
         }
         val abiFacts = buildList {
@@ -985,6 +911,112 @@ internal data class PreparedAbiBinding(
     val minBindingSize: Int? = null,
 )
 
+internal data class PreparedMaterialFragmentIdentity(
+    val fragmentHash: String,
+    val abiHash: String,
+)
+
+internal fun preparedMaterialFragmentIdentity(
+    declarationsWgsl: String,
+    evaluationFunctionWgsl: String,
+    uniformBinding: GPUPreparedMaterialUniformBinding?,
+    sampledBindings: List<GPUPreparedMaterialSampledBinding>,
+    reflectedAbiFacts: List<String>,
+): PreparedMaterialFragmentIdentity {
+    val fragmentSource = declarationsWgsl + "\n\n" + evaluationFunctionWgsl
+    val abiHash = CanonicalIdentityEncoder("prepared-material-fragment-abi-v1")
+        .text("evaluationFunction", MATERIAL_EVALUATION_FUNCTION)
+        .text(
+            "colorContract",
+            GPUPreparedMaterialColorContract.LinearPremultipliedRgba.name,
+        )
+        .text(
+            "coordinateContract",
+            GPUPreparedMaterialCoordinateContract.LocalPosition2D.name,
+        )
+        .texts(
+            "uniformBinding",
+            listOfNotNull(
+                uniformBinding?.let {
+                    "${it.group}:${it.binding}:${it.minBindingSizeBytes}"
+                },
+            ),
+        )
+        .texts(
+            "sampledBindings",
+            sampledBindings.map {
+                "${it.resourceIndex}:${it.textureGroup}:${it.textureBinding}:" +
+                    "${it.samplerGroup}:${it.samplerBinding}"
+            },
+        )
+        .texts("reflectedAbiFacts", reflectedAbiFacts)
+        .digestIdentity()
+    return PreparedMaterialFragmentIdentity(
+        fragmentHash = sha256Hex(fragmentSource.encodeToByteArray()),
+        abiHash = abiHash,
+    )
+}
+
+internal fun composableBindingMismatch(
+    uniformBinding: GPUPreparedMaterialUniformBinding?,
+    sampledBindings: List<GPUPreparedMaterialSampledBinding>,
+    reflectedBindings: List<org.graphiks.kanvas.gpu.renderer.wgsl.WgslBindingReflection>,
+): String? {
+    val expectedBindings = buildList {
+        uniformBinding?.let {
+            add(
+                PreparedAbiBinding(
+                    group = it.group,
+                    binding = it.binding,
+                    resourceKind = "uniformBuffer",
+                    access = "read",
+                    minBindingSize = it.minBindingSizeBytes,
+                ),
+            )
+        }
+        sampledBindings.forEach {
+            add(
+                PreparedAbiBinding(
+                    group = it.textureGroup,
+                    binding = it.textureBinding,
+                    resourceKind = "sampledTexture",
+                    access = "read",
+                    sampleType = "float",
+                    viewDimension = "2d",
+                ),
+            )
+            add(
+                PreparedAbiBinding(
+                    group = it.samplerGroup,
+                    binding = it.samplerBinding,
+                    resourceKind = "sampler",
+                    access = "read",
+                ),
+            )
+        }
+    }
+    val actualBindings = reflectedBindings.map {
+        PreparedAbiBinding(
+            group = it.group,
+            binding = it.binding,
+            resourceKind = it.resourceKind,
+            access = it.access,
+            sampleType = it.sampleType,
+            viewDimension = it.viewDimension,
+            storageFormat = it.storageFormat,
+            minBindingSize = it.minBindingSize,
+        )
+    }
+    return if (
+        actualBindings.sortedWith(compareBy({ it.group }, { it.binding })) ==
+        expectedBindings.sortedWith(compareBy({ it.group }, { it.binding }))
+    ) {
+        null
+    } else {
+        "Prepared material fragment bindings do not match the canonical schema"
+    }
+}
+
 internal data class PreparedAbiLayout(
     val size: Int,
     val alignment: Int,
@@ -999,6 +1031,51 @@ internal data class PreparedAbiMember(
     val alignment: Int,
     val stride: Int? = null,
 )
+
+internal fun composableUniformLayoutMismatch(
+    expected: PreparedAbiLayout?,
+    uniformBindingSize: Int?,
+    reflectedLayouts: List<org.graphiks.kanvas.gpu.renderer.wgsl.WgslLayoutReflection>,
+): String? {
+    val uniformLayouts = reflectedLayouts.filter { layout -> layout.addressSpace == "uniform" }
+    if (expected == null || uniformBindingSize == null) {
+        return if (
+            expected == null &&
+            uniformBindingSize == null &&
+            reflectedLayouts.isEmpty()
+        ) {
+            null
+        } else {
+            "Prepared material fragment reflects an unexpected uniform layout"
+        }
+    }
+    if (reflectedLayouts.size != 1 || uniformLayouts.size != 1) {
+        return "Prepared material fragment must reflect exactly one canonical uniform layout"
+    }
+    val actual = uniformLayouts.single().let { layout ->
+        PreparedAbiLayout(
+            size = layout.size,
+            alignment = layout.alignment,
+            members = layout.members.map { member ->
+                PreparedAbiMember(
+                    name = member.name,
+                    type = member.type,
+                    offset = member.offset,
+                    size = member.size,
+                    alignment = member.alignment,
+                    stride = member.stride,
+                )
+            },
+        )
+    }
+    if (actual != expected) {
+        return "Prepared material fragment uniform layout does not match the registered ABI"
+    }
+    if (uniformBindingSize != expected.size) {
+        return "Prepared material fragment uniform binding size does not match the registered ABI"
+    }
+    return null
+}
 
 private fun solidAbiExpectation(): PreparedModuleAbiExpectation =
     uniformAbiExpectation(
@@ -1818,9 +1895,6 @@ private fun GPUPreparedRuntimeEffectSourceColorContract.toPreparedSourceColorCon
         GPUPreparedRuntimeEffectSourceColorContract.LinearPremultipliedRgba ->
             PreparedSourceColorContract.LinearPremultipliedRgba
     }
-
-private fun sourceDeclaresFunction(source: String, function: String): Boolean =
-    Regex("""\bfn\s+${Regex.escape(function)}\s*\(""").containsMatchIn(source)
 
 private fun FloatArray.toByteArray(): ByteArray =
     ByteBuffer.allocate(size * Float.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {

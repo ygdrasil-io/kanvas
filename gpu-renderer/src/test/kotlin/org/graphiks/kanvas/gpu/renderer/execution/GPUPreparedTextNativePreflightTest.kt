@@ -540,16 +540,16 @@ private fun PreparedTextNativePreflightFixture.withViolation(
         }
     GPUPreparedTextViolationKind.MATERIAL_ABI_MISMATCH ->
         withTextSemantic { semantic ->
-            semantic.rebuilt(material = semantic.material.copy(abiHash = "abi:forged"))
+            semantic.rebuilt(material = semantic.material.rebuilt(abiHash = "abi:forged"))
         }
     GPUPreparedTextViolationKind.WGSL_ENTRY_POINT_INCORRECT ->
         withTextSemantic { semantic ->
-            semantic.rebuilt(material = semantic.material.copy(entryPoint = "forged_entry"))
+            semantic.rebuilt(material = semantic.material.rebuilt(entryPoint = "forged_entry"))
         }
     GPUPreparedTextViolationKind.BINDING_LAYOUT_INCORRECT ->
         withTextSemantic { semantic ->
             semantic.rebuilt(
-                material = semantic.material.copy(
+                material = semantic.material.rebuilt(
                     wgslSource =
                         "struct ForgedBinding { value: vec4f, };\n" +
                             "@group(3) @binding(9) var<uniform> forged: ForgedBinding;\n" +
@@ -560,7 +560,7 @@ private fun PreparedTextNativePreflightFixture.withViolation(
     GPUPreparedTextViolationKind.MATERIAL_UNIFORMS_MODIFIED ->
         withTextSemantic { semantic ->
             semantic.rebuilt(
-                material = semantic.material.copy(
+                material = semantic.material.rebuilt(
                     uniformBytes = semantic.material.uniformBytes.mapIndexed { index, value ->
                         if (index == 0) value xor 0x7f else value
                     },
@@ -569,19 +569,41 @@ private fun PreparedTextNativePreflightFixture.withViolation(
         }
     GPUPreparedTextViolationKind.MATERIAL_RESOURCES_MODIFIED ->
         withTextSemantic { semantic ->
+            val forgedResource =
+                org.graphiks.kanvas.gpu.renderer.materials
+                    .GPUPreparedMaterialSampledResource(
+                        width = 1,
+                        height = 1,
+                        samplingFilterMode = "nearest",
+                        alphaOnly = false,
+                        rgba8Bytes = byteArrayOf(1, 2, 3, 4),
+                        resourceKey = "material:forged-resource",
+                    )
+            val originalFragment = semantic.material.composableFragment
+            val forgedFragment =
+                org.graphiks.kanvas.gpu.renderer.materials.contracts
+                    .GPUPreparedMaterialFragment(
+                        declarationsWgsl = originalFragment.declarationsWgsl,
+                        evaluationFunctionWgsl = originalFragment.evaluationFunctionWgsl,
+                        evaluationFunction = originalFragment.evaluationFunction,
+                        uniformBinding = originalFragment.uniformBinding,
+                        sampledBindings = listOf(
+                            org.graphiks.kanvas.gpu.renderer.materials.contracts
+                                .GPUPreparedMaterialSampledBinding(
+                                    resourceIndex = 0,
+                                    textureBinding = 1,
+                                    samplerBinding = 2,
+                                ),
+                        ),
+                        colorContract = originalFragment.colorContract,
+                        coordinateContract = originalFragment.coordinateContract,
+                        fragmentHash = originalFragment.fragmentHash,
+                        abiHash = originalFragment.abiHash,
+                    )
             semantic.rebuilt(
-                material = semantic.material.copy(
-                    sampledResources = listOf(
-                        org.graphiks.kanvas.gpu.renderer.materials
-                            .GPUPreparedMaterialSampledResource(
-                                width = 1,
-                                height = 1,
-                                samplingFilterMode = "nearest",
-                                alphaOnly = false,
-                                rgba8Bytes = byteArrayOf(1, 2, 3, 4),
-                                resourceKey = "material:forged-resource",
-                            ),
-                    ),
+                material = semantic.material.rebuilt(
+                    composableFragment = forgedFragment,
+                    sampledResources = listOf(forgedResource),
                 ),
             )
         }
@@ -905,6 +927,34 @@ private fun GPUPreparedR8UploadArtifact.rebuilt(
     contentHash = bytes.sha256(),
     bytes = bytes,
 )
+
+private fun org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram.rebuilt(
+    materialKey: String = this.materialKey,
+    wgslSource: String = this.wgslSource,
+    entryPoint: String = this.entryPoint,
+    composableFragment:
+        org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment =
+        this.composableFragment,
+    uniformBytes: List<Int> = this.uniformBytes,
+    sampledResources:
+        List<org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialSampledResource> =
+        this.sampledResources,
+    paintAlpha: Float = this.paintAlpha,
+    sourceKind: org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind =
+        this.sourceKind,
+    abiHash: String = this.abiHash,
+): org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram =
+    org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram(
+        materialKey = materialKey,
+        wgslSource = wgslSource,
+        entryPoint = entryPoint,
+        composableFragment = composableFragment,
+        uniformBytes = uniformBytes,
+        sampledResources = sampledResources,
+        paintAlpha = paintAlpha,
+        sourceKind = sourceKind,
+        abiHash = abiHash,
+    )
 
 private fun GPUDrawSemanticPayload.TextA8.rebuilt(
     atlas: GPUPreparedR8UploadArtifact = this.atlas,

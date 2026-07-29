@@ -2107,19 +2107,16 @@ private fun registeredUniformRectCanonicalPreimage(
 ).joinToString("\n")
 
 private fun GPUPreparedMaterialProgram.preparedTextSnapshot(): GPUPreparedMaterialProgram {
-    require(materialKey.isNotBlank()) { "Prepared text material key must not be blank" }
-    require(wgslSource.isNotBlank()) { "Prepared text WGSL source must not be blank" }
-    require(entryPoint.isNotBlank()) { "Prepared text material entry point must not be blank" }
-    require(uniformBytes.all { byte -> byte in 0..255 }) {
-        "Prepared text material uniforms must be unsigned bytes"
-    }
-    require(paintAlpha.isFinite() && paintAlpha in 0f..1f) {
-        "Prepared text paint alpha must be finite and normalized"
-    }
-    require(abiHash.isNotBlank()) { "Prepared text material ABI hash must not be blank" }
-    return copy(
-        uniformBytes = immutableList(uniformBytes),
-        sampledResources = immutableList(sampledResources),
+    return GPUPreparedMaterialProgram(
+        materialKey = materialKey,
+        wgslSource = wgslSource,
+        entryPoint = entryPoint,
+        composableFragment = composableFragment,
+        uniformBytes = uniformBytes,
+        sampledResources = sampledResources,
+        paintAlpha = paintAlpha,
+        sourceKind = sourceKind,
+        abiHash = abiHash,
     )
 }
 

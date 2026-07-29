@@ -12,7 +12,13 @@ import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialC
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialCoordinateContract
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialSampledBinding
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialUniformBinding
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.SimpleRTDescriptor
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.preparedRuntimeEffectBindingContractHash
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.preparedRuntimeEffectModuleContractHash
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.preparedRuntimeEffectRouteContractHash
+import org.graphiks.kanvas.gpu.renderer.wgsl.WgslBindingReflection
 import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLReflectionProvider
 import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLValidator
 
@@ -123,6 +129,92 @@ class GPUPreparedMaterialFragmentTest {
     }
 
     @Test
+    fun `fragment identity isolates code ABI and sampled topology causes`() {
+        val declarations = """
+            fn kanvas_material_source(p: vec2<f32>) -> vec4<f32> {
+                return vec4<f32>(p, 0.0, 1.0);
+            }
+        """.trimIndent()
+        val evaluation = """
+            fn kanvas_evaluate_material(p: vec2<f32>) -> vec4<f32> {
+                return kanvas_material_source(p);
+            }
+        """.trimIndent()
+        val uniform = GPUPreparedMaterialUniformBinding(minBindingSizeBytes = 16)
+        val layoutFacts = listOf("layout[0]=Material:uniform:16:16")
+        fun identity(
+            code: String = declarations,
+            sampled: List<GPUPreparedMaterialSampledBinding> = emptyList(),
+            abiFacts: List<String> = layoutFacts,
+        ) = preparedMaterialFragmentIdentity(
+            declarationsWgsl = code,
+            evaluationFunctionWgsl = evaluation,
+            uniformBinding = uniform,
+            sampledBindings = sampled,
+            reflectedAbiFacts = abiFacts,
+        )
+
+        val baseline = identity()
+        val sampled = identity(
+            sampled = listOf(
+                GPUPreparedMaterialSampledBinding(
+                    resourceIndex = 0,
+                    textureBinding = 1,
+                    samplerBinding = 2,
+                ),
+            ),
+        )
+        val codeOnly = identity(code = declarations.replace("1.0", "0.5"))
+        val abiOnly = identity(abiFacts = layoutFacts + "layout[0].member[0]=color:vec4<f32>")
+
+        assertEquals(baseline.fragmentHash, sampled.fragmentHash)
+        assertNotEquals(baseline.abiHash, sampled.abiHash)
+        assertNotEquals(baseline.fragmentHash, codeOnly.fragmentHash)
+        assertEquals(baseline.abiHash, codeOnly.abiHash)
+        assertEquals(baseline.fragmentHash, abiOnly.fragmentHash)
+        assertNotEquals(baseline.abiHash, abiOnly.abiHash)
+    }
+
+    @Test
+    fun `composable binding gate rejects missing extra and duplicate bindings`() {
+        val uniform = GPUPreparedMaterialUniformBinding(minBindingSizeBytes = 16)
+        val sampled = listOf(
+            GPUPreparedMaterialSampledBinding(
+                resourceIndex = 0,
+                textureBinding = 1,
+                samplerBinding = 2,
+            ),
+        )
+        val reflected = listOf(
+            reflectedBinding(0, "uniformBuffer", minBindingSize = 16),
+            reflectedBinding(
+                binding = 1,
+                resourceKind = "sampledTexture",
+                sampleType = "float",
+                viewDimension = "2d",
+            ),
+            reflectedBinding(2, "sampler"),
+        )
+
+        assertEquals(null, composableBindingMismatch(uniform, sampled, reflected))
+        assertTrue(composableBindingMismatch(uniform, sampled, reflected.dropLast(1)) != null)
+        assertTrue(
+            composableBindingMismatch(
+                uniform,
+                sampled,
+                reflected + reflectedBinding(3, "sampler"),
+            ) != null,
+        )
+        assertTrue(
+            composableBindingMismatch(
+                uniform,
+                sampled,
+                reflected + reflected.last(),
+            ) != null,
+        )
+    }
+
+    @Test
     fun `straight and premultiplied sources select their declared normalization`() {
         val straight = compile(registeredRuntimeEffect(), paintAlpha = 1f).composableFragment
         val premultiplied = compile(linearGradient(), paintAlpha = 1f).composableFragment
@@ -134,6 +226,64 @@ class GPUPreparedMaterialFragmentTest {
         assertTrue(
             "return source;" in premultiplied.evaluationFunctionWgsl,
             premultiplied.evaluationFunctionWgsl,
+        )
+    }
+
+    @Test
+    fun `runtime source contract propagates through material fragment and final identities`() {
+        val descriptor = SimpleRTDescriptor.createDescriptor()
+        val straightProgram =
+            assertIs<GPUPreparedRuntimeEffectResolution.Ready>(
+                KanvasPreparedRuntimeEffectResolver().resolve(
+                    descriptor.id.value,
+                    descriptor.version.value,
+                ),
+            ).program
+        val premultipliedContract =
+            GPUPreparedRuntimeEffectSourceColorContract.LinearPremultipliedRgba
+        val premultipliedDescriptor = descriptor.copy(
+            sourceColorContract = premultipliedContract,
+        )
+        val premultipliedProgram = straightProgram.copy(
+            sourceColorContract = premultipliedContract,
+            moduleHash = preparedRuntimeEffectModuleContractHash(
+                wgslModuleHash = descriptor.wgslPlan.moduleHash,
+                sourceColorContract = premultipliedContract,
+            ),
+            bindingPlanHash = preparedRuntimeEffectBindingContractHash(
+                descriptorBindingPlanHash = descriptor.resources.bindingPlanHash,
+                sourceColorContract = premultipliedContract,
+            ),
+            routeContractHash = preparedRuntimeEffectRouteContractHash(
+                descriptor = premultipliedDescriptor,
+                sourceColorContract = premultipliedContract,
+            ),
+        )
+        fun compileWith(program: GPUPreparedRuntimeEffectProgram): GPUPreparedMaterialProgram {
+            val resolver = GPUPreparedRuntimeEffectResolver { _, _ ->
+                GPUPreparedRuntimeEffectResolution.Ready(program)
+            }
+            return assertIs<GPUPreparedMaterialProgramResult.Ready>(
+                GPUPreparedMaterialProgramCompiler.compile(
+                    registeredRuntimeEffect(),
+                    1f,
+                    context.copy(runtimeEffectResolver = resolver),
+                ),
+            ).program
+        }
+
+        val straight = compileWith(straightProgram)
+        val premultiplied = compileWith(premultipliedProgram)
+
+        assertNotEquals(straight.materialKey, premultiplied.materialKey)
+        assertNotEquals(
+            straight.composableFragment.fragmentHash,
+            premultiplied.composableFragment.fragmentHash,
+        )
+        assertNotEquals(straight.abiHash, premultiplied.abiHash)
+        assertEquals(
+            straight.composableFragment.abiHash,
+            premultiplied.composableFragment.abiHash,
         )
     }
 
@@ -345,4 +495,21 @@ class GPUPreparedMaterialFragmentTest {
                 "gColor" to GPURuntimeEffectUniformValue.Float4(0.25f, 0.5f, 0.75f, 0.8f),
             ),
         )
+
+    private fun reflectedBinding(
+        binding: Int,
+        resourceKind: String,
+        minBindingSize: Int? = null,
+        sampleType: String? = null,
+        viewDimension: String? = null,
+    ) = WgslBindingReflection(
+        group = 1,
+        binding = binding,
+        name = "binding$binding",
+        resourceKind = resourceKind,
+        access = "read",
+        minBindingSize = minBindingSize,
+        sampleType = sampleType,
+        viewDimension = viewDimension,
+    )
 }

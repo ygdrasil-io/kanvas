@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceDescriptor
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectSourceColorContract
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
@@ -623,6 +624,7 @@ data class GPURuntimeEffectDescriptor(
     val wgslPlan: GPURuntimeEffectWGSLPlan,
     val routeContract: GPURuntimeEffectRouteContract,
     val liveEditPlan: GPURuntimeEffectLiveEditPlan,
+    val sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract? = null,
     val liveParameterSchema: GPURuntimeEffectLiveParameterSchema? = null,
     val diagnostics: List<GPURuntimeEffectDiagnostic> = emptyList(),
 )

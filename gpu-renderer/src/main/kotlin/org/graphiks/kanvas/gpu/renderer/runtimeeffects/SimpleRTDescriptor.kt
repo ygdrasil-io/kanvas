@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.runtimeeffects
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectSourceColorContract
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadFingerprint
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadSlotID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPayloadUploadPlan
@@ -75,6 +76,7 @@ object SimpleRTDescriptor {
         wgslPlan = wgslPlan,
         routeContract = routeContract,
         liveEditPlan = liveEditPlan,
+        sourceColorContract = GPUPreparedRuntimeEffectSourceColorContract.LinearStraightRgba,
     )
     /** Builds a minimal [GPURuntimeEffectExecutionRequest] for testing dispatch paths. */
     fun createExecutionRequest(): GPURuntimeEffectExecutionRequest {
