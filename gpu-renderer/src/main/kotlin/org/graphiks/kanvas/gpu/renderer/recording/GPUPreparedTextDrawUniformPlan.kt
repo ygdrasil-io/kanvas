@@ -41,10 +41,28 @@ class GPUPreparedTextDrawUniformBufferPlan(
         require(contentHash == uploadSnapshot.preparedTextSha256())
         require(this.slices.isNotEmpty())
         require(this.slices.map { it.packetId }.distinct().size == this.slices.size)
-        var previousEnd = 0L
-        this.slices.forEach { slice ->
+        val strideBytes = try {
+            alignUpPreparedTextDrawUniform(logicalSliceSizeBytes, alignmentBytes)
+        } catch (error: ArithmeticException) {
+            throw IllegalArgumentException("Prepared text draw-uniform stride overflowed.", error)
+        }
+        val expectedByteSize = try {
+            Math.multiplyExact(strideBytes, this.slices.size.toLong())
+        } catch (error: ArithmeticException) {
+            throw IllegalArgumentException("Prepared text draw-uniform byte size overflowed.", error)
+        }
+        require(byteSize == expectedByteSize)
+        this.slices.forEachIndexed { index, slice ->
+            val expectedOffset = try {
+                Math.multiplyExact(strideBytes, index.toLong())
+            } catch (error: ArithmeticException) {
+                throw IllegalArgumentException(
+                    "Prepared text draw-uniform slice offset overflowed.",
+                    error,
+                )
+            }
+            require(slice.offsetBytes == expectedOffset)
             require(slice.offsetBytes % alignmentBytes == 0L)
-            require(slice.offsetBytes >= previousEnd)
             val end = Math.addExact(slice.offsetBytes, slice.sizeBytes)
             require(end <= byteSize)
             require(
@@ -52,7 +70,12 @@ class GPUPreparedTextDrawUniformBufferPlan(
                     uploadSnapshot.copyOfRange(slice.offsetBytes.toInt(), end.toInt())
                         .preparedTextSha256(),
             )
-            previousEnd = end
+            val strideEnd = Math.addExact(expectedOffset, strideBytes)
+            require(
+                (end.toInt() until strideEnd.toInt()).all { paddingIndex ->
+                    uploadSnapshot[paddingIndex] == 0.toByte()
+                },
+            )
         }
     }
 
