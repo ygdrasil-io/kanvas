@@ -28,6 +28,43 @@ import org.graphiks.kanvas.types.Point
 
 class GPUPreparedTextSemanticBuilderTest {
     @Test
+    fun `A8 semantic snapshots the exact inverse of the subrun Surface transform`() {
+        val transform = Matrix33.makeAll(
+            1.25f, 0.125f, 2f,
+            -0.0625f, 1.5f, 1f,
+        )
+        val prepared = preparedA8(transform)
+
+        val gathered = assertIs<GPUPreparedTextSemanticGatherResult.Gathered>(
+            GPUPreparedTextSemanticBuilder.gather(
+                visualCommands = prepared.mapping.visualCommands,
+                inventory = prepared.inventory,
+                targetBounds = GPUPixelBounds(0, 0, 64, 64),
+            ),
+        )
+        val semantic = assertIs<GPUDrawSemanticPayload.TextA8>(
+            gathered.semanticsByCommandId.getValue(0),
+        )
+        val determinant =
+            transform.scaleX * transform.scaleY - transform.skewX * transform.skewY
+        val expectedInverse = listOf(
+            transform.scaleY / determinant,
+            -transform.skewX / determinant,
+            (transform.skewX * transform.transY -
+                transform.scaleY * transform.transX) / determinant,
+            -transform.skewY / determinant,
+            transform.scaleX / determinant,
+            (transform.skewY * transform.transX -
+                transform.scaleX * transform.transY) / determinant,
+        )
+
+        assertEquals(
+            expectedInverse.map(Float::toRawBits),
+            semantic.deviceToLocal.rawBits(),
+        )
+    }
+
+    @Test
     fun `shared scissor authority requires proof that a non scissor clip is retained separately`() {
         val target = GPUPixelBounds(0, 0, 64, 64)
         val mask = GPUClipCoveragePlan.Mask(
@@ -327,7 +364,9 @@ class GPUPreparedTextSemanticBuilderTest {
         assertTrue(semantic.canonicalHash.matches(Regex("[0-9a-f]{64}")))
     }
 
-    private fun textOperation(): DisplayOp.DrawText = DisplayOp.DrawText(
+    private fun textOperation(
+        transform: Matrix33 = Matrix33.identity(),
+    ): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(
             glyphRuns = listOf(
                 KanvasGlyphRun(
@@ -342,14 +381,16 @@ class GPUPreparedTextSemanticBuilderTest {
         x = 4f,
         y = 24f,
         paint = Paint.fill(Color.WHITE),
-        transform = Matrix33.identity(),
+        transform = transform,
         clip = ClipStack.WideOpen,
     )
 
-    private fun preparedA8(): GPUPreparedTextFramePreparation.Ready =
+    private fun preparedA8(
+        transform: Matrix33 = Matrix33.identity(),
+    ): GPUPreparedTextFramePreparation.Ready =
         assertIs<GPUPreparedTextFramePreparation.Ready>(
             GPUPreparedTextFramePreparer.prepare(
-                operations = listOf(textOperation()),
+                operations = listOf(textOperation(transform)),
                 target = target(),
                 config = RenderConfig.DEFAULT,
                 capabilities = capabilities(),

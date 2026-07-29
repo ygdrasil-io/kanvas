@@ -68,6 +68,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphLayerPayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphAtlasPlacementProofInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextA8PayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextDeviceToLocalAffine
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
@@ -78,6 +79,8 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect
 import org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
 import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
@@ -506,6 +509,80 @@ class GPUFramePlanIntegrityTest {
         assertTrue(dump.contains("atlasHeight=${padded.atlas.height}"), dump)
         assertTrue(dump.contains("atlasRowBytes=${padded.atlas.rowBytes}"), dump)
         assertTrue(dump.contains(padded.atlas.contentHash), dump)
+    }
+
+    @Test
+    fun `TextA8 affine draw uniform and composite facts change frame identity and dump`() {
+        val semantic = textA8Semantic(
+            key = "text-a8:composite",
+            width = 1,
+            height = 2,
+            rowBytes = 1,
+            bytes = byteArrayOf(0x10, 0x20),
+            deviceToLocal = GPUPreparedTextDeviceToLocalAffine(
+                m00 = 1.25f,
+                m01 = 0.125f,
+                m02 = -2f,
+                m10 = -0.0625f,
+                m11 = 1.5f,
+                m12 = 3f,
+            ),
+        )
+        val packet = packet(commandId = 1, semanticPayload = semantic)
+        val baseline = renderPlan(
+            packet = packet,
+            textDrawUniformAlignmentBytes = 256L,
+            textTargetFormatClass = "rgba8unorm",
+        )
+        val changedDrawPlan = renderPlan(
+            packet = packet,
+            textDrawUniformAlignmentBytes = 64L,
+            textTargetFormatClass = "rgba8unorm",
+        )
+        val changedComposite = renderPlan(
+            packet = packet,
+            textDrawUniformAlignmentBytes = 256L,
+            textTargetFormatClass = "bgra8unorm",
+        )
+        val changedAffine = renderPlan(
+            packet = packet(
+                commandId = 1,
+                semanticPayload = textA8Semantic(
+                    key = "text-a8:composite",
+                    width = 1,
+                    height = 2,
+                    rowBytes = 1,
+                    bytes = byteArrayOf(0x10, 0x20),
+                    deviceToLocal = semantic.deviceToLocal.copy(m02 = -1.5f),
+                ),
+            ),
+            textDrawUniformAlignmentBytes = 256L,
+            textTargetFormatClass = "rgba8unorm",
+        )
+        val binding = baseline.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single()
+            .preparedTextBindingsByPacketId
+            .getValue(packet.packetId)
+        val dump = baseline.dumpLines().joinToString("\n")
+
+        assertNotEquals(baseline.stableHash(), changedDrawPlan.stableHash())
+        assertNotEquals(baseline.dumpLines(), changedDrawPlan.dumpLines())
+        assertNotEquals(baseline.stableHash(), changedComposite.stableHash())
+        assertNotEquals(baseline.dumpLines(), changedComposite.dumpLines())
+        assertNotEquals(baseline.stableHash(), changedAffine.stableHash())
+        assertNotEquals(baseline.dumpLines(), changedAffine.dumpLines())
+        assertTrue(
+            dump.contains(
+                "deviceToLocalBits=${semantic.deviceToLocal.rawBits().joinToString(",")}",
+            ),
+            dump,
+        )
+        assertTrue(dump.contains(binding.drawUniformBufferPlan.contentHash), dump)
+        assertTrue(dump.contains(binding.drawUniformSlice.contentHash), dump)
+        assertTrue(dump.contains(binding.compositeProgram.sourceHash), dump)
+        assertTrue(dump.contains(binding.compositeProgram.abiHash), dump)
+        assertTrue(dump.contains(binding.compositeProgram.pipelineKey), dump)
     }
 
     @Test
@@ -1235,6 +1312,8 @@ class GPUFramePlanIntegrityTest {
     private fun renderPlan(
         packet: GPUDrawPacket,
         resourceUses: List<GPUFrameResourceUse> = emptyList(),
+        textDrawUniformAlignmentBytes: Long = 256L,
+        textTargetFormatClass: String = "rgba8unorm",
     ): GPUFramePlan {
         val textBindings = (packet.semanticPayload as? GPUDrawSemanticPayload.TextA8)
             ?.let { semantic ->
@@ -1267,6 +1346,42 @@ class GPUFramePlanIntegrityTest {
                     byteSize = bytes.size.toLong(),
                     contentHash = contentHash,
                     uploadBytes = bytes,
+                )
+                val drawUniformAssembly = assertIs<GPUPreparedTextDrawUniformPlanResult.Prepared>(
+                    buildPreparedTextDrawUniformBufferPlan(
+                        inputs = listOf(
+                            GPUPreparedTextDrawUniformInput(packet.packetId, semantic),
+                        ),
+                        frameIdentity = "integrity-text",
+                        alignmentBytes = textDrawUniformAlignmentBytes,
+                        maxBufferSize = 1_048_576L,
+                    ),
+                )
+                val drawUniformPlan = drawUniformAssembly.plan
+                val drawUniformSlice =
+                    drawUniformAssembly.slicesByPacketId.getValue(packet.packetId)
+                val compositeProgram =
+                    assertIs<GPUPreparedTextCompositeProgramResult.Ready>(
+                        GPUPreparedTextShaderComposer.compose(
+                            material = semantic.material,
+                            targetFormatClass = textTargetFormatClass,
+                            blendPlanIdentity = semantic.blendPlanIdentity,
+                        ),
+                    ).program
+                val compositeSeal = GPUPreparedTextCompositePreflightSeal(
+                    deviceToLocal = semantic.deviceToLocal,
+                    drawUniformBufferRef = drawUniformPlan.bufferRef,
+                    drawUniformAlignmentBytes = drawUniformPlan.alignmentBytes,
+                    drawUniformLogicalSliceSizeBytes = drawUniformPlan.logicalSliceSizeBytes,
+                    drawUniformBufferByteSize = drawUniformPlan.byteSize,
+                    drawUniformBufferContentHash = drawUniformPlan.contentHash,
+                    drawUniformSlice = drawUniformSlice,
+                    compositeSourceHash = compositeProgram.sourceHash,
+                    compositeAbiHash = compositeProgram.abiHash,
+                    compositePipelineKey = compositeProgram.pipelineKey,
+                    compositeVertexEntryPoint = compositeProgram.vertexEntryPoint,
+                    compositeFragmentEntryPoint = compositeProgram.fragmentEntryPoint,
+                    compositeVertexLayout = compositeProgram.vertexLayout,
                 )
                 mapOf(
                     packet.packetId to GPUPreparedTextRenderBinding(
@@ -1312,7 +1427,11 @@ class GPUFramePlanIntegrityTest {
                             clipIdentity = semantic.clipIdentity,
                             blendPlanIdentity = semantic.blendPlanIdentity,
                             capabilitySnapshotHash = semantic.capabilitySnapshotHash,
+                            textA8Composite = compositeSeal,
                         ),
+                        drawUniformBufferPlanOrNull = drawUniformPlan,
+                        drawUniformSliceOrNull = drawUniformSlice,
+                        compositeProgramOrNull = compositeProgram,
                     ),
                 )
             }
@@ -1663,6 +1782,15 @@ class GPUFramePlanIntegrityTest {
         height: Int,
         rowBytes: Int,
         bytes: ByteArray,
+        deviceToLocal: GPUPreparedTextDeviceToLocalAffine =
+            GPUPreparedTextDeviceToLocalAffine(
+                m00 = 1f,
+                m01 = 0f,
+                m02 = 0f,
+                m10 = 0f,
+                m11 = 1f,
+                m12 = 0f,
+            ),
     ): GPUDrawSemanticPayload.TextA8 {
         val atlas = GPUPreparedR8UploadArtifact(
             key = key,
@@ -1691,6 +1819,7 @@ class GPUFramePlanIntegrityTest {
                     ),
                 ),
                 material = stubPreparedMaterialProgram(),
+                deviceToLocal = deviceToLocal,
                 targetBounds = GPUPixelBounds(0, 0, 2, 2),
                 scissorBounds = GPUPixelBounds(0, 0, 2, 2),
                 clipIdentity = "clip:text-a8-integrity",

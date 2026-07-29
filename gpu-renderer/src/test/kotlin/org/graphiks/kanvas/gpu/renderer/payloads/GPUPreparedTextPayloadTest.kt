@@ -234,6 +234,15 @@ class GPUPreparedTextPayloadTest {
         val atlasBytes = byteArrayOf(0, 1, 128.toByte(), 255.toByte())
         val atlas = r8Artifact(atlasBytes)
         val instances = mutableListOf(instance())
+        val deviceToLocal = GPUPreparedTextDeviceToLocalAffine(
+            m00 = 0.5f,
+            m01 = -0.25f,
+            m02 = 7f,
+            m10 = 0.125f,
+            m11 = 0.75f,
+            m12 = -11f,
+        )
+        val expectedDeviceToLocalBits = deviceToLocal.rawBits()
         val uniformBytes = mutableListOf(1, 2, 3, 4)
         val material = material(uniformBytes)
         val expectedUniforms = material.uniformBytes
@@ -244,6 +253,7 @@ class GPUPreparedTextPayloadTest {
             pageIndex = 0,
             instances = instances,
             material = material,
+            deviceToLocal = deviceToLocal,
             targetBounds = TARGET,
             scissorBounds = SCISSOR,
             clipIdentity = "prepared-text-clip:wide-open",
@@ -258,11 +268,16 @@ class GPUPreparedTextPayloadTest {
         atlasBytes.fill(0)
         instances.clear()
         uniformBytes.fill(0)
+        deviceToLocal.javaClass.getDeclaredField("m00").run {
+            isAccessible = true
+            setFloat(deviceToLocal, 99f)
+        }
 
         assertContentEquals(byteArrayOf(0, 1, 128.toByte(), 255.toByte()), semantic.atlas.tightBytesForUpload())
         assertEquals(GPUTextArtifactGeneration(7), semantic.atlasGeneration)
         assertEquals(1, semantic.instances.size)
         assertEquals(expectedUniforms, semantic.material.uniformBytes)
+        assertEquals(expectedDeviceToLocalBits, semantic.deviceToLocal.rawBits())
         assertNotSame(material, semantic.material)
         assertEquals(stableHash, semantic.canonicalHash)
         assertTrue(semantic.hasCanonicalHashIntegrity())
@@ -364,15 +379,41 @@ class GPUPreparedTextPayloadTest {
                 clipIdentity = "prepared-text-clip:rect",
             ),
         )
+        val changedTransform = gatherer.gather(
+            base.copy(
+                deviceToLocal = base.deviceToLocal.copy(m01 = -0.25f),
+            ),
+        )
 
         assertTrue(original.canonicalHash != changedInstance.canonicalHash)
         assertTrue(original.canonicalHash != changedMaterial.canonicalHash)
         assertTrue(original.canonicalHash != changedSourceOccurrence.canonicalHash)
         assertTrue(original.canonicalHash != changedClip.canonicalHash)
+        assertTrue(original.canonicalHash != changedTransform.canonicalHash)
         assertTrue(changedInstance.hasCanonicalHashIntegrity())
         assertTrue(changedMaterial.hasCanonicalHashIntegrity())
         assertTrue(changedSourceOccurrence.hasCanonicalHashIntegrity())
         assertTrue(changedClip.hasCanonicalHashIntegrity())
+        assertTrue(changedTransform.hasCanonicalHashIntegrity())
+    }
+
+    @Test
+    fun `TextA8 refuses any non finite device to local coefficient`() {
+        val base = input()
+        val invalidAffineFactories = listOf<() -> GPUPreparedTextDeviceToLocalAffine>(
+            { base.deviceToLocal.copy(m00 = Float.NaN) },
+            { base.deviceToLocal.copy(m01 = Float.POSITIVE_INFINITY) },
+            { base.deviceToLocal.copy(m02 = Float.NEGATIVE_INFINITY) },
+            { base.deviceToLocal.copy(m10 = Float.NaN) },
+            { base.deviceToLocal.copy(m11 = Float.POSITIVE_INFINITY) },
+            { base.deviceToLocal.copy(m12 = Float.NEGATIVE_INFINITY) },
+        )
+
+        invalidAffineFactories.forEach { invalidAffine ->
+            assertFailsWith<IllegalArgumentException> {
+                invalidAffine()
+            }
+        }
     }
 
     private fun input(): GPUPreparedTextA8PayloadInput = GPUPreparedTextA8PayloadInput(
@@ -382,6 +423,14 @@ class GPUPreparedTextPayloadTest {
         pageIndex = 0,
         instances = listOf(instance()),
         material = material(mutableListOf(1, 2, 3, 4)),
+        deviceToLocal = GPUPreparedTextDeviceToLocalAffine(
+            m00 = 1f,
+            m01 = 0f,
+            m02 = 0f,
+            m10 = 0f,
+            m11 = 1f,
+            m12 = 0f,
+        ),
         targetBounds = TARGET,
         scissorBounds = SCISSOR,
         clipIdentity = "prepared-text-clip:wide-open",

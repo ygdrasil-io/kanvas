@@ -821,6 +821,12 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBind
     materialUniformSizeBytes = materialUniformSizeBytes,
     materialSampledResourcePlans = materialSampledResourcePlans,
     preflightSeal = preflightSeal,
+    drawUniformBufferPlanOrNull =
+        if (hasTextA8Composite) drawUniformBufferPlan else null,
+    drawUniformSliceOrNull =
+        if (hasTextA8Composite) drawUniformSlice else null,
+    compositeProgramOrNull =
+        if (hasTextA8Composite) compositeProgram else null,
 )
 
 private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal.rebuilt(
@@ -855,6 +861,7 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPre
     clipIdentity = clipIdentity,
     blendPlanIdentity = blendPlanIdentity,
     capabilitySnapshotHash = capabilitySnapshotHash,
+    textA8Composite = textA8Composite,
 )
 
 private fun PreparedTextNativePreflightFixture.withPreparationMutationForRole(
@@ -947,6 +954,15 @@ private fun GPUDrawSemanticPayload.TextA8.rebuilt(
         pageIndex = pageIndex,
         instances = instances,
         material = material,
+        deviceToLocal =
+            org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextDeviceToLocalAffine(
+                m00 = 1f,
+                m01 = 0f,
+                m02 = 0f,
+                m10 = 0f,
+                m11 = 1f,
+                m12 = 0f,
+            ),
         targetBounds = targetBounds,
         scissorBounds = scissorBounds,
         clipIdentity = clipIdentity,
@@ -1228,6 +1244,16 @@ internal fun preparedTextNativePreflightFixture(
                         pageIndex = page.pageIndex,
                         instances = GPUPreparedTextPreflightFixture.baselineA8Instances(page),
                         material = materialProgram,
+                        deviceToLocal =
+                            org.graphiks.kanvas.gpu.renderer.payloads
+                                .GPUPreparedTextDeviceToLocalAffine(
+                                    m00 = 1f,
+                                    m01 = 0f,
+                                    m02 = 0f,
+                                    m10 = 0f,
+                                    m11 = 1f,
+                                    m12 = 0f,
+                                ),
                         targetBounds = bounds,
                         scissorBounds = bounds,
                         clipIdentity = "clip:none",

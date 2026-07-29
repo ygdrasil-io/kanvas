@@ -248,9 +248,43 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
             capabilities = capabilities(),
         )
 
+        val directVisuals =
+            direct.mapping.visualCommands.map { visual -> visual.copy(preparedText = null) }
+        val diagnosticVisuals =
+            diagnostic.visualCommands.map { visual -> visual.copy(preparedText = null) }
+        directVisuals.zip(diagnosticVisuals).forEach { (expected, actual) ->
+            val expectedMaterial =
+                assertIs<NormalizedDrawCommand.DrawTextRun>(expected.normalized).preparedMaterial!!
+            val actualMaterial =
+                assertIs<NormalizedDrawCommand.DrawTextRun>(actual.normalized).preparedMaterial!!
+            assertEquals(expectedMaterial.materialKey, actualMaterial.materialKey)
+            assertEquals(expectedMaterial.wgslSource, actualMaterial.wgslSource)
+            assertEquals(expectedMaterial.entryPoint, actualMaterial.entryPoint)
+            assertEquals(expectedMaterial.uniformBytes, actualMaterial.uniformBytes)
+            assertEquals(expectedMaterial.paintAlpha.toRawBits(), actualMaterial.paintAlpha.toRawBits())
+            assertEquals(expectedMaterial.sourceKind, actualMaterial.sourceKind)
+            assertEquals(expectedMaterial.abiHash, actualMaterial.abiHash)
+            assertEquals(
+                expectedMaterial.composableFragment.fragmentHash,
+                actualMaterial.composableFragment.fragmentHash,
+            )
+            assertEquals(
+                expectedMaterial.composableFragment.abiHash,
+                actualMaterial.composableFragment.abiHash,
+            )
+        }
         assertEquals(
-            direct.mapping.visualCommands.map { visual -> visual.copy(preparedText = null) },
-            diagnostic.visualCommands.map { visual -> visual.copy(preparedText = null) },
+            directVisuals,
+            diagnosticVisuals.zip(directVisuals).map { (actual, expected) ->
+                val expectedMaterial =
+                    assertIs<NormalizedDrawCommand.DrawTextRun>(expected.normalized).preparedMaterial
+                actual.copy(
+                    normalized =
+                        assertIs<NormalizedDrawCommand.DrawTextRun>(actual.normalized).copy(
+                            preparedMaterial = expectedMaterial,
+                        ),
+                )
+            },
         )
         assertEquals(
             direct.inventory.contentSha256,

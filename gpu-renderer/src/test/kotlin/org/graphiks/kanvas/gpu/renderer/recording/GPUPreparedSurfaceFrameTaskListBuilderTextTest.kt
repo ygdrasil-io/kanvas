@@ -1,10 +1,13 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
 import io.ygdrasil.webgpu.GPUTextureFormat
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -75,12 +78,14 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextA8PayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextDeviceToLocalAffine
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
@@ -91,6 +96,111 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import kotlin.uuid.Uuid
 
 class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
+    @Test
+    fun `TextA8 draw uniforms use the exact 48 byte ABI with aligned immutable slices`() {
+        val atlas = atlas("atlas:draw-uniforms", generation = 7, bytes = byteArrayOf(1, 2, 3, 4))
+        val material = preparedMaterial("material:draw-uniforms")
+        val firstAffine = GPUPreparedTextDeviceToLocalAffine(
+            m00 = 0.5f,
+            m01 = -0.25f,
+            m02 = 7f,
+            m10 = 0.125f,
+            m11 = 0.75f,
+            m12 = -11f,
+        )
+        val secondAffine = GPUPreparedTextDeviceToLocalAffine(
+            m00 = 1.5f,
+            m01 = 0.375f,
+            m02 = -3f,
+            m10 = -0.5f,
+            m11 = 2f,
+            m12 = 13f,
+        )
+        val semantics = linkedMapOf<Int, GPUDrawSemanticPayload>(
+            0 to textSemantic(0, atlas, 11, material = material, deviceToLocal = firstAffine),
+            1 to textSemantic(1, atlas, 12, material = material, deviceToLocal = secondAffine),
+        )
+
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(
+                GPUPreparedSurfaceFrameRequest(
+                    baseTaskList = baseTaskList(semantics.keys.toList()),
+                    capabilities = capabilities(),
+                    target = TARGET,
+                    targetBounds = BOUNDS,
+                    semanticsByCommandId = semantics,
+                    readbackRequestId = null,
+                ),
+            ),
+        ).taskList
+
+        val bindings = taskList.tasks.filterIsInstance<GPUTask.Render>()
+            .flatMap { render -> render.preparedTextBindingsByPacketId.values }
+        val plan = bindings.first().drawUniformBufferPlan
+        assertSame(plan, bindings.last().drawUniformBufferPlan)
+        assertEquals(48L, plan.logicalSliceSizeBytes)
+        assertEquals(256L, plan.alignmentBytes)
+        assertEquals(listOf(0L, 256L), plan.slices.map { it.offsetBytes })
+        assertEquals(listOf(48L, 48L), plan.slices.map { it.sizeBytes })
+        assertEquals(512L, plan.byteSize)
+        assertEquals(plan.slices, bindings.map { it.drawUniformSlice })
+
+        val bytes = plan.bytesForUpload()
+        assertTrue(bytes.sliceArray(48 until 256).all { it == 0.toByte() })
+        assertTrue(bytes.sliceArray(304 until 512).all { it == 0.toByte() })
+        fun floatsAt(offset: Int): List<Float> = ByteBuffer.wrap(bytes)
+            .order(ByteOrder.LITTLE_ENDIAN)
+            .also { it.position(offset) }
+            .let { source -> List(4) { source.float } }
+        assertEquals(
+            listOf(BOUNDS.width.toFloat(), BOUNDS.height.toFloat(), material.paintAlpha, 0f),
+            floatsAt(0),
+        )
+        assertEquals(listOf(firstAffine.m00, firstAffine.m01, firstAffine.m02, 0f), floatsAt(16))
+        assertEquals(listOf(firstAffine.m10, firstAffine.m11, firstAffine.m12, 0f), floatsAt(32))
+        assertEquals(
+            listOf(BOUNDS.width.toFloat(), BOUNDS.height.toFloat(), material.paintAlpha, 0f),
+            floatsAt(256),
+        )
+        assertEquals(listOf(secondAffine.m00, secondAffine.m01, secondAffine.m02, 0f), floatsAt(272))
+        assertEquals(listOf(secondAffine.m10, secondAffine.m11, secondAffine.m12, 0f), floatsAt(288))
+        plan.slices.forEach { slice ->
+            assertEquals(
+                sha256(bytes.copyOfRange(slice.offsetBytes.toInt(), (slice.offsetBytes + 48L).toInt())),
+                slice.contentHash,
+            )
+        }
+
+        bytes[0] = (bytes[0].toInt() xor 0xff).toByte()
+        assertNotEquals(bytes[0], plan.bytesForUpload()[0])
+        val constructorBytes = plan.bytesForUpload()
+        val constructorSlices = plan.slices.toMutableList()
+        val constructorSnapshot = GPUPreparedTextDrawUniformBufferPlan(
+            bufferRef = plan.bufferRef,
+            alignmentBytes = plan.alignmentBytes,
+            logicalSliceSizeBytes = plan.logicalSliceSizeBytes,
+            byteSize = plan.byteSize,
+            contentHash = plan.contentHash,
+            slices = constructorSlices,
+            uploadBytes = constructorBytes,
+        )
+        val expectedConstructorBytes = constructorSnapshot.bytesForUpload()
+        val expectedConstructorSlices = constructorSnapshot.slices
+        constructorBytes.fill(0x7f)
+        constructorSlices.clear()
+        assertContentEquals(expectedConstructorBytes, constructorSnapshot.bytesForUpload())
+        assertEquals(expectedConstructorSlices, constructorSnapshot.slices)
+        @Suppress("UNCHECKED_CAST")
+        val exposedSlices =
+            constructorSnapshot.slices as MutableList<GPUPreparedTextDrawUniformSlice>
+        assertFailsWith<UnsupportedOperationException> { exposedSlices.clear() }
+        assertEquals(
+            bindings[0].compositeProgram.pipelineKey,
+            bindings[1].compositeProgram.pipelineKey,
+            "Affine uniform values must not specialize the composite pipeline.",
+        )
+    }
+
     @Test
     fun `shared TextA8 page records one FrameLocal upload before every ordered consumer`() {
         val atlas = atlas("atlas:shared", generation = 7, bytes = byteArrayOf(1, 2, 3, 4))
@@ -178,7 +288,19 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         assertEquals(GPUFrameResourceLifetime.FrameLocal, instancePreparation.lifetime)
         assertEquals(192L, instancePreparation.byteSize)
         assertEquals(1, preparations.count { it.role == GPUFrameResourceRole.GlyphAtlas })
-        assertEquals(1, preparations.count { it.role == GPUFrameResourceRole.UniformData })
+        assertEquals(2, preparations.count { it.role == GPUFrameResourceRole.UniformData })
+        val drawUniformPreparation = preparations.single {
+            it.resource == bindings.first().drawUniformBufferPlan.bufferRef
+        }
+        assertEquals(GPUFrameResourceRole.UniformData, drawUniformPreparation.role)
+        assertEquals(512L, drawUniformPreparation.byteSize)
+        assertEquals(
+            setOf(
+                GPUFrameResourceUsage.Uniform,
+                GPUFrameResourceUsage.CopyDestination,
+            ),
+            drawUniformPreparation.usages,
+        )
         val uniformPlans = bindings.mapNotNull { it.materialUniformBufferPlan }.distinct()
         assertEquals(1, uniformPlans.size)
         assertTrue(bindings.all { binding ->
@@ -234,7 +356,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         }
         val preparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
             .flatMap(GPUTask.PrepareResources::requests)
-        assertEquals(1, preparations.count { it.role == GPUFrameResourceRole.UniformData })
+        assertEquals(2, preparations.count { it.role == GPUFrameResourceRole.UniformData })
         assertEquals(1, preparations.count { it.role == GPUFrameResourceRole.GlyphAtlas })
         assertEquals(1, preparations.count { it.role == GPUFrameResourceRole.StorageData })
         val sampledTexture = preparations.single { it.role == GPUFrameResourceRole.StorageData }
@@ -414,6 +536,83 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         )
         assertEquals(
             "unsupported.frame_memory.aggregate_budget_exceeded",
+            refused.diagnostic.code.value,
+        )
+    }
+
+    @Test
+    fun `draw uniform alignment overflow and max buffer limits refuse transactionally`() {
+        val atlas = atlas(
+            "atlas:draw-uniform-refusal",
+            generation = 7,
+            bytes = byteArrayOf(1, 2, 3, 4),
+        )
+        val inputs = listOf(
+            GPUPreparedTextDrawUniformInput(
+                GPUDrawPacketID("packet.draw-uniform.0"),
+                textSemantic(0, atlas, 11),
+            ),
+            GPUPreparedTextDrawUniformInput(
+                GPUDrawPacketID("packet.draw-uniform.1"),
+                textSemantic(1, atlas, 12),
+            ),
+        )
+        val invalidAlignment = assertIs<GPUPreparedTextDrawUniformPlanResult.Refused>(
+            buildPreparedTextDrawUniformBufferPlan(
+                inputs = inputs,
+                frameIdentity = "frame:draw-uniform-refusal",
+                alignmentBytes = 3L,
+                maxBufferSize = 1L shl 30,
+            ),
+        )
+        assertEquals(
+            "invalid.recording.prepared_text_draw_uniform_alignment",
+            invalidAlignment.code,
+        )
+        val overflow = assertIs<GPUPreparedTextDrawUniformPlanResult.Refused>(
+            buildPreparedTextDrawUniformBufferPlan(
+                inputs = inputs,
+                frameIdentity = "frame:draw-uniform-refusal",
+                alignmentBytes = 1L shl 62,
+                maxBufferSize = Long.MAX_VALUE,
+            ),
+        )
+        assertEquals(
+            "unsupported.recording.prepared_text_draw_uniform_buffer",
+            overflow.code,
+        )
+        val overBudget = assertIs<GPUPreparedTextDrawUniformPlanResult.Refused>(
+            buildPreparedTextDrawUniformBufferPlan(
+                inputs = inputs,
+                frameIdentity = "frame:draw-uniform-refusal",
+                alignmentBytes = 256L,
+                maxBufferSize = 511L,
+            ),
+        )
+        assertEquals(
+            "unsupported.recording.prepared_text_draw_uniform_buffer",
+            overBudget.code,
+        )
+
+        val limitedCapabilities = capabilities().let { observed ->
+            observed.copy(limits = observed.limits!!.copy(maxBufferSize = 255L))
+        }
+        val transaction = GPUPreparedSurfaceFrameTaskListBuilder().build(
+            GPUPreparedSurfaceFrameRequest(
+                baseTaskList = baseTaskList(
+                    commandIds = listOf(0),
+                    capabilities = limitedCapabilities,
+                ),
+                capabilities = limitedCapabilities,
+                target = TARGET,
+                targetBounds = BOUNDS,
+                semanticsByCommandId = mapOf(0 to textSemantic(0, atlas, 11)),
+                readbackRequestId = null,
+            ),
+        )
+        val refused = assertIs<GPUPreparedSurfaceFrameResult.Refused>(transaction)
+        assertEquals(
+            "unsupported.recording.prepared_text_draw_uniform_buffer",
             refused.diagnostic.code.value,
         )
     }
@@ -645,6 +844,15 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         glyphId: Int,
         instanceCount: Int = 1,
         material: GPUPreparedMaterialProgram = preparedMaterial("material:text:$commandId"),
+        deviceToLocal: GPUPreparedTextDeviceToLocalAffine =
+            GPUPreparedTextDeviceToLocalAffine(
+                m00 = 1f,
+                m01 = 0f,
+                m02 = 0f,
+                m10 = 0f,
+                m11 = 1f,
+                m12 = 0f,
+            ),
     ): GPUDrawSemanticPayload.TextA8 = GPUPreparedTextPayloadGatherer().gather(
         GPUPreparedTextA8PayloadInput(
             commandIdValue = commandId,
@@ -661,6 +869,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
                 )
             },
             material = material,
+            deviceToLocal = deviceToLocal,
             targetBounds = BOUNDS,
             scissorBounds = BOUNDS,
             clipIdentity = "clip:none",

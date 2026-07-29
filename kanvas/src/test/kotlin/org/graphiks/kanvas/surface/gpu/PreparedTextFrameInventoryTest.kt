@@ -390,8 +390,10 @@ class PreparedTextFrameInventoryTest {
     @Test
     fun `subruns split on representation page material blend clip and transform class`() {
         val first = draw(0, listOf(glyph(1), glyph(2)))
-        val materialChanged = draw(1, listOf(glyph(3))).copyForTest(
-            materialKey = "material:changed",
+        val materialChanged = draw(
+            operationIndex = 1,
+            glyphs = listOf(glyph(3)),
+            paint = Paint.fill(Color.BLUE),
         )
         val transformChanged = draw(
             2,
@@ -408,7 +410,10 @@ class PreparedTextFrameInventoryTest {
 
         assertEquals(listOf(0, 1, 2), ready.subRunsByOperationIndex.keys.toList())
         assertTrue(ready.subRunsByOperationIndex.getValue(0).size >= 2)
-        assertEquals("material:changed", ready.subRunsByOperationIndex.getValue(1).single().materialKey)
+        assertEquals(
+            materialChanged.material.materialKey,
+            ready.subRunsByOperationIndex.getValue(1).single().materialKey,
+        )
         assertEquals(
             materialChanged.clipContentKey,
             ready.subRunsByOperationIndex.getValue(1).single().clipIdentity,
@@ -1751,25 +1756,6 @@ class PreparedTextFrameInventoryTest {
         positionY = positionY,
         fontSize = fontSize,
         strikeKey = strikeKey,
-    )
-
-    private fun GPUPreparedTextDraw.copyForTest(
-        materialKey: String,
-    ): GPUPreparedTextDraw = GPUPreparedTextDraw.create(
-        operationIndex = operationIndex,
-        face = face,
-        glyphs = glyphs,
-        originX = originX,
-        originY = originY,
-        transform = transform,
-        clipContentKey = clipContentKey,
-        clip = clip,
-        paint = paint,
-        material = material.copy(materialKey = materialKey),
-        blendPlan = blendPlan,
-        targetColorFormat = targetColorFormat,
-        capabilitySnapshotHash = capabilitySnapshotHash,
-        representationPolicy = representationPolicy,
     )
 
     private fun assertQuadEquals(expected: List<Float>, actual: List<Float>) {

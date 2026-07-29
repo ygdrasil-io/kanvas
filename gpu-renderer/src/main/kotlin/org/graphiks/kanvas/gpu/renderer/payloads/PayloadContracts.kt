@@ -915,6 +915,34 @@ class GPUColorGlyphLayerPayload internal constructor(input: GPUColorGlyphLayerPa
 }
 
 /** Mutable-boundary input for one exact prepared A8 text sub-run. */
+data class GPUPreparedTextDeviceToLocalAffine(
+    val m00: Float,
+    val m01: Float,
+    val m02: Float,
+    val m10: Float,
+    val m11: Float,
+    val m12: Float,
+) {
+    init {
+        require(isFinite()) {
+            "Prepared text device-to-local affine must contain only finite coefficients"
+        }
+    }
+
+    fun rawBits(): List<Int> = immutableList(
+        listOf(m00, m01, m02, m10, m11, m12).map(Float::toRawBits),
+    )
+
+    internal fun isFinite(): Boolean =
+        m00.isFinite() &&
+            m01.isFinite() &&
+            m02.isFinite() &&
+            m10.isFinite() &&
+            m11.isFinite() &&
+            m12.isFinite()
+}
+
+/** Mutable-boundary input for one exact prepared A8 text sub-run. */
 data class GPUPreparedTextA8PayloadInput(
     val commandIdValue: Int,
     val atlas: GPUPreparedR8UploadArtifact,
@@ -922,6 +950,7 @@ data class GPUPreparedTextA8PayloadInput(
     val pageIndex: Int,
     val instances: List<GPUTextA8Instance>,
     val material: GPUPreparedMaterialProgram,
+    val deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
     val clipIdentity: String,
@@ -1190,6 +1219,7 @@ sealed interface GPUDrawSemanticPayload {
         val pageIndex: Int,
         instances: List<GPUTextA8Instance>,
         material: GPUPreparedMaterialProgram,
+        deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
         val targetBounds: GPUPixelBounds,
         val scissorBounds: GPUPixelBounds,
         val clipIdentity: String,
@@ -1202,6 +1232,7 @@ sealed interface GPUDrawSemanticPayload {
         override val payloadRef: GPUDrawPayloadRef = payloadRef.deepSnapshot()
         val instances: List<GPUTextA8Instance> = immutableList(instances)
         val material: GPUPreparedMaterialProgram = material.preparedTextSnapshot()
+        val deviceToLocal: GPUPreparedTextDeviceToLocalAffine = deviceToLocal.copy()
 
         internal fun hasCanonicalHashIntegrity(): Boolean =
             canonicalHash == preparedTextA8CanonicalHash(
@@ -1211,6 +1242,7 @@ sealed interface GPUDrawSemanticPayload {
                 pageIndex = pageIndex,
                 instances = instances,
                 material = material,
+                deviceToLocal = deviceToLocal,
                 targetBounds = targetBounds,
                 scissorBounds = scissorBounds,
                 clipIdentity = clipIdentity,
@@ -1345,6 +1377,9 @@ class GPUPreparedTextPayloadGatherer {
         require(input.capabilitySnapshotHash.isNotBlank()) {
             "Prepared text capability snapshot hash must not be blank"
         }
+        require(input.deviceToLocal.isFinite()) {
+            "Prepared text device-to-local affine must contain only finite coefficients"
+        }
 
         val payloadRef = GPUDrawPayloadRef(
             commandIdValue = input.commandIdValue,
@@ -1359,6 +1394,7 @@ class GPUPreparedTextPayloadGatherer {
             pageIndex = input.pageIndex,
             instances = instances,
             material = material,
+            deviceToLocal = input.deviceToLocal.copy(),
             targetBounds = input.targetBounds,
             scissorBounds = input.scissorBounds,
             clipIdentity = input.clipIdentity,
@@ -1372,6 +1408,7 @@ class GPUPreparedTextPayloadGatherer {
                 pageIndex = input.pageIndex,
                 instances = instances,
                 material = material,
+                deviceToLocal = input.deviceToLocal,
                 targetBounds = input.targetBounds,
                 scissorBounds = input.scissorBounds,
                 clipIdentity = input.clipIdentity,
@@ -2117,6 +2154,7 @@ private fun preparedTextA8CanonicalHash(
     pageIndex: Int,
     instances: List<GPUTextA8Instance>,
     material: GPUPreparedMaterialProgram,
+    deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
     targetBounds: GPUPixelBounds,
     scissorBounds: GPUPixelBounds,
     clipIdentity: String,
@@ -2164,6 +2202,10 @@ private fun preparedTextA8CanonicalHash(
         appendCanonicalField("material.paintAlpha", material.paintAlpha.toRawBits().toString())
         appendCanonicalField("material.sourceKind", material.sourceKind.name)
         appendCanonicalField("material.abiHash", material.abiHash)
+        appendCanonicalField(
+            "deviceToLocal",
+            deviceToLocal.rawBits().joinToString(","),
+        )
         appendCanonicalField("target", targetBounds.canonicalBounds())
         appendCanonicalField("scissor", scissorBounds.canonicalBounds())
         appendCanonicalField("clip", clipIdentity)

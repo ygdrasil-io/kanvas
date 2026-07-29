@@ -1179,6 +1179,27 @@ private fun CanonicalHashSink.preparedTextBinding(value: GPUPreparedTextRenderBi
         string("textureRef", plan.frameTextureRef.value)
         string("contentHash", plan.contentHash)
     }
+    if (value.hasTextA8Composite) {
+        tag("GPUPreparedTextCompositeBinding")
+        val plan = value.drawUniformBufferPlan
+        val slice = value.drawUniformSlice
+        val program = value.compositeProgram
+        preparedTextAffine("deviceToLocal", value.preflightSeal.textA8Composite!!.deviceToLocal)
+        string("drawUniformBufferRef", plan.bufferRef.value)
+        long("drawUniformAlignmentBytes", plan.alignmentBytes)
+        long("drawUniformLogicalSliceSizeBytes", plan.logicalSliceSizeBytes)
+        long("drawUniformBufferByteSize", plan.byteSize)
+        string("drawUniformBufferContentHash", plan.contentHash)
+        list("drawUniformSlices", plan.slices) { preparedTextDrawUniformSlice(it) }
+        tag("selectedDrawUniformSlice")
+        preparedTextDrawUniformSlice(slice)
+        string("compositeSourceHash", program.sourceHash)
+        string("compositeAbiHash", program.abiHash)
+        string("compositePipelineKey", program.pipelineKey)
+        string("compositeVertexEntryPoint", program.vertexEntryPoint)
+        string("compositeFragmentEntryPoint", program.fragmentEntryPoint)
+        preparedTextVertexLayout("compositeVertexLayout", program.vertexLayout)
+    }
     tag("GPUPreparedTextBindingPreflightSeal")
     string("semanticCanonicalHash", value.preflightSeal.semanticCanonicalHash)
     string("sealAtlasKey", value.preflightSeal.atlasKey)
@@ -1208,6 +1229,57 @@ private fun CanonicalHashSink.preparedTextBinding(value: GPUPreparedTextRenderBi
     string("sealClipIdentity", value.preflightSeal.clipIdentity)
     string("sealBlendPlanIdentity", value.preflightSeal.blendPlanIdentity)
     string("sealCapabilitySnapshotHash", value.preflightSeal.capabilitySnapshotHash)
+    value.preflightSeal.textA8Composite?.let { seal ->
+        tag("GPUPreparedTextCompositePreflightSeal")
+        preparedTextAffine("sealDeviceToLocal", seal.deviceToLocal)
+        string("sealDrawUniformBufferRef", seal.drawUniformBufferRef.value)
+        long("sealDrawUniformAlignmentBytes", seal.drawUniformAlignmentBytes)
+        long(
+            "sealDrawUniformLogicalSliceSizeBytes",
+            seal.drawUniformLogicalSliceSizeBytes,
+        )
+        long("sealDrawUniformBufferByteSize", seal.drawUniformBufferByteSize)
+        string("sealDrawUniformBufferContentHash", seal.drawUniformBufferContentHash)
+        tag("sealDrawUniformSlice")
+        preparedTextDrawUniformSlice(seal.drawUniformSlice)
+        string("sealCompositeSourceHash", seal.compositeSourceHash)
+        string("sealCompositeAbiHash", seal.compositeAbiHash)
+        string("sealCompositePipelineKey", seal.compositePipelineKey)
+        string("sealCompositeVertexEntryPoint", seal.compositeVertexEntryPoint)
+        string("sealCompositeFragmentEntryPoint", seal.compositeFragmentEntryPoint)
+        preparedTextVertexLayout("sealCompositeVertexLayout", seal.compositeVertexLayout)
+    }
+}
+
+private fun CanonicalHashSink.preparedTextAffine(
+    name: String,
+    value: org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextDeviceToLocalAffine,
+) {
+    tag(name)
+    list("rawBits", value.rawBits()) { bits -> int("bits", bits) }
+}
+
+private fun CanonicalHashSink.preparedTextDrawUniformSlice(
+    value: GPUPreparedTextDrawUniformSlice,
+) {
+    string("packetId", value.packetId.value)
+    long("offsetBytes", value.offsetBytes)
+    long("sizeBytes", value.sizeBytes)
+    string("contentHash", value.contentHash)
+}
+
+private fun CanonicalHashSink.preparedTextVertexLayout(
+    name: String,
+    value: org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout,
+) {
+    tag(name)
+    long("arrayStrideBytes", value.arrayStrideBytes)
+    string("stepMode", value.stepMode)
+    list("attributes", value.attributes) { attribute ->
+        int("location", attribute.location)
+        long("offsetBytes", attribute.offsetBytes)
+        string("format", attribute.format)
+    }
 }
 
 private fun CanonicalHashSink.textureDescriptor(name: String, value: GPUTextureDescriptor) {
@@ -1492,6 +1564,9 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
             string("blendPlanIdentity", value.blendPlanIdentity)
             string("capabilitySnapshotHash", value.capabilitySnapshotHash)
             string("frameProvenance", value.frameProvenance.annotationValue)
+            list("deviceToLocalRawBits", value.deviceToLocal.rawBits()) { bits ->
+                int("bits", bits)
+            }
             bounds("targetBounds", value.targetBounds)
             bounds("scissorBounds", value.scissorBounds)
         }
@@ -1905,6 +1980,7 @@ private fun GPUPreparedTextRenderBinding.stableDump(): String =
             "{key=${plan.resourceKey},texture=${plan.frameTextureRef.value}," +
                 "contentHash=${plan.contentHash}}"
         }.ifEmpty { "none" }}," +
+        "textA8Composite=${if (hasTextA8Composite) textA8CompositeStableDump() else "none"}," +
         "preflightSeal={semantic=${preflightSeal.semanticCanonicalHash}," +
         "atlas=${preflightSeal.atlasKey}@${preflightSeal.atlasGeneration}/" +
         "${preflightSeal.atlasContentHash}:${preflightSeal.atlasWidth}x" +
@@ -1921,7 +1997,45 @@ private fun GPUPreparedTextRenderBinding.stableDump(): String =
         "resources=${preflightSeal.materialSampledResourceFacts.joinToString("|").ifEmpty { "none" }}," +
         "target=${preflightSeal.targetBounds},scissor=${preflightSeal.scissorBounds}," +
         "clip=${preflightSeal.clipIdentity},blend=${preflightSeal.blendPlanIdentity}," +
-        "capability=${preflightSeal.capabilitySnapshotHash}}}"
+        "capability=${preflightSeal.capabilitySnapshotHash}," +
+        "textA8Composite=${preflightSeal.textA8Composite?.stableDump() ?: "none"}}}"
+
+private fun GPUPreparedTextRenderBinding.textA8CompositeStableDump(): String {
+    val plan = drawUniformBufferPlan
+    val program = compositeProgram
+    return "{deviceToLocalBits=" +
+        preflightSeal.textA8Composite!!.deviceToLocal.rawBits().joinToString(",") +
+        ",drawUniform={buffer=${plan.bufferRef.value},alignment=${plan.alignmentBytes}," +
+        "logicalSliceBytes=${plan.logicalSliceSizeBytes},bytes=${plan.byteSize}," +
+        "contentHash=${plan.contentHash},slices=${plan.slices.joinToString("|") {
+            it.stableDump()
+        }}},selectedSlice=${drawUniformSlice.stableDump()}," +
+        "composite={sourceHash=${program.sourceHash},abiHash=${program.abiHash}," +
+        "pipelineKey=${program.pipelineKey},vertexEntry=${program.vertexEntryPoint}," +
+        "fragmentEntry=${program.fragmentEntryPoint}," +
+        "vertexLayout=${program.vertexLayout.stableDump()}}}"
+}
+
+private fun GPUPreparedTextCompositePreflightSeal.stableDump(): String =
+    "{deviceToLocalBits=${deviceToLocal.rawBits().joinToString(",")}," +
+        "drawUniform={buffer=${drawUniformBufferRef.value}," +
+        "alignment=$drawUniformAlignmentBytes," +
+        "logicalSliceBytes=$drawUniformLogicalSliceSizeBytes," +
+        "bytes=$drawUniformBufferByteSize,contentHash=$drawUniformBufferContentHash}," +
+        "slice=${drawUniformSlice.stableDump()}," +
+        "composite={sourceHash=$compositeSourceHash,abiHash=$compositeAbiHash," +
+        "pipelineKey=$compositePipelineKey,vertexEntry=$compositeVertexEntryPoint," +
+        "fragmentEntry=$compositeFragmentEntryPoint," +
+        "vertexLayout=${compositeVertexLayout.stableDump()}}}"
+
+private fun GPUPreparedTextDrawUniformSlice.stableDump(): String =
+    "${packetId.value}@${offsetBytes}+${sizeBytes}/$contentHash"
+
+private fun org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout.stableDump():
+    String =
+    "{stride=$arrayStrideBytes,stepMode=$stepMode,attributes=${attributes.joinToString("|") {
+        "${it.location}@${it.offsetBytes}:${it.format}"
+    }}}"
 
 private fun GPUTextureDescriptor.stableDump(): String =
     "{width=$width,height=$height,format=$format," +
@@ -2009,6 +2123,7 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
                 "atlasKey=${atlas.key},atlasWidth=${atlas.width},atlasHeight=${atlas.height}," +
                 "atlasRowBytes=${atlas.rowBytes},atlasContentHash=${atlas.contentHash}," +
                 "instances=${instances.size},material=${material.materialKey}/${material.abiHash}," +
+                "deviceToLocalBits=${deviceToLocal.rawBits().joinToString(",")}," +
                 "clip=$clipIdentity,blend=$blendPlanIdentity,capability=$capabilitySnapshotHash," +
                 "provenance=${frameProvenance.annotationValue},target=$targetBounds,scissor=$scissorBounds)"
         is GPUDrawSemanticPayload.ColorGlyph ->

@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextDeviceToLocalAffine
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
@@ -50,6 +51,10 @@ import org.graphiks.kanvas.gpu.renderer.resources.buildMaterialTextureFrameResou
 import org.graphiks.kanvas.gpu.renderer.resources.buildR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
+import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
 
 data class GPUPreparedSurfaceFrameRequest(
     val baseTaskList: GPUTaskList,
@@ -146,6 +151,43 @@ class GPUPreparedTextMaterialUniformBufferPlan(
     fun bytesForUpload(): ByteArray = uploadSnapshot.copyOf()
 }
 
+/** TextA8-only immutable facts duplicated into the Task 8/9 preflight seal. */
+class GPUPreparedTextCompositePreflightSeal(
+    deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
+    val drawUniformBufferRef: GPUFrameBufferRef,
+    val drawUniformAlignmentBytes: Long,
+    val drawUniformLogicalSliceSizeBytes: Long,
+    val drawUniformBufferByteSize: Long,
+    val drawUniformBufferContentHash: String,
+    drawUniformSlice: GPUPreparedTextDrawUniformSlice,
+    val compositeSourceHash: String,
+    val compositeAbiHash: String,
+    val compositePipelineKey: String,
+    val compositeVertexEntryPoint: String,
+    val compositeFragmentEntryPoint: String,
+    compositeVertexLayout: GPUPreparedTextVertexLayout,
+) {
+    val deviceToLocal: GPUPreparedTextDeviceToLocalAffine = deviceToLocal.copy()
+    val drawUniformSlice: GPUPreparedTextDrawUniformSlice = drawUniformSlice.copy()
+    val compositeVertexLayout: GPUPreparedTextVertexLayout = GPUPreparedTextVertexLayout(
+        arrayStrideBytes = compositeVertexLayout.arrayStrideBytes,
+        stepMode = compositeVertexLayout.stepMode,
+        attributes = compositeVertexLayout.attributes,
+    )
+
+    init {
+        require(drawUniformAlignmentBytes > 0L)
+        require(drawUniformLogicalSliceSizeBytes == PREPARED_TEXT_DRAW_UNIFORM_LOGICAL_BYTES)
+        require(drawUniformBufferByteSize > 0L)
+        require(drawUniformBufferContentHash.isNotBlank())
+        require(compositeSourceHash.isNotBlank())
+        require(compositeAbiHash.isNotBlank())
+        require(compositePipelineKey.isNotBlank())
+        require(compositeVertexEntryPoint.isNotBlank())
+        require(compositeFragmentEntryPoint.isNotBlank())
+    }
+}
+
 /**
  * Passive immutable Task 8 handoff facts consumed by Task 9 preflight.
  *
@@ -180,6 +222,7 @@ class GPUPreparedTextBindingPreflightSeal(
     val clipIdentity: String,
     val blendPlanIdentity: String,
     val capabilitySnapshotHash: String,
+    val textA8Composite: GPUPreparedTextCompositePreflightSeal? = null,
 ) {
     val materialSampledResourceFacts: List<String> =
         immutableList(materialSampledResourceFacts)
@@ -217,9 +260,26 @@ class GPUPreparedTextRenderBinding(
     val materialUniformSizeBytes: Long,
     materialSampledResourcePlans: List<GPUMaterialTextureFrameResourcePlan>,
     val preflightSeal: GPUPreparedTextBindingPreflightSeal,
+    private val drawUniformBufferPlanOrNull: GPUPreparedTextDrawUniformBufferPlan? = null,
+    private val drawUniformSliceOrNull: GPUPreparedTextDrawUniformSlice? = null,
+    private val compositeProgramOrNull: GPUPreparedTextCompositeProgram? = null,
 ) {
     val materialSampledResourcePlans: List<GPUMaterialTextureFrameResourcePlan> =
         immutableList(materialSampledResourcePlans)
+    internal val hasTextA8Composite: Boolean
+        get() = compositeProgramOrNull != null
+    val drawUniformBufferPlan: GPUPreparedTextDrawUniformBufferPlan
+        get() = checkNotNull(drawUniformBufferPlanOrNull) {
+            "ColorGlyph binding has no TextA8 draw-uniform plan before Task 11"
+        }
+    val drawUniformSlice: GPUPreparedTextDrawUniformSlice
+        get() = checkNotNull(drawUniformSliceOrNull) {
+            "ColorGlyph binding has no TextA8 draw-uniform slice before Task 11"
+        }
+    val compositeProgram: GPUPreparedTextCompositeProgram
+        get() = checkNotNull(compositeProgramOrNull) {
+            "ColorGlyph binding has no TextA8 composite program before Task 11"
+        }
 
     init {
         require(firstInstance >= 0 && instanceCount > 0)
@@ -238,6 +298,28 @@ class GPUPreparedTextRenderBinding(
                 Math.addExact(materialUniformOffsetBytes, materialUniformSizeBytes) <=
                     materialUniformBufferPlan.byteSize,
             )
+        }
+        require(
+            listOf(
+                drawUniformBufferPlanOrNull,
+                drawUniformSliceOrNull,
+                compositeProgramOrNull,
+                preflightSeal.textA8Composite,
+            ).all { it == null } ||
+                listOf(
+                    drawUniformBufferPlanOrNull,
+                    drawUniformSliceOrNull,
+                    compositeProgramOrNull,
+                    preflightSeal.textA8Composite,
+                ).all { it != null },
+        ) {
+            "Prepared TextA8 composite binding facts must be published atomically"
+        }
+        if (drawUniformBufferPlanOrNull != null) {
+            val slice = requireNotNull(drawUniformSliceOrNull)
+            require(slice.packetId == packetId)
+            require(drawUniformBufferPlanOrNull.slices.single { it.packetId == packetId } == slice)
+            require(preflightSeal.textA8Composite?.drawUniformSlice == slice)
         }
     }
 }
@@ -510,6 +592,45 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 else -> null
             }
         }
+        val textA8Inputs = packets.mapNotNull { packet ->
+            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
+                GPUDrawSemanticPayload.TextA8 ?: return@mapNotNull null
+            GPUPreparedTextDrawUniformInput(packet.packetId, semantic)
+        }
+        val compositeProgramsByPacketId =
+            linkedMapOf<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID, GPUPreparedTextCompositeProgram>()
+        textA8Inputs.forEach { input ->
+            when (
+                val composition = GPUPreparedTextShaderComposer.compose(
+                    material = input.semantic.material,
+                    targetFormatClass = request.targetFormat.value,
+                    blendPlanIdentity = input.semantic.blendPlanIdentity,
+                )
+            ) {
+                is GPUPreparedTextCompositeProgramResult.Ready ->
+                    compositeProgramsByPacketId[input.packetId] = composition.program
+                is GPUPreparedTextCompositeProgramResult.Refused ->
+                    return refused(composition.code, composition.message)
+            }
+        }
+        val textDrawUniformAssembly = if (textA8Inputs.isEmpty()) {
+            null
+        } else {
+            when (
+                val result = buildPreparedTextDrawUniformBufferPlan(
+                    inputs = textA8Inputs,
+                    frameIdentity = request.baseTaskList.frameId.value.toString(),
+                    alignmentBytes =
+                        requireNotNull(request.capabilities.limits)
+                            .minUniformBufferOffsetAlignment,
+                    maxBufferSize = requireNotNull(request.capabilities.limits).maxBufferSize,
+                )
+            ) {
+                is GPUPreparedTextDrawUniformPlanResult.Prepared -> result
+                is GPUPreparedTextDrawUniformPlanResult.Refused ->
+                    return refused(result.code, result.message)
+            }
+        }
         val inconsistentR8Identity = r8Semantics
             .groupBy(GPUDrawSemanticPayload::exactR8ArtifactIdentity)
             .values
@@ -687,6 +808,17 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     ),
                 )
             }
+            textDrawUniformAssembly?.plan?.let { plan ->
+                add(
+                    GPUFrameMemoryAllocation(
+                        label = "prepared-text.draw-uniforms.${plan.contentHash}",
+                        category = GPUFrameMemoryCategory.ReusableScratch,
+                        bytes = plan.byteSize,
+                        resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                        extent = null,
+                    ),
+                )
+            }
             readbackPlan?.let { plan ->
                 add(
                     GPUFrameMemoryAllocation(
@@ -797,6 +929,23 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 lifetime = GPUFrameResourceLifetime.FrameLocal,
                 byteSize = plan.byteSize,
                 diagnosticLabel = "prepared-text.material-uniforms.${plan.contentHash}",
+            )
+        }
+        textDrawUniformAssembly?.plan?.let { plan ->
+            preparations += GPUResourcePreparationRequest(
+                resource = plan.bufferRef,
+                descriptor = GPUFrameBufferDescriptor(
+                    byteSize = plan.byteSize,
+                    alignmentBytes = plan.alignmentBytes,
+                ),
+                role = GPUFrameResourceRole.UniformData,
+                usages = setOf(
+                    GPUFrameResourceUsage.Uniform,
+                    GPUFrameResourceUsage.CopyDestination,
+                ),
+                lifetime = GPUFrameResourceLifetime.FrameLocal,
+                byteSize = plan.byteSize,
+                diagnosticLabel = "prepared-text.draw-uniforms.${plan.contentHash}",
             )
         }
         val readbackStaging = readbackPlan?.let {
@@ -1067,6 +1216,23 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         .rangesByCommandId
                         .getValue(packet.commandIdValue)
                     val material = semantic.preparedTextMaterial()
+                    val drawUniformPlan = if (semantic is GPUDrawSemanticPayload.TextA8) {
+                        requireNotNull(textDrawUniformAssembly).plan
+                    } else {
+                        null
+                    }
+                    val drawUniformSlice = if (semantic is GPUDrawSemanticPayload.TextA8) {
+                        requireNotNull(textDrawUniformAssembly)
+                            .slicesByPacketId
+                            .getValue(packet.packetId)
+                    } else {
+                        null
+                    }
+                    val compositeProgram = if (semantic is GPUDrawSemanticPayload.TextA8) {
+                        compositeProgramsByPacketId.getValue(packet.packetId)
+                    } else {
+                        null
+                    }
                     packet.packetId to GPUPreparedTextRenderBinding(
                         packetId = packet.packetId,
                         atlasResourcePlan = r8UploadByIdentity
@@ -1091,7 +1257,13 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             instanceCount = range.instanceCount,
                             materialUniformOffsetBytes = materialUniformRange.offsetBytes,
                             materialUniformSizeBytes = materialUniformRange.sizeBytes,
+                            drawUniformBufferPlan = drawUniformPlan,
+                            drawUniformSlice = drawUniformSlice,
+                            compositeProgram = compositeProgram,
                         ),
+                        drawUniformBufferPlanOrNull = drawUniformPlan,
+                        drawUniformSliceOrNull = drawUniformSlice,
+                        compositeProgramOrNull = compositeProgram,
                     )
                 }.toMap(),
             )
@@ -1933,6 +2105,9 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
     instanceCount: Int,
     materialUniformOffsetBytes: Long,
     materialUniformSizeBytes: Long,
+    drawUniformBufferPlan: GPUPreparedTextDrawUniformBufferPlan?,
+    drawUniformSlice: GPUPreparedTextDrawUniformSlice?,
+    compositeProgram: GPUPreparedTextCompositeProgram?,
 ): GPUPreparedTextBindingPreflightSeal {
     val targetBounds: GPUPixelBounds
     val scissorBounds: GPUPixelBounds
@@ -1941,6 +2116,7 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
     val capabilitySnapshotHash: String
     val canonicalHash: String
     val pageIndex: Int
+    val textA8Composite: GPUPreparedTextCompositePreflightSeal?
     when (this) {
         is GPUDrawSemanticPayload.TextA8 -> {
             targetBounds = this.targetBounds
@@ -1950,6 +2126,24 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
             capabilitySnapshotHash = this.capabilitySnapshotHash
             canonicalHash = this.canonicalHash
             pageIndex = this.pageIndex
+            val exactPlan = requireNotNull(drawUniformBufferPlan)
+            val exactSlice = requireNotNull(drawUniformSlice)
+            val exactProgram = requireNotNull(compositeProgram)
+            textA8Composite = GPUPreparedTextCompositePreflightSeal(
+                deviceToLocal = deviceToLocal,
+                drawUniformBufferRef = exactPlan.bufferRef,
+                drawUniformAlignmentBytes = exactPlan.alignmentBytes,
+                drawUniformLogicalSliceSizeBytes = exactPlan.logicalSliceSizeBytes,
+                drawUniformBufferByteSize = exactPlan.byteSize,
+                drawUniformBufferContentHash = exactPlan.contentHash,
+                drawUniformSlice = exactSlice,
+                compositeSourceHash = exactProgram.sourceHash,
+                compositeAbiHash = exactProgram.abiHash,
+                compositePipelineKey = exactProgram.pipelineKey,
+                compositeVertexEntryPoint = exactProgram.vertexEntryPoint,
+                compositeFragmentEntryPoint = exactProgram.fragmentEntryPoint,
+                compositeVertexLayout = exactProgram.vertexLayout,
+            )
         }
         is GPUDrawSemanticPayload.ColorGlyph -> {
             targetBounds = this.targetBounds
@@ -1959,6 +2153,14 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
             capabilitySnapshotHash = requireNotNull(this.capabilitySnapshotHash)
             canonicalHash = this.canonicalHash
             pageIndex = this.instances.first().pageIndex
+            require(
+                drawUniformBufferPlan == null &&
+                    drawUniformSlice == null &&
+                    compositeProgram == null,
+            ) {
+                "ColorGlyph composition remains deferred to Task 11"
+            }
+            textA8Composite = null
         }
         else -> error("Only prepared text semantics own preflight seals")
     }
@@ -1994,6 +2196,7 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
         clipIdentity = clipIdentity,
         blendPlanIdentity = blendPlanIdentity,
         capabilitySnapshotHash = capabilitySnapshotHash,
+        textA8Composite = textA8Composite,
     )
 }
 
