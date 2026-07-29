@@ -56,6 +56,9 @@ class GPUPreparedTextCompositePreflightTest {
             GPUPreparedTextCompositePreflightRefusalCodes.INSTANCE_VERTEX_ABI,
             refused.diagnostic.code.value,
         )
+        assertEquals(0, probe.nativePreparationEvents)
+        assertEquals(0, probe.materializerInvocations)
+        assertEquals(0L, probe.nativePayloadRegistrations)
         assertEquals(0, probe.totalCreations)
     }
 
@@ -81,6 +84,9 @@ class GPUPreparedTextCompositePreflightTest {
             GPUPreparedTextCompositePreflightRefusalCodes.BINDING_LAYOUT,
             refused.diagnostic.code.value,
         )
+        assertEquals(0, probe.nativePreparationEvents)
+        assertEquals(0, probe.materializerInvocations)
+        assertEquals(0L, probe.nativePayloadRegistrations)
         assertEquals(0, probe.totalCreations)
     }
 
