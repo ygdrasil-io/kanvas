@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.filters
 
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.util.Collections
 import java.util.Objects
@@ -55,10 +57,20 @@ sealed interface GPUPreparedFilterInputRef {
     }
 
     data class Picture(val pictureIdentity: String) : GPUPreparedFilterInputRef {
+        init {
+            require(pictureIdentity.isNotBlank()) { "pictureIdentity must not be blank" }
+        }
+
         override fun identityFragment() = "picture:$pictureIdentity"
     }
 
     data class Backdrop(val destinationPlanIdentity: String) : GPUPreparedFilterInputRef {
+        init {
+            require(destinationPlanIdentity.isNotBlank()) {
+                "destinationPlanIdentity must not be blank"
+            }
+        }
+
         override fun identityFragment() = "backdrop:$destinationPlanIdentity"
     }
 }
@@ -74,6 +86,45 @@ private fun requireFinite(vararg values: Float, label: String) {
     }
 }
 
+private fun canonicalHash(vararg parts: String): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    parts.forEach { part ->
+        val bytes = part.toByteArray(Charsets.UTF_8)
+        digest.update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(bytes.size).array())
+        digest.update(bytes)
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+private fun FloatArray.canonicalBitsIdentity(): String =
+    canonicalHash(
+        *buildList {
+            add(size.toString())
+            this@canonicalBitsIdentity.forEach { add(it.toRawBits().toString()) }
+        }.toTypedArray(),
+    )
+
+private fun String.toTileMode(): GPUTileMode = when (lowercase()) {
+    "clamp" -> GPUTileMode.Clamp
+    "repeat" -> GPUTileMode.Repeat
+    "mirror" -> GPUTileMode.Mirror
+    "decal" -> GPUTileMode.Decal
+    else -> throw IllegalArgumentException("Unknown tile mode '$this'")
+}
+
+private fun String.toBlendMode(): GPUBlendMode {
+    val normalized = replace(Regex("([a-z])([A-Z])"), "\$1_\$2")
+        .replace('-', '_')
+        .uppercase()
+    return GPUBlendMode.entries.firstOrNull {
+        it.name == normalized || it.gpuLabel == lowercase()
+    } ?: throw IllegalArgumentException("Unknown blend mode '$this'")
+}
+
+private fun String.toColorChannel(): GPUColorChannel =
+    GPUColorChannel.entries.firstOrNull { it.name.equals(this, ignoreCase = true) }
+        ?: throw IllegalArgumentException("Unknown color channel '$this'")
+
 //
 // Parameter classes
 //
@@ -81,8 +132,11 @@ private fun requireFinite(vararg values: Float, label: String) {
 data class BlurParams(
     val sigmaX: Float,
     val sigmaY: Float,
-    val tileMode: String = "clamp",
+    val tileMode: GPUTileMode = GPUTileMode.Clamp,
 ) : GPUPreparedFilterParameters {
+    constructor(sigmaX: Float, sigmaY: Float, tileMode: String) :
+        this(sigmaX, sigmaY, tileMode.toTileMode())
+
     init {
         requireFinite(sigmaX, sigmaY, label = "BlurParams")
         require(sigmaX >= 0f && sigmaY >= 0f) { "BlurParams: sigma must be >= 0" }
@@ -97,8 +151,16 @@ data class CropParams(
     val y: Float,
     val width: Float,
     val height: Float,
-    val tileMode: String = "decal",
+    val tileMode: GPUTileMode = GPUTileMode.Clamp,
 ) : GPUPreparedFilterParameters {
+    constructor(
+        x: Float,
+        y: Float,
+        width: Float,
+        height: Float,
+        tileMode: String,
+    ) : this(x, y, width, height, tileMode.toTileMode())
+
     init {
         requireFinite(x, y, width, height, label = "CropParams")
     }
@@ -125,10 +187,11 @@ class ColorFilterParams(matrix: FloatArray) : GPUPreparedFilterParameters {
 
     init {
         require(this._matrix.size == 20) { "Color matrix must have exactly 20 entries" }
+        requireFinite("ColorFilterParams", _matrix)
     }
 
     override fun canonicalIdentity(): String =
-        "color_filter:${_matrix.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
+        "color_filter:${_matrix.canonicalBitsIdentity()}"
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -141,7 +204,9 @@ class ColorFilterParams(matrix: FloatArray) : GPUPreparedFilterParameters {
     override fun toString(): String = "ColorFilterParams(matrix=${_matrix.contentToString()})"
 }
 
-data class BlendParams(val mode: String) : GPUPreparedFilterParameters {
+data class BlendParams(val mode: GPUBlendMode) : GPUPreparedFilterParameters {
+    constructor(mode: String) : this(mode.toBlendMode())
+
     override fun canonicalIdentity(): String = "blend:$mode"
 }
 
@@ -150,14 +215,19 @@ data class ComposeParams(
     val outer: GPUPreparedFilterInputRef,
 ) : GPUPreparedFilterParameters {
     override fun canonicalIdentity(): String =
-        "compose:inner=${inner.identityFragment()}:outer=${outer.identityFragment()}"
+        canonicalHash("compose", inner.identityFragment(), outer.identityFragment())
 }
 
 data class DilateParams(
     val radiusX: Float,
     val radiusY: Float,
 ) : GPUPreparedFilterParameters {
-    init { requireFinite(radiusX, radiusY, label = "DilateParams") }
+    init {
+        requireFinite(radiusX, radiusY, label = "DilateParams")
+        require(radiusX >= 0f && radiusY >= 0f) {
+            "DilateParams: radii must be >= 0"
+        }
+    }
 
     override fun canonicalIdentity(): String =
         "dilate:${radiusX.toRawBits()}:${radiusY.toRawBits()}"
@@ -167,7 +237,12 @@ data class ErodeParams(
     val radiusX: Float,
     val radiusY: Float,
 ) : GPUPreparedFilterParameters {
-    init { requireFinite(radiusX, radiusY, label = "ErodeParams") }
+    init {
+        requireFinite(radiusX, radiusY, label = "ErodeParams")
+        require(radiusX >= 0f && radiusY >= 0f) {
+            "ErodeParams: radii must be >= 0"
+        }
+    }
 
     override fun canonicalIdentity(): String =
         "erode:${radiusX.toRawBits()}:${radiusY.toRawBits()}"
@@ -181,26 +256,32 @@ class DropShadowParams(
     color: FloatArray,
 ) : GPUPreparedFilterParameters {
 
-    val color: FloatArray = color.copyOf()
+    private val colorSnapshot: FloatArray = color.copyOf()
+    val color: FloatArray get() = colorSnapshot.copyOf()
 
     init {
         requireFinite(dx, dy, sigmaX, sigmaY, label = "DropShadowParams")
-        require(this.color.size == 4) { "Drop shadow color must have exactly 4 entries" }
+        require(sigmaX >= 0f && sigmaY >= 0f) {
+            "DropShadowParams: sigma must be >= 0"
+        }
+        require(colorSnapshot.size == 4) { "Drop shadow color must have exactly 4 entries" }
+        requireFinite("DropShadowParams", colorSnapshot)
     }
 
     override fun canonicalIdentity(): String =
         "drop_shadow:${dx.toRawBits()}:${dy.toRawBits()}:${sigmaX.toRawBits()}:${sigmaY.toRawBits()}" +
-            ":${this.color.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
+            ":${colorSnapshot.canonicalBitsIdentity()}"
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is DropShadowParams) return false
         return dx == other.dx && dy == other.dy &&
             sigmaX == other.sigmaX && sigmaY == other.sigmaY &&
-            color.contentEquals(other.color)
+            colorSnapshot.contentEquals(other.colorSnapshot)
     }
 
-    override fun hashCode(): Int = Objects.hash(dx, dy, sigmaX, sigmaY, color.contentHashCode())
+    override fun hashCode(): Int =
+        Objects.hash(dx, dy, sigmaX, sigmaY, colorSnapshot.contentHashCode())
 
     override fun toString(): String =
         "DropShadowParams(dx=$dx, dy=$dy, sigmaX=$sigmaX, sigmaY=$sigmaY)"
@@ -225,51 +306,101 @@ data class TileParams(
             ":dst=${dstX.toRawBits()}:${dstY.toRawBits()}:${dstRight.toRawBits()}:${dstBottom.toRawBits()}"
 }
 
-data class MergeParams(
-    val inputs: List<GPUPreparedFilterInputRef>,
+class MergeParams(
+    inputs: List<GPUPreparedFilterInputRef>,
 ) : GPUPreparedFilterParameters {
+    val inputs: List<GPUPreparedFilterInputRef> =
+        Collections.unmodifiableList(inputs.toList())
+
     init {
         require(inputs.isNotEmpty()) { "Merge must have at least one input" }
     }
 
     override fun canonicalIdentity(): String =
-        "merge:${inputs.joinToString(":") { it.identityFragment() }}"
+        canonicalHash(
+            *buildList {
+                add("merge")
+                add(inputs.size.toString())
+                inputs.forEach { add(it.identityFragment()) }
+            }.toTypedArray(),
+        )
+
+    override fun equals(other: Any?): Boolean =
+        this === other || other is MergeParams && inputs == other.inputs
+
+    override fun hashCode(): Int = inputs.hashCode()
+
+    override fun toString(): String = "MergeParams(inputs=$inputs)"
 }
 
 data class DisplacementMapParams(
-    val xChannel: String,
-    val yChannel: String,
+    val xChannel: GPUColorChannel,
+    val yChannel: GPUColorChannel,
     val scale: Float,
 ) : GPUPreparedFilterParameters {
+    constructor(xChannel: String, yChannel: String, scale: Float) :
+        this(xChannel.toColorChannel(), yChannel.toColorChannel(), scale)
+
     init { requireFinite(scale, label = "DisplacementMapParams") }
 
     override fun canonicalIdentity(): String =
         "displacement:${xChannel}:${yChannel}:${scale.toRawBits()}"
 }
 
+data class GPUPreparedFilterRect(
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float,
+) {
+    init {
+        requireFinite(x, y, width, height, label = "GPUPreparedFilterRect")
+        require(width >= 0f && height >= 0f) {
+            "GPUPreparedFilterRect: width and height must be >= 0"
+        }
+    }
+
+    fun canonicalIdentity(): String = canonicalHash(
+        "rect",
+        x.toRawBits().toString(),
+        y.toRawBits().toString(),
+        width.toRawBits().toString(),
+        height.toRawBits().toString(),
+    )
+}
+
 class PictureParams(
     val pictureIdentity: String,
-    val srcX: Float = -1f,
-    val srcY: Float = -1f,
-    val srcW: Float = -1f,
-    val srcH: Float = -1f,
+    val sourceRect: GPUPreparedFilterRect? = null,
 ) : GPUPreparedFilterParameters {
+    constructor(
+        pictureIdentity: String,
+        srcX: Float,
+        srcY: Float,
+        srcW: Float,
+        srcH: Float,
+    ) : this(pictureIdentity, GPUPreparedFilterRect(srcX, srcY, srcW, srcH))
 
-    val hasExplicitSrc: Boolean get() = srcX >= 0f
+    init {
+        require(pictureIdentity.isNotBlank()) { "Picture identity must not be blank" }
+    }
+
+    val hasExplicitSrc: Boolean get() = sourceRect != null
+    val srcX: Float? get() = sourceRect?.x
+    val srcY: Float? get() = sourceRect?.y
+    val srcW: Float? get() = sourceRect?.width
+    val srcH: Float? get() = sourceRect?.height
 
     override fun canonicalIdentity(): String =
-        if (hasExplicitSrc)
-            "picture:$pictureIdentity:src=${srcX.toRawBits()}:${srcY.toRawBits()}:${srcW.toRawBits()}:${srcH.toRawBits()}"
-        else "picture:$pictureIdentity"
+        canonicalHash("picture", pictureIdentity, sourceRect?.canonicalIdentity() ?: "no-source-rect")
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is PictureParams) return false
-        return pictureIdentity == other.pictureIdentity &&
-            srcX == other.srcX && srcY == other.srcY && srcW == other.srcW && srcH == other.srcH
+        return pictureIdentity == other.pictureIdentity && sourceRect == other.sourceRect
     }
 
-    override fun hashCode(): Int = Objects.hash(pictureIdentity, srcX, srcY, srcW, srcH)
+    override fun hashCode(): Int = Objects.hash(pictureIdentity, sourceRect)
 
     override fun toString(): String =
         "PictureParams(id=$pictureIdentity, hasSrc=$hasExplicitSrc)"
@@ -306,8 +437,29 @@ class MatrixConvolutionParams(
     val kernelOffsetX: Int,
     val kernelOffsetY: Int,
     val convolveAlpha: Boolean,
-    val tileMode: String,
+    val tileMode: GPUTileMode,
 ) : GPUPreparedFilterParameters {
+    constructor(
+        kernel: FloatArray,
+        kernelSizeX: Int,
+        kernelSizeY: Int,
+        gain: Float,
+        bias: Float,
+        kernelOffsetX: Int,
+        kernelOffsetY: Int,
+        convolveAlpha: Boolean,
+        tileMode: String,
+    ) : this(
+        kernel,
+        kernelSizeX,
+        kernelSizeY,
+        gain,
+        bias,
+        kernelOffsetX,
+        kernelOffsetY,
+        convolveAlpha,
+        tileMode.toTileMode(),
+    )
 
     private val _kernel: FloatArray = kernel.copyOf()
 
@@ -362,23 +514,55 @@ class RuntimeEffectParams(
     val effectId: String,
     val effectVersion: Int,
     uniforms: Map<String, FloatArray>,
-    val children: Map<String, GPUPreparedFilterInputRef>,
+    children: Map<String, GPUPreparedFilterInputRef>,
     val childShaderName: String = "src",
 ) : GPUPreparedFilterParameters {
 
-    val uniforms: Map<String, FloatArray> =
-        Collections.unmodifiableMap(uniforms.mapValues { (_, v) -> v.copyOf() })
+    private val uniformSnapshots: Map<String, FloatArray> =
+        Collections.unmodifiableMap(uniforms.mapValues { (_, value) -> value.copyOf() })
+    val uniforms: Map<String, FloatArray>
+        get() = Collections.unmodifiableMap(
+            uniformSnapshots.mapValues { (_, value) -> value.copyOf() },
+        )
+    val children: Map<String, GPUPreparedFilterInputRef> =
+        Collections.unmodifiableMap(LinkedHashMap(children))
+
+    init {
+        require(effectId.isNotBlank()) { "Runtime effect id must not be blank" }
+        require(effectVersion >= 0) { "Runtime effect version must be >= 0" }
+        require(childShaderName.isNotBlank()) {
+            "Runtime effect child shader name must not be blank"
+        }
+        uniformSnapshots.forEach { (name, values) ->
+            require(name.isNotBlank()) { "Runtime uniform name must not be blank" }
+            requireFinite("RuntimeEffectParams uniform '$name'", values)
+        }
+        this.children.keys.forEach { name ->
+            require(name.isNotBlank()) { "Runtime child name must not be blank" }
+        }
+    }
 
     override fun canonicalIdentity(): String {
-        val uniformPart = uniforms.entries
-            .sortedBy { it.key }
-            .joinToString(";") { (k, v) ->
-                "$k=${v.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
-            }
-        val childPart = children.entries
-            .sortedBy { it.key }
-            .joinToString(";") { (k, v) -> "$k=${v.identityFragment()}" }
-        return "runtime:$effectId:v$effectVersion:uniforms=[$uniformPart]:children=[$childPart]:shader=$childShaderName"
+        return canonicalHash(
+            *buildList {
+                add("runtime-effect")
+                add(effectId)
+                add(effectVersion.toString())
+                add(childShaderName)
+                val sortedUniforms = uniformSnapshots.entries.sortedBy { it.key }
+                add(sortedUniforms.size.toString())
+                sortedUniforms.forEach { (name, values) ->
+                    add(name)
+                    add(values.canonicalBitsIdentity())
+                }
+                val sortedChildren = children.entries.sortedBy { it.key }
+                add(sortedChildren.size.toString())
+                sortedChildren.forEach { (name, input) ->
+                    add(name)
+                    add(input.identityFragment())
+                }
+            }.toTypedArray(),
+        )
     }
 
     override fun equals(other: Any?): Boolean {
@@ -386,9 +570,9 @@ class RuntimeEffectParams(
         if (other !is RuntimeEffectParams) return false
         if (effectId != other.effectId || effectVersion != other.effectVersion) return false
         if (childShaderName != other.childShaderName) return false
-        if (uniforms.size != other.uniforms.size) return false
-        for ((k, v) in uniforms) {
-            val ov = other.uniforms[k] ?: return false
+        if (uniformSnapshots.size != other.uniformSnapshots.size) return false
+        for ((k, v) in uniformSnapshots) {
+            val ov = other.uniformSnapshots[k] ?: return false
             if (!v.contentEquals(ov)) return false
         }
         return children == other.children
@@ -398,7 +582,7 @@ class RuntimeEffectParams(
         var result = effectId.hashCode()
         result = 31 * result + effectVersion
         result = 31 * result + childShaderName.hashCode()
-        for ((k, v) in uniforms.entries.sortedBy { it.key }) {
+        for ((k, v) in uniformSnapshots.entries.sortedBy { it.key }) {
             result = 31 * result + k.hashCode()
             result = 31 * result + v.contentHashCode()
         }
@@ -419,22 +603,25 @@ class DistantLitDiffuseParams(
     val surfaceScale: Float, val kd: Float,
     color: FloatArray,
 ) : GPUPreparedFilterParameters {
-    val color: FloatArray = color.copyOf()
+    private val colorSnapshot: FloatArray = color.copyOf()
+    val color: FloatArray get() = colorSnapshot.copyOf()
     init {
         requireFinite(dx, dy, dz, surfaceScale, kd, label = "DistantLitDiffuseParams")
         requireFinite("DistantLitDiffuseParams", color)
-        require(this.color.size == 3) { "Lighting color must have exactly 3 entries" }
+        require(colorSnapshot.size == 3) { "Lighting color must have exactly 3 entries" }
     }
     override fun canonicalIdentity(): String =
         "distant_lit_diffuse:${dx.toRawBits()}:${dy.toRawBits()}:${dz.toRawBits()}" +
-            ":${surfaceScale.toRawBits()}:${kd.toRawBits()}:${this.color.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
+            ":${surfaceScale.toRawBits()}:${kd.toRawBits()}:${colorSnapshot.canonicalBitsIdentity()}"
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is DistantLitDiffuseParams) return false
         return dx == other.dx && dy == other.dy && dz == other.dz &&
-            surfaceScale == other.surfaceScale && kd == other.kd && this.color.contentEquals(other.color)
+            surfaceScale == other.surfaceScale && kd == other.kd &&
+            colorSnapshot.contentEquals(other.colorSnapshot)
     }
-    override fun hashCode(): Int = Objects.hash(dx, dy, dz, surfaceScale, kd, color.contentHashCode())
+    override fun hashCode(): Int =
+        Objects.hash(dx, dy, dz, surfaceScale, kd, colorSnapshot.contentHashCode())
 }
 
 class PointLitDiffuseParams(
@@ -442,21 +629,24 @@ class PointLitDiffuseParams(
     val surfaceScale: Float, val kd: Float,
     color: FloatArray,
 ) : GPUPreparedFilterParameters {
-    val color: FloatArray = color.copyOf()
+    private val colorSnapshot: FloatArray = color.copyOf()
+    val color: FloatArray get() = colorSnapshot.copyOf()
     init {
         requireFinite(px, py, pz, surfaceScale, kd, label = "PointLitDiffuseParams")
         requireFinite("PointLitDiffuseParams", color)
-        require(this.color.size == 3) { "Lighting color must have exactly 3 entries" }
+        require(colorSnapshot.size == 3) { "Lighting color must have exactly 3 entries" }
     }
     override fun canonicalIdentity(): String =
-        "point_lit_diffuse:${px.toRawBits()}:${py.toRawBits()}:${pz.toRawBits()}:${surfaceScale.toRawBits()}:${kd.toRawBits()}:${this.color.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
+        "point_lit_diffuse:${px.toRawBits()}:${py.toRawBits()}:${pz.toRawBits()}:${surfaceScale.toRawBits()}:${kd.toRawBits()}:${colorSnapshot.canonicalBitsIdentity()}"
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is PointLitDiffuseParams) return false
         return px == other.px && py == other.py && pz == other.pz &&
-            surfaceScale == other.surfaceScale && kd == other.kd && this.color.contentEquals(other.color)
+            surfaceScale == other.surfaceScale && kd == other.kd &&
+            colorSnapshot.contentEquals(other.colorSnapshot)
     }
-    override fun hashCode(): Int = Objects.hash(px, py, pz, surfaceScale, kd, color.contentHashCode())
+    override fun hashCode(): Int =
+        Objects.hash(px, py, pz, surfaceScale, kd, colorSnapshot.contentHashCode())
 }
 
 class SpotLitDiffuseParams(
@@ -466,23 +656,29 @@ class SpotLitDiffuseParams(
     val surfaceScale: Float, val kd: Float,
     color: FloatArray,
 ) : GPUPreparedFilterParameters {
-    val color: FloatArray = color.copyOf()
+    private val colorSnapshot: FloatArray = color.copyOf()
+    val color: FloatArray get() = colorSnapshot.copyOf()
     init {
         requireFinite(px, py, pz, tx, ty, tz, cutoff, exponent, surfaceScale, kd, label = "SpotLitDiffuseParams")
         requireFinite("SpotLitDiffuseParams", color)
-        require(this.color.size == 3) { "Lighting color must have exactly 3 entries" }
+        require(colorSnapshot.size == 3) { "Lighting color must have exactly 3 entries" }
     }
     override fun canonicalIdentity(): String =
-        "spot_lit_diffuse:${px.toRawBits()}:${py.toRawBits()}:${pz.toRawBits()}:${tx.toRawBits()}:${ty.toRawBits()}:${tz.toRawBits()}:${cutoff.toRawBits()}:${exponent.toRawBits()}:${surfaceScale.toRawBits()}:${kd.toRawBits()}:${this.color.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
+        "spot_lit_diffuse:${px.toRawBits()}:${py.toRawBits()}:${pz.toRawBits()}:${tx.toRawBits()}:${ty.toRawBits()}:${tz.toRawBits()}:${cutoff.toRawBits()}:${exponent.toRawBits()}:${surfaceScale.toRawBits()}:${kd.toRawBits()}:${colorSnapshot.canonicalBitsIdentity()}"
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is SpotLitDiffuseParams) return false
         return px == other.px && py == other.py && pz == other.pz &&
             tx == other.tx && ty == other.ty && tz == other.tz &&
             cutoff == other.cutoff && exponent == other.exponent &&
-            surfaceScale == other.surfaceScale && kd == other.kd && this.color.contentEquals(other.color)
+            surfaceScale == other.surfaceScale && kd == other.kd &&
+            colorSnapshot.contentEquals(other.colorSnapshot)
     }
-    override fun hashCode(): Int = Objects.hash(px, py, pz, tx, ty, tz, cutoff, exponent, surfaceScale, kd, color.contentHashCode())
+    override fun hashCode(): Int =
+        Objects.hash(
+            px, py, pz, tx, ty, tz, cutoff, exponent, surfaceScale, kd,
+            colorSnapshot.contentHashCode(),
+        )
 }
 
 class DistantLitSpecularParams(
@@ -490,22 +686,24 @@ class DistantLitSpecularParams(
     val surfaceScale: Float, val ks: Float, val shininess: Float,
     color: FloatArray,
 ) : GPUPreparedFilterParameters {
-    val color: FloatArray = color.copyOf()
+    private val colorSnapshot: FloatArray = color.copyOf()
+    val color: FloatArray get() = colorSnapshot.copyOf()
     init {
         requireFinite(dx, dy, dz, surfaceScale, ks, shininess, label = "DistantLitSpecularParams")
         requireFinite("DistantLitSpecularParams", color)
-        require(this.color.size == 3) { "Lighting color must have exactly 3 entries" }
+        require(colorSnapshot.size == 3) { "Lighting color must have exactly 3 entries" }
     }
     override fun canonicalIdentity(): String =
-        "distant_lit_specular:${dx.toRawBits()}:${dy.toRawBits()}:${dz.toRawBits()}:${surfaceScale.toRawBits()}:${ks.toRawBits()}:${shininess.toRawBits()}:${this.color.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
+        "distant_lit_specular:${dx.toRawBits()}:${dy.toRawBits()}:${dz.toRawBits()}:${surfaceScale.toRawBits()}:${ks.toRawBits()}:${shininess.toRawBits()}:${colorSnapshot.canonicalBitsIdentity()}"
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is DistantLitSpecularParams) return false
         return dx == other.dx && dy == other.dy && dz == other.dz &&
             surfaceScale == other.surfaceScale && ks == other.ks && shininess == other.shininess &&
-            this.color.contentEquals(other.color)
+            colorSnapshot.contentEquals(other.colorSnapshot)
     }
-    override fun hashCode(): Int = Objects.hash(dx, dy, dz, surfaceScale, ks, shininess, color.contentHashCode())
+    override fun hashCode(): Int =
+        Objects.hash(dx, dy, dz, surfaceScale, ks, shininess, colorSnapshot.contentHashCode())
 }
 
 class PointLitSpecularParams(
@@ -513,22 +711,24 @@ class PointLitSpecularParams(
     val surfaceScale: Float, val ks: Float, val shininess: Float,
     color: FloatArray,
 ) : GPUPreparedFilterParameters {
-    val color: FloatArray = color.copyOf()
+    private val colorSnapshot: FloatArray = color.copyOf()
+    val color: FloatArray get() = colorSnapshot.copyOf()
     init {
         requireFinite(px, py, pz, surfaceScale, ks, shininess, label = "PointLitSpecularParams")
         requireFinite("PointLitSpecularParams", color)
-        require(this.color.size == 3) { "Lighting color must have exactly 3 entries" }
+        require(colorSnapshot.size == 3) { "Lighting color must have exactly 3 entries" }
     }
     override fun canonicalIdentity(): String =
-        "point_lit_specular:${px.toRawBits()}:${py.toRawBits()}:${pz.toRawBits()}:${surfaceScale.toRawBits()}:${ks.toRawBits()}:${shininess.toRawBits()}:${this.color.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
+        "point_lit_specular:${px.toRawBits()}:${py.toRawBits()}:${pz.toRawBits()}:${surfaceScale.toRawBits()}:${ks.toRawBits()}:${shininess.toRawBits()}:${colorSnapshot.canonicalBitsIdentity()}"
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is PointLitSpecularParams) return false
         return px == other.px && py == other.py && pz == other.pz &&
             surfaceScale == other.surfaceScale && ks == other.ks && shininess == other.shininess &&
-            this.color.contentEquals(other.color)
+            colorSnapshot.contentEquals(other.colorSnapshot)
     }
-    override fun hashCode(): Int = Objects.hash(px, py, pz, surfaceScale, ks, shininess, color.contentHashCode())
+    override fun hashCode(): Int =
+        Objects.hash(px, py, pz, surfaceScale, ks, shininess, colorSnapshot.contentHashCode())
 }
 
 class SpotLitSpecularParams(
@@ -538,14 +738,15 @@ class SpotLitSpecularParams(
     val surfaceScale: Float, val ks: Float, val shininess: Float,
     color: FloatArray,
 ) : GPUPreparedFilterParameters {
-    val color: FloatArray = color.copyOf()
+    private val colorSnapshot: FloatArray = color.copyOf()
+    val color: FloatArray get() = colorSnapshot.copyOf()
     init {
         requireFinite(px, py, pz, tx, ty, tz, cutoff, exponent, surfaceScale, ks, shininess, label = "SpotLitSpecularParams")
         requireFinite("SpotLitSpecularParams", color)
-        require(this.color.size == 3) { "Lighting color must have exactly 3 entries" }
+        require(colorSnapshot.size == 3) { "Lighting color must have exactly 3 entries" }
     }
     override fun canonicalIdentity(): String =
-        "spot_lit_specular:${px.toRawBits()}:${py.toRawBits()}:${pz.toRawBits()}:${tx.toRawBits()}:${ty.toRawBits()}:${tz.toRawBits()}:${cutoff.toRawBits()}:${exponent.toRawBits()}:${surfaceScale.toRawBits()}:${ks.toRawBits()}:${shininess.toRawBits()}:${this.color.fold(0L) { acc, f -> acc * 31 + f.toRawBits().toLong() }}"
+        "spot_lit_specular:${px.toRawBits()}:${py.toRawBits()}:${pz.toRawBits()}:${tx.toRawBits()}:${ty.toRawBits()}:${tz.toRawBits()}:${cutoff.toRawBits()}:${exponent.toRawBits()}:${surfaceScale.toRawBits()}:${ks.toRawBits()}:${shininess.toRawBits()}:${colorSnapshot.canonicalBitsIdentity()}"
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is SpotLitSpecularParams) return false
@@ -553,22 +754,30 @@ class SpotLitSpecularParams(
             tx == other.tx && ty == other.ty && tz == other.tz &&
             cutoff == other.cutoff && exponent == other.exponent &&
             surfaceScale == other.surfaceScale && ks == other.ks && shininess == other.shininess &&
-            this.color.contentEquals(other.color)
+            colorSnapshot.contentEquals(other.colorSnapshot)
     }
-    override fun hashCode(): Int = Objects.hash(px, py, pz, tx, ty, tz, cutoff, exponent, surfaceScale, ks, shininess, color.contentHashCode())
+    override fun hashCode(): Int =
+        Objects.hash(
+            px, py, pz, tx, ty, tz, cutoff, exponent, surfaceScale, ks, shininess,
+            colorSnapshot.contentHashCode(),
+        )
 }
 
-/** Typed, immutable filter graph node. */
-data class GPUPreparedFilterNode(
+/** Typed, deeply immutable filter graph node. */
+class GPUPreparedFilterNode(
     val id: GPUPreparedFilterNodeId,
     val kind: GPUPreparedFilterKind,
-    val inputs: List<GPUPreparedFilterInputRef>,
+    inputs: List<GPUPreparedFilterInputRef>,
     val parameters: GPUPreparedFilterParameters,
     val provenance: String,
 ) {
+    val inputs: List<GPUPreparedFilterInputRef> =
+        Collections.unmodifiableList(inputs.toList())
+
     init {
         validateKindParams()
         validateInputArity()
+        validateParameterInputs()
     }
 
     private fun validateKindParams() {
@@ -630,9 +839,43 @@ data class GPUPreparedFilterNode(
         }
     }
 
-    fun canonicalIdentity(): String =
-        "node:${id.value}:kind=$kind:inputs=[${inputs.joinToString(";") { it.identityFragment() }}]:" +
-            "params=(${parameters.canonicalIdentity()}):provenance=$provenance"
+    private fun validateParameterInputs() {
+        when (val params = parameters) {
+            is ComposeParams -> require(inputs == listOf(params.inner, params.outer)) {
+                "Node ${id.value}: Compose parameter inputs must match node inputs exactly"
+            }
+            is MergeParams -> require(inputs == params.inputs) {
+                "Node ${id.value}: Merge parameter inputs must match node inputs exactly"
+            }
+            else -> Unit
+        }
+    }
+
+    fun canonicalIdentity(): String = canonicalHash(
+        *buildList {
+            add("node")
+            add(id.value)
+            add(kind.name)
+            add(inputs.size.toString())
+            inputs.forEach { add(it.identityFragment()) }
+            add(parameters.canonicalIdentity())
+            add(provenance)
+        }.toTypedArray(),
+    )
+
+    override fun equals(other: Any?): Boolean =
+        this === other ||
+            other is GPUPreparedFilterNode &&
+            id == other.id &&
+            kind == other.kind &&
+            inputs == other.inputs &&
+            parameters == other.parameters &&
+            provenance == other.provenance
+
+    override fun hashCode(): Int = Objects.hash(id, kind, inputs, parameters, provenance)
+
+    override fun toString(): String =
+        "GPUPreparedFilterNode(id=$id, kind=$kind, inputs=$inputs, provenance=$provenance)"
 }
 
 /** Typed, immutable filter DAG with validated identity. */
@@ -722,30 +965,41 @@ class GPUPreparedFilterGraph(
         fun computeIdentity(
             nodes: List<GPUPreparedFilterNode>,
             output: GPUPreparedFilterInputRef,
-        ): String {
-            val digest = MessageDigest.getInstance("SHA-256")
-            for (node in nodes.sortedBy { it.id.value }) {
-                digest.update(node.canonicalIdentity().toByteArray())
-            }
-            digest.update(output.identityFragment().toByteArray())
-            return digest.digest().joinToString("") { "%02x".format(it) }
-        }
+        ): String = canonicalHash(
+            *buildList {
+                add("filter-graph:v2")
+                val sortedNodes = nodes.sortedBy { it.id.value }
+                add(sortedNodes.size.toString())
+                sortedNodes.forEach { add(it.canonicalIdentity()) }
+                add(output.identityFragment())
+            }.toTypedArray(),
+        )
     }
 }
 
-/** Proof of a normalization rewrite. */
-data class GPUPreparedFilterRewriteProof(
+/** Deeply immutable proof of a normalization rewrite. */
+class GPUPreparedFilterRewriteProof(
     val rule: String,
-    val sourceNodeIds: List<GPUPreparedFilterNodeId>,
-    val resultNodeIds: List<GPUPreparedFilterNodeId>,
+    sourceNodeIds: List<GPUPreparedFilterNodeId>,
+    resultNodeIds: List<GPUPreparedFilterNodeId>,
     val removedIntermediateCount: Int,
     val inputBoundsIdentity: String,
     val outputBoundsIdentity: String,
-)
+) {
+    val sourceNodeIds: List<GPUPreparedFilterNodeId> =
+        Collections.unmodifiableList(sourceNodeIds.toList())
+    val resultNodeIds: List<GPUPreparedFilterNodeId> =
+        Collections.unmodifiableList(resultNodeIds.toList())
+}
 
-/** Normalized filter graph with rewrite proofs. */
-data class GPUPreparedFilterNormalization(
+/** Normalized filter graph with immutable rewrite proofs. */
+class GPUPreparedFilterNormalization(
     val graph: GPUPreparedFilterGraph,
-    val rewrites: List<GPUPreparedFilterRewriteProof>,
-    val materializationNodeIds: Set<GPUPreparedFilterNodeId>,
-)
+    rewrites: List<GPUPreparedFilterRewriteProof>,
+    materializationNodeIds: Set<GPUPreparedFilterNodeId>,
+) {
+    val rewrites: List<GPUPreparedFilterRewriteProof> =
+        Collections.unmodifiableList(rewrites.toList())
+    val materializationNodeIds: Set<GPUPreparedFilterNodeId> =
+        Collections.unmodifiableSet(LinkedHashSet(materializationNodeIds))
+}

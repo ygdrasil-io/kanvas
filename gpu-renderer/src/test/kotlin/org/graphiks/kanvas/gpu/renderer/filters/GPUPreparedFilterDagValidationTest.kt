@@ -65,6 +65,38 @@ class GPUPreparedFilterDagValidationTest {
     }
 
     @Test
+    fun `compose parameter inputs must match node edges exactly`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUPreparedFilterNode(
+                gid("n0"),
+                GPUPreparedFilterKind.Compose,
+                listOf(
+                    GPUPreparedFilterInputRef.ImplicitSource,
+                    GPUPreparedFilterInputRef.TransparentBlack,
+                ),
+                ComposeParams(
+                    inner = GPUPreparedFilterInputRef.TransparentBlack,
+                    outer = GPUPreparedFilterInputRef.ImplicitSource,
+                ),
+                "test",
+            )
+        }
+    }
+
+    @Test
+    fun `merge parameter inputs must match node edges exactly`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUPreparedFilterNode(
+                gid("n0"),
+                GPUPreparedFilterKind.Merge,
+                listOf(GPUPreparedFilterInputRef.ImplicitSource),
+                MergeParams(listOf(GPUPreparedFilterInputRef.TransparentBlack)),
+                "test",
+            )
+        }
+    }
+
+    @Test
     fun `graph with injected bad identity uses computed identity`() {
         val n = GPUPreparedFilterNode(gid("n0"), GPUPreparedFilterKind.Offset,
             listOf(GPUPreparedFilterInputRef.ImplicitSource), OffsetParams(1f, 0f), "a")

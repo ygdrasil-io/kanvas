@@ -122,9 +122,11 @@ class GPUPreparedFilterDescriptorsTest {
     }
 
     @Test
-    fun `node input refs support transparent black and empty source`() {
-        assertEquals(GPUPreparedFilterInputRef.TransparentBlack, GPUPreparedFilterInputRef.TransparentBlack)
-        assertEquals(GPUPreparedFilterInputRef.ImplicitSource, GPUPreparedFilterInputRef.ImplicitSource)
+    fun `node input refs distinguish transparent black from implicit source`() {
+        assertNotEquals(
+            GPUPreparedFilterInputRef.TransparentBlack.identityFragment(),
+            GPUPreparedFilterInputRef.ImplicitSource.identityFragment(),
+        )
     }
 
     @Test
@@ -156,10 +158,10 @@ class GPUPreparedFilterDescriptorsTest {
     }
 
     @Test
-    fun `Blend params preserve mode string`() {
+    fun `Blend params preserve closed mode`() {
         val a = BlendParams("srcOver")
         val b = BlendParams("srcIn")
-        assertEquals("srcOver", a.mode)
+        assertEquals(org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode.SRC_OVER, a.mode)
         assertNotEquals(a, b)
     }
 
@@ -182,8 +184,8 @@ class GPUPreparedFilterDescriptorsTest {
         val params = DisplacementMapParams(
             xChannel = "r", yChannel = "a", scale = 12f,
         )
-        assertEquals("r", params.xChannel)
-        assertEquals("a", params.yChannel)
+        assertEquals(GPUColorChannel.R, params.xChannel)
+        assertEquals(GPUColorChannel.A, params.yChannel)
     }
 
     @Test

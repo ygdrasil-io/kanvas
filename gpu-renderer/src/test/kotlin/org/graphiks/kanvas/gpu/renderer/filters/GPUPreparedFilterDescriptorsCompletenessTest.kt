@@ -12,7 +12,7 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
     fun `BlurParams preserves tileMode`() {
         val a = BlurParams(3f, 5f, tileMode = "clamp")
         val b = BlurParams(3f, 5f, tileMode = "repeat")
-        assertEquals("clamp", a.tileMode)
+        assertEquals(GPUTileMode.Clamp, a.tileMode)
         assertNotEquals(a, b)
         assertNotEquals(a.canonicalIdentity(), b.canonicalIdentity())
     }
@@ -21,7 +21,7 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
     fun `CropParams preserves tileMode`() {
         val a = CropParams(0f, 0f, 100f, 100f, tileMode = "decal")
         val b = CropParams(0f, 0f, 100f, 100f, tileMode = "clamp")
-        assertEquals("decal", a.tileMode)
+        assertEquals(GPUTileMode.Decal, a.tileMode)
         assertNotEquals(a, b)
     }
 
@@ -41,7 +41,7 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
         assertEquals(0f, withSrc.srcX)
         val withoutSrc = PictureParams("pic2")
         assertEquals("pic2", withoutSrc.pictureIdentity)
-        assertTrue(withoutSrc.srcX < 0f)
+        assertEquals(null, withoutSrc.sourceRect)
     }
 
     @Test
