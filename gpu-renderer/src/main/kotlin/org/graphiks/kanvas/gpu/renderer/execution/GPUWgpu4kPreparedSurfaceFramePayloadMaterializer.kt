@@ -27,6 +27,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
     private val preparedSceneTarget: GPUWgpu4kPreparedSceneTarget,
     private val corePrimitiveCache: GPUWgpu4kCorePrimitiveSessionCache,
     private val preparedImageCache: GPUWgpu4kPreparedImageSessionCache,
+    private val preparedTextCache: GPUWgpu4kPreparedTextSessionCache,
     private val preparedImageHandleFactory: GPUPreparedImageNativeHandleFactory,
     private val preparedImageCapabilities: GPUCapabilities,
     private val surfaceBlitCache: GPUWgpu4kSurfaceBlitSessionCache,
@@ -85,6 +86,9 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
         var imageOwner: GPUPreparedRenderRunOwnedResources? = null
         var imageAnchor: GPUPreparedNativeCompletionAnchor? = null
         var retainedImageRollbackOwner: AutoCloseable? = null
+        var textOwner: GPUPreparedRenderRunOwnedResources? = null
+        var textAnchor: GPUPreparedNativeCompletionAnchor? = null
+        var retainedTextRollbackOwner: AutoCloseable? = null
         val setupLedger = GPUPreRegistrationNativeHandleLedger()
         var coreMaterializer: GPUWgpu4kCorePrimitiveRenderRunMaterializer? = null
         return try {
@@ -124,38 +128,44 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             val imageRuns = accepted.orderedRuns.mapNotNull { run ->
                 (run as? GPUPreparedSurfaceNativeRunPlan.Image)?.plan
             }
-            val imageReady = when (
-                val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
-                    preparedImageCache,
-                    preparedImageHandleFactory,
-                    preparedImageCapabilities,
-                ).materializeAcceptedFrame(
-                    accepted.imageFrames,
-                    imageRuns,
-                    generationSeal.deviceGeneration,
-                )
-            ) {
-                is GPUPreparedRenderRunMaterialization.Ready -> result
-                is GPUPreparedRenderRunMaterialization.Refused -> {
-                    retainedImageRollbackOwner = result.retainedCloseOwner
-                    throw PreparedSurfaceMaterializationFailure(result.code, result.message)
+            val imageReady = if (imageRuns.isEmpty()) {
+                null
+            } else {
+                when (
+                    val result = GPUWgpu4kPreparedImageRenderRunMaterializer(
+                        preparedImageCache,
+                        preparedImageHandleFactory,
+                        preparedImageCapabilities,
+                    ).materializeAcceptedFrame(
+                        accepted.imageFrames,
+                        imageRuns,
+                        generationSeal.deviceGeneration,
+                    )
+                ) {
+                    is GPUPreparedRenderRunMaterialization.Ready -> result
+                    is GPUPreparedRenderRunMaterialization.Refused -> {
+                        retainedImageRollbackOwner = result.retainedCloseOwner
+                        throw PreparedSurfaceMaterializationFailure(result.code, result.message)
+                    }
                 }
             }
-            imageOwner = imageReady.ownedResources.singleOrNull()
+            imageOwner = imageReady?.ownedResources?.singleOrNull()
                 as? GPUPreparedRenderRunOwnedResources
-                ?: throw PreparedSurfaceMaterializationFailure(
+            if (imageReady != null && imageOwner == null) {
+                throw PreparedSurfaceMaterializationFailure(
                     "invalid.prepared-surface.image-owner",
                     "The frame-global image lot must return one exact transferable owner.",
                 )
+            }
 
-            imageReady.uniformUploads.forEach { upload ->
+            imageReady?.uniformUploads.orEmpty().forEach { upload ->
                 encodePreparedImageUniformUpload(queue, upload)
             }
             val imageRunByStep = imageRuns.associateBy(
                 GPUPreparedSurfaceImageRenderRunPlan::sourceScopeIndex,
             )
             val visibleImageHandles = mutableListOf<AutoCloseable>()
-            val finalImageOperands = imageReady.scopeOperands.map { operand ->
+            val finalImageOperands = imageReady?.scopeOperands.orEmpty().map { operand ->
                 when (operand) {
                     is GPUPreparedNativeScopeOperand.TextureUpload -> {
                         visibleImageHandles += operand.destination.texture
@@ -169,6 +179,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                             ),
                             destinationKey = operand.destinationKey,
                             layout = operand.layout,
+                            uploadRole = operand.uploadRole,
                         )
                     }
                     is GPUPreparedNativeScopeOperand.PreparedImageRenderRun -> {
@@ -191,8 +202,82 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 }
             }
             val distinctVisibleImageHandles = visibleImageHandles.distinctByNativeIdentity()
-            imageOwner.detachOwnedHandles(distinctVisibleImageHandles)
-            imageAnchor = GPUPreparedNativeCompletionAnchor(distinctVisibleImageHandles)
+            imageOwner?.detachOwnedHandles(distinctVisibleImageHandles)
+            imageAnchor = distinctVisibleImageHandles
+                .takeIf(List<AutoCloseable>::isNotEmpty)
+                ?.let(::GPUPreparedNativeCompletionAnchor)
+
+            val textReady = accepted.textPlan?.let { textPlan ->
+                when (
+                    val result = GPUWgpu4kPreparedTextRenderRunMaterializer(
+                        device,
+                        preparedTextCache,
+                    ).materializeAcceptedRun(
+                        textPlan,
+                        generationSeal.deviceGeneration,
+                    )
+                ) {
+                    is GPUPreparedRenderRunMaterialization.Ready -> result
+                    is GPUPreparedRenderRunMaterialization.Refused -> {
+                        retainedTextRollbackOwner = result.retainedCloseOwner
+                        throw PreparedSurfaceMaterializationFailure(result.code, result.message)
+                    }
+                }
+            }
+            textOwner = textReady?.ownedResources?.singleOrNull()
+                as? GPUPreparedRenderRunOwnedResources
+            if (textReady != null && textOwner == null) {
+                throw PreparedSurfaceMaterializationFailure(
+                    "invalid.prepared-surface.text-owner",
+                    "The frame-global prepared-text lot must return one exact transferable owner.",
+                )
+            }
+            textReady?.uniformUploads.orEmpty().forEach { upload ->
+                encodePreparedImageUniformUpload(queue, upload)
+            }
+            val renderStepsByIndex = framePlan.steps.withIndex()
+                .mapNotNull { indexed ->
+                    (indexed.value as?
+                        org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep)
+                        ?.let { indexed.index to it }
+                }
+                .toMap()
+            val visibleTextHandles = mutableListOf<AutoCloseable>()
+            val finalTextOperands = textReady?.scopeOperands.orEmpty().map { operand ->
+                when (operand) {
+                    is GPUPreparedNativeScopeOperand.TextureUpload -> {
+                        visibleTextHandles += operand.destination.texture
+                        GPUPreparedNativeScopeOperand.TextureUpload(
+                            sourceStepIndex = operand.sourceStepIndex,
+                            data = operand.data,
+                            destination = GPUPreparedNativeTextureOperand(
+                                operand.destination.texture,
+                                generationSeal.deviceGeneration,
+                                GPUPreparedNativeOperandOwnership.Borrowed,
+                            ),
+                            destinationKey = operand.destinationKey,
+                            layout = operand.layout,
+                            uploadRole = operand.uploadRole,
+                        )
+                    }
+                    is GPUPreparedNativeScopeOperand.PreparedTextRenderRun ->
+                        operand.toTargetBoundRender(
+                            renderStep = renderStepsByIndex.getValue(operand.sourceStepIndex),
+                            target = targetViewOperand,
+                            generationSeal = generationSeal,
+                            visibleHandles = visibleTextHandles,
+                        )
+                    else -> throw PreparedSurfaceMaterializationFailure(
+                        "invalid.prepared-surface.text-operand",
+                        "The frame-global prepared-text lot returned an unsupported operand.",
+                    )
+                }
+            }
+            val distinctVisibleTextHandles = visibleTextHandles.distinctByNativeIdentity()
+            textOwner?.detachOwnedHandles(distinctVisibleTextHandles)
+            textAnchor = distinctVisibleTextHandles
+                .takeIf(List<AutoCloseable>::isNotEmpty)
+                ?.let(::GPUPreparedNativeCompletionAnchor)
 
             val targetFormat = framePlan.preparedSurfaceTargetFormat()
                 ?: throw PreparedSurfaceMaterializationFailure(
@@ -266,6 +351,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             val operandsByStep = (
                 coreReady?.renderOperands.orEmpty() +
                     finalImageOperands +
+                    finalTextOperands +
                     listOfNotNull(readbackOperand, surfaceOperand)
                 ).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
             if (operandsByStep.size != accepted.exactScopeKeys.size) {
@@ -313,16 +399,17 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 scopeOperandKeys = accepted.exactScopeKeys.map(
                     GPUPreparedNativeScopeKey::operandKeys,
                 ),
-                auxiliaryOwnedHandles = listOf(
+                auxiliaryOwnedHandles = listOfNotNull(
+                    imageAnchor,
+                    imageOwner,
+                    textAnchor,
+                    textOwner,
+                ).map { owner ->
                     GPUPreparedNativeAuxiliaryHandle(
-                        requireNotNull(imageAnchor),
+                        owner,
                         GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                    ),
-                    GPUPreparedNativeAuxiliaryHandle(
-                        requireNotNull(imageOwner),
-                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                    ),
-                ),
+                    )
+                },
                 leaseLifecycle = coreLifecycle,
                 pathDepthStencilViewAuthority =
                     coreReady?.pathDepthStencilViewAuthority.orEmpty(),
@@ -332,16 +419,18 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             coreLifecycle = null
             imageAnchor = null
             imageOwner = null
+            textAnchor = null
+            textOwner = null
             GPUPreparedNativeFramePayloadMaterialization.Materialized(draft)
         } catch (failure: Throwable) {
             val rollbackOwner = PreparedSurfaceRollbackOwner(
-                listOfNotNull(imageAnchor, imageOwner),
+                listOfNotNull(imageAnchor, imageOwner, textAnchor, textOwner),
             )
             val locallyRetainedOwner = rollbackOwner.takeUnless(
                 PreparedSurfaceRollbackOwner::closeRetainingFailures,
             )
             val closeOwnerRetained = retainedCloseOwner(
-                retainedImageRollbackOwner,
+                retainedCloseOwner(retainedImageRollbackOwner, retainedTextRollbackOwner),
                 locallyRetainedOwner,
             )
             val ledgerRetained = setupLedger.takeUnless(
@@ -431,6 +520,70 @@ private fun GPUPreparedNativeScopeOperand.PreparedImageRenderRun.toTargetBoundRe
         ),
         commands = commands,
         semanticPayloads = run.packets.map<GPUDrawSemanticPayload.SampledImage, GPUDrawSemanticPayload> {
+            it
+        },
+    )
+}
+
+private fun GPUPreparedNativeScopeOperand.PreparedTextRenderRun.toTargetBoundRender(
+    renderStep: org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep,
+    target: GPUPreparedNativeTextureViewOperand,
+    generationSeal: GPUPreparedGenerationSeal,
+    visibleHandles: MutableList<AutoCloseable>,
+): GPUPreparedNativeScopeOperand.Render {
+    val borrowedCommands = commands.map { command ->
+        when (command) {
+            is GPUPreparedNativeRenderCommand.SetPipeline -> command
+            is GPUPreparedNativeRenderCommand.SetBindGroup -> {
+                visibleHandles += command.bindGroup.bindGroup
+                GPUPreparedNativeRenderCommand.SetBindGroup(
+                    index = command.index,
+                    bindGroup = GPUPreparedNativeBindGroupOperand(
+                        command.bindGroup.bindGroup,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    dynamicOffsets = command.dynamicOffsets,
+                )
+            }
+            is GPUPreparedNativeRenderCommand.SetVertexBuffer -> {
+                visibleHandles += command.buffer.buffer
+                GPUPreparedNativeRenderCommand.SetVertexBuffer(
+                    slot = command.slot,
+                    buffer = GPUPreparedNativeBufferOperand(
+                        command.buffer.buffer,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                        command.buffer.byteCapacity,
+                    ),
+                    offset = command.offset,
+                    size = command.size,
+                    vertexStrideBytes = command.vertexStrideBytes,
+                )
+            }
+            is GPUPreparedNativeRenderCommand.SetScissor -> command
+            is GPUPreparedNativeRenderCommand.Draw -> command
+            else -> throw PreparedSurfaceMaterializationFailure(
+                "invalid.prepared-surface.text-command",
+                "Prepared TextA8 emitted a command outside its closed instanced ABI.",
+            )
+        }
+    }
+    return GPUPreparedNativeScopeOperand.Render(
+        sourceStepIndex = sourceStepIndex,
+        pass = GPUPreparedNativeRenderPassConfig(
+            colorTarget = target,
+            loadOperation = when (renderStep.loadStore.loadOp) {
+                "clear" -> GPUPreparedNativeLoadOperation.Clear
+                "load" -> GPUPreparedNativeLoadOperation.Load
+                else -> error("Unsupported mixed prepared-surface load operation")
+            },
+            storeOperation = GPUPreparedNativeStoreOperation.Store,
+            clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
+                .takeIf { renderStep.loadStore.loadOp == "clear" },
+        ),
+        commands = borrowedCommands,
+        semanticPayloads = semanticPayloads.map<GPUDrawSemanticPayload.TextA8, GPUDrawSemanticPayload> {
             it
         },
     )

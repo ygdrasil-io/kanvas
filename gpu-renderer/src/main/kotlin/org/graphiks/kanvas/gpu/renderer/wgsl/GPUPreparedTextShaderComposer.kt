@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.WgslBindingReflection
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslLayoutReflection
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 
@@ -33,6 +34,9 @@ data class GPUPreparedTextCompositeProgram(
     val vertexLayout: GPUPreparedTextVertexLayout,
     val sourceHash: String,
     val abiHash: String,
+    val targetFormatClass: String,
+    val blendPlanIdentity: String,
+    val fixedFunctionBlendState: GPUFixedFunctionBlendState?,
     val pipelineKey: String,
 )
 
@@ -52,6 +56,7 @@ object GPUPreparedTextShaderComposer {
         material: GPUPreparedMaterialProgram,
         targetFormatClass: String,
         blendPlanIdentity: String,
+        fixedFunctionBlendState: GPUFixedFunctionBlendState? = null,
     ): GPUPreparedTextCompositeProgramResult {
         if (targetFormatClass.isBlank()) {
             return refused("Prepared text target format class must not be blank")
@@ -151,6 +156,9 @@ object GPUPreparedTextShaderComposer {
                 vertexLayout = vertexLayout,
                 sourceHash = sourceHash,
                 abiHash = abiHash,
+                targetFormatClass = targetFormatClass,
+                blendPlanIdentity = blendPlanIdentity,
+                fixedFunctionBlendState = fixedFunctionBlendState,
                 pipelineKey = pipelineKey,
             ),
         )

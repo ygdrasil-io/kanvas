@@ -280,6 +280,8 @@ class GPUPreparedTextRenderBinding(
         get() = checkNotNull(compositeProgramOrNull) {
             "ColorGlyph binding has no TextA8 composite program before Task 11"
         }
+    internal val nativeProgram: GPUPreparedTextNativeProgramHandoff
+        get() = GPUPreparedTextNativeProgramHandoff.fromAuthenticated(compositeProgram)
 
     init {
         require(firstInstance >= 0 && instanceCount > 0)
@@ -323,6 +325,78 @@ class GPUPreparedTextRenderBinding(
         }
     }
 }
+
+/** Passive Task 5 handoff; native execution consumes no materials-package semantic type. */
+internal class GPUPreparedTextNativeProgramHandoff private constructor(
+    val wgslSource: String,
+    val vertexEntryPoint: String,
+    val fragmentEntryPoint: String,
+    val drawUniformBinding: Int,
+    val materialUniformBinding: GPUPreparedTextNativeUniformBinding?,
+    materialSampledBindings: List<GPUPreparedTextNativeSampledBinding>,
+    val atlasTextureBinding: Int,
+    val atlasSamplerBinding: Int,
+    val sourceHash: String,
+    val abiHash: String,
+    val targetFormatClass: String,
+    val blendPlanIdentity: String,
+    val fixedFunctionBlendState:
+        org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState?,
+    val vertexLayout: GPUPreparedTextVertexLayout,
+    val pipelineKey: String,
+) {
+    val materialSampledBindings: List<GPUPreparedTextNativeSampledBinding> =
+        immutableList(materialSampledBindings)
+
+    companion object {
+        internal fun fromAuthenticated(
+            program: GPUPreparedTextCompositeProgram,
+        ): GPUPreparedTextNativeProgramHandoff {
+            val fragment = program.bindingPlan.materialFragment
+            return GPUPreparedTextNativeProgramHandoff(
+                wgslSource = program.wgslSource,
+                vertexEntryPoint = program.vertexEntryPoint,
+                fragmentEntryPoint = program.fragmentEntryPoint,
+                drawUniformBinding = program.bindingPlan.drawUniformBinding,
+                materialUniformBinding = fragment.uniformBinding?.let { binding ->
+                    GPUPreparedTextNativeUniformBinding(
+                        binding = binding.binding,
+                        minBindingSizeBytes = binding.minBindingSizeBytes,
+                    )
+                },
+                materialSampledBindings = fragment.sampledBindings.map { binding ->
+                    GPUPreparedTextNativeSampledBinding(
+                        textureBinding = binding.textureBinding,
+                        samplerBinding = binding.samplerBinding,
+                    )
+                },
+                atlasTextureBinding = program.bindingPlan.atlasTextureBinding,
+                atlasSamplerBinding = program.bindingPlan.atlasSamplerBinding,
+                sourceHash = program.sourceHash,
+                abiHash = program.abiHash,
+                targetFormatClass = program.targetFormatClass,
+                blendPlanIdentity = program.blendPlanIdentity,
+                fixedFunctionBlendState = program.fixedFunctionBlendState,
+                vertexLayout = GPUPreparedTextVertexLayout(
+                    arrayStrideBytes = program.vertexLayout.arrayStrideBytes,
+                    stepMode = program.vertexLayout.stepMode,
+                    attributes = program.vertexLayout.attributes,
+                ),
+                pipelineKey = program.pipelineKey,
+            )
+        }
+    }
+}
+
+internal data class GPUPreparedTextNativeUniformBinding(
+    val binding: Int,
+    val minBindingSizeBytes: Int,
+)
+
+internal data class GPUPreparedTextNativeSampledBinding(
+    val textureBinding: Int,
+    val samplerBinding: Int,
+)
 
 /**
  * Builds a handle-free prepared frame while keeping semantic/resource authorities immutable.
@@ -605,6 +679,10 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     material = input.semantic.material,
                     targetFormatClass = request.targetFormat.value,
                     blendPlanIdentity = input.semantic.blendPlanIdentity,
+                    fixedFunctionBlendState = (
+                        packets.single { packet -> packet.packetId == input.packetId }.blendPlan as?
+                            org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan.FixedFunctionBlend
+                        )?.state,
                 )
             ) {
                 is GPUPreparedTextCompositeProgramResult.Ready ->

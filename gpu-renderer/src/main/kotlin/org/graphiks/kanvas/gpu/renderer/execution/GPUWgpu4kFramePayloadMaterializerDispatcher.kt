@@ -187,12 +187,18 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             GPUWgpu4kPreparedFramePayloadRoute.RegisteredUniformRect
         distinct == listOf(GPUDrawSemanticPayload.SeparableBlurRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.SeparableBlurRect
-        distinct == listOf(GPUDrawSemanticPayload.SampledImage::class) ||
-            distinct.size == 2 &&
-            distinct.toSet() == setOf(
-                GPUDrawSemanticPayload.CorePrimitive::class,
-                GPUDrawSemanticPayload.SampledImage::class,
-            ) -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
+        distinct.toSet().let { semanticSet ->
+            semanticSet.isNotEmpty() &&
+                semanticSet.any {
+                    it == GPUDrawSemanticPayload.SampledImage::class ||
+                        it == GPUDrawSemanticPayload.TextA8::class
+                } &&
+                semanticSet.all {
+                    it == GPUDrawSemanticPayload.CorePrimitive::class ||
+                        it == GPUDrawSemanticPayload.SampledImage::class ||
+                        it == GPUDrawSemanticPayload.TextA8::class
+                }
+        } -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
         distinct.size > 1 -> GPUWgpu4kPreparedFramePayloadRoute.Refused(
             "unsupported.native-frame-payload.mixed-semantic-shape",
             "One prepared native frame may not mix typed semantic payload shapes.",

@@ -85,6 +85,22 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
         assertEquals(
             GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed,
             selectWgpu4kPreparedFramePayloadRoute(
+                listOf(GPUDrawSemanticPayload.TextA8::class),
+            ),
+        )
+        assertEquals(
+            GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed,
+            selectWgpu4kPreparedFramePayloadRoute(
+                listOf(
+                    GPUDrawSemanticPayload.CorePrimitive::class,
+                    GPUDrawSemanticPayload.SampledImage::class,
+                    GPUDrawSemanticPayload.TextA8::class,
+                ),
+            ),
+        )
+        assertEquals(
+            GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed,
+            selectWgpu4kPreparedFramePayloadRoute(
                 listOf(
                     GPUDrawSemanticPayload.SampledImage::class,
                     GPUDrawSemanticPayload.CorePrimitive::class,

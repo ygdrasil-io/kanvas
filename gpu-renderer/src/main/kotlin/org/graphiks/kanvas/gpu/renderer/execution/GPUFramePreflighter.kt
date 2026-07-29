@@ -164,7 +164,7 @@ internal class GPUFramePreflighter(
         }
         val hasExactPreparedSurfaceMixedBoundary =
             hasExactPreparedSurfaceMixedNativeBoundary(framePlan)
-        var preparedTextPassedPureBoundary = false
+        var colorGlyphPassedPureBoundary = false
         if (!hasExactPreparedSurfaceMixedBoundary &&
             framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
                 .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
@@ -191,21 +191,20 @@ internal class GPUFramePreflighter(
                     .filterIsInstance<GPUFrameStep.RenderPassStep>()
                     .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
                     .any { packet ->
-                        packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
-                            packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+                        packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
                     }
             ) {
-                preparedTextPassedPureBoundary = true
+                colorGlyphPassedPureBoundary = true
             }
         }
         val pureValidation = pureValidation(framePlan)
         pureValidation.diagnostic?.let { return GPUFramePreflightResult.Refused(it) }
-        if (preparedTextPassedPureBoundary) {
+        if (colorGlyphPassedPureBoundary) {
             return GPUFramePreflightResult.Refused(
                 diagnostic(
                     GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
-                    "Prepared-text pure preflight passed; native materialization remains closed " +
-                        "until FP-05 Task 10.",
+                    "Prepared ColorGlyph pure preflight passed; native materialization remains " +
+                        "closed until Task 11.",
                 ),
             )
         }
@@ -4148,7 +4147,7 @@ internal class GPUFramePreflighter(
                     diagnostic(
                         GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
                         "Prepared text semantics have no executable native materialization route; " +
-                            "native materialization belongs to FP-05 Task 10.",
+                            "the sealed prepared-surface native boundary is required.",
                     )
                 }
             is GPUDrawSemanticPayload.ColorGlyph ->
@@ -5367,6 +5366,9 @@ internal class GPUFramePreflighter(
         return when (step) {
             is GPUFrameStep.RenderPassStep -> {
                 val targetResourceLabel = resources.first()
+                val textA8 = step.drawPackets.all {
+                    it.semanticPayload is GPUDrawSemanticPayload.TextA8
+                }
                 val colorGlyph = step.drawPackets.all { it.semanticPayload is GPUDrawSemanticPayload.ColorGlyph }
                 val directCore = corePrimitiveDirectRoutes is GPUCorePrimitiveDirectNativeRouteSeal.Routes
                 val indexedCore = corePrimitiveNativeScopeRoutes is GPUCorePrimitiveNativeScopeRouteSeal.Routes
@@ -5456,6 +5458,39 @@ internal class GPUFramePreflighter(
             } ?: listOf(
                 key(GPUPreparedNativeOperandRole.RenderColorTarget, GPUPreparedNativeOperandKind.TextureView, targetResourceLabel),
             )
+                if (textA8) {
+                    check(step.drawPackets.size == 1) {
+                        "Prepared TextA8 native scopes retain one exact ordered subrun"
+                    }
+                    val packet = step.drawPackets.single()
+                    return targetKeys + listOf(
+                        key(
+                            GPUPreparedNativeOperandRole.RenderPipeline,
+                            GPUPreparedNativeOperandKind.RenderPipeline,
+                            "prepared-text:${packet.packetId.value}:pipeline",
+                        ),
+                        key(
+                            GPUPreparedNativeOperandRole.RenderBindGroup,
+                            GPUPreparedNativeOperandKind.BindGroup,
+                            "prepared-text:${packet.packetId.value}:draw-group",
+                        ),
+                        key(
+                            GPUPreparedNativeOperandRole.RenderBindGroup,
+                            GPUPreparedNativeOperandKind.BindGroup,
+                            "prepared-text:${packet.packetId.value}:material-group",
+                        ),
+                        key(
+                            GPUPreparedNativeOperandRole.RenderBindGroup,
+                            GPUPreparedNativeOperandKind.BindGroup,
+                            "prepared-text:${packet.packetId.value}:atlas-group",
+                        ),
+                        key(
+                            GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                            GPUPreparedNativeOperandKind.Buffer,
+                            "prepared-text:${packet.packetId.value}:instances",
+                        ),
+                    )
+                }
                 val depthStencilKeys = if (pathCore || clipStencilCore) {
                     val depthStencilRole = if (clipStencilCore) {
                         GPUFrameResourceRole.ClipDepthStencil
@@ -5596,7 +5631,13 @@ internal class GPUFramePreflighter(
                     key(
                         GPUPreparedNativeOperandRole.UploadSource,
                         GPUPreparedNativeOperandKind.Buffer,
-                        "prepared-image-upload-data:${step.staging.value}",
+                        if (step.r8ResourcePlan != null ||
+                            step.materialResourcePlan != null
+                        ) {
+                            "prepared-text-upload-data:${step.staging.value}"
+                        } else {
+                            "prepared-image-upload-data:${step.staging.value}"
+                        },
                     ),
                     key(
                         GPUPreparedNativeOperandRole.UploadDestination,

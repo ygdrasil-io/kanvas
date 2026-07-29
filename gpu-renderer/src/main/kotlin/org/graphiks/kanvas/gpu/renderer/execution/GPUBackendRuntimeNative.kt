@@ -645,6 +645,7 @@ internal data class GPUPreparedSceneChildOwnerTier(
 internal fun preparedSceneChildOwnerTiers(
     activityOwners: List<AutoCloseable>,
     preparedImageCache: GPUWgpu4kPreparedImageSessionCache,
+    preparedTextCache: GPUWgpu4kPreparedTextSessionCache? = null,
     deviceCacheOwners: List<AutoCloseable>,
     target: AutoCloseable,
 ): List<GPUPreparedSceneChildOwnerTier> = listOf(
@@ -653,8 +654,8 @@ internal fun preparedSceneChildOwnerTiers(
         owners = activityOwners,
     ),
     GPUPreparedSceneChildOwnerTier(
-        label = "prepared-image-cache",
-        owners = listOf(preparedImageCache),
+        label = "prepared-resource-cache",
+        owners = listOfNotNull(preparedTextCache, preparedImageCache),
     ),
     GPUPreparedSceneChildOwnerTier(
         label = "cache",
@@ -1285,6 +1286,12 @@ private class WgpuBackendSession(
                 preparedImageNativeCounters,
             ),
         )
+        val preparedTextCache = setupTransaction.own(
+            GPUWgpu4kPreparedTextSessionCache(
+                glfw.wgpuContext.device,
+                deviceGeneration,
+            ),
+        )
         telemetryRecorder.recordTextureCreated()
         val encodingBackend = setupTransaction.own(GPUWgpu4kFrameEncodingBackend(
             deviceGeneration = deviceGeneration,
@@ -1310,6 +1317,7 @@ private class WgpuBackendSession(
             ownerTiers = preparedSceneChildOwnerTiers(
                 activityOwners = listOf(encodingBackend, mappingExecutorCloser),
                 preparedImageCache = preparedImageCache,
+                preparedTextCache = preparedTextCache,
                 deviceCacheOwners = listOf(
                     surfaceBlitCache,
                     solidRectCache,
@@ -1415,6 +1423,7 @@ private class WgpuBackendSession(
                         preparedSceneTarget = preparedTarget,
                         corePrimitiveCache = corePrimitiveCache,
                         preparedImageCache = preparedImageCache,
+                        preparedTextCache = preparedTextCache,
                         preparedImageHandleFactory =
                             GPUWgpu4kPreparedImageNativeHandleFactory(
                                 glfw.wgpuContext.device,

@@ -4994,8 +4994,17 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         }.also { created ->
                             createdHandlesByLabel.getOrPut(label) { mutableListOf() } += created
                         }
-                    } else if (label == "Kanvas.frame.preparedImage.texture") {
-                        val imageViewLabel = "Kanvas.frame.preparedImage.textureView"
+                    } else if (label == "Kanvas.frame.preparedImage.texture" ||
+                        label == "Kanvas.frame.preparedText.text-atlas" ||
+                        label.startsWith("Kanvas.frame.preparedText.material-texture.")
+                    ) {
+                        val imageViewLabel = when {
+                            label == "Kanvas.frame.preparedImage.texture" ->
+                                "Kanvas.frame.preparedImage.textureView"
+                            label == "Kanvas.frame.preparedText.text-atlas" ->
+                                "Kanvas.frame.preparedText.text-atlas-view"
+                            else -> label.replace("material-texture.", "material-texture-view.")
+                        }
                         handle(GPUTexture::class.java, label) { textureMethod ->
                             if (textureMethod.name == "createView") {
                                 events += "createView:$imageViewLabel"
@@ -5137,6 +5146,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                         renderPipelineKinds += when {
                             ".corePrimitive.pipeline." in label -> "core"
                             ".preparedImage.pipeline." in label -> "image"
+                            ".preparedText.pipeline." in label -> "text"
                             else -> "other:$label"
                         }
                         events += "render.pipeline:$label"

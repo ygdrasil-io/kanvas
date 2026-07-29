@@ -94,6 +94,10 @@ internal object GPUPreparedTextCompositePreflight {
                 material = semantic.material,
                 targetFormatClass = targetDescriptor.format.value,
                 blendPlanIdentity = semantic.blendPlanIdentity,
+                fixedFunctionBlendState = (
+                    packet.blendPlan as?
+                        org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan.FixedFunctionBlend
+                    )?.state,
             )
         ) {
             is GPUPreparedTextCompositeProgramResult.Ready -> result.program
@@ -214,10 +218,13 @@ internal object GPUPreparedTextCompositePreflight {
         seal: GPUPreparedTextCompositePreflightSeal,
     ): GPUPreparedTextCompositePreflightRefusal? {
         if (actual.pipelineKey != expected.pipelineKey ||
+            actual.targetFormatClass != expected.targetFormatClass ||
+            actual.blendPlanIdentity != expected.blendPlanIdentity ||
+            actual.fixedFunctionBlendState != expected.fixedFunctionBlendState ||
             seal.compositePipelineKey != actual.pipelineKey
         ) {
             return abiRefusal(
-                "Prepared TextA8 target/blend pipeline key or seal changed.",
+                "Prepared TextA8 target/blend state, pipeline key, or seal changed.",
             )
         }
         return null

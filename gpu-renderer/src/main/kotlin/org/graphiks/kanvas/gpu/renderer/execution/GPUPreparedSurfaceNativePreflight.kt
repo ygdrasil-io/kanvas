@@ -67,7 +67,7 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
  * Sole canonical authority for the prepared-text preflight refusal surface.
  *
  * Tests consume these constants instead of maintaining a parallel string
- * table. Task 10 may reuse them but must not redefine them.
+ * table. Later prepared-text work may reuse them but must not redefine them.
  */
 internal object GPUPreparedTextPreflightRefusalCodes {
     const val PREPARED_TEXT_UNMATERIALIZED =
@@ -276,6 +276,7 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
     val surfaceChain: GPUPreparedSurfaceChainSeal?,
     orderedRuns: List<GPUPreparedSurfaceNativeRunPlan>,
     imageFrames: List<GPUPreparedSurfaceImageFramePlan>,
+    val textPlan: GPUPreparedTextRenderRunPlan?,
     exactScopeKeys: List<GPUPreparedNativeScopeKey>,
     val generationSeal: GPUPreparedGenerationSeal,
 ) {
@@ -285,7 +286,11 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
 
     init {
         require(encoderPlanId.isNotBlank() && contextIdentity.isNotBlank())
-        require(this.orderedRuns.isNotEmpty() && this.imageFrames.isNotEmpty())
+        require(this.orderedRuns.isNotEmpty() || textPlan != null)
+        require(
+            this.imageFrames.isNotEmpty() ==
+                this.orderedRuns.any { it is GPUPreparedSurfaceNativeRunPlan.Image },
+        )
         require(this.imageFrames.map { frame -> frame.resourcePlan.artifactKey }
             .distinct().size == this.imageFrames.size
         ) { "Global image frame plans must be unique per artifact" }
@@ -300,6 +305,7 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
                     is GPUPreparedSurfaceNativeRunPlan.Image -> run.plan.exactScopeKey
                 }
             })
+            textPlan?.let { addAll(it.exactScopeKeys) }
             readback?.let { add(it.exactScopeKey) }
             surfaceChain?.let { add(it.exactBlitScopeKey) }
         }.sortedBy(GPUPreparedNativeScopeKey::sourceStepIndex)
@@ -1418,6 +1424,12 @@ internal class GPUPreparedSurfaceNativePreflight(
             imageUploads,
             shaderContract,
         )?.let { return it }
+        if (packets.any { it.semanticPayload is GPUDrawSemanticPayload.ColorGlyph }) {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
+                "Prepared ColorGlyph native materialization remains closed until Task 11.",
+            )
+        }
 
         val exactScopeKeys = encoderPlan.scopes.map { scope ->
             GPUPreparedNativeScopeKey(
@@ -1499,7 +1511,10 @@ internal class GPUPreparedSurfaceNativePreflight(
                         },
                     ),
                 )
-            } else {
+            } else if (render.drawPackets.all {
+                    it.semanticPayload is GPUDrawSemanticPayload.SampledImage
+                }
+            ) {
                 val runPackets = render.drawPackets.map { packet ->
                     packet.semanticPayload as GPUDrawSemanticPayload.SampledImage
                 }
@@ -1541,14 +1556,70 @@ internal class GPUPreparedSurfaceNativePreflight(
                 )
             }
         }
-        GPUPreparedImagePlanValidator.validateFramePlans(
-            imageFrames = imageFrames,
-            runs = orderedRuns
-                .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Image>()
-                .map(GPUPreparedSurfaceNativeRunPlan.Image::plan),
-        )?.let { (code, message) ->
-            return refused(code, message)
+        if (imageFrames.isNotEmpty()) {
+            GPUPreparedImagePlanValidator.validateFramePlans(
+                imageFrames = imageFrames,
+                runs = orderedRuns
+                    .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Image>()
+                    .map(GPUPreparedSurfaceNativeRunPlan.Image::plan),
+            )?.let { (code, message) ->
+                return refused(code, message)
+            }
         }
+        val textRenderEvidence = framePlan.steps.mapIndexedNotNull { index, step ->
+            (step as? GPUFrameStep.RenderPassStep)
+                ?.takeIf { render ->
+                    render.drawPackets.all { packet ->
+                        packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+                    }
+                }
+                ?.let { index to it }
+        }
+        val textPlan = textRenderEvidence
+            .takeIf { it.isNotEmpty() }
+            ?.let { textRenders ->
+                val textPackets = textRenders.flatMap { (_, render) ->
+                    render.drawPackets.map { packet ->
+                        packet.semanticPayload as GPUDrawSemanticPayload.TextA8
+                    }
+                }
+                val textBindings = textRenders.flatMap { (_, render) ->
+                    render.drawPackets.map { packet ->
+                        render.preparedTextBindingsByPacketId.getValue(packet.packetId)
+                    }
+                }
+                val textScopeIndices = buildSet {
+                    uploadSteps.forEach { (index, upload) ->
+                        if (upload.r8ResourcePlan != null ||
+                            upload.materialResourcePlan != null
+                        ) {
+                            add(index)
+                        }
+                    }
+                    textRenders.forEach { (index, _) -> add(index) }
+                }
+                val textScopeKeys = exactScopeKeys.filter { scope ->
+                    scope.sourceStepIndex in textScopeIndices
+                }
+                val textTextureUploads = uploadSteps.mapNotNull { (index, upload) ->
+                    val scope = textScopeKeys.singleOrNull { key ->
+                        key.sourceStepIndex == index
+                    } ?: return@mapNotNull null
+                    upload.r8ResourcePlan?.let { resource ->
+                        GPUPreparedTextTextureUploadPlan.Atlas(scope, resource)
+                    } ?: upload.materialResourcePlan?.let { resource ->
+                        GPUPreparedTextTextureUploadPlan.Material(scope, resource)
+                    }
+                }
+                GPUPreparedTextRenderRunPlan(
+                    sourceScopeIndices =
+                        textScopeKeys.map(GPUPreparedNativeScopeKey::sourceStepIndex),
+                    packets = textPackets,
+                    bindings = textBindings,
+                    exactScopeKeys = textScopeKeys,
+                    textureUploads = textTextureUploads,
+                )
+            }
         val sceneTarget = framePlan.steps
             .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
@@ -1608,6 +1679,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                     surfaceChain = surfaceChain,
                     orderedRuns = orderedRuns,
                     imageFrames = imageFrames,
+                    textPlan = textPlan,
                     exactScopeKeys = exactScopeKeys,
                     generationSeal = generationSeal,
                 ),
@@ -2335,7 +2407,13 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                         key(
                             GPUPreparedNativeOperandRole.UploadSource,
                             GPUPreparedNativeOperandKind.Buffer,
-                            "prepared-image-upload-data:${step.staging.value}",
+                            if (step.r8ResourcePlan != null ||
+                                step.materialResourcePlan != null
+                            ) {
+                                "prepared-text-upload-data:${step.staging.value}"
+                            } else {
+                                "prepared-image-upload-data:${step.staging.value}"
+                            },
                         ),
                         key(
                             GPUPreparedNativeOperandRole.UploadDestination,
@@ -2435,6 +2513,40 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                 labels.first(),
             ),
         )
+        if (render.drawPackets.all {
+                it.semanticPayload is GPUDrawSemanticPayload.TextA8
+            }
+        ) {
+            if (render.drawPackets.size != 1) return emptyList()
+            val packet = render.drawPackets.single()
+            return target + listOf(
+                key(
+                    GPUPreparedNativeOperandRole.RenderPipeline,
+                    GPUPreparedNativeOperandKind.RenderPipeline,
+                    "prepared-text:${packet.packetId.value}:pipeline",
+                ),
+                key(
+                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                    GPUPreparedNativeOperandKind.BindGroup,
+                    "prepared-text:${packet.packetId.value}:draw-group",
+                ),
+                key(
+                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                    GPUPreparedNativeOperandKind.BindGroup,
+                    "prepared-text:${packet.packetId.value}:material-group",
+                ),
+                key(
+                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                    GPUPreparedNativeOperandKind.BindGroup,
+                    "prepared-text:${packet.packetId.value}:atlas-group",
+                ),
+                key(
+                    GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                    GPUPreparedNativeOperandKind.Buffer,
+                    "prepared-text:${packet.packetId.value}:instances",
+                ),
+            )
+        }
         val unified = scope.corePrimitiveNativeScopeRouteSeal as?
             GPUCorePrimitiveNativeScopeRouteSeal.Routes
         val path = unified?.orderedUnits?.any {

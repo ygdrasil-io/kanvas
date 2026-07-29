@@ -366,6 +366,9 @@ internal class GPUPreparedNativeRenderPipelineOperand private constructor(
         get() = bindingAuthority.bindingPolicy
     internal val coverageMaskConsumerUniformAlignmentBytes: Long?
         get() = bindingAuthority.coverageMaskConsumerUniformAlignmentBytes
+    internal val hasPreparedTextAcquisitionAuthority: Boolean
+        get() = bindingAuthority is
+            GPUPreparedNativeRenderPipelineBindingAuthority.PreparedTextAcquired
 
     internal constructor(
         pipeline: GPURenderPipeline,
@@ -403,6 +406,16 @@ internal class GPUPreparedNativeRenderPipelineOperand private constructor(
                 acquired,
                 uniformAlignmentBytes,
             ),
+        )
+
+        internal fun fromPreparedTextAcquisition(
+            acquired: GPUWgpu4kPreparedTextPipelineAcquisition,
+            deviceGeneration: GPUDeviceGenerationID,
+        ) = GPUPreparedNativeRenderPipelineOperand(
+            acquired.pipeline,
+            deviceGeneration,
+            GPUPreparedNativeOperandOwnership.Borrowed,
+            GPUPreparedNativeRenderPipelineBindingAuthority.PreparedTextAcquired(acquired),
         )
     }
 }
@@ -444,6 +457,14 @@ private sealed interface GPUPreparedNativeRenderPipelineBindingAuthority {
                 "Coverage-mask consumer pipeline authority requires a positive uniform alignment"
             }
         }
+    }
+
+    class PreparedTextAcquired(
+        @Suppress("unused")
+        private val acquired: GPUWgpu4kPreparedTextPipelineAcquisition,
+    ) : GPUPreparedNativeRenderPipelineBindingAuthority {
+        override val bindingPolicy =
+            GPUPreparedNativeRenderPipelineBindingPolicy.BindGroupRequired
     }
 }
 
@@ -700,6 +721,7 @@ internal class GPUPreparedNativeBufferUpload(
     val destinationKey: GPUPreparedNativeOperandKey,
     val destinationOffset: Long,
     consumerSourceStepIndices: List<Int>,
+    val uploadRole: String = "prepared-image-uniforms",
 ) {
     val exactOperandKeys: List<GPUPreparedNativeOperandKey> =
         immutableList(listOf(data.key, destinationKey))
@@ -707,6 +729,7 @@ internal class GPUPreparedNativeBufferUpload(
         immutableList(consumerSourceStepIndices)
 
     init {
+        require(uploadRole.isNotBlank())
         require(data.key.role == GPUPreparedNativeOperandRole.UploadSource &&
             data.key.kind == GPUPreparedNativeOperandKind.Buffer
         ) { "Prepared-image uniform upload requires the exact logical Buffer source key" }
@@ -1014,7 +1037,8 @@ internal sealed interface GPUPreparedNativeScopeOperand {
         val data: GPUPreparedNativeUploadData,
         val destination: GPUPreparedNativeTextureOperand,
         val destinationKey: GPUPreparedNativeOperandKey,
-        val layout: org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUploadLayout,
+        val layout: org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedTextureUploadLayout,
+        val uploadRole: String = "prepared-image",
     ) : GPUPreparedNativeScopeOperand {
         override val operationKind = GPUEncoderOperationKind.Upload
         override val operands: List<GPUPreparedNativeOperand> = immutableList(listOf(destination))
@@ -1022,6 +1046,7 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             immutableList(listOf(data.key, destinationKey))
 
         init {
+            require(uploadRole.isNotBlank())
             require(data.key.role == GPUPreparedNativeOperandRole.UploadSource &&
                 data.key.kind == GPUPreparedNativeOperandKind.Buffer
             ) { "Prepared-image upload data requires the exact logical Buffer source key" }
@@ -1032,6 +1057,43 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             require(data.bytes().contentEquals(layout.bytesForUpload())) {
                 "Prepared-image texture upload data must equal the sealed padded upload layout"
             }
+        }
+    }
+
+    /**
+     * Target-free TextA8 run. The mixed-surface assembler attaches the one existing target
+     * without creating another encoder, pass, submit, or readback.
+     */
+    class PreparedTextRenderRun(
+        override val sourceStepIndex: Int,
+        commands: List<GPUPreparedNativeRenderCommand>,
+        exactOperandKeys: List<GPUPreparedNativeOperandKey>,
+        semanticPayloads: List<GPUDrawSemanticPayload.TextA8>,
+    ) : GPUPreparedNativeScopeOperand {
+        override val operationKind = GPUEncoderOperationKind.Render
+        val commands: List<GPUPreparedNativeRenderCommand> = immutableList(commands)
+        val semanticPayloads: List<GPUDrawSemanticPayload.TextA8> =
+            immutableList(semanticPayloads)
+        override val operands: List<GPUPreparedNativeOperand> =
+            immutableList(this.commands.flatMap(GPUPreparedNativeRenderCommand::operands))
+        override val exactOperandKeys: List<GPUPreparedNativeOperandKey> =
+            immutableList(exactOperandKeys)
+
+        init {
+            require(this.semanticPayloads.isNotEmpty())
+            require(this.commands.filterIsInstance<GPUPreparedNativeRenderCommand.Draw>().size ==
+                this.semanticPayloads.size
+            )
+            val pipelines =
+                this.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+            require(pipelines.size == this.semanticPayloads.size &&
+                pipelines.all { command ->
+                    command.pipeline.hasPreparedTextAcquisitionAuthority
+                }
+            ) {
+                "Prepared TextA8 render runs require one typed prepared-text acquisition per draw"
+            }
+            require(this.exactOperandKeys.isNotEmpty())
         }
     }
 

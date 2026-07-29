@@ -10,6 +10,7 @@ import org.junit.jupiter.api.TestFactory
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -270,6 +271,32 @@ private val compositeMutations = listOf(
     ) { binding ->
         binding.replaceCompositeProgram(
             binding.compositeProgram.copy(pipelineKey = "2".repeat(64)),
+        )
+    },
+    CompositeMutation(
+        name = "native target format class",
+        expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ABI,
+    ) { binding ->
+        binding.replaceCompositeProgram(
+            binding.compositeProgram.copy(targetFormatClass = "rgba8unorm"),
+        )
+    },
+    CompositeMutation(
+        name = "native blend plan identity",
+        expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ABI,
+    ) { binding ->
+        binding.replaceCompositeProgram(
+            binding.compositeProgram.copy(blendPlanIdentity = "forged:src"),
+        )
+    },
+    CompositeMutation(
+        name = "native fixed-function blend state",
+        expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ABI,
+    ) { binding ->
+        binding.replaceCompositeProgram(
+            binding.compositeProgram.copy(
+                fixedFunctionBlendState = preparedTextBlendState(GPUBlendMode.SRC),
+            ),
         )
     },
 )

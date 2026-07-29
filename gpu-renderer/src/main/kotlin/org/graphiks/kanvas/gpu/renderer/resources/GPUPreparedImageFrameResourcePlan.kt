@@ -16,12 +16,12 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 class GPUPreparedImageUploadLayout internal constructor(
     val logicalBytesPerRow: Long,
     val sourceBytesPerRow: Long = logicalBytesPerRow,
-    val bytesPerRow: Long,
-    val rowsPerImage: Int,
-    val width: Int,
-    val height: Int,
+    override val bytesPerRow: Long,
+    override val rowsPerImage: Int,
+    override val width: Int,
+    override val height: Int,
     paddedUploadBytes: ByteArray,
-) {
+) : GPUPreparedTextureUploadLayout {
     private val uploadBytes = paddedUploadBytes.copyOf()
 
     init {
@@ -48,7 +48,7 @@ class GPUPreparedImageUploadLayout internal constructor(
         }
     }
 
-    fun bytesForUpload(): ByteArray = uploadBytes.copyOf()
+    override fun bytesForUpload(): ByteArray = uploadBytes.copyOf()
 
     internal fun logicalBytesForHash(): ByteArray {
         val logicalSize = Math.multiplyExact(logicalBytesPerRow, height.toLong())

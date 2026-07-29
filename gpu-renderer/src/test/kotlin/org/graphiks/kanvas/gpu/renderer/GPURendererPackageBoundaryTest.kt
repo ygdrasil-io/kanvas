@@ -57,6 +57,20 @@ class GPURendererPackageBoundaryTest {
         )
     }
 
+    @Test
+    fun `prepared text native cache consumes only the passive recording handoff`() {
+        val cacheSource = productionFile(
+            "execution/GPUWgpu4kPreparedTextSessionCache.kt",
+        ).readText()
+
+        assertTrue(
+            actual = "org.graphiks.kanvas.gpu.renderer.materials." !in cacheSource,
+            message =
+                "Prepared-text native cache must not bypass the execution-materials boundary",
+        )
+        assertContains(cacheSource, "GPUPreparedTextNativeProgramHandoff")
+    }
+
     /** Keeps one runtime DTO while preserving the historical materials-package source API. */
     @Test
     fun `prepared material payload contract is passive and has one runtime class`() {

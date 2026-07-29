@@ -515,7 +515,7 @@ internal fun encodePreparedImageTextureUpload(
     val layout = upload.layout
     val bytes = upload.data.bytes()
     require(bytes.contentEquals(layout.bytesForUpload())) {
-        "Prepared-image writeTexture bytes must retain the sealed padded layout"
+        "Prepared texture writeTexture bytes must retain the sealed padded layout"
     }
     queue.writeTexture(
         destination = TexelCopyTextureInfo(texture = upload.destination.texture),

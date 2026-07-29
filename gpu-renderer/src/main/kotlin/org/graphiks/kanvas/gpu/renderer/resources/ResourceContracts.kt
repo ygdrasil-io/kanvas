@@ -209,6 +209,16 @@ data class GPUUploadLayout(
     }
 }
 
+/** Exact immutable host-to-texture layout consumed by one native queue write. */
+interface GPUPreparedTextureUploadLayout {
+    val bytesPerRow: Long
+    val rowsPerImage: Int
+    val width: Int
+    val height: Int
+
+    fun bytesForUpload(): ByteArray
+}
+
 /** Handle-free texture-copy layout for a bounded destination snapshot. */
 data class GPUTextureCopyLayout(
     val bytesPerRow: Long,

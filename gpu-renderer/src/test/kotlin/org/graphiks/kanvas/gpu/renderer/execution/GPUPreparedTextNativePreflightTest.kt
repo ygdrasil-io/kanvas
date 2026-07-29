@@ -141,8 +141,25 @@ class GPUPreparedTextNativePreflightTest {
     }
 
     @Test
-    fun `accepted pure text preflight stops at Task 10 guard before native creation`() {
+    fun `accepted pure text preflight reaches the installed native materializer`() {
         val fixture = preparedTextNativePreflightFixture()
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(
+            probe.preflight(fixture),
+        )
+
+        assertEquals(
+            "test.prepared-surface.boundary",
+            refused.diagnostic.code.value,
+        )
+        assertEquals(1, probe.materializerInvocations)
+        assertEquals(1, probe.nativePreparationEvents)
+    }
+
+    @Test
+    fun `ColorGlyph retains the Task 11 native materialization guard`() {
+        val fixture = preparedTextNativePreflightFixture(includeColorGlyph = true)
         val probe = GPUPreparedTextNativeCreationProbe()
 
         val refused = assertIs<GPUFramePreflightResult.Refused>(
@@ -153,7 +170,7 @@ class GPUPreparedTextNativePreflightTest {
             GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
             refused.diagnostic.code.value,
         )
-        assertEquals(0, probe.totalCreations)
+        assertEquals(0, probe.materializerInvocations)
     }
 
     @Test
@@ -491,6 +508,40 @@ internal class GPUPreparedTextNativeCreationProbe {
         } finally {
             adapter.close()
         }
+}
+
+internal fun capturedPreparedTextInputs(
+    textInstanceCounts: List<Int> = listOf(64, 36),
+): CapturedPreparedSurfaceInputs {
+    val fixture = preparedTextNativePreflightFixture(
+        textInstanceCounts = textInstanceCounts,
+    )
+    val adapter = GPURuntimeResourceAdapter()
+    val provider = GPUConcreteResourceProvider(leaseFactory = adapter)
+    val capture = CapturingPreparedNativeMaterializer()
+    return try {
+        val result = GPUFramePreflighter(
+            context = fixture.context,
+            capabilities = fixture.capabilities,
+            resourceProvider = provider,
+            completionProvider = PreparedTextFailingCompletionProvider,
+            surfaceProvider = PreparedTextFailingSurfaceProvider,
+            nativeBoundary = adapter.bindNativeFrameBoundary(provider, capture),
+        ).preflight(fixture.framePlan)
+        val refused = assertIs<GPUFramePreflightResult.Refused>(result)
+        assertEquals("test.prepared-surface.boundary", refused.diagnostic.code.value)
+        CapturedPreparedSurfaceInputs(
+            framePlan = requireNotNull(capture.capturedFramePlan),
+            encoderPlan = requireNotNull(capture.capturedEncoderPlan),
+            resources = requireNotNull(capture.capturedResources),
+            shaderContract = assertIs<GPUPreparedImageShaderValidationResult.Ready>(
+                validatePreparedImageShader(GPU_PREPARED_IMAGE_WGSL),
+            ).shaderContract,
+            generationSeal = requireNotNull(capture.capturedGenerationSeal),
+        )
+    } finally {
+        adapter.close()
+    }
 }
 
 private fun PreparedTextNativePreflightFixture.withViolation(
@@ -1201,6 +1252,10 @@ internal data class PreparedTextNativePreflightFixture(
 
 internal fun preparedTextNativePreflightFixture(
     includeColorGlyph: Boolean = false,
+    textInstanceCounts: List<Int>? = null,
+    targetFormat: GPUColorFormat = GPUColorFormat.RGBA8UnormSrgb,
+    blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
+    blendState: GPUFixedFunctionBlendState = preparedTextBlendState(blendMode),
     materialProgram:
         org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram =
         GPUPreparedTextPreflightFixture.baselineMaterialProgram(),
@@ -1214,6 +1269,9 @@ internal fun preparedTextNativePreflightFixture(
     val packets = commandIds.map { commandId ->
         preparedTextPreflightPacket(
             commandId = commandId,
+            targetFormat = targetFormat,
+            blendMode = blendMode,
+            blendState = blendState,
             renderStepIdentity = if (includeColorGlyph && commandId == commandIds.last()) {
                 COLOR_GLYPH_RENDER_STEP_IDENTITY
             } else {
@@ -1274,6 +1332,15 @@ internal fun preparedTextNativePreflightFixture(
     val page = GPUPreparedTextPreflightFixture.baselinePage0()
     val atlas = page.toPreparedR8UploadArtifact()
     val semantics = packets.associate { packet ->
+        val baselineInstances =
+            GPUPreparedTextPreflightFixture.baselineA8Instances(page)
+        val packetInstances = textInstanceCounts
+            ?.getOrNull(packet.commandIdValue)
+            ?.let { count ->
+                require(count > 0)
+                List(count) { index -> baselineInstances[index % baselineInstances.size] }
+            }
+            ?: baselineInstances
         packet.commandIdValue to
             if (packet.renderStepId.value == COLOR_GLYPH_RENDER_STEP_IDENTITY) {
                 preparedColorGlyphSemantic(packet, atlas, bounds, capabilities)
@@ -1284,7 +1351,7 @@ internal fun preparedTextNativePreflightFixture(
                         atlas = atlas,
                         atlasGeneration = page.artifactKey.generation,
                         pageIndex = page.pageIndex,
-                        instances = GPUPreparedTextPreflightFixture.baselineA8Instances(page),
+                        instances = packetInstances,
                         material = materialProgram,
                         deviceToLocal =
                             org.graphiks.kanvas.gpu.renderer.payloads
@@ -1315,7 +1382,7 @@ internal fun preparedTextNativePreflightFixture(
             semanticsByCommandId = semantics,
             readbackRequestId =
                 GPUReadbackRequestID("readback.prepared-text.native-preflight"),
-            targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+            targetFormat = targetFormat,
         ),
     )
     val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
@@ -1345,7 +1412,7 @@ internal fun preparedTextNativePreflightFixture(
     )
 }
 
-private fun sampledPreparedTextMaterialProgram(
+internal fun sampledPreparedTextMaterialProgram(
     sourceId: String,
 ): org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram {
     val capabilities = preparedTextPreflightCapabilities()
@@ -1440,8 +1507,12 @@ private fun preparedColorGlyphSemantic(
     )
 }
 
-private fun preparedTextPreflightPacket(
+internal fun preparedTextPreflightPacket(
     commandId: Int,
+    resourceGeneration: Long = GPUPreparedTextPreflightFixture.GENERATION.toLong(),
+    targetFormat: GPUColorFormat = GPUColorFormat.RGBA8UnormSrgb,
+    blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
+    blendState: GPUFixedFunctionBlendState = preparedTextBlendState(blendMode),
     renderStepIdentity: String = "text.a8_mask.sample",
 ): GPUDrawPacket =
     GPUDrawPacket(
@@ -1458,31 +1529,44 @@ private fun preparedTextPreflightPacket(
         renderStepVersion = 1,
         role = GPUDrawPacketRole.Shading,
         blendPlan = GPUBlendPlan.FixedFunctionBlend(
-            mode = GPUBlendMode.SRC_OVER,
-            state = GPUFixedFunctionBlendState(
-                stateId = "one_isa",
-                color = GPUFixedFunctionBlendComponent(
-                    "one",
-                    "one-minus-src-alpha",
-                    "add",
-                ),
-                alpha = GPUFixedFunctionBlendComponent(
-                    "one",
-                    "one-minus-src-alpha",
-                    "add",
-                ),
-                writeMask = "rgba",
-            ),
+            mode = blendMode,
+            state = blendState,
             sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
         ),
         renderPipelineKey = GPURenderPipelineKey("pending.pipeline.prepared-text"),
         bindingLayoutHash = "pending.layout.prepared-text",
         vertexSourceLabel = "prepared-text-instance-quad",
-        targetStateHash = "target.rgba8unorm-srgb.16x16",
+        targetStateHash = "target.${targetFormat.value}.16x16",
         originalPaintOrder = commandId,
-        resourceGeneration = GPUPreparedTextPreflightFixture.GENERATION.toLong(),
+        resourceGeneration = resourceGeneration,
         frameProvenance = GPUFrameProvenance.GmContent,
     )
+
+internal fun preparedTextBlendState(
+    mode: GPUBlendMode,
+): GPUFixedFunctionBlendState = when (mode) {
+    GPUBlendMode.SRC -> GPUFixedFunctionBlendState(
+        stateId = "one_zero",
+        color = GPUFixedFunctionBlendComponent("one", "zero", "add"),
+        alpha = GPUFixedFunctionBlendComponent("one", "zero", "add"),
+        writeMask = "rgba",
+    )
+    GPUBlendMode.SRC_OVER -> GPUFixedFunctionBlendState(
+        stateId = "one_isa",
+        color = GPUFixedFunctionBlendComponent(
+            "one",
+            "one-minus-src-alpha",
+            "add",
+        ),
+        alpha = GPUFixedFunctionBlendComponent(
+            "one",
+            "one-minus-src-alpha",
+            "add",
+        ),
+        writeMask = "rgba",
+    )
+    else -> error("Prepared-text test fixture does not define $mode")
+}
 
 private fun preparedTextPreflightCapabilities(): GPUCapabilities =
     GPUCapabilities(
@@ -1511,6 +1595,7 @@ private fun preparedTextPreflightCapabilities(): GPUCapabilities =
         ),
         supportedTextureFormats = setOf(
             GPUTextureFormat.R8Unorm,
+            GPUTextureFormat.RGBA8Unorm,
             GPUTextureFormat.RGBA8UnormSrgb,
         ),
     )

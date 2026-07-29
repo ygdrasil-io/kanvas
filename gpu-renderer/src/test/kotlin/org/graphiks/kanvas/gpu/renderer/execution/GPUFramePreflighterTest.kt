@@ -4202,13 +4202,13 @@ class GPUFramePreflighterTest {
     }
 
     @Test
-    fun `prepared text refusal explains that native materialization belongs to Task 10`() {
+    fun `prepared text refusal requires the sealed prepared surface boundary`() {
         val source = File(
             "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt",
         ).readText()
 
         assertTrue("Prepared text semantics have no executable native materialization route; " in source)
-        assertTrue("native materialization belongs to FP-05 Task 10." in source)
+        assertTrue("the sealed prepared-surface native boundary is required." in source)
         assertFalse("native materialization route before FP-05 Task 8" in source)
     }
 

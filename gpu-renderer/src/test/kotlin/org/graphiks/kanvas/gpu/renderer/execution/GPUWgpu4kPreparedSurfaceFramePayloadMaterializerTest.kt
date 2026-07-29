@@ -27,6 +27,328 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 
 class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
     @Test
+    fun `prepared text materializer attaches exact uploads and instanced runs to one payload`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = capturedPreparedTextInputs(),
+        )
+        try {
+            val materialized = assertIs<
+                GPUPreparedNativeFramePayloadMaterialization.Materialized
+                >(fixture.materialize())
+            val payload = materialized.draft.payload
+
+            assertEquals(
+                fixture.input.encoderPlan.scopes.map { it.sourceStepIndex },
+                payload.scopeOperands.map { it.sourceStepIndex },
+            )
+            assertEquals(
+                fixture.input.encoderPlan.scopes.map { it.nativeOperandKeys },
+                payload.scopeOperandKeys,
+            )
+            assertEquals(
+                listOf(
+                    "Kanvas.frame.preparedText.instances",
+                    "Kanvas.frame.preparedText.draw-uniforms",
+                    "Kanvas.frame.preparedText.material-uniforms",
+                ),
+                fixture.native.writeBufferCalls.map { call -> call.bufferLabel },
+            )
+            val renders = payload.scopeOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            assertEquals(listOf(64, 36), renders.map { render ->
+                render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.Draw>()
+                    .single().drawCall.instanceCount
+            })
+            assertTrue(renders.all { render ->
+                render.commands.filterIsInstance<
+                    GPUPreparedNativeRenderCommand.SetBindGroup
+                    >().map { it.index } == listOf(0, 1, 2)
+            })
+            assertTrue(materialized.draft.disposeBeforeRegistration())
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `prepared text frame resources stay open through submit and close once on completion`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = capturedPreparedTextInputs(),
+        )
+        val backend = GPUWgpu4kFrameEncodingBackend(
+            deviceGeneration = fixture.input.generationSeal.deviceGeneration,
+            device = fixture.native.device,
+            queue = fixture.native.queue,
+            canonicalSceneTargetView = fixture.target.view,
+        )
+        val registry = GPURuntimeResourceAdapter()
+        val encodingWitness = GPUFrameCoreTestFixture.preparedFrame()
+        var ownership: GPUPreparedNativeFrameOwnership? = null
+        try {
+            val draft = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                fixture.materialize(),
+            ).draft
+            val payload = draft.payload
+            val frameHandles = buildList<AutoCloseable> {
+                payload.scopeOperands
+                    .filterIsInstance<GPUPreparedNativeScopeOperand.TextureUpload>()
+                    .forEach { add(it.destination.texture) }
+                payload.scopeOperands
+                    .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                    .flatMap { it.commands }
+                    .forEach { command ->
+                        when (command) {
+                            is GPUPreparedNativeRenderCommand.SetBindGroup ->
+                                add(command.bindGroup.bindGroup)
+                            is GPUPreparedNativeRenderCommand.SetVertexBuffer ->
+                                add(command.buffer.buffer)
+                            else -> Unit
+                        }
+                    }
+                fixture.native.writeBufferCalls.mapNotNullTo(this) { it.buffer }
+            }.distinctBy(System::identityHashCode)
+            assertTrue(frameHandles.all { fixture.native.closeCounts[it] == null })
+
+            ownership = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+                registry.registerPreparedNativeFrameDraft(draft),
+            ).ownership
+            assertIs<GPUPreparedNativeFrameBindingResult.Ready>(
+                ownership.bindLateSurface(
+                    acquiredSurface = null,
+                    binding = GPUPreparedNativeFrameLateSurfaceBinding.NotRequired,
+                ),
+            )
+            assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+                ownership.consume(payload.identity),
+            )
+            val encoder = backend.createCommandEncoder("prepared-text-completion")
+            fixture.input.encoderPlan.scopes.zip(payload.scopeOperands)
+                .forEach { (scope, operand) ->
+                    encoder.encode(
+                        scope,
+                        encodingWitness,
+                        GPUFrameCoreTestFixture.sceneTarget(
+                            targetGeneration =
+                                fixture.input.generationSeal.targetGeneration,
+                        ),
+                        operand,
+                    )
+                }
+            backend.submit(encoder.finish())
+            assertEquals(1, fixture.native.writeTextureCalls)
+            assertEquals(1, fixture.native.events.count { it == "encoder.finish" })
+            assertEquals(1, fixture.native.events.count { it == "queue.submit" })
+            assertTrue(frameHandles.all { fixture.native.closeCounts[it] == null })
+
+            assertTrue(ownership.markSubmitted())
+            assertTrue(ownership.releaseAfterCompletion())
+            assertTrue(frameHandles.all { fixture.native.closeCounts[it] == 1 })
+            assertTrue(ownership.claimOutputMapping())
+            assertTrue(ownership.releaseOutputAfterReadback())
+            val closed = fixture.native.closeCounts.toMap()
+            assertFalse(ownership.releaseAfterCompletion())
+            assertFalse(ownership.releaseOutputAfterReadback())
+            assertEquals(closed, fixture.native.closeCounts)
+        } finally {
+            ownership?.rollback()
+            if (encodingWitness.claimForRollback()) encodingWitness.rollback.execute()
+            runCatching { registry.close() }
+            runCatching { backend.close() }
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `core image text frame preserves full scope order in one submit and readback`() {
+        val fixture = fixture(PreparedSurfaceFixtureShape.CoreImageText)
+        val backend = GPUWgpu4kFrameEncodingBackend(
+            deviceGeneration = fixture.input.generationSeal.deviceGeneration,
+            device = fixture.native.device,
+            queue = fixture.native.queue,
+            canonicalSceneTargetView = fixture.target.view,
+        )
+        val registry = GPURuntimeResourceAdapter()
+        val witness = GPUFrameCoreTestFixture.preparedFrame()
+        var ownership: GPUPreparedNativeFrameOwnership? = null
+        try {
+            val draft = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                fixture.materialize(),
+            ).draft
+            val payload = draft.payload
+            assertEquals(
+                fixture.input.encoderPlan.scopes.map { it.sourceStepIndex },
+                payload.scopeOperands.map { it.sourceStepIndex },
+            )
+            assertEquals(
+                fixture.input.encoderPlan.scopes.map { it.nativeOperandKeys },
+                payload.scopeOperandKeys,
+            )
+            assertEquals(
+                listOf("CorePrimitive", "SampledImage", "TextA8"),
+                payload.scopeOperands
+                    .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                    .map { render -> render.semanticPayloads.single().canonicalType },
+            )
+
+            ownership = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+                registry.registerPreparedNativeFrameDraft(draft),
+            ).ownership
+            assertIs<GPUPreparedNativeFrameBindingResult.Ready>(
+                ownership.bindLateSurface(
+                    null,
+                    GPUPreparedNativeFrameLateSurfaceBinding.NotRequired,
+                ),
+            )
+            assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+                ownership.consume(payload.identity),
+            )
+            val encoder = backend.createCommandEncoder("prepared-core-image-text")
+            fixture.input.encoderPlan.scopes.zip(payload.scopeOperands).forEach { (scope, operand) ->
+                encoder.encode(
+                    scope,
+                    witness,
+                    GPUFrameCoreTestFixture.sceneTarget(
+                        targetGeneration = fixture.input.generationSeal.targetGeneration,
+                    ),
+                    operand,
+                )
+            }
+            backend.submit(encoder.finish())
+
+            assertEquals(listOf("core", "image", "text"), fixture.native.renderPipelineKinds)
+            assertEquals(2, fixture.native.writeTextureCalls)
+            assertEquals(1, fixture.native.events.count { it == "encoder.finish" })
+            assertEquals(1, fixture.native.events.count { it == "queue.submit" })
+            assertEquals(1, fixture.native.readbackCopyCalls)
+            assertTrue(ownership.markSubmitted())
+            assertTrue(ownership.releaseAfterCompletion())
+            assertTrue(ownership.claimOutputMapping())
+            assertTrue(ownership.releaseOutputAfterReadback())
+        } finally {
+            ownership?.rollback()
+            if (witness.claimForRollback()) witness.rollback.execute()
+            runCatching { registry.close() }
+            runCatching { backend.close() }
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `prepared text completion close failure is quarantined and retried once`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = capturedPreparedTextInputs(),
+        )
+        val registry = GPURuntimeResourceAdapter()
+        var ownership: GPUPreparedNativeFrameOwnership? = null
+        try {
+            val draft = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                fixture.materialize(),
+            ).draft
+            val payload = draft.payload
+            val atlas = assertIs<GPUPreparedNativeScopeOperand.TextureUpload>(
+                payload.scopeOperands.first {
+                    it is GPUPreparedNativeScopeOperand.TextureUpload &&
+                        it.uploadRole == "text-atlas"
+                },
+            ).destination.texture
+            assertEquals(
+                listOf(atlas),
+                fixture.native.createdHandles("Kanvas.frame.preparedText.text-atlas"),
+            )
+            ownership = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+                registry.registerPreparedNativeFrameDraft(draft),
+            ).ownership
+            assertIs<GPUPreparedNativeFrameBindingResult.Ready>(
+                ownership.bindLateSurface(
+                    null,
+                    GPUPreparedNativeFrameLateSurfaceBinding.NotRequired,
+                ),
+            )
+            assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+                ownership.consume(payload.identity),
+            )
+            assertTrue(ownership.markSubmitted())
+            fixture.native.failCloseOnce("Kanvas.frame.preparedText.text-atlas")
+
+            assertFalse(ownership.releaseAfterCompletion())
+            assertEquals(
+                1,
+                fixture.native.closeAttempts("Kanvas.frame.preparedText.text-atlas"),
+            )
+            registry.close()
+            assertEquals(
+                2,
+                fixture.native.closeAttempts("Kanvas.frame.preparedText.text-atlas"),
+            )
+            assertEquals(2, fixture.native.closeCounts[atlas])
+        } finally {
+            ownership?.rollback()
+            runCatching { registry.close() }
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `prepared text resources stay closed when readback close is quarantined and retried`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = capturedPreparedTextInputs(),
+        )
+        val registry = GPURuntimeResourceAdapter()
+        var ownership: GPUPreparedNativeFrameOwnership? = null
+        try {
+            val draft = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                fixture.materialize(),
+            ).draft
+            val payload = draft.payload
+            val atlas = assertIs<GPUPreparedNativeScopeOperand.TextureUpload>(
+                payload.scopeOperands.first {
+                    it is GPUPreparedNativeScopeOperand.TextureUpload &&
+                        it.uploadRole == "text-atlas"
+                },
+            ).destination.texture
+            val readback = payload.scopeOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Readback>()
+                .single()
+                .destination.buffer
+            ownership = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+                registry.registerPreparedNativeFrameDraft(draft),
+            ).ownership
+            assertIs<GPUPreparedNativeFrameBindingResult.Ready>(
+                ownership.bindLateSurface(
+                    null,
+                    GPUPreparedNativeFrameLateSurfaceBinding.NotRequired,
+                ),
+            )
+            assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+                ownership.consume(payload.identity),
+            )
+            assertTrue(ownership.markSubmitted())
+            assertTrue(ownership.releaseAfterCompletion())
+            assertEquals(1, fixture.native.closeCounts[atlas])
+            assertTrue(ownership.claimOutputMapping())
+            fixture.native.failCloseOnce("Kanvas.frame.preparedSurface.readback")
+
+            assertFalse(ownership.releaseOutputAfterReadback())
+            assertEquals(1, fixture.native.closeCounts[atlas])
+            assertEquals(
+                1,
+                fixture.native.closeAttempts("Kanvas.frame.preparedSurface.readback"),
+            )
+            registry.close()
+            assertEquals(1, fixture.native.closeCounts[atlas])
+            assertEquals(2, fixture.native.closeCounts[readback])
+        } finally {
+            ownership?.rollback()
+            runCatching { registry.close() }
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `image only materializer emits the exact upload render and readback partition`() {
         val fixture = fixture(PreparedSurfaceFixtureShape.ImageOnly)
         try {
@@ -174,6 +496,10 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             native.device,
             input.generationSeal.deviceGeneration,
         )
+        val textCache = GPUWgpu4kPreparedTextSessionCache(
+            native.device,
+            input.generationSeal.deviceGeneration,
+        )
         val surfaceCache = GPUWgpu4kSurfaceBlitSessionCache(native.device, target)
         val mixed = GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             device = native.device,
@@ -181,6 +507,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             preparedSceneTarget = target,
             corePrimitiveCache = coreCache,
             preparedImageCache = imageCache,
+            preparedTextCache = textCache,
             preparedImageHandleFactory = GPUWgpu4kPreparedImageNativeHandleFactory(native.device),
             preparedImageCapabilities = preparedImageCapabilities(),
             surfaceBlitCache = surfaceCache,
@@ -703,8 +1030,9 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
         surfaceTargetAvailable: Boolean = true,
         surfaceTargetGenerationDelta: Long = 0L,
         shaderSource: String = GPU_PREPARED_IMAGE_WGSL,
+        inputOverride: CapturedPreparedSurfaceInputs? = null,
     ): Fixture {
-        val input = capturedPreparedSurfaceInputs(
+        val input = inputOverride ?: capturedPreparedSurfaceInputs(
             shape = shape,
             includeReadback = true,
             includeSurface = includeSurface,
@@ -731,6 +1059,10 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             native.device,
             input.generationSeal.deviceGeneration,
         )
+        val textCache = GPUWgpu4kPreparedTextSessionCache(
+            native.device,
+            input.generationSeal.deviceGeneration,
+        )
         val imageFactory = CompositePreparedImageHandleFactory(
             failFirstClose = failFirstImageClose,
         )
@@ -747,6 +1079,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             preparedSceneTarget = target,
             corePrimitiveCache = coreCache,
             preparedImageCache = imageCache,
+            preparedTextCache = textCache,
             preparedImageHandleFactory = selectedImageFactory,
             preparedImageCapabilities = preparedImageCapabilities(),
             surfaceBlitCache = surfaceCache,
@@ -774,6 +1107,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             target,
             coreCache,
             imageCache,
+            textCache,
             surfaceCache,
             imageFactory,
             materializer,
@@ -787,6 +1121,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
         val target: GPUWgpu4kPreparedSceneTarget,
         val coreCache: GPUWgpu4kCorePrimitiveSessionCache,
         val imageCache: GPUWgpu4kPreparedImageSessionCache,
+        val textCache: GPUWgpu4kPreparedTextSessionCache,
         val surfaceCache: GPUWgpu4kSurfaceBlitSessionCache,
         val imageFactory: CompositePreparedImageHandleFactory,
         val materializer: GPUWgpu4kPreparedSurfaceFramePayloadMaterializer,
@@ -818,6 +1153,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             runCatching { materializer.close() }
             runCatching { surfaceCache.close() }
             runCatching { imageCache.close() }
+            runCatching { textCache.close() }
             runCatching { coreCache.close() }
             runCatching { target.close() }
         }

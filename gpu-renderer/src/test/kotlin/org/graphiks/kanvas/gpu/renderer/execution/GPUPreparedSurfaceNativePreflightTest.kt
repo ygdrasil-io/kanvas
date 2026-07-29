@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.GPUTextureFormat
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -7,6 +8,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.toPreparedR8UploadArtifact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
@@ -35,6 +37,10 @@ import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceFormat
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageSourceInput
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
+import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
@@ -52,6 +58,8 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImagePayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageSampling
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextA8PayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
@@ -68,6 +76,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputDescriptor
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskPhase
+import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.gpu.renderer.resources.GPUBufferResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
@@ -84,6 +94,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureResourceRef
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 class GPUPreparedSurfaceNativePreflightTest {
     @Test
@@ -1197,6 +1208,7 @@ internal enum class PreparedSurfaceFixtureShape {
     Mixed,
     CoreImageCore,
     ImageCoreImage,
+    CoreImageText,
     PathImage,
     ImagePath,
     PathImagePath,
@@ -1230,6 +1242,10 @@ internal fun preparedSurfacePreflightFixture(
             preparedSurfaceImageCommand(0, 0),
             preparedSurfaceCoreCommand(1, 1),
             preparedSurfaceImageCommand(2, 2),
+        )
+        PreparedSurfaceFixtureShape.CoreImageText -> listOf(
+            preparedSurfaceCoreCommand(0, 0),
+            preparedSurfaceImageCommand(1, 1),
         )
         PreparedSurfaceFixtureShape.PathImage -> listOf(
             preparedSurfaceCoreCommand(0, 0),
@@ -1265,7 +1281,43 @@ internal fun preparedSurfacePreflightFixture(
     ).apply {
         commands.forEach(::record)
     }.close()
-    val base = recording.taskList.withPreparedSurfaceClipAuthority()
+    val clippedBase = recording.taskList.withPreparedSurfaceClipAuthority()
+    val base = if (shape != PreparedSurfaceFixtureShape.CoreImageText) {
+        clippedBase
+    } else {
+        val precedingRender = clippedBase.tasks.filterIsInstance<GPUTask.Render>().last()
+        val textPacket = preparedTextPreflightPacket(
+            commandId = 2,
+            resourceGeneration = precedingRender.drawPackets.single().resourceGeneration,
+        )
+        GPUTaskList(
+            frameId = clippedBase.frameId,
+            capabilitySeal = clippedBase.capabilitySeal,
+            recordingSeals = clippedBase.recordingSeals,
+            expectedReplayKeyHash = clippedBase.expectedReplayKeyHash,
+            tasks = clippedBase.tasks + GPUTask.Render(
+                taskId = GPUTaskID("task.prepared-surface.text"),
+                recordingId = precedingRender.recordingId,
+                phase = GPUTaskPhase.Render,
+                target = precedingRender.target,
+                loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+                samplePlan = GPUSamplePlan.SingleSampleFrame,
+                provisionalSegmentKey =
+                    GPUProvisionalRenderSegmentKey("segment.prepared-surface.text"),
+                drawPackets = listOf(textPacket),
+                batchEligibilityByPacketId = mapOf(
+                    textPacket.packetId to GPUPassBatchEligibility(
+                        kind = GPUPassBatchKind.Isolated,
+                        queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
+                    ),
+                ),
+            ),
+            dependencies = clippedBase.dependencies,
+            phaseOrder = clippedBase.phaseOrder,
+            memoryBudget = clippedBase.memoryBudget,
+            diagnostics = clippedBase.diagnostics,
+        )
+    }
     val pathCommandIds = when (shape) {
         PreparedSurfaceFixtureShape.PathImage -> setOf(0)
         PreparedSurfaceFixtureShape.ImagePath -> setOf(1)
@@ -1281,6 +1333,34 @@ internal fun preparedSurfacePreflightFixture(
                 packet.renderStepId.value == "image.draw.texture_upload"
             ) {
                 preparedSurfaceImageSemantic(base, packet.commandIdValue)
+            } else if (packet.renderStepId.value == "text.a8_mask.sample") {
+                val page = GPUPreparedTextPreflightFixture.baselinePage0()
+                GPUPreparedTextPayloadGatherer().gather(
+                    GPUPreparedTextA8PayloadInput(
+                        commandIdValue = packet.commandIdValue,
+                        atlas = page.toPreparedR8UploadArtifact(),
+                        atlasGeneration = page.artifactKey.generation,
+                        pageIndex = page.pageIndex,
+                        instances = GPUPreparedTextPreflightFixture.baselineA8Instances(page),
+                        material = GPUPreparedTextPreflightFixture.baselineMaterialProgram(),
+                        deviceToLocal =
+                            org.graphiks.kanvas.gpu.renderer.payloads
+                                .GPUPreparedTextDeviceToLocalAffine(
+                                    1f,
+                                    0f,
+                                    0f,
+                                    0f,
+                                    1f,
+                                    0f,
+                                ),
+                        targetBounds = PREPARED_SURFACE_BOUNDS,
+                        scissorBounds = PREPARED_SURFACE_BOUNDS,
+                        clipIdentity = "clip:none",
+                        blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
+                        capabilitySnapshotHash = capabilities.canonicalSnapshotHash(),
+                        frameProvenance = GPUFrameProvenance.GmContent,
+                    ),
+                )
             } else if (packet.commandIdValue in pathCommandIds) {
                 preparedSurfacePathSemantic(base, packet.commandIdValue)
             } else {
@@ -1310,11 +1390,21 @@ internal fun preparedSurfacePreflightFixture(
         .flatMap(GPUTask.Render::drawPackets)
         .first()
         .resourceGeneration
+    val textGenerationByResource = buildMap {
+        taskList.tasks.filterIsInstance<GPUTask.Upload>().forEach { upload ->
+            upload.r8ResourcePlan?.let { plan ->
+                put(plan.frameTextureRef, plan.artifactGeneration)
+                put(plan.stagingRef, plan.artifactGeneration)
+            }
+        }
+    }
     val resourceGenerations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
         .flatMap(GPUTask.PrepareResources::requests)
         .associate { request ->
             request.resource to if (request.role == GPUFrameResourceRole.SceneTarget) {
                 targetGeneration
+            } else if (request.resource in textGenerationByResource) {
+                textGenerationByResource.getValue(request.resource)
             } else {
                 5L
             }
@@ -2274,6 +2364,13 @@ private fun preparedSurfaceCapabilities() = GPUCapabilities(
     facts = listOf(
         GPUCapabilityFact("first_slice.fill_rect.native", "test", "supported", true, "test"),
         GPUCapabilityFact("first_slice.draw_image_rect.prepared", "test", "supported", true, "test"),
+        GPUCapabilityFact(
+            "first_slice.draw_text_run.a8_atlas",
+            "test",
+            "supported",
+            true,
+            "task9",
+        ),
     ),
     snapshotId = "prepared-surface-native-preflight",
     limits = GPULimits(
@@ -2282,6 +2379,10 @@ private fun preparedSurfaceCapabilities() = GPUCapabilities(
         minUniformBufferOffsetAlignment = 256,
         maxBufferSize = 1L shl 30,
         maxDynamicUniformBuffersPerPipelineLayout = 1,
+    ),
+    supportedTextureFormats = setOf(
+        GPUTextureFormat.R8Unorm,
+        GPUTextureFormat.RGBA8UnormSrgb,
     ),
 )
 
