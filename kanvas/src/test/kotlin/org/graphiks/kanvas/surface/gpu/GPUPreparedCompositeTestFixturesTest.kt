@@ -56,8 +56,10 @@ class GPUPreparedCompositeTestFixturesTest {
     fun `oracle linear sample interpolates correctly`() {
         val rgba = GPUPreparedCompositeTestFixtures.rgbaGradient(2, 2)
         val sample = GPUPreparedFilterCpuOracle.sampleLinearRGBA(rgba, 2, 2, 0.75f, 0.5f)
-        assertTrue(sample[0] in 0..255)
-        assertTrue(sample[1] in 0..255)
+        assertEquals(254, sample[0])
+        assertEquals(127, sample[1])
+        assertEquals(0, sample[2])
+        assertEquals(255, sample[3])
     }
 
     @Test

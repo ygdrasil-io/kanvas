@@ -67,6 +67,35 @@ class GPUPreparedCompositeContractsTest {
     }
 
     @Test
+    fun `scope and mask plan snapshot mutable lists`() {
+        val entries = mutableListOf<GPUPreparedCompositeEntry>(
+            GPUPreparedCompositeEntry.Draw(0),
+        )
+        val scope = GPUPreparedCompositeScope(
+            id = GPUPreparedCompositeScopeId("scope"),
+            parentId = null,
+            saveOperationIndex = null,
+            restoreOperationIndex = null,
+            entries = entries,
+            sourceKind = GPUPreparedCompositeScopeKind.Root,
+            provenance = "test",
+        )
+        val table = mutableListOf(1, 2, 3)
+        val mask = GPUPreparedMaskFilterPlan(
+            kind = GPUPreparedMaskFilterKind.Table,
+            coverageFormat = GPUPreparedCoverageFormat.A8,
+            executionIdentity = "table",
+            tableEntries = table,
+        )
+
+        entries += GPUPreparedCompositeEntry.Draw(1)
+        table += 4
+
+        assertEquals(1, scope.entries.size)
+        assertEquals(listOf(1, 2, 3), mask.tableEntries)
+    }
+
+    @Test
     fun `composite plan carries capture identity and layer plans`() {
         val plan = GPUPreparedCompositePlan(
             captureIdentity = "cap_v1",
@@ -101,13 +130,13 @@ class GPUPreparedCompositeContractsTest {
     fun `mask filter plan carries kind coverage format and table entries`() {
         val table = (0 until 256).toList()
         val plan = GPUPreparedMaskFilterPlan(
-            kind = "Table",
-            coverageFormat = "A8",
+            kind = GPUPreparedMaskFilterKind.Table,
+            coverageFormat = GPUPreparedCoverageFormat.A8,
             executionIdentity = "table_v1",
             tableEntries = table,
         )
-        assertEquals("Table", plan.kind)
-        assertEquals("A8", plan.coverageFormat)
+        assertEquals(GPUPreparedMaskFilterKind.Table, plan.kind)
+        assertEquals(GPUPreparedCoverageFormat.A8, plan.coverageFormat)
         assertEquals(256, plan.tableEntries.size)
         assertEquals(0, plan.tableEntries[0])
         assertEquals(255, plan.tableEntries[255])
@@ -127,9 +156,16 @@ class GPUPreparedCompositeContractsTest {
 
     @Test
     fun `mask filter lowering encodes three public kinds`() {
-        val blurPlan = GPUPreparedMaskFilterPlan("Blur", "A8", "blur_exec")
+        val blurPlan = GPUPreparedMaskFilterPlan(
+            GPUPreparedMaskFilterKind.Blur,
+            GPUPreparedCoverageFormat.A8,
+            "blur_exec",
+        )
         val ready = GPUPreparedMaskFilterLowering.Ready(blurPlan)
-        assertEquals("Blur", (ready as GPUPreparedMaskFilterLowering.Ready).plan.kind)
+        assertEquals(
+            GPUPreparedMaskFilterKind.Blur,
+            (ready as GPUPreparedMaskFilterLowering.Ready).plan.kind,
+        )
         val refused = GPUPreparedMaskFilterLowering.Refused(
             code = "unsupported.mask-filter.table.size",
             facts = mapOf("size" to "512"),

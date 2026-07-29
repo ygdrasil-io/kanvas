@@ -12,6 +12,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -66,7 +67,10 @@ class GPUPreparedCompositeCaptureFinalTest {
         val inner = recordPic { it.drawRect(Rect(0f, 0f, 1f, 1f), black) }
         val r = capture(listOf(DisplayOp.DrawPicture(inner, null, id33, ClipStack.WideOpen)))
         val ready = assertIs<GPUPreparedCompositeCaptureResult.Ready>(r)
-        assertEquals(0, ready.capture.scopes.values.count { it.sourceKind == GPUPreparedCompositeScopeKind.PaintedPicture })
+        assertEquals(
+            listOf(GPUPreparedCompositeScopeKind.Root),
+            ready.capture.scopes.values.map { it.sourceKind },
+        )
     }
 
     @Test
@@ -83,9 +87,15 @@ class GPUPreparedCompositeCaptureFinalTest {
 
     @Test
     fun `picture self-cycle is refused`() {
-        val inner = recordPic { it.drawRect(Rect(0f, 0f, 1f, 1f), black) }
-        assertIs<GPUPreparedCompositeCaptureResult.Ready>(capture(
-            listOf(DisplayOp.DrawPicture(inner, black, id33, ClipStack.WideOpen))))
+        val operations = mutableListOf<DisplayOp>()
+        val picture = Picture(Rect(0f, 0f, 1f, 1f), operations)
+        operations += DisplayOp.DrawPicture(picture, null, id33, ClipStack.WideOpen)
+
+        val refused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(
+            capture(listOf(DisplayOp.DrawPicture(picture, null, id33, ClipStack.WideOpen))),
+        )
+
+        assertEquals(GPUPreparedCompositeRefusalCodes.PICTURE_CYCLE, refused.code)
     }
 
     @Test
