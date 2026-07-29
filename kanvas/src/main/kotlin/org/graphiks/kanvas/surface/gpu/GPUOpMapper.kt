@@ -536,7 +536,7 @@ private fun DisplayOp.coreSourceOperation(): String = when (this) {
     is DisplayOp.DrawRect -> if (paint.isStroke()) "drawRect.stroke" else "drawRect"
     is DisplayOp.DrawRRect -> if (paint.isStroke()) "drawRRect.stroke" else "drawRRect"
     is DisplayOp.DrawDRRect -> "drawDRRect"
-    is DisplayOp.DrawPath -> "drawPath"
+    is DisplayOp.DrawPath -> sourceOperation
     else -> error("Non-core operation has no Slice 12A source identity")
 }
 
@@ -981,7 +981,7 @@ internal fun DisplayOp.DrawPath.toNormalizedCommand(
             dependsOnDestination = false,
             requiresBarrier = false,
         ),
-        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawPath"),
+        source = GPUCommandSource(adapter = "kanvas-surface", operation = sourceOperation),
         stroke = paint.isStroke(),
         strokeWidth = paint.strokeWidth,
         dashIntervals = (paint.pathEffect as? PathEffect.Dash)?.intervals,
@@ -1653,7 +1653,7 @@ internal fun fixedLatticeColorPaint(color: Color, paint: Paint?): Paint {
 internal fun DisplayOp.withCombinedTransform(outer: Matrix33): DisplayOp = when (this) {
     is DisplayOp.DrawRect -> copy(transform = outer * transform)
     is DisplayOp.DrawRRect -> copy(transform = outer * transform)
-    is DisplayOp.DrawPath -> copy(transform = outer * transform)
+    is DisplayOp.DrawPath -> copyPreservingSourceOperation(transform = outer * transform)
     is DisplayOp.DrawImage -> copy(transform = outer * transform)
     is DisplayOp.DrawText -> copy(transform = outer * transform)
     is DisplayOp.DrawColor -> copy(transform = outer * transform)
@@ -1691,7 +1691,7 @@ internal fun DisplayOp.withPictureReplayState(
     return when (val transformed = withCombinedTransform(outerTransform)) {
         is DisplayOp.DrawRect -> transformed.copy(clip = replayClip)
         is DisplayOp.DrawRRect -> transformed.copy(clip = replayClip)
-        is DisplayOp.DrawPath -> transformed.copy(clip = replayClip)
+        is DisplayOp.DrawPath -> transformed.copyPreservingSourceOperation(clip = replayClip)
         is DisplayOp.DrawImage -> transformed.copy(clip = replayClip)
         is DisplayOp.DrawText -> transformed.copy(clip = replayClip)
         is DisplayOp.DrawColor -> transformed.copy(clip = replayClip)

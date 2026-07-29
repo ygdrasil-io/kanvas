@@ -6,6 +6,7 @@ import org.graphiks.kanvas.canvas.Canvas
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.DrawPathSourceOperation
 import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
@@ -182,7 +183,12 @@ class Picture internal constructor(
                     is DisplayOp.DrawRect -> canvas.drawRect(op.rect, op.paint)
                     is DisplayOp.DrawRRect -> canvas.drawRRect(op.rrect, op.paint)
                     is DisplayOp.DrawDRRect -> canvas.drawDRRect(op.outer, op.inner, op.paint)
-                    is DisplayOp.DrawPath -> canvas.drawPath(op.path, op.paint)
+                    is DisplayOp.DrawPath -> canvas.drawPath(
+                        op.path,
+                        op.paint,
+                        DrawPathSourceOperation.fromStableName(op.sourceOperation)
+                            ?: DrawPathSourceOperation.DRAW_PATH,
+                    )
                     is DisplayOp.DrawPoint -> canvas.drawPoint(op.x, op.y, op.paint)
                     is DisplayOp.DrawPoints -> canvas.drawPoints(op.mode, op.points, op.paint)
                     is DisplayOp.DrawImage -> canvas.drawImage(op.image, op.dst, op.paint)
@@ -251,7 +257,7 @@ class Picture internal constructor(
 // ---- Binary serialization helpers ------------------------------------------
 
 private val MAGIC = byteArrayOf(0x4B, 0x50, 0x49, 0x43)
-private const val FORMAT_VERSION = 5
+private const val FORMAT_VERSION = 6
 
 // type discriminators
 private const val OP_DRAW_RECT: Byte = 0
@@ -682,7 +688,7 @@ private class Writer {
             }
             is DisplayOp.DrawPath -> {
                 byte(OP_DRAW_PATH); path(op.path); paint(op.paint)
-                matrix33(op.transform); clipStack(op.clip)
+                matrix33(op.transform); clipStack(op.clip); string(op.sourceOperation)
             }
             is DisplayOp.DrawPoint -> {
                 byte(OP_DRAW_POINT); float(op.x); float(op.y); paint(op.paint)
@@ -1155,7 +1161,29 @@ private class Reader(private val data: ByteArray) {
             OP_DRAW_RECT.toInt() -> DisplayOp.DrawRect(rect(), paint(), matrix33(), clipStack())
             OP_DRAW_R_RECT.toInt() -> DisplayOp.DrawRRect(rrect(), paint(), matrix33(), clipStack())
             OP_DRAW_D_R_RECT.toInt() -> DisplayOp.DrawDRRect(rrect(), rrect(), paint(), matrix33(), clipStack())
-            OP_DRAW_PATH.toInt() -> DisplayOp.DrawPath(path(), paint(), matrix33(), clipStack())
+            OP_DRAW_PATH.toInt() -> {
+                val path = path()
+                val paint = paint()
+                val transform = matrix33()
+                val clip = clipStack()
+                val sourceOperation = if (formatVersion >= 6) {
+                    DrawPathSourceOperation.fromStableName(string())
+                } else {
+                    DrawPathSourceOperation.DRAW_PATH
+                }
+                if (sourceOperation == null) {
+                    valid = false
+                    null
+                } else {
+                    DisplayOp.DrawPath.withSourceOperation(
+                        path = path,
+                        paint = paint,
+                        transform = transform,
+                        clip = clip,
+                        sourceOperation = sourceOperation,
+                    )
+                }
+            }
             OP_DRAW_POINT.toInt() -> DisplayOp.DrawPoint(float(), float(), paint(), matrix33(), clipStack())
             OP_DRAW_POINTS.toInt() -> {
                 val mode = pointMode()

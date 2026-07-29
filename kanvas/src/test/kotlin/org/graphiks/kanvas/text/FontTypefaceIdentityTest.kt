@@ -6,6 +6,11 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertIs
+import kotlin.test.assertNull
+import org.graphiks.kanvas.font.scaler.GlyphScaleResult
+import org.graphiks.kanvas.font.scaler.OutlineCommand
+import org.graphiks.kanvas.geometry.Path
 
 class FontTypefaceIdentityTest {
     @Test
@@ -42,6 +47,42 @@ class FontTypefaceIdentityTest {
         assertNotNull(first.typefaceId)
         assertNotNull(second.typefaceId)
         assertNotEquals(first.typefaceId, second.typefaceId)
+    }
+
+    @Test
+    fun `static TrueType public APIs retain legacy scaler results`() {
+        val typeface = FontTypeface(liberationFontBytes(), "LiberationSans")
+        val scaler = checkNotNull(typeface.scaler)
+        val glyphId = checkNotNull(scaler.glyphIdForCodepoint('A'.code))
+        val fontSize = 37f
+        val scaled = assertIs<GlyphScaleResult.Success>(
+            scaler.scaleGlyphOrDiagnostic(glyphId, fontSize),
+        ).glyph
+        val expectedPath = scaled.commands.toPath()
+        val actualPath = assertNotNull(typeface.getGlyphPath(glyphId, fontSize))
+
+        assertEquals(scaler.unitsPerEmInt.toFloat(), typeface.unitsPerEm)
+        assertEquals(glyphId, typeface.glyphIdForCodepoint('A'.code))
+        assertEquals(scaled.advanceWidth, typeface.getAdvance(glyphId, fontSize))
+        assertEquals(expectedPath.verbs(), actualPath.verbs())
+        assertEquals(expectedPath.points(), actualPath.points())
+    }
+
+    @Test
+    fun `collection TrueType public APIs retain legacy scaler fallback`() {
+        val face = liberationFontBytes()
+        val typeface = FontTypeface(
+            ttcFont(face, face),
+            "LiberationSansCollection",
+            faceIndex = 1,
+        )
+        val fontSize = 37f
+
+        assertNull(typeface.scaler)
+        assertEquals(1_000f, typeface.unitsPerEm)
+        assertEquals(0, typeface.glyphIdForCodepoint('A'.code))
+        assertEquals(fontSize * 0.5f, typeface.getAdvance(glyphId = 36, fontSize))
+        assertNull(typeface.getGlyphPath(glyphId = 36, fontSize))
     }
 
     private fun liberationFontBytes(): ByteArray =
@@ -89,5 +130,29 @@ class FontTypefaceIdentityTest {
         this[offset + 1] = (value ushr 16).toByte()
         this[offset + 2] = (value ushr 8).toByte()
         this[offset + 3] = value.toByte()
+    }
+
+    private fun List<OutlineCommand>.toPath(): Path = Path {
+        for (command in this@toPath) {
+            when (command) {
+                is OutlineCommand.MoveTo -> moveTo(command.x.toFloat(), command.y.toFloat())
+                is OutlineCommand.LineTo -> lineTo(command.x.toFloat(), command.y.toFloat())
+                is OutlineCommand.QuadraticTo -> quadTo(
+                    command.controlX.toFloat(),
+                    command.controlY.toFloat(),
+                    command.x.toFloat(),
+                    command.y.toFloat(),
+                )
+                is OutlineCommand.CubicTo -> cubicTo(
+                    command.controlX1.toFloat(),
+                    command.controlY1.toFloat(),
+                    command.controlX2.toFloat(),
+                    command.controlY2.toFloat(),
+                    command.x.toFloat(),
+                    command.y.toFloat(),
+                )
+                is OutlineCommand.Close -> close()
+            }
+        }
     }
 }

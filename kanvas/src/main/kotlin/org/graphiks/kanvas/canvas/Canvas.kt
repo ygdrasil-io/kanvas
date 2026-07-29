@@ -3,6 +3,7 @@ package org.graphiks.kanvas.canvas
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.GlyphPaintProvider
+import org.graphiks.kanvas.text.PreparedTextOutline
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.image.Image
@@ -97,6 +98,22 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
         buffer.append(DisplayOp.DrawPath(path, paint, currentTransform, currentRecordedClip))
     }
 
+    internal fun drawPath(
+        path: Path,
+        paint: Paint,
+        sourceOperation: DrawPathSourceOperation,
+    ) {
+        buffer.append(
+            DisplayOp.DrawPath.withSourceOperation(
+                path = path,
+                paint = paint,
+                transform = currentTransform,
+                clip = currentRecordedClip,
+                sourceOperation = sourceOperation,
+            ),
+        )
+    }
+
     /**
      * Draw an [image] scaled to fill [dst].
      *
@@ -132,26 +149,37 @@ class Canvas internal constructor(private val buffer: DisplayListBuffer) {
                 run.glyphs.indices.forEach { index ->
                     val glyphId = run.glyphs[index].toInt()
                     val position = run.positions[index]
-                    val path = typeface.getGlyphPath(
-                        glyphId,
-                        run.fontSize,
-                        blob.variationCoordinates,
-                    )
-                    if (path == null) {
-                        if ((typeface as? FontTypeface)?.isCffGlyphWithoutOutline(
+                    val path = when (
+                        val outline = (typeface as? FontTypeface)?.preparedTextOutline(
+                            glyphId = glyphId,
+                            fontSize = run.fontSize,
+                            variationCoordinates = blob.variationCoordinates,
+                        )
+                    ) {
+                        is PreparedTextOutline.ProvenNonEmpty -> outline.path
+                        PreparedTextOutline.ProvenEmpty -> return@forEach
+                        PreparedTextOutline.Unavailable -> {
+                            unresolvedGlyph = true
+                            return@forEach
+                        }
+                        null -> typeface.getGlyphPath(
                                 glyphId,
+                                run.fontSize,
                                 blob.variationCoordinates,
-                            ) != true
-                        ) unresolvedGlyph = true
-                        return@forEach
+                            ) ?: run {
+                                unresolvedGlyph = true
+                                return@forEach
+                            }
                     }
+                    if (path.isEmpty()) return@forEach
                     val glyphPaint = (typeface as? GlyphPaintProvider)?.paintForGlyph(glyphId) ?: paint
                     outlinedGlyphs +=
-                        DisplayOp.DrawPath(
-                            path.transform(x + position.x, y + position.y, 1f, 1f),
-                            glyphPaint,
-                            currentTransform,
-                            currentRecordedClip,
+                        DisplayOp.DrawPath.withSourceOperation(
+                            path = path.transform(x + position.x, y + position.y, 1f, 1f),
+                            paint = glyphPaint,
+                            transform = currentTransform,
+                            clip = currentRecordedClip,
+                            sourceOperation = DrawPathSourceOperation.TEXT_EXPANDED,
                         )
                 }
             }

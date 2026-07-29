@@ -62,6 +62,7 @@ import org.graphiks.kanvas.types.isAffine
 import org.graphiks.kanvas.font.colr.COLRPaintNode
 import org.graphiks.kanvas.font.colr.COLRV1ColorLineExtend
 import org.graphiks.kanvas.font.colr.COLR_FOREGROUND_PALETTE_INDEX
+import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
 import org.graphiks.kanvas.font.scaler.GlyphRepresentation
 import org.graphiks.kanvas.font.scaler.GlyphScaler
 import org.graphiks.kanvas.font.scaler.OutlineCommand
@@ -1287,11 +1288,19 @@ private fun renderViaGpuLegacy(
                 cmdId: GPUDrawCommandID,
             ): Boolean {
                 val tf = op.blob.typeface as? FontTypeface ?: run {
-                    diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "unsupported.text.outline.no_typeface")
+                    diagnostics.degrade(
+                        "degrade:drawText:${cmdId.value}",
+                        "drawText",
+                        GPUTextRefusalCodes.OUTLINE_NO_TYPEFACE,
+                    )
                     return false
                 }
                 val scaler = tf.scaler ?: run {
-                    diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "unsupported.text.outline.no_scaler")
+                    diagnostics.degrade(
+                        "degrade:drawText:${cmdId.value}",
+                        "drawText",
+                        GPUTextRefusalCodes.OUTLINE_NO_SCALER,
+                    )
                     return false
                 }
                 val tx = op.transform
@@ -1434,11 +1443,19 @@ private fun renderViaGpuLegacy(
                 cmdId: GPUDrawCommandID,
             ): Boolean {
                 val tf = op.blob.typeface as? FontTypeface ?: run {
-                    diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "unsupported.text.color.no_typeface")
+                    diagnostics.degrade(
+                        "degrade:drawText:${cmdId.value}",
+                        "drawText",
+                        GPUTextRefusalCodes.COLOR_NO_TYPEFACE,
+                    )
                     return false
                 }
                 val scaler = tf.scaler ?: run {
-                    diagnostics.degrade("degrade:drawText:${cmdId.value}", "drawText", "unsupported.text.color.no_scaler")
+                    diagnostics.degrade(
+                        "degrade:drawText:${cmdId.value}",
+                        "drawText",
+                        GPUTextRefusalCodes.COLOR_NO_SCALER,
+                    )
                     return false
                 }
                 val foregroundColor = op.paint.color
@@ -1513,7 +1530,7 @@ private fun renderViaGpuLegacy(
                                 diagnostics.degrade(
                                     "degrade:drawText:${cmdId.value}",
                                     "drawText",
-                                    "unsupported.text.color_bitmap_glyph",
+                                    GPUTextRefusalCodes.COLOR_BITMAP_GLYPH,
                                 )
                             }
                             else -> {}

@@ -11,6 +11,7 @@ dependencies {
     implementation(project(":math"))
     implementation(project(":font"))
     implementation(project(":font:colr"))
+    api(project(":font:glyph"))
     api(libs.wgslCoreJvm)
     api(libs.wgslParserJvm)
     testImplementation(kotlin("test"))

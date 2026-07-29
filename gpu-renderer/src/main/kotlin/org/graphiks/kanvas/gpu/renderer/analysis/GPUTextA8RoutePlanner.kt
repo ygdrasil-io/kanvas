@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.analysis
 
 import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
 import org.graphiks.kanvas.font.handoff.GlyphRunDescriptor
+import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
@@ -156,12 +157,12 @@ class GPUTextA8RoutePlanner {
 
     private fun NormalizedDrawCommand.DrawTextRun.refusalCode(): String? =
         when {
-            artifactRefs.isEmpty() -> "unsupported.text.artifact_unregistered"
+            artifactRefs.isEmpty() -> GPUTextRefusalCodes.ARTIFACT_UNREGISTERED
             artifactRefs.any { ref -> ref.routeHint != null && ref.routeHint !in acceptedRouteHints } ->
-                "unsupported.text.a8_atlas_route_unavailable"
+                GPUTextRefusalCodes.A8_ATLAS_ROUTE_UNAVAILABLE
             atlasGenerations != artifactRefs.map { reference -> reference.generation } ->
-                "unsupported.text.atlas_generation_stale"
-            uploadDependencyFacts.isEmpty() -> "unsupported.text.upload_plan_missing"
+                GPUTextRefusalCodes.ATLAS_GENERATION_STALE
+            uploadDependencyFacts.isEmpty() -> GPUTextRefusalCodes.UPLOAD_PLAN_MISSING
             routeDiagnostics.any { diag -> diag.terminal } ->
                 routeDiagnostics.first { diag -> diag.terminal }.code
             else -> null

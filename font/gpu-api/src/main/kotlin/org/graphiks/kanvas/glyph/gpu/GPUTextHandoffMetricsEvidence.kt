@@ -107,7 +107,7 @@ fun defaultGPUTextHandoffMetricsJson(): String {
                 "classification" to "GPU-gated",
                 "artifactKeyHash" to "sha256:a8-atlas-budget",
                 "handoffDiagnostic" to "text.gpu.artifact-budget-exceeded",
-                "rendererDiagnostic" to "unsupported.text.artifact_budget_exceeded",
+                "rendererDiagnostic" to GPUTextRefusalCodes.ARTIFACT_BUDGET_EXCEEDED,
             ),
         )
         add(
@@ -120,7 +120,7 @@ fun defaultGPUTextHandoffMetricsJson(): String {
                 "classification" to "GPU-gated",
                 "artifactKeyHash" to "sha256:nondeterministic-key-fixture",
                 "handoffDiagnostic" to "text.gpu.artifact-key-nondeterministic",
-                "rendererDiagnostic" to "unsupported.text.artifact_key_nondeterministic",
+                "rendererDiagnostic" to GPUTextRefusalCodes.ARTIFACT_KEY_NONDETERMINISTIC,
             ),
         )
     }

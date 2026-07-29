@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
+import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
+
 private const val RUNTIME_EFFECT_REFUSAL_SCENE_ID = "runtime-effect-refusal-gate-board"
 private const val A8_GLYPH_ATLAS_SCENE_ID = "a8-glyph-atlas-gate-board"
 private const val TEXT_RESOURCE_BINDING_SCENE_ID = "text-resource-binding-gate-board"
@@ -25,12 +27,12 @@ internal fun GPURendererScene<*>.a8GlyphAtlasGateDiagnostics(): List<String> {
     if (sceneId.value != A8_GLYPH_ATLAS_SCENE_ID) return emptyList()
     return listOf(
         "a8GlyphAtlasRefusalMatrix=" +
-            "atlas-descriptor:TargetPrepared:unsupported.text.atlas_descriptor_unaccepted," +
-            "atlas-page:RefuseRequired:unsupported.text.atlas_page_unavailable," +
-            "atlas-entry:RefuseRequired:unsupported.text.atlas_entry_missing," +
-            "atlas-generation:RefuseRequired:unsupported.text.atlas_generation_stale," +
-            "a8-route:TargetPrepared:unsupported.text.a8_atlas_route_unavailable," +
-            "instance-buffer:RefuseRequired:unsupported.text.instance_buffer_budget_exceeded",
+            "atlas-descriptor:TargetPrepared:${GPUTextRefusalCodes.ATLAS_DESCRIPTOR_UNACCEPTED}," +
+            "atlas-page:RefuseRequired:${GPUTextRefusalCodes.ATLAS_PAGE_UNAVAILABLE}," +
+            "atlas-entry:RefuseRequired:${GPUTextRefusalCodes.ATLAS_ENTRY_MISSING}," +
+            "atlas-generation:RefuseRequired:${GPUTextRefusalCodes.ATLAS_GENERATION_STALE}," +
+            "a8-route:TargetPrepared:${GPUTextRefusalCodes.A8_ATLAS_ROUTE_UNAVAILABLE}," +
+            "instance-buffer:RefuseRequired:${GPUTextRefusalCodes.INSTANCE_BUFFER_BUDGET_EXCEEDED}",
         "pmA8GlyphAtlasRow=gpu-renderer.text.a8-atlas",
         "pmA8GlyphAtlasClassification=TargetPrepared",
         "a8GlyphAtlasRoutePromoted=false",
@@ -43,12 +45,12 @@ internal fun GPURendererScene<*>.textResourceBindingGateDiagnostics(): List<Stri
     if (sceneId.value != TEXT_RESOURCE_BINDING_SCENE_ID) return emptyList()
     return listOf(
         "textResourceBindingRefusalMatrix=" +
-            "upload-plan:RefuseRequired:unsupported.text.upload_plan_missing," +
-            "binding-layout:RefuseRequired:unsupported.text.binding_layout_unavailable," +
-            "stale-generation:RefuseRequired:unsupported.text.artifact_generation_stale," +
-            "artifact-registration:RefuseRequired:unsupported.text.artifact_unregistered," +
-            "upload-budget:RefuseRequired:unsupported.text.upload_budget_exceeded," +
-            "cpu-rendered-texture:RefuseRequired:unsupported.text.cpu_rendered_texture_forbidden",
+            "upload-plan:RefuseRequired:${GPUTextRefusalCodes.UPLOAD_PLAN_MISSING}," +
+            "binding-layout:RefuseRequired:${GPUTextRefusalCodes.BINDING_LAYOUT_UNAVAILABLE}," +
+            "stale-generation:RefuseRequired:${GPUTextRefusalCodes.ARTIFACT_GENERATION_STALE}," +
+            "artifact-registration:RefuseRequired:${GPUTextRefusalCodes.ARTIFACT_UNREGISTERED}," +
+            "upload-budget:RefuseRequired:${GPUTextRefusalCodes.UPLOAD_BUDGET_EXCEEDED}," +
+            "cpu-rendered-texture:RefuseRequired:${GPUTextRefusalCodes.CPU_RENDERED_TEXTURE_FORBIDDEN}",
         "pmTextResourceBindingRow=gpu-renderer.text-resource-binding",
         "pmTextResourceBindingClassification=TargetPrepared",
         "textUploadPlanPromoted=false",

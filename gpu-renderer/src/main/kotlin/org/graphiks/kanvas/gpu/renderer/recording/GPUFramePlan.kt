@@ -608,7 +608,12 @@ internal fun GPUFrameMemoryBudgetPlan.snapshotForFramePlan(): GPUFrameMemoryBudg
         diagnostic = diagnostic?.snapshot(),
     )
 
-private fun GPUCapabilities.canonicalSnapshotHash(): String =
+/**
+ * Canonical, handle-free identity of every capability fact that can affect renderer validity.
+ *
+ * Frame sealing and prepared material compilation deliberately share this single authority.
+ */
+fun GPUCapabilities.canonicalSnapshotHash(): String =
     CanonicalHashSink("GPUCapabilities/v3").apply {
         implementation("implementation", implementation)
         string("snapshotId", snapshotId)

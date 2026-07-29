@@ -173,6 +173,31 @@ class GPUFramePlanIntegrityTest {
     }
 
     @Test
+    fun `canonical capability identity changes for one format usage or sample support fact`() {
+        val base = integrityCapabilities()
+        val formatChanged = integrityCapabilities(
+            supportedTextureFormats = setOf(GPUTextureFormat.RGBA8Unorm),
+        )
+        val usageChanged = integrityCapabilities(
+            supportedTextureUsage = GPUTextureUsage.TextureBinding,
+        )
+        val sampleChanged = integrityCapabilities(
+            textureFormatSampleSupport = GPUTextureFormatSampleSupport(
+                mapOf(
+                    GPUTextureFormat.RGBA8Unorm to GPUTextureSampleCountSupport(
+                        renderAttachmentSampleCounts = setOf(1, 4),
+                        resolveSourceSampleCounts = setOf(4),
+                    ),
+                ),
+            ),
+        )
+
+        listOf(formatChanged, usageChanged, sampleChanged).forEach { changed ->
+            assertNotEquals(base.canonicalSnapshotHash(), changed.canonicalSnapshotHash())
+        }
+    }
+
+    @Test
     fun `frame plan and representative nested collections are JVM immutable`() {
         val firstPacket = packet(commandId = 1)
         val secondPacket = packet(commandId = 2)
@@ -1665,6 +1690,7 @@ class GPUFramePlanIntegrityTest {
     private fun integrityCapabilities(
         supportedTextureUsage: GPUTextureUsage? = null,
         maxBufferSize: Long? = null,
+        supportedTextureFormats: Set<GPUTextureFormat> = emptySet(),
         textureFormatSampleSupport: GPUTextureFormatSampleSupport = GPUTextureFormatSampleSupport(),
     ): GPUCapabilities = GPUCapabilities(
         implementation = GPUImplementationIdentity(
@@ -1681,6 +1707,7 @@ class GPUFramePlanIntegrityTest {
             minUniformBufferOffsetAlignment = 256,
             maxBufferSize = maxBufferSize,
         ),
+        supportedTextureFormats = supportedTextureFormats,
         supportedTextureUsage = supportedTextureUsage,
         textureFormatSampleSupport = textureFormatSampleSupport,
     )

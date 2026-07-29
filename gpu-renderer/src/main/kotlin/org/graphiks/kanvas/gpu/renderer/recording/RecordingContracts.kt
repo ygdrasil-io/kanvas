@@ -53,6 +53,7 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
+import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUTextA8RoutePlanner
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnosticCodes
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextRouteDecision
@@ -340,7 +341,7 @@ class GPURecorder(
     }
 
     private fun refusedDrawTextRunPlan(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
-        val code = "unsupported.text.draw_run_route_unavailable"
+        val code = GPUTextRefusalCodes.DRAW_RUN_ROUTE_UNAVAILABLE
         val recordId = "analysis.draw_text_run.${command.commandId.value}"
         val diagnostic = GPUAnalysisDiagnostic(
             code = code,

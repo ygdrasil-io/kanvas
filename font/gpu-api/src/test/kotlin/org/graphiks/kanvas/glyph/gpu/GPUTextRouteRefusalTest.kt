@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.glyph.gpu
 
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -7,6 +8,46 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class GPUTextRouteRefusalTest {
+    @Test
+    fun `text refusal literals have one layered authority including scenes`() {
+        val projectRoot = generateSequence(File(".").canonicalFile) { directory ->
+            directory.parentFile
+        }.first { directory ->
+            directory.resolve("settings.gradle.kts").isFile
+        }
+        val gpuAuthority = projectRoot.resolve(
+            "font/gpu-api/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/" +
+                "GPUTextRouteRefusals.kt",
+        )
+        val formerCoreAuthority = projectRoot.resolve(
+            "font/core/src/main/kotlin/org/graphiks/kanvas/glyph/gpu/" +
+                "GPUTextRefusalCodes.kt",
+        )
+        val diagnosticLiteral = Regex(
+            "\"(?:unsupported|dependency)\\.text\\.[^\"]+\"",
+        )
+        val duplicates = listOf("font/gpu-api", "gpu-renderer", "gpu-renderer-scenes", "kanvas")
+            .flatMap { module ->
+                projectRoot.resolve(module).walkTopDown()
+                    .filter { file ->
+                        file.isFile &&
+                            file.extension == "kt" &&
+                            "/src/main/" in file.invariantSeparatorsPath &&
+                            file.canonicalFile != gpuAuthority.canonicalFile
+                    }
+                    .flatMap { file ->
+                        diagnosticLiteral.findAll(file.readText()).map { match ->
+                            "${file.relativeTo(projectRoot).invariantSeparatorsPath}:${match.value}"
+                        }
+                    }
+                    .toList()
+            }
+
+        assertContains(gpuAuthority.readText(), "object GPUTextRefusalCodes")
+        assertFalse(formerCoreAuthority.exists())
+        assertEquals(emptyList(), duplicates)
+    }
+
     @Test
     fun `default route refusal report covers route blockers without claim promotion`() {
         val report = defaultGPUTextRouteRefusalReport()

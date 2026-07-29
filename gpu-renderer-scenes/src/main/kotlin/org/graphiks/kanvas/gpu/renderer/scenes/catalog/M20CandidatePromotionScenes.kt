@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.catalog
 
+import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneColor
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneRect
@@ -26,7 +27,7 @@ val glyphAtlasStripScene: GPURendererScene<SceneCommand> =
                 color = SceneColor(0.92f, 0.94f, 0.96f, 1f),
                 glyphRoute = "font.glyph.a8-atlas",
                 webGpuCandidateRoute = "webgpu.text.glyph-atlas.a8-sampled",
-                fallbackReason = "unsupported.text.draw_run_route_unavailable",
+                fallbackReason = GPUTextRefusalCodes.DRAW_RUN_ROUTE_UNAVAILABLE,
             ),
             SceneCommand.FillRect(
                 label = "atlas-diagnostic-strip",
@@ -59,7 +60,7 @@ val sdfGlyphScaleScene: GPURendererScene<SceneCommand> =
                 color = SceneColor(0.92f, 0.94f, 0.96f, 1f),
                 glyphRoute = "font.glyph.sdf-atlas",
                 webGpuCandidateRoute = "webgpu.text.glyph-atlas.sdf-sampled",
-                fallbackReason = "unsupported.text.draw_run_route_unavailable",
+                fallbackReason = GPUTextRefusalCodes.DRAW_RUN_ROUTE_UNAVAILABLE,
             ),
             SceneCommand.TextRun(
                 label = "sdf-medium",
@@ -72,7 +73,7 @@ val sdfGlyphScaleScene: GPURendererScene<SceneCommand> =
                 color = SceneColor(0.88f, 0.90f, 0.94f, 1f),
                 glyphRoute = "font.glyph.sdf-atlas",
                 webGpuCandidateRoute = "webgpu.text.glyph-atlas.sdf-sampled",
-                fallbackReason = "unsupported.text.draw_run_route_unavailable",
+                fallbackReason = GPUTextRefusalCodes.DRAW_RUN_ROUTE_UNAVAILABLE,
                 paintOrder = 1,
             ),
             SceneCommand.TextRun(
@@ -86,7 +87,7 @@ val sdfGlyphScaleScene: GPURendererScene<SceneCommand> =
                 color = SceneColor(0.84f, 0.86f, 0.92f, 1f),
                 glyphRoute = "font.glyph.sdf-atlas",
                 webGpuCandidateRoute = "webgpu.text.glyph-atlas.sdf-sampled",
-                fallbackReason = "unsupported.text.draw_run_route_unavailable",
+                fallbackReason = GPUTextRefusalCodes.DRAW_RUN_ROUTE_UNAVAILABLE,
                 paintOrder = 2,
             ),
             SceneCommand.FillRect(

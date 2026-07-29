@@ -2,6 +2,12 @@ package org.graphiks.kanvas.canvas
 
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.text.FontTypeface
+import org.graphiks.kanvas.text.GlyphPaintProvider
+import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.PreparedTextOutline
+import org.graphiks.kanvas.text.TextBlob
+import org.graphiks.kanvas.text.Typeface
 import org.graphiks.kanvas.types.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -106,4 +112,127 @@ class CanvasTest {
     }
 
     @Test fun `Canvas resetMatrix`() { val b = TestBuffer(); val c = Canvas(b); c.translate(100f, 200f); c.resetMatrix(); assertEquals(Matrix33.identity(), c.matrix) }
+
+    @Test
+    fun `empty CFF glyph completes text expansion without recording a draw`() {
+        val typeface = fontFixture(
+            relativePath = "reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf",
+            name = "SourceSerif4-Regular",
+        )
+        val emptyGlyph = (1..2_048).first { glyphId ->
+            typeface.preparedTextOutline(glyphId, 32f) is PreparedTextOutline.ProvenEmpty
+        }
+        val buffer = TestBuffer()
+
+        Canvas(buffer).drawText(textBlob(typeface, emptyGlyph), 4f, 8f, Paint.fill(Color.BLACK))
+
+        assertTrue(buffer.ops().isEmpty())
+    }
+
+    @Test
+    fun `empty variable TrueType glyph completes text expansion without recording a draw`() {
+        val typeface = fontFixture(
+            relativePath = "reports/font/fixtures/fonts/scaler/RobotoFlex-Variable.ttf",
+            name = "RobotoFlex-Variable",
+        )
+        val space = typeface.glyphIdForCodepoint(' '.code)
+        assertTrue(space > 0)
+        val buffer = TestBuffer()
+
+        Canvas(buffer).drawText(
+            textBlob(typeface, space, mapOf("wght" to 721f)),
+            4f,
+            8f,
+            Paint.fill(Color.BLACK),
+        )
+
+        assertTrue(buffer.ops().isEmpty())
+    }
+
+    @Test
+    fun `unavailable exact outline retains DrawText instead of pretending expansion succeeded`() {
+        val typeface = fontFixture(
+            relativePath = "reports/font/fixtures/fonts/scaler/RobotoFlex-Variable.ttf",
+            name = "RobotoFlex-Variable",
+        )
+        val glyph = typeface.glyphIdForCodepoint('A'.code)
+        val buffer = TestBuffer()
+
+        Canvas(buffer).drawText(
+            textBlob(typeface, glyph, mapOf("ZZZZ" to 1f)),
+            4f,
+            8f,
+            Paint.fill(Color.BLACK),
+        )
+
+        assertIs<DisplayOp.DrawText>(buffer.ops().single())
+    }
+
+    @Test
+    fun `expanded text path carries its exact source operation`() {
+        val typeface = fontFixture(
+            relativePath = "reports/font/fixtures/fonts/scaler/SourceSerif4-Regular.otf",
+            name = "SourceSerif4-Regular",
+        )
+        val glyph = typeface.glyphIdForCodepoint('A'.code)
+        val buffer = TestBuffer()
+
+        Canvas(buffer).drawText(textBlob(typeface, glyph), 4f, 8f, Paint.fill(Color.BLACK))
+
+        assertEquals("text-expanded", assertIs<DisplayOp.DrawPath>(buffer.ops().single()).sourceOperation)
+    }
+
+    @Test
+    fun `empty path from a generic drawable typeface completes expansion without recording a draw`() {
+        val typeface = object : Typeface, GlyphPaintProvider {
+            override val fontName: String = "empty-generic-drawable"
+            override fun glyphIdForCodepoint(codepoint: Int): Int = 1
+            override fun getAdvance(glyphId: Int, fontSize: Float): Float = fontSize
+            override fun getGlyphPath(glyphId: Int, fontSize: Float): Path = Path()
+            override fun paintForGlyph(glyphId: Int): Paint = Paint.fill(Color.BLUE)
+        }
+        val buffer = TestBuffer()
+
+        Canvas(buffer).drawText(
+            TextBlob(
+                glyphRuns = listOf(
+                    KanvasGlyphRun(
+                        glyphs = listOf(1u),
+                        positions = listOf(Point.ZERO),
+                        fontSize = 32f,
+                    ),
+                ),
+                typeface = typeface,
+                fontSize = 32f,
+            ),
+            4f,
+            8f,
+            Paint.fill(Color.BLACK),
+        )
+
+        assertTrue(buffer.ops().isEmpty())
+    }
+
+    private fun textBlob(
+        typeface: FontTypeface,
+        glyphId: Int,
+        variations: Map<String, Float> = emptyMap(),
+    ): TextBlob = TextBlob(
+        glyphRuns = listOf(
+            KanvasGlyphRun(
+                glyphs = listOf(glyphId.toUShort()),
+                positions = listOf(Point.ZERO),
+                fontSize = 32f,
+            ),
+        ),
+        typeface = typeface,
+        fontSize = 32f,
+        variationCoordinates = variations,
+    )
+
+    private fun fontFixture(relativePath: String, name: String): FontTypeface =
+        FontTypeface(
+            java.io.File("..").canonicalFile.resolve(relativePath).readBytes(),
+            fontName = name,
+        )
 }

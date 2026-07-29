@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.scenes.commands
 
+import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFillRectCommandBuilder
@@ -575,7 +576,8 @@ sealed interface SceneCommand {
     }
 }
 
-internal const val TEXT_DRAW_RUN_ROUTE_UNAVAILABLE: String = "unsupported.text.draw_run_route_unavailable"
+internal const val TEXT_DRAW_RUN_ROUTE_UNAVAILABLE: String =
+    GPUTextRefusalCodes.DRAW_RUN_ROUTE_UNAVAILABLE
 
 internal fun List<SceneCommand>.textRunRouteUnavailableReason(): String? {
     val textRuns = filterIsInstance<SceneCommand.TextRun>()
