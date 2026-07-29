@@ -540,32 +540,40 @@ private fun PreparedTextNativePreflightFixture.withViolation(
         }
     GPUPreparedTextViolationKind.MATERIAL_ABI_MISMATCH ->
         withTextSemantic { semantic ->
-            semantic.rebuilt(material = semantic.material.rebuilt(abiHash = "abi:forged"))
+            semantic.material.corruptForNegativeTest(
+                fieldName = "abiHash",
+                value = "abi:forged",
+            )
+            semantic
         }
     GPUPreparedTextViolationKind.WGSL_ENTRY_POINT_INCORRECT ->
         withTextSemantic { semantic ->
-            semantic.rebuilt(material = semantic.material.rebuilt(entryPoint = "forged_entry"))
+            semantic.material.corruptForNegativeTest(
+                fieldName = "entryPoint",
+                value = "forged_entry",
+            )
+            semantic
         }
     GPUPreparedTextViolationKind.BINDING_LAYOUT_INCORRECT ->
         withTextSemantic { semantic ->
-            semantic.rebuilt(
-                material = semantic.material.rebuilt(
-                    wgslSource =
-                        "struct ForgedBinding { value: vec4f, };\n" +
-                            "@group(3) @binding(9) var<uniform> forged: ForgedBinding;\n" +
-                            semantic.material.wgslSource,
-                ),
+            semantic.material.corruptForNegativeTest(
+                fieldName = "wgslSource",
+                value =
+                    "struct ForgedBinding { value: vec4f, };\n" +
+                        "@group(3) @binding(9) var<uniform> forged: ForgedBinding;\n" +
+                        semantic.material.wgslSource,
             )
+            semantic
         }
     GPUPreparedTextViolationKind.MATERIAL_UNIFORMS_MODIFIED ->
         withTextSemantic { semantic ->
-            semantic.rebuilt(
-                material = semantic.material.rebuilt(
-                    uniformBytes = semantic.material.uniformBytes.mapIndexed { index, value ->
-                        if (index == 0) value xor 0x7f else value
-                    },
-                ),
+            semantic.material.corruptForNegativeTest(
+                fieldName = "uniformBytes",
+                value = semantic.material.uniformBytes.mapIndexed { index, value ->
+                    if (index == 0) value xor 0x7f else value
+                },
             )
+            semantic
         }
     GPUPreparedTextViolationKind.MATERIAL_RESOURCES_MODIFIED ->
         withTextSemantic { semantic ->
@@ -910,34 +918,17 @@ private fun GPUPreparedR8UploadArtifact.rebuilt(
     bytes = bytes,
 )
 
-private fun org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram.rebuilt(
-    materialKey: String = this.materialKey,
-    wgslSource: String = this.wgslSource,
-    entryPoint: String = this.entryPoint,
-    composableFragment:
-        org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment =
-        this.composableFragment,
-    uniformBytes: List<Int> = this.uniformBytes,
-    sampledResources:
-        List<org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialSampledResource> =
-        this.sampledResources,
-    paintAlpha: Float = this.paintAlpha,
-    sourceKind: org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind =
-        this.sourceKind,
-    abiHash: String = this.abiHash,
-): org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram =
-    org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram(
-        materialKey = materialKey,
-        wgslSource = wgslSource,
-        entryPoint = entryPoint,
-        composableFragment = composableFragment,
-        uniformBytes = uniformBytes,
-        sampledResources = sampledResources,
-        paintAlpha = paintAlpha,
-        sourceKind = sourceKind,
-        abiHash = abiHash,
-        expectedFragmentIdentity = this.composableFragment.authenticatedIdentity,
-    )
+private fun org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
+    .corruptForNegativeTest(
+        fieldName: String,
+        value: Any,
+    ): org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram {
+    javaClass.getDeclaredField(fieldName).run {
+        isAccessible = true
+        set(this@corruptForNegativeTest, value)
+    }
+    return this
+}
 
 private fun GPUDrawSemanticPayload.TextA8.rebuilt(
     atlas: GPUPreparedR8UploadArtifact = this.atlas,

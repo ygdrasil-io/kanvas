@@ -38,11 +38,10 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSurfaceNativePreflight
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialLoweringContext
-import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
-import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialFragment
+import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
@@ -673,21 +672,8 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         ),
     )
 
-    private fun preparedMaterial(key: String) = GPUPreparedMaterialProgram(
-        materialKey = key,
-        wgslSource =
-            "@fragment fn prepared_material_fragment() -> @location(0) vec4f { " +
-                "return vec4f(1.0); }",
-        entryPoint = "prepared_material_fragment",
-        composableFragment = stubPreparedMaterialFragment(uniformByteCount = 16),
-        uniformBytes = List(16) { index -> index },
-        sampledResources = emptyList(),
-        paintAlpha = 1f,
-        sourceKind = GPUMaterialSourceKind.SolidColor,
-        abiHash = "abi:text",
-        expectedFragmentIdentity =
-            stubPreparedMaterialFragment(uniformByteCount = 16).authenticatedIdentity,
-    )
+    private fun preparedMaterial(key: String): GPUPreparedMaterialProgram =
+        stubPreparedMaterialProgram(red = (key.hashCode() and 0xff) / 255f)
 
     private fun sampledMaterial(alphaOnly: Boolean = false): GPUPreparedMaterialProgram {
         val result = GPUPreparedMaterialProgramCompiler.compile(

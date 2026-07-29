@@ -15,10 +15,12 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect
 import org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
-import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind
+import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialLoweringContext
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
-import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialFragment
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
 import kotlin.uuid.Uuid
 
 class GPUPreparedTextPayloadTest {
@@ -26,10 +28,11 @@ class GPUPreparedTextPayloadTest {
     fun `prepared material snapshots its uniform bytes before payload gathering`() {
         val mutableUniforms = mutableListOf(1, 2, 3, 4)
         val prepared = material(mutableUniforms)
+        val expectedUniforms = prepared.uniformBytes
 
         mutableUniforms.fill(0)
 
-        assertEquals(listOf(1, 2, 3, 4), prepared.uniformBytes)
+        assertEquals(expectedUniforms, prepared.uniformBytes)
         assertTrue(
             runCatching {
                 @Suppress("UNCHECKED_CAST")
@@ -39,13 +42,13 @@ class GPUPreparedTextPayloadTest {
     }
 
     @Test
-    fun `prepared material rejects a fragment with a different uniform topology`() {
-        assertFailsWith<IllegalArgumentException> {
-            material(
-                uniformBytes = mutableListOf(1, 2, 3, 4),
-                fragmentUniformByteCount = 0,
-            )
-        }
+    fun `prepared material compiler aligns fragment and final uniform topology`() {
+        val prepared = material(mutableListOf(1, 2, 3, 4))
+
+        assertEquals(
+            prepared.uniformBytes.size,
+            prepared.composableFragment.uniformBinding?.minBindingSizeBytes,
+        )
     }
 
     @Test
@@ -167,6 +170,8 @@ class GPUPreparedTextPayloadTest {
             ),
         )
         val uniforms = mutableListOf(1, 2, 3, 4)
+        val material = material(uniforms)
+        val expectedUniforms = material.uniformBytes
 
         val input = GPUPreparedColorGlyphPayloadInput(
             commandIdValue = 4,
@@ -175,7 +180,7 @@ class GPUPreparedTextPayloadTest {
             atlas = atlas,
             instances = instances,
             layers = layers,
-            material = material(uniforms),
+            material = material,
             targetBounds = TARGET,
             scissorBounds = SCISSOR,
             clipIdentity = "prepared-text-clip:wide-open",
@@ -219,7 +224,7 @@ class GPUPreparedTextPayloadTest {
         assertContentEquals(byteArrayOf(0, 1, 128.toByte(), 255.toByte()), semantic.atlas.tightBytesForUpload())
         assertEquals(listOf(1), semantic.instances.map { it.colorLayerIndex })
         assertEquals(listOf(1), semantic.layers.map { it.colorLayerIndex })
-        assertEquals(listOf(1, 2, 3, 4), semantic.material!!.uniformBytes)
+        assertEquals(expectedUniforms, semantic.material!!.uniformBytes)
         assertEquals(hash, semantic.canonicalHash)
         assertTrue(semantic.hasCanonicalHashIntegrity())
     }
@@ -231,6 +236,7 @@ class GPUPreparedTextPayloadTest {
         val instances = mutableListOf(instance())
         val uniformBytes = mutableListOf(1, 2, 3, 4)
         val material = material(uniformBytes)
+        val expectedUniforms = material.uniformBytes
         val input = GPUPreparedTextA8PayloadInput(
             commandIdValue = 3,
             atlas = atlas,
@@ -256,7 +262,7 @@ class GPUPreparedTextPayloadTest {
         assertContentEquals(byteArrayOf(0, 1, 128.toByte(), 255.toByte()), semantic.atlas.tightBytesForUpload())
         assertEquals(GPUTextArtifactGeneration(7), semantic.atlasGeneration)
         assertEquals(1, semantic.instances.size)
-        assertEquals(listOf(1, 2, 3, 4), semantic.material.uniformBytes)
+        assertEquals(expectedUniforms, semantic.material.uniformBytes)
         assertNotSame(material, semantic.material)
         assertEquals(stableHash, semantic.canonicalHash)
         assertTrue(semantic.hasCanonicalHashIntegrity())
@@ -288,6 +294,45 @@ class GPUPreparedTextPayloadTest {
             .toSet()
         assertTrue((1..9).all { index -> "component$index" in publicMethodNames })
         assertTrue(publicMethodNames.none { name -> name == "copy" || name.startsWith("copy$") })
+    }
+
+    @Test
+    fun `prepared material snapshot refuses WGSL detached from its admitted program facts`() {
+        val source = material(mutableListOf(1, 2, 3, 4))
+        source.javaClass.getDeclaredField("wgslSource").run {
+            isAccessible = true
+            set(source, "invalid-unparsed-wgsl")
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            source.authenticatedSnapshot()
+        }
+    }
+
+    @Test
+    fun `prepared material snapshot refuses payload and final ABI detached from admission`() {
+        val modifiedUniforms = material(mutableListOf(1, 2, 3, 4))
+        modifiedUniforms.javaClass.getDeclaredField("uniformBytes").run {
+            isAccessible = true
+            set(
+                modifiedUniforms,
+                modifiedUniforms.uniformBytes.mapIndexed { index, value ->
+                    if (index == 0) value xor 0x7f else value
+                },
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            modifiedUniforms.authenticatedSnapshot()
+        }
+
+        val modifiedAbi = material(mutableListOf(1, 2, 3, 4))
+        modifiedAbi.javaClass.getDeclaredField("abiHash").run {
+            isAccessible = true
+            set(modifiedAbi, "sha256:" + "0".repeat(64))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            modifiedAbi.authenticatedSnapshot()
+        }
     }
 
     @Test
@@ -386,21 +431,28 @@ class GPUPreparedTextPayloadTest {
 
     private fun material(
         uniformBytes: MutableList<Int>,
-        fragmentUniformByteCount: Int = uniformBytes.size,
-    ): GPUPreparedMaterialProgram =
-        GPUPreparedMaterialProgram(
-            materialKey = "material:prepared:solid:unit",
-            wgslSource = "@fragment fn prepared_material_fragment() -> @location(0) vec4f { return vec4f(1.0); }",
-            entryPoint = "prepared_material_fragment",
-            composableFragment = stubPreparedMaterialFragment(fragmentUniformByteCount),
-            uniformBytes = uniformBytes,
-            sampledResources = emptyList(),
+    ): GPUPreparedMaterialProgram {
+        val channels = List(4) { index ->
+            (uniformBytes.getOrElse(index) { 0 } and 0xff) / 255f
+        }
+        val result = GPUPreparedMaterialProgramCompiler.compile(
+            descriptor = GPUMaterialDescriptor.SolidColor(
+                r = channels[0],
+                g = channels[1],
+                b = channels[2],
+                a = channels[3],
+            ),
             paintAlpha = 0.5f,
-            sourceKind = GPUMaterialSourceKind.SolidColor,
-            abiHash = "abi:unit",
-            expectedFragmentIdentity =
-                stubPreparedMaterialFragment(fragmentUniformByteCount).authenticatedIdentity,
+            context = GPUMaterialLoweringContext(
+                capabilityClass = "prepared-text-payload-test",
+                targetFormatClass = "rgba8unorm",
+                dictionaryVersion = "material-dictionary:prepared-text-test:v1",
+            ),
         )
+        return checkNotNull((result as? GPUPreparedMaterialProgramResult.Ready)?.program) {
+            "The admitted payload material must compile: $result"
+        }
+    }
 
     private fun sha256(bytes: ByteArray): String =
         java.security.MessageDigest.getInstance("SHA-256")

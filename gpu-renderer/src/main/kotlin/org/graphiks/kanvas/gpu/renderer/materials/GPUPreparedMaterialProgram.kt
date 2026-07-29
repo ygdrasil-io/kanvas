@@ -7,6 +7,8 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragmentAdmission
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgramAdmission
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialSampledBinding
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialUniformBinding
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -54,10 +56,10 @@ object GPUPreparedMaterialProgramCompiler {
             is PreparedSourceResult.Refused ->
                 return refused(result.code, result.sourceKind, result.message)
         }
-        val reflectedAbiFacts = when (
+        val finalReflection = when (
             val validation = validateFinalModule(prepared)
         ) {
-            is FinalModuleValidation.Ready -> validation.abiFacts
+            is FinalModuleValidation.Ready -> validation.reflection
             is FinalModuleValidation.Refused ->
                 return refused(
                     code = "unsupported.material.wgsl_validation",
@@ -73,7 +75,7 @@ object GPUPreparedMaterialProgramCompiler {
             sourceFunction = prepared.sourceFunction,
             sourceColorContract = prepared.sourceColorContract,
         )
-        val composableAbiFacts = when (
+        val fragmentAdmission = when (
             val validation = validateComposableFragment(
                 prepared = prepared,
                 evaluationFunctionWgsl = evaluationFunctionWgsl,
@@ -81,7 +83,7 @@ object GPUPreparedMaterialProgramCompiler {
                 sampledBindings = sampledBindings,
             )
         ) {
-            is ComposableFragmentValidation.Ready -> validation.abiFacts
+            is ComposableFragmentValidation.Ready -> validation.admission
             is ComposableFragmentValidation.Refused ->
                 return refused(
                     code = "unsupported.material.wgsl_validation",
@@ -89,59 +91,34 @@ object GPUPreparedMaterialProgramCompiler {
                     message = validation.message,
                 )
         }
-        val composableFragment = GPUPreparedMaterialFragment.createAuthenticated(
-            declarationsWgsl = prepared.composableDeclarationsWgsl,
-            evaluationFunctionWgsl = evaluationFunctionWgsl,
-            uniformBinding = uniformBinding,
-            sampledBindings = sampledBindings,
-            reflectedAbiFacts = composableAbiFacts,
-        )
-
         val uniformSnapshot = immutableList(prepared.uniformBytes.map { it.toInt() and 0xff })
         val resourceSnapshot = immutableList(prepared.sampledResources)
-        val resourceFacts = resourceSnapshot.flatMapIndexed { index, resource ->
-            resource.identityFacts().map { fact -> "resource[$index].$fact" }
-        }
-        val sourceHash = sha256Hex(prepared.wgslSource.encodeToByteArray())
-        val materialKey = "material:prepared:${prepared.sourceKind.name.lowercase()}:" +
-            CanonicalIdentityEncoder("prepared-material-key-v2")
-                .text("sourceKind", prepared.sourceKind.name)
-                .text("sourceHash", sourceHash)
-                .text("entryPoint", prepared.entryPoint)
-                .text("uniformLayout", prepared.uniformLayoutHash)
-                .text("capabilityClass", context.capabilityClass)
-                .text("targetFormatClass", context.targetFormatClass)
-                .text("dictionaryVersion", context.dictionaryVersion)
-                .text("uniformBytesHash", sha256Hex(prepared.uniformBytes))
-                .floatBits("paintAlpha", paintAlpha)
-                .texts("keyFacts", prepared.keyFacts)
-                .texts("sampledResourceFacts", resourceFacts)
-                .digestHex()
-        val abiHash = CanonicalIdentityEncoder("prepared-material-abi-v2")
-            .text("sourceKind", prepared.sourceKind.name)
-            .text("sourceHash", sourceHash)
-            .text("entryPoint", prepared.entryPoint)
-            .text("uniformLayout", prepared.uniformLayoutHash)
-            .int("uniformByteCount", uniformSnapshot.size)
-            .int("sampledResourceCount", resourceSnapshot.size)
-            .text("fragmentHash", composableFragment.fragmentHash)
-            .text("fragmentAbiHash", composableFragment.abiHash)
-            .texts("registeredAbiFacts", prepared.abiFacts)
-            .texts("reflectedAbiFacts", reflectedAbiFacts)
-            .digestIdentity()
+        val admission = GPUPreparedMaterialProgramAdmission.issueValidated(
+            fragmentAdmission = fragmentAdmission,
+            wgslSource = prepared.wgslSource,
+            entryPoint = prepared.entryPoint,
+            sourceKind = prepared.sourceKind,
+            uniformLayoutHash = prepared.uniformLayoutHash,
+            uniformBytes = uniformSnapshot,
+            sampledResources = resourceSnapshot,
+            paintAlpha = paintAlpha,
+            capabilityClass = context.capabilityClass,
+            targetFormatClass = context.targetFormatClass,
+            dictionaryVersion = context.dictionaryVersion,
+            keyFacts = prepared.keyFacts,
+            registeredAbiFacts = prepared.abiFacts,
+            reflectedAbi = finalReflection,
+        )
 
         return GPUPreparedMaterialProgramResult.Ready(
-            GPUPreparedMaterialProgram(
-                materialKey = materialKey,
+            GPUPreparedMaterialProgram.createAuthenticated(
                 wgslSource = prepared.wgslSource,
                 entryPoint = prepared.entryPoint,
-                composableFragment = composableFragment,
                 uniformBytes = uniformSnapshot,
                 sampledResources = resourceSnapshot,
                 paintAlpha = paintAlpha,
                 sourceKind = prepared.sourceKind,
-                abiHash = abiHash,
-                expectedFragmentIdentity = composableFragment.authenticatedIdentity,
+                admission = admission,
             ),
         )
     }
@@ -594,39 +571,7 @@ object GPUPreparedMaterialProgramCompiler {
         prepared.abiExpectation.mismatch(report, prepared.uniformBytes.size)?.let { message ->
             return FinalModuleValidation.Refused(message)
         }
-        val abiFacts = buildList {
-            report.entryPoints.sortedWith(compareBy({ it.name }, { it.stage }))
-                .forEachIndexed { index, reflected ->
-                    add(
-                        "entry[$index]=${reflected.name}:${reflected.stage}:" +
-                            "${reflected.workgroupSize}",
-                    )
-                }
-            report.bindings.sortedWith(compareBy({ it.group }, { it.binding }))
-                .forEachIndexed { index, binding ->
-                    add(
-                        "binding[$index]=${binding.group}:${binding.binding}:${binding.name}:" +
-                            "${binding.resourceKind}:${binding.access}:${binding.sampleType}:" +
-                            "${binding.viewDimension}:${binding.storageFormat}:" +
-                            "${binding.minBindingSize}",
-                    )
-                }
-            report.layouts.sortedWith(compareBy({ it.addressSpace }, { it.structName }))
-                .forEachIndexed { layoutIndex, layout ->
-                    add(
-                        "layout[$layoutIndex]=${layout.structName}:${layout.addressSpace}:" +
-                            "${layout.size}:${layout.alignment}",
-                    )
-                    layout.members.forEachIndexed { memberIndex, member ->
-                        add(
-                            "layout[$layoutIndex].member[$memberIndex]=${member.name}:" +
-                                "${member.type}:${member.offset}:${member.size}:" +
-                                "${member.alignment}:${member.stride}",
-                        )
-                    }
-                }
-        }
-        return FinalModuleValidation.Ready(abiFacts)
+        return FinalModuleValidation.Ready(report)
     }
 
     private fun validateComposableFragment(
@@ -688,32 +633,15 @@ object GPUPreparedMaterialProgramCompiler {
                 message,
             )
         }
-        val abiFacts = buildList {
-            report.bindings.sortedWith(compareBy({ it.group }, { it.binding }))
-                .forEachIndexed { index, binding ->
-                    add(
-                        "binding[$index]=${binding.group}:${binding.binding}:${binding.name}:" +
-                            "${binding.resourceKind}:${binding.access}:${binding.sampleType}:" +
-                            "${binding.viewDimension}:${binding.storageFormat}:" +
-                            "${binding.minBindingSize}",
-                    )
-                }
-            report.layouts.sortedWith(compareBy({ it.addressSpace }, { it.structName }))
-                .forEachIndexed { layoutIndex, layout ->
-                    add(
-                        "layout[$layoutIndex]=${layout.structName}:${layout.addressSpace}:" +
-                            "${layout.size}:${layout.alignment}",
-                    )
-                    layout.members.forEachIndexed { memberIndex, member ->
-                        add(
-                            "layout[$layoutIndex].member[$memberIndex]=${member.name}:" +
-                                "${member.type}:${member.offset}:${member.size}:" +
-                                "${member.alignment}:${member.stride}",
-                        )
-                    }
-                }
-        }
-        return ComposableFragmentValidation.Ready(abiFacts)
+        return ComposableFragmentValidation.Ready(
+            GPUPreparedMaterialFragmentAdmission.issueValidated(
+                declarationsWgsl = prepared.composableDeclarationsWgsl,
+                evaluationFunctionWgsl = evaluationFunctionWgsl,
+                uniformBinding = uniformBinding,
+                sampledBindings = sampledBindings,
+                reflectedAbi = report,
+            ),
+        )
     }
 
     private fun sampledResource(
@@ -900,31 +828,6 @@ internal data class PreparedAbiBinding(
     val storageFormat: String? = null,
     val minBindingSize: Int? = null,
 )
-
-internal data class PreparedMaterialFragmentIdentity(
-    val fragmentHash: String,
-    val abiHash: String,
-)
-
-internal fun preparedMaterialFragmentIdentity(
-    declarationsWgsl: String,
-    evaluationFunctionWgsl: String,
-    uniformBinding: GPUPreparedMaterialUniformBinding?,
-    sampledBindings: List<GPUPreparedMaterialSampledBinding>,
-    reflectedAbiFacts: List<String>,
-): PreparedMaterialFragmentIdentity {
-    val identity = GPUPreparedMaterialFragment.authenticatedIdentity(
-        declarationsWgsl = declarationsWgsl,
-        evaluationFunctionWgsl = evaluationFunctionWgsl,
-        uniformBinding = uniformBinding,
-        sampledBindings = sampledBindings,
-        reflectedAbiFacts = reflectedAbiFacts,
-    )
-    return PreparedMaterialFragmentIdentity(
-        fragmentHash = identity.fragmentHash,
-        abiHash = identity.abiHash,
-    )
-}
 
 internal fun composableBindingMismatch(
     uniformBinding: GPUPreparedMaterialUniformBinding?,
@@ -1270,12 +1173,16 @@ private sealed interface PreparedSourceResult {
 }
 
 private sealed interface FinalModuleValidation {
-    data class Ready(val abiFacts: List<String>) : FinalModuleValidation
+    data class Ready(
+        val reflection: org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport,
+    ) : FinalModuleValidation
     data class Refused(val message: String) : FinalModuleValidation
 }
 
 private sealed interface ComposableFragmentValidation {
-    data class Ready(val abiFacts: List<String>) : ComposableFragmentValidation
+    data class Ready(
+        val admission: GPUPreparedMaterialFragmentAdmission,
+    ) : ComposableFragmentValidation
     data class Refused(val message: String) : ComposableFragmentValidation
 }
 

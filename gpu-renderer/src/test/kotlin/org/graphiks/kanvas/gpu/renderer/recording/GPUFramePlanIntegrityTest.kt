@@ -78,9 +78,7 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect
 import org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
-import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
-import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialFragment
+import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
@@ -1692,18 +1690,7 @@ class GPUFramePlanIntegrityTest {
                         pageIndex = 0,
                     ),
                 ),
-                material = GPUPreparedMaterialProgram(
-                    materialKey = "material:text-a8-integrity",
-                    wgslSource = "@fragment fn prepared_material_fragment() -> @location(0) vec4f { return vec4f(1.0); }",
-                    entryPoint = "prepared_material_fragment",
-                    composableFragment = stubPreparedMaterialFragment(),
-                    uniformBytes = emptyList(),
-                    sampledResources = emptyList(),
-                    paintAlpha = 1f,
-                    sourceKind = GPUMaterialSourceKind.SolidColor,
-                    abiHash = "abi:text-a8-integrity",
-                    expectedFragmentIdentity = stubPreparedMaterialFragment().authenticatedIdentity,
-                ),
+                material = stubPreparedMaterialProgram(),
                 targetBounds = GPUPixelBounds(0, 0, 2, 2),
                 scissorBounds = GPUPixelBounds(0, 0, 2, 2),
                 clipIdentity = "clip:text-a8-integrity",

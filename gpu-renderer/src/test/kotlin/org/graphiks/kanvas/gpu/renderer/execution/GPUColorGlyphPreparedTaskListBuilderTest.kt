@@ -34,9 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
-import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
-import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialFragment
+import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphAtlasPlacementProofInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphLayerPayloadInput
@@ -81,6 +79,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
                 GPUFrameResourceRole.UploadStaging,
                 GPUFrameResourceRole.GlyphAtlas,
                 GPUFrameResourceRole.VertexData,
+                GPUFrameResourceRole.UniformData,
             ),
             prepare.requests.map { it.role },
         )
@@ -104,6 +103,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
             listOf(
                 GPUFrameResourceRole.GlyphAtlas,
                 GPUFrameResourceRole.VertexData,
+                GPUFrameResourceRole.UniformData,
             ),
             render.resourceUses.map { it.role },
         )
@@ -122,7 +122,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
         )
         assertEquals(8L, taskList.memoryBudget.targetResidentBytes)
         assertEquals(0, prepare.requests.count { it.role == GPUFrameResourceRole.IndexData })
-        assertEquals(0, prepare.requests.count { it.role == GPUFrameResourceRole.UniformData })
+        assertEquals(1, prepare.requests.count { it.role == GPUFrameResourceRole.UniformData })
     }
 
     @Test
@@ -435,20 +435,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
                     ),
                 ),
                 layers = layers,
-                material = GPUPreparedMaterialProgram(
-                    materialKey = "material:color-glyph",
-                    wgslSource =
-                        "@fragment fn prepared_material_fragment() -> @location(0) vec4f { " +
-                            "return vec4f(1.0); }",
-                    entryPoint = "prepared_material_fragment",
-                    composableFragment = stubPreparedMaterialFragment(),
-                    uniformBytes = emptyList(),
-                    sampledResources = emptyList(),
-                    paintAlpha = 1f,
-                    sourceKind = GPUMaterialSourceKind.SolidColor,
-                    abiHash = "abi:color-glyph",
-                    expectedFragmentIdentity = stubPreparedMaterialFragment().authenticatedIdentity,
-                ),
+                material = stubPreparedMaterialProgram(),
                 targetBounds = GPUPixelBounds(0, 0, 2, 1),
                 scissorBounds = GPUPixelBounds(0, 0, 1, 1),
                 clipIdentity = "clip:color-glyph",

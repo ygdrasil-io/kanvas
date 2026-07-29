@@ -64,7 +64,7 @@ enum class GPUMaterialSourceKind {
  *
  * This DTO owns no lowering, routing, shader generation, or resource decision.
  */
-class GPUPreparedMaterialProgram internal constructor(
+class GPUPreparedMaterialProgram private constructor(
     val materialKey: String,
     val wgslSource: String,
     val entryPoint: String,
@@ -74,7 +74,7 @@ class GPUPreparedMaterialProgram internal constructor(
     val paintAlpha: Float,
     val sourceKind: GPUMaterialSourceKind,
     val abiHash: String,
-    private val expectedFragmentIdentity: GPUPreparedMaterialFragmentIdentity,
+    private val admission: GPUPreparedMaterialProgramAdmission,
 ) {
     val uniformBytes: List<Int> = immutableList(uniformBytes)
     val sampledResources: List<GPUPreparedMaterialSampledResource> =
@@ -90,9 +90,8 @@ class GPUPreparedMaterialProgram internal constructor(
         require(paintAlpha.isFinite() && paintAlpha in 0f..1f) {
             "Prepared material paint alpha must be finite and normalized"
         }
-        require(abiHash.isNotBlank()) { "Prepared material ABI hash must not be blank" }
-        require(composableFragment.authenticatedIdentity == expectedFragmentIdentity) {
-            "Prepared material fragment identity must match its authenticated program"
+        require(abiHash.matches(Regex("sha256:[0-9a-f]{64}"))) {
+            "Prepared material ABI hash must be canonical"
         }
 
         val uniformBinding = composableFragment.uniformBinding
@@ -112,18 +111,19 @@ class GPUPreparedMaterialProgram internal constructor(
         }
     }
 
+    @JvmSynthetic
     internal fun authenticatedSnapshot(): GPUPreparedMaterialProgram =
-        GPUPreparedMaterialProgram(
+        createAuthenticatedCore(
             materialKey = materialKey,
             wgslSource = wgslSource,
             entryPoint = entryPoint,
-            composableFragment = composableFragment,
             uniformBytes = uniformBytes,
             sampledResources = sampledResources,
             paintAlpha = paintAlpha,
             sourceKind = sourceKind,
-            abiHash = abiHash,
-            expectedFragmentIdentity = expectedFragmentIdentity,
+            admission = admission,
+            retainedFragment = composableFragment,
+            retainedAbiHash = abiHash,
         )
 
     operator fun component1(): String = materialKey
@@ -183,6 +183,93 @@ class GPUPreparedMaterialProgram internal constructor(
             "paintAlpha=$paintAlpha, " +
             "sourceKind=$sourceKind, " +
             "abiHash=$abiHash)"
+
+    companion object {
+        @JvmSynthetic
+        internal fun createAuthenticated(
+            wgslSource: String,
+            entryPoint: String,
+            uniformBytes: List<Int>,
+            sampledResources: List<GPUPreparedMaterialSampledResource>,
+            paintAlpha: Float,
+            sourceKind: GPUMaterialSourceKind,
+            admission: GPUPreparedMaterialProgramAdmission,
+        ): GPUPreparedMaterialProgram =
+            createAuthenticatedCore(
+                materialKey = admission.materialKey(),
+                wgslSource = wgslSource,
+                entryPoint = entryPoint,
+                uniformBytes = uniformBytes,
+                sampledResources = sampledResources,
+                paintAlpha = paintAlpha,
+                sourceKind = sourceKind,
+                admission = admission,
+                retainedFragment = null,
+                retainedAbiHash = null,
+            )
+
+        private fun createAuthenticatedCore(
+            materialKey: String,
+            wgslSource: String,
+            entryPoint: String,
+            uniformBytes: List<Int>,
+            sampledResources: List<GPUPreparedMaterialSampledResource>,
+            paintAlpha: Float,
+            sourceKind: GPUMaterialSourceKind,
+            admission: GPUPreparedMaterialProgramAdmission,
+            retainedFragment: GPUPreparedMaterialFragment?,
+            retainedAbiHash: String?,
+        ): GPUPreparedMaterialProgram {
+            admission.requireMatches(
+                materialKey = materialKey,
+                wgslSource = wgslSource,
+                entryPoint = entryPoint,
+                sourceKind = sourceKind,
+                uniformBytes = uniformBytes,
+                sampledResources = sampledResources,
+                paintAlpha = paintAlpha,
+            )
+            val authoritativeFragment = GPUPreparedMaterialFragment.createAuthenticated(
+                admission.fragmentAdmission,
+            )
+            retainedFragment?.let { retained ->
+                require(retained.declarationsWgsl == authoritativeFragment.declarationsWgsl)
+                require(
+                    retained.evaluationFunctionWgsl ==
+                        authoritativeFragment.evaluationFunctionWgsl,
+                )
+                require(retained.evaluationFunction == authoritativeFragment.evaluationFunction)
+                require(retained.uniformBinding == authoritativeFragment.uniformBinding)
+                require(retained.sampledBindings == authoritativeFragment.sampledBindings)
+                require(retained.colorContract == authoritativeFragment.colorContract)
+                require(retained.coordinateContract == authoritativeFragment.coordinateContract)
+                require(retained.fragmentHash == authoritativeFragment.fragmentHash)
+                require(retained.abiHash == authoritativeFragment.abiHash)
+            }
+            val fragment = retainedFragment ?: authoritativeFragment
+            val abiHash = admission.programAbiHash(
+                fragmentHash = authoritativeFragment.fragmentHash,
+                fragmentAbiHash = authoritativeFragment.abiHash,
+            )
+            retainedAbiHash?.let { retained ->
+                require(retained == abiHash) {
+                    "Prepared material ABI must match its admitted program facts"
+                }
+            }
+            return GPUPreparedMaterialProgram(
+                materialKey = materialKey,
+                wgslSource = wgslSource,
+                entryPoint = entryPoint,
+                composableFragment = fragment,
+                uniformBytes = uniformBytes,
+                sampledResources = sampledResources,
+                paintAlpha = paintAlpha,
+                sourceKind = sourceKind,
+                abiHash = abiHash,
+                admission = admission,
+            )
+        }
+    }
 }
 
 private fun exactRgbaByteCount(width: Int, height: Int): Long? {
