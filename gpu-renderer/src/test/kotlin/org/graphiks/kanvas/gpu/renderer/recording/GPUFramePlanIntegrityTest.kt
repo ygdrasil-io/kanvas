@@ -1702,6 +1702,7 @@ class GPUFramePlanIntegrityTest {
                     paintAlpha = 1f,
                     sourceKind = GPUMaterialSourceKind.SolidColor,
                     abiHash = "abi:text-a8-integrity",
+                    expectedFragmentIdentity = stubPreparedMaterialFragment().authenticatedIdentity,
                 ),
                 targetBounds = GPUPixelBounds(0, 0, 2, 2),
                 scissorBounds = GPUPixelBounds(0, 0, 2, 2),

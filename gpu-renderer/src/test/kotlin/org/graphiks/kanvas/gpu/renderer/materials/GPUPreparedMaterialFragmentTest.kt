@@ -176,6 +176,49 @@ class GPUPreparedMaterialFragmentTest {
     }
 
     @Test
+    fun `fragment authority derives code and ABI hashes from exact admitted facts`() {
+        val declarations = """
+            fn kanvas_material_source(p: vec2<f32>) -> vec4<f32> {
+                return vec4<f32>(p, 0.0, 1.0);
+            }
+        """.trimIndent()
+        val evaluation = """
+            fn kanvas_evaluate_material(p: vec2<f32>) -> vec4<f32> {
+                return kanvas_material_source(p);
+            }
+        """.trimIndent()
+        fun authenticated(abiFacts: List<String>) =
+            GPUPreparedMaterialFragment.createAuthenticated(
+                declarationsWgsl = declarations,
+                evaluationFunctionWgsl = evaluation,
+                uniformBinding = GPUPreparedMaterialUniformBinding(minBindingSizeBytes = 16),
+                sampledBindings = emptyList(),
+                reflectedAbiFacts = abiFacts,
+            )
+
+        val baseline = authenticated(
+            listOf(
+                "binding[0]=1:0:material:uniformBuffer:read:null:null:null:16",
+                "layout[0]=Material:uniform:16:16",
+            ),
+        )
+        val changedAbi = authenticated(
+            listOf(
+                "binding[0]=1:0:material:uniformBuffer:read:null:null:null:16",
+                "layout[0]=Material:uniform:16:16",
+                "layout[0].member[0]=color:vec4<f32>:0:16:16:null",
+            ),
+        )
+
+        assertEquals(
+            sha256Hex((declarations + "\n\n" + evaluation).encodeToByteArray()),
+            baseline.fragmentHash,
+        )
+        assertEquals(baseline.fragmentHash, changedAbi.fragmentHash)
+        assertNotEquals(baseline.abiHash, changedAbi.abiHash)
+    }
+
+    @Test
     fun `composable binding gate rejects missing extra and duplicate bindings`() {
         val uniform = GPUPreparedMaterialUniformBinding(minBindingSizeBytes = 16)
         val sampled = listOf(
@@ -288,33 +331,17 @@ class GPUPreparedMaterialFragmentTest {
     }
 
     @Test
-    fun `fragment constructor rejects noncanonical identities and binding topology`() {
+    fun `fragment authority rejects noncanonical binding topology`() {
         fun fragment(
-            evaluationFunction: String = "kanvas_evaluate_material",
-            fragmentHash: String = "0".repeat(64),
-            abiHash: String = "sha256:${"1".repeat(64)}",
             sampledBindings: List<GPUPreparedMaterialSampledBinding> = emptyList(),
-        ) = GPUPreparedMaterialFragment(
+        ) = GPUPreparedMaterialFragment.createAuthenticated(
             declarationsWgsl = "fn kanvas_material_source(p: vec2<f32>) -> vec4<f32> { return vec4f(p, 0.0, 1.0); }",
             evaluationFunctionWgsl = "fn kanvas_evaluate_material(p: vec2<f32>) -> vec4<f32> { return kanvas_material_source(p); }",
-            evaluationFunction = evaluationFunction,
             uniformBinding = null,
             sampledBindings = sampledBindings,
-            colorContract = GPUPreparedMaterialColorContract.LinearPremultipliedRgba,
-            coordinateContract = GPUPreparedMaterialCoordinateContract.LocalPosition2D,
-            fragmentHash = fragmentHash,
-            abiHash = abiHash,
+            reflectedAbiFacts = listOf("test-fixture"),
         )
 
-        assertFailsWith<IllegalArgumentException> {
-            fragment(evaluationFunction = "other")
-        }
-        assertFailsWith<IllegalArgumentException> {
-            fragment(fragmentHash = "sha256:${"0".repeat(64)}")
-        }
-        assertFailsWith<IllegalArgumentException> {
-            fragment(abiHash = "")
-        }
         assertFailsWith<IllegalArgumentException> {
             fragment(
                 sampledBindings = listOf(
@@ -337,6 +364,19 @@ class GPUPreparedMaterialFragmentTest {
                 ),
             )
         }
+        assertFailsWith<IllegalArgumentException> {
+            fragment(
+                sampledBindings = listOf(
+                    GPUPreparedMaterialSampledBinding(
+                        resourceIndex = 0,
+                        textureGroup = 2,
+                        textureBinding = 7,
+                        samplerGroup = 2,
+                        samplerBinding = 9,
+                    ),
+                ),
+            )
+        }
     }
 
     @Test
@@ -348,16 +388,12 @@ class GPUPreparedMaterialFragmentTest {
                 samplerBinding = 2,
             ),
         )
-        val fragment = GPUPreparedMaterialFragment(
+        val fragment = GPUPreparedMaterialFragment.createAuthenticated(
             declarationsWgsl = "fn kanvas_material_source(p: vec2<f32>) -> vec4<f32> { return vec4f(p, 0.0, 1.0); }",
             evaluationFunctionWgsl = "fn kanvas_evaluate_material(p: vec2<f32>) -> vec4<f32> { return kanvas_material_source(p); }",
-            evaluationFunction = "kanvas_evaluate_material",
             uniformBinding = null,
             sampledBindings = bindings,
-            colorContract = GPUPreparedMaterialColorContract.LinearPremultipliedRgba,
-            coordinateContract = GPUPreparedMaterialCoordinateContract.LocalPosition2D,
-            fragmentHash = "0".repeat(64),
-            abiHash = "sha256:${"1".repeat(64)}",
+            reflectedAbiFacts = listOf("test-fixture"),
         )
 
         bindings.clear()
@@ -368,6 +404,47 @@ class GPUPreparedMaterialFragmentTest {
                 (fragment.sampledBindings as MutableList<GPUPreparedMaterialSampledBinding>).clear()
             }.isFailure,
         )
+    }
+
+    @Test
+    fun `program rejects reattaching same topology fragment with different authenticated code and ABI`() {
+        val baseline = compile(solid(), paintAlpha = 1f)
+        val replacement = GPUPreparedMaterialFragment.createAuthenticated(
+            declarationsWgsl = """
+                fn kanvas_material_source(p: vec2<f32>) -> vec4<f32> {
+                    return vec4f(p.yx, 0.5, 1.0);
+                }
+            """.trimIndent(),
+            evaluationFunctionWgsl = """
+                fn kanvas_evaluate_material(p: vec2<f32>) -> vec4<f32> {
+                    return kanvas_material_source(p);
+                }
+            """.trimIndent(),
+            uniformBinding = baseline.composableFragment.uniformBinding,
+            sampledBindings = baseline.composableFragment.sampledBindings,
+            reflectedAbiFacts = listOf("replacement:distinct-reflected-abi"),
+        )
+
+        assertEquals(
+            baseline.composableFragment.sampledBindings.size,
+            replacement.sampledBindings.size,
+        )
+        assertNotEquals(baseline.composableFragment.fragmentHash, replacement.fragmentHash)
+        assertNotEquals(baseline.composableFragment.abiHash, replacement.abiHash)
+        assertFailsWith<IllegalArgumentException> {
+            GPUPreparedMaterialProgram(
+                materialKey = baseline.materialKey,
+                wgslSource = baseline.wgslSource,
+                entryPoint = baseline.entryPoint,
+                composableFragment = replacement,
+                uniformBytes = baseline.uniformBytes,
+                sampledResources = baseline.sampledResources,
+                paintAlpha = baseline.paintAlpha,
+                sourceKind = baseline.sourceKind,
+                abiHash = baseline.abiHash,
+                expectedFragmentIdentity = baseline.composableFragment.authenticatedIdentity,
+            )
+        }
     }
 
     private fun compile(
@@ -512,4 +589,8 @@ class GPUPreparedMaterialFragmentTest {
         sampleType = sampleType,
         viewDimension = viewDimension,
     )
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 }

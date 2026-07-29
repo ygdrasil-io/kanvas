@@ -74,6 +74,7 @@ class GPUPreparedMaterialProgram internal constructor(
     val paintAlpha: Float,
     val sourceKind: GPUMaterialSourceKind,
     val abiHash: String,
+    private val expectedFragmentIdentity: GPUPreparedMaterialFragmentIdentity,
 ) {
     val uniformBytes: List<Int> = immutableList(uniformBytes)
     val sampledResources: List<GPUPreparedMaterialSampledResource> =
@@ -90,6 +91,9 @@ class GPUPreparedMaterialProgram internal constructor(
             "Prepared material paint alpha must be finite and normalized"
         }
         require(abiHash.isNotBlank()) { "Prepared material ABI hash must not be blank" }
+        require(composableFragment.authenticatedIdentity == expectedFragmentIdentity) {
+            "Prepared material fragment identity must match its authenticated program"
+        }
 
         val uniformBinding = composableFragment.uniformBinding
         require((uniformBinding == null) == this.uniformBytes.isEmpty()) {
@@ -107,6 +111,78 @@ class GPUPreparedMaterialProgram internal constructor(
             "Prepared material fragment sampled topology must match its resources"
         }
     }
+
+    internal fun authenticatedSnapshot(): GPUPreparedMaterialProgram =
+        GPUPreparedMaterialProgram(
+            materialKey = materialKey,
+            wgslSource = wgslSource,
+            entryPoint = entryPoint,
+            composableFragment = composableFragment,
+            uniformBytes = uniformBytes,
+            sampledResources = sampledResources,
+            paintAlpha = paintAlpha,
+            sourceKind = sourceKind,
+            abiHash = abiHash,
+            expectedFragmentIdentity = expectedFragmentIdentity,
+        )
+
+    operator fun component1(): String = materialKey
+
+    operator fun component2(): String = wgslSource
+
+    operator fun component3(): String = entryPoint
+
+    operator fun component4(): GPUPreparedMaterialFragment = composableFragment
+
+    operator fun component5(): List<Int> = uniformBytes
+
+    operator fun component6(): List<GPUPreparedMaterialSampledResource> = sampledResources
+
+    operator fun component7(): Float = paintAlpha
+
+    operator fun component8(): GPUMaterialSourceKind = sourceKind
+
+    operator fun component9(): String = abiHash
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is GPUPreparedMaterialProgram) return false
+
+        return materialKey == other.materialKey &&
+            wgslSource == other.wgslSource &&
+            entryPoint == other.entryPoint &&
+            composableFragment == other.composableFragment &&
+            uniformBytes == other.uniformBytes &&
+            sampledResources == other.sampledResources &&
+            paintAlpha.compareTo(other.paintAlpha) == 0 &&
+            sourceKind == other.sourceKind &&
+            abiHash == other.abiHash
+    }
+
+    override fun hashCode(): Int {
+        var result = materialKey.hashCode()
+        result = 31 * result + wgslSource.hashCode()
+        result = 31 * result + entryPoint.hashCode()
+        result = 31 * result + composableFragment.hashCode()
+        result = 31 * result + uniformBytes.hashCode()
+        result = 31 * result + sampledResources.hashCode()
+        result = 31 * result + paintAlpha.hashCode()
+        result = 31 * result + sourceKind.hashCode()
+        result = 31 * result + abiHash.hashCode()
+        return result
+    }
+
+    override fun toString(): String =
+        "GPUPreparedMaterialProgram(" +
+            "materialKey=$materialKey, " +
+            "wgslSource=$wgslSource, " +
+            "entryPoint=$entryPoint, " +
+            "composableFragment=$composableFragment, " +
+            "uniformBytes=$uniformBytes, " +
+            "sampledResources=$sampledResources, " +
+            "paintAlpha=$paintAlpha, " +
+            "sourceKind=$sourceKind, " +
+            "abiHash=$abiHash)"
 }
 
 private fun exactRgbaByteCount(width: Int, height: Int): Long? {

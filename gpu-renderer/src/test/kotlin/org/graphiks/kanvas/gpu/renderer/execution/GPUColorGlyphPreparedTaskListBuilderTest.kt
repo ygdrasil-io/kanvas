@@ -447,6 +447,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
                     paintAlpha = 1f,
                     sourceKind = GPUMaterialSourceKind.SolidColor,
                     abiHash = "abi:color-glyph",
+                    expectedFragmentIdentity = stubPreparedMaterialFragment().authenticatedIdentity,
                 ),
                 targetBounds = GPUPixelBounds(0, 0, 2, 1),
                 scissorBounds = GPUPixelBounds(0, 0, 1, 1),

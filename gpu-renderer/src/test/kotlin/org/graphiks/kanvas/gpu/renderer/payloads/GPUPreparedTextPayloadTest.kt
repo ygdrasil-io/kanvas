@@ -263,6 +263,34 @@ class GPUPreparedTextPayloadTest {
     }
 
     @Test
+    fun `prepared material snapshot preserves value semantics without exposing copy`() {
+        val source = material(mutableListOf(1, 2, 3, 4))
+        val snapshot = GPUPreparedTextPayloadGatherer().gather(
+            input().copy(material = source),
+        ).material
+
+        assertNotSame(source, snapshot)
+        assertEquals(source, snapshot)
+        assertEquals(source.hashCode(), snapshot.hashCode())
+        assertEquals(source.toString(), snapshot.toString())
+        assertEquals(source.materialKey, source.component1())
+        assertEquals(source.wgslSource, source.component2())
+        assertEquals(source.entryPoint, source.component3())
+        assertEquals(source.composableFragment, source.component4())
+        assertEquals(source.uniformBytes, source.component5())
+        assertEquals(source.sampledResources, source.component6())
+        assertEquals(source.paintAlpha, source.component7())
+        assertEquals(source.sourceKind, source.component8())
+        assertEquals(source.abiHash, source.component9())
+
+        val publicMethodNames = GPUPreparedMaterialProgram::class.java.methods
+            .map { method -> method.name }
+            .toSet()
+        assertTrue((1..9).all { index -> "component$index" in publicMethodNames })
+        assertTrue(publicMethodNames.none { name -> name == "copy" || name.startsWith("copy$") })
+    }
+
+    @Test
     fun `TextA8 canonical hash covers exact semantic facts`() {
         val gatherer = GPUPreparedTextPayloadGatherer()
         val base = input()
@@ -370,6 +398,8 @@ class GPUPreparedTextPayloadTest {
             paintAlpha = 0.5f,
             sourceKind = GPUMaterialSourceKind.SolidColor,
             abiHash = "abi:unit",
+            expectedFragmentIdentity =
+                stubPreparedMaterialFragment(fragmentUniformByteCount).authenticatedIdentity,
         )
 
     private fun sha256(bytes: ByteArray): String =

@@ -579,33 +579,15 @@ private fun PreparedTextNativePreflightFixture.withViolation(
                         rgba8Bytes = byteArrayOf(1, 2, 3, 4),
                         resourceKey = "material:forged-resource",
                     )
-            val originalFragment = semantic.material.composableFragment
-            val forgedFragment =
-                org.graphiks.kanvas.gpu.renderer.materials.contracts
-                    .GPUPreparedMaterialFragment(
-                        declarationsWgsl = originalFragment.declarationsWgsl,
-                        evaluationFunctionWgsl = originalFragment.evaluationFunctionWgsl,
-                        evaluationFunction = originalFragment.evaluationFunction,
-                        uniformBinding = originalFragment.uniformBinding,
-                        sampledBindings = listOf(
-                            org.graphiks.kanvas.gpu.renderer.materials.contracts
-                                .GPUPreparedMaterialSampledBinding(
-                                    resourceIndex = 0,
-                                    textureBinding = 1,
-                                    samplerBinding = 2,
-                                ),
-                        ),
-                        colorContract = originalFragment.colorContract,
-                        coordinateContract = originalFragment.coordinateContract,
-                        fragmentHash = originalFragment.fragmentHash,
-                        abiHash = originalFragment.abiHash,
-                    )
-            semantic.rebuilt(
-                material = semantic.material.rebuilt(
-                    composableFragment = forgedFragment,
-                    sampledResources = listOf(forgedResource),
-                ),
-            )
+            // The authenticated DTO intentionally makes this invalid state
+            // unconstructible. Reflection is confined to this negative
+            // preflight fixture so the downstream integrity gate remains
+            // covered against post-construction memory corruption.
+            semantic.material.javaClass.getDeclaredField("sampledResources").run {
+                isAccessible = true
+                set(semantic.material, listOf(forgedResource))
+            }
+            semantic
         }
     GPUPreparedTextViolationKind.UPLOAD_MISSING ->
         copy(
@@ -954,6 +936,7 @@ private fun org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgra
         paintAlpha = paintAlpha,
         sourceKind = sourceKind,
         abiHash = abiHash,
+        expectedFragmentIdentity = this.composableFragment.authenticatedIdentity,
     )
 
 private fun GPUDrawSemanticPayload.TextA8.rebuilt(

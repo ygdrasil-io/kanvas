@@ -2107,17 +2107,7 @@ private fun registeredUniformRectCanonicalPreimage(
 ).joinToString("\n")
 
 private fun GPUPreparedMaterialProgram.preparedTextSnapshot(): GPUPreparedMaterialProgram {
-    return GPUPreparedMaterialProgram(
-        materialKey = materialKey,
-        wgslSource = wgslSource,
-        entryPoint = entryPoint,
-        composableFragment = composableFragment,
-        uniformBytes = uniformBytes,
-        sampledResources = sampledResources,
-        paintAlpha = paintAlpha,
-        sourceKind = sourceKind,
-        abiHash = abiHash,
-    )
+    return authenticatedSnapshot()
 }
 
 private fun preparedTextA8CanonicalHash(

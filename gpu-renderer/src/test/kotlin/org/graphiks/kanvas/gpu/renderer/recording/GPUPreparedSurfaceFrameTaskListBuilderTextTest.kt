@@ -685,6 +685,8 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         paintAlpha = 1f,
         sourceKind = GPUMaterialSourceKind.SolidColor,
         abiHash = "abi:text",
+        expectedFragmentIdentity =
+            stubPreparedMaterialFragment(uniformByteCount = 16).authenticatedIdentity,
     )
 
     private fun sampledMaterial(alphaOnly: Boolean = false): GPUPreparedMaterialProgram {

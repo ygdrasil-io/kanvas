@@ -6,8 +6,6 @@ import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
-import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialColorContract
-import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialCoordinateContract
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialSampledBinding
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialUniformBinding
@@ -91,23 +89,12 @@ object GPUPreparedMaterialProgramCompiler {
                     message = validation.message,
                 )
         }
-        val fragmentIdentity = preparedMaterialFragmentIdentity(
+        val composableFragment = GPUPreparedMaterialFragment.createAuthenticated(
             declarationsWgsl = prepared.composableDeclarationsWgsl,
             evaluationFunctionWgsl = evaluationFunctionWgsl,
             uniformBinding = uniformBinding,
             sampledBindings = sampledBindings,
             reflectedAbiFacts = composableAbiFacts,
-        )
-        val composableFragment = GPUPreparedMaterialFragment(
-            declarationsWgsl = prepared.composableDeclarationsWgsl,
-            evaluationFunctionWgsl = evaluationFunctionWgsl,
-            evaluationFunction = MATERIAL_EVALUATION_FUNCTION,
-            uniformBinding = uniformBinding,
-            sampledBindings = sampledBindings,
-            colorContract = GPUPreparedMaterialColorContract.LinearPremultipliedRgba,
-            coordinateContract = GPUPreparedMaterialCoordinateContract.LocalPosition2D,
-            fragmentHash = fragmentIdentity.fragmentHash,
-            abiHash = fragmentIdentity.abiHash,
         )
 
         val uniformSnapshot = immutableList(prepared.uniformBytes.map { it.toInt() and 0xff })
@@ -137,6 +124,8 @@ object GPUPreparedMaterialProgramCompiler {
             .text("uniformLayout", prepared.uniformLayoutHash)
             .int("uniformByteCount", uniformSnapshot.size)
             .int("sampledResourceCount", resourceSnapshot.size)
+            .text("fragmentHash", composableFragment.fragmentHash)
+            .text("fragmentAbiHash", composableFragment.abiHash)
             .texts("registeredAbiFacts", prepared.abiFacts)
             .texts("reflectedAbiFacts", reflectedAbiFacts)
             .digestIdentity()
@@ -152,6 +141,7 @@ object GPUPreparedMaterialProgramCompiler {
                 paintAlpha = paintAlpha,
                 sourceKind = prepared.sourceKind,
                 abiHash = abiHash,
+                expectedFragmentIdentity = composableFragment.authenticatedIdentity,
             ),
         )
     }
@@ -923,37 +913,16 @@ internal fun preparedMaterialFragmentIdentity(
     sampledBindings: List<GPUPreparedMaterialSampledBinding>,
     reflectedAbiFacts: List<String>,
 ): PreparedMaterialFragmentIdentity {
-    val fragmentSource = declarationsWgsl + "\n\n" + evaluationFunctionWgsl
-    val abiHash = CanonicalIdentityEncoder("prepared-material-fragment-abi-v1")
-        .text("evaluationFunction", MATERIAL_EVALUATION_FUNCTION)
-        .text(
-            "colorContract",
-            GPUPreparedMaterialColorContract.LinearPremultipliedRgba.name,
-        )
-        .text(
-            "coordinateContract",
-            GPUPreparedMaterialCoordinateContract.LocalPosition2D.name,
-        )
-        .texts(
-            "uniformBinding",
-            listOfNotNull(
-                uniformBinding?.let {
-                    "${it.group}:${it.binding}:${it.minBindingSizeBytes}"
-                },
-            ),
-        )
-        .texts(
-            "sampledBindings",
-            sampledBindings.map {
-                "${it.resourceIndex}:${it.textureGroup}:${it.textureBinding}:" +
-                    "${it.samplerGroup}:${it.samplerBinding}"
-            },
-        )
-        .texts("reflectedAbiFacts", reflectedAbiFacts)
-        .digestIdentity()
+    val identity = GPUPreparedMaterialFragment.authenticatedIdentity(
+        declarationsWgsl = declarationsWgsl,
+        evaluationFunctionWgsl = evaluationFunctionWgsl,
+        uniformBinding = uniformBinding,
+        sampledBindings = sampledBindings,
+        reflectedAbiFacts = reflectedAbiFacts,
+    )
     return PreparedMaterialFragmentIdentity(
-        fragmentHash = sha256Hex(fragmentSource.encodeToByteArray()),
-        abiHash = abiHash,
+        fragmentHash = identity.fragmentHash,
+        abiHash = identity.abiHash,
     )
 }
 
