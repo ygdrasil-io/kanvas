@@ -133,22 +133,22 @@ internal const val GPU_PREPARED_IMAGE_UNIFORM_ALLOCATION_SIZE_BYTES = 112L
 private object GPUImageFrameResourcePlanSnapshot
 
 class GPUImageFrameResourcePlan private constructor(
-    val stagingRef: GPUFrameBufferRef,
+    override val stagingRef: GPUFrameBufferRef,
     val textureRef: GPUTextureResourceRef,
-    val frameTextureRef: GPUFrameTextureRef,
+    override val frameTextureRef: GPUFrameTextureRef,
     val uniformRef: GPUFrameBufferRef,
     val textureDescriptor: GPUTextureDescriptor,
     val uploadLayout: GPUPreparedImageUploadLayout,
-    val uploadTaskLayout: GPUUploadLayout,
+    override val uploadTaskLayout: GPUUploadLayout,
     val bindingRequests: List<GPUImageBindingRequest>,
-    val preparationRequests: List<GPUResourcePreparationRequest>,
-    val memoryAllocations: List<GPUFrameMemoryAllocation>,
+    override val preparationRequests: List<GPUResourcePreparationRequest>,
+    override val memoryAllocations: List<GPUFrameMemoryAllocation>,
     val artifactKey: GPUImageUploadArtifactKey,
     val artifactWidth: Int,
     val artifactHeight: Int,
     val artifactContentHash: String,
     private val snapshotMarker: GPUImageFrameResourcePlanSnapshot,
-) {
+) : GPUTextureFrameResourcePlan {
     constructor(
         stagingRef: GPUFrameBufferRef,
         textureRef: GPUTextureResourceRef,
@@ -187,6 +187,8 @@ class GPUImageFrameResourcePlan private constructor(
             "Prepared-image artifact provenance hash must not be blank"
         }
     }
+
+    override fun bytesForUpload(): ByteArray = uploadLayout.bytesForUpload()
 
     @Suppress("DataClassPrivateConstructor")
     fun copy(

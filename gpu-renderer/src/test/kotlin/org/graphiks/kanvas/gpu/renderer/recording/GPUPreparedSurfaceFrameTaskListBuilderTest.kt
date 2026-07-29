@@ -357,11 +357,12 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         ).taskList
         val upload = taskList.tasks.filterIsInstance<GPUTask.Upload>().single()
         val planField = upload.javaClass.declaredFields.singleOrNull {
-            it.name == "imageResourcePlan"
+            it.name == "textureResourcePlan"
         }
-        assertNotNull(planField, "Upload must retain its exact prepared-image resource plan")
+        assertNotNull(planField, "Upload must retain its exact generic texture resource plan")
         planField.isAccessible = true
-        val plan = assertNotNull(planField.get(upload))
+        val plan = assertIs<GPUImageFrameResourcePlan>(planField.get(upload))
+        assertSame(upload.imageResourcePlan, plan)
         val uploadLayout = plan.javaClass.getMethod("getUploadLayout").invoke(plan)
         val bytesForUpload = uploadLayout.javaClass.getMethod("bytesForUpload").invoke(uploadLayout) as ByteArray
         assertEquals(bytesForUpload.size.toLong(), upload.layout.byteSize)
@@ -517,9 +518,9 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         val framePlan = GPUFramePlanner.plan(taskList)
         val uploadStep = framePlan.steps.filterIsInstance<GPUFrameStep.UploadResourceStep>().single()
         val uploadPlanField = uploadStep.javaClass.declaredFields.singleOrNull {
-            it.name == "imageResourcePlan"
+            it.name == "textureResourcePlan"
         }
-        assertNotNull(uploadPlanField, "Frame upload step must retain its prepared-image plan")
+        assertNotNull(uploadPlanField, "Frame upload step must retain its generic texture plan")
         uploadPlanField.isAccessible = true
         assertSame(uploadTask.imageResourcePlan, uploadPlanField.get(uploadStep))
         val renderStep = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>().single()
@@ -1289,7 +1290,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
         destination = destination,
         layout = layout,
         sourceTaskIds = sourceTaskIds,
-        imageResourcePlan = imageResourcePlan,
+        textureResourcePlan = imageResourcePlan,
     )
 
     private fun GPUImageFrameResourcePlan.rebuilt(

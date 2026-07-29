@@ -1499,7 +1499,7 @@ private fun GPUFramePlan.withInvalidPreparedImageUpload(): GPUFramePlan =
                     destination = step.destination,
                     layout = invalidLayout,
                     sourceTaskIds = step.sourceTaskIds,
-                    imageResourcePlan = plan.copy(uploadTaskLayout = invalidLayout),
+                    textureResourcePlan = plan.copy(uploadTaskLayout = invalidLayout),
                 )
             }
         },
@@ -1519,7 +1519,7 @@ private fun GPUFramePlan.withPreparedImagePlanMutation(
                 destination = step.destination,
                 layout = step.layout,
                 sourceTaskIds = step.sourceTaskIds,
-                imageResourcePlan = transform(requireNotNull(step.imageResourcePlan)),
+                textureResourcePlan = transform(requireNotNull(step.imageResourcePlan)),
             )
         }
     },
@@ -1546,7 +1546,7 @@ private fun GPUFramePlan.withPreparedImageBindingMutation(
                             destination = step.destination,
                             layout = step.layout,
                             sourceTaskIds = step.sourceTaskIds,
-                            imageResourcePlan = plan.copy(
+                            textureResourcePlan = plan.copy(
                                 bindingRequests = plan.bindingRequests.map { binding ->
                                     transformedByPacketId.getValue(binding.packetId)
                                 },

@@ -44,9 +44,11 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
@@ -819,20 +821,32 @@ sealed interface GPUTask {
         val staging: GPUFrameBufferRef,
         val destination: GPUFrameResourceRef,
         val layout: GPUUploadLayout,
-        val imageResourcePlan: GPUImageFrameResourcePlan? = null,
+        val textureResourcePlan: GPUTextureFrameResourcePlan? = null,
         val destinationKind: GPUUploadDestinationKind =
-            if (imageResourcePlan == null) GPUUploadDestinationKind.Buffer else GPUUploadDestinationKind.Texture,
+            if (textureResourcePlan == null) GPUUploadDestinationKind.Buffer else GPUUploadDestinationKind.Texture,
     ) : GPUTask {
+        val imageResourcePlan: GPUImageFrameResourcePlan?
+            get() = textureResourcePlan as? GPUImageFrameResourcePlan
+        val r8ResourcePlan: GPUR8FrameResourcePlan?
+            get() = textureResourcePlan as? GPUR8FrameResourcePlan
+
         init {
-            require((imageResourcePlan != null) == (destinationKind == GPUUploadDestinationKind.Texture)) {
-                "Texture uploads require an exact prepared-image plan; buffer uploads forbid one"
-            }
-            imageResourcePlan?.let { plan ->
-                require(staging == plan.stagingRef &&
-                    destination == plan.frameTextureRef &&
-                    layout == plan.uploadTaskLayout
-                ) {
-                    "Prepared-image upload must retain the exact planned staging, destination, and layout"
+            when (val plan = textureResourcePlan) {
+                null -> require(destinationKind == GPUUploadDestinationKind.Buffer) {
+                    "Texture uploads require an exact texture plan; buffer uploads forbid one"
+                }
+                is GPUImageFrameResourcePlan,
+                is GPUR8FrameResourcePlan,
+                -> {
+                    require(destinationKind == GPUUploadDestinationKind.Texture) {
+                        "Texture uploads require an exact texture plan; buffer uploads forbid one"
+                    }
+                    require(staging == plan.stagingRef &&
+                        destination == plan.frameTextureRef &&
+                        layout == plan.uploadTaskLayout
+                    ) {
+                        "Texture upload must retain the exact planned staging, destination, and layout"
+                    }
                 }
             }
         }

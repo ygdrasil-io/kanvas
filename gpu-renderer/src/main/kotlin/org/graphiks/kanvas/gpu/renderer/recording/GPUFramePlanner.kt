@@ -777,7 +777,7 @@ object GPUFramePlanner {
                     destination = task.destination,
                     layout = task.layout,
                     sourceTaskIds = listOf(task.taskId),
-                    imageResourcePlan = task.imageResourcePlan,
+                    textureResourcePlan = task.textureResourcePlan,
                     destinationKind = task.destinationKind,
                 )
                 is GPUTask.Barrier -> steps += GPUFrameStep.DependencyBarrierStep(

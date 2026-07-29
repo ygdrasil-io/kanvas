@@ -45,10 +45,12 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 
@@ -347,23 +349,34 @@ sealed interface GPUFrameStep {
         val destination: GPUFrameResourceRef,
         val layout: GPUUploadLayout,
         sourceTaskIds: List<GPUTaskID>,
-        val imageResourcePlan: GPUImageFrameResourcePlan? = null,
+        val textureResourcePlan: GPUTextureFrameResourcePlan? = null,
         val destinationKind: GPUUploadDestinationKind =
-            if (imageResourcePlan == null) GPUUploadDestinationKind.Buffer else GPUUploadDestinationKind.Texture,
+            if (textureResourcePlan == null) GPUUploadDestinationKind.Buffer else GPUUploadDestinationKind.Texture,
     ) : GPUFrameStep {
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
+        val imageResourcePlan: GPUImageFrameResourcePlan?
+            get() = textureResourcePlan as? GPUImageFrameResourcePlan
+        val r8ResourcePlan: GPUR8FrameResourcePlan?
+            get() = textureResourcePlan as? GPUR8FrameResourcePlan
 
         init {
-            require((imageResourcePlan != null) == (destinationKind == GPUUploadDestinationKind.Texture)) {
-                "Texture frame uploads require an exact prepared-image plan; buffer uploads forbid one"
-            }
-            imageResourcePlan?.let { plan ->
-                require(staging == plan.stagingRef &&
-                    destination == plan.frameTextureRef &&
-                    layout == plan.uploadTaskLayout
-                ) {
-                    "Prepared-image frame upload must retain its exact plan authority"
+            when (val plan = textureResourcePlan) {
+                null -> require(destinationKind == GPUUploadDestinationKind.Buffer) {
+                    "Texture frame uploads require an exact texture plan; buffer uploads forbid one"
+                }
+                is GPUImageFrameResourcePlan,
+                is GPUR8FrameResourcePlan,
+                -> {
+                    require(destinationKind == GPUUploadDestinationKind.Texture) {
+                        "Texture frame uploads require an exact texture plan; buffer uploads forbid one"
+                    }
+                    require(staging == plan.stagingRef &&
+                        destination == plan.frameTextureRef &&
+                        layout == plan.uploadTaskLayout
+                    ) {
+                        "Texture frame upload must retain its exact plan authority"
+                    }
                 }
             }
         }
@@ -933,7 +946,14 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
             long("bytesPerRow", value.layout.bytesPerRow)
             int("rowsPerImage", value.layout.rowsPerImage)
             long("byteSize", value.layout.byteSize)
-            nullable("preparedImagePlan", value.imageResourcePlan) { imageResourcePlan(it) }
+            when (val plan = value.textureResourcePlan) {
+                null ->
+                    nullable("preparedImagePlan", value.imageResourcePlan) { imageResourcePlan(it) }
+                is GPUImageFrameResourcePlan ->
+                    nullable("preparedImagePlan", plan) { imageResourcePlan(it) }
+                is GPUR8FrameResourcePlan ->
+                    nullable("preparedR8Plan", plan) { r8ResourcePlan(it) }
+            }
         }
         is GPUFrameStep.CopyResourceStep -> {
             resourceRef("source", value.source)
@@ -1020,6 +1040,26 @@ private fun CanonicalHashSink.imageResourcePlan(value: GPUImageFrameResourcePlan
     int("rowsPerImage", value.uploadTaskLayout.rowsPerImage)
     long("byteSize", value.uploadTaskLayout.byteSize)
     list("bindingRequests", value.bindingRequests) { preparedImageBinding(it) }
+    list("preparationRequests", value.preparationRequests) { preparationRequest(it) }
+    list("memoryAllocations", value.memoryAllocations) { memoryAllocation(it) }
+}
+
+private fun CanonicalHashSink.r8ResourcePlan(value: GPUR8FrameResourcePlan) {
+    tag("GPUR8FrameResourcePlan")
+    string("stagingRef", value.stagingRef.value)
+    string("frameTextureRef", value.frameTextureRef.value)
+    tag("GPUUploadLayout")
+    long("sourceOffsetBytes", value.uploadTaskLayout.sourceOffsetBytes)
+    long("bytesPerRow", value.uploadTaskLayout.bytesPerRow)
+    int("rowsPerImage", value.uploadTaskLayout.rowsPerImage)
+    long("byteSize", value.uploadTaskLayout.byteSize)
+    string("artifactKey", value.artifactKey)
+    int("artifactWidth", value.artifactWidth)
+    int("artifactHeight", value.artifactHeight)
+    int("artifactRowBytes", value.artifactRowBytes)
+    long("artifactGeneration", value.artifactGeneration)
+    string("artifactContentHash", value.artifactContentHash)
+    byteArray("uploadBytes", value.bytesForUpload())
     list("preparationRequests", value.preparationRequests) { preparationRequest(it) }
     list("memoryAllocations", value.memoryAllocations) { memoryAllocation(it) }
 }
@@ -1558,7 +1598,13 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
             "upload kind=${destinationKind.name} staging=${staging.value} destination=${destination.value} " +
                 "offset=${layout.sourceOffsetBytes} bytesPerRow=${layout.bytesPerRow} " +
                 "rowsPerImage=${layout.rowsPerImage} bytes=${layout.byteSize} " +
-                "preparedImagePlan=${imageResourcePlan?.stableDump() ?: "none"}"
+                when (val plan = textureResourcePlan) {
+                    null -> "preparedImagePlan=none"
+                    is GPUImageFrameResourcePlan ->
+                        "preparedImagePlan=${plan.stableDump()}"
+                    is GPUR8FrameResourcePlan ->
+                        "preparedR8Plan=${plan.stableDump()}"
+                }
         is GPUFrameStep.CopyResourceStep ->
             "copy source=${source.value} destination=${destination.value} " +
                 "regions=${regions.joinToString(";") { it.stableDump() }}"
@@ -1611,6 +1657,23 @@ private fun GPUImageFrameResourcePlan.stableDump(): String =
         "bindings=${bindingRequests.mapIndexed { index, binding ->
             "$index:${binding.stableDump()}"
         }.joinToString(";").ifEmpty { "none" }}," +
+        "preparations=${preparationRequests.mapIndexed { index, request ->
+            "$index:${request.stableDump()}"
+        }.joinToString(";").ifEmpty { "none" }}," +
+        "allocations=${memoryAllocations.mapIndexed { index, allocation ->
+            "$index:{label=${allocation.label},category=${allocation.category.name}," +
+                "bytes=${allocation.bytes},kind=${allocation.resourceKind.name}," +
+                "extent=${allocation.extent ?: "none"}}"
+        }.joinToString(";").ifEmpty { "none" }}}"
+
+private fun GPUR8FrameResourcePlan.stableDump(): String =
+    "{staging=${stagingRef.value},frameTexture=${frameTextureRef.value}," +
+        "taskLayout={offset=${uploadTaskLayout.sourceOffsetBytes}," +
+        "bytesPerRow=${uploadTaskLayout.bytesPerRow},rowsPerImage=${uploadTaskLayout.rowsPerImage}," +
+        "byteSize=${uploadTaskLayout.byteSize}}," +
+        "artifact={key=$artifactKey,size=${artifactWidth}x$artifactHeight,rowBytes=$artifactRowBytes," +
+        "generation=$artifactGeneration,contentHash=$artifactContentHash}," +
+        "uploadBytes=${bytesForUpload().size},uploadSha256=${bytesForUpload().sha256()}," +
         "preparations=${preparationRequests.mapIndexed { index, request ->
             "$index:${request.stableDump()}"
         }.joinToString(";").ifEmpty { "none" }}," +

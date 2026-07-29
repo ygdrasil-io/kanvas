@@ -936,14 +936,14 @@ private fun GPUFramePlan.withReversedPreparedImageBindings(): GPUFramePlan {
         if (step !is GPUFrameStep.UploadResourceStep || step.imageResourcePlan == null) {
             step
         } else {
-            val resourcePlan = step.imageResourcePlan
+            val resourcePlan = requireNotNull(step.imageResourcePlan)
             reversedBindingCount += resourcePlan.bindingRequests.size
             GPUFrameStep.UploadResourceStep(
                 staging = step.staging,
                 destination = step.destination,
                 layout = step.layout,
                 sourceTaskIds = step.sourceTaskIds,
-                imageResourcePlan = resourcePlan.copy(
+                textureResourcePlan = resourcePlan.copy(
                     bindingRequests = resourcePlan.bindingRequests.reversed(),
                 ),
             )

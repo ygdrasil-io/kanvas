@@ -1165,7 +1165,7 @@ class GPUFramePlanIntegrityTest {
                     destination = resourcePlan.frameTextureRef,
                     layout = resourcePlan.uploadTaskLayout,
                     sourceTaskIds = listOf(taskId),
-                    imageResourcePlan = resourcePlan,
+                    textureResourcePlan = resourcePlan,
                 ),
             )
 

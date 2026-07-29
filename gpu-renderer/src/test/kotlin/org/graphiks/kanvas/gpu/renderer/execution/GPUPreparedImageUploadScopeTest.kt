@@ -44,7 +44,7 @@ class GPUPreparedImageUploadScopeTest {
             staging = plan.stagingRef,
             destination = plan.frameTextureRef,
             layout = plan.uploadTaskLayout,
-            imageResourcePlan = plan,
+            textureResourcePlan = plan,
         )
 
         assertEquals(GPUUploadDestinationKind.Texture, upload.destinationKind)
@@ -69,7 +69,7 @@ class GPUPreparedImageUploadScopeTest {
             staging = plan.stagingRef,
             destination = plan.frameTextureRef,
             layout = plan.uploadTaskLayout,
-            imageResourcePlan = plan,
+            textureResourcePlan = plan,
         )
         val framePlan = GPUFramePlanner.plan(taskList(capabilities, upload, plan))
         val provider = GPUConcreteResourceProvider()

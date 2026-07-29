@@ -420,7 +420,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 staging = plan.stagingRef,
                 destination = plan.frameTextureRef,
                 layout = plan.uploadTaskLayout,
-                imageResourcePlan = plan,
+                textureResourcePlan = plan,
             )
         }
         val baseRenderByPacketId = baseRenders.flatMap { render ->
