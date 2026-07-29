@@ -118,10 +118,10 @@ class GPUPreparedCompositeCaptureTest {
         )
         val result = capture(ops)
         val ready = assertIs<GPUPreparedCompositeCaptureResult.Ready>(result)
-        val paintedScopes = ready.capture.scopes.values.filter {
-            it.sourceKind == GPUPreparedCompositeScopeKind.PaintedPicture
-        }
-        assertEquals(0, paintedScopes.size)
+        assertEquals(
+            listOf(GPUPreparedCompositeScopeKind.Root),
+            ready.capture.scopes.values.map { it.sourceKind },
+        )
         assertTrue(ready.capture.expandedOperations.size >= 1)
     }
 
