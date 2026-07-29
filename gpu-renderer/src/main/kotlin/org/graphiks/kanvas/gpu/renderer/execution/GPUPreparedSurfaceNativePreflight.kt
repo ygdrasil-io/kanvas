@@ -31,6 +31,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameReadbackRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflight
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayout
@@ -559,7 +560,6 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "Every prepared-text packet requires one exact immutable binding.",
                 )
         }
-
         textPackets.zip(bindings).firstOrNull { (evidence, binding) ->
             val semanticGeneration = evidence.semantic.preparedTextAtlasGeneration()
             semanticGeneration != evidence.semantic.preparedTextAtlas().generation ||
@@ -969,6 +969,20 @@ internal class GPUPreparedSurfaceNativePreflight(
                             ),
                         )
                     }
+                runBindings.filter(GPUPreparedTextRenderBinding::hasTextA8Composite)
+                    .map(GPUPreparedTextRenderBinding::drawUniformBufferPlan)
+                    .distinctBy { plan -> plan.bufferRef }
+                    .forEach { plan ->
+                        add(
+                            GPUFrameResourceUse(
+                                plan.bufferRef,
+                                GPUFrameResourceRole.UniformData,
+                                GPUFrameResourceUsage.Uniform,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
                 runBindings.mapNotNull(GPUPreparedTextRenderBinding::materialUniformBufferPlan)
                     .distinctBy { plan -> plan.bufferRef }
                     .forEach { plan ->
@@ -996,7 +1010,13 @@ internal class GPUPreparedSurfaceNativePreflight(
                         )
                     }
             }
-            if (render.resourceUses != expectedUses) {
+            val drawUniformRefs = runBindings
+                .filter(GPUPreparedTextRenderBinding::hasTextA8Composite)
+                .map { binding -> binding.drawUniformBufferPlan.bufferRef }
+                .toSet()
+            if (render.resourceUses.filterNot { use -> use.resource in drawUniformRefs } !=
+                expectedUses.filterNot { use -> use.resource in drawUniformRefs }
+            ) {
                 return refused(
                     GPUPreparedTextPreflightRefusalCodes.OPERAND,
                     "Prepared-text render operands must form the exact ordered Task 8 partition.",
@@ -1113,6 +1133,21 @@ internal class GPUPreparedSurfaceNativePreflight(
                     GPUPreparedTextPreflightRefusalCodes.COPY_ALIGNMENT,
                     "Prepared-text copy rows violate the observed WebGPU alignment.",
                 )
+            }
+        }
+        capabilities?.let { observed ->
+            textPackets.zip(bindings).forEach { (evidence, binding) ->
+                val semantic = evidence.semantic as? GPUDrawSemanticPayload.TextA8
+                    ?: return@forEach
+                GPUPreparedTextCompositePreflight.validate(
+                    binding = binding,
+                    semantic = semantic,
+                    capabilities = observed,
+                    framePlan = framePlan,
+                    renderSourceStepIndex = evidence.renderIndex,
+                )?.let { refusal ->
+                    return refused(refusal.code, refusal.message)
+                }
             }
         }
         return null

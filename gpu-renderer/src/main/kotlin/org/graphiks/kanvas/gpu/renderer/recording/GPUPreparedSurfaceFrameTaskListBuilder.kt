@@ -1133,6 +1133,23 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             write = false,
                         ),
                     )
+                    textDrawUniformAssembly?.plan
+                        ?.takeIf {
+                            run.any { packet ->
+                                packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+                            }
+                        }
+                        ?.let { plan ->
+                            add(
+                                GPUFrameResourceUse(
+                                    plan.bufferRef,
+                                    GPUFrameResourceRole.UniformData,
+                                    GPUFrameResourceUsage.Uniform,
+                                    GPUFrameResourceLifetime.FrameLocal,
+                                    write = false,
+                                ),
+                            )
+                        }
                     textMaterialUniformAssembly?.plan?.let { plan ->
                         add(
                             GPUFrameResourceUse(

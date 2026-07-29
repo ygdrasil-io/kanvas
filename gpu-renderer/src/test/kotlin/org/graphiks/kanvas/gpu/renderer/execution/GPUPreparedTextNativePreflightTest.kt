@@ -51,6 +51,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult
@@ -150,6 +151,41 @@ class GPUPreparedTextNativePreflightTest {
 
         assertEquals(
             GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
+            refused.diagnostic.code.value,
+        )
+        assertEquals(0, probe.totalCreations)
+    }
+
+    @Test
+    fun `missing draw uniform render operand refuses before Task 10 and native creation`() {
+        val fixture = preparedTextNativePreflightFixture()
+        val drawUniformBuffer = fixture.framePlan.preparedTextBindings()
+            .first()
+            .drawUniformBufferPlan
+            .bufferRef
+        val mutated = fixture.copy(
+            framePlan = fixture.framePlan.rebuilt(
+                steps = fixture.framePlan.steps.map { step ->
+                    if (step is GPUFrameStep.RenderPassStep) {
+                        step.rebuilt(
+                            resourceUses = step.resourceUses.filterNot { use ->
+                                use.resource == drawUniformBuffer
+                            },
+                        )
+                    } else {
+                        step
+                    }
+                },
+            ),
+        )
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(
+            probe.preflight(mutated),
+        )
+
+        assertEquals(
+            GPUPreparedTextCompositePreflightRefusalCodes.BINDING_LAYOUT,
             refused.diagnostic.code.value,
         )
         assertEquals(0, probe.totalCreations)
@@ -425,13 +461,19 @@ class GPUPreparedTextNativePreflightTest {
         }
 }
 
-private class GPUPreparedTextNativeCreationProbe {
+internal class GPUPreparedTextNativeCreationProbe {
     private val adapter = GPURuntimeResourceAdapter()
     private val provider = GPUConcreteResourceProvider(leaseFactory = adapter)
     private val materializer = CapturingPreparedNativeMaterializer()
 
+    val nativePreparationEvents: Int
+        get() = provider.telemetry.dumpEvents.size
+    val materializerInvocations: Int
+        get() = materializer.materializeCallCount
+    val nativePayloadRegistrations: Long
+        get() = adapter.preparedNativeFramePayloadRegistrationCount
     val totalCreations: Int
-        get() = materializer.materializeCallCount + provider.telemetry.dumpEvents.size
+        get() = materializerInvocations + nativePreparationEvents
 
     fun preflight(
         fixture: PreparedTextNativePreflightFixture,
