@@ -32,8 +32,10 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflight
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
+import org.graphiks.kanvas.gpu.renderer.recording.preparedTextNativeBlendDomainRefusal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayout
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackPixelFormat
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputDescriptor
@@ -92,7 +94,7 @@ internal object GPUPreparedTextPreflightRefusalCodes {
     const val TARGET = "invalid.preflight.text.target"
     const val SCISSOR = "invalid.preflight.text.scissor"
     const val CLIP = "invalid.preflight.text.clip"
-    const val BLEND = "invalid.preflight.text.blend"
+    const val BLEND = GPUPreparedTextCompositePreflightRefusalCodes.NATIVE_BLEND
     const val RESOURCE_LIFETIME = "invalid.preflight.text.resource_lifetime"
     const val DEPENDENCY = "invalid.preflight.text.dependency"
     const val OPERAND = "invalid.preflight.text.operand"
@@ -370,6 +372,15 @@ internal class GPUPreparedSurfaceNativePreflight(
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
         val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         val packets = renders.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        preparedTextNativeBlendDomainRefusal(
+            packets
+                .filter { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+                }
+                .map(GPUDrawPacket::blendPlan),
+        )?.let { refusal ->
+            return refused(refusal.code, refusal.message)
+        }
         val semantics = packets.map(GPUDrawPacket::semanticPayload)
         if (packets.isEmpty() ||
             semantics.any { it == null } ||

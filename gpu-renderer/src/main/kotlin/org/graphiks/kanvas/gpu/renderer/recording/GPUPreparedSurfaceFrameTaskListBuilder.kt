@@ -341,7 +341,7 @@ internal class GPUPreparedTextNativeProgramHandoff private constructor(
     val targetFormatClass: String,
     val blendPlanIdentity: String,
     val fixedFunctionBlendState:
-        org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState?,
+        org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState,
     val vertexLayout: GPUPreparedTextVertexLayout,
     val pipelineKey: String,
 ) {
@@ -376,7 +376,10 @@ internal class GPUPreparedTextNativeProgramHandoff private constructor(
                 abiHash = program.abiHash,
                 targetFormatClass = program.targetFormatClass,
                 blendPlanIdentity = program.blendPlanIdentity,
-                fixedFunctionBlendState = program.fixedFunctionBlendState,
+                fixedFunctionBlendState = checkNotNull(program.fixedFunctionBlendState) {
+                    "Prepared TextA8 native handoff requires preflight-authenticated " +
+                        "fixed-function blend state"
+                },
                 vertexLayout = GPUPreparedTextVertexLayout(
                     arrayStrideBytes = program.vertexLayout.arrayStrideBytes,
                     stepMode = program.vertexLayout.stepMode,
@@ -670,6 +673,13 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
                 GPUDrawSemanticPayload.TextA8 ?: return@mapNotNull null
             GPUPreparedTextDrawUniformInput(packet.packetId, semantic)
+        }
+        preparedTextNativeBlendDomainRefusal(
+            textA8Inputs.map { input ->
+                packets.single { packet -> packet.packetId == input.packetId }.blendPlan
+            },
+        )?.let { refusal ->
+            return refused(refusal.code, refusal.message)
         }
         val compositeProgramsByPacketId =
             linkedMapOf<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID, GPUPreparedTextCompositeProgram>()

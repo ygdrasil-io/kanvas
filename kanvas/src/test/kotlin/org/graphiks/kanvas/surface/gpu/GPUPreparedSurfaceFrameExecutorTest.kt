@@ -7,6 +7,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.TestFactory
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -35,9 +37,13 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceFrameExecutorTest {
@@ -91,6 +97,31 @@ class GPUPreparedSurfaceFrameExecutorTest {
         assertEquals(0, noCapabilitiesBackend.prepareCalls)
         assertEquals(1, noCapabilitiesBackend.closeCalls)
     }
+
+    @TestFactory
+    fun `destination-read prepared text blends refuse before native entry`(): List<DynamicTest> =
+        listOf(BlendMode.SRC, BlendMode.PLUS).map { blendMode ->
+            DynamicTest.dynamicTest(blendMode.name) {
+                val session = FakeSession()
+                val backend = FakeBackend(capabilities(preparedText = true), session)
+                val executor = GPUPreparedSurfaceFrameExecutor(
+                    GPUPreparedSurfaceBackendPortFactory { backend },
+                )
+
+                val refused = assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
+                    executor.execute(textRequest(blendMode)),
+                )
+
+                assertEquals(
+                    "invalid.preflight.text.blend",
+                    refused.diagnostic.code.value,
+                )
+                assertEquals(0, backend.prepareCalls)
+                assertEquals(0, session.submitCalls)
+                assertEquals(0, session.closeCalls)
+                assertEquals(1, backend.closeCalls)
+            }
+        }
 
     @Test
     fun `success preserves build facts and returns exact frame-local evidence after close`() {
@@ -460,6 +491,38 @@ class GPUPreparedSurfaceFrameExecutorTest {
         )
     }
 
+    private fun textRequest(blendMode: BlendMode): GPUPreparedSurfaceExecutionRequest {
+        val operations = listOf(
+            DisplayOp.DrawText(
+                blob = TextBlob(
+                    glyphRuns = listOf(
+                        KanvasGlyphRun(
+                            glyphs = listOf(36u),
+                            positions = listOf(Point(0f, 0f)),
+                            fontSize = 16f,
+                        ),
+                    ),
+                    typeface = liberationTypeface(),
+                    fontSize = 16f,
+                ),
+                x = 4f,
+                y = 24f,
+                paint = Paint.fill(Color.WHITE).copy(blendMode = blendMode),
+                transform = Matrix33.identity(),
+                clip = ClipStack.WideOpen,
+            ),
+        )
+        return GPUPreparedSurfaceExecutionRequest(
+            GPUPreparedSurfaceEligibility.Candidate(
+                operations = operations,
+                config = RenderConfig.DEFAULT,
+                color = assertIs(RenderConfig.DEFAULT.mapPreparedGpuColorConfig()),
+            ),
+            32,
+            32,
+        )
+    }
+
     private fun sceneTarget(taskList: GPUTaskList): GPUFrameTargetRef =
         taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
             .flatMap(GPUTask.PrepareResources::requests)
@@ -491,10 +554,14 @@ class GPUPreparedSurfaceFrameExecutorTest {
             ).execute(request()),
         )
 
-    private fun capabilities(fillRect: Boolean = true): GPUCapabilities {
+    private fun capabilities(
+        fillRect: Boolean = true,
+        preparedText: Boolean = false,
+    ): GPUCapabilities {
         val base = GPUProductFlagConfig().buildCapabilities()
         val facts = buildList {
             if (fillRect) add(capability("first_slice.fill_rect.native"))
+            if (preparedText) add(capability("first_slice.draw_text_run.a8_atlas"))
             add(capability(PATH_FILL_STENCIL_COVER))
         }
         return GPUCapabilities(

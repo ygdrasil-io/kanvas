@@ -107,6 +107,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.separableBlurRectRenderStepId
 import org.graphiks.kanvas.gpu.renderer.recording.separableBlurRectScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.preparedTextNativeBlendDomainRefusal
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUCommandOperandMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
@@ -160,6 +161,19 @@ internal class GPUFramePreflighter(
                     "invalid.preflight.native_payload_provider_mismatch",
                     "Native payload boundary does not own the exact resource provider used by preflight.",
                 ),
+            )
+        }
+        preparedTextNativeBlendDomainRefusal(
+            framePlan.steps
+                .filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+                .filter { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+                }
+                .map(GPUDrawPacket::blendPlan),
+        )?.let { refused ->
+            return GPUFramePreflightResult.Refused(
+                diagnostic(refused.code, refused.message),
             )
         }
         val hasExactPreparedSurfaceMixedBoundary =

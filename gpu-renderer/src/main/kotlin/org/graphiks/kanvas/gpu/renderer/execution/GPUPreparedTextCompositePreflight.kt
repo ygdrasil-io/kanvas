@@ -7,6 +7,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeBindin
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
@@ -20,12 +21,32 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
 import org.graphiks.kanvas.gpu.renderer.wgsl.PreparedTextA8Shader
 
 internal object GPUPreparedTextCompositePreflightRefusalCodes {
+    const val NATIVE_BLEND = "invalid.preflight.text.blend"
     const val COMPOSITE_SOURCE = "invalid.preflight.text.composite_source"
     const val COMPOSITE_ABI = "invalid.preflight.text.composite_abi"
     const val INSTANCE_VERTEX_ABI = "invalid.preflight.text.instance_vertex_abi"
     const val DRAW_UNIFORM = "invalid.preflight.text.draw_uniform"
     const val BINDING_LAYOUT = "invalid.preflight.text.composite_binding_layout"
 }
+
+/**
+ * Pure Task 5 native-domain gate shared by recording and execution preflight.
+ *
+ * Non-fixed plans retain their semantic identity for later routes, but cannot enter the current
+ * Prepared TextA8 native handoff.
+ */
+internal fun preparedTextNativeBlendDomainRefusal(
+    blendPlans: List<GPUBlendPlan?>,
+): GPUPreparedTextCompositePreflightRefusal? =
+    if (blendPlans.any { blendPlan -> blendPlan !is GPUBlendPlan.FixedFunctionBlend }) {
+        GPUPreparedTextCompositePreflightRefusal(
+            code = GPUPreparedTextCompositePreflightRefusalCodes.NATIVE_BLEND,
+            message =
+                "Prepared TextA8 native materialization requires a fixed-function blend plan.",
+        )
+    } else {
+        null
+    }
 
 internal data class GPUPreparedTextCompositePreflightRefusal(
     val code: String,

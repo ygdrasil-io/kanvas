@@ -374,9 +374,8 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                         targets = listOf(
                             ColorTargetState(
                                 format = program.targetFormatClass.toPreparedTextTargetFormat(),
-                                blend = requireNotNull(program.fixedFunctionBlendState) {
-                                    "Prepared-text native pipeline requires fixed-function blend"
-                                }.toPreparedTextBlendState(),
+                                blend = program.fixedFunctionBlendState
+                                    .toPreparedTextBlendState(),
                                 writeMask = program.fixedFunctionBlendState
                                     .toPreparedTextWriteMask(),
                             ),

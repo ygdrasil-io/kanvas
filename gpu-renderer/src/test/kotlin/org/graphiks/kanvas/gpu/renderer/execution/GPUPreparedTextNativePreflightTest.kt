@@ -27,6 +27,9 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
@@ -36,7 +39,9 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
@@ -155,6 +160,29 @@ class GPUPreparedTextNativePreflightTest {
         )
         assertEquals(1, probe.materializerInvocations)
         assertEquals(1, probe.nativePreparationEvents)
+    }
+
+    @Test
+    fun `canonical scalar fixed-function text blend reaches the native materializer`() {
+        val blendPlan = canonicalPreparedTextBlendPlan(GPUBlendMode.SRC_OVER)
+        assertIs<GPUBlendPlan.FixedFunctionBlend>(blendPlan)
+        val fixture = preparedTextNativePreflightFixture(blendPlan = blendPlan)
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(
+            probe.preflight(fixture),
+        )
+
+        assertEquals("test.prepared-surface.boundary", refused.diagnostic.code.value)
+        assertEquals(1, probe.nativePreparationEvents)
+        assertEquals(1, probe.materializerInvocations)
+        assertEquals(0L, probe.nativePayloadRegistrations)
+        fixture.framePlan.preparedTextBindings().forEach { binding ->
+            assertEquals(
+                blendPlan.state,
+                binding.nativeProgram.fixedFunctionBlendState,
+            )
+        }
     }
 
     @Test
@@ -1256,6 +1284,7 @@ internal fun preparedTextNativePreflightFixture(
     targetFormat: GPUColorFormat = GPUColorFormat.RGBA8UnormSrgb,
     blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
     blendState: GPUFixedFunctionBlendState = preparedTextBlendState(blendMode),
+    blendPlan: GPUBlendPlan? = null,
     materialProgram:
         org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram =
         GPUPreparedTextPreflightFixture.baselineMaterialProgram(),
@@ -1272,6 +1301,7 @@ internal fun preparedTextNativePreflightFixture(
             targetFormat = targetFormat,
             blendMode = blendMode,
             blendState = blendState,
+            blendPlan = blendPlan,
             renderStepIdentity = if (includeColorGlyph && commandId == commandIds.last()) {
                 COLOR_GLYPH_RENDER_STEP_IDENTITY
             } else {
@@ -1513,6 +1543,7 @@ internal fun preparedTextPreflightPacket(
     targetFormat: GPUColorFormat = GPUColorFormat.RGBA8UnormSrgb,
     blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
     blendState: GPUFixedFunctionBlendState = preparedTextBlendState(blendMode),
+    blendPlan: GPUBlendPlan? = null,
     renderStepIdentity: String = "text.a8_mask.sample",
 ): GPUDrawPacket =
     GPUDrawPacket(
@@ -1528,7 +1559,7 @@ internal fun preparedTextPreflightPacket(
         renderStepId = GPURenderStepID(renderStepIdentity),
         renderStepVersion = 1,
         role = GPUDrawPacketRole.Shading,
-        blendPlan = GPUBlendPlan.FixedFunctionBlend(
+        blendPlan = blendPlan ?: GPUBlendPlan.FixedFunctionBlend(
             mode = blendMode,
             state = blendState,
             sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
@@ -1541,6 +1572,23 @@ internal fun preparedTextPreflightPacket(
         resourceGeneration = resourceGeneration,
         frameProvenance = GPUFrameProvenance.GmContent,
     )
+
+private fun canonicalPreparedTextBlendPlan(
+    mode: GPUBlendMode,
+    targetFormat: GPUColorFormat = GPUColorFormat.RGBA8UnormSrgb,
+): GPUBlendPlan = GPUBlendPlanner().plan(
+    GPUBlendSpecializationRequest(
+        mode = mode,
+        coverage = GPUCoverageConsumption.ScalarCoverage,
+        sourceAlpha = GPUSourceAlphaClassification.Translucent,
+        target = GPUTargetBlendFacts(
+            formatClass = targetFormat.value,
+            clampsNormalizedColorWrites = true,
+            premultipliedAlpha = true,
+        ),
+        samplePlan = GPUSamplePlan.SingleSampleFrame,
+    ),
+)
 
 internal fun preparedTextBlendState(
     mode: GPUBlendMode,
