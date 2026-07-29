@@ -181,6 +181,45 @@ class GPUPreparedTextOwnershipTest {
         secondCache.close()
         assertTrue(native.created.all { native.closeCounts[it] == 1 })
     }
+
+    @Test
+    fun `shared material sampler is closed once and a failed creation can retry`() {
+        val fixtures = listOf("first", "second").map { suffix ->
+            preparedTextNativePreflightFixture(
+                materialProgram = sampledPreparedTextMaterialProgram("sampler-owner:$suffix"),
+            )
+        }
+        val plans = fixtures.map(::preparedTextTestRunPlan)
+        val generation = fixtures.first().context.deviceGeneration
+        val program = plans.first().bindings.first().nativeProgram
+        val resources = plans.flatMap { plan ->
+            plan.bindings.flatMap { binding -> binding.materialSampledResourcePlans }
+        }.distinctBy { resource -> resource.resourceKey }
+        val native = OwnershipPreparedTextNative(
+            failingOperation = "createSampler",
+            failingOrdinal = 2,
+        )
+        val cache = GPUWgpu4kPreparedTextSessionCache(native.device, generation)
+
+        assertIs<GPUPreparedTextCacheBatchAcquire.Refused>(
+            cache.acquireBatch(
+                programs = listOf(program),
+                generation = generation,
+                materialResourcesByPipelineKey = mapOf(program.pipelineKey to resources),
+            ),
+        )
+        assertIs<GPUPreparedTextCacheBatchAcquire.Ready>(
+            cache.acquireBatch(
+                programs = listOf(program),
+                generation = generation,
+                materialResourcesByPipelineKey = mapOf(program.pipelineKey to resources),
+            ),
+        )
+        cache.close()
+
+        assertEquals(3, native.created.count { handle -> handle is GPUSampler })
+        assertTrue(native.created.all { handle -> native.closeCounts[handle] == 1 })
+    }
 }
 
 private data class FailurePoint(

@@ -136,7 +136,7 @@ internal class GPUPreparedSurfaceCompletion(
 internal class GPUPreparedSurfaceFrameExecutor(
     private val backendFactory: GPUPreparedSurfaceBackendPortFactory,
     private val frameBuilder: (GPUPreparedSurfaceFrameBuildRequest) -> GPUPreparedSurfaceFrameBuildResult =
-        GPUPreparedSurfaceFrameBuilder::build,
+        GPUPreparedSurfaceFrameBuildSession()::build,
     private val ordinal: AtomicLong = sharedOrdinal,
 ) : GPUPreparedSurfaceExecutionPort {
     override fun execute(request: GPUPreparedSurfaceExecutionRequest): GPUPreparedSurfaceExecutionResult {

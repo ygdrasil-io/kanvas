@@ -51,13 +51,42 @@ sealed interface GPUPreparedTextCompositeProgramResult {
     ) : GPUPreparedTextCompositeProgramResult
 }
 
+internal interface GPUPreparedTextCompositionObserver {
+    fun onCompose()
+    fun onParse()
+    fun onLower()
+    fun onReflect()
+}
+
+private object NoOpGPUPreparedTextCompositionObserver : GPUPreparedTextCompositionObserver {
+    override fun onCompose() = Unit
+    override fun onParse() = Unit
+    override fun onLower() = Unit
+    override fun onReflect() = Unit
+}
+
 object GPUPreparedTextShaderComposer {
     fun compose(
         material: GPUPreparedMaterialProgram,
         targetFormatClass: String,
         blendPlanIdentity: String,
         fixedFunctionBlendState: GPUFixedFunctionBlendState? = null,
+    ): GPUPreparedTextCompositeProgramResult = composeObserved(
+        material = material,
+        targetFormatClass = targetFormatClass,
+        blendPlanIdentity = blendPlanIdentity,
+        fixedFunctionBlendState = fixedFunctionBlendState,
+        observer = NoOpGPUPreparedTextCompositionObserver,
+    )
+
+    internal fun composeObserved(
+        material: GPUPreparedMaterialProgram,
+        targetFormatClass: String,
+        blendPlanIdentity: String,
+        fixedFunctionBlendState: GPUFixedFunctionBlendState?,
+        observer: GPUPreparedTextCompositionObserver,
     ): GPUPreparedTextCompositeProgramResult {
+        observer.onCompose()
         if (targetFormatClass.isBlank()) {
             return refused("Prepared text target format class must not be blank")
         }
@@ -85,12 +114,8 @@ object GPUPreparedTextShaderComposer {
             return refused("Prepared material fragment collides with reserved identifier $identifier")
         }
 
-        val source = listOf(
-            fragment.declarationsWgsl,
-            fragment.evaluationFunctionWgsl,
-            PreparedTextA8Shader.vertexWgsl,
-            PreparedTextA8Shader.fragmentWgsl,
-        ).joinToString("\n\n")
+        val source = sourceForFragment(fragment)
+        observer.onParse()
         val parsed = runCatching { parseWgslResult(source) }
             .getOrElse { failure ->
                 return refused(
@@ -102,6 +127,7 @@ object GPUPreparedTextShaderComposer {
                 "wgsl4k parser diagnostics: ${parsed.errors.joinToString { it.message }}",
             )
         }
+        observer.onLower()
         val lowered = runCatching { Lowerer().lower(parsed.translationUnit) }
             .getOrElse { failure ->
                 return refused(
@@ -109,6 +135,7 @@ object GPUPreparedTextShaderComposer {
                 )
             }
         val sourceHash = sha256Hex(source.encodeToByteArray())
+        observer.onReflect()
         val report = runCatching {
             lowered.reflectWgslModule(sourceId = sourceHash)
         }.getOrElse { failure ->
@@ -131,14 +158,12 @@ object GPUPreparedTextShaderComposer {
                 ),
             )
             .digestHex()
-        val pipelineKey = CanonicalIdentityDigestEncoder(
-            "prepared-text-composite-pipeline-v1",
+        val pipelineKey = pipelineKey(
+            sourceHash = sourceHash,
+            abiHash = abiHash,
+            targetFormatClass = targetFormatClass,
+            blendPlanIdentity = blendPlanIdentity,
         )
-            .text("sourceHash", sourceHash)
-            .text("abiHash", abiHash)
-            .text("targetFormatClass", targetFormatClass)
-            .text("blendPlanIdentity", blendPlanIdentity)
-            .digestHex()
         return GPUPreparedTextCompositeProgramResult.Ready(
             GPUPreparedTextCompositeProgram(
                 wgslSource = source,
@@ -163,6 +188,27 @@ object GPUPreparedTextShaderComposer {
             ),
         )
     }
+
+    private fun sourceForFragment(fragment: GPUPreparedMaterialFragment): String = listOf(
+        fragment.declarationsWgsl,
+        fragment.evaluationFunctionWgsl,
+        PreparedTextA8Shader.vertexWgsl,
+        PreparedTextA8Shader.fragmentWgsl,
+    ).joinToString("\n\n")
+
+    internal fun pipelineKey(
+        sourceHash: String,
+        abiHash: String,
+        targetFormatClass: String,
+        blendPlanIdentity: String,
+    ): String = CanonicalIdentityDigestEncoder(
+        "prepared-text-composite-pipeline-v1",
+    )
+        .text("sourceHash", sourceHash)
+        .text("abiHash", abiHash)
+        .text("targetFormatClass", targetFormatClass)
+        .text("blendPlanIdentity", blendPlanIdentity)
+        .digestHex()
 
     private fun reservedIdentifierCollision(
         fragment: GPUPreparedMaterialFragment,

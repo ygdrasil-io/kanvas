@@ -52,8 +52,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.buildR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramCache
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
 
 data class GPUPreparedSurfaceFrameRequest(
@@ -408,6 +408,8 @@ internal data class GPUPreparedTextNativeSampledBinding(
  */
 class GPUPreparedSurfaceFrameTaskListBuilder(
     private val readbackLayoutPlanner: GPUReadbackLayoutPlanner = GPUReadbackLayoutPlanner(),
+    private val preparedTextCompositeProgramCache:
+        GPUPreparedTextCompositeProgramCache = GPUPreparedTextCompositeProgramCache(),
 ) {
     fun build(
         request: GPUPreparedSurfaceFrameRequest,
@@ -685,7 +687,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             linkedMapOf<org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID, GPUPreparedTextCompositeProgram>()
         textA8Inputs.forEach { input ->
             when (
-                val composition = GPUPreparedTextShaderComposer.compose(
+                val composition = preparedTextCompositeProgramCache.getOrCompose(
                     material = input.semantic.material,
                     targetFormatClass = request.targetFormat.value,
                     blendPlanIdentity = input.semantic.blendPlanIdentity,

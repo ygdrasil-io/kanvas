@@ -25,6 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramCache
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
@@ -86,6 +87,46 @@ import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 class GPUPreparedTextNativePreflightTest {
+    @Test
+    fun `recording reuses one composite across subruns and warm builds without preflight composition`() {
+        val cache = GPUPreparedTextCompositeProgramCache(maximumEntries = 4)
+        val builder = GPUPreparedSurfaceFrameTaskListBuilder(
+            preparedTextCompositeProgramCache = cache,
+        )
+        val first = preparedTextNativePreflightFixture(taskListBuilder = builder)
+
+        assertEquals(
+            GPUPreparedTextCompositeProgramCache.Snapshot(
+                residentEntryCount = 1,
+                hitCount = 1,
+                missCount = 1,
+                evictionCount = 0,
+                composeCount = 1,
+                parseCount = 1,
+                lowerCount = 1,
+                reflectCount = 1,
+            ),
+            cache.snapshot(),
+        )
+        assertNull(
+            GPUPreparedSurfaceNativePreflight().validateFramePlan(
+                first.framePlan,
+                first.context,
+                first.capabilities,
+            ),
+        )
+        assertEquals(1, cache.snapshot().composeCount)
+
+        preparedTextNativePreflightFixture(taskListBuilder = builder)
+
+        assertEquals(3, cache.snapshot().hitCount)
+        assertEquals(1, cache.snapshot().missCount)
+        assertEquals(1, cache.snapshot().composeCount)
+        assertEquals(1, cache.snapshot().parseCount)
+        assertEquals(1, cache.snapshot().lowerCount)
+        assertEquals(1, cache.snapshot().reflectCount)
+    }
+
     @Test
     fun `accepted TextA8 frame passes pure prepared surface preflight`() {
         val fixture = preparedTextNativePreflightFixture()
@@ -1288,6 +1329,8 @@ internal fun preparedTextNativePreflightFixture(
     materialProgram:
         org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram =
         GPUPreparedTextPreflightFixture.baselineMaterialProgram(),
+    taskListBuilder: GPUPreparedSurfaceFrameTaskListBuilder =
+        GPUPreparedSurfaceFrameTaskListBuilder(),
 ): PreparedTextNativePreflightFixture {
     val capabilities = preparedTextPreflightCapabilities()
     val frameId = GPUFrameID(109)
@@ -1403,7 +1446,7 @@ internal fun preparedTextNativePreflightFixture(
                 )
             }
     }
-    val result = GPUPreparedSurfaceFrameTaskListBuilder().build(
+    val result = taskListBuilder.build(
         GPUPreparedSurfaceFrameRequest(
             baseTaskList = base,
             capabilities = capabilities,

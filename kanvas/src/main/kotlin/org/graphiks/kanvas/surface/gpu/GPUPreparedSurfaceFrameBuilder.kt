@@ -57,6 +57,8 @@ internal sealed interface GPUPreparedSurfaceFrameBuildResult {
 internal object GPUPreparedSurfaceFrameBuilder {
     fun build(
         request: GPUPreparedSurfaceFrameBuildRequest,
+        taskListBuilder: GPUPreparedSurfaceFrameTaskListBuilder =
+            GPUPreparedSurfaceFrameTaskListBuilder(),
     ): GPUPreparedSurfaceFrameBuildResult {
         validateTargetBounds(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         validateTargetFormat(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
@@ -153,7 +155,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 is GPUPreparedSurfaceSemanticGatherResult.Refused ->
                     return GPUPreparedSurfaceFrameBuildResult.Refused(gathered.diagnostic)
             }
-            when (val prepared = GPUPreparedSurfaceFrameTaskListBuilder().build(
+            when (val prepared = taskListBuilder.build(
                 GPUPreparedSurfaceFrameRequest(
                     baseTaskList = recording.taskList,
                     capabilities = request.capabilities,
@@ -192,6 +194,20 @@ internal object GPUPreparedSurfaceFrameBuilder {
             )
         }
     }
+}
+
+/**
+ * Renderer-session-owned build authority.
+ *
+ * Its task-list builder retains the bounded, handle-free composite-program cache across warm
+ * frames. Tests and diagnostic one-shot callers may keep using [GPUPreparedSurfaceFrameBuilder].
+ */
+internal class GPUPreparedSurfaceFrameBuildSession(
+    private val taskListBuilder: GPUPreparedSurfaceFrameTaskListBuilder =
+        GPUPreparedSurfaceFrameTaskListBuilder(),
+) {
+    fun build(request: GPUPreparedSurfaceFrameBuildRequest): GPUPreparedSurfaceFrameBuildResult =
+        GPUPreparedSurfaceFrameBuilder.build(request, taskListBuilder)
 }
 
 private sealed interface PreparedImageVisuals {

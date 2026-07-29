@@ -12,6 +12,7 @@ import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.RenderPipelineDescriptor
+import io.ygdrasil.webgpu.SamplerDescriptor
 import java.lang.reflect.Proxy
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,6 +26,65 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 
 class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
+    @Test
+    fun `unique image contents share the two exact material sampler states`() {
+        val fixtures = (0 until 20).map { index ->
+            val filter = if (index % 2 == 0) "nearest" else "linear"
+            preparedTextNativePreflightFixture(
+                materialProgram = compiledPreparedTextMaterial(
+                    org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor.ImageDraw(
+                        imageSourceId = "sampler-cache:$index",
+                        imageWidth = 2,
+                        imageHeight = 2,
+                        rgbaPixels = ByteArray(16) { byteIndex ->
+                            (index * 19 + byteIndex * 7).toByte()
+                        },
+                        samplingFilterMode = filter,
+                        alphaOnly = false,
+                    ),
+                ),
+            )
+        }
+        val plans = fixtures.map(::preparedTextTestRunPlan)
+        val generation = fixtures.first().context.deviceGeneration
+        val program = plans.first().bindings.first().nativeProgram
+        val resources = plans.flatMap { plan ->
+            plan.bindings.flatMap { binding -> binding.materialSampledResourcePlans }
+        }.distinctBy { resource -> resource.resourceKey }
+        assertEquals(20, resources.map { it.resourceKey }.distinct().size)
+        val native = RecordingPreparedTextNative()
+        val cache = GPUWgpu4kPreparedTextSessionCache(native.device, generation)
+
+        val ready = assertIs<GPUPreparedTextCacheBatchAcquire.Ready>(
+            cache.acquireBatch(
+                programs = listOf(program),
+                generation = generation,
+                materialResourcesByPipelineKey = mapOf(program.pipelineKey to resources),
+            ),
+        )
+        val samplers = ready.pipelinesByKey.getValue(program.pipelineKey)
+            .materialSamplersByResourceKey
+
+        assertEquals(resources.map { it.resourceKey }.toSet(), samplers.keys)
+        assertEquals(2, samplers.values.toSet().size)
+        assertEquals(
+            GPUPreparedTextSamplerCacheSnapshot(
+                residentEntryCount = 2,
+                hitCount = 18,
+                missCount = 2,
+            ),
+            cache.samplerCacheSnapshot(),
+        )
+        assertEquals(
+            2,
+            native.samplerDescriptors.count { descriptor ->
+                ".material." in descriptor.label.orEmpty()
+            },
+        )
+
+        cache.close()
+    }
+
     @Test
     fun `native pipeline preserves exact target format and fixed blend matrix`() {
         listOf(GPUColorFormat.RGBA8Unorm, GPUColorFormat.RGBA8UnormSrgb).forEach { format ->
@@ -133,8 +193,15 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
             )
             val acquisition = assertIs<GPUPreparedTextCacheBatchAcquire.Ready>(
                 cache.acquireBatch(
-                    plan.bindings.map { it.nativeProgram },
-                    generation,
+                    programs = plan.bindings.map { it.nativeProgram },
+                    generation = generation,
+                    materialResourcesByPipelineKey = plan.bindings
+                        .groupBy { binding -> binding.nativeProgram.pipelineKey }
+                        .mapValues { (_, bindings) ->
+                            bindings.flatMap { binding ->
+                                binding.materialSampledResourcePlans
+                            }.distinctBy { resource -> resource.resourceKey }
+                        },
                 ),
             )
             assertEquals(
@@ -486,6 +553,7 @@ private class RecordingPreparedTextNative {
     val createdMaterialUniformBuffers = mutableListOf<GPUBuffer>()
     val createdR8Textures = mutableListOf<GPUTexture>()
     val pipelineDescriptors = mutableListOf<RenderPipelineDescriptor>()
+    val samplerDescriptors = mutableListOf<SamplerDescriptor>()
     private var ordinal = 0
 
     val device: GPUDevice = handle("device") { methodName, args ->
@@ -498,7 +566,10 @@ private class RecordingPreparedTextNative {
                 pipelineDescriptors += args?.first() as RenderPipelineDescriptor
                 handle<GPURenderPipeline>("pipeline")
             }
-            "createSampler" -> handle<GPUSampler>("sampler")
+            "createSampler" -> {
+                samplerDescriptors += args?.first() as SamplerDescriptor
+                handle<GPUSampler>("sampler")
+            }
             "createTexture" -> {
                 val label = args?.firstOrNull()?.toString().orEmpty()
                 textureHandle().also {

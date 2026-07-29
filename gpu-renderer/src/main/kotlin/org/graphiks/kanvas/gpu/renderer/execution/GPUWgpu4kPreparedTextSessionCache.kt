@@ -15,6 +15,7 @@ import io.ygdrasil.webgpu.GPUBufferBindingType
 import io.ygdrasil.webgpu.GPUColorWrite
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUFilterMode
+import io.ygdrasil.webgpu.GPUMipmapFilterMode
 import io.ygdrasil.webgpu.GPUPipelineLayout
 import io.ygdrasil.webgpu.GPURenderPipeline
 import io.ygdrasil.webgpu.GPUSampler
@@ -74,6 +75,25 @@ internal sealed interface GPUPreparedTextCacheBatchAcquire {
     ) : GPUPreparedTextCacheBatchAcquire
 }
 
+internal data class GPUPreparedTextSamplerCacheSnapshot(
+    val residentEntryCount: Int,
+    val hitCount: Int,
+    val missCount: Int,
+)
+
+private data class GPUPreparedTextSamplerState(
+    val addressModeU: GPUAddressMode,
+    val addressModeV: GPUAddressMode,
+    val addressModeW: GPUAddressMode,
+    val magFilter: GPUFilterMode,
+    val minFilter: GPUFilterMode,
+    val mipmapFilter: GPUMipmapFilterMode,
+    val lodMinClampBits: Int,
+    val lodMaxClampBits: Int,
+    val compare: String?,
+    val maxAnisotropy: UShort,
+)
+
 private class GPUWgpu4kPreparedTextCachedPipeline(
     val program: GPUPreparedTextNativeProgramHandoff,
     val shader: GPUShaderModule,
@@ -83,8 +103,6 @@ private class GPUWgpu4kPreparedTextCachedPipeline(
     val pipelineLayout: GPUPipelineLayout,
     val pipeline: GPURenderPipeline,
     val atlasSampler: GPUSampler,
-    val materialSamplersByResourceKey: MutableMap<String, GPUSampler>,
-    val materialSamplerFiltersByResourceKey: MutableMap<String, String>,
     val owned: MutableList<AutoCloseable>,
 )
 
@@ -101,7 +119,10 @@ internal class GPUWgpu4kPreparedTextSessionCache(
     private enum class Lifecycle { Active, Closing, Closed }
 
     private val pipelines = linkedMapOf<String, GPUWgpu4kPreparedTextCachedPipeline>()
+    private val materialSamplers = linkedMapOf<GPUPreparedTextSamplerState, GPUSampler>()
     private val retainedFailedSetup = mutableListOf<AutoCloseable>()
+    private var materialSamplerHitCount = 0
+    private var materialSamplerMissCount = 0
     private var lifecycle = Lifecycle.Active
 
     @Synchronized
@@ -152,15 +173,14 @@ internal class GPUWgpu4kPreparedTextSessionCache(
         }
 
         val createdEntries = mutableListOf<Pair<String, GPUWgpu4kPreparedTextCachedPipeline>>()
-        val createdSamplers =
-            mutableListOf<Triple<GPUWgpu4kPreparedTextCachedPipeline, String, GPUSampler>>()
+        val createdSamplers = mutableListOf<Pair<GPUPreparedTextSamplerState, GPUSampler>>()
+        val samplerAliasesByPipelineKey = linkedMapOf<String, Map<String, GPUSampler>>()
         return try {
             programsByKey.forEach { (key, sameKeyPrograms) ->
                 val cached = pipelines[key] ?: createPipeline(sameKeyPrograms.first()).also {
                     createdEntries += key to it
                 }
-                ensureMaterialSamplers(
-                    cached = cached,
+                samplerAliasesByPipelineKey[key] = resolveMaterialSamplers(
                     resources = materialResourcesByPipelineKey[key].orEmpty(),
                     createdSamplers = createdSamplers,
                 )
@@ -174,17 +194,16 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                     materialBindGroupLayout = cached.materialBindGroupLayout,
                     atlasBindGroupLayout = cached.atlasBindGroupLayout,
                     atlasSampler = cached.atlasSampler,
-                    materialSamplersByResourceKey = cached.materialSamplersByResourceKey,
+                    materialSamplersByResourceKey =
+                        samplerAliasesByPipelineKey[sameKeyPrograms.first().pipelineKey].orEmpty(),
                 )
             }
             GPUPreparedTextCacheBatchAcquire.Ready(
                 Collections.unmodifiableMap(acquired.toMap()),
             )
         } catch (failure: Throwable) {
-            createdSamplers.asReversed().forEach { (entry, resourceKey, sampler) ->
-                entry.materialSamplersByResourceKey.remove(resourceKey)
-                entry.materialSamplerFiltersByResourceKey.remove(resourceKey)
-                entry.owned.removeAll { it === sampler }
+            createdSamplers.asReversed().forEach { (state, sampler) ->
+                materialSamplers.remove(state)
                 closeHandlesRetainingFailures(mutableListOf(sampler))
             }
             createdEntries.asReversed().forEach { (_, entry) ->
@@ -204,6 +223,14 @@ internal class GPUWgpu4kPreparedTextSessionCache(
     }
 
     @Synchronized
+    fun samplerCacheSnapshot(): GPUPreparedTextSamplerCacheSnapshot =
+        GPUPreparedTextSamplerCacheSnapshot(
+            residentEntryCount = materialSamplers.size,
+            hitCount = materialSamplerHitCount,
+            missCount = materialSamplerMissCount,
+        )
+
+    @Synchronized
     override fun close() {
         if (lifecycle == Lifecycle.Closed && retainedFailedSetup.isEmpty()) return
         lifecycle = Lifecycle.Closing
@@ -212,6 +239,7 @@ internal class GPUWgpu4kPreparedTextSessionCache(
         pipelines.values.toList().asReversed().forEach { entry ->
             closeHandles(entry.owned, failures)
         }
+        closeHandles(materialSamplers.values.toMutableList(), failures)
         retainedBeforeThisAttempt.asReversed().forEach { handle ->
             try {
                 handle.close()
@@ -221,6 +249,7 @@ internal class GPUWgpu4kPreparedTextSessionCache(
             }
         }
         pipelines.clear()
+        materialSamplers.clear()
         if (retainedFailedSetup.isEmpty()) lifecycle = Lifecycle.Closed
         if (retainedFailedSetup.isNotEmpty()) {
             throw GPUOwnedNativeCloseIncompleteException(
@@ -383,7 +412,10 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                     ),
                 ),
             ).track(created)
-            val atlasSampler = createSampler("nearest", "atlas").track(created)
+            val atlasSampler = createSampler(
+                samplerState("nearest"),
+                "atlas",
+            ).track(created)
             return GPUWgpu4kPreparedTextCachedPipeline(
                 program = program,
                 shader = shader,
@@ -393,8 +425,6 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                 pipelineLayout = pipelineLayout,
                 pipeline = pipeline,
                 atlasSampler = atlasSampler,
-                materialSamplersByResourceKey = linkedMapOf(),
-                materialSamplerFiltersByResourceKey = linkedMapOf(),
                 owned = created,
             )
         } catch (failure: Throwable) {
@@ -403,45 +433,74 @@ internal class GPUWgpu4kPreparedTextSessionCache(
         }
     }
 
-    private fun ensureMaterialSamplers(
-        cached: GPUWgpu4kPreparedTextCachedPipeline,
+    private fun resolveMaterialSamplers(
         resources: List<GPUMaterialTextureFrameResourcePlan>,
         createdSamplers:
-            MutableList<Triple<GPUWgpu4kPreparedTextCachedPipeline, String, GPUSampler>>,
-    ) {
+            MutableList<Pair<GPUPreparedTextSamplerState, GPUSampler>>,
+    ): Map<String, GPUSampler> {
+        val filtersByResourceKey = linkedMapOf<String, String>()
+        val aliases = linkedMapOf<String, GPUSampler>()
         resources.forEach { resource ->
-            val previousFilter =
-                cached.materialSamplerFiltersByResourceKey[resource.resourceKey]
+            val previousFilter = filtersByResourceKey.put(
+                resource.resourceKey,
+                resource.samplingFilterMode,
+            )
             require(previousFilter == null || previousFilter == resource.samplingFilterMode) {
                 "Prepared-text material resource ${resource.resourceKey} changed sampler filter"
             }
-            if (resource.resourceKey !in cached.materialSamplersByResourceKey) {
-                val sampler = createSampler(
-                    resource.samplingFilterMode,
-                    "material.${resource.resourceKey}",
-                ).track(cached.owned)
-                cached.materialSamplersByResourceKey[resource.resourceKey] = sampler
-                cached.materialSamplerFiltersByResourceKey[resource.resourceKey] =
-                    resource.samplingFilterMode
-                createdSamplers += Triple(cached, resource.resourceKey, sampler)
+            val state = samplerState(resource.samplingFilterMode)
+            val sampler = materialSamplers[state]?.also {
+                materialSamplerHitCount += 1
+            } ?: createSampler(
+                state,
+                "material.${state.magFilter.name.lowercase()}",
+            ).also { created ->
+                materialSamplerMissCount += 1
+                materialSamplers[state] = created
+                createdSamplers += state to created
             }
+            aliases[resource.resourceKey] = sampler
         }
+        return aliases
     }
 
-    private fun createSampler(filter: String, role: String): GPUSampler {
+    private fun samplerState(filter: String): GPUPreparedTextSamplerState {
         val nativeFilter = when (filter) {
             "nearest" -> GPUFilterMode.Nearest
             "linear" -> GPUFilterMode.Linear
             else -> error("Unsupported prepared-text sampler filter $filter")
         }
+        return GPUPreparedTextSamplerState(
+            addressModeU = GPUAddressMode.ClampToEdge,
+            addressModeV = GPUAddressMode.ClampToEdge,
+            addressModeW = GPUAddressMode.ClampToEdge,
+            magFilter = nativeFilter,
+            minFilter = nativeFilter,
+            mipmapFilter = GPUMipmapFilterMode.Nearest,
+            lodMinClampBits = 0f.toRawBits(),
+            lodMaxClampBits = 0f.toRawBits(),
+            compare = null,
+            maxAnisotropy = 1u.toUShort(),
+        )
+    }
+
+    private fun createSampler(
+        state: GPUPreparedTextSamplerState,
+        role: String,
+    ): GPUSampler {
         return device.createSampler(
             SamplerDescriptor(
-                addressModeU = GPUAddressMode.ClampToEdge,
-                addressModeV = GPUAddressMode.ClampToEdge,
-                addressModeW = GPUAddressMode.ClampToEdge,
-                magFilter = nativeFilter,
-                minFilter = nativeFilter,
-                label = "Kanvas.session.preparedText.$role.$filter",
+                addressModeU = state.addressModeU,
+                addressModeV = state.addressModeV,
+                addressModeW = state.addressModeW,
+                magFilter = state.magFilter,
+                minFilter = state.minFilter,
+                mipmapFilter = state.mipmapFilter,
+                lodMinClamp = Float.fromBits(state.lodMinClampBits),
+                lodMaxClamp = Float.fromBits(state.lodMaxClampBits),
+                compare = null,
+                maxAnisotropy = state.maxAnisotropy,
+                label = "Kanvas.session.preparedText.$role",
             ),
         )
     }

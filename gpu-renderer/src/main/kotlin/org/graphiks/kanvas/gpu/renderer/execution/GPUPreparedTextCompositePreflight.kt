@@ -3,10 +3,9 @@ package org.graphiks.kanvas.gpu.renderer.recording
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeBindingPlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
@@ -17,6 +16,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
 import org.graphiks.kanvas.gpu.renderer.wgsl.PreparedTextA8Shader
 
@@ -110,26 +110,20 @@ internal object GPUPreparedTextCompositePreflight {
             ?: return bindingLayoutRefusal(
                 "Prepared TextA8 composite requires one exact target descriptor.",
             )
-        val expectedProgram = when (
-            val result = GPUPreparedTextShaderComposer.compose(
-                material = semantic.material,
-                targetFormatClass = targetDescriptor.format.value,
-                blendPlanIdentity = semantic.blendPlanIdentity,
-                fixedFunctionBlendState = (
-                    packet.blendPlan as?
-                        org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan.FixedFunctionBlend
-                    )?.state,
+        val expectedFragment = runCatching {
+            semantic.material.authenticatedSnapshot().composableFragment
+        }.getOrElse { failure ->
+            return sourceRefusal(
+                "Prepared TextA8 material could not be re-authenticated: " +
+                    failure::class.simpleName.orEmpty(),
             )
-        ) {
-            is GPUPreparedTextCompositeProgramResult.Ready -> result.program
-            is GPUPreparedTextCompositeProgramResult.Refused ->
-                return sourceRefusal(
-                    "Prepared TextA8 composite could not be re-authenticated: ${result.message}",
-                )
         }
+        val fixedFunctionBlendState = (
+            packet.blendPlan as? GPUBlendPlan.FixedFunctionBlend
+            )?.state
         validateInstanceVertex(
             binding,
-            expectedProgram.vertexLayout,
+            PreparedTextA8Shader.VertexLayout,
             compositeSeal.compositeVertexLayout,
             render,
             preparations,
@@ -141,18 +135,19 @@ internal object GPUPreparedTextCompositePreflight {
         )?.let { return it }
         validateProgramSourceAndAbi(
             binding.compositeProgram,
-            expectedProgram,
             compositeSeal,
         )?.let { return it }
         validateBindingLayout(
             binding.compositeProgram,
-            expectedProgram,
+            expectedFragment,
             render,
         )?.let { return it }
         validatePipelineKey(
             binding.compositeProgram,
-            expectedProgram,
-            compositeSeal,
+            targetFormatClass = targetDescriptor.format.value,
+            blendPlanIdentity = semantic.blendPlanIdentity,
+            fixedFunctionBlendState = fixedFunctionBlendState,
+            seal = compositeSeal,
         )?.let { return it }
         validateDrawUniformTopology(
             binding,
@@ -166,24 +161,21 @@ internal object GPUPreparedTextCompositePreflight {
 
     private fun validateProgramSourceAndAbi(
         actual: GPUPreparedTextCompositeProgram,
-        expected: GPUPreparedTextCompositeProgram,
         seal: GPUPreparedTextCompositePreflightSeal,
     ): GPUPreparedTextCompositePreflightRefusal? {
         val actualSourceHash = actual.wgslSource.encodeToByteArray().preparedTextSha256()
-        if (actual.wgslSource != expected.wgslSource ||
-            actual.sourceHash != actualSourceHash ||
-            actual.sourceHash != expected.sourceHash ||
+        if (actual.sourceHash != actualSourceHash ||
             seal.compositeSourceHash != actual.sourceHash
         ) {
             return sourceRefusal(
                 "Prepared TextA8 final WGSL and its exact source hash changed after composition.",
             )
         }
-        if (actual.vertexEntryPoint != expected.vertexEntryPoint ||
-            actual.fragmentEntryPoint != expected.fragmentEntryPoint ||
+        if (actual.vertexEntryPoint != "vs_main" ||
+            actual.fragmentEntryPoint != "fs_main" ||
             seal.compositeVertexEntryPoint != actual.vertexEntryPoint ||
             seal.compositeFragmentEntryPoint != actual.fragmentEntryPoint ||
-            actual.abiHash != expected.abiHash ||
+            !actual.abiHash.matches(Regex("[0-9a-f]{64}")) ||
             seal.compositeAbiHash != actual.abiHash
         ) {
             return abiRefusal(
@@ -195,10 +187,17 @@ internal object GPUPreparedTextCompositePreflight {
 
     private fun validateBindingLayout(
         actual: GPUPreparedTextCompositeProgram,
-        expected: GPUPreparedTextCompositeProgram,
+        expectedFragment: GPUPreparedMaterialFragment,
         render: GPUFrameStep.RenderPassStep,
     ): GPUPreparedTextCompositePreflightRefusal? {
-        if (!actual.bindingPlan.matches(expected.bindingPlan)) {
+        if (actual.bindingPlan.drawUniformGroup != 0 ||
+            actual.bindingPlan.drawUniformBinding != 0 ||
+            actual.bindingPlan.atlasTextureGroup != 2 ||
+            actual.bindingPlan.atlasTextureBinding != 0 ||
+            actual.bindingPlan.atlasSamplerGroup != 2 ||
+            actual.bindingPlan.atlasSamplerBinding != 1 ||
+            !actual.bindingPlan.materialFragment.matches(expectedFragment)
+        ) {
             return bindingLayoutRefusal(
                 "Prepared TextA8 draw, material, and atlas binding layout changed.",
             )
@@ -235,13 +234,21 @@ internal object GPUPreparedTextCompositePreflight {
 
     private fun validatePipelineKey(
         actual: GPUPreparedTextCompositeProgram,
-        expected: GPUPreparedTextCompositeProgram,
+        targetFormatClass: String,
+        blendPlanIdentity: String,
+        fixedFunctionBlendState: GPUFixedFunctionBlendState?,
         seal: GPUPreparedTextCompositePreflightSeal,
     ): GPUPreparedTextCompositePreflightRefusal? {
-        if (actual.pipelineKey != expected.pipelineKey ||
-            actual.targetFormatClass != expected.targetFormatClass ||
-            actual.blendPlanIdentity != expected.blendPlanIdentity ||
-            actual.fixedFunctionBlendState != expected.fixedFunctionBlendState ||
+        val expectedPipelineKey = GPUPreparedTextShaderComposer.pipelineKey(
+            sourceHash = actual.sourceHash,
+            abiHash = actual.abiHash,
+            targetFormatClass = targetFormatClass,
+            blendPlanIdentity = blendPlanIdentity,
+        )
+        if (actual.pipelineKey != expectedPipelineKey ||
+            actual.targetFormatClass != targetFormatClass ||
+            actual.blendPlanIdentity != blendPlanIdentity ||
+            actual.fixedFunctionBlendState != fixedFunctionBlendState ||
             seal.compositePipelineKey != actual.pipelineKey
         ) {
             return abiRefusal(
@@ -540,26 +547,17 @@ internal object GPUPreparedTextCompositePreflight {
         return null
     }
 
-    private fun GPUPreparedTextCompositeBindingPlan.matches(
-        expected: GPUPreparedTextCompositeBindingPlan,
+    private fun GPUPreparedMaterialFragment.matches(
+        expected: GPUPreparedMaterialFragment,
     ): Boolean =
-        drawUniformGroup == expected.drawUniformGroup &&
-            drawUniformBinding == expected.drawUniformBinding &&
-            atlasTextureGroup == expected.atlasTextureGroup &&
-            atlasTextureBinding == expected.atlasTextureBinding &&
-            atlasSamplerGroup == expected.atlasSamplerGroup &&
-            atlasSamplerBinding == expected.atlasSamplerBinding &&
-            materialFragment.declarationsWgsl ==
-            expected.materialFragment.declarationsWgsl &&
-            materialFragment.evaluationFunctionWgsl ==
-            expected.materialFragment.evaluationFunctionWgsl &&
-            materialFragment.uniformBinding == expected.materialFragment.uniformBinding &&
-            materialFragment.sampledBindings == expected.materialFragment.sampledBindings &&
-            materialFragment.fragmentHash == expected.materialFragment.fragmentHash &&
-            materialFragment.abiHash == expected.materialFragment.abiHash &&
-            materialFragment.colorContract == expected.materialFragment.colorContract &&
-            materialFragment.coordinateContract ==
-            expected.materialFragment.coordinateContract
+        declarationsWgsl == expected.declarationsWgsl &&
+            evaluationFunctionWgsl == expected.evaluationFunctionWgsl &&
+            uniformBinding == expected.uniformBinding &&
+            sampledBindings == expected.sampledBindings &&
+            fragmentHash == expected.fragmentHash &&
+            abiHash == expected.abiHash &&
+            colorContract == expected.colorContract &&
+            coordinateContract == expected.coordinateContract
 
     private fun checkedAdd(left: Long, right: Long): Long? =
         try {
