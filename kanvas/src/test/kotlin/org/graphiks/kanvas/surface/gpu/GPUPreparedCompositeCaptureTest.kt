@@ -6,11 +6,10 @@ import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.picture.PictureRecorder
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeCaptureResult
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -124,6 +123,17 @@ class GPUPreparedCompositeCaptureTest {
         }
         assertEquals(0, paintedScopes.size)
         assertTrue(ready.capture.expandedOperations.size >= 1)
+    }
+
+    @Test
+    fun `captured operation snapshot is typed not Any`() {
+        val ops = listOf(simpleRect(0f, 0f, 5f, 5f))
+        val result = capture(ops)
+        val ready = assertIs<GPUPreparedCompositeCaptureResult.Ready>(result)
+        val op = ready.capture.expandedOperations.first()
+        val snapshot = op.snapshot
+        assertIs<GPUPreparedOperationSnapshot>(snapshot)
+        assertTrue(snapshot.identityFragment().isNotBlank())
     }
 
     private fun capture(

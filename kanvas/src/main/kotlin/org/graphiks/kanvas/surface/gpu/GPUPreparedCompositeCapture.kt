@@ -1,14 +1,10 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayOp
-import org.graphiks.kanvas.picture.Picture
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeCapture
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeCaptureResult
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCapturedOperation
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScope
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeId
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
 import java.security.MessageDigest
 
@@ -17,6 +13,43 @@ data class GPUPreparedCompositeCaptureLimits(
     val maxNestingDepth: Int = 10,
     val maxExpandedOps: Int = 10000,
 )
+
+sealed interface GPUPreparedOperationSnapshot {
+    fun identityFragment(): String
+    data class DrawOp(
+        val opType: String,
+        val operationIndex: Int,
+        val provenance: String,
+    ) : GPUPreparedOperationSnapshot {
+        override fun identityFragment(): String = "draw:$opType:$operationIndex:$provenance"
+    }
+}
+
+/** Captured operation with typed snapshot. */
+data class GPUPreparedCapturedOperation(
+    val sourceOperationIndex: Int,
+    val snapshot: GPUPreparedOperationSnapshot,
+    val identity: String,
+)
+
+/** Immutable composite capture result. */
+data class GPUPreparedCompositeCapture(
+    val rootScopeId: GPUPreparedCompositeScopeId,
+    val scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
+    val expandedOperations: List<GPUPreparedCapturedOperation>,
+    val identity: String,
+)
+
+sealed interface GPUPreparedCompositeCaptureResult {
+    data class Ready(val capture: GPUPreparedCompositeCapture) :
+        GPUPreparedCompositeCaptureResult
+
+    data class Refused(
+        val code: String,
+        val operationIndex: Int?,
+        val facts: Map<String, String>,
+    ) : GPUPreparedCompositeCaptureResult
+}
 
 internal object GPUPreparedCompositeCapturer {
 
@@ -204,7 +237,6 @@ internal object GPUPreparedCompositeCapturer {
                 )
                 scopes[syntheticId] = syntheticScope
                 parentScope.entries.add(GPUPreparedCompositeEntry.Scope(syntheticId))
-                appendDraw(opIdx, op, parentScope)
 
                 activePicturesOnStack.add(pictureId)
                 try {
@@ -238,13 +270,15 @@ internal object GPUPreparedCompositeCapturer {
             scope: MutableCaptureScope,
         ) {
             val idx = expandedOps.size
-            val opIdentity = "op:${opIdx}:${op.javaClass.simpleName}"
+            val opClassName = op.javaClass.simpleName
+            val opIdentity = "op:${opIdx}:$opClassName"
             expandedOps.add(
                 GPUPreparedCapturedOperation(
                     sourceOperationIndex = opIdx,
-                    snapshot = mapOf(
-                        "type" to op.javaClass.simpleName,
-                        "index" to opIdx.toString(),
+                    snapshot = GPUPreparedOperationSnapshot.DrawOp(
+                        opType = opClassName,
+                        operationIndex = opIdx,
+                        provenance = "root/$opIdx",
                     ),
                     identity = opIdentity,
                 )
