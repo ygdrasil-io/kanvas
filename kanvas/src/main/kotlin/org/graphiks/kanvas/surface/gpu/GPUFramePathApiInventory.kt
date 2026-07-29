@@ -34,6 +34,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.surface.RenderConfig
 
 const val GPU_FRAME_PROVENANCE_ANNOTATION_KEY: String = "kanvas.frame.provenance"
@@ -66,6 +67,7 @@ data class GPUFramePathVisualCommand(
     val provenance: GPUFrameProvenance,
     val geometryRefusal: GPUCorePrimitiveGeometryRefusal? = null,
     val preparedImage: GPUPreparedImageDrawFacts? = null,
+    val preparedText: GPUPreparedTextSubRun? = null,
 )
 
 data class GPUFramePathInventoryPlan(
@@ -78,6 +80,7 @@ data class GPUFramePathInventoryPlan(
     val framePlan: GPUFramePlan,
     val legacyDump: GPULegacyImmediatePathDump,
     val preparedRefusal: GPUPreparedOperationRefusal?,
+    val preparedTextInventory: PreparedTextFrameInventory? = null,
 )
 
 /**
@@ -95,7 +98,22 @@ object GPUFramePathApiInventory {
         capabilities: GPUCapabilities = GPUProductFlagConfig.fromSystemProperties().buildCapabilities(),
         deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(0),
     ): GPUFramePathInventoryPlan {
-        val mapping = GPUOpMapper.mapOperations(operations, target, config, capabilities)
+        val prepared = GPUPreparedTextFramePreparer.prepare(
+            operations = operations,
+            target = target,
+            config = config,
+            capabilities = capabilities,
+            generation = GPUTextArtifactGeneration(0),
+        )
+        val mapping = when (prepared) {
+            is GPUPreparedTextFramePreparation.Ready -> prepared.mapping
+            is GPUPreparedTextFramePreparation.Refused -> GPUOpMapper.mapOperations(
+                operations = emptyList(),
+                target = target,
+                config = config,
+                capabilities = capabilities,
+            ).copy(preparedRefusal = prepared.refusal)
+        }
         val visual = mapping.visualCommands
 
         val recorder = GPURecorder(
@@ -123,6 +141,8 @@ object GPUFramePathApiInventory {
             framePlan = framePlan,
             legacyDump = mapping.legacyDump,
             preparedRefusal = mapping.preparedRefusal,
+            preparedTextInventory =
+                (prepared as? GPUPreparedTextFramePreparation.Ready)?.inventory,
         )
     }
 
@@ -215,13 +235,36 @@ object GPUFramePathApiInventory {
         inventory: GPUFramePathInventoryPlan,
         targetBounds: GPUPixelBounds,
         imageArtifactsByCommandId: Map<Int, GPUPreparedImageUploadArtifact>,
-    ): GPUPreparedSurfaceSemanticGatherResult = GPUPreparedSurfaceSemanticBuilder.gather(
-        visualCommands = inventory.visualCommands,
-        recording = inventory.recording,
-        targetBounds = targetBounds,
-        imageArtifactsByCommandId = imageArtifactsByCommandId,
-        blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
-    )
+    ): GPUPreparedSurfaceSemanticGatherResult {
+        val textSemantics = inventory.preparedTextInventory?.let { preparedText ->
+            when (
+                val gathered = GPUPreparedTextSemanticBuilder.gather(
+                    visualCommands = inventory.visualCommands,
+                    inventory = preparedText,
+                    targetBounds = targetBounds,
+                )
+            ) {
+                is GPUPreparedTextSemanticGatherResult.Gathered -> gathered.semanticsByCommandId
+                is GPUPreparedTextSemanticGatherResult.Refused ->
+                    return GPUPreparedSurfaceSemanticGatherResult.Refused(
+                        GPUDiagnostic(
+                            code = GPUDiagnosticCode(gathered.code),
+                            domain = GPUDiagnosticDomain.Recording,
+                            severity = GPUDiagnosticSeverity.Error,
+                            message = gathered.message,
+                        ),
+                    )
+            }
+        }.orEmpty()
+        return GPUPreparedSurfaceSemanticBuilder.gather(
+            visualCommands = inventory.visualCommands,
+            recording = inventory.recording,
+            targetBounds = targetBounds,
+            imageArtifactsByCommandId = imageArtifactsByCommandId,
+            textSemanticsByCommandId = textSemantics,
+            blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+        )
+    }
 
     private fun preparedRefusalDiagnostic(refusal: GPUPreparedOperationRefusal): GPUDiagnostic =
         GPUDiagnostic(

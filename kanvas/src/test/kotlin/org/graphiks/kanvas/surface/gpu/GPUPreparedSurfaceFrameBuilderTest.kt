@@ -59,6 +59,17 @@ import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceFrameBuilderTest {
     @Test
+    fun `core frame above text generation range remains valid when it contains no text`() {
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            request(listOf(rect())).copy(
+                frameId = GPUFrameID(Int.MAX_VALUE.toLong() + 1L),
+            ),
+        )
+
+        assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(result)
+    }
+
+    @Test
     fun `prepared atlas expands to ordered sampled packets sharing one artifact with distinct uniforms`() {
         val atlas = atlasImage("builder-atlas")
         val operation = DisplayOp.DrawAtlas(

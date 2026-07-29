@@ -67,7 +67,9 @@ internal fun NormalizedDrawCommand.fillGuardRefusalReasonOrNull(): String? {
     clip.perspectiveCaptureRefusalReasonOrNull()?.let { return it }
     strokeRefusalReasonOrNull()?.let { return it }
     if (this is NormalizedDrawCommand.DrawTextRun) return null
-    val material = this.material
+    val material = requireNotNull(this.material) {
+        "Non-text normalized commands require a legacy material descriptor"
+    }
     val maskBlur = when (this) {
         is NormalizedDrawCommand.FillRect -> maskFilter as? NormalizedMaskFilter.Blur
         is NormalizedDrawCommand.FillRRect -> maskFilter as? NormalizedMaskFilter.Blur

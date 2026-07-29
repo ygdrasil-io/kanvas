@@ -3,11 +3,13 @@ package org.graphiks.kanvas.gpu.renderer.payloads
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID
@@ -60,7 +62,12 @@ class GPUColorGlyphPayloadGathererTest {
         val colorGlyph = assertIs<GPUDrawSemanticPayload.ColorGlyph>(semantic)
         assertEquals("ColorGlyph", colorGlyph.canonicalType)
         assertEquals(GPUColorGlyphAtlasFormat.R8Unorm, colorGlyph.atlasFormat)
+        assertContentEquals(
+            byteArrayOf(0x10, 0x20, 0x30, 0x40),
+            colorGlyph.atlas.tightBytesForUpload(),
+        )
         assertEquals(listOf(0x10, 0x20, 0x30, 0x40), colorGlyph.atlasA8Bytes)
+        assertNotSame(colorGlyph.atlasA8Bytes, colorGlyph.atlasA8Bytes)
         assertEquals(2, colorGlyph.atlasWidth)
         assertEquals(2, colorGlyph.atlasHeight)
         assertEquals(7L, colorGlyph.atlasGeneration)
@@ -175,6 +182,16 @@ class GPUColorGlyphPayloadGathererTest {
             "layer outside atlas" to {
                 gather(layers = listOf(layer(11u, bounds = GPUPixelBounds(1, 1, 3, 2))))
             },
+            "duplicate legacy atlas placement" to {
+                val duplicateLayers = listOf(
+                    layer(11u, bounds = GPUPixelBounds(0, 0, 1, 2)),
+                    layer(12u, bounds = GPUPixelBounds(0, 0, 1, 2)),
+                )
+                gather(
+                    layers = duplicateLayers,
+                    uniformBytes = validUniformBytes(duplicateLayers),
+                )
+            },
             "empty device bounds" to {
                 gather(layers = listOf(layer(11u, deviceBounds = GPUPixelBounds(1, 1, 1, 2))))
             },
@@ -256,11 +273,8 @@ class GPUColorGlyphPayloadGathererTest {
         payloadRef = payloadRef,
         planArtifactKey = planArtifactKey,
         atlasArtifactKey = atlasArtifactKey,
-        atlasA8Bytes = atlasA8Bytes,
-        atlasWidth = atlasWidth,
-        atlasHeight = atlasHeight,
+        atlas = atlas,
         atlasFormat = atlasFormat,
-        atlasGeneration = atlasGeneration,
         layers = layers,
         vertexData = vertexData,
         indexData = indexData,

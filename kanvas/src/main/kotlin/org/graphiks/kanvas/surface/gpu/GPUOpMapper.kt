@@ -10,6 +10,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
+import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.ClipStackOp
@@ -42,6 +44,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.PATH_FILL_STENCIL_COVER
@@ -107,6 +111,7 @@ internal object GPUOpMapper {
         target: GPUTargetFacts,
         config: RenderConfig,
         capabilities: GPUCapabilities,
+        preparedTextInventory: PreparedTextFrameInventory? = null,
     ): GPUOpMapping {
         val visual = mutableListOf<GPUFramePathVisualCommand>()
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
@@ -127,6 +132,50 @@ internal object GPUOpMapper {
                     stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.Clip)
                 is DisplayOp.FlushAndSnapshot ->
                     stateEvents += GPUFramePathStateEvent(operationIndex, GPUFramePathStateKind.FlushSnapshot)
+                is DisplayOp.DrawText -> {
+                    if (preparedTextInventory == null) {
+                        if (legacy.accepts(operation)) legacy.recordInvocation(operation)
+                        return@forEachIndexed
+                    }
+                    if (operationIndex !in preparedTextInventory.acceptedTextOperationIndices) {
+                        return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            legacyDump = legacy.dump(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = visual.size,
+                                operationIndex = operationIndex,
+                                code = "invalid.surface.prepared.text-operation-ownership",
+                                facts = emptyMap(),
+                            ),
+                        )
+                    }
+                    val subRuns = preparedTextInventory.subRunsByOperationIndex[operationIndex].orEmpty()
+                    for (subRun in subRuns) {
+                        val commandId = visual.size
+                        val lowered = subRun.toPreparedTextVisual(
+                            commandId = commandId,
+                            provenance = provenance,
+                            target = target,
+                            config = config,
+                            capabilities = capabilities,
+                            inventory = preparedTextInventory,
+                        ) ?: return GPUOpMapping(
+                            visualCommands = emptyList(),
+                            stateEvents = stateEvents.toList(),
+                            legacyDump = legacy.dump(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = commandId,
+                                operationIndex = operationIndex,
+                                code = "invalid.surface.prepared.text-command",
+                                facts = mapOf(
+                                    "subRunIndex" to subRun.subRunIndex.toString(),
+                                ),
+                            ),
+                        )
+                        visual += lowered
+                    }
+                }
                 is DisplayOp.DrawImage -> {
                     val commandId = visual.size
                     when (
@@ -428,6 +477,136 @@ internal object GPUOpMapper {
             else -> error("Slice 12A mapper produced a non-core command")
         }
     }
+}
+
+private fun GPUPreparedTextSubRun.toPreparedTextVisual(
+    commandId: Int,
+    provenance: GPUFrameProvenance,
+    target: GPUTargetFacts,
+    config: RenderConfig,
+    capabilities: GPUCapabilities,
+    inventory: PreparedTextFrameInventory,
+): GPUFramePathVisualCommand? {
+    if (draw.operationIndex != operationIndex ||
+        draw.material.materialKey != materialKey ||
+        draw.blendPlan.canonicalIdentity() != blendPlanIdentity ||
+        draw.clipContentKey != clipIdentity ||
+        draw.capabilitySnapshotHash != capabilities.canonicalSnapshotHash() ||
+        instances.isEmpty() ||
+        representation == GPUPreparedTextRepresentation.A8_MASK && colorGlyphLayerPlan != null ||
+        representation == GPUPreparedTextRepresentation.COLRV0 && colorGlyphLayerPlan == null
+    ) {
+        return null
+    }
+    val page = pageIndex?.let { index ->
+        inventory.pages.singleOrNull { candidate -> candidate.pageIndex == index }
+    } ?: return null
+    if (page.artifactKey.generation != inventory.generation ||
+        instances.any { instance -> instance.pageIndex != page.pageIndex }
+    ) {
+        return null
+    }
+    val bounds = instances.preparedTextBounds(target) ?: return null
+    val clipFacts = draw.clip.toGPUClipFacts(target)
+    val maxTextureDimension = capabilities.limits?.maxTextureDimension2D
+        ?.coerceAtMost(Int.MAX_VALUE.toLong())
+        ?.toInt()
+        ?: maxOf(target.width, target.height)
+    val clipCoverage = clipFacts.coverageRequest?.let { request ->
+        if (request.contentKey != draw.clipContentKey) return null
+        GPUClipCoveragePlanner.planForFrameRoute(request, config, maxTextureDimension)
+    } ?: if (draw.clipContentKey == "prepared-text-clip:wide-open") {
+        GPUClipCoveragePlan.NoClip
+    } else {
+        return null
+    }
+    if (clipCoverage is GPUClipCoveragePlan.Refused) return null
+    val clipExecution = clipCoverage.toExecutionPlan(capabilities, target)
+    val artifactRef = GPUTextArtifactRef(
+        artifactType = "PreparedTextA8AtlasPage",
+        artifactId = page.artifactKey.artifactID.value.toString(),
+        artifactKeyHash = page.artifactKey.contentFingerprint,
+        generation = page.artifactKey.generation,
+        routeHint = "AtlasMaskSample",
+    )
+    val stableRunIdentity =
+        "prepared-text:${inventory.contentSha256}:operation=$operationIndex:subrun=$subRunIndex"
+    val normalized = NormalizedDrawCommand.DrawTextRun(
+        commandId = GPUDrawCommandID(commandId),
+        textLayoutResultId = "prepared-text:${inventory.contentSha256}",
+        glyphRunId = stableRunIdentity,
+        glyphRunDescriptorRefs = listOf(stableRunIdentity),
+        glyphRunDescriptor = null,
+        colorGlyphPlans = listOfNotNull(colorGlyphLayerPlan),
+        artifactRefs = listOf(artifactRef),
+        artifactKeyHashes = listOf(artifactRef.artifactKeyHash),
+        atlasGenerations = listOf(GPUTextArtifactGeneration(inventory.generation.value)),
+        uploadDependencyFacts = listOf("upload-before-sample:${page.artifactKey.contentFingerprint}"),
+        routeDiagnostics = emptyList(),
+        transform = draw.transform.toGPUTransformFacts(),
+        clip = clipFacts.copy(
+            coveragePlan = clipCoverage,
+            executionPlan = clipExecution,
+        ),
+        layer = GPULayerFacts.root(target),
+        preparedMaterial = draw.material,
+        blend = draw.blendPlan.mode.toPaintBlendMode().toGpuBlendFacts(),
+        preparedBlendPlan = draw.blendPlan,
+        bounds = bounds,
+        ordering = GPUOrderingFacts(
+            paintOrder = commandId,
+            dependsOnDestination = draw.blendPlan.destinationReadRequirement ==
+                GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+            requiresBarrier = false,
+        ),
+        source = GPUCommandSource(
+            adapter = "kanvas-surface",
+            operation = "drawText.prepared:$operationIndex:$subRunIndex",
+            frameProvenance = provenance,
+        ),
+    )
+    return GPUFramePathVisualCommand(
+        normalized = normalized,
+        targetSpaceBounds = bounds,
+        geometryCoverage = GPUCoverageConsumption.ScalarCoverage,
+        clipCoverage = clipCoverage,
+        clipExecutionPlan = clipExecution,
+        blendPlan = draw.blendPlan,
+        provenance = provenance,
+        preparedText = this,
+    )
+}
+
+private fun GPUBlendMode.toPaintBlendMode(): BlendMode = when (this) {
+    GPUBlendMode.CLEAR -> BlendMode.CLEAR
+    GPUBlendMode.SRC_OVER -> BlendMode.SRC_OVER
+    GPUBlendMode.SRC -> BlendMode.SRC
+    GPUBlendMode.DST -> BlendMode.DST
+    GPUBlendMode.DST_OVER -> BlendMode.DST_OVER
+    GPUBlendMode.SRC_IN -> BlendMode.SRC_IN
+    GPUBlendMode.DST_IN -> BlendMode.DST_IN
+    GPUBlendMode.SRC_OUT -> BlendMode.SRC_OUT
+    GPUBlendMode.DST_OUT -> BlendMode.DST_OUT
+    GPUBlendMode.SRC_ATOP -> BlendMode.SRC_ATOP
+    GPUBlendMode.DST_ATOP -> BlendMode.DST_ATOP
+    GPUBlendMode.XOR -> BlendMode.XOR
+    GPUBlendMode.PLUS -> BlendMode.PLUS
+    GPUBlendMode.MODULATE -> BlendMode.MODULATE
+    GPUBlendMode.MULTIPLY -> BlendMode.MULTIPLY
+    GPUBlendMode.SCREEN -> BlendMode.SCREEN
+    GPUBlendMode.OVERLAY -> BlendMode.OVERLAY
+    GPUBlendMode.DARKEN -> BlendMode.DARKEN
+    GPUBlendMode.LIGHTEN -> BlendMode.LIGHTEN
+    GPUBlendMode.COLOR_DODGE -> BlendMode.COLOR_DODGE
+    GPUBlendMode.COLOR_BURN -> BlendMode.COLOR_BURN
+    GPUBlendMode.HARD_LIGHT -> BlendMode.HARD_LIGHT
+    GPUBlendMode.SOFT_LIGHT -> BlendMode.SOFT_LIGHT
+    GPUBlendMode.DIFFERENCE -> BlendMode.DIFFERENCE
+    GPUBlendMode.EXCLUSION -> BlendMode.EXCLUSION
+    GPUBlendMode.HUE -> BlendMode.HUE
+    GPUBlendMode.SATURATION -> BlendMode.SATURATION
+    GPUBlendMode.COLOR -> BlendMode.COLOR
+    GPUBlendMode.LUMINOSITY -> BlendMode.LUMINOSITY
 }
 
 private fun Throwable.isPathVertexBudgetFailure(): Boolean =
@@ -1866,41 +2045,5 @@ private fun ClipStackOp.transformForPictureReplay(matrix: Matrix33): ClipStackOp
     is ClipStackOp.PathOp -> copy(
         path = if (matrix.isAffine()) path.transform(matrix) else path,
         perspectiveCaptureRefusal = perspectiveCaptureRefusal || !matrix.isAffine(),
-    )
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// DrawText → NormalizedDrawCommand.DrawTextRun
-// ────────────────────────────────────────────────────────────────────────────
-
-internal fun DisplayOp.DrawText.toNormalizedCommand(
-    cmdId: GPUDrawCommandID,
-    target: GPUTargetFacts,
-): NormalizedDrawCommand.DrawTextRun {
-    val material = this.paint.toMaterial()
-    val bounds = GPUBounds(this.x, this.y, this.x + this.blob.fontSize * 10f, this.y + this.blob.fontSize)
-    val clip = this.clip.toGPUClipFacts(target)
-    val transform = this.transform.toGPUTransformFacts()
-    val blobId = "textblob-${this.blob.hashCode()}"
-    return NormalizedDrawCommand.DrawTextRun(
-        commandId = cmdId,
-        textLayoutResultId = blobId,
-        glyphRunId = blobId,
-        glyphRunDescriptorRefs = emptyList(),
-        glyphRunDescriptor = null,
-        colorGlyphPlans = emptyList(),
-        artifactRefs = emptyList(),
-        artifactKeyHashes = emptyList(),
-        atlasGenerations = emptyList(),
-        uploadDependencyFacts = emptyList(),
-        routeDiagnostics = emptyList(),
-        transform = transform,
-        clip = clip,
-        layer = GPULayerFacts.root(target),
-        material = material,
-        blend = this.paint.blendMode.toGpuBlendFacts(),
-        bounds = bounds,
-        ordering = GPUOrderingFacts(paintOrder = 0, dependsOnDestination = false, requiresBarrier = false),
-        source = GPUCommandSource(adapter = "kanvas-surface", operation = "drawText"),
     )
 }

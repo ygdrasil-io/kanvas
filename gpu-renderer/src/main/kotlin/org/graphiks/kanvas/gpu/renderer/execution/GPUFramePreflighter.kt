@@ -4121,6 +4121,12 @@ internal class GPUFramePreflighter(
                 } else {
                     validatePreparedSampledImageScissor(packet, semantic)
                 }
+            is GPUDrawSemanticPayload.TextA8 ->
+                diagnostic(
+                    "unsupported.preflight.prepared_text_unmaterialized",
+                    "Prepared text semantics have no executable native materialization route; " +
+                        "native materialization belongs to FP-05 Task 10.",
+                )
             is GPUDrawSemanticPayload.ColorGlyph ->
                 validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
         }

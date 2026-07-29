@@ -4202,6 +4202,17 @@ class GPUFramePreflighterTest {
     }
 
     @Test
+    fun `prepared text refusal explains that native materialization belongs to Task 10`() {
+        val source = File(
+            "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/execution/GPUFramePreflighter.kt",
+        ).readText()
+
+        assertTrue("Prepared text semantics have no executable native materialization route; " in source)
+        assertTrue("native materialization belongs to FP-05 Task 10." in source)
+        assertFalse("native materialization route before FP-05 Task 8" in source)
+    }
+
+    @Test
     fun `core primitive hot path reuses builder pipeline and uniform slab seals`() {
         val sourceRoot = File("src/main/kotlin/org/graphiks/kanvas/gpu/renderer")
         val builder = sourceRoot.resolve(

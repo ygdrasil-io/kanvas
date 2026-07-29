@@ -2368,11 +2368,14 @@ private fun GPUBlendFacts.canonicalRefusalCode(targetFormatClass: String): Strin
     }
 }
 
-internal fun GPUBlendFacts.canonicalPlan(targetFormatClass: String): GPUBlendPlan =
+internal fun GPUBlendFacts.canonicalPlan(
+    targetFormatClass: String,
+    coverage: GPUCoverageConsumption = GPUCoverageConsumption.FullOrScissor,
+): GPUBlendPlan =
     GPUBlendPlanner().plan(
         GPUBlendSpecializationRequest(
             mode = mode,
-            coverage = GPUCoverageConsumption.FullOrScissor,
+            coverage = coverage,
             sourceAlpha = sourceAlpha,
             target = GPUTargetBlendFacts(
                 formatClass = targetFormatClass,

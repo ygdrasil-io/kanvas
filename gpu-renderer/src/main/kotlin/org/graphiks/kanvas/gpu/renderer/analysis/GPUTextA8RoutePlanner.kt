@@ -6,6 +6,7 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
@@ -71,11 +72,17 @@ class GPUTextA8RoutePlanner {
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
             pipelineKey = GPURenderPipelineKey(pipelineKey),
-            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
+            blendPlan = command.preparedBlendPlan ?: command.blend.canonicalPlan(
+                command.layer.target.colorFormat,
+                GPUCoverageConsumption.ScalarCoverage,
+            ),
             boundsHash = command.bounds.stableBoundsHash(),
-            scissorBoundsHash = command.scissorBoundsHash(),
+            scissorBoundsHash = command.preparedTextScissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.targetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
 
         return GPUFirstRoutePlan(
@@ -176,8 +183,13 @@ class GPUTextA8RoutePlanner {
 private fun NormalizedDrawCommand.DrawTextRun.targetStateHash(): String =
     "target.${layer.target.colorFormat}.${layer.target.width}x${layer.target.height}"
 
-private fun NormalizedDrawCommand.DrawTextRun.scissorBoundsHash(): String? =
-    null
+internal fun NormalizedDrawCommand.DrawTextRun.preparedTextScissorBoundsHash(): String? =
+    (clip.executionPlan as? org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.ScissorOnly)
+        ?.scissor
+        ?.let { scissor ->
+            "scissor_${scissor.left.toFloat()}_${scissor.top.toFloat()}_" +
+                "${scissor.right.toFloat()}_${scissor.bottom.toFloat()}"
+        }
 
 private fun GPUBounds.stableBoundsHash(): String =
     "bounds:$left,$top,$right,$bottom"

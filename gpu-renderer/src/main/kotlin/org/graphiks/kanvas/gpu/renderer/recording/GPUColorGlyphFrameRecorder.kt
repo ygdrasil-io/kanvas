@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.recording
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
+import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -81,10 +82,11 @@ class GPUColorGlyphFrameRecorder {
     private val payloadGatherer = GPUColorGlyphPayloadGatherer()
 
     fun record(request: GPUColorGlyphFrameRecordingRequest): GPUColorGlyphFrameRecordingResult {
-        if (request.layers.size !in 1..MAX_COLOR_GLYPH_FRAME_LAYERS) {
+        if (request.layers.size !in 1..GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS) {
             return refused(
                 code = "invalid.recording.color_glyph_input",
-                message = "ColorGlyph recording requires 1..$MAX_COLOR_GLYPH_FRAME_LAYERS resolved layers.",
+                message = "ColorGlyph recording requires " +
+                    "1..$GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS resolved layers.",
             )
         }
         if (request.configuredAggregateBudgetBytes <= 0L) {
@@ -168,11 +170,11 @@ class GPUColorGlyphFrameRecorder {
             putFloat(request.targetBounds.height.toFloat())
             putInt(request.layers.size)
             putInt(0)
-            repeat(MAX_COLOR_GLYPH_FRAME_LAYERS) { index ->
+            repeat(GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS) { index ->
                 val color = request.layers.getOrNull(index)?.premultipliedRgba ?: ZERO_COLOR_GLYPH_FIELD
                 repeat(4) { component -> putFloat(color.getOrElse(component) { Float.NaN }) }
             }
-            repeat(MAX_COLOR_GLYPH_FRAME_LAYERS) { index ->
+            repeat(GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS) { index ->
                 val bounds = request.layers.getOrNull(index)?.atlasBounds
                 if (bounds == null) {
                     ZERO_COLOR_GLYPH_FIELD.forEach(::putFloat)
@@ -183,7 +185,7 @@ class GPUColorGlyphFrameRecorder {
                     putFloat(bounds.height / request.atlasHeight.toFloat())
                 }
             }
-            repeat(MAX_COLOR_GLYPH_FRAME_LAYERS) { index ->
+            repeat(GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS) { index ->
                 val bounds = request.layers.getOrNull(index)?.deviceBounds
                 if (bounds == null) {
                     ZERO_COLOR_GLYPH_FIELD.forEach(::putFloat)
@@ -214,7 +216,6 @@ class GPUColorGlyphFrameRecorder {
 }
 
 private const val COLOR_GLYPH_ATLAS_FORMAT = "r8unorm"
-private const val MAX_COLOR_GLYPH_FRAME_LAYERS = 16
 private const val COLOR_GLYPH_FRAME_UNIFORM_BYTES = 784
 private const val DEFAULT_COLOR_GLYPH_FRAME_BUDGET_BYTES = 1L shl 30
 private val COLOR_GLYPH_CANONICAL_INDICES = intArrayOf(0, 1, 2, 0, 2, 3)

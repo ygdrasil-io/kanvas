@@ -43,7 +43,9 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasPackingResult
 import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasRectItem
 import org.graphiks.kanvas.glyph.gpu.GPUTextAtlasRectPacker
 import org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect
+import org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex
 import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
+import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.pipeline.BlurStyle
@@ -98,6 +100,7 @@ data class PreparedTextMaskIdentity(
 class GPUPreparedTextSubRun private constructor(
     val operationIndex: Int,
     val subRunIndex: Int,
+    val draw: GPUPreparedTextDraw,
     val representation: GPUPreparedTextRepresentation,
     val pageIndex: Int?,
     sourceInstances: List<GPUTextA8Instance>,
@@ -114,6 +117,7 @@ class GPUPreparedTextSubRun private constructor(
         internal fun create(
             operationIndex: Int,
             subRunIndex: Int,
+            draw: GPUPreparedTextDraw,
             representation: GPUPreparedTextRepresentation,
             pageIndex: Int?,
             instances: List<GPUTextA8Instance>,
@@ -125,6 +129,7 @@ class GPUPreparedTextSubRun private constructor(
         ): GPUPreparedTextSubRun = GPUPreparedTextSubRun(
             operationIndex = operationIndex,
             subRunIndex = subRunIndex,
+            draw = draw,
             representation = representation,
             pageIndex = pageIndex,
             sourceInstances = instances,
@@ -141,6 +146,7 @@ class PreparedTextFrameInventory private constructor(
     val generation: GPUTextArtifactGeneration,
     sourcePages: List<GPUTextA8AtlasPageArtifact>,
     sourceSubRunsByOperationIndex: Map<Int, List<GPUPreparedTextSubRun>>,
+    sourceAcceptedTextOperationIndices: Set<Int>,
     val metrics: GPUPreparedTextFrameMetrics,
     sourceMaskIdentityByGlyphUse: List<PreparedTextMaskIdentity>,
     val contentSha256: String,
@@ -155,6 +161,8 @@ class PreparedTextFrameInventory private constructor(
                 }
             },
         )
+    val acceptedTextOperationIndices: Set<Int> =
+        Collections.unmodifiableSet(LinkedHashSet(sourceAcceptedTextOperationIndices))
     val maskIdentityByGlyphUse: List<PreparedTextMaskIdentity> =
         Collections.unmodifiableList(ArrayList(sourceMaskIdentityByGlyphUse))
 
@@ -163,6 +171,7 @@ class PreparedTextFrameInventory private constructor(
             generation: GPUTextArtifactGeneration,
             pages: List<GPUTextA8AtlasPageArtifact>,
             subRunsByOperationIndex: Map<Int, List<GPUPreparedTextSubRun>>,
+            acceptedTextOperationIndices: Set<Int>,
             metrics: GPUPreparedTextFrameMetrics,
             maskIdentityByGlyphUse: List<PreparedTextMaskIdentity>,
             contentSha256: String,
@@ -170,6 +179,7 @@ class PreparedTextFrameInventory private constructor(
             generation = generation,
             sourcePages = pages,
             sourceSubRunsByOperationIndex = subRunsByOperationIndex,
+            sourceAcceptedTextOperationIndices = acceptedTextOperationIndices,
             metrics = metrics,
             sourceMaskIdentityByGlyphUse = maskIdentityByGlyphUse,
             contentSha256 = contentSha256,
@@ -506,6 +516,7 @@ object PreparedTextFrameInventoryBuilder {
                 facts = mapOf("reason" to "duplicate-operation-index"),
             )
         }
+        val drawByOperationIndex = draws.associateBy(GPUPreparedTextDraw::operationIndex)
 
         val uniqueMasks = LinkedHashMap<GlyphMaskKey, PreparedMask>()
         val rawContentByMaskKey = LinkedHashMap<GlyphMaskKey, String>()
@@ -611,6 +622,19 @@ object PreparedTextFrameInventoryBuilder {
                                 GPUTextRefusalCodes.ARTIFACT_KEY_NONDETERMINISTIC,
                                 draw.operationIndex,
                                 mapOf("reason" to "colrv0-layer-plan-mismatch"),
+                            )
+                        }
+                        val planLayerCount = artifact.colorPlan.layers.size
+                        if (planLayerCount > GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS) {
+                            return refused(
+                                GPUTextRefusalCodes.COLOR_PLAN_UNSUPPORTED,
+                                draw.operationIndex,
+                                mapOf(
+                                    "reason" to "colrv0-layer-count-exceeds-payload-limit",
+                                    "layerCount" to planLayerCount.toString(),
+                                    "maxLayerCount" to
+                                        GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS.toString(),
+                                ),
                             )
                         }
                         val gpuPlan = artifact.colorPlan.toGPUColorGlyphLayerPlan(
@@ -754,6 +778,7 @@ object PreparedTextFrameInventoryBuilder {
             val facts = checkNotNull(drawFacts[use.draw])
             val instance = GPUTextA8Instance.create(
                 glyphId = use.glyphId,
+                sourceGlyphIndex = GPUTextSourceGlyphIndex(use.glyphIndex),
                 deviceQuad = deviceQuad(use.draw, use.glyphIndex, use.preparedMask.mask),
                 uvRect = GPUTextFloatRect(
                     left = placement.contentRect.left.toFloat() / limits.pageWidth.toFloat(),
@@ -782,7 +807,8 @@ object PreparedTextFrameInventoryBuilder {
                 maskKeySha256 = maskHash,
             )
         }
-        val subRunCount = countPreparedTextSubRuns(groupedInput.map { input -> input.key })
+        val groupedSubRuns = groupPreparedTextSubRuns(groupedInput)
+        val subRunCount = groupedSubRuns.size
         if (subRunCount > limits.maxSubRuns) {
             return refused(
                 GPUTextRefusalCodes.SUBRUN_BUDGET_EXCEEDED,
@@ -830,38 +856,25 @@ object PreparedTextFrameInventoryBuilder {
         }
 
         val subRunsByOperation = LinkedHashMap<Int, MutableList<GPUPreparedTextSubRun>>()
-        var activeKey: PreparedTextSubRunIdentity? = null
-        var activeInstances = mutableListOf<GPUTextA8Instance>()
-        var activePlan: GPUColorGlyphLayerPlan? = null
-        fun flush() {
-            val key = activeKey ?: return
+        groupedSubRuns.forEach { grouped ->
+            val key = grouped.key
             val operationSubRuns = subRunsByOperation.getOrPut(key.operationIndex) {
                 mutableListOf()
             }
             operationSubRuns += GPUPreparedTextSubRun.create(
                 operationIndex = key.operationIndex,
                 subRunIndex = operationSubRuns.size,
+                draw = checkNotNull(drawByOperationIndex[key.operationIndex]),
                 representation = key.representation,
                 pageIndex = key.pageIndex,
-                instances = activeInstances,
+                instances = grouped.instances,
                 materialKey = key.materialKey,
                 blendPlanIdentity = key.blendPlanIdentity,
                 clipIdentity = key.clipIdentity,
                 transformClass = key.transformClass,
-                colorGlyphLayerPlan = activePlan,
+                colorGlyphLayerPlan = grouped.colorPlan,
             )
-            activeInstances = mutableListOf()
-            activePlan = null
         }
-        groupedInput.forEach { input ->
-            if (activeKey != input.key) {
-                flush()
-                activeKey = input.key
-                activePlan = input.colorPlan
-            }
-            activeInstances += input.instance
-        }
-        flush()
         check(subRunsByOperation.values.sumOf { subRuns -> subRuns.size } == subRunCount)
 
         val immutableSubRuns = LinkedHashMap<Int, List<GPUPreparedTextSubRun>>()
@@ -881,6 +894,7 @@ object PreparedTextFrameInventoryBuilder {
             generation = generation,
             pages = pageArtifacts,
             subRuns = immutableSubRuns,
+            acceptedTextOperationIndices = operationIndexes.toSet(),
             metrics = metrics,
             identities = maskIdentities,
         )
@@ -889,6 +903,7 @@ object PreparedTextFrameInventoryBuilder {
                 generation = generation,
                 pages = pageArtifacts,
                 subRunsByOperationIndex = immutableSubRuns,
+                acceptedTextOperationIndices = operationIndexes.toSet(),
                 metrics = metrics,
                 maskIdentityByGlyphUse = maskIdentities,
                 contentSha256 = contentHash,
@@ -967,6 +982,59 @@ private data class SubRunInstance(
     val instance: GPUTextA8Instance,
     val colorPlan: GPUColorGlyphLayerPlan?,
 )
+
+private data class GroupedPreparedTextSubRun(
+    val key: PreparedTextSubRunIdentity,
+    val instances: List<GPUTextA8Instance>,
+    val colorPlan: GPUColorGlyphLayerPlan?,
+)
+
+private fun groupPreparedTextSubRuns(
+    inputs: List<SubRunInstance>,
+): List<GroupedPreparedTextSubRun> {
+    val grouped = ArrayList<GroupedPreparedTextSubRun>()
+    var start = 0
+    while (start < inputs.size) {
+        val key = inputs[start].key
+        var end = start
+        if (key.representation == GPUPreparedTextRepresentation.COLRV0) {
+            var layerCount = 0
+            while (end < inputs.size && inputs[end].key == key) {
+                val occurrence = inputs[end].instance.sourceGlyphIndex
+                var occurrenceEnd = end + 1
+                while (
+                    occurrenceEnd < inputs.size &&
+                    inputs[occurrenceEnd].key == key &&
+                    inputs[occurrenceEnd].instance.sourceGlyphIndex == occurrence
+                ) {
+                    occurrenceEnd += 1
+                }
+                val occurrenceLayerCount = occurrenceEnd - end
+                check(occurrenceLayerCount <= GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS)
+                if (
+                    layerCount > 0 &&
+                    layerCount + occurrenceLayerCount > GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
+                ) {
+                    break
+                }
+                layerCount += occurrenceLayerCount
+                end = occurrenceEnd
+            }
+        } else {
+            while (end < inputs.size && inputs[end].key == key) {
+                end += 1
+            }
+        }
+        check(end > start)
+        grouped += GroupedPreparedTextSubRun(
+            key = key,
+            instances = inputs.subList(start, end).map(SubRunInstance::instance),
+            colorPlan = inputs[start].colorPlan,
+        )
+        start = end
+    }
+    return grouped
+}
 
 private fun PreparedTextGlyphArtifact.A8.structuralValidationFailure(
     expectedGlyphId: Int,
@@ -1308,12 +1376,16 @@ private fun inventoryHash(
     generation: GPUTextArtifactGeneration,
     pages: List<GPUTextA8AtlasPageArtifact>,
     subRuns: Map<Int, List<GPUPreparedTextSubRun>>,
+    acceptedTextOperationIndices: Set<Int>,
     metrics: GPUPreparedTextFrameMetrics,
     identities: List<PreparedTextMaskIdentity>,
 ): String = sha256String(
     buildString {
         append("prepared-text-frame-inventory:v1|generation=").append(generation.value)
         append("|metrics=").append(metrics)
+        acceptedTextOperationIndices.forEach { operationIndex ->
+            append("|accepted-operation:").append(operationIndex)
+        }
         pages.forEach { page ->
             append("|page:").append(page.pageIndex)
             append(':').append(page.artifactKey.contentFingerprint)
@@ -1337,6 +1409,7 @@ private fun inventoryHash(
                 subRun.instances.forEach { instance ->
                     append("|instance:").append(instance.glyphId).append(':').append(instance.pageIndex)
                     append(':').append(instance.colorLayerIndex)
+                    append(':').append(instance.sourceGlyphIndex.value)
                     instance.deviceQuad.forEach { value -> append(':').append(value.toRawBits()) }
                     listOf(
                         instance.uvRect.left,

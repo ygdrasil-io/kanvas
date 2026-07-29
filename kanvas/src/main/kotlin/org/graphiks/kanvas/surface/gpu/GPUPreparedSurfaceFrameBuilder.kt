@@ -28,6 +28,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 
 internal data class GPUPreparedSurfaceFrameBuildRequest(
     val candidate: GPUPreparedSurfaceEligibility.Candidate,
@@ -62,13 +63,31 @@ internal object GPUPreparedSurfaceFrameBuilder {
         validateFrameIdentities(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
 
         return try {
-            val mapping = GPUOpMapper.mapOperations(
+            val hasPreparedText = request.candidate.operations.any { operation ->
+                operation is org.graphiks.kanvas.canvas.DisplayOp.DrawText
+            }
+            val frameGeneration = if (hasPreparedText) {
+                request.frameId.value
+                    .takeIf { value -> value <= Int.MAX_VALUE.toLong() }
+                    ?.toInt()
+                    ?: return GPUPreparedSurfaceFrameBuildResult.Refused(
+                        diagnostic(
+                            code = "invalid.surface.prepared.text-generation",
+                            message = "Prepared text frame generation exceeds the typed artifact range.",
+                        ),
+                    )
+            } else {
+                0
+            }
+            val textPreparation = GPUPreparedTextFramePreparer.prepare(
                 operations = request.candidate.operations,
                 target = request.targetFacts,
                 config = request.candidate.config,
                 capabilities = request.capabilities,
+                generation = GPUTextArtifactGeneration(frameGeneration),
             )
-            mapping.preparedRefusal?.let { refusal ->
+            if (textPreparation is GPUPreparedTextFramePreparation.Refused) {
+                val refusal = textPreparation.refusal
                 return GPUPreparedSurfaceFrameBuildResult.Refused(
                     diagnostic(
                         code = refusal.code,
@@ -81,15 +100,37 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     ),
                 )
             }
+            textPreparation as GPUPreparedTextFramePreparation.Ready
+            val mapping = textPreparation.mapping
             val preparedImages = collectPreparedImageVisuals(
                 mapping = mapping,
                 operations = request.candidate.operations,
+                inventory = textPreparation.inventory,
             )
             if (preparedImages is PreparedImageVisuals.Refused) {
                 return GPUPreparedSurfaceFrameBuildResult.Refused(preparedImages.diagnostic)
             }
             preparedImages as PreparedImageVisuals.Ready
             val preparedMapping = mapping.copy(visualCommands = preparedImages.visualCommands)
+            val preparedTextSemantics = when (
+                val gathered = GPUPreparedTextSemanticBuilder.gather(
+                    visualCommands = preparedMapping.visualCommands,
+                    inventory = textPreparation.inventory,
+                    targetBounds = request.targetBounds,
+                )
+            ) {
+                is GPUPreparedTextSemanticGatherResult.Gathered -> gathered.semanticsByCommandId
+                is GPUPreparedTextSemanticGatherResult.Refused ->
+                    return GPUPreparedSurfaceFrameBuildResult.Refused(
+                        diagnostic(
+                            code = gathered.code,
+                            message = gathered.message,
+                            facts = listOfNotNull(
+                                gathered.commandId?.let { "commandId" to it.toString() },
+                            ).toMap(),
+                        ),
+                    )
+            }
             val recorder = GPURecorder(
                 recordingId = request.recordingId,
                 frameId = request.frameId,
@@ -106,6 +147,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 recording = recording,
                 targetBounds = request.targetBounds,
                 imageArtifactsByCommandId = preparedImages.artifactsByCommandId,
+                textSemanticsByCommandId = preparedTextSemantics,
             )) {
                 is GPUPreparedSurfaceSemanticGatherResult.Gathered -> gathered.semanticsByCommandId
                 is GPUPreparedSurfaceSemanticGatherResult.Refused ->
@@ -172,11 +214,17 @@ private sealed interface PreparedVisualSource {
     data class Core(
         override val operationIndex: Int,
     ) : PreparedVisualSource
+
+    data class Text(
+        override val operationIndex: Int,
+        val subRunIndex: Int,
+    ) : PreparedVisualSource
 }
 
 private fun collectPreparedImageVisuals(
     mapping: GPUOpMapping,
     operations: List<DisplayOp>,
+    inventory: PreparedTextFrameInventory,
 ): PreparedImageVisuals {
     val visualSources = operations.withIndex().flatMap { indexed ->
         val operationIndex = indexed.index
@@ -198,6 +246,10 @@ private fun collectPreparedImageVisuals(
             is DisplayOp.DrawAtlas ->
                 operation.texRects.map {
                     PreparedVisualSource.Image(operationIndex, operation.atlas)
+                }
+            is DisplayOp.DrawText ->
+                inventory.subRunsByOperationIndex[operationIndex].orEmpty().map { subRun ->
+                    PreparedVisualSource.Text(operationIndex, subRun.subRunIndex)
                 }
             else -> if (operation.isCorePreparedVisual()) {
                 listOf(PreparedVisualSource.Core(operationIndex))
@@ -240,6 +292,24 @@ private fun collectPreparedImageVisuals(
                 return PreparedImageVisuals.Refused(
                     imageCommandSourceDiagnostic(
                         message = "Prepared core operation was associated with image facts.",
+                        facts = mapOf(
+                            "commandId" to commandIndex.toString(),
+                            "operationIndex" to operationIndex.toString(),
+                        ),
+                    ),
+                )
+            }
+            return@forEachIndexed
+        }
+        if (source is PreparedVisualSource.Text) {
+            if (visual.normalized !is NormalizedDrawCommand.DrawTextRun ||
+                visual.preparedText?.operationIndex != operationIndex ||
+                visual.preparedText.subRunIndex != source.subRunIndex ||
+                visual.preparedImage != null
+            ) {
+                return PreparedImageVisuals.Refused(
+                    imageCommandSourceDiagnostic(
+                        message = "Prepared text source was associated with different command facts.",
                         facts = mapOf(
                             "commandId" to commandIndex.toString(),
                             "operationIndex" to operationIndex.toString(),

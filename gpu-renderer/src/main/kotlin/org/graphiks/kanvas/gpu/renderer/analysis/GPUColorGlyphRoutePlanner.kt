@@ -1,9 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.analysis
 
 import org.graphiks.kanvas.glyph.gpu.GPUColorGlyphLayerPlan
+import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
 import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.routing.GPUFirstRouteDecisionBuilder
@@ -92,11 +94,17 @@ class GPUColorGlyphRoutePlanner {
             sortKey = command.ordering.paintOrder.toLong(),
             renderStepIdentity = renderStep,
             pipelineKey = GPURenderPipelineKey(pipelineKey),
-            blendPlan = command.blend.canonicalPlan(command.layer.target.colorFormat),
+            blendPlan = command.preparedBlendPlan ?: command.blend.canonicalPlan(
+                command.layer.target.colorFormat,
+                GPUCoverageConsumption.ScalarCoverage,
+            ),
             boundsHash = command.bounds.colorBoundsHash(),
-            scissorBoundsHash = null,
+            scissorBoundsHash = command.preparedTextScissorBoundsHash(),
             originalPaintOrder = command.ordering.paintOrder,
             targetStateHash = command.colorTargetStateHash(),
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
         )
         return GPUFirstRoutePlan(
             analysisRecord = analysisRecord,
@@ -157,7 +165,7 @@ class GPUColorGlyphRoutePlanner {
 
     companion object {
         /** Maximum COLRv0 layers accepted on the single-pass color route. */
-        const val MAX_COLOR_LAYERS: Int = 16
+        const val MAX_COLOR_LAYERS: Int = GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
     }
 }
 

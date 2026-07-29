@@ -1,11 +1,13 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
+import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
+
 /**
  * Fixed layer budget iterated by the single-pass COLRv0 composite shader.
  * Matches `GPUColorGlyphRoutePlanner.MAX_COLOR_LAYERS`; plans exceeding it are
  * refused before reaching the shader.
  */
-const val COLOR_GLYPH_COMPOSITE_MAX_LAYERS: Int = 16
+const val COLOR_GLYPH_COMPOSITE_MAX_LAYERS: Int = GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 
 /**
  * Generates the single-pass COLRv0 composite WGSL. For each layer (bottom -> top)

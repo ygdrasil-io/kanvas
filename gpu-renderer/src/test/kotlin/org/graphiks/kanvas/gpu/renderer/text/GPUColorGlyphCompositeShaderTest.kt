@@ -1,8 +1,10 @@
 package org.graphiks.kanvas.gpu.renderer.text
 
+import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUColorGlyphRoutePlanner
 import org.graphiks.kanvas.gpu.renderer.execution.GPUColorGlyphCompositeShaderResult
 import org.graphiks.kanvas.gpu.renderer.execution.buildColorGlyphCompositeShader
+import org.graphiks.kanvas.gpu.renderer.payloads.GPU_COLOR_GLYPH_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.wgsl.COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.wgsl.colorGlyphCompositeWgsl
 import kotlin.test.Test
@@ -28,6 +30,7 @@ class GPUColorGlyphCompositeShaderTest {
     @Test
     fun `composite shader uses the COLRv0 layer budget`() {
         assertEquals(16, COLOR_GLYPH_COMPOSITE_MAX_LAYERS)
+        assertEquals(GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS, GPU_COLOR_GLYPH_MAX_LAYERS)
         assertEquals(GPUColorGlyphRoutePlanner.MAX_COLOR_LAYERS, COLOR_GLYPH_COMPOSITE_MAX_LAYERS)
         val wgsl = colorGlyphCompositeWgsl()
         assertTrue(wgsl.contains("array<vec4f, 16>"))

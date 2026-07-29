@@ -67,10 +67,19 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphLayerPayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphAtlasPlacementProofInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextA8PayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
+import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
+import org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect
+import org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
@@ -463,7 +472,40 @@ class GPUFramePlanIntegrityTest {
         assertTrue(dump.contains(semantic.canonicalHash), dump)
         assertTrue(dump.contains(semantic.planArtifactKey.contentFingerprint), dump)
         assertTrue(dump.contains(semantic.atlasArtifactKey.contentFingerprint), dump)
+        assertTrue(dump.contains(semantic.atlas.key), dump)
+        assertTrue(dump.contains("atlasRowBytes=${semantic.atlas.rowBytes}"), dump)
+        assertTrue(dump.contains(semantic.atlas.contentHash), dump)
         assertTrue(dump.contains("atlas=2x1"), dump)
+    }
+
+    @Test
+    fun `TextA8 atlas layout identity changes canonical frame hash and stable dump`() {
+        val tight = textA8Semantic(
+            key = "text-a8:tight",
+            width = 1,
+            height = 2,
+            rowBytes = 1,
+            bytes = byteArrayOf(0x10, 0x20),
+        )
+        val padded = textA8Semantic(
+            key = "text-a8:padded",
+            width = 1,
+            height = 2,
+            rowBytes = 2,
+            bytes = byteArrayOf(0x10, 0, 0x20, 0),
+        )
+        val tightPlan = renderPlan(packet(commandId = 1, semanticPayload = tight))
+        val paddedPlan = renderPlan(packet(commandId = 1, semanticPayload = padded))
+        val dump = paddedPlan.dumpLines().joinToString("\n")
+
+        assertNotEquals(tight.canonicalHash, padded.canonicalHash)
+        assertNotEquals(tightPlan.stableHash(), paddedPlan.stableHash())
+        assertNotEquals(tightPlan.dumpLines(), paddedPlan.dumpLines())
+        assertTrue(dump.contains("atlasKey=${padded.atlas.key}"), dump)
+        assertTrue(dump.contains("atlasWidth=${padded.atlas.width}"), dump)
+        assertTrue(dump.contains("atlasHeight=${padded.atlas.height}"), dump)
+        assertTrue(dump.contains("atlasRowBytes=${padded.atlas.rowBytes}"), dump)
+        assertTrue(dump.contains(padded.atlas.contentHash), dump)
     }
 
     @Test
@@ -1529,6 +1571,59 @@ class GPUFramePlanIntegrityTest {
             uniformBytes = uniforms,
             targetBounds = GPUPixelBounds(0, 0, 2, 1),
             scissorBounds = GPUPixelBounds(0, 0, 1, 1),
+        )
+    }
+
+    private fun textA8Semantic(
+        key: String,
+        width: Int,
+        height: Int,
+        rowBytes: Int,
+        bytes: ByteArray,
+    ): GPUDrawSemanticPayload.TextA8 {
+        val atlas = GPUPreparedR8UploadArtifact(
+            key = key,
+            width = width,
+            height = height,
+            rowBytes = rowBytes,
+            generation = 7,
+            contentHash = MessageDigest.getInstance("SHA-256")
+                .digest(bytes)
+                .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) },
+            bytes = bytes,
+        )
+        return GPUPreparedTextPayloadGatherer().gather(
+            GPUPreparedTextA8PayloadInput(
+                commandIdValue = 1,
+                atlas = atlas,
+                atlasGeneration = GPUTextArtifactGeneration(7),
+                pageIndex = 0,
+                instances = listOf(
+                    GPUTextA8Instance.create(
+                        glyphId = 11,
+                        sourceGlyphIndex = GPUTextSourceGlyphIndex(0),
+                        deviceQuad = listOf(0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f),
+                        uvRect = GPUTextFloatRect(0f, 0f, 1f, 0.5f),
+                        pageIndex = 0,
+                    ),
+                ),
+                material = GPUPreparedMaterialProgram(
+                    materialKey = "material:text-a8-integrity",
+                    wgslSource = "@fragment fn prepared_material_fragment() -> @location(0) vec4f { return vec4f(1.0); }",
+                    entryPoint = "prepared_material_fragment",
+                    uniformBytes = emptyList(),
+                    sampledResources = emptyList(),
+                    paintAlpha = 1f,
+                    sourceKind = GPUMaterialSourceKind.SolidColor,
+                    abiHash = "abi:text-a8-integrity",
+                ),
+                targetBounds = GPUPixelBounds(0, 0, 2, 2),
+                scissorBounds = GPUPixelBounds(0, 0, 2, 2),
+                clipIdentity = "clip:text-a8-integrity",
+                blendPlanIdentity = "blend:text-a8-integrity",
+                capabilitySnapshotHash = "capability:text-a8-integrity",
+                frameProvenance = GPUFrameProvenance.GmContent,
+            ),
         )
     }
 

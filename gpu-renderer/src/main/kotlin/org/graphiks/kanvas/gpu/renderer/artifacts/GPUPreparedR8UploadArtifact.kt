@@ -3,7 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.artifacts
 import java.security.MessageDigest
 import org.graphiks.kanvas.glyph.gpu.GPUTextA8AtlasPageArtifact
 
-/** Immutable tight-row R8 upload artifact shared by A8 and color-glyph coverage. */
+/** Immutable row-strided R8 upload artifact shared by A8 and color-glyph coverage. */
 class GPUPreparedR8UploadArtifact internal constructor(
     val key: String,
     val width: Int,
@@ -22,6 +22,9 @@ class GPUPreparedR8UploadArtifact internal constructor(
         contentHash = contentHash,
         bytes = bytes,
     )
+
+    val byteSize: Int
+        get() = snapshot.size
 
     fun tightBytesForUpload(): ByteArray = snapshot.copyOf()
 

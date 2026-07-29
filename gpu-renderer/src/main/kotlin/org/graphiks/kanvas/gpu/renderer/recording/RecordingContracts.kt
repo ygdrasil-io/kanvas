@@ -339,6 +339,9 @@ class GPURecorder(
                 is GPUTextRouteDecision.Refused -> refusedDrawTextRunPlan(command)
             }
         }
+        if (command.artifactRefs.isNotEmpty()) {
+            return GPUTextA8RoutePlanner().plan(command)
+        }
         return refusedDrawTextRunPlan(command)
     }
 

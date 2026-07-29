@@ -19,6 +19,8 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 
 /** Canonical command identifier name used by the package layout target. */
@@ -2088,8 +2090,13 @@ sealed interface NormalizedDrawCommand {
     val clip: GPUClipFacts
     /** Captured layer facts. */
     val layer: GPULayerFacts
-    /** Captured material descriptor. */
-    val material: GPUMaterialDescriptor
+    /**
+     * Captured legacy material descriptor.
+     *
+     * Prepared text carries its already-compiled immutable program instead, so
+     * this value is null only for that explicit command variant.
+     */
+    val material: GPUMaterialDescriptor?
     /** Captured blend facts. */
     val blend: GPUBlendFacts
     /** Conservative command bounds. */
@@ -2191,8 +2198,9 @@ sealed interface NormalizedDrawCommand {
     /**
      * Text run command with only dumpable text-stack artifact references.
      *
-     * Blend facts are retained to satisfy the shared normalized-command contract,
-     * but recording still refuses text runs until a text GPU route is promoted.
+     * Legacy callers retain exactly one descriptor. Prepared callers retain
+     * exactly one already-compiled, handle-free material program and never
+     * reconstruct the descriptor or its sampled pixels during recording.
      */
     data class DrawTextRun(
         override val commandId: GPUDrawCommandID,
@@ -2209,12 +2217,21 @@ sealed interface NormalizedDrawCommand {
         override val transform: GPUTransformFacts,
         override val clip: GPUClipFacts,
         override val layer: GPULayerFacts,
-        override val material: GPUMaterialDescriptor,
+        override val material: GPUMaterialDescriptor? = null,
+        val preparedMaterial: GPUPreparedMaterialProgram? = null,
         override val blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        /** Exact prepared blend authority when this command came from a prepared text sub-run. */
+        val preparedBlendPlan: GPUBlendPlan? = null,
         override val bounds: GPUBounds,
         override val ordering: GPUOrderingFacts,
         override val source: GPUCommandSource,
     ) : NormalizedDrawCommand {
+        init {
+            require((material == null) != (preparedMaterial == null)) {
+                "DrawTextRun requires exactly one legacy descriptor or prepared material program"
+            }
+        }
+
         override val drawKind: GPUDrawKind = GPUDrawKind.DrawTextRun
     }
 

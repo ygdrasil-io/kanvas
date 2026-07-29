@@ -29,6 +29,49 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class GPUTextA8RouteAcceptanceTest {
+    @Test
+    fun `recorder accepts prepared DrawTextRun without legacy atlas byte descriptor`() {
+        val artifactRef = GPUTextArtifactRef(
+            artifactType = "PreparedTextA8AtlasPage",
+            artifactId = "prepared-page-1",
+            artifactKeyHash = "prepared-page-content",
+            generation = GPUTextArtifactGeneration(5),
+            routeHint = "AtlasMaskSample",
+        )
+        val target = GPUTargetFacts(width = 128, height = 64, colorFormat = "rgba8unorm")
+        val command = NormalizedDrawCommand.DrawTextRun(
+            commandId = GPUDrawCommandID(0),
+            textLayoutResultId = "prepared-layout",
+            glyphRunId = "prepared-run",
+            glyphRunDescriptorRefs = listOf("prepared-run"),
+            glyphRunDescriptor = null,
+            artifactRefs = listOf(artifactRef),
+            artifactKeyHashes = listOf(artifactRef.artifactKeyHash),
+            atlasGenerations = listOf(artifactRef.generation),
+            uploadDependencyFacts = listOf("upload-before-sample:prepared-page-content"),
+            routeDiagnostics = emptyList(),
+            transform = GPUTransformFacts.identity(),
+            clip = GPUClipFacts.wideOpen(bounds = GPUBounds(0f, 0f, 128f, 64f)),
+            layer = GPULayerFacts.root(target),
+            material = GPUMaterialDescriptor.SolidColor(1f, 1f, 1f, 1f),
+            bounds = GPUBounds(1f, 2f, 17f, 20f),
+            ordering = GPUOrderingFacts(0, false, false),
+            source = GPUCommandSource("unit-test", "drawText.prepared"),
+        )
+
+        val recording = GPURecorder(
+            recordingId = GPURecordingID("prepared-a8-no-legacy-descriptor"),
+            frameId = org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID(25),
+            capabilities = textA8Capabilities(),
+        ).also { recorder -> recorder.record(command) }.close()
+
+        assertTrue(recording.taskList.diagnostics.none { diagnostic -> diagnostic.isTerminal })
+        assertEquals(
+            "text.a8_mask.sample",
+            recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
+                .single().drawPackets.single().renderStepId.value,
+        )
+    }
 
     @Test
     fun `recorder accepts DrawTextRun with valid A8 atlas descriptor`() {

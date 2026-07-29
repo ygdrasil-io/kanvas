@@ -39,6 +39,7 @@ internal object GPUPreparedSurfaceSemanticBuilder {
         recording: GPURecording,
         targetBounds: GPUPixelBounds,
         imageArtifactsByCommandId: Map<Int, GPUPreparedImageUploadArtifact>,
+        textSemanticsByCommandId: Map<Int, GPUDrawSemanticPayload> = emptyMap(),
         blendAuthorityPolicy: GPUCorePrimitiveBlendAuthorityPolicy =
             GPUCorePrimitiveBlendAuthorityPolicy.Required,
     ): GPUPreparedSurfaceSemanticGatherResult {
@@ -47,6 +48,9 @@ internal object GPUPreparedSurfaceSemanticBuilder {
             visual.normalized is NormalizedDrawCommand.DrawImageRect
         }
         val imageIds = imageVisuals.map { visual -> visual.normalized.commandId.value }.toSet()
+        val textIds = visualCommands.filter { visual -> visual.preparedText != null }
+            .map { visual -> visual.normalized.commandId.value }
+            .toSet()
         val packetsByCommandId = recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
             .flatMap(GPUTask.Render::drawPackets)
             .groupBy(GPUDrawPacket::commandIdValue)
@@ -54,6 +58,7 @@ internal object GPUPreparedSurfaceSemanticBuilder {
         val visualIdSet = visualIds.toSet()
         if (visualIds.distinct().size != visualIds.size ||
             imageArtifactsByCommandId.keys != imageIds ||
+            textSemanticsByCommandId.keys != textIds ||
             analysisByCommandId.keys != visualIdSet ||
             packetsByCommandId.keys != visualIdSet ||
             analysisByCommandId.size != visualIds.size ||
@@ -63,7 +68,8 @@ internal object GPUPreparedSurfaceSemanticBuilder {
         ) {
             return refused(
                 "invalid.surface.prepared.semantic-command-bijection",
-                "Prepared-surface visuals, analysis records, packets, and image artifacts must be bijective.",
+                "Prepared-surface visuals, analysis records, packets, image artifacts, and text semantics " +
+                    "must be bijective.",
                 mapOf(
                     "visualIds" to visualIds.joinToString(","),
                     "imageIds" to imageIds.sorted().joinToString(","),
@@ -79,7 +85,8 @@ internal object GPUPreparedSurfaceSemanticBuilder {
         }
 
         val coreVisuals = visualCommands.filterNot { visual ->
-            visual.normalized is NormalizedDrawCommand.DrawImageRect
+            visual.normalized is NormalizedDrawCommand.DrawImageRect ||
+                visual.preparedText != null
         }
         val coreSemantics = when (
             val gathered = GPUCorePrimitiveSemanticBuilder.gather(
@@ -107,6 +114,19 @@ internal object GPUPreparedSurfaceSemanticBuilder {
         val result = linkedMapOf<Int, GPUDrawSemanticPayload>()
         for (visual in visualCommands) {
             val commandId = visual.normalized.commandId.value
+            if (visual.preparedText != null) {
+                if (visual.preparedImage != null ||
+                    visual.normalized !is NormalizedDrawCommand.DrawTextRun
+                ) {
+                    return refused(
+                        "invalid.surface.prepared.text-lowerer-authority",
+                        "Prepared text facts must belong only to normalized text commands.",
+                        mapOf("commandId" to commandId.toString()),
+                    )
+                }
+                result[commandId] = textSemanticsByCommandId.getValue(commandId)
+                continue
+            }
             val command = visual.normalized as? NormalizedDrawCommand.DrawImageRect
             if (command == null) {
                 if (visual.preparedImage != null) {
@@ -141,20 +161,12 @@ internal object GPUPreparedSurfaceSemanticBuilder {
                     "Prepared image semantic requires the normalized image material descriptor.",
                     mapOf("commandId" to commandId.toString()),
                 )
-            val scissor = when (val clip = visual.clipCoverage) {
-                GPUClipCoveragePlan.NoClip -> targetBounds
-                is GPUClipCoveragePlan.Scissor -> GPUPixelBounds(
-                    left = floor(clip.bounds.left).toInt().coerceAtLeast(targetBounds.left),
-                    top = floor(clip.bounds.top).toInt().coerceAtLeast(targetBounds.top),
-                    right = ceil(clip.bounds.right).toInt().coerceAtMost(targetBounds.right),
-                    bottom = ceil(clip.bounds.bottom).toInt().coerceAtMost(targetBounds.bottom),
-                )
-                else -> return refused(
+            val scissor = visual.clipCoverage.toPreparedScissorBounds(targetBounds)
+                ?: return refused(
                     "unsupported.surface.prepared.image-clip",
-                    "Prepared image semantics currently require no clip or one exact scissor.",
+                    "Prepared image semantics require valid canonical clip bounds.",
                     mapOf("commandId" to commandId.toString()),
                 )
-            }
             val artifact = imageArtifactsByCommandId.getValue(commandId)
             val preparedImage = visual.preparedImage
                 ?: return refused(

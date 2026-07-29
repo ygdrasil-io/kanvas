@@ -9,6 +9,7 @@ import org.graphiks.kanvas.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 
 /** Immutable font-source snapshot retained by a prepared text draw. */
@@ -163,6 +164,10 @@ class GPUPreparedTextDraw private constructor(
      */
     val paint: Paint
         get() = paintSnapshot.snapshotForPreparedText()
+
+    /** Immutable foreground color without re-snapshotting an unrelated shader graph. */
+    internal val foregroundColor: Color
+        get() = paintSnapshot.color
 
     companion object {
         @JvmSynthetic

@@ -192,10 +192,11 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
     recordingBlendPlanIdentity: String,
     colorTransform: GPUCorePrimitiveColorTransform,
 ): GPUCorePrimitivePayloadInput {
-    val material = normalized.material as? GPUMaterialDescriptor.SolidColor
+    val normalizedMaterial = normalized.material
+    val material = normalizedMaterial as? GPUMaterialDescriptor.SolidColor
         ?: refuseGeometry(
             "unsupported.core_primitive.material.non_solid",
-            mapOf("materialKind" to normalized.material::class.simpleName.orEmpty()),
+            mapOf("materialKind" to normalizedMaterial?.let { it::class.simpleName }.orEmpty()),
         )
     val alpha = material.a
     val linearR = colorTransform.apply(material.r)
@@ -303,15 +304,11 @@ private fun GPUFramePathVisualCommand.toCorePrimitiveInput(
         }
     }
     val geometry = sealedRRectGeometry ?: normalized.toDeviceGeometry(targetBounds)
-    val scissor = when (val clip = clipCoverage) {
-        is GPUClipCoveragePlan.Scissor -> GPUPixelBounds(
-            floor(clip.bounds.left).toInt().coerceIn(targetBounds.left, targetBounds.right),
-            floor(clip.bounds.top).toInt().coerceIn(targetBounds.top, targetBounds.bottom),
-            ceil(clip.bounds.right).toInt().coerceIn(targetBounds.left, targetBounds.right),
-            ceil(clip.bounds.bottom).toInt().coerceIn(targetBounds.top, targetBounds.bottom),
-        )
-        else -> targetBounds
-    }
+    val scissor = clipCoverage.toPreparedScissorBounds(
+        targetBounds = targetBounds,
+        nonScissorClipRetainedSeparately = true,
+    )
+        ?: refuseGeometry("unsupported.core_primitive.clip.scissor_empty", emptyMap())
     return GPUCorePrimitivePayloadInput(
         commandIdValue = normalized.commandId.value,
         sourceFamily = sourceFamily,

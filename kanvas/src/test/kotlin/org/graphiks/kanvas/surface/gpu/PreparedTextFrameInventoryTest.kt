@@ -7,6 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -32,6 +33,26 @@ import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 
 class PreparedTextFrameInventoryTest {
+    @Test
+    fun `every finalized subrun shares the exact immutable prepared draw`() {
+        val draw = draw(
+            operationIndex = 4,
+            glyphs = listOf(glyph(7), glyph(8)),
+        )
+
+        val ready = assertIs<PreparedTextFrameInventoryResult.Ready>(
+            build(
+                draws = listOf(draw),
+                limits = limits(pageWidth = 4, pageHeight = 4, maxPages = 2),
+            ),
+        ).inventory
+
+        val subRuns = ready.subRunsByOperationIndex.getValue(4)
+        assertEquals(2, subRuns.size)
+        subRuns.forEach { subRun -> assertSame(draw, subRun.draw) }
+        assertSame(subRuns[0].draw, subRuns[1].draw)
+    }
+
     @Test
     fun `inventory deduplicates exact masks and preserves first operation order`() {
         val first = draw(
@@ -149,6 +170,10 @@ class PreparedTextFrameInventoryTest {
         }
         assertFailsWith<UnsupportedOperationException> {
             @Suppress("UNCHECKED_CAST")
+            (ready.acceptedTextOperationIndices as MutableSet).clear()
+        }
+        assertFailsWith<UnsupportedOperationException> {
+            @Suppress("UNCHECKED_CAST")
             (ready.pages.single().bytes as MutableList<Int>)[0] = 255
         }
         assertFailsWith<UnsupportedOperationException> {
@@ -159,6 +184,7 @@ class PreparedTextFrameInventoryTest {
                 )[0] = 999f
         }
         assertEquals(pageBytes, ready.pages.single().bytes)
+        assertEquals(setOf(0), ready.acceptedTextOperationIndices)
         assertEquals(
             firstQuad,
             ready.subRunsByOperationIndex.getValue(0).single()
@@ -1141,6 +1167,95 @@ class PreparedTextFrameInventoryTest {
     }
 
     @Test
+    fun `COLRv0 subruns split at sixteen layers without splitting a glyph occurrence`() {
+        val artifact = assertIs<PreparedTextGlyphArtifact.COLRV0>(exactColorArtifact())
+        assertEquals(2, artifact.layers.size)
+
+        fun assertSplit(
+            glyphCount: Int,
+            preparedArtifact: PreparedTextGlyphArtifact.COLRV0,
+            expectedSubRunSizes: List<Int>,
+        ) {
+            val draw = exactColorDraw(glyphCount)
+            val ready = assertIs<PreparedTextFrameInventoryResult.Ready>(
+                build(
+                    listOf(draw),
+                    limits = colorLimits().copy(maxGlyphs = 32, maxInstances = 64),
+                    resolver = PreparedTextGlyphArtifactResolver { _, _, _ -> preparedArtifact },
+                ),
+            ).inventory
+            val subRuns = ready.subRunsByOperationIndex.getValue(draw.operationIndex)
+
+            assertEquals(expectedSubRunSizes, subRuns.map { it.instances.size })
+            assertEquals(expectedSubRunSizes.size, ready.metrics.subRunCount)
+            val subRunByOccurrence = subRuns.flatMapIndexed { subRunIndex, subRun ->
+                subRun.instances.map { instance -> instance.sourceGlyphIndex.value to subRunIndex }
+            }.groupBy({ it.first }, { it.second })
+            assertTrue(subRunByOccurrence.values.all { owners -> owners.distinct().size == 1 })
+        }
+
+        val oneLayerArtifact = PreparedTextGlyphArtifact.COLRV0(
+            layers = artifact.layers.take(1),
+            colorPlan = artifact.colorPlan.copy(layers = artifact.colorPlan.layers.take(1)),
+        )
+        assertSplit(
+            glyphCount = 16,
+            preparedArtifact = oneLayerArtifact,
+            expectedSubRunSizes = listOf(16),
+        )
+        assertSplit(
+            glyphCount = 17,
+            preparedArtifact = oneLayerArtifact,
+            expectedSubRunSizes = listOf(16, 1),
+        )
+        assertSplit(
+            glyphCount = 8,
+            preparedArtifact = artifact,
+            expectedSubRunSizes = listOf(16),
+        )
+        assertSplit(
+            glyphCount = 9,
+            preparedArtifact = artifact,
+            expectedSubRunSizes = listOf(16, 2),
+        )
+    }
+
+    @Test
+    fun `one COLRv0 occurrence beyond the payload layer limit refuses canonically`() {
+        val exact = assertIs<PreparedTextGlyphArtifact.COLRV0>(exactColorArtifact())
+        val sourceLayer = assertIs<PreparedTextColorLayerArtifact.A8>(exact.layers.first())
+        val sourcePlan = exact.colorPlan.layers.first()
+        val artifact = PreparedTextGlyphArtifact.COLRV0(
+            layers = List(17) { layerIndex ->
+                if (layerIndex == 16) {
+                    PreparedTextColorLayerArtifact.Empty(
+                        layerIndex = layerIndex,
+                        glyphId = sourceLayer.glyphId,
+                    )
+                } else {
+                    sourceLayer.copy(layerIndex = layerIndex)
+                }
+            },
+            colorPlan = exact.colorPlan.copy(
+                layers = List(17) { layerIndex ->
+                    sourcePlan.copy(layerIndex = layerIndex)
+                },
+            ),
+        )
+
+        val refused = assertIs<PreparedTextFrameInventoryResult.Refused>(
+            build(
+                listOf(exactColorDraw()),
+                limits = colorLimits(),
+                resolver = PreparedTextGlyphArtifactResolver { _, _, _ -> artifact },
+            ),
+        )
+
+        assertEquals(GPUTextRefusalCodes.COLOR_PLAN_UNSUPPORTED, refused.code)
+        assertEquals("colrv0-layer-count-exceeds-payload-limit", refused.facts["reason"])
+    }
+
+    @Test
     fun `COLRv0 layer index survives a multi-page split`() {
         val exact = assertIs<PreparedTextGlyphArtifact.COLRV0>(exactColorArtifact())
         val artifactLayers = exact.layers.take(2).mapIndexed { index, layer ->
@@ -1371,7 +1486,7 @@ class PreparedTextFrameInventoryTest {
         ).inventory
     }
 
-    private fun exactColorDraw(): GPUPreparedTextDraw {
+    private fun exactColorDraw(glyphCount: Int = 1): GPUPreparedTextDraw {
         val typeface = org.graphiks.kanvas.text.FontTypeface(
             checkNotNull(
                 javaClass.classLoader.getResourceAsStream("fonts/skia/colr.ttf"),
@@ -1381,8 +1496,8 @@ class PreparedTextFrameInventoryTest {
         return assertIs<GPUPreparedTextLowering.Ready>(
             GPUPreparedTextLowerer.lower(
                 operation(
-                    glyphIds = listOf(2),
-                    positions = listOf(Point(0f, 0f)),
+                    glyphIds = List(glyphCount) { 2 },
+                    positions = List(glyphCount) { index -> Point(index * 12f, 0f) },
                     transform = Matrix33.identity(),
                     typeface = typeface,
                 ),

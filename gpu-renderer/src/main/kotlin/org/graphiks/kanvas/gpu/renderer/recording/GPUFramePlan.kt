@@ -1350,6 +1350,25 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
             bounds("targetBounds", value.targetBounds)
             bounds("scissorBounds", value.scissorBounds)
         }
+        is GPUDrawSemanticPayload.TextA8 -> {
+            string("canonicalHash", value.canonicalHash)
+            string("atlasKey", value.atlas.key)
+            string("atlasContentHash", value.atlas.contentHash)
+            int("atlasWidth", value.atlas.width)
+            int("atlasHeight", value.atlas.height)
+            int("atlasRowBytes", value.atlas.rowBytes)
+            int("atlasGeneration", value.atlasGeneration.value)
+            int("pageIndex", value.pageIndex)
+            int("instanceCount", value.instances.size)
+            string("materialKey", value.material.materialKey)
+            string("materialAbiHash", value.material.abiHash)
+            string("clipIdentity", value.clipIdentity)
+            string("blendPlanIdentity", value.blendPlanIdentity)
+            string("capabilitySnapshotHash", value.capabilitySnapshotHash)
+            string("frameProvenance", value.frameProvenance.annotationValue)
+            bounds("targetBounds", value.targetBounds)
+            bounds("scissorBounds", value.scissorBounds)
+        }
         is GPUDrawSemanticPayload.ColorGlyph -> {
             string("canonicalHash", value.canonicalHash)
             string("planArtifactId", value.planArtifactKey.artifactID.value.toString())
@@ -1359,15 +1378,25 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
             int("atlasArtifactGeneration", value.atlasArtifactKey.generation.value)
             string("atlasArtifactFingerprint", value.atlasArtifactKey.contentFingerprint)
             string("atlasBytesSha256", value.atlasBytesSha256)
+            string("atlasKey", value.atlas.key)
+            int("atlasRowBytes", value.atlas.rowBytes)
+            string("atlasContentHash", value.atlas.contentHash)
             long("atlasGeneration", value.atlasGeneration)
             int("atlasWidth", value.atlasWidth)
             int("atlasHeight", value.atlasHeight)
             string("atlasFormat", value.atlasFormat.gpuLabel)
-            int("atlasByteCount", value.atlasA8Bytes.size)
+            int("atlasByteCount", value.atlas.byteSize)
             int("layerCount", value.layers.size)
             int("vertexFloatCount", value.vertexData.size)
             int("indexCount", value.indexData.size)
             int("uniformByteCount", value.uniformBytes.size)
+            int("preparedInstanceCount", value.instances.size)
+            nullableString("preparedMaterialKey", value.material?.materialKey)
+            nullableString("preparedMaterialAbiHash", value.material?.abiHash)
+            nullableString("preparedClipIdentity", value.clipIdentity)
+            nullableString("preparedBlendPlanIdentity", value.blendPlanIdentity)
+            nullableString("preparedCapabilitySnapshotHash", value.capabilitySnapshotHash)
+            nullableString("preparedFrameProvenance", value.frameProvenance?.annotationValue)
             bounds("targetBounds", value.targetBounds)
             bounds("scissorBounds", value.scissorBounds)
         }
@@ -1772,6 +1801,14 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
                 "clearPremul=${clearPremultipliedRgba.joinToString(",")})"
         is GPUDrawSemanticPayload.SampledImage ->
             "$common,${stableDumpLine()})"
+        is GPUDrawSemanticPayload.TextA8 ->
+            "$common,textA8Hash=$canonicalHash," +
+                "atlas=${atlas.key}@${atlasGeneration.value}/${atlas.contentHash}:page=$pageIndex," +
+                "atlasKey=${atlas.key},atlasWidth=${atlas.width},atlasHeight=${atlas.height}," +
+                "atlasRowBytes=${atlas.rowBytes},atlasContentHash=${atlas.contentHash}," +
+                "instances=${instances.size},material=${material.materialKey}/${material.abiHash}," +
+                "clip=$clipIdentity,blend=$blendPlanIdentity,capability=$capabilitySnapshotHash," +
+                "provenance=${frameProvenance.annotationValue},target=$targetBounds,scissor=$scissorBounds)"
         is GPUDrawSemanticPayload.ColorGlyph ->
             "$common,colorGlyphHash=$canonicalHash," +
                 "plan=${planArtifactKey.artifactID.value}@${planArtifactKey.generation.value}/" +
@@ -1779,9 +1816,16 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
                 "atlasArtifact=${atlasArtifactKey.artifactID.value}@${atlasArtifactKey.generation.value}/" +
                 "${atlasArtifactKey.contentFingerprint}," +
                 "atlasBytesSha256=$atlasBytesSha256," +
+                "atlasKey=${atlas.key},atlasRowBytes=${atlas.rowBytes}," +
+                "atlasContentHash=${atlas.contentHash}," +
                 "atlas=${atlasWidth}x$atlasHeight:${atlasFormat.gpuLabel}:$atlasGeneration," +
-                "atlasBytes=${atlasA8Bytes.size},layers=${layers.size}," +
+                "atlasBytes=${atlas.byteSize},layers=${layers.size}," +
                 "vertexFloats=${vertexData.size},indices=${indexData.size},uniformBytes=${uniformBytes.size}," +
+                "preparedInstances=${instances.size}," +
+                "preparedMaterial=${material?.let { "${it.materialKey}/${it.abiHash}" } ?: "none"}," +
+                "preparedClip=${clipIdentity ?: "none"},preparedBlend=${blendPlanIdentity ?: "none"}," +
+                "preparedCapability=${capabilitySnapshotHash ?: "none"}," +
+                "preparedProvenance=${frameProvenance?.annotationValue ?: "none"}," +
                 "target=$targetBounds,scissor=$scissorBounds)"
     }
 }

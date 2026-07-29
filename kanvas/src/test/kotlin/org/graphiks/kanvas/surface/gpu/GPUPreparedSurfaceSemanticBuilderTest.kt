@@ -68,6 +68,11 @@ class GPUPreparedSurfaceSemanticBuilderTest {
         )
 
         assertEquals("invalid.surface.prepared.semantic-command-bijection", refused.diagnostic.code.value)
+        assertEquals(
+            "Prepared-surface visuals, analysis records, packets, image artifacts, and text semantics " +
+                "must be bijective.",
+            refused.diagnostic.message,
+        )
     }
 
     @Test

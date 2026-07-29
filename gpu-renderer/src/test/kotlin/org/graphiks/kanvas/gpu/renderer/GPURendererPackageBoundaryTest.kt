@@ -4,6 +4,7 @@ import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.validation.GPUForbiddenImportCheck
 import org.graphiks.kanvas.gpu.renderer.validation.GPUPackageBoundaryCheck
@@ -53,6 +54,42 @@ class GPURendererPackageBoundaryTest {
         assertTrue(
             actual = violations.isEmpty(),
             message = "Package-boundary violations in gpu-renderer source: ${violations.joinToString()}",
+        )
+    }
+
+    /** Keeps one runtime DTO while preserving the historical materials-package source API. */
+    @Test
+    fun `prepared material payload contract is passive and has one runtime class`() {
+        val payloadSource = productionFile("payloads/PayloadContracts.kt").readText()
+        val contractSource = productionFile(
+            "materials/contracts/PreparedMaterialContracts.kt",
+        ).readText()
+
+        assertContains(
+            payloadSource,
+            "import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram",
+        )
+        listOf(
+            "org.graphiks.kanvas.gpu.renderer.materials.",
+            "org.graphiks.kanvas.gpu.renderer.payloads.",
+            "org.graphiks.kanvas.gpu.renderer.passes.",
+            "org.graphiks.kanvas.gpu.renderer.recording.",
+            "org.graphiks.kanvas.gpu.renderer.resources.",
+            "org.graphiks.kanvas.gpu.renderer.execution.",
+        ).forEach { forbiddenImport ->
+            assertTrue(
+                actual = "import $forbiddenImport" !in contractSource,
+                message = "Prepared material DTO contracts must remain passive: $forbiddenImport",
+            )
+        }
+
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram::class,
+            org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram::class,
+        )
+        assertEquals(
+            "org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram",
+            org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram::class.qualifiedName,
         )
     }
 

@@ -392,8 +392,16 @@ class GPUTextA8AtlasPageArtifact private constructor(
 /**
  * Immutable per-draw A8 instance record consumed by a later upload/execution task.
  */
+@JvmInline
+value class GPUTextSourceGlyphIndex(val value: Int) {
+    init {
+        require(value >= 0) { "GPUTextSourceGlyphIndex must be non-negative." }
+    }
+}
+
 class GPUTextA8Instance private constructor(
     val glyphId: Int,
+    val sourceGlyphIndex: GPUTextSourceGlyphIndex,
     sourceDeviceQuad: List<Float>,
     val uvRect: GPUTextFloatRect,
     val pageIndex: Int,
@@ -421,12 +429,14 @@ class GPUTextA8Instance private constructor(
 
         fun create(
             glyphId: Int,
+            sourceGlyphIndex: GPUTextSourceGlyphIndex = GPUTextSourceGlyphIndex(0),
             deviceQuad: List<Float>,
             uvRect: GPUTextFloatRect,
             pageIndex: Int,
             colorLayerIndex: Int? = null,
         ): GPUTextA8Instance = GPUTextA8Instance(
             glyphId = glyphId,
+            sourceGlyphIndex = sourceGlyphIndex,
             sourceDeviceQuad = deviceQuad,
             uvRect = uvRect,
             pageIndex = pageIndex,

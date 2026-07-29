@@ -7,15 +7,24 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
+import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendSpecializationRequest
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.routing.GPURouteDecision
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextArtifactRef
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnostic
@@ -62,6 +71,45 @@ class GPUTextA8RoutePlannerTest {
             listOf("artifact:GlyphAtlasArtifact:sha256:a8-atlas"),
             analysisDecision.resourceDeclarations,
         )
+    }
+
+    @Test
+    fun `accepted A8 packet retains exact scissor clip provenance and scalar coverage blend`() {
+        val clip = GPUClipFacts.deviceRect(GPUBounds(4f, 5f, 16f, 17f))
+        val blend = GPUBlendFacts(
+            mode = GPUBlendMode.SRC,
+            sourceAlpha = GPUSourceAlphaClassification.Translucent,
+        )
+        val command = a8DrawTextRunCommand(
+            clip = clip,
+            blend = blend,
+            source = GPUCommandSource(
+                adapter = "unit-test",
+                operation = "drawTextRun",
+                frameProvenance = GPUFrameProvenance.GmContent,
+            ),
+        )
+
+        val packet = GPUTextA8RoutePlanner().plan(command).pass.drawPackets.single()
+        val expectedBlend = GPUBlendPlanner().plan(
+            GPUBlendSpecializationRequest(
+                mode = blend.mode,
+                coverage = GPUCoverageConsumption.ScalarCoverage,
+                sourceAlpha = blend.sourceAlpha,
+                target = GPUTargetBlendFacts(
+                    formatClass = command.layer.target.colorFormat,
+                    clampsNormalizedColorWrites = true,
+                    premultipliedAlpha = true,
+                ),
+                samplePlan = GPUSamplePlan.SingleSampleFrame,
+            ),
+        )
+
+        assertEquals("scissor_4.0_5.0_16.0_17.0", packet.scissorBoundsHash)
+        assertEquals(clip.coveragePlan, packet.clipCoveragePlan)
+        assertEquals(clip.executionPlan, packet.clipExecutionPlan)
+        assertEquals(GPUFrameProvenance.GmContent, packet.frameProvenance)
+        assertEquals(expectedBlend, packet.blendPlan)
     }
 
     @Test
@@ -130,6 +178,9 @@ class GPUTextA8RoutePlannerTest {
         atlasGenerations: List<GPUTextArtifactGeneration> = listOf(GPUTextArtifactGeneration(3)),
         uploadDependencyFacts: List<String> = listOf("upload-before-sample"),
         routeDiagnostics: List<GPUTextDiagnostic> = emptyList(),
+        clip: GPUClipFacts = GPUClipFacts.wideOpen(bounds = GPUBounds(0f, 0f, 128f, 64f)),
+        blend: GPUBlendFacts = GPUBlendFacts.srcOver(),
+        source: GPUCommandSource = GPUCommandSource(adapter = "unit-test", operation = "drawTextRun"),
     ): NormalizedDrawCommand.DrawTextRun {
         val target = GPUTargetFacts(width = 128, height = 64, colorFormat = "rgba8unorm")
         return NormalizedDrawCommand.DrawTextRun(
@@ -143,16 +194,17 @@ class GPUTextA8RoutePlannerTest {
             uploadDependencyFacts = uploadDependencyFacts,
             routeDiagnostics = routeDiagnostics,
             transform = GPUTransformFacts.identity(),
-            clip = GPUClipFacts.wideOpen(bounds = GPUBounds(0f, 0f, 128f, 64f)),
+            clip = clip,
             layer = GPULayerFacts.root(target = target),
             material = GPUMaterialDescriptor.SolidColor(r = 0f, g = 0f, b = 0f, a = 1f),
+            blend = blend,
             bounds = GPUBounds(0f, 0f, 128f, 64f),
             ordering = GPUOrderingFacts(
                 paintOrder = 4,
                 dependsOnDestination = false,
                 requiresBarrier = false,
             ),
-            source = GPUCommandSource(adapter = "unit-test", operation = "drawTextRun"),
+            source = source,
         )
     }
 

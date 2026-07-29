@@ -19,68 +19,6 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 
-/**
- * Handle-free snapshot of one sampled image binding admitted by material lowering.
- *
- * This class does not normalize image content or replace prepared-image authority.
- * It only freezes the exact already-expanded RGBA facts carried by an admitted
- * [GPUMaterialDescriptor.ImageDraw].
- */
-class GPUPreparedMaterialSampledResource internal constructor(
-    val width: Int,
-    val height: Int,
-    val samplingFilterMode: String,
-    val alphaOnly: Boolean,
-    rgba8Bytes: ByteArray,
-) {
-    private val rgba8Snapshot = rgba8Bytes.copyOf()
-
-    val contentHash: String = sha256Hex(rgba8Snapshot)
-
-    val resourceKey: String = "sampled-material:" +
-        CanonicalIdentityEncoder("prepared-material-sampled-resource-v2")
-            .int("width", width)
-            .int("height", height)
-            .text("samplingFilterMode", samplingFilterMode)
-            .boolean("alphaOnly", alphaOnly)
-            .text("contentHash", contentHash)
-            .digestHex()
-
-    init {
-        require(width > 0 && height > 0) {
-            "Prepared material sampled resource dimensions must be positive"
-        }
-        val expectedBytes = exactRgbaByteCount(width, height)
-        require(expectedBytes != null && expectedBytes == rgba8Snapshot.size.toLong()) {
-            "Prepared material sampled resource must contain width * height * 4 bytes"
-        }
-        require(samplingFilterMode == "nearest" || samplingFilterMode == "linear") {
-            "Prepared material sampled resource requires nearest or linear sampling"
-        }
-    }
-
-    fun rgba8Bytes(): ByteArray = rgba8Snapshot.copyOf()
-
-    internal fun identityFacts(): List<String> = listOf(
-        "key=$resourceKey",
-        "content=$contentHash",
-        "dimensions=${width}x$height",
-        "sampling=$samplingFilterMode",
-        "alphaOnly=$alphaOnly",
-    )
-}
-
-data class GPUPreparedMaterialProgram(
-    val materialKey: String,
-    val wgslSource: String,
-    val entryPoint: String,
-    val uniformBytes: List<Int>,
-    val sampledResources: List<GPUPreparedMaterialSampledResource>,
-    val paintAlpha: Float,
-    val sourceKind: GPUMaterialSourceKind,
-    val abiHash: String,
-)
-
 sealed interface GPUPreparedMaterialProgramResult {
     data class Ready(val program: GPUPreparedMaterialProgram) : GPUPreparedMaterialProgramResult
 
@@ -634,11 +572,12 @@ object GPUPreparedMaterialProgramCompiler {
     private fun sampledResource(
         descriptor: GPUMaterialDescriptor.ImageDraw,
     ): SampledResourceResult {
+        val rgbaSnapshot = descriptor.rgbaPixels.copyOf()
         val expectedBytes = exactRgbaByteCount(descriptor.imageWidth, descriptor.imageHeight)
             ?: return SampledResourceResult.Refused(
                 "Prepared material image dimensions are invalid or overflow RGBA byte count",
             )
-        if (expectedBytes != descriptor.rgbaPixels.size.toLong()) {
+        if (expectedBytes != rgbaSnapshot.size.toLong()) {
             return SampledResourceResult.Refused(
                 "Prepared material image byte length does not equal width * height * 4",
             )
@@ -648,13 +587,23 @@ object GPUPreparedMaterialProgramCompiler {
                 "Prepared material image sampling must be nearest or linear",
             )
         }
+        val contentHash = sha256Hex(rgbaSnapshot)
+        val resourceKey = "sampled-material:" +
+            CanonicalIdentityEncoder("prepared-material-sampled-resource-v2")
+                .int("width", descriptor.imageWidth)
+                .int("height", descriptor.imageHeight)
+                .text("samplingFilterMode", descriptor.samplingFilterMode)
+                .boolean("alphaOnly", descriptor.alphaOnly)
+                .text("contentHash", contentHash)
+                .digestHex()
         return SampledResourceResult.Ready(
             GPUPreparedMaterialSampledResource(
                 width = descriptor.imageWidth,
                 height = descriptor.imageHeight,
                 samplingFilterMode = descriptor.samplingFilterMode,
                 alphaOnly = descriptor.alphaOnly,
-                rgba8Bytes = descriptor.rgbaPixels,
+                rgba8Bytes = rgbaSnapshot,
+                resourceKey = resourceKey,
             ),
         )
     }

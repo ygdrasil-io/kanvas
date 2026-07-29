@@ -58,12 +58,13 @@ internal fun GPUBackendOffscreenTarget.renderMaskBlurCommand(
         diagnostics.fatal("refuse:${command.diagnosticName}", command.diagnosticName, reason)
         return GPUMaskBlurDispatchResult(rendered = false)
     }
-    val material = command.material as? GPUMaterialDescriptor.SolidColor
+    val commandMaterial = command.material
+    val material = commandMaterial as? GPUMaterialDescriptor.SolidColor
         ?: run {
             diagnostics.fatal(
                 "refuse:${command.diagnosticName}",
                 command.diagnosticName,
-                "unsupported.mask-filter.blur.material.${command.material.kind.name}",
+                "unsupported.mask-filter.blur.material.${commandMaterial?.kind?.name ?: "missing"}",
             )
             return GPUMaskBlurDispatchResult(rendered = false)
         }

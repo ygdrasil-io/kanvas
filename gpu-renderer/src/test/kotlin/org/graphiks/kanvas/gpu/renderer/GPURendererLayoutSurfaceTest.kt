@@ -218,7 +218,7 @@ class GPURendererLayoutSurfaceTest {
             "org.graphiks.kanvas.gpu.renderer.materials.GPUPaintStagePlan",
             "org.graphiks.kanvas.gpu.renderer.materials.GPUPaintEvaluationOrder",
             "org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceDescriptor",
-            "org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind",
+            "org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUMaterialSourceKind",
             "org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourcePlan",
             "org.graphiks.kanvas.gpu.renderer.materials.GPUSolidColorPlan",
             "org.graphiks.kanvas.gpu.renderer.materials.GPUGradientPlan",

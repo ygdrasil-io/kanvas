@@ -32,22 +32,6 @@ enum class GPUPaintEvaluationOrder {
     CoverageThenSource,
 }
 
-/** Material source kind. */
-enum class GPUMaterialSourceKind {
-    /** Solid color source. */
-    SolidColor,
-    /** Gradient source. */
-    Gradient,
-    /** Image shader source. */
-    ImageShader,
-    /** Registered runtime effect source. */
-    RuntimeEffect,
-    /** Two admitted child material sources combined by a registered blend formula. */
-    ShaderBlend,
-    /** Unsupported source that must route to refusal. */
-    Unsupported,
-}
-
 /** Gradient kind. */
 enum class GPUGradientKind {
     /** Linear gradient. */

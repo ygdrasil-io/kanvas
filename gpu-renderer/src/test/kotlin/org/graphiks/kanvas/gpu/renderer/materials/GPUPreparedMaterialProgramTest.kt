@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.gpu.renderer.materials
 
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -192,6 +193,24 @@ class GPUPreparedMaterialProgramTest {
             byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8),
             resource.rgba8Bytes(),
         )
+    }
+
+    @Test
+    fun `image sampled resource reads mutable source pixels exactly once before identity derivation`() {
+        val source = File(
+            "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/GPUPreparedMaterialProgram.kt",
+        ).readText()
+        val body = source.substringAfter(
+            "private fun sampledResource(",
+        ).substringBefore(
+            "private fun runtimeEffectRefusal(",
+        )
+
+        assertEquals(1, Regex("""descriptor\.rgbaPixels""").findAll(body).count())
+        assertTrue("val rgbaSnapshot = descriptor.rgbaPixels.copyOf()" in body)
+        assertTrue("rgbaSnapshot.size.toLong()" in body)
+        assertTrue("sha256Hex(rgbaSnapshot)" in body)
+        assertTrue("rgba8Bytes = rgbaSnapshot" in body)
     }
 
     @Test

@@ -1660,8 +1660,8 @@ private fun renderViaGpuLegacy(
                     hasColorGlyphs(op.blob) -> renderColorText(op, cmdId)
                     op.paint.isStroke() -> renderShaderText(op, cmdId)
                     else -> {
-                        val cmd = op.toNormalizedCommand(cmdId, targets)
-                        if (!clipSourceRoute && cmd.blend.needsDestinationTexture()) {
+                        val blend = op.paint.blendMode.toGpuBlendFacts()
+                        if (!clipSourceRoute && blend.needsDestinationTexture()) {
                             diagnostics.fatal("refuse:drawText:${cmdId.value}", "drawText", "unsupported_blend:advanced")
                             false
                         } else {
@@ -1676,7 +1676,7 @@ private fun renderViaGpuLegacy(
                                 t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                     drawTextAtlasPass(
                                         gpuBlob = gpuBlob,
-                                        blendMode = if (clipSourceRoute) GPUBlendMode.SRC_OVER else cmd.blend.mode,
+                                        blendMode = if (clipSourceRoute) GPUBlendMode.SRC_OVER else blend.mode,
                                         dispatched = dispatched,
                                         diagnostics = diagnostics,
                                         textColor = if (clipSourcePlane == GPUClipSourcePlane.GeometryCoverage) {
@@ -2738,8 +2738,8 @@ private fun renderViaGpuLegacy(
                             sceneHasContent = true
                             continue
                         }
-                        val cmd = op.toNormalizedCommand(cmdId, targets)
-                        if (cmd.blend.needsDestinationTexture()) {
+                        val blend = op.paint.blendMode.toGpuBlendFacts()
+                        if (blend.needsDestinationTexture()) {
                             diagnostics.fatal("refuse:drawText:${cmdId.value}", "drawText", "unsupported_blend:advanced")
                             continue
                         }
@@ -2751,7 +2751,7 @@ private fun renderViaGpuLegacy(
                             t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                 drawTextAtlasPass(
                                     gpuBlob,
-                                    cmd.blend.mode,
+                                    blend.mode,
                                     dispatched,
                                     diagnostics,
                                     textColor = resolveTextColor(op.paint),
@@ -3124,8 +3124,8 @@ private fun renderViaGpuLegacy(
                                         sceneHasContent = true
                                         continue
                                     }
-                                    val cmd = nestedOp.toNormalizedCommand(nestedCmdId, targets)
-                        if (cmd.blend.needsDestinationTexture()) {
+                                    val blend = nestedOp.paint.blendMode.toGpuBlendFacts()
+                                    if (blend.needsDestinationTexture()) {
                                         diagnostics.fatal("refuse:drawPicture:nested:${nestedCmdId.value}", "drawPicture", "unsupported_blend:advanced")
                                         continue
                                     }
@@ -3137,7 +3137,7 @@ private fun renderViaGpuLegacy(
                                         t.encodeOffscreenTexture(sceneLabel, sceneClear()) {
                                             drawTextAtlasPass(
                                                 gpuBlob,
-                                                cmd.blend.mode,
+                                                blend.mode,
                                                 dispatched,
                                                 diagnostics,
                                                 textColor = resolveTextColor(nestedOp.paint),
