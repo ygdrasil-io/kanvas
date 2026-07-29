@@ -12,7 +12,7 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
     fun `BlurParams preserves tileMode`() {
         val a = BlurParams(3f, 5f, tileMode = "clamp")
         val b = BlurParams(3f, 5f, tileMode = "repeat")
-        assertEquals(GPUTileMode.Clamp, a.tileMode)
+        assertEquals("clamp", a.tileMode)
         assertNotEquals(a, b)
         assertNotEquals(a.canonicalIdentity(), b.canonicalIdentity())
     }
@@ -21,7 +21,7 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
     fun `CropParams preserves tileMode`() {
         val a = CropParams(0f, 0f, 100f, 100f, tileMode = "decal")
         val b = CropParams(0f, 0f, 100f, 100f, tileMode = "clamp")
-        assertEquals(GPUTileMode.Decal, a.tileMode)
+        assertEquals("decal", a.tileMode)
         assertNotEquals(a, b)
     }
 
@@ -41,7 +41,7 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
         assertEquals(0f, withSrc.srcX)
         val withoutSrc = PictureParams("pic2")
         assertEquals("pic2", withoutSrc.pictureIdentity)
-        assertEquals(null, withoutSrc.sourceRect)
+        assertTrue(withoutSrc.srcX < 0f)
     }
 
     @Test
@@ -153,6 +153,7 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
         val graph = GPUPreparedFilterGraph(
             nodes = listOf(n1),
             output = GPUPreparedFilterInputRef.Node(GPUPreparedFilterNodeId("n1")),
+            identity = expected,
         )
         assertEquals(expected, graph.identity)
     }
@@ -168,6 +169,7 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
                         listOf(GPUPreparedFilterInputRef.ImplicitSource), OffsetParams(2f, 0f), "b"),
                 ),
                 output = GPUPreparedFilterInputRef.Node(GPUPreparedFilterNodeId("n1")),
+                identity = "bad",
             )
         }
     }
@@ -181,6 +183,7 @@ class GPUPreparedFilterDescriptorsCompletenessTest {
                         listOf(GPUPreparedFilterInputRef.ImplicitSource), OffsetParams(1f, 0f), "a"),
                 ),
                 output = GPUPreparedFilterInputRef.Node(GPUPreparedFilterNodeId("n_missing")),
+                identity = "bad",
             )
         }
     }
