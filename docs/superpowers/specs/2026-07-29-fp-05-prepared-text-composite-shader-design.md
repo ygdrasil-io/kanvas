@@ -205,6 +205,14 @@ The global buffer offset and `firstInstance` must not both apply the range.
 Task 8 adds one immutable frame-global draw-uniform buffer with an aligned
 slice per text subrun.
 
+The exact coordinate authority originates in the Surface inventory:
+`GPUPreparedTextSubRun.draw.transform` retains the admitted local-to-device
+affine transform. `GPUPreparedTextSemanticBuilder` computes its inverse once
+and snapshots the six affine `deviceToLocal` floats into the pure TextA8
+payload. Task 8 copies those exact bits into the draw-uniform slice. Neither
+recording, preflight nor native execution may reconstruct material coordinates
+from glyph bounds or atlas UVs.
+
 The canonical 48-byte logical payload is:
 
 ```wgsl
@@ -256,6 +264,8 @@ The draw-uniform transform is affine.
 ### Task 8 correction
 
 - keep the existing 64-byte instance buffer unchanged;
+- consume the exact `deviceToLocal` affine snapshot carried by the TextA8
+  semantic payload;
 - add the frame-global draw-uniform plan and per-subrun slices;
 - create and retain the composite program before task-list publication;
 - include composite source/ABI/pipeline facts and draw-uniform facts in the
