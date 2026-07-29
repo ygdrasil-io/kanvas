@@ -1,9 +1,5 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
-import org.graphiks.kanvas.gpu.renderer.recording.GPUColorGlyphPreparedTaskListBuilder
-import org.graphiks.kanvas.gpu.renderer.recording.GPUColorGlyphPreparedTaskListRequest
-import org.graphiks.kanvas.gpu.renderer.recording.GPUColorGlyphPreparedTaskListResult
-
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.font.atlas.GlyphAtlasPlacement
@@ -75,28 +71,37 @@ internal fun buildPreparedColorGlyphTestTaskList(
             ),
         )
     }
-    val uniformBytes = ByteBuffer.allocate(COLOR_GLYPH_UNIFORM_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
-        putFloat(targetWidth.toFloat())
-        putFloat(targetHeight.toFloat())
-        putInt(payloadLayers.size)
-        putInt(0)
-        payloadLayers.forEach { layer -> layer.premultipliedRgba.forEach(::putFloat) }
-        repeat(MAX_COLOR_GLYPH_LAYERS - payloadLayers.size) { repeat(4) { putFloat(0f) } }
-        payloadLayers.forEach { layer ->
-            putFloat(layer.atlasBounds.left / atlas.width.toFloat())
-            putFloat(layer.atlasBounds.top / atlas.height.toFloat())
-            putFloat(layer.atlasBounds.width / atlas.width.toFloat())
-            putFloat(layer.atlasBounds.height / atlas.height.toFloat())
+    val uniformBytes = ByteBuffer.allocate(COLOR_GLYPH_UNIFORM_BYTES)
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .apply {
+            putFloat(targetWidth.toFloat())
+            putFloat(targetHeight.toFloat())
+            putInt(payloadLayers.size)
+            putInt(0)
+            payloadLayers.forEach { layer -> layer.premultipliedRgba.forEach(::putFloat) }
+            repeat(MAX_COLOR_GLYPH_LAYERS - payloadLayers.size) {
+                repeat(4) { putFloat(0f) }
+            }
+            payloadLayers.forEach { layer ->
+                putFloat(layer.atlasBounds.left / atlas.width.toFloat())
+                putFloat(layer.atlasBounds.top / atlas.height.toFloat())
+                putFloat(layer.atlasBounds.width / atlas.width.toFloat())
+                putFloat(layer.atlasBounds.height / atlas.height.toFloat())
+            }
+            repeat(MAX_COLOR_GLYPH_LAYERS - payloadLayers.size) {
+                repeat(4) { putFloat(0f) }
+            }
+            payloadLayers.forEach { layer ->
+                putFloat(layer.deviceBounds.left.toFloat())
+                putFloat(layer.deviceBounds.top.toFloat())
+                putFloat(layer.deviceBounds.width.toFloat())
+                putFloat(layer.deviceBounds.height.toFloat())
+            }
+            repeat(MAX_COLOR_GLYPH_LAYERS - payloadLayers.size) {
+                repeat(4) { putFloat(0f) }
+            }
         }
-        repeat(MAX_COLOR_GLYPH_LAYERS - payloadLayers.size) { repeat(4) { putFloat(0f) } }
-        payloadLayers.forEach { layer ->
-            putFloat(layer.deviceBounds.left.toFloat())
-            putFloat(layer.deviceBounds.top.toFloat())
-            putFloat(layer.deviceBounds.width.toFloat())
-            putFloat(layer.deviceBounds.height.toFloat())
-        }
-        repeat(MAX_COLOR_GLYPH_LAYERS - payloadLayers.size) { repeat(4) { putFloat(0f) } }
-    }.array()
+        .array()
     val semantic = GPUColorGlyphPayloadGatherer().gatherSemantic(
         commandIdValue = commandId,
         renderStepIdentity = COLOR_GLYPH_RENDER_STEP_IDENTITY,
@@ -119,23 +124,15 @@ internal fun buildPreparedColorGlyphTestTaskList(
         targetBounds = GPUPixelBounds(0, 0, targetWidth, targetHeight),
         scissorBounds = GPUPixelBounds(0, 0, targetWidth, targetHeight),
     )
-    val result = GPUColorGlyphPreparedTaskListBuilder().build(
-        GPUColorGlyphPreparedTaskListRequest(
-            frameId = GPUFrameID(frameId),
-            recordingId = GPURecordingID("recording.color-glyph.prepared-test.$frameId"),
-            capabilities = capabilities,
-            deviceGeneration = deviceGeneration,
-            target = target,
-            semantic = semantic,
-            readbackRequestId = requestId,
-        ),
+    return buildLegacyNativeColorGlyphTaskList(
+        frameId = GPUFrameID(frameId),
+        recordingId = GPURecordingID("recording.color-glyph.prepared-test.$frameId"),
+        capabilities = capabilities,
+        deviceGeneration = deviceGeneration,
+        target = target,
+        semantic = semantic,
+        readbackRequestId = requestId,
     )
-    return when (result) {
-        is GPUColorGlyphPreparedTaskListResult.Recorded -> result.taskList
-        is GPUColorGlyphPreparedTaskListResult.Refused -> error(
-            "${result.diagnostic.code.value}: ${result.diagnostic.message}",
-        )
-    }
 }
 
 private fun org.graphiks.kanvas.font.atlas.AtlasRegion.toPixelBounds() =

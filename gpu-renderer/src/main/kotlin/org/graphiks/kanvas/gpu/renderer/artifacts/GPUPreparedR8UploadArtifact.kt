@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.artifacts
 
 import java.security.MessageDigest
 import org.graphiks.kanvas.glyph.gpu.GPUTextA8AtlasPageArtifact
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
 
 /** Immutable row-strided R8 upload artifact shared by A8 and color-glyph coverage. */
 class GPUPreparedR8UploadArtifact internal constructor(
@@ -82,6 +83,25 @@ fun GPUTextA8AtlasPageArtifact.toPreparedR8UploadArtifact(): GPUPreparedR8Upload
         generation = artifactKey.generation.value.toLong(),
         contentHash = contentSha256,
         bytes = ByteArray(bytes.size) { index -> bytes[index].toByte() },
+    )
+
+/** Sole legacy-COLRv0 adapter to the generic immutable R8 artifact contract. */
+internal fun buildPreparedColorGlyphR8UploadArtifact(
+    artifactKey: GPUTextArtifactKey,
+    width: Int,
+    height: Int,
+    bytes: ByteArray,
+): GPUPreparedR8UploadArtifact =
+    GPUPreparedR8UploadArtifact(
+        key = "prepared-color-glyph-a8:v1:" +
+            "artifactID=${artifactKey.artifactID.value}:" +
+            "contentFingerprint=${artifactKey.contentFingerprint}",
+        width = width,
+        height = height,
+        rowBytes = width,
+        generation = artifactKey.generation.value.toLong(),
+        contentHash = bytes.sha256(),
+        bytes = bytes,
     )
 
 private fun ByteArray.sha256(): String =

@@ -8,21 +8,20 @@ import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_RENDER_PIPELINE_KE
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.colorGlyphScissorAuthority
-import org.graphiks.kanvas.gpu.renderer.recording.colorGlyphSharedAtlasReplacementPeakBytes
 
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureView
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import java.lang.reflect.Proxy
+import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID
@@ -34,10 +33,14 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPURendererFeature
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
+import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphAtlasPlacementProofInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphLayerPayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphPayloadGatherer
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedColorGlyphPayloadInput
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
@@ -47,39 +50,45 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
-import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import kotlin.uuid.Uuid
 
 class GPUColorGlyphPreparedTaskListBuilderTest {
     @Test
-    fun `typed color glyph recording builds exact completion only task list`() {
+    fun `typed color glyph adapter has common R8 topology without legacy per glyph resources`() {
         val semantic = semantic()
         val result = GPUColorGlyphPreparedTaskListBuilder().build(
             request(semantic = semantic, readbackRequestId = null),
         )
 
         val taskList = assertIs<GPUColorGlyphPreparedTaskListResult.Recorded>(result).taskList
-        assertEquals(listOf(GPUTask.PrepareResources::class, GPUTask.Render::class), taskList.tasks.map { it::class })
+        assertEquals(
+            listOf(
+                GPUTask.PrepareResources::class,
+                GPUTask.Upload::class,
+                GPUTask.Render::class,
+            ),
+            taskList.tasks.map { it::class },
+        )
         val prepare = assertIs<GPUTask.PrepareResources>(taskList.tasks[0])
         assertEquals(
             listOf(
                 GPUFrameResourceRole.SceneTarget,
+                GPUFrameResourceRole.UploadStaging,
                 GPUFrameResourceRole.GlyphAtlas,
                 GPUFrameResourceRole.VertexData,
-                GPUFrameResourceRole.IndexData,
-                GPUFrameResourceRole.UniformData,
             ),
             prepare.requests.map { it.role },
         )
         assertNull(prepare.requests.singleOrNull { it.role == GPUFrameResourceRole.ReadbackStaging })
         assertEquals(
-            GPUFrameResourceLifetime.SharedCache,
+            GPUFrameResourceLifetime.FrameLocal,
             prepare.requests.single { it.role == GPUFrameResourceRole.GlyphAtlas }.lifetime,
         )
-        val render = assertIs<GPUTask.Render>(taskList.tasks[1])
+        val render = assertIs<GPUTask.Render>(taskList.tasks[2])
         val packet = render.drawPackets.single()
         assertSame(semantic, packet.semanticPayload)
         assertEquals(COLOR_GLYPH_RENDER_STEP_IDENTITY, packet.renderStepId.value)
@@ -89,24 +98,30 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
         assertEquals(COLOR_GLYPH_VERTEX_SOURCE_LABEL, packet.vertexSourceLabel)
         assertEquals(colorGlyphScissorAuthority(semantic.scissorBounds), packet.scissorBoundsHash)
         assertEquals(COLOR_GLYPH_TARGET_STATE_HASH, packet.targetStateHash)
-        assertEquals(GPULoadStorePlan("clear", GPUStorePlan.Store, "opaque-black"), render.loadStore)
+        assertEquals(GPULoadStorePlan("clear", GPUStorePlan.Store), render.loadStore)
         assertEquals(
             listOf(
                 GPUFrameResourceRole.GlyphAtlas,
                 GPUFrameResourceRole.VertexData,
-                GPUFrameResourceRole.IndexData,
-                GPUFrameResourceRole.UniformData,
             ),
             render.resourceUses.map { it.role },
         )
         assertEquals(
-            GPUFrameResourceLifetime.SharedCache,
+            GPUFrameResourceLifetime.FrameLocal,
             render.resourceUses.single { it.role == GPUFrameResourceRole.GlyphAtlas }.lifetime,
         )
-        assertEquals(1, taskList.dependencies.size)
-        assertEquals(876L, taskList.memoryBudget.peakFrameTransientBytes)
+        assertEquals(3, taskList.dependencies.size)
+        assertEquals(
+            setOf(
+                "prepared.text.prepare-before-upload",
+                "prepared.surface.prepare-before-consumer",
+                "prepared.text.upload-before-consumer",
+            ),
+            taskList.dependencies.map { it.reasonCode }.toSet(),
+        )
         assertEquals(8L, taskList.memoryBudget.targetResidentBytes)
-        assertEquals(876L, taskList.memoryBudget.categoryTotals.getValue(GPUFrameMemoryCategory.ReusableScratch))
+        assertEquals(0, prepare.requests.count { it.role == GPUFrameResourceRole.IndexData })
+        assertEquals(0, prepare.requests.count { it.role == GPUFrameResourceRole.UniformData })
     }
 
     @Test
@@ -119,17 +134,21 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
 
         val taskList = assertIs<GPUColorGlyphPreparedTaskListResult.Recorded>(result).taskList
         assertEquals(
-            listOf(GPUTask.PrepareResources::class, GPUTask.Render::class, GPUTask.Readback::class),
+            listOf(
+                GPUTask.PrepareResources::class,
+                GPUTask.Upload::class,
+                GPUTask.Render::class,
+                GPUTask.Readback::class,
+            ),
             taskList.tasks.map { it::class },
         )
         val prepare = assertIs<GPUTask.PrepareResources>(taskList.tasks[0])
         val staging = prepare.requests.single { it.role == GPUFrameResourceRole.ReadbackStaging }
         assertEquals(8L, staging.byteSize)
-        val readback = assertIs<GPUTask.Readback>(taskList.tasks[2])
+        val readback = assertIs<GPUTask.Readback>(taskList.tasks[3])
         assertEquals(requestId, readback.request.requestId)
         assertEquals(staging.resource, readback.staging)
-        assertEquals(2, taskList.dependencies.size)
-        assertEquals(884L, taskList.memoryBudget.peakFrameTransientBytes)
+        assertEquals(4, taskList.dependencies.size)
         assertEquals(8L, taskList.memoryBudget.targetResidentBytes)
     }
 
@@ -149,13 +168,10 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
         )
 
         val refused = assertIs<GPUColorGlyphPreparedTaskListResult.Refused>(result)
-        assertEquals("unsupported.recording.color_glyph_limits_unavailable", refused.diagnostic.code.value)
-    }
-
-    @Test
-    fun `shared atlas replacement peak uses checked signed arithmetic`() {
-        assertEquals(4L, colorGlyphSharedAtlasReplacementPeakBytes(2L))
-        assertNull(colorGlyphSharedAtlasReplacementPeakBytes(Long.MAX_VALUE))
+        assertEquals(
+            "unsupported.recording.prepared_surface_limits_unavailable",
+            refused.diagnostic.code.value,
+        )
     }
 
     @Test
@@ -288,6 +304,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
             batchEligibilityByPacketId = originalRender.batchEligibilityByPacketId,
             sampleContinuationKey = originalRender.sampleContinuationKey,
             compositeMembership = originalRender.compositeMembership,
+            preparedTextBindingsByPacketId = originalRender.preparedTextBindingsByPacketId,
         )
         return GPUTaskList(
             frameId = base.frameId,
@@ -364,6 +381,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
                 useForeground = false,
                 foregroundResolved = true,
                 placementProof = placement(atlasKey, 11, GPUPixelBounds(0, 0, 1, 1)),
+                colorLayerIndex = 0,
             ),
             GPUColorGlyphLayerPayloadInput(
                 planArtifactKey = planKey,
@@ -375,39 +393,66 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
                 useForeground = false,
                 foregroundResolved = true,
                 placementProof = placement(atlasKey, 12, GPUPixelBounds(1, 0, 2, 1)),
+                colorLayerIndex = 1,
             ),
         )
-        val uniform = ByteBuffer.allocate(784).order(ByteOrder.LITTLE_ENDIAN).apply {
-            putFloat(2f)
-            putFloat(1f)
-            putInt(2)
-            putInt(0)
-            putColor(1f, 0f, 0f, 1f)
-            putColor(0f, 0f, 1f, 1f)
-            repeat(14) { putColor(0f, 0f, 0f, 0f) }
-            putRect(0f, 0f, 0.5f, 1f)
-            putRect(0.5f, 0f, 0.5f, 1f)
-            repeat(14) { putRect(0f, 0f, 0f, 0f) }
-            putRect(0f, 0f, 1f, 1f)
-            putRect(0f, 0f, 1f, 1f)
-            repeat(14) { putRect(0f, 0f, 0f, 0f) }
-        }.array()
-        return GPUColorGlyphPayloadGatherer().gatherSemantic(
-            commandIdValue = 41,
-            renderStepIdentity = COLOR_GLYPH_RENDER_STEP_IDENTITY,
-            planArtifactKey = planKey,
-            atlasArtifactKey = atlasKey,
-            atlasA8Bytes = byteArrayOf(255.toByte(), 128.toByte()),
-            atlasWidth = 2,
-            atlasHeight = 1,
-            atlasFormat = "r8unorm",
-            atlasGeneration = ATLAS_GENERATION,
-            layers = layers,
-            vertexData = floatArrayOf(0f, 0f, 0f, 0f, 1f, 0f, 1f, 0f, 1f, 1f, 1f, 1f, 0f, 1f, 0f, 1f),
-            indexData = intArrayOf(0, 1, 2, 0, 2, 3),
-            uniformBytes = uniform,
-            targetBounds = GPUPixelBounds(0, 0, 2, 1),
-            scissorBounds = GPUPixelBounds(0, 0, 1, 1),
+        val atlasBytes = byteArrayOf(255.toByte(), 128.toByte())
+        return GPUColorGlyphPayloadGatherer().gatherPreparedSemantic(
+            GPUPreparedColorGlyphPayloadInput(
+                commandIdValue = 41,
+                planArtifactKey = planKey,
+                atlasArtifactKey = atlasKey,
+                atlas = GPUPreparedR8UploadArtifact(
+                    key = "atlas:color-glyph:prepared",
+                    width = 2,
+                    height = 1,
+                    rowBytes = 2,
+                    generation = ATLAS_GENERATION,
+                    contentHash = sha256(atlasBytes),
+                    bytes = atlasBytes,
+                ),
+                instances = listOf(
+                    GPUTextA8Instance.create(
+                        glyphId = 11,
+                        sourceGlyphIndex =
+                            org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex(0),
+                        deviceQuad = listOf(0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f),
+                        uvRect =
+                            org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect(0f, 0f, 0.5f, 1f),
+                        pageIndex = 0,
+                        colorLayerIndex = 0,
+                    ),
+                    GPUTextA8Instance.create(
+                        glyphId = 12,
+                        sourceGlyphIndex =
+                            org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex(1),
+                        deviceQuad = listOf(0f, 0f, 1f, 0f, 1f, 1f, 0f, 1f),
+                        uvRect =
+                            org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect(0.5f, 0f, 1f, 1f),
+                        pageIndex = 0,
+                        colorLayerIndex = 1,
+                    ),
+                ),
+                layers = layers,
+                material = GPUPreparedMaterialProgram(
+                    materialKey = "material:color-glyph",
+                    wgslSource =
+                        "@fragment fn prepared_material_fragment() -> @location(0) vec4f { " +
+                            "return vec4f(1.0); }",
+                    entryPoint = "prepared_material_fragment",
+                    uniformBytes = emptyList(),
+                    sampledResources = emptyList(),
+                    paintAlpha = 1f,
+                    sourceKind = GPUMaterialSourceKind.SolidColor,
+                    abiHash = "abi:color-glyph",
+                ),
+                targetBounds = GPUPixelBounds(0, 0, 2, 1),
+                scissorBounds = GPUPixelBounds(0, 0, 1, 1),
+                clipIdentity = "clip:color-glyph",
+                blendPlanIdentity = "blend:src-over",
+                capabilitySnapshotHash = "capability:color-glyph",
+                frameProvenance = GPUFrameProvenance.GmContent,
+            ),
         )
     }
 
@@ -420,13 +465,10 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
         fingerprint,
     )
 
-    private fun ByteBuffer.putColor(r: Float, g: Float, b: Float, a: Float) {
-        putFloat(r); putFloat(g); putFloat(b); putFloat(a)
-    }
-
-    private fun ByteBuffer.putRect(x: Float, y: Float, w: Float, h: Float) {
-        putFloat(x); putFloat(y); putFloat(w); putFloat(h)
-    }
+    private fun sha256(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
     private fun capabilities() = GPUCapabilities(
         implementation = GPUImplementationIdentity("GPU", "unit", "adapter", "device"),

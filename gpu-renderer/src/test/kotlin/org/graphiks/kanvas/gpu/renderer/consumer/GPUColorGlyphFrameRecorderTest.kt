@@ -12,6 +12,7 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
+import org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
@@ -29,6 +30,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import kotlin.uuid.Uuid
 
@@ -49,14 +51,21 @@ class GPUColorGlyphFrameRecorderTest {
         val render = assertIs<GPUTask.Render>(recorded.taskList.tasks.single { it is GPUTask.Render })
 
         assertSame(semantic, render.drawPackets.single().semanticPayload)
-        assertEquals(listOf(GPUTask.PrepareResources::class, GPUTask.Render::class), recorded.taskList.tasks.map { it::class })
+        assertEquals(
+            listOf(
+                GPUTask.PrepareResources::class,
+                GPUTask.Upload::class,
+                GPUTask.Render::class,
+            ),
+            recorded.taskList.tasks.map { it::class },
+        )
         assertEquals("text.colrv0.composite", render.drawPackets.single().renderStepId.value)
         assertEquals("clear", render.loadStore.loadOp)
         assertEquals(GPUStorePlan.Store, render.loadStore.storePlan)
-        assertEquals("opaque-black", render.loadStore.clearColorLabel)
+        assertEquals(null, render.loadStore.clearColorLabel)
         assertEquals(GPUPixelBounds(0, 0, 4, 3), semantic.scissorBounds)
         assertEquals(
-            listOf(0f, 0f, 0f, 0f, 4f, 0f, 1f, 0f, 4f, 3f, 1f, 1f, 0f, 3f, 0f, 1f),
+            listOf(0f, 0f, 0f, 0f, 3f, 0f, 1f, 0f, 3f, 3f, 1f, 1f, 0f, 3f, 0f, 1f),
             semantic.vertexData,
         )
         assertEquals(listOf(0, 1, 2, 0, 2, 3), semantic.indexData)
@@ -74,6 +83,14 @@ class GPUColorGlyphFrameRecorderTest {
         layers.clear()
 
         assertEquals(listOf(255, 128), semantic.atlasA8Bytes)
+        assertTrue(semantic.atlas.key.startsWith("prepared-color-glyph-a8:v1:"))
+        assertEquals(
+            listOf(GPUTextSourceGlyphIndex(6), GPUTextSourceGlyphIndex(6)),
+            semantic.instances.map { it.sourceGlyphIndex },
+        )
+        assertEquals(GPUFrameProvenance.None, semantic.frameProvenance)
+        assertTrue(requireNotNull(semantic.material).materialKey.startsWith("material:prepared:solidcolor:"))
+        assertEquals(16, requireNotNull(semantic.material).uniformBytes.size)
         assertEquals(listOf(1f, 0f, 0f, 1f), semantic.layers.first().premultipliedRgba)
         assertEquals(2, semantic.layers.size)
         assertTrue(semantic.canonicalHash.isNotBlank())
@@ -87,7 +104,12 @@ class GPUColorGlyphFrameRecorderTest {
 
         val recorded = assertIs<GPUColorGlyphFrameRecordingResult.Recorded>(result)
         assertEquals(
-            listOf(GPUTask.PrepareResources::class, GPUTask.Render::class, GPUTask.Readback::class),
+            listOf(
+                GPUTask.PrepareResources::class,
+                GPUTask.Upload::class,
+                GPUTask.Render::class,
+                GPUTask.Readback::class,
+            ),
             recorded.taskList.tasks.map { it::class },
         )
 
@@ -148,7 +170,10 @@ class GPUColorGlyphFrameRecorderTest {
         val limitsRefusal = assertIs<GPUColorGlyphFrameRecordingResult.Refused>(
             GPUColorGlyphFrameRecorder().record(request(capabilities = capabilities().copy(limits = null))),
         )
-        assertEquals("unsupported.recording.color_glyph_limits_unavailable", limitsRefusal.diagnostic.code.value)
+        assertEquals(
+            "unsupported.recording.prepared_surface_limits_unavailable",
+            limitsRefusal.diagnostic.code.value,
+        )
     }
 
     private fun request(
@@ -170,6 +195,8 @@ class GPUColorGlyphFrameRecorderTest {
         deviceGeneration = GPUDeviceGenerationID(9L),
         target = GPUFrameTargetRef("target.consumer.color-glyph"),
         commandIdValue = 41,
+        sourceGlyphIndex = GPUTextSourceGlyphIndex(6),
+        frameProvenance = GPUFrameProvenance.None,
         planArtifactKey = planArtifactKey,
         atlasArtifactKey = atlasArtifactKey,
         atlasA8Bytes = atlasBytes,

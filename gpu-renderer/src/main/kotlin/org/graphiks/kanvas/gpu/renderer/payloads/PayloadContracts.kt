@@ -9,6 +9,7 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
 import org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect
 import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.buildPreparedColorGlyphR8UploadArtifact
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableSet
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
@@ -2473,11 +2474,6 @@ class GPUColorGlyphPayloadGatherer {
         }
         validateColorGlyphUniform(uniformBytes, targetBounds, atlasWidth, atlasHeight, layers)
 
-        val atlasSnapshot = if (preparedAtlas == null) {
-            atlasA8Bytes.map { it.toInt() and 0xff }
-        } else {
-            emptyList()
-        }
         val layerSnapshots = layers.map(::GPUColorGlyphLayerPayload)
         val vertexSnapshot = vertexData.toList()
         val indexSnapshot = indexData.toList()
@@ -2515,15 +2511,10 @@ class GPUColorGlyphPayloadGatherer {
             ),
             uniformBlock = uniformBlock,
         )
-        val atlasArtifact = preparedAtlas ?: GPUPreparedR8UploadArtifact(
-            key = "prepared-color-glyph-a8:v1:" +
-                "artifactID=${atlasArtifactKey.artifactID.value}:" +
-                "contentFingerprint=${atlasArtifactKey.contentFingerprint}",
+        val atlasArtifact = preparedAtlas ?: buildPreparedColorGlyphR8UploadArtifact(
+            artifactKey = atlasArtifactKey,
             width = atlasWidth,
             height = atlasHeight,
-            rowBytes = atlasWidth,
-            generation = atlasGeneration,
-            contentHash = sha256BytesHex(atlasSnapshot),
             bytes = atlasA8Bytes,
         )
         val atlasBytesSha256 = atlasArtifact.contentHash

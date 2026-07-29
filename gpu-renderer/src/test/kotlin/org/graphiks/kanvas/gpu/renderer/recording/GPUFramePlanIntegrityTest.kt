@@ -84,6 +84,7 @@ import org.graphiks.kanvas.gpu.renderer.pipelines.GPUComputePipelineKey
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.buildR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
@@ -1235,8 +1236,53 @@ class GPUFramePlanIntegrityTest {
     private fun renderPlan(
         packet: GPUDrawPacket,
         resourceUses: List<GPUFrameResourceUse> = emptyList(),
-    ): GPUFramePlan =
-        framePlan(
+    ): GPUFramePlan {
+        val textBindings = (packet.semanticPayload as? GPUDrawSemanticPayload.TextA8)
+            ?.let { semantic ->
+                val instance = semantic.instances.single()
+                val bytes = ByteBuffer.allocate(GPUTextA8Instance.ENCODED_BYTE_SIZE)
+                    .order(ByteOrder.LITTLE_ENDIAN)
+                    .apply {
+                        instance.deviceQuad.forEach(::putFloat)
+                        putFloat(instance.uvRect.left)
+                        putFloat(instance.uvRect.top)
+                        putFloat(instance.uvRect.right)
+                        putFloat(instance.uvRect.bottom)
+                        putInt(instance.glyphId)
+                        putInt(instance.sourceGlyphIndex.value)
+                        putInt(instance.pageIndex)
+                        putInt(-1)
+                    }
+                    .array()
+                val contentHash = bytes.sha256ForIntegrityTest()
+                mapOf(
+                    packet.packetId to GPUPreparedTextRenderBinding(
+                        packetId = packet.packetId,
+                        atlasResourcePlan = buildR8FrameResourcePlan(
+                            artifact = semantic.atlas,
+                            capabilities = integrityCapabilities(),
+                            frameIdentity = "integrity-text",
+                        ),
+                        instanceBufferPlan = GPUPreparedTextInstanceBufferPlan(
+                            bufferRef = GPUFrameBufferRef("buffer.integrity.text.$contentHash"),
+                            strideBytes = GPUTextA8Instance.ENCODED_BYTE_SIZE,
+                            alignmentBytes = 16,
+                            instanceCount = 1,
+                            byteSize = bytes.size.toLong(),
+                            contentHash = contentHash,
+                            uploadBytes = bytes,
+                        ),
+                        firstInstance = 0,
+                        instanceCount = 1,
+                        materialUniformBufferPlan = null,
+                        materialUniformOffsetBytes = 0L,
+                        materialUniformSizeBytes = 0L,
+                        materialSampledResourcePlans = emptyList(),
+                    ),
+                )
+            }
+            .orEmpty()
+        return framePlan(
             GPUFrameStep.RenderPassStep(
                 target = GPUFrameTargetRef("target.scene"),
                 loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
@@ -1244,8 +1290,10 @@ class GPUFramePlanIntegrityTest {
                 resourceUses = resourceUses,
                 drawPackets = listOf(packet),
                 sourceTaskIds = listOf(GPUTaskID("task.render")),
+                preparedTextBindingsByPacketId = textBindings,
             ),
         )
+    }
 
     private fun barrierPlan(reason: String, tokens: List<String>): GPUFramePlan =
         framePlan(

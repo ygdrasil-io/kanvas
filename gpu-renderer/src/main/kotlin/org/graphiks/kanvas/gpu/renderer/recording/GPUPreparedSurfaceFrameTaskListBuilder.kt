@@ -1,8 +1,13 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.security.MessageDigest
+import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -36,9 +41,13 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingInput
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterialTextureFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
+import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFromBindings
+import org.graphiks.kanvas.gpu.renderer.resources.buildMaterialTextureFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.buildR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
@@ -52,6 +61,25 @@ data class GPUPreparedSurfaceFrameRequest(
     val targetFormat: GPUColorFormat = GPUColorFormat.RGBA8Unorm,
 )
 
+/** Checked structural ceilings applied before one prepared task graph is published. */
+data class GPUPreparedSurfaceTaskGraphLimits(
+    val maxBufferAllocations: Int = Int.MAX_VALUE,
+    val maxTextureAllocations: Int = Int.MAX_VALUE,
+    val maxAllocations: Int = Int.MAX_VALUE,
+    val maxTasks: Int = Int.MAX_VALUE,
+    val maxDependencies: Int = Int.MAX_VALUE,
+    val maxInstanceRanges: Int = Int.MAX_VALUE,
+) {
+    init {
+        require(maxBufferAllocations >= 0)
+        require(maxTextureAllocations >= 0)
+        require(maxAllocations >= 0)
+        require(maxTasks >= 0)
+        require(maxDependencies >= 0)
+        require(maxInstanceRanges >= 0)
+    }
+}
+
 sealed interface GPUPreparedSurfaceFrameResult {
     data class Recorded(val taskList: GPUTaskList) : GPUPreparedSurfaceFrameResult
     data class Refused(val diagnostic: GPUDiagnostic) : GPUPreparedSurfaceFrameResult
@@ -62,6 +90,97 @@ internal data class GPURecordedImageUpload(
     val taskId: GPUTaskID,
     val resources: GPUImageFrameResourcePlan,
 )
+
+/** Recording-owned association between one exact immutable R8 artifact and its upload task. */
+internal data class GPURecordedR8Upload(
+    val taskId: GPUTaskID,
+    val resources: GPUR8FrameResourcePlan,
+)
+
+/** Recording-owned association between one exact prepared-material texture and its upload. */
+internal data class GPURecordedMaterialUpload(
+    val taskId: GPUTaskID,
+    val resources: GPUMaterialTextureFrameResourcePlan,
+)
+
+/** One immutable, frame-global prepared-text instance buffer. */
+class GPUPreparedTextInstanceBufferPlan(
+    val bufferRef: GPUFrameBufferRef,
+    val strideBytes: Int,
+    val alignmentBytes: Int,
+    val instanceCount: Int,
+    val byteSize: Long,
+    val contentHash: String,
+    uploadBytes: ByteArray,
+) {
+    private val uploadSnapshot = uploadBytes.copyOf()
+
+    init {
+        require(strideBytes == GPUTextA8Instance.ENCODED_BYTE_SIZE)
+        require(alignmentBytes == PREPARED_TEXT_INSTANCE_ALIGNMENT_BYTES)
+        require(instanceCount > 0)
+        require(byteSize == uploadSnapshot.size.toLong())
+        require(byteSize == Math.multiplyExact(instanceCount.toLong(), strideBytes.toLong()))
+        require(contentHash == uploadSnapshot.sha256Hex())
+    }
+
+    fun bytesForUpload(): ByteArray = uploadSnapshot.copyOf()
+}
+
+/** One immutable, aligned, frame-global prepared-material uniform buffer. */
+class GPUPreparedTextMaterialUniformBufferPlan(
+    val bufferRef: GPUFrameBufferRef,
+    val alignmentBytes: Long,
+    val byteSize: Long,
+    val contentHash: String,
+    uploadBytes: ByteArray,
+) {
+    private val uploadSnapshot = uploadBytes.copyOf()
+
+    init {
+        require(alignmentBytes > 0L && alignmentBytes and (alignmentBytes - 1L) == 0L)
+        require(byteSize > 0L && byteSize == uploadSnapshot.size.toLong())
+        require(contentHash == uploadSnapshot.sha256Hex())
+    }
+
+    fun bytesForUpload(): ByteArray = uploadSnapshot.copyOf()
+}
+
+/** Exact atlas and frame-global instance range consumed by one ordered prepared-text packet. */
+class GPUPreparedTextRenderBinding(
+    val packetId: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID,
+    val atlasResourcePlan: GPUR8FrameResourcePlan,
+    val instanceBufferPlan: GPUPreparedTextInstanceBufferPlan,
+    val firstInstance: Int,
+    val instanceCount: Int,
+    val materialUniformBufferPlan: GPUPreparedTextMaterialUniformBufferPlan?,
+    val materialUniformOffsetBytes: Long,
+    val materialUniformSizeBytes: Long,
+    materialSampledResourcePlans: List<GPUMaterialTextureFrameResourcePlan>,
+) {
+    val materialSampledResourcePlans: List<GPUMaterialTextureFrameResourcePlan> =
+        immutableList(materialSampledResourcePlans)
+
+    init {
+        require(firstInstance >= 0 && instanceCount > 0)
+        require(
+            Math.addExact(firstInstance, instanceCount) <= instanceBufferPlan.instanceCount,
+        )
+        require(materialUniformOffsetBytes >= 0L && materialUniformSizeBytes >= 0L)
+        if (materialUniformBufferPlan == null) {
+            require(materialUniformOffsetBytes == 0L && materialUniformSizeBytes == 0L)
+        } else {
+            require(materialUniformSizeBytes > 0L)
+            require(
+                materialUniformOffsetBytes % materialUniformBufferPlan.alignmentBytes == 0L,
+            )
+            require(
+                Math.addExact(materialUniformOffsetBytes, materialUniformSizeBytes) <=
+                    materialUniformBufferPlan.byteSize,
+            )
+        }
+    }
+}
 
 /**
  * Builds a handle-free prepared frame while keeping semantic/resource authorities immutable.
@@ -74,6 +193,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
     fun build(
         request: GPUPreparedSurfaceFrameRequest,
         configuredAggregateBudgetBytes: Long = 1L shl 30,
+        taskGraphLimits: GPUPreparedSurfaceTaskGraphLimits =
+            GPUPreparedSurfaceTaskGraphLimits(),
     ): GPUPreparedSurfaceFrameResult {
         request.baseTaskList.tasks.filterIsInstance<GPUTask.Refused>().firstOrNull()?.let {
             return GPUPreparedSurfaceFrameResult.Refused(it.diagnostic.atRecordingBoundary())
@@ -102,7 +223,6 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 "Prepared-surface aggregate budget must be positive.",
             )
         }
-
         val packets = baseRenders.flatMap(GPUTask.Render::drawPackets)
             .sortedBy(GPUDrawPacket::originalPaintOrder)
         val commandIds = packets.map(GPUDrawPacket::commandIdValue)
@@ -124,12 +244,44 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val unsupported = request.semanticsByCommandId.values.firstOrNull {
             it !is GPUDrawSemanticPayload.CorePrimitive &&
-                it !is GPUDrawSemanticPayload.SampledImage
+                it !is GPUDrawSemanticPayload.SampledImage &&
+                it !is GPUDrawSemanticPayload.TextA8 &&
+                it !is GPUDrawSemanticPayload.ColorGlyph
         }
         if (unsupported != null) {
             return refused(
                 "unsupported.recording.prepared_surface_semantic_type",
-                "Prepared surfaces accept only CorePrimitive and SampledImage semantics.",
+                "Prepared surfaces accept only CorePrimitive, SampledImage, TextA8, and ColorGlyph semantics.",
+            )
+        }
+        val hasPreparedText = request.semanticsByCommandId.values.any {
+            it is GPUDrawSemanticPayload.TextA8 || it is GPUDrawSemanticPayload.ColorGlyph
+        }
+        if (hasPreparedText && request.capabilities.limits == null) {
+            return refused(
+                "unsupported.recording.prepared_surface_limits_unavailable",
+                "Prepared text requires observed device limits.",
+            )
+        }
+        val invalidPreparedText = request.semanticsByCommandId.values.firstOrNull { semantic ->
+            when (semantic) {
+                is GPUDrawSemanticPayload.TextA8 ->
+                    !semantic.hasCanonicalHashIntegrity() ||
+                        semantic.targetBounds != request.targetBounds ||
+                        semantic.atlasGeneration.value.toLong() != semantic.atlas.generation ||
+                        semantic.instances.isEmpty()
+                is GPUDrawSemanticPayload.ColorGlyph ->
+                    !semantic.hasCanonicalHashIntegrity() ||
+                        semantic.targetBounds != request.targetBounds ||
+                        semantic.instances.isEmpty() ||
+                        semantic.material == null
+                else -> false
+            }
+        }
+        if (invalidPreparedText != null) {
+            return refused(
+                "invalid.recording.prepared_text_semantic",
+                "Prepared text requires one canonical immutable payload with exact target and instances.",
             )
         }
         val invalidImage = request.semanticsByCommandId.values
@@ -211,9 +363,15 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val invalidRoutePacket = packets.firstOrNull { packet ->
             val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)
-            semantic is GPUDrawSemanticPayload.SampledImage &&
-                (packet.renderStepId.value != semantic.payloadRef.renderStepIdentity ||
-                    semantic.payloadRef.renderStepIdentity != "image.draw.texture_upload")
+            when (semantic) {
+                is GPUDrawSemanticPayload.SampledImage ->
+                    packet.renderStepId.value != semantic.payloadRef.renderStepIdentity ||
+                        semantic.payloadRef.renderStepIdentity != "image.draw.texture_upload"
+                is GPUDrawSemanticPayload.TextA8,
+                is GPUDrawSemanticPayload.ColorGlyph,
+                -> packet.renderStepId.value != semantic.payloadRef.renderStepIdentity
+                else -> false
+            }
         }
         if (invalidRoutePacket != null) {
             return refused(
@@ -285,6 +443,146 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         val imageUploadByArtifactKey = recordedImageUploads.associateBy { upload ->
             upload.resources.bindingRequests.first().artifactKey
         }
+        val r8Semantics = packets.mapNotNull { packet ->
+            when (val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue)) {
+                is GPUDrawSemanticPayload.TextA8 -> semantic
+                is GPUDrawSemanticPayload.ColorGlyph -> semantic
+                else -> null
+            }
+        }
+        val inconsistentR8Identity = r8Semantics
+            .groupBy(GPUDrawSemanticPayload::exactR8ArtifactIdentity)
+            .values
+            .firstOrNull { group ->
+                val expectedBytes = group.first().r8Artifact().tightBytesForUpload()
+                group.drop(1).any { semantic ->
+                    !semantic.r8Artifact().tightBytesForUpload().contentEquals(expectedBytes)
+                }
+            }
+        if (inconsistentR8Identity != null) {
+            return refused(
+                "invalid.recording.prepared_text_r8_artifact_identity",
+                "One exact prepared-text R8 identity must retain identical immutable bytes.",
+            )
+        }
+        val recordedR8Uploads = try {
+            r8Semantics
+                .distinctBy(GPUDrawSemanticPayload::exactR8ArtifactIdentity)
+                .mapIndexed { index, semantic ->
+                    GPURecordedR8Upload(
+                        taskId = GPUTaskID(
+                            "task.prepared-surface.r8-upload.${request.baseTaskList.frameId.value}.$index",
+                        ),
+                        resources = buildR8FrameResourcePlan(
+                            artifact = semantic.r8Artifact(),
+                            capabilities = request.capabilities,
+                            frameIdentity = request.baseTaskList.frameId.value.toString(),
+                        ),
+                    )
+                }
+        } catch (failure: IllegalArgumentException) {
+            return refused(
+                "unsupported.recording.prepared_text_r8_resource",
+                failure.message ?: "Prepared text R8 resource planning failed.",
+            )
+        } catch (_: ArithmeticException) {
+            return refused(
+                "unsupported.recording.prepared_text_r8_resource",
+                "Prepared text R8 resource planning overflowed.",
+            )
+        }
+        val r8UploadByIdentity = recordedR8Uploads.associateBy { upload ->
+            upload.resources.exactR8ArtifactIdentity()
+        }
+        val materialResources = r8Semantics.flatMap { semantic ->
+            semantic.preparedTextMaterial().sampledResources
+        }
+        val inconsistentMaterialResource = materialResources
+            .groupBy { resource -> resource.resourceKey }
+            .values
+            .firstOrNull { group ->
+                val first = group.first()
+                group.drop(1).any { resource ->
+                    resource.contentHash != first.contentHash ||
+                        resource.width != first.width ||
+                        resource.height != first.height ||
+                        resource.samplingFilterMode != first.samplingFilterMode ||
+                        resource.alphaOnly != first.alphaOnly ||
+                        !resource.rgba8Bytes().contentEquals(first.rgba8Bytes())
+                }
+            }
+        if (inconsistentMaterialResource != null) {
+            return refused(
+                "invalid.recording.prepared_text_material_resource_identity",
+                "One prepared-material resource key must retain one exact immutable resource.",
+            )
+        }
+        val recordedMaterialUploads = try {
+            materialResources
+                .distinctBy { resource -> resource.resourceKey }
+                .mapIndexed { index, resource ->
+                    GPURecordedMaterialUpload(
+                        taskId = GPUTaskID(
+                            "task.prepared-surface.material-upload." +
+                                "${request.baseTaskList.frameId.value}.$index",
+                        ),
+                        resources = buildMaterialTextureFrameResourcePlan(
+                            resourceKey = resource.resourceKey,
+                            width = resource.width,
+                            height = resource.height,
+                            samplingFilterMode = resource.samplingFilterMode,
+                            alphaOnly = resource.alphaOnly,
+                            contentHash = resource.contentHash,
+                            rgba8Bytes = resource.rgba8Bytes(),
+                            capabilities = request.capabilities,
+                            frameIdentity = request.baseTaskList.frameId.value.toString(),
+                        ),
+                    )
+                }
+        } catch (failure: IllegalArgumentException) {
+            return refused(
+                "unsupported.recording.prepared_text_material_resource",
+                failure.message ?: "Prepared text material resource planning failed.",
+            )
+        } catch (_: ArithmeticException) {
+            return refused(
+                "unsupported.recording.prepared_text_material_resource",
+                "Prepared text material resource planning overflowed.",
+            )
+        }
+        val materialUploadByResourceKey = recordedMaterialUploads.associateBy { upload ->
+            upload.resources.resourceKey
+        }
+        val textInstanceAssembly = if (r8Semantics.isEmpty()) {
+            null
+        } else {
+            when (
+                val assembly = buildPreparedTextInstanceAssembly(
+                    semantics = r8Semantics,
+                    frameIdentity = request.baseTaskList.frameId.value.toString(),
+                    capabilities = request.capabilities,
+                )
+            ) {
+                is PreparedTextInstanceAssemblyResult.Prepared -> assembly
+                is PreparedTextInstanceAssemblyResult.Refused ->
+                    return refused(assembly.code, assembly.message)
+            }
+        }
+        val textMaterialUniformAssembly = if (r8Semantics.isEmpty()) {
+            null
+        } else {
+            when (
+                val assembly = buildPreparedTextMaterialUniformAssembly(
+                    semantics = r8Semantics,
+                    frameIdentity = request.baseTaskList.frameId.value.toString(),
+                    capabilities = request.capabilities,
+                )
+            ) {
+                is PreparedTextMaterialUniformAssemblyResult.Prepared -> assembly.assembly
+                is PreparedTextMaterialUniformAssemblyResult.Refused ->
+                    return refused(assembly.code, assembly.message)
+            }
+        }
 
         val readbackRequest = request.readbackRequestId?.let { requestId ->
             GPUFrameReadbackRequest(
@@ -303,6 +601,32 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val enclosingAllocations = buildList {
             imagePlans.forEach { plan -> addAll(plan.memoryAllocations) }
+            recordedR8Uploads.forEach { upload -> addAll(upload.resources.memoryAllocations) }
+            recordedMaterialUploads.forEach { upload ->
+                addAll(upload.resources.memoryAllocations)
+            }
+            textInstanceAssembly?.let { assembly ->
+                add(
+                    GPUFrameMemoryAllocation(
+                        label = "prepared-text.instances.${assembly.plan.contentHash}",
+                        category = GPUFrameMemoryCategory.ReusableScratch,
+                        bytes = assembly.plan.byteSize,
+                        resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                        extent = null,
+                    ),
+                )
+            }
+            textMaterialUniformAssembly?.plan?.let { plan ->
+                add(
+                    GPUFrameMemoryAllocation(
+                        label = "prepared-text.material-uniforms.${plan.contentHash}",
+                        category = GPUFrameMemoryCategory.ReusableScratch,
+                        bytes = plan.byteSize,
+                        resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                        extent = null,
+                    ),
+                )
+            }
             readbackPlan?.let { plan ->
                 add(
                     GPUFrameMemoryAllocation(
@@ -375,6 +699,46 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         imagePlans.forEach { plan ->
             preparations += plan.preparationRequests
         }
+        recordedR8Uploads.forEach { upload ->
+            preparations += upload.resources.preparationRequests
+        }
+        recordedMaterialUploads.forEach { upload ->
+            preparations += upload.resources.preparationRequests
+        }
+        textInstanceAssembly?.let { assembly ->
+            preparations += GPUResourcePreparationRequest(
+                resource = assembly.plan.bufferRef,
+                descriptor = GPUFrameBufferDescriptor(
+                    byteSize = assembly.plan.byteSize,
+                    alignmentBytes = assembly.plan.alignmentBytes.toLong(),
+                ),
+                role = GPUFrameResourceRole.VertexData,
+                usages = setOf(
+                    GPUFrameResourceUsage.Vertex,
+                    GPUFrameResourceUsage.CopyDestination,
+                ),
+                lifetime = GPUFrameResourceLifetime.FrameLocal,
+                byteSize = assembly.plan.byteSize,
+                diagnosticLabel = "prepared-text.instances.${assembly.plan.contentHash}",
+            )
+        }
+        textMaterialUniformAssembly?.plan?.let { plan ->
+            preparations += GPUResourcePreparationRequest(
+                resource = plan.bufferRef,
+                descriptor = GPUFrameBufferDescriptor(
+                    byteSize = plan.byteSize,
+                    alignmentBytes = plan.alignmentBytes,
+                ),
+                role = GPUFrameResourceRole.UniformData,
+                usages = setOf(
+                    GPUFrameResourceUsage.Uniform,
+                    GPUFrameResourceUsage.CopyDestination,
+                ),
+                lifetime = GPUFrameResourceLifetime.FrameLocal,
+                byteSize = plan.byteSize,
+                diagnosticLabel = "prepared-text.material-uniforms.${plan.contentHash}",
+            )
+        }
         val readbackStaging = readbackPlan?.let {
             GPUFrameBufferRef("buffer.prepared-surface.readback.${request.baseTaskList.frameId.value}")
         }
@@ -423,6 +787,30 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 textureResourcePlan = plan,
             )
         }
+        val r8Uploads = recordedR8Uploads.map { recordedUpload ->
+            val plan = recordedUpload.resources
+            GPUTask.Upload(
+                taskId = recordedUpload.taskId,
+                recordingId = recordingId,
+                phase = GPUTaskPhase.Upload,
+                staging = plan.stagingRef,
+                destination = plan.frameTextureRef,
+                layout = plan.uploadTaskLayout,
+                textureResourcePlan = plan,
+            )
+        }
+        val materialUploads = recordedMaterialUploads.map { recordedUpload ->
+            val plan = recordedUpload.resources
+            GPUTask.Upload(
+                taskId = recordedUpload.taskId,
+                recordingId = recordingId,
+                phase = GPUTaskPhase.Upload,
+                staging = plan.stagingRef,
+                destination = plan.frameTextureRef,
+                layout = plan.uploadTaskLayout,
+                textureResourcePlan = plan,
+            )
+        }
         val baseRenderByPacketId = baseRenders.flatMap { render ->
             render.drawPackets.map { packet -> packet.packetId to render }
         }.toMap()
@@ -437,6 +825,58 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             }
         }
         val routeRuns = orderedPreparedPackets.contiguousRouteRuns(preparedRenderByPacketId)
+        val predictedTaskCount = 1L +
+            recordedImageUploads.size +
+            recordedR8Uploads.size +
+            recordedMaterialUploads.size +
+            routeRuns.size +
+            if (readbackRequest != null) 1L else 0L
+        val predictedDependencyCount =
+            recordedImageUploads.size.toLong() +
+                recordedR8Uploads.size.toLong() +
+                recordedMaterialUploads.size.toLong() +
+                routeRuns.size.toLong() +
+                routeRuns.sumOf { run ->
+                    run.mapNotNull { packet ->
+                        (packet.semanticPayload as? GPUDrawSemanticPayload.SampledImage)
+                            ?.artifact
+                            ?.key
+                    }.distinct().size.toLong()
+                } +
+                routeRuns.sumOf { run ->
+                    run.mapNotNull { packet ->
+                        packet.semanticPayload
+                            ?.takeIf(GPUDrawSemanticPayload::isPreparedTextSemantic)
+                            ?.exactR8ArtifactIdentity()
+                    }.distinct().size.toLong()
+                } +
+                routeRuns.sumOf { run ->
+                    run.flatMap { packet ->
+                        packet.semanticPayload
+                            ?.takeIf(GPUDrawSemanticPayload::isPreparedTextSemantic)
+                            ?.preparedTextMaterial()
+                            ?.sampledResources
+                            .orEmpty()
+                    }.map { resource -> resource.resourceKey }.distinct().size.toLong()
+                } +
+                (routeRuns.size - 1).coerceAtLeast(0).toLong() +
+                if (readbackRequest != null) 1L else 0L
+        val taskGraphRefusal = taskGraphLimitRefusal(
+            limits = taskGraphLimits,
+            bufferAllocations = memoryBudget.allocations.count {
+                it.resourceKind == GPUFrameMemoryResourceKind.Buffer
+            },
+            textureAllocations = memoryBudget.allocations.count {
+                it.resourceKind == GPUFrameMemoryResourceKind.Texture2D
+            },
+            allocations = memoryBudget.allocations.size,
+            tasks = predictedTaskCount,
+            dependencies = predictedDependencyCount,
+            instanceRanges = r8Semantics.size,
+        )
+        if (taskGraphRefusal != null) {
+            return refused(taskGraphRefusal.code, taskGraphRefusal.message)
+        }
         val renders = routeRuns.mapIndexed { index, run ->
             val original = preparedRenderByPacketId.getValue(run.first().packetId)
             val uses = if (run.first().semanticPayload is GPUDrawSemanticPayload.SampledImage) {
@@ -460,6 +900,59 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         ),
                     )
                 }.distinct()
+            } else if (requireNotNull(run.first().semanticPayload).isPreparedTextSemantic()) {
+                val atlasUses = run.map { packet ->
+                    val plan = r8UploadByIdentity.getValue(
+                        requireNotNull(packet.semanticPayload).exactR8ArtifactIdentity(),
+                    ).resources
+                    GPUFrameResourceUse(
+                        plan.frameTextureRef,
+                        GPUFrameResourceRole.GlyphAtlas,
+                        GPUFrameResourceUsage.TextureBinding,
+                        GPUFrameResourceLifetime.FrameLocal,
+                        write = false,
+                    )
+                }.distinct()
+                buildList {
+                    addAll(atlasUses)
+                    add(
+                        GPUFrameResourceUse(
+                            requireNotNull(textInstanceAssembly).plan.bufferRef,
+                            GPUFrameResourceRole.VertexData,
+                            GPUFrameResourceUsage.Vertex,
+                            GPUFrameResourceLifetime.FrameLocal,
+                            write = false,
+                        ),
+                    )
+                    textMaterialUniformAssembly?.plan?.let { plan ->
+                        add(
+                            GPUFrameResourceUse(
+                                plan.bufferRef,
+                                GPUFrameResourceRole.UniformData,
+                                GPUFrameResourceUsage.Uniform,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
+                    run.flatMap { packet ->
+                        requireNotNull(packet.semanticPayload)
+                            .preparedTextMaterial()
+                            .sampledResources
+                    }.map { resource ->
+                        materialUploadByResourceKey.getValue(resource.resourceKey).resources
+                    }.distinctBy { plan -> plan.resourceKey }.forEach { plan ->
+                        add(
+                            GPUFrameResourceUse(
+                                plan.frameTextureRef,
+                                GPUFrameResourceRole.StorageData,
+                                GPUFrameResourceUsage.TextureBinding,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
+                }
             } else {
                 run.flatMap { packet ->
                     coreAssembly.resourceUsesByCommandId[packet.commandIdValue].orEmpty()
@@ -503,6 +996,33 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         }
                     packet.packetId to binding
                 }.toMap(),
+                preparedTextBindingsByPacketId = run.mapNotNull { packet ->
+                    val semantic = packet.semanticPayload
+                        ?.takeIf(GPUDrawSemanticPayload::isPreparedTextSemantic)
+                        ?: return@mapNotNull null
+                    val range = requireNotNull(textInstanceAssembly)
+                        .rangesByCommandId
+                        .getValue(packet.commandIdValue)
+                    val materialUniformRange = requireNotNull(textMaterialUniformAssembly)
+                        .rangesByCommandId
+                        .getValue(packet.commandIdValue)
+                    val material = semantic.preparedTextMaterial()
+                    packet.packetId to GPUPreparedTextRenderBinding(
+                        packetId = packet.packetId,
+                        atlasResourcePlan = r8UploadByIdentity
+                            .getValue(semantic.exactR8ArtifactIdentity())
+                            .resources,
+                        instanceBufferPlan = textInstanceAssembly.plan,
+                        firstInstance = range.firstInstance,
+                        instanceCount = range.instanceCount,
+                        materialUniformBufferPlan = textMaterialUniformAssembly.plan,
+                        materialUniformOffsetBytes = materialUniformRange.offsetBytes,
+                        materialUniformSizeBytes = materialUniformRange.sizeBytes,
+                        materialSampledResourcePlans = material.sampledResources.map { resource ->
+                            materialUploadByResourceKey.getValue(resource.resourceKey).resources
+                        },
+                    )
+                }.toMap(),
             )
         }
 
@@ -514,6 +1034,24 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 "prepared-image-resource-order",
                 "prepared.image.prepare-before-upload",
                 "prepared-image.prepare.$index",
+            )
+        }
+        r8Uploads.forEachIndexed { index, upload ->
+            dependencies += dependency(
+                prepareTask.taskId,
+                upload.taskId,
+                "prepared-text-resource-order",
+                "prepared.text.prepare-before-upload",
+                "prepared-text.prepare.$index",
+            )
+        }
+        materialUploads.forEachIndexed { index, upload ->
+            dependencies += dependency(
+                prepareTask.taskId,
+                upload.taskId,
+                "prepared-text-material-resource-order",
+                "prepared.text.material-prepare-before-upload",
+                "prepared-text.material-prepare.$index",
             )
         }
         renders.forEachIndexed { index, render ->
@@ -537,6 +1075,44 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         "prepared-image.consumer.${dependencies.size}",
                     )
                 }
+            render.drawPackets
+                .mapNotNull { packet ->
+                    packet.semanticPayload?.takeIf(GPUDrawSemanticPayload::isPreparedTextSemantic)
+                }
+                .map { semantic ->
+                    r8UploadByIdentity.getValue(semantic.exactR8ArtifactIdentity()).taskId
+                }
+                .distinct()
+                .forEach { uploadTaskId ->
+                    dependencies += dependency(
+                        uploadTaskId,
+                        render.taskId,
+                        "prepared-text-resource-order",
+                        "prepared.text.upload-before-consumer",
+                        "prepared-text.consumer.${dependencies.size}",
+                    )
+                }
+            render.drawPackets
+                .flatMap { packet ->
+                    packet.semanticPayload
+                        ?.takeIf(GPUDrawSemanticPayload::isPreparedTextSemantic)
+                        ?.preparedTextMaterial()
+                        ?.sampledResources
+                        .orEmpty()
+                }
+                .map { resource ->
+                    materialUploadByResourceKey.getValue(resource.resourceKey).taskId
+                }
+                .distinct()
+                .forEach { uploadTaskId ->
+                    dependencies += dependency(
+                        uploadTaskId,
+                        render.taskId,
+                        "prepared-text-material-resource-order",
+                        "prepared.text.material-upload-before-consumer",
+                        "prepared-text.material-consumer.${dependencies.size}",
+                    )
+                }
         }
         renders.zipWithNext().forEachIndexed { index, (from, to) ->
             dependencies += dependency(
@@ -549,6 +1125,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val tasks = mutableListOf<GPUTask>(prepareTask)
         tasks += uploads
+        tasks += r8Uploads
+        tasks += materialUploads
         tasks += renders
         if (readbackRequest != null && readbackStaging != null) {
             val readbackTask = GPUTask.Readback(
@@ -585,6 +1163,11 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     (request.targetFormat == GPUColorFormat.RGBA8UnormSrgb).toString(),
             ),
         )
+        val diagnostics = if (imageSemantics.isEmpty()) {
+            request.baseTaskList.diagnostics
+        } else {
+            request.baseTaskList.diagnostics + colorDiagnostic
+        }
         return GPUPreparedSurfaceFrameResult.Recorded(
             GPUTaskList(
                 frameId = request.baseTaskList.frameId,
@@ -595,7 +1178,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 dependencies = dependencies.distinct(),
                 phaseOrder = request.baseTaskList.phaseOrder,
                 memoryBudget = memoryBudget,
-                diagnostics = request.baseTaskList.diagnostics + colorDiagnostic,
+                diagnostics = diagnostics,
             ),
         )
     }
@@ -807,6 +1390,8 @@ private fun List<GPUDrawPacket>.contiguousRouteRuns(
             semanticKind = when (packet.semanticPayload) {
                 is GPUDrawSemanticPayload.SampledImage -> "sampled-image"
                 is GPUDrawSemanticPayload.CorePrimitive -> "core-primitive"
+                is GPUDrawSemanticPayload.TextA8 -> "text-a8"
+                is GPUDrawSemanticPayload.ColorGlyph -> "color-glyph"
                 else -> "unsupported"
             },
             passId = packet.passId,
@@ -840,6 +1425,8 @@ private fun List<GPUDrawPacket>.contiguousRouteRuns(
                 semanticKind = when (first.semanticPayload) {
                     is GPUDrawSemanticPayload.SampledImage -> "sampled-image"
                     is GPUDrawSemanticPayload.CorePrimitive -> "core-primitive"
+                    is GPUDrawSemanticPayload.TextA8 -> "text-a8"
+                    is GPUDrawSemanticPayload.ColorGlyph -> "color-glyph"
                     else -> "unsupported"
                 },
                 passId = first.passId,
@@ -978,3 +1565,335 @@ private fun GPUDiagnostic.atRecordingBoundary(): GPUDiagnostic =
     } else {
         this
     }
+
+private data class PreparedR8ArtifactIdentity(
+    val key: String,
+    val generation: Long,
+    val contentHash: String,
+    val width: Int,
+    val height: Int,
+    val rowBytes: Int,
+)
+
+private data class PreparedSurfaceTaskGraphRefusal(
+    val code: String,
+    val message: String,
+)
+
+private fun taskGraphLimitRefusal(
+    limits: GPUPreparedSurfaceTaskGraphLimits,
+    bufferAllocations: Int,
+    textureAllocations: Int,
+    allocations: Int,
+    tasks: Long,
+    dependencies: Long,
+    instanceRanges: Int,
+): PreparedSurfaceTaskGraphRefusal? {
+    if (bufferAllocations > limits.maxBufferAllocations) {
+        return PreparedSurfaceTaskGraphRefusal(
+            "unsupported.recording.prepared_surface_buffer_allocation_budget",
+            "Prepared-surface buffer allocation count exceeds its configured limit.",
+        )
+    }
+    if (textureAllocations > limits.maxTextureAllocations) {
+        return PreparedSurfaceTaskGraphRefusal(
+            "unsupported.recording.prepared_surface_texture_allocation_budget",
+            "Prepared-surface texture allocation count exceeds its configured limit.",
+        )
+    }
+    if (allocations > limits.maxAllocations) {
+        return PreparedSurfaceTaskGraphRefusal(
+            "unsupported.recording.prepared_surface_allocation_budget",
+            "Prepared-surface allocation count exceeds its configured limit.",
+        )
+    }
+    if (tasks > limits.maxTasks.toLong()) {
+        return PreparedSurfaceTaskGraphRefusal(
+            "unsupported.recording.prepared_surface_task_budget",
+            "Prepared-surface task count exceeds its configured limit.",
+        )
+    }
+    if (dependencies > limits.maxDependencies.toLong()) {
+        return PreparedSurfaceTaskGraphRefusal(
+            "unsupported.recording.prepared_surface_dependency_budget",
+            "Prepared-surface dependency count exceeds its configured limit.",
+        )
+    }
+    if (instanceRanges > limits.maxInstanceRanges) {
+        return PreparedSurfaceTaskGraphRefusal(
+            "unsupported.recording.prepared_text_instance_range_budget",
+            "Prepared-text instance-range count exceeds its configured limit.",
+        )
+    }
+    return null
+}
+
+private const val PREPARED_TEXT_INSTANCE_ALIGNMENT_BYTES = 16
+
+private data class PreparedTextInstanceRange(
+    val firstInstance: Int,
+    val instanceCount: Int,
+)
+
+private sealed interface PreparedTextInstanceAssemblyResult {
+    class Prepared(
+        val plan: GPUPreparedTextInstanceBufferPlan,
+        val rangesByCommandId: Map<Int, PreparedTextInstanceRange>,
+    ) : PreparedTextInstanceAssemblyResult
+
+    data class Refused(
+        val code: String,
+        val message: String,
+    ) : PreparedTextInstanceAssemblyResult
+}
+
+private fun buildPreparedTextInstanceAssembly(
+    semantics: List<GPUDrawSemanticPayload>,
+    frameIdentity: String,
+    capabilities: GPUCapabilities,
+): PreparedTextInstanceAssemblyResult {
+    val totalInstances = try {
+        semantics.fold(0) { count, semantic ->
+            Math.addExact(count, semantic.preparedTextInstances().size)
+        }
+    } catch (_: ArithmeticException) {
+        return PreparedTextInstanceAssemblyResult.Refused(
+            "unsupported.recording.prepared_text_instance_range",
+            "Prepared text instance count overflowed.",
+        )
+    }
+    val byteSize = try {
+        Math.multiplyExact(
+            totalInstances.toLong(),
+            GPUTextA8Instance.ENCODED_BYTE_SIZE.toLong(),
+        )
+    } catch (_: ArithmeticException) {
+        return PreparedTextInstanceAssemblyResult.Refused(
+            "unsupported.recording.prepared_text_instance_buffer",
+            "Prepared text instance byte size overflowed.",
+        )
+    }
+    if (byteSize > Int.MAX_VALUE.toLong() ||
+        capabilities.limits?.maxBufferSize?.let { byteSize > it } == true
+    ) {
+        return PreparedTextInstanceAssemblyResult.Refused(
+            "unsupported.recording.prepared_text_instance_buffer",
+            "Prepared text instance buffer exceeds the observed allocation limit.",
+        )
+    }
+    val bytes = ByteBuffer.allocate(byteSize.toInt())
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .also { target ->
+            semantics.forEach { semantic ->
+                semantic.preparedTextInstances().forEach { instance ->
+                    instance.deviceQuad.forEach(target::putFloat)
+                    target.putFloat(instance.uvRect.left)
+                    target.putFloat(instance.uvRect.top)
+                    target.putFloat(instance.uvRect.right)
+                    target.putFloat(instance.uvRect.bottom)
+                    target.putInt(instance.glyphId)
+                    target.putInt(instance.sourceGlyphIndex.value)
+                    target.putInt(instance.pageIndex)
+                    target.putInt(instance.colorLayerIndex ?: -1)
+                }
+            }
+        }
+        .array()
+    val contentHash = bytes.sha256Hex()
+    val plan = GPUPreparedTextInstanceBufferPlan(
+        bufferRef = GPUFrameBufferRef(
+            "buffer.prepared-text.instances:$frameIdentity:$contentHash",
+        ),
+        strideBytes = GPUTextA8Instance.ENCODED_BYTE_SIZE,
+        alignmentBytes = PREPARED_TEXT_INSTANCE_ALIGNMENT_BYTES,
+        instanceCount = totalInstances,
+        byteSize = byteSize,
+        contentHash = contentHash,
+        uploadBytes = bytes,
+    )
+    var firstInstance = 0
+    val ranges = linkedMapOf<Int, PreparedTextInstanceRange>()
+    semantics.forEach { semantic ->
+        val count = semantic.preparedTextInstances().size
+        ranges[semantic.payloadRef.commandIdValue] = PreparedTextInstanceRange(
+            firstInstance = firstInstance,
+            instanceCount = count,
+        )
+        firstInstance = Math.addExact(firstInstance, count)
+    }
+    return PreparedTextInstanceAssemblyResult.Prepared(plan, ranges)
+}
+
+private data class PreparedTextMaterialUniformRange(
+    val offsetBytes: Long,
+    val sizeBytes: Long,
+)
+
+private data class PreparedTextMaterialUniformIdentity(
+    val materialKey: String,
+    val abiHash: String,
+    val sourceKind: String,
+    val paintAlphaBits: Int,
+    val bytes: List<Int>,
+)
+
+private data class PreparedTextMaterialUniformAssembly(
+    val plan: GPUPreparedTextMaterialUniformBufferPlan?,
+    val rangesByCommandId: Map<Int, PreparedTextMaterialUniformRange>,
+)
+
+private sealed interface PreparedTextMaterialUniformAssemblyResult {
+    data class Prepared(val assembly: PreparedTextMaterialUniformAssembly) :
+        PreparedTextMaterialUniformAssemblyResult
+
+    data class Refused(val code: String, val message: String) :
+        PreparedTextMaterialUniformAssemblyResult
+}
+
+private fun buildPreparedTextMaterialUniformAssembly(
+    semantics: List<GPUDrawSemanticPayload>,
+    frameIdentity: String,
+    capabilities: GPUCapabilities,
+): PreparedTextMaterialUniformAssemblyResult {
+    val limits = requireNotNull(capabilities.limits)
+    val alignment = limits.minUniformBufferOffsetAlignment
+    val offsetByIdentity = linkedMapOf<PreparedTextMaterialUniformIdentity, Long>()
+    val bytesByIdentity = linkedMapOf<PreparedTextMaterialUniformIdentity, ByteArray>()
+    val ranges = linkedMapOf<Int, PreparedTextMaterialUniformRange>()
+    var byteSize = 0L
+    for (semantic in semantics) {
+        val material = semantic.preparedTextMaterial()
+        if (!material.paintAlpha.isFinite() || material.paintAlpha !in 0f..1f ||
+            material.uniformBytes.any { it !in 0..255 }
+        ) {
+            return PreparedTextMaterialUniformAssemblyResult.Refused(
+                "invalid.recording.prepared_text_material_uniform",
+                "Prepared text material uniforms and paint alpha must retain validated values.",
+            )
+        }
+        if (material.uniformBytes.isEmpty()) {
+            ranges[semantic.payloadRef.commandIdValue] =
+                PreparedTextMaterialUniformRange(0L, 0L)
+            continue
+        }
+        val identity = PreparedTextMaterialUniformIdentity(
+            materialKey = material.materialKey,
+            abiHash = material.abiHash,
+            sourceKind = material.sourceKind.name,
+            paintAlphaBits = material.paintAlpha.toRawBits(),
+            bytes = material.uniformBytes,
+        )
+        val offset = offsetByIdentity[identity] ?: try {
+            alignUpPreparedText(byteSize, alignment).also { alignedOffset ->
+                byteSize = Math.addExact(alignedOffset, material.uniformBytes.size.toLong())
+                offsetByIdentity[identity] = alignedOffset
+                bytesByIdentity[identity] =
+                    ByteArray(material.uniformBytes.size) { index ->
+                        material.uniformBytes[index].toByte()
+                    }
+            }
+        } catch (_: ArithmeticException) {
+            return PreparedTextMaterialUniformAssemblyResult.Refused(
+                "unsupported.recording.prepared_text_material_uniform_buffer",
+                "Prepared text material uniform offsets overflowed.",
+            )
+        }
+        ranges[semantic.payloadRef.commandIdValue] = PreparedTextMaterialUniformRange(
+            offsetBytes = offset,
+            sizeBytes = material.uniformBytes.size.toLong(),
+        )
+    }
+    if (byteSize == 0L) {
+        return PreparedTextMaterialUniformAssemblyResult.Prepared(
+            PreparedTextMaterialUniformAssembly(null, ranges),
+        )
+    }
+    if (byteSize > Int.MAX_VALUE.toLong() ||
+        limits.maxBufferSize?.let { byteSize > it } == true
+    ) {
+        return PreparedTextMaterialUniformAssemblyResult.Refused(
+            "unsupported.recording.prepared_text_material_uniform_buffer",
+            "Prepared text material uniform buffer exceeds the observed allocation limit.",
+        )
+    }
+    val bytes = ByteArray(byteSize.toInt())
+    bytesByIdentity.forEach { (identity, materialBytes) ->
+        materialBytes.copyInto(bytes, offsetByIdentity.getValue(identity).toInt())
+    }
+    val contentHash = bytes.sha256Hex()
+    return PreparedTextMaterialUniformAssemblyResult.Prepared(
+        PreparedTextMaterialUniformAssembly(
+            plan = GPUPreparedTextMaterialUniformBufferPlan(
+                bufferRef = GPUFrameBufferRef(
+                    "buffer.prepared-text.material-uniforms:$frameIdentity:$contentHash",
+                ),
+                alignmentBytes = alignment,
+                byteSize = byteSize,
+                contentHash = contentHash,
+                uploadBytes = bytes,
+            ),
+            rangesByCommandId = ranges,
+        ),
+    )
+}
+
+private fun alignUpPreparedText(value: Long, alignment: Long): Long {
+    val remainder = value % alignment
+    return if (remainder == 0L) value else Math.addExact(value, alignment - remainder)
+}
+
+private fun GPUDrawSemanticPayload.preparedTextInstances(): List<GPUTextA8Instance> = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> instances
+    is GPUDrawSemanticPayload.ColorGlyph -> instances
+    else -> error("Only prepared text semantics own instance records")
+}
+
+private fun GPUDrawSemanticPayload.preparedTextMaterial() = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> material
+    is GPUDrawSemanticPayload.ColorGlyph -> requireNotNull(material)
+    else -> error("Only prepared text semantics own prepared material programs")
+}
+
+private fun GPUDrawSemanticPayload.isPreparedTextSemantic(): Boolean =
+    this is GPUDrawSemanticPayload.TextA8 || this is GPUDrawSemanticPayload.ColorGlyph
+
+private fun GPUDrawSemanticPayload.r8Artifact() = when (this) {
+    is GPUDrawSemanticPayload.TextA8 -> atlas
+    is GPUDrawSemanticPayload.ColorGlyph -> atlas
+    else -> error("Only prepared text semantics own an R8 artifact")
+}
+
+private fun GPUDrawSemanticPayload.exactR8ArtifactIdentity(): PreparedR8ArtifactIdentity =
+    r8Artifact().let { artifact ->
+        PreparedR8ArtifactIdentity(
+            key = artifact.key,
+            generation = artifact.generation,
+            contentHash = artifact.contentHash,
+            width = artifact.width,
+            height = artifact.height,
+            rowBytes = artifact.rowBytes,
+        )
+    }
+
+private fun GPUR8FrameResourcePlan.exactR8ArtifactIdentity(): PreparedR8ArtifactIdentity =
+    PreparedR8ArtifactIdentity(
+        key = artifactKey,
+        generation = artifactGeneration,
+        contentHash = artifactContentHash,
+        width = artifactWidth,
+        height = artifactHeight,
+        rowBytes = artifactRowBytes,
+    )
+
+private fun ByteArray.sha256Hex(): String =
+    buildString(64) {
+        MessageDigest.getInstance("SHA-256")
+            .digest(this@sha256Hex)
+            .forEach { byte ->
+                val value = byte.toInt() and 0xff
+                append(LOWER_HEX_DIGITS[value ushr 4])
+                append(LOWER_HEX_DIGITS[value and 0x0f])
+            }
+    }
+
+private const val LOWER_HEX_DIGITS = "0123456789abcdef"

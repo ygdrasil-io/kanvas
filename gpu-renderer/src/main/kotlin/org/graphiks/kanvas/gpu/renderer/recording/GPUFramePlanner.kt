@@ -867,6 +867,9 @@ object GPUFramePlanner {
         val preparedImageBindingsByPacketId = slices
             .flatMap { slice -> slice.task.preparedImageBindingsByPacketId.entries }
             .associate { entry -> entry.toPair() }
+        val preparedTextBindingsByPacketId = slices
+            .flatMap { slice -> slice.task.preparedTextBindingsByPacketId.entries }
+            .associate { entry -> entry.toPair() }
         val loadStore = if (continuesStoredTarget) {
             first.loadStore.copy(loadOp = "load", clearColorLabel = null)
         } else {
@@ -896,6 +899,7 @@ object GPUFramePlanner {
                 },
             depthStencilLoadStore = first.depthStencilLoadStore,
             preparedImageBindingsByPacketId = preparedImageBindingsByPacketId,
+            preparedTextBindingsByPacketId = preparedTextBindingsByPacketId,
         )
     }
 

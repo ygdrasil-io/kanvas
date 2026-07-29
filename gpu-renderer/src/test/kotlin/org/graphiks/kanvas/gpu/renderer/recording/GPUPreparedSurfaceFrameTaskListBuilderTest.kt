@@ -159,6 +159,11 @@ class GPUPreparedSurfaceFrameTaskListBuilderTest {
             it.role == GPUFrameResourceRole.UploadStaging ||
                 it.usage == GPUFrameResourceUsage.TextureBinding
         })
+        assertFalse(
+            GPUFramePlanner.plan(taskList).dumpLines().any {
+                "preparedTextBindings=" in it
+            },
+        )
     }
 
     @Test

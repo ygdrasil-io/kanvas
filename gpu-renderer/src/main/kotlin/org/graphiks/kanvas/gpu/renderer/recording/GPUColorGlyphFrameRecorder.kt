@@ -1,26 +1,35 @@
 package org.graphiks.kanvas.gpu.renderer.recording
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
+import org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect
+import org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex
 import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
+import org.graphiks.kanvas.gpu.renderer.artifacts.buildPreparedColorGlyphR8UploadArtifact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
-import org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphAtlasPlacementProofInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphLayerPayloadInput
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUColorGlyphPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedColorGlyphPayloadInput
+import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialLoweringContext
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
+import org.graphiks.kanvas.gpu.renderer.materials.GPUSolidMaterialDictionary
+import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 /**
  * One resolved COLRv0 layer ready for the packed A8 atlas.
@@ -49,6 +58,8 @@ data class GPUColorGlyphFrameRecordingRequest(
     val deviceGeneration: GPUDeviceGenerationID,
     val target: GPUFrameTargetRef,
     val commandIdValue: Int,
+    val sourceGlyphIndex: GPUTextSourceGlyphIndex,
+    val frameProvenance: GPUFrameProvenance,
     val planArtifactKey: GPUTextArtifactKey,
     val atlasArtifactKey: GPUTextArtifactKey,
     val atlasA8Bytes: ByteArray,
@@ -96,24 +107,59 @@ class GPUColorGlyphFrameRecorder {
             )
         }
 
+        val material = when (
+            val result = GPUPreparedMaterialProgramCompiler.compile(
+                descriptor = GPUMaterialDescriptor.SolidColor(1f, 1f, 1f, 1f),
+                paintAlpha = 1f,
+                context = GPUMaterialLoweringContext(
+                    capabilityClass = request.capabilities.canonicalSnapshotHash(),
+                    targetFormatClass = "rgba8unorm",
+                    dictionaryVersion = GPUSolidMaterialDictionary.DictionaryVersion,
+                ),
+            )
+        ) {
+            is GPUPreparedMaterialProgramResult.Ready -> result.program
+            is GPUPreparedMaterialProgramResult.Refused ->
+                return refused(result.code, result.message)
+        }
         val semantic = try {
-            payloadGatherer.gatherSemantic(
+            val atlas = buildPreparedColorGlyphR8UploadArtifact(
+                artifactKey = request.atlasArtifactKey,
+                width = request.atlasWidth,
+                height = request.atlasHeight,
+                bytes = request.atlasA8Bytes,
+            )
+            val layers = request.layers.mapIndexed { index, layer ->
+                layer.toPayloadInput(request, colorLayerIndex = index)
+            }
+            payloadGatherer.gatherPreparedSemantic(
+                GPUPreparedColorGlyphPayloadInput(
                 commandIdValue = request.commandIdValue,
-                renderStepIdentity = COLOR_GLYPH_RENDER_STEP_IDENTITY,
                 planArtifactKey = request.planArtifactKey,
                 atlasArtifactKey = request.atlasArtifactKey,
-                atlasA8Bytes = request.atlasA8Bytes,
-                atlasWidth = request.atlasWidth,
-                atlasHeight = request.atlasHeight,
-                atlasFormat = COLOR_GLYPH_ATLAS_FORMAT,
-                atlasGeneration = request.atlasArtifactKey.generation.value.toLong(),
-                layers = request.layers.map { layer -> layer.toPayloadInput(request) },
-                vertexData = canonicalTargetQuad(request.targetBounds),
-                indexData = COLOR_GLYPH_CANONICAL_INDICES.copyOf(),
-                uniformBytes = packUniforms(request),
+                atlas = atlas,
+                instances = request.layers.mapIndexed { index, layer ->
+                    GPUTextA8Instance.create(
+                        glyphId = layer.layerGlyphID.toInt(),
+                        sourceGlyphIndex = request.sourceGlyphIndex,
+                        deviceQuad = layer.deviceBounds.deviceQuad(),
+                        uvRect = layer.atlasBounds.normalizedUvRect(
+                            request.atlasWidth,
+                            request.atlasHeight,
+                        ),
+                        pageIndex = 0,
+                        colorLayerIndex = index,
+                    )
+                },
+                layers = layers,
+                material = material,
                 targetBounds = request.targetBounds,
                 scissorBounds = request.scissorBounds,
-            )
+                clipIdentity = colorGlyphScissorAuthority(request.scissorBounds),
+                blendPlanIdentity = preparedColorGlyphBlendPlan().canonicalIdentity(),
+                capabilitySnapshotHash = request.capabilities.canonicalSnapshotHash(),
+                frameProvenance = request.frameProvenance,
+            ))
         } catch (failure: IllegalArgumentException) {
             return refused(
                 code = "invalid.recording.color_glyph_input",
@@ -145,6 +191,7 @@ class GPUColorGlyphFrameRecorder {
 
     private fun GPUResolvedColorGlyphLayer.toPayloadInput(
         request: GPUColorGlyphFrameRecordingRequest,
+        colorLayerIndex: Int,
     ) = GPUColorGlyphLayerPayloadInput(
         planArtifactKey = request.planArtifactKey,
         layerGlyphID = layerGlyphID,
@@ -162,47 +209,7 @@ class GPUColorGlyphFrameRecorder {
             strikeSubpixelY = strikeSubpixelY,
             atlasBounds = atlasBounds,
         ),
-    )
-
-    private fun packUniforms(request: GPUColorGlyphFrameRecordingRequest): ByteArray =
-        ByteBuffer.allocate(COLOR_GLYPH_FRAME_UNIFORM_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
-            putFloat(request.targetBounds.width.toFloat())
-            putFloat(request.targetBounds.height.toFloat())
-            putInt(request.layers.size)
-            putInt(0)
-            repeat(GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS) { index ->
-                val color = request.layers.getOrNull(index)?.premultipliedRgba ?: ZERO_COLOR_GLYPH_FIELD
-                repeat(4) { component -> putFloat(color.getOrElse(component) { Float.NaN }) }
-            }
-            repeat(GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS) { index ->
-                val bounds = request.layers.getOrNull(index)?.atlasBounds
-                if (bounds == null) {
-                    ZERO_COLOR_GLYPH_FIELD.forEach(::putFloat)
-                } else {
-                    putFloat(bounds.left / request.atlasWidth.toFloat())
-                    putFloat(bounds.top / request.atlasHeight.toFloat())
-                    putFloat(bounds.width / request.atlasWidth.toFloat())
-                    putFloat(bounds.height / request.atlasHeight.toFloat())
-                }
-            }
-            repeat(GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS) { index ->
-                val bounds = request.layers.getOrNull(index)?.deviceBounds
-                if (bounds == null) {
-                    ZERO_COLOR_GLYPH_FIELD.forEach(::putFloat)
-                } else {
-                    putFloat(bounds.left.toFloat())
-                    putFloat(bounds.top.toFloat())
-                    putFloat(bounds.width.toFloat())
-                    putFloat(bounds.height.toFloat())
-                }
-            }
-        }.array()
-
-    private fun canonicalTargetQuad(bounds: GPUPixelBounds): FloatArray = floatArrayOf(
-        bounds.left.toFloat(), bounds.top.toFloat(), 0f, 0f,
-        bounds.right.toFloat(), bounds.top.toFloat(), 1f, 0f,
-        bounds.right.toFloat(), bounds.bottom.toFloat(), 1f, 1f,
-        bounds.left.toFloat(), bounds.bottom.toFloat(), 0f, 1f,
+        colorLayerIndex = colorLayerIndex,
     )
 
     private fun refused(code: String, message: String) = GPUColorGlyphFrameRecordingResult.Refused(
@@ -215,8 +222,23 @@ class GPUColorGlyphFrameRecorder {
     )
 }
 
-private const val COLOR_GLYPH_ATLAS_FORMAT = "r8unorm"
-private const val COLOR_GLYPH_FRAME_UNIFORM_BYTES = 784
 private const val DEFAULT_COLOR_GLYPH_FRAME_BUDGET_BYTES = 1L shl 30
-private val COLOR_GLYPH_CANONICAL_INDICES = intArrayOf(0, 1, 2, 0, 2, 3)
-private val ZERO_COLOR_GLYPH_FIELD = listOf(0f, 0f, 0f, 0f)
+
+private fun GPUPixelBounds.deviceQuad(): List<Float> = listOf(
+    left.toFloat(),
+    top.toFloat(),
+    right.toFloat(),
+    top.toFloat(),
+    right.toFloat(),
+    bottom.toFloat(),
+    left.toFloat(),
+    bottom.toFloat(),
+)
+
+private fun GPUPixelBounds.normalizedUvRect(width: Int, height: Int): GPUTextFloatRect =
+    GPUTextFloatRect(
+        left / width.toFloat(),
+        top / height.toFloat(),
+        right / width.toFloat(),
+        bottom / height.toFloat(),
+    )

@@ -44,6 +44,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterialTextureFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
@@ -742,6 +743,8 @@ sealed interface GPUTask {
         val depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = null,
         preparedImageBindingsByPacketId:
             Map<GPUDrawPacketID, GPUImageBindingRequest> = emptyMap(),
+        preparedTextBindingsByPacketId:
+            Map<GPUDrawPacketID, GPUPreparedTextRenderBinding> = emptyMap(),
     ) : GPUTask {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -757,6 +760,9 @@ sealed interface GPUTask {
         val preparedImageBindingsByPacketId:
             Map<GPUDrawPacketID, GPUImageBindingRequest> =
             immutableMap(preparedImageBindingsByPacketId)
+        val preparedTextBindingsByPacketId:
+            Map<GPUDrawPacketID, GPUPreparedTextRenderBinding> =
+            immutableMap(preparedTextBindingsByPacketId)
 
         init {
             require(phase == GPUTaskPhase.Render) { "GPUTask.Render requires Render phase" }
@@ -774,6 +780,22 @@ sealed interface GPUTask {
                 }
             ) {
                 "Prepared-image bindings must exactly cover every and only sampled-image packet"
+            }
+            val preparedTextPacketIds = drawPackets
+                .filter { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
+                        (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph &&
+                            packet.semanticPayload.instances.isNotEmpty() &&
+                            packet.semanticPayload.material != null)
+                }
+                .map(GPUDrawPacket::packetId)
+                .toSet()
+            require(preparedTextBindingsByPacketId.keys == preparedTextPacketIds &&
+                preparedTextBindingsByPacketId.all { (packetId, binding) ->
+                    packetId == binding.packetId
+                }
+            ) {
+                "Prepared-text bindings must exactly cover every and only text packet"
             }
         }
 
@@ -832,6 +854,8 @@ sealed interface GPUTask {
             get() = textureResourcePlan as? GPUImageFrameResourcePlan
         val r8ResourcePlan: GPUR8FrameResourcePlan?
             get() = textureResourcePlan as? GPUR8FrameResourcePlan
+        val materialResourcePlan: GPUMaterialTextureFrameResourcePlan?
+            get() = textureResourcePlan as? GPUMaterialTextureFrameResourcePlan
 
         init {
             when (val plan = textureResourcePlan) {
@@ -840,6 +864,7 @@ sealed interface GPUTask {
                 }
                 is GPUImageFrameResourcePlan,
                 is GPUR8FrameResourcePlan,
+                is GPUMaterialTextureFrameResourcePlan,
                 -> {
                     require(destinationKind == GPUUploadDestinationKind.Texture) {
                         "Texture uploads require an exact texture plan; buffer uploads forbid one"

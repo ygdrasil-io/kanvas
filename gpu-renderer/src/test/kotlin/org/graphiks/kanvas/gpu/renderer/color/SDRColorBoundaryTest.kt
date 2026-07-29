@@ -164,7 +164,7 @@ class SDRColorBoundaryTest {
             "org/graphiks/kanvas/gpu/renderer/recording/GPUSolidRectFrameRecorder.kt",
             "org/graphiks/kanvas/gpu/renderer/recording/GPUSeparableBlurRectFrameRecorder.kt",
             "org/graphiks/kanvas/gpu/renderer/recording/GPURegisteredUniformRectFrameRecorder.kt",
-            "org/graphiks/kanvas/gpu/renderer/recording/GPUColorGlyphPreparedTaskListBuilder.kt",
+            "org/graphiks/kanvas/gpu/renderer/recording/GPUPreparedSurfaceFrameTaskListBuilder.kt",
             "org/graphiks/kanvas/gpu/renderer/recording/GPUCorePrimitivePreparedFrameTaskListBuilder.kt",
             "org/graphiks/kanvas/gpu/renderer/execution/GPUBackendRuntimeNative.kt",
         )

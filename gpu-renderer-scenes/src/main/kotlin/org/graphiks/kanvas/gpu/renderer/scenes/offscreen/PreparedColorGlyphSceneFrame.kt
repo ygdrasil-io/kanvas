@@ -16,6 +16,7 @@ import org.graphiks.kanvas.font.scaler.ScaledGlyph
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
+import org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -31,6 +32,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.scenes.catalog.GPURendererScene
 import org.graphiks.kanvas.gpu.renderer.scenes.commands.SceneCommand
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 internal sealed interface PreparedColorGlyphSceneFrameResult {
     data class Recorded(
@@ -130,6 +132,8 @@ internal class PreparedColorGlyphSceneFrameRecorder(
                 deviceGeneration = deviceGeneration,
                 target = GPUFrameTargetRef("target.scene.${scene.sceneId.value}"),
                 commandIdValue = 1,
+                sourceGlyphIndex = GPUTextSourceGlyphIndex(0),
+                frameProvenance = GPUFrameProvenance.GmContent,
                 planArtifactKey = planKey,
                 atlasArtifactKey = atlasKey,
                 atlasA8Bytes = upload.atlasBytes,

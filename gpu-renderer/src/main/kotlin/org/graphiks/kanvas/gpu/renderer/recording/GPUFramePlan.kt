@@ -45,6 +45,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterialTextureFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceCopyRegion
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
@@ -266,6 +267,8 @@ sealed interface GPUFrameStep {
         val depthStencilLoadStore: GPUDepthStencilLoadStorePlan? = null,
         preparedImageBindingsByPacketId:
             Map<GPUDrawPacketID, GPUImageBindingRequest> = emptyMap(),
+        preparedTextBindingsByPacketId:
+            Map<GPUDrawPacketID, GPUPreparedTextRenderBinding> = emptyMap(),
     ) : GPUFrameStep {
         val drawPackets: List<GPUDrawPacket> = immutableList(drawPackets)
         val resourceUses: List<GPUFrameResourceUse> = immutableList(resourceUses)
@@ -276,6 +279,9 @@ sealed interface GPUFrameStep {
         val preparedImageBindingsByPacketId:
             Map<GPUDrawPacketID, GPUImageBindingRequest> =
             immutableMap(preparedImageBindingsByPacketId)
+        val preparedTextBindingsByPacketId:
+            Map<GPUDrawPacketID, GPUPreparedTextRenderBinding> =
+            immutableMap(preparedTextBindingsByPacketId)
         override val sourceTaskIds: List<GPUTaskID> = immutableList(sourceTaskIds)
         override val executionKind = GPUFrameStepExecutionKind.Encoder
 
@@ -320,6 +326,22 @@ sealed interface GPUFrameStep {
             ) {
                 "GPUFrameStep.RenderPassStep prepared-image bindings must exactly cover image packets"
             }
+            val preparedTextPacketIds = drawPackets
+                .filter { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
+                        (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph &&
+                            packet.semanticPayload.instances.isNotEmpty() &&
+                            packet.semanticPayload.material != null)
+                }
+                .map(GPUDrawPacket::packetId)
+                .toSet()
+            require(preparedTextBindingsByPacketId.keys == preparedTextPacketIds &&
+                preparedTextBindingsByPacketId.all { (packetId, binding) ->
+                    packetId == binding.packetId
+                }
+            ) {
+                "GPUFrameStep.RenderPassStep prepared-text bindings must exactly cover text packets"
+            }
         }
     }
 
@@ -359,6 +381,8 @@ sealed interface GPUFrameStep {
             get() = textureResourcePlan as? GPUImageFrameResourcePlan
         val r8ResourcePlan: GPUR8FrameResourcePlan?
             get() = textureResourcePlan as? GPUR8FrameResourcePlan
+        val materialResourcePlan: GPUMaterialTextureFrameResourcePlan?
+            get() = textureResourcePlan as? GPUMaterialTextureFrameResourcePlan
 
         init {
             when (val plan = textureResourcePlan) {
@@ -367,6 +391,7 @@ sealed interface GPUFrameStep {
                 }
                 is GPUImageFrameResourcePlan,
                 is GPUR8FrameResourcePlan,
+                is GPUMaterialTextureFrameResourcePlan,
                 -> {
                     require(destinationKind == GPUUploadDestinationKind.Texture) {
                         "Texture frame uploads require an exact texture plan; buffer uploads forbid one"
@@ -928,8 +953,23 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
                     .filter { packet -> packet.semanticPayload is GPUDrawSemanticPayload.SampledImage }
                     .map { packet ->
                         value.preparedImageBindingsByPacketId.getValue(packet.packetId)
-                    },
+                },
             ) { preparedImageBinding(it) }
+            if (value.preparedTextBindingsByPacketId.isNotEmpty()) {
+                list(
+                    "preparedTextBindings",
+                    value.drawPackets
+                        .filter { packet ->
+                            packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
+                                (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph &&
+                                    packet.semanticPayload.instances.isNotEmpty() &&
+                                    packet.semanticPayload.material != null)
+                        }
+                        .map { packet ->
+                            value.preparedTextBindingsByPacketId.getValue(packet.packetId)
+                        },
+                ) { preparedTextBinding(it) }
+            }
         }
         is GPUFrameStep.ComputePassStep -> {
             resourceRef("target", value.target)
@@ -953,6 +993,10 @@ private fun CanonicalHashSink.step(value: GPUFrameStep) {
                     nullable("preparedImagePlan", plan) { imageResourcePlan(it) }
                 is GPUR8FrameResourcePlan ->
                     nullable("preparedR8Plan", plan) { r8ResourcePlan(it) }
+                is GPUMaterialTextureFrameResourcePlan ->
+                    nullable("preparedMaterialTexturePlan", plan) {
+                        materialTextureResourcePlan(it)
+                    }
             }
         }
         is GPUFrameStep.CopyResourceStep -> {
@@ -1064,6 +1108,27 @@ private fun CanonicalHashSink.r8ResourcePlan(value: GPUR8FrameResourcePlan) {
     list("memoryAllocations", value.memoryAllocations) { memoryAllocation(it) }
 }
 
+private fun CanonicalHashSink.materialTextureResourcePlan(
+    value: GPUMaterialTextureFrameResourcePlan,
+) {
+    tag("GPUPreparedMaterialTextureFrameResourcePlan")
+    string("stagingRef", value.stagingRef.value)
+    string("frameTextureRef", value.frameTextureRef.value)
+    long("sourceOffsetBytes", value.uploadTaskLayout.sourceOffsetBytes)
+    long("bytesPerRow", value.uploadTaskLayout.bytesPerRow)
+    int("rowsPerImage", value.uploadTaskLayout.rowsPerImage)
+    long("byteSize", value.uploadTaskLayout.byteSize)
+    string("resourceKey", value.resourceKey)
+    int("width", value.width)
+    int("height", value.height)
+    string("samplingFilterMode", value.samplingFilterMode)
+    bool("alphaOnly", value.alphaOnly)
+    string("contentHash", value.contentHash)
+    byteArray("uploadBytes", value.bytesForUpload())
+    list("preparationRequests", value.preparationRequests) { preparationRequest(it) }
+    list("memoryAllocations", value.memoryAllocations) { memoryAllocation(it) }
+}
+
 private fun CanonicalHashSink.preparedImageBinding(value: GPUImageBindingRequest) {
     tag("GPUPreparedImageBindingRequest")
     string("packetId", value.packetId)
@@ -1082,6 +1147,38 @@ private fun CanonicalHashSink.preparedImageBinding(value: GPUImageBindingRequest
     string("uniformPacketId", value.uniformAllocation.packetId)
     long("uniformOffset", value.uniformAllocation.offset)
     long("uniformSize", value.uniformAllocation.size)
+}
+
+private fun CanonicalHashSink.preparedTextBinding(value: GPUPreparedTextRenderBinding) {
+    tag("GPUPreparedTextRenderBinding")
+    string("packetId", value.packetId.value)
+    string("atlasStagingRef", value.atlasResourcePlan.stagingRef.value)
+    string("atlasTextureRef", value.atlasResourcePlan.frameTextureRef.value)
+    string("atlasArtifactKey", value.atlasResourcePlan.artifactKey)
+    long("atlasGeneration", value.atlasResourcePlan.artifactGeneration)
+    string("atlasContentHash", value.atlasResourcePlan.artifactContentHash)
+    tag("GPUPreparedTextInstanceBufferPlan")
+    string("bufferRef", value.instanceBufferPlan.bufferRef.value)
+    int("strideBytes", value.instanceBufferPlan.strideBytes)
+    int("alignmentBytes", value.instanceBufferPlan.alignmentBytes)
+    int("instanceCount", value.instanceBufferPlan.instanceCount)
+    long("byteSize", value.instanceBufferPlan.byteSize)
+    string("contentHash", value.instanceBufferPlan.contentHash)
+    int("firstInstance", value.firstInstance)
+    int("drawInstanceCount", value.instanceCount)
+    nullable("materialUniformBuffer", value.materialUniformBufferPlan) { plan ->
+        string("bufferRef", plan.bufferRef.value)
+        long("alignmentBytes", plan.alignmentBytes)
+        long("byteSize", plan.byteSize)
+        string("contentHash", plan.contentHash)
+    }
+    long("materialUniformOffsetBytes", value.materialUniformOffsetBytes)
+    long("materialUniformSizeBytes", value.materialUniformSizeBytes)
+    list("materialSampledResources", value.materialSampledResourcePlans) { plan ->
+        string("resourceKey", plan.resourceKey)
+        string("textureRef", plan.frameTextureRef.value)
+        string("contentHash", plan.contentHash)
+    }
 }
 
 private fun CanonicalHashSink.textureDescriptor(name: String, value: GPUTextureDescriptor) {
@@ -1595,6 +1692,24 @@ private fun CanonicalHashSink.diagnostic(name: String, value: GPUDiagnostic) {
 
 private fun GPUFrameStep.dumpLine(index: Int): String {
     val tasks = sourceTaskIds.joinToString(",", transform = GPUTaskID::value)
+    val preparedTextDumpSuffix =
+        (this as? GPUFrameStep.RenderPassStep)
+            ?.takeIf { it.preparedTextBindingsByPacketId.isNotEmpty() }
+            ?.let { render ->
+                " preparedTextBindings=${render.drawPackets
+                    .filter { packet ->
+                        packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
+                            (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph &&
+                                packet.semanticPayload.instances.isNotEmpty() &&
+                                packet.semanticPayload.material != null)
+                    }
+                    .joinToString(";") { packet ->
+                        render.preparedTextBindingsByPacketId
+                            .getValue(packet.packetId)
+                            .stableDump()
+                    }}"
+            }
+            .orEmpty()
     val body = when (this) {
         is GPUFrameStep.RenderPassStep ->
             "render target=${target.value} load=${loadStore.loadOp} store=${loadStore.storePlan.name} " +
@@ -1617,7 +1732,8 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
                     .filter { packet -> packet.semanticPayload is GPUDrawSemanticPayload.SampledImage }
                     .joinToString(";") { packet ->
                         preparedImageBindingsByPacketId.getValue(packet.packetId).stableDump()
-                    }.ifEmpty { "none" }}"
+                    }.ifEmpty { "none" }}" +
+                preparedTextDumpSuffix
         is GPUFrameStep.ComputePassStep ->
             "compute target=${target.value} uses=${resourceUses.joinToString(";") { it.stableDump() }} " +
                 "dispatches=${dispatches.joinToString(";") { it.stableDump() }}"
@@ -1633,6 +1749,8 @@ private fun GPUFrameStep.dumpLine(index: Int): String {
                         "preparedImagePlan=${plan.stableDump()}"
                     is GPUR8FrameResourcePlan ->
                         "preparedR8Plan=${plan.stableDump()}"
+                    is GPUMaterialTextureFrameResourcePlan ->
+                        "preparedMaterialTexturePlan=${plan.stableDump()}"
                 }
         is GPUFrameStep.CopyResourceStep ->
             "copy source=${source.value} destination=${destination.value} " +
@@ -1712,6 +1830,23 @@ private fun GPUR8FrameResourcePlan.stableDump(): String =
                 "extent=${allocation.extent ?: "none"}}"
         }.joinToString(";").ifEmpty { "none" }}}"
 
+private fun GPUMaterialTextureFrameResourcePlan.stableDump(): String =
+    "{staging=${stagingRef.value},frameTexture=${frameTextureRef.value}," +
+        "taskLayout={offset=${uploadTaskLayout.sourceOffsetBytes}," +
+        "bytesPerRow=${uploadTaskLayout.bytesPerRow},rowsPerImage=${uploadTaskLayout.rowsPerImage}," +
+        "byteSize=${uploadTaskLayout.byteSize}}," +
+        "resource={key=$resourceKey,size=${width}x$height,sampling=$samplingFilterMode," +
+        "alphaOnly=$alphaOnly,contentHash=$contentHash}," +
+        "uploadBytes=${bytesForUpload().size},uploadSha256=${bytesForUpload().sha256()}," +
+        "preparations=${preparationRequests.mapIndexed { index, request ->
+            "$index:${request.stableDump()}"
+        }.joinToString(";").ifEmpty { "none" }}," +
+        "allocations=${memoryAllocations.mapIndexed { index, allocation ->
+            "$index:{label=${allocation.label},category=${allocation.category.name}," +
+                "bytes=${allocation.bytes},kind=${allocation.resourceKind.name}," +
+                "extent=${allocation.extent ?: "none"}}"
+        }.joinToString(";").ifEmpty { "none" }}}"
+
 private fun GPUImageBindingRequest.stableDump(): String =
     "{packet=$packetId,artifact=${artifactKey.value},texture=${texture.stableDump()}," +
         "view={descriptorHash=${view.textureDescriptorHash},dimension=${view.viewDimension}," +
@@ -1720,6 +1855,27 @@ private fun GPUImageBindingRequest.stableDump(): String =
         "sampler=${sampler.stableDump()},bindingLayout=$bindingLayoutHash," +
         "uniform={packet=${uniformAllocation.packetId},offset=${uniformAllocation.offset}," +
         "size=${uniformAllocation.size}}}"
+
+private fun GPUPreparedTextRenderBinding.stableDump(): String =
+    "{packet=${packetId.value}," +
+        "atlas={staging=${atlasResourcePlan.stagingRef.value}," +
+        "texture=${atlasResourcePlan.frameTextureRef.value}," +
+        "key=${atlasResourcePlan.artifactKey},generation=${atlasResourcePlan.artifactGeneration}," +
+        "contentHash=${atlasResourcePlan.artifactContentHash}}," +
+        "instances={buffer=${instanceBufferPlan.bufferRef.value}," +
+        "stride=${instanceBufferPlan.strideBytes},alignment=${instanceBufferPlan.alignmentBytes}," +
+        "count=${instanceBufferPlan.instanceCount},bytes=${instanceBufferPlan.byteSize}," +
+        "contentHash=${instanceBufferPlan.contentHash}}," +
+        "range={first=$firstInstance,count=$instanceCount}," +
+        "materialUniform=${materialUniformBufferPlan?.let { plan ->
+            "{buffer=${plan.bufferRef.value},alignment=${plan.alignmentBytes}," +
+                "bytes=${plan.byteSize},contentHash=${plan.contentHash}," +
+                "offset=$materialUniformOffsetBytes,size=$materialUniformSizeBytes}"
+        } ?: "none"}," +
+        "materialResources=${materialSampledResourcePlans.joinToString(";") { plan ->
+            "{key=${plan.resourceKey},texture=${plan.frameTextureRef.value}," +
+                "contentHash=${plan.contentHash}}"
+        }.ifEmpty { "none" }}}"
 
 private fun GPUTextureDescriptor.stableDump(): String =
     "{width=$width,height=$height,format=$format," +
