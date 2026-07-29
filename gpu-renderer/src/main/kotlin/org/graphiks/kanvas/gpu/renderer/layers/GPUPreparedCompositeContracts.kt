@@ -4,8 +4,6 @@ import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedFilterNodeId
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedFilterGraph
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedFilterInputRef
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedFilterNormalization
-import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
-import java.util.Collections
 
 /** Stable composite scope identity. */
 @JvmInline
@@ -23,170 +21,91 @@ enum class GPUPreparedCompositeScopeKind {
     FilterPictureSource,
 }
 
-/** Exact float rectangle encoded with IEEE-754 raw bits. */
-data class GPUPreparedRectSnapshot(
-    val leftBits: Int,
-    val topBits: Int,
-    val rightBits: Int,
-    val bottomBits: Int,
-)
-
-/** Exact 3x3 transform encoded with IEEE-754 raw bits. */
-data class GPUPreparedMatrixSnapshot(
-    val scaleXBits: Int,
-    val skewXBits: Int,
-    val transXBits: Int,
-    val skewYBits: Int,
-    val scaleYBits: Int,
-    val transYBits: Int,
-    val persp0Bits: Int,
-    val persp1Bits: Int,
-    val persp2Bits: Int,
-)
-
-/** Closed clip subset accepted by the prepared composite scaffold. */
-sealed interface GPUPreparedClipSnapshot {
-    data object WideOpen : GPUPreparedClipSnapshot
-
-    data class DeviceRect(
-        val rect: GPUPreparedRectSnapshot,
-        val antiAlias: Boolean,
-    ) : GPUPreparedClipSnapshot
-}
-
-enum class GPUPreparedPaintStyle {
-    Fill,
-    Stroke,
-    StrokeAndFill,
-}
-
-enum class GPUPreparedStrokeCap {
-    Butt,
-    Round,
-    Square,
-}
-
-enum class GPUPreparedStrokeJoin {
-    Miter,
-    Round,
-    Bevel,
-}
-
-/**
- * Exact paint subset accepted at capture time.
- *
- * Shader/filter/path-effect/blender paints are refused before this snapshot is
- * created, so this type cannot silently represent only part of a Paint.
- */
-data class GPUPreparedPaintSnapshot(
-    val colorArgb: UInt,
-    val blendMode: GPUBlendMode,
-    val style: GPUPreparedPaintStyle,
-    val strokeWidthBits: Int,
-    val strokeCap: GPUPreparedStrokeCap,
-    val strokeJoin: GPUPreparedStrokeJoin,
-    val strokeMiterBits: Int,
-    val antiAlias: Boolean,
-)
-
-/** Exact composite state attached to a saveLayer or picture scope. */
-data class GPUPreparedCompositeScopeState(
-    val bounds: GPUPreparedRectSnapshot?,
-    val paint: GPUPreparedPaintSnapshot?,
-    val transform: GPUPreparedMatrixSnapshot,
-    val clip: GPUPreparedClipSnapshot,
-)
-
 /** Ordered entry in a composite scope. */
 sealed interface GPUPreparedCompositeEntry {
     data class Draw(val operationIndex: Int) : GPUPreparedCompositeEntry
     data class Scope(val id: GPUPreparedCompositeScopeId) : GPUPreparedCompositeEntry
 }
 
-/** Deeply immutable composite scope. */
-class GPUPreparedCompositeScope(
+/** Immutable composite scope. */
+data class GPUPreparedCompositeScope(
     val id: GPUPreparedCompositeScopeId,
     val parentId: GPUPreparedCompositeScopeId?,
     val saveOperationIndex: Int?,
     val restoreOperationIndex: Int?,
-    entries: List<GPUPreparedCompositeEntry>,
+    val entries: List<GPUPreparedCompositeEntry>,
     val sourceKind: GPUPreparedCompositeScopeKind,
     val provenance: String,
-    val state: GPUPreparedCompositeScopeState? = null,
-) {
-    val entries: List<GPUPreparedCompositeEntry> =
-        Collections.unmodifiableList(entries.toList())
+)
+
+/** Snapshot of a captured DisplayOp operation. */
+data class GPUPreparedCapturedOperation(
+    val sourceOperationIndex: Int,
+    val snapshot: Any,
+    val identity: String,
+)
+
+/** Immutable composite capture result. */
+data class GPUPreparedCompositeCapture(
+    val rootScopeId: GPUPreparedCompositeScopeId,
+    val scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
+    val expandedOperations: List<GPUPreparedCapturedOperation>,
+    val identity: String,
+)
+
+sealed interface GPUPreparedCompositeCaptureResult {
+    data class Ready(val capture: GPUPreparedCompositeCapture) :
+        GPUPreparedCompositeCaptureResult
+
+    data class Refused(
+        val code: String,
+        val operationIndex: Int?,
+        val facts: Map<String, String>,
+    ) : GPUPreparedCompositeCaptureResult
 }
 
 sealed interface GPUPreparedImageFilterLowering {
     data class Ready(val graph: GPUPreparedFilterGraph) :
         GPUPreparedImageFilterLowering
 
-    class Refused(
+    data class Refused(
         val code: String,
-        facts: Map<String, String>,
-    ) : GPUPreparedImageFilterLowering {
-        val facts: Map<String, String> =
-            Collections.unmodifiableMap(LinkedHashMap(facts))
-    }
+        val facts: Map<String, String>,
+    ) : GPUPreparedImageFilterLowering
 }
 
-class GPUPreparedCompositePlan(
+data class GPUPreparedCompositePlan(
     val captureIdentity: String,
     val rootScopeId: GPUPreparedCompositeScopeId,
-    layers: List<GPULayerPlan>,
-    normalizedFilters: Map<GPUPreparedCompositeScopeId, GPUPreparedFilterNormalization>,
+    val layers: List<Any>,
+    val normalizedFilters: Map<GPUPreparedCompositeScopeId, GPUPreparedFilterNormalization>,
     val identity: String,
-) {
-    val layers: List<GPULayerPlan> =
-        Collections.unmodifiableList(layers.toList())
-    val normalizedFilters: Map<GPUPreparedCompositeScopeId, GPUPreparedFilterNormalization> =
-        Collections.unmodifiableMap(LinkedHashMap(normalizedFilters))
-}
+)
 
 sealed interface GPUPreparedCompositeLowering {
     data class Ready(val plan: GPUPreparedCompositePlan) :
         GPUPreparedCompositeLowering
 
-    class Refused(
+    data class Refused(
         val code: String,
         val operationIndex: Int?,
-        facts: Map<String, String>,
-    ) : GPUPreparedCompositeLowering {
-        val facts: Map<String, String> =
-            Collections.unmodifiableMap(LinkedHashMap(facts))
-    }
+        val facts: Map<String, String>,
+    ) : GPUPreparedCompositeLowering
 }
 
-enum class GPUPreparedMaskFilterKind {
-    Blur,
-    Shader,
-    Table,
-}
-
-enum class GPUPreparedCoverageFormat {
-    A8,
-}
-
-class GPUPreparedMaskFilterPlan(
-    val kind: GPUPreparedMaskFilterKind,
-    val coverageFormat: GPUPreparedCoverageFormat,
+data class GPUPreparedMaskFilterPlan(
+    val kind: String,
+    val coverageFormat: String,
     val executionIdentity: String,
-    tableEntries: List<Int> = emptyList(),
-) {
-    val tableEntries: List<Int> =
-        Collections.unmodifiableList(tableEntries.toList())
-}
+    val tableEntries: List<Int> = emptyList(),
+)
 
 sealed interface GPUPreparedMaskFilterLowering {
     data class Ready(val plan: GPUPreparedMaskFilterPlan) :
         GPUPreparedMaskFilterLowering
 
-    class Refused(
+    data class Refused(
         val code: String,
-        facts: Map<String, String>,
-    ) : GPUPreparedMaskFilterLowering {
-        val facts: Map<String, String> =
-            Collections.unmodifiableMap(LinkedHashMap(facts))
-    }
+        val facts: Map<String, String>,
+    ) : GPUPreparedMaskFilterLowering
 }

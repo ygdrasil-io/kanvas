@@ -11,9 +11,6 @@ object GPUPreparedCompositeRefusalCodes {
     const val LAYER_BOUNDS = "unsupported.composite.layer.bounds"
     const val LAYER_BUDGET = "unsupported.composite.layer.budget"
     const val LAYER_DESTINATION_READ = "unsupported.composite.layer.destination_read"
-    const val OPERATION = "unsupported.composite.operation"
-    const val PAINT = "unsupported.composite.paint"
-    const val CLIP = "unsupported.composite.clip"
     const val NATIVE_ALIAS = "unsupported.composite.native.alias"
     const val NATIVE_CAPABILITY = "unsupported.composite.native.capability"
     const val PREFLIGHT = "unsupported.composite.preflight"
@@ -25,9 +22,6 @@ object GPUPreparedCompositeRefusalCodes {
         LAYER_BOUNDS,
         LAYER_BUDGET,
         LAYER_DESTINATION_READ,
-        OPERATION,
-        PAINT,
-        CLIP,
         NATIVE_ALIAS,
         NATIVE_CAPABILITY,
         PREFLIGHT,

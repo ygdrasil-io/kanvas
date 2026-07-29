@@ -67,32 +67,48 @@ class GPUPreparedCompositeContractsTest {
     }
 
     @Test
-    fun `scope and mask plan snapshot mutable lists`() {
-        val entries = mutableListOf<GPUPreparedCompositeEntry>(
-            GPUPreparedCompositeEntry.Draw(0),
+    fun `capture contains root and child scopes`() {
+        val root = scopeNode("root", null, GPUPreparedCompositeScopeKind.Root)
+        val child = scopeNode("child", root.id, GPUPreparedCompositeScopeKind.SaveLayer)
+        val capture = GPUPreparedCompositeCapture(
+            rootScopeId = root.id,
+            scopes = mapOf(root.id to root, child.id to child),
+            expandedOperations = emptyList(),
+            identity = "capture_v1",
         )
-        val scope = GPUPreparedCompositeScope(
-            id = GPUPreparedCompositeScopeId("scope"),
-            parentId = null,
-            saveOperationIndex = null,
-            restoreOperationIndex = null,
-            entries = entries,
-            sourceKind = GPUPreparedCompositeScopeKind.Root,
-            provenance = "test",
-        )
-        val table = mutableListOf(1, 2, 3)
-        val mask = GPUPreparedMaskFilterPlan(
-            kind = GPUPreparedMaskFilterKind.Table,
-            coverageFormat = GPUPreparedCoverageFormat.A8,
-            executionIdentity = "table",
-            tableEntries = table,
-        )
+        assertEquals(2, capture.scopes.size)
+        assertEquals(root.id, capture.rootScopeId)
+        assertNotNull(capture.scopes[child.id])
+    }
 
-        entries += GPUPreparedCompositeEntry.Draw(1)
-        table += 4
+    @Test
+    fun `capture ready result wraps immutable capture`() {
+        val capture = minimalCapture()
+        val result = GPUPreparedCompositeCaptureResult.Ready(capture)
+        assertEquals(capture.identity, (result as GPUPreparedCompositeCaptureResult.Ready).capture.identity)
+    }
 
-        assertEquals(1, scope.entries.size)
-        assertEquals(listOf(1, 2, 3), mask.tableEntries)
+    @Test
+    fun `capture refused result carries code and facts`() {
+        val result = GPUPreparedCompositeCaptureResult.Refused(
+            code = "unsupported.composite.layer.unbalanced",
+            operationIndex = 3,
+            facts = mapOf("reason" to "unmatched EndLayer"),
+        )
+        assertEquals("unsupported.composite.layer.unbalanced", result.code)
+        assertEquals(3, result.operationIndex)
+        assertEquals("unmatched EndLayer", result.facts["reason"])
+    }
+
+    @Test
+    fun `captured operation carries source index and identity`() {
+        val op = GPUPreparedCapturedOperation(
+            sourceOperationIndex = 5,
+            snapshot = DummyDisplayOp("drawRect_0"),
+            identity = "op_5_hash",
+        )
+        assertEquals(5, op.sourceOperationIndex)
+        assertEquals("op_5_hash", op.identity)
     }
 
     @Test
@@ -130,13 +146,13 @@ class GPUPreparedCompositeContractsTest {
     fun `mask filter plan carries kind coverage format and table entries`() {
         val table = (0 until 256).toList()
         val plan = GPUPreparedMaskFilterPlan(
-            kind = GPUPreparedMaskFilterKind.Table,
-            coverageFormat = GPUPreparedCoverageFormat.A8,
+            kind = "Table",
+            coverageFormat = "A8",
             executionIdentity = "table_v1",
             tableEntries = table,
         )
-        assertEquals(GPUPreparedMaskFilterKind.Table, plan.kind)
-        assertEquals(GPUPreparedCoverageFormat.A8, plan.coverageFormat)
+        assertEquals("Table", plan.kind)
+        assertEquals("A8", plan.coverageFormat)
         assertEquals(256, plan.tableEntries.size)
         assertEquals(0, plan.tableEntries[0])
         assertEquals(255, plan.tableEntries[255])
@@ -156,16 +172,9 @@ class GPUPreparedCompositeContractsTest {
 
     @Test
     fun `mask filter lowering encodes three public kinds`() {
-        val blurPlan = GPUPreparedMaskFilterPlan(
-            GPUPreparedMaskFilterKind.Blur,
-            GPUPreparedCoverageFormat.A8,
-            "blur_exec",
-        )
+        val blurPlan = GPUPreparedMaskFilterPlan("Blur", "A8", "blur_exec")
         val ready = GPUPreparedMaskFilterLowering.Ready(blurPlan)
-        assertEquals(
-            GPUPreparedMaskFilterKind.Blur,
-            (ready as GPUPreparedMaskFilterLowering.Ready).plan.kind,
-        )
+        assertEquals("Blur", (ready as GPUPreparedMaskFilterLowering.Ready).plan.kind)
         val refused = GPUPreparedMaskFilterLowering.Refused(
             code = "unsupported.mask-filter.table.size",
             facts = mapOf("size" to "512"),
@@ -182,18 +191,18 @@ class GPUPreparedCompositeContractsTest {
     }
 
     @Test
-    fun `scope id values never depend on object address`() {
-        val id1 = GPUPreparedCompositeScopeId("s1")
-        val id2 = GPUPreparedCompositeScopeId("s1")
-        assertEquals(id1, id2)
-    }
-
-    @Test
-    fun `refusal code sets from filter and composite have expected codes`() {
-        val filterCodes = GPUPreparedFilterRefusalCodes.ALL
-        assertTrue(filterCodes.contains(GPUPreparedFilterRefusalCodes.GRAPH_CYCLE))
-        val compositeCodes = GPUPreparedCompositeRefusalCodes.ALL
-        assertTrue(compositeCodes.contains(GPUPreparedCompositeRefusalCodes.LAYER_UNBALANCED))
+    fun `filter rewrite proof carries rule and node ids`() {
+        val proof = GPUPreparedFilterRewriteProof(
+            rule = "compose-offset",
+            sourceNodeIds = listOf(GPUPreparedFilterNodeId("n1"), GPUPreparedFilterNodeId("n2")),
+            resultNodeIds = listOf(GPUPreparedFilterNodeId("n12")),
+            removedIntermediateCount = 1,
+            inputBoundsIdentity = "bounds_in",
+            outputBoundsIdentity = "bounds_out",
+        )
+        assertEquals("compose-offset", proof.rule)
+        assertEquals(2, proof.sourceNodeIds.size)
+        assertEquals(1, proof.removedIntermediateCount)
     }
 
     @Test
@@ -222,6 +231,34 @@ class GPUPreparedCompositeContractsTest {
         assertTrue(normalization.materializationNodeIds.contains(GPUPreparedFilterNodeId("n1")))
     }
 
+    @Test
+    fun `refusal code sets from filter and composite have expected codes`() {
+        val filterCodes = GPUPreparedFilterRefusalCodes.ALL
+        assertTrue(filterCodes.contains(GPUPreparedFilterRefusalCodes.GRAPH_CYCLE))
+        assertTrue(filterCodes.contains(GPUPreparedFilterRefusalCodes.GRAPH_BUDGET))
+        assertTrue(filterCodes.contains(GPUPreparedFilterRefusalCodes.PARAMETER_NON_FINITE))
+        assertTrue(filterCodes.contains(GPUPreparedFilterRefusalCodes.BOUNDS_OVERFLOW))
+        assertTrue(filterCodes.contains(GPUPreparedFilterRefusalCodes.INTERMEDIATE_BUDGET))
+        val compositeCodes = GPUPreparedCompositeRefusalCodes.ALL
+        assertTrue(compositeCodes.contains(GPUPreparedCompositeRefusalCodes.LAYER_UNBALANCED))
+        assertTrue(compositeCodes.contains(GPUPreparedCompositeRefusalCodes.PICTURE_CYCLE))
+        assertTrue(compositeCodes.contains(GPUPreparedCompositeRefusalCodes.PICTURE_BUDGET))
+    }
+
+    @Test
+    fun `id values never depend on object address`() {
+        val id1 = GPUPreparedFilterNodeId("n1")
+        val id2 = GPUPreparedFilterNodeId("n1")
+        assertEquals(id1, id2)
+    }
+
+    @Test
+    fun `scope id values never depend on object address`() {
+        val id1 = GPUPreparedCompositeScopeId("s1")
+        val id2 = GPUPreparedCompositeScopeId("s1")
+        assertEquals(id1, id2)
+    }
+
     private fun scopeNode(
         id: String,
         parentId: GPUPreparedCompositeScopeId?,
@@ -235,6 +272,16 @@ class GPUPreparedCompositeContractsTest {
             entries = emptyList(),
             sourceKind = kind,
             provenance = "test/$id",
+        )
+    }
+
+    private fun minimalCapture(): GPUPreparedCompositeCapture {
+        val root = scopeNode("root", null, GPUPreparedCompositeScopeKind.Root)
+        return GPUPreparedCompositeCapture(
+            rootScopeId = root.id,
+            scopes = mapOf(root.id to root),
+            expandedOperations = emptyList(),
+            identity = "capture_v1",
         )
     }
 
@@ -252,6 +299,9 @@ class GPUPreparedCompositeContractsTest {
         return GPUPreparedFilterGraph(
             nodes = emptyList(),
             output = GPUPreparedFilterInputRef.TransparentBlack,
+            identity = "graph_empty",
         )
     }
+
+    private data class DummyDisplayOp(val label: String)
 }
