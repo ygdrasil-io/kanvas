@@ -2,12 +2,14 @@ package org.graphiks.kanvas.gpu.renderer.materials
 
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.collections.CanonicalIdentityDigestEncoder
+import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialColorContract
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialCoordinateContract
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
 import org.graphiks.kanvas.gpu.renderer.wgsl.PreparedTextA8Shader
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslBindingReflection
+import org.graphiks.kanvas.gpu.renderer.wgsl.WgslLayoutReflection
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport
 import org.graphiks.kanvas.gpu.renderer.wgsl.reflectWgslModule
 import org.graphiks.wgsl.parser.Lowerer
@@ -109,8 +111,8 @@ object GPUPreparedTextShaderComposer {
                 "wgsl4k reflection failed: ${failure::class.simpleName.orEmpty()}",
             )
         }
-        finalModuleMismatch(fragment, report)?.let { mismatch ->
-            return refused(mismatch)
+        preparedTextFinalModuleRefusal(fragment, report)?.let { refusal ->
+            return refusal
         }
 
         val vertexLayout = PreparedTextA8Shader.VertexLayout
@@ -152,77 +154,6 @@ object GPUPreparedTextShaderComposer {
                 pipelineKey = pipelineKey,
             ),
         )
-    }
-
-    private fun finalModuleMismatch(
-        fragment: GPUPreparedMaterialFragment,
-        report: WgslReflectionReport,
-    ): String? {
-        if (!report.validation.success || report.unsupportedFeatures.isNotEmpty()) {
-            return "Prepared text reflection did not prove a supported final module"
-        }
-        val entryPoints = report.entryPoints.map { it.name to it.stage }
-        if (
-            entryPoints != listOf(
-                VERTEX_ENTRY_POINT to "vertex",
-                FRAGMENT_ENTRY_POINT to "fragment",
-            )
-        ) {
-            return "Prepared text final module must expose exactly vs_main and fs_main"
-        }
-        val coordinates = report.bindings.map { it.group to it.binding }
-        if (coordinates.distinct().size != coordinates.size) {
-            return "Prepared text final module contains a binding collision"
-        }
-        preparedTextMaterialBindingMismatch(fragment, report.bindings)?.let {
-            return it
-        }
-        val expectedBindings = buildList {
-            add(
-                ExpectedBinding(
-                    DRAW_UNIFORM_GROUP,
-                    DRAW_UNIFORM_BINDING,
-                    "uniformBuffer",
-                ),
-            )
-            fragment.uniformBinding?.let {
-                add(ExpectedBinding(it.group, it.binding, "uniformBuffer"))
-            }
-            fragment.sampledBindings.forEach {
-                add(ExpectedBinding(it.textureGroup, it.textureBinding, "sampledTexture"))
-                add(ExpectedBinding(it.samplerGroup, it.samplerBinding, "sampler"))
-            }
-            add(ExpectedBinding(ATLAS_GROUP, ATLAS_TEXTURE_BINDING, "sampledTexture"))
-            add(ExpectedBinding(ATLAS_GROUP, ATLAS_SAMPLER_BINDING, "sampler"))
-        }
-        val actualBindings = report.bindings.map {
-            ExpectedBinding(it.group, it.binding, it.resourceKind)
-        }
-        if (actualBindings != expectedBindings) {
-            return "Prepared text final bindings do not match draw, material and atlas plans"
-        }
-        if (!report.bindings.all { it.group in DRAW_UNIFORM_GROUP..ATLAS_GROUP }) {
-            return "Prepared text final bindings must occupy exactly groups 0 through 2"
-        }
-        if (!report.layouts.any { layout ->
-                layout.structName == "PreparedTextDrawUniforms" &&
-                    layout.addressSpace == "uniform" &&
-                    layout.size == DRAW_UNIFORM_SIZE_BYTES &&
-                    layout.members.map { it.name } == listOf(
-                        "targetSizeAndPaintAlpha",
-                        "deviceToLocalRow0",
-                        "deviceToLocalRow1",
-                    )
-            }
-        ) {
-            return "Prepared text draw-uniform layout was not reflected exactly"
-        }
-        if (!report.entryPoints.any { it.name == VERTEX_ENTRY_POINT } ||
-            !report.entryPoints.any { it.name == FRAGMENT_ENTRY_POINT }
-        ) {
-            return "Prepared text final entry points were not reflected"
-        }
-        return null
     }
 
     private fun reservedIdentifierCollision(
@@ -278,7 +209,62 @@ object GPUPreparedTextShaderComposer {
         )
 }
 
-internal fun preparedTextMaterialBindingMismatch(
+internal fun preparedTextFinalModuleRefusal(
+    fragment: GPUPreparedMaterialFragment,
+    report: WgslReflectionReport,
+): GPUPreparedTextCompositeProgramResult.Refused? {
+    val mismatch = preparedTextFinalModuleMismatch(fragment, report) ?: return null
+    return GPUPreparedTextCompositeProgramResult.Refused(
+        code = REFUSAL_CODE,
+        message = mismatch,
+    )
+}
+
+private fun preparedTextFinalModuleMismatch(
+    fragment: GPUPreparedMaterialFragment,
+    report: WgslReflectionReport,
+): String? {
+    if (!report.validation.success || report.unsupportedFeatures.isNotEmpty()) {
+        return "Prepared text reflection did not prove a supported final module"
+    }
+    val entryPoints = report.entryPoints.map { it.name to it.stage }
+    if (
+        entryPoints != listOf(
+            VERTEX_ENTRY_POINT to "vertex",
+            FRAGMENT_ENTRY_POINT to "fragment",
+        )
+    ) {
+        return "Prepared text final module must expose exactly vs_main and fs_main"
+    }
+    val coordinates = report.bindings.map { it.group to it.binding }
+    if (coordinates.distinct().size != coordinates.size) {
+        return "Prepared text final module contains a binding collision"
+    }
+    preparedTextMaterialBindingMismatch(fragment, report.bindings)?.let {
+        return it
+    }
+    preparedTextTaskBindingMismatch(report.bindings)?.let {
+        return it
+    }
+    if (!report.bindings.all { it.group in DRAW_UNIFORM_GROUP..ATLAS_GROUP }) {
+        return "Prepared text final bindings must occupy exactly groups 0 through 2"
+    }
+    val drawUniformLayout = report.layouts
+        .filter { layout -> layout.structName == DRAW_UNIFORM_STRUCT_NAME }
+        .singleOrNull()
+        ?.preparedTextAbi()
+    if (drawUniformLayout != EXPECTED_DRAW_UNIFORM_LAYOUT) {
+        return "Prepared text draw-uniform layout was not reflected exactly"
+    }
+    if (!report.entryPoints.any { it.name == VERTEX_ENTRY_POINT } ||
+        !report.entryPoints.any { it.name == FRAGMENT_ENTRY_POINT }
+    ) {
+        return "Prepared text final entry points were not reflected"
+    }
+    return null
+}
+
+private fun preparedTextMaterialBindingMismatch(
     fragment: GPUPreparedMaterialFragment,
     reflectedBindings: List<WgslBindingReflection>,
 ): String? =
@@ -290,11 +276,81 @@ internal fun preparedTextMaterialBindingMismatch(
         "Prepared text final material bindings do not match the exact Task 1 ABI"
     }
 
-private data class ExpectedBinding(
+private fun preparedTextTaskBindingMismatch(
+    reflectedBindings: List<WgslBindingReflection>,
+): String? {
+    val actualBindings = reflectedBindings
+        .filter { binding ->
+            binding.group == DRAW_UNIFORM_GROUP || binding.group == ATLAS_GROUP
+        }
+        .map(WgslBindingReflection::preparedTextAbi)
+        .sortedWith(compareBy({ it.group }, { it.binding }))
+    return if (actualBindings == EXPECTED_TASK_BINDINGS) {
+        null
+    } else {
+        "Prepared text final draw and atlas bindings do not match the exact Task 2 ABI"
+    }
+}
+
+private data class PreparedTextBindingAbi(
     val group: Int,
     val binding: Int,
     val resourceKind: String,
+    val access: String?,
+    val sampleType: String?,
+    val viewDimension: String?,
+    val storageFormat: String?,
+    val minBindingSize: Int?,
 )
+
+private fun WgslBindingReflection.preparedTextAbi(): PreparedTextBindingAbi =
+    PreparedTextBindingAbi(
+        group = group,
+        binding = binding,
+        resourceKind = resourceKind,
+        access = access,
+        sampleType = sampleType,
+        viewDimension = viewDimension,
+        storageFormat = storageFormat,
+        minBindingSize = minBindingSize,
+    )
+
+private data class PreparedTextDrawUniformLayoutAbi(
+    val structName: String,
+    val addressSpace: String,
+    val size: Int,
+    val alignment: Int,
+    val members: List<PreparedTextDrawUniformMemberAbi>,
+)
+
+private data class PreparedTextDrawUniformMemberAbi(
+    val name: String,
+    val type: String,
+    val offset: Int,
+    val size: Int,
+    val alignment: Int,
+    val stride: Int?,
+)
+
+private fun WgslLayoutReflection.preparedTextAbi(): PreparedTextDrawUniformLayoutAbi =
+    PreparedTextDrawUniformLayoutAbi(
+        structName = structName,
+        addressSpace = addressSpace,
+        size = size,
+        alignment = alignment,
+        members = immutableList(
+            members.map { member ->
+                PreparedTextDrawUniformMemberAbi(
+                    name = member.name,
+                    type = member.type,
+                    offset = member.offset,
+                    size = member.size,
+                    alignment = member.alignment,
+                    stride = member.stride,
+                )
+            },
+        ),
+    )
 
 private fun sha256Hex(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes)
@@ -303,12 +359,81 @@ private fun sha256Hex(bytes: ByteArray): String =
 private const val DRAW_UNIFORM_GROUP = 0
 private const val DRAW_UNIFORM_BINDING = 0
 private const val DRAW_UNIFORM_SIZE_BYTES = 48
+private const val DRAW_UNIFORM_STRUCT_NAME = "PreparedTextDrawUniforms"
 private const val ATLAS_GROUP = 2
 private const val ATLAS_TEXTURE_BINDING = 0
 private const val ATLAS_SAMPLER_BINDING = 1
 private const val VERTEX_ENTRY_POINT = "vs_main"
 private const val FRAGMENT_ENTRY_POINT = "fs_main"
 private const val REFUSAL_CODE = "unsupported.material.composition"
+private val EXPECTED_TASK_BINDINGS = immutableList(
+    listOf(
+        PreparedTextBindingAbi(
+            group = DRAW_UNIFORM_GROUP,
+            binding = DRAW_UNIFORM_BINDING,
+            resourceKind = "uniformBuffer",
+            access = "read",
+            sampleType = null,
+            viewDimension = null,
+            storageFormat = null,
+            minBindingSize = DRAW_UNIFORM_SIZE_BYTES,
+        ),
+        PreparedTextBindingAbi(
+            group = ATLAS_GROUP,
+            binding = ATLAS_TEXTURE_BINDING,
+            resourceKind = "sampledTexture",
+            access = "read",
+            sampleType = "float",
+            viewDimension = "2d",
+            storageFormat = null,
+            minBindingSize = null,
+        ),
+        PreparedTextBindingAbi(
+            group = ATLAS_GROUP,
+            binding = ATLAS_SAMPLER_BINDING,
+            resourceKind = "sampler",
+            access = "read",
+            sampleType = null,
+            viewDimension = null,
+            storageFormat = null,
+            minBindingSize = null,
+        ),
+    ),
+)
+private val EXPECTED_DRAW_UNIFORM_LAYOUT = PreparedTextDrawUniformLayoutAbi(
+    structName = DRAW_UNIFORM_STRUCT_NAME,
+    addressSpace = "uniform",
+    size = DRAW_UNIFORM_SIZE_BYTES,
+    alignment = 16,
+    members = immutableList(
+        listOf(
+            PreparedTextDrawUniformMemberAbi(
+                name = "targetSizeAndPaintAlpha",
+                type = "vec4<f32>",
+                offset = 0,
+                size = 16,
+                alignment = 16,
+                stride = null,
+            ),
+            PreparedTextDrawUniformMemberAbi(
+                name = "deviceToLocalRow0",
+                type = "vec4<f32>",
+                offset = 16,
+                size = 16,
+                alignment = 16,
+                stride = null,
+            ),
+            PreparedTextDrawUniformMemberAbi(
+                name = "deviceToLocalRow1",
+                type = "vec4<f32>",
+                offset = 32,
+                size = 16,
+                alignment = 16,
+                stride = null,
+            ),
+        ),
+    ),
+)
 private val RESERVED_IDENTIFIERS = listOf(
     "PreparedTextDrawUniforms",
     "PreparedTextVertexInput",

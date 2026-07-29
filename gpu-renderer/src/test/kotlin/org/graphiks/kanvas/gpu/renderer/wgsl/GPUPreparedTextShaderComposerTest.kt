@@ -16,7 +16,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResu
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
-import org.graphiks.kanvas.gpu.renderer.materials.preparedTextMaterialBindingMismatch
+import org.graphiks.kanvas.gpu.renderer.materials.preparedTextFinalModuleRefusal
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
@@ -50,10 +50,21 @@ class GPUPreparedTextShaderComposerTest {
             assertEquals(report.bindings.distinct(), report.bindings, descriptor.kind.toString())
             assertEquals(3, report.bindings.maxOf { it.group } + 1, descriptor.kind.toString())
             assertEquals(
-                listOf(Triple(0, 0, "uniformBuffer")),
+                listOf(
+                    TestBindingAbi(
+                        group = 0,
+                        binding = 0,
+                        resourceKind = "uniformBuffer",
+                        access = "read",
+                        sampleType = null,
+                        viewDimension = null,
+                        storageFormat = null,
+                        minBindingSize = 48,
+                    ),
+                ),
                 report.bindings
                     .filter { it.group == 0 }
-                    .map { Triple(it.group, it.binding, it.resourceKind) },
+                    .map(WgslBindingReflection::testAbi),
                 descriptor.kind.toString(),
             )
             assertEquals(
@@ -65,12 +76,30 @@ class GPUPreparedTextShaderComposerTest {
             )
             assertEquals(
                 listOf(
-                    Triple(2, 0, "sampledTexture"),
-                    Triple(2, 1, "sampler"),
+                    TestBindingAbi(
+                        group = 2,
+                        binding = 0,
+                        resourceKind = "sampledTexture",
+                        access = "read",
+                        sampleType = "float",
+                        viewDimension = "2d",
+                        storageFormat = null,
+                        minBindingSize = null,
+                    ),
+                    TestBindingAbi(
+                        group = 2,
+                        binding = 1,
+                        resourceKind = "sampler",
+                        access = "read",
+                        sampleType = null,
+                        viewDimension = null,
+                        storageFormat = null,
+                        minBindingSize = null,
+                    ),
                 ),
                 report.bindings
                     .filter { it.group == 2 }
-                    .map { Triple(it.group, it.binding, it.resourceKind) },
+                    .map(WgslBindingReflection::testAbi),
                 descriptor.kind.toString(),
             )
             assertSame(material.composableFragment, ready.bindingPlan.materialFragment)
@@ -147,20 +176,148 @@ class GPUPreparedTextShaderComposerTest {
     }
 
     @Test
-    fun `final material binding gate compares every reflected Task 1 ABI fact`() {
+    fun `final ABI gate accepts the canonical reflected composite`() {
         val material = compile(image(byteArrayOf(1, 2, 3, 4)))
-        val ready = compose(material)
-        val parsed = parseWgslResult(ready.wgslSource)
-        assertTrue(parsed.isSuccess, parsed.errors.joinToString { it.message })
-        val reflectedBindings = Lowerer().lower(parsed.translationUnit)
-            .reflectWgslModule(sourceId = "prepared-text-binding-gate-test")
-            .bindings
 
         assertEquals(
             null,
-            preparedTextMaterialBindingMismatch(
+            preparedTextFinalModuleRefusal(
                 material.composableFragment,
-                reflectedBindings,
+                reflect(compose(material)),
+            ),
+        )
+    }
+
+    @Test
+    fun `final ABI gate rejects every isolated draw and atlas binding fact mutation`() {
+        val material = compile(image(byteArrayOf(1, 2, 3, 4)))
+        val report = reflect(compose(material))
+        val taskTwoBindings = report.bindings.filter { it.group == 0 || it.group == 2 }
+        assertEquals(3, taskTwoBindings.size)
+        val mutations = taskTwoBindings.flatMap { binding ->
+            listOf(
+                "g${binding.group}b${binding.binding}.group" to
+                    report.withBindingMutation(binding) { it.copy(group = it.group + 10) },
+                "g${binding.group}b${binding.binding}.binding" to
+                    report.withBindingMutation(binding) { it.copy(binding = it.binding + 10) },
+                "g${binding.group}b${binding.binding}.resourceKind" to
+                    report.withBindingMutation(binding) {
+                        it.copy(resourceKind = "${it.resourceKind}.mutated")
+                    },
+                "g${binding.group}b${binding.binding}.access" to
+                    report.withBindingMutation(binding) {
+                        it.copy(access = it.access.toggled("read"))
+                    },
+                "g${binding.group}b${binding.binding}.sampleType" to
+                    report.withBindingMutation(binding) {
+                        it.copy(sampleType = it.sampleType.toggled("float"))
+                    },
+                "g${binding.group}b${binding.binding}.viewDimension" to
+                    report.withBindingMutation(binding) {
+                        it.copy(viewDimension = it.viewDimension.toggled("2d"))
+                    },
+                "g${binding.group}b${binding.binding}.storageFormat" to
+                    report.withBindingMutation(binding) {
+                        it.copy(storageFormat = it.storageFormat.toggled("rgba8unorm"))
+                    },
+                "g${binding.group}b${binding.binding}.minBindingSize" to
+                    report.withBindingMutation(binding) {
+                        it.copy(minBindingSize = it.minBindingSize?.plus(16) ?: 16)
+                    },
+            )
+        }
+
+        assertAllRefused(material, mutations)
+    }
+
+    @Test
+    fun `final ABI gate rejects every isolated draw uniform layout fact mutation`() {
+        val material = compile(solid())
+        val report = reflect(compose(material))
+        val drawLayout = report.layouts.single {
+            it.structName == "PreparedTextDrawUniforms"
+        }
+        assertEquals(3, drawLayout.members.size)
+        val mutations = buildList {
+            add(
+                "struct.name" to report.withDrawLayoutMutation {
+                    it.copy(structName = "PreparedTextDrawUniformsMutated")
+                },
+            )
+            add(
+                "struct.addressSpace" to report.withDrawLayoutMutation {
+                    it.copy(addressSpace = "storage")
+                },
+            )
+            add(
+                "struct.size" to report.withDrawLayoutMutation {
+                    it.copy(size = it.size + 16)
+                },
+            )
+            add(
+                "struct.alignment" to report.withDrawLayoutMutation {
+                    it.copy(alignment = it.alignment + 16)
+                },
+            )
+            add(
+                "members.order" to report.withDrawLayoutMutation {
+                    it.copy(members = listOf(it.members[1], it.members[0], it.members[2]))
+                },
+            )
+            drawLayout.members.indices.forEach { memberIndex ->
+                add(
+                    "member[$memberIndex].name" to
+                        report.withDrawMemberMutation(memberIndex) {
+                            it.copy(name = "${it.name}Mutated")
+                        },
+                )
+                add(
+                    "member[$memberIndex].type" to
+                        report.withDrawMemberMutation(memberIndex) {
+                            it.copy(type = "array<f32, 4>")
+                        },
+                )
+                add(
+                    "member[$memberIndex].offset" to
+                        report.withDrawMemberMutation(memberIndex) {
+                            it.copy(offset = it.offset + 4)
+                        },
+                )
+                add(
+                    "member[$memberIndex].size" to
+                        report.withDrawMemberMutation(memberIndex) {
+                            it.copy(size = it.size + 4)
+                        },
+                )
+                add(
+                    "member[$memberIndex].alignment" to
+                        report.withDrawMemberMutation(memberIndex) {
+                            it.copy(alignment = it.alignment + 4)
+                        },
+                )
+                add(
+                    "member[$memberIndex].stride" to
+                        report.withDrawMemberMutation(memberIndex) {
+                            it.copy(stride = it.stride?.plus(16) ?: 16)
+                        },
+                )
+            }
+        }
+
+        assertAllRefused(material, mutations)
+    }
+
+    @Test
+    fun `final material binding gate compares every reflected Task 1 ABI fact`() {
+        val material = compile(image(byteArrayOf(1, 2, 3, 4)))
+        val report = reflect(compose(material))
+        val reflectedBindings = report.bindings
+
+        assertEquals(
+            null,
+            preparedTextFinalModuleRefusal(
+                material.composableFragment,
+                report,
             ),
         )
         val materialUniform = reflectedBindings.single {
@@ -198,13 +355,11 @@ class GPUPreparedTextShaderComposerTest {
         )
 
         mismatches.forEach { mutation ->
-            assertTrue(
-                preparedTextMaterialBindingMismatch(
-                    material.composableFragment,
-                    mutation,
-                ) != null,
-                mutation.toString(),
+            val refusal = preparedTextFinalModuleRefusal(
+                material.composableFragment,
+                report.copy(bindings = mutation),
             )
+            assertEquals("unsupported.material.composition", refusal?.code, mutation.toString())
         }
     }
 
@@ -276,6 +431,33 @@ class GPUPreparedTextShaderComposerTest {
                 blendPlanIdentity = blendPlanIdentity,
             ),
         ).program
+
+    private fun reflect(
+        program: GPUPreparedTextCompositeProgram,
+    ): WgslReflectionReport {
+        val parsed = parseWgslResult(program.wgslSource)
+        assertTrue(parsed.isSuccess, parsed.errors.joinToString { it.message })
+        return Lowerer().lower(parsed.translationUnit)
+            .reflectWgslModule(sourceId = program.sourceHash)
+    }
+
+    private fun assertAllRefused(
+        material: GPUPreparedMaterialProgram,
+        mutations: List<Pair<String, WgslReflectionReport>>,
+    ) {
+        val admittedMutations = mutations.mapNotNull { (name, report) ->
+            val refusal = preparedTextFinalModuleRefusal(
+                material.composableFragment,
+                report,
+            )
+            if (refusal?.code == "unsupported.material.composition") {
+                null
+            } else {
+                "$name -> $refusal"
+            }
+        }
+        assertEquals(emptyList(), admittedMutations)
+    }
 
     private fun admittedDescriptors(): List<GPUMaterialDescriptor> = listOf(
         solid(),
@@ -403,3 +585,60 @@ class GPUPreparedTextShaderComposerTest {
         MessageDigest.getInstance("SHA-256").digest(bytes)
             .joinToString("") { "%02x".format(it.toInt() and 0xff) }
 }
+
+private data class TestBindingAbi(
+    val group: Int,
+    val binding: Int,
+    val resourceKind: String,
+    val access: String?,
+    val sampleType: String?,
+    val viewDimension: String?,
+    val storageFormat: String?,
+    val minBindingSize: Int?,
+)
+
+private fun WgslBindingReflection.testAbi(): TestBindingAbi =
+    TestBindingAbi(
+        group = group,
+        binding = binding,
+        resourceKind = resourceKind,
+        access = access,
+        sampleType = sampleType,
+        viewDimension = viewDimension,
+        storageFormat = storageFormat,
+        minBindingSize = minBindingSize,
+    )
+
+private fun WgslReflectionReport.withBindingMutation(
+    target: WgslBindingReflection,
+    mutate: (WgslBindingReflection) -> WgslBindingReflection,
+): WgslReflectionReport =
+    copy(
+        bindings = bindings.map { binding ->
+            if (binding == target) mutate(binding) else binding
+        },
+    )
+
+private fun WgslReflectionReport.withDrawLayoutMutation(
+    mutate: (WgslLayoutReflection) -> WgslLayoutReflection,
+): WgslReflectionReport =
+    copy(
+        layouts = layouts.map { layout ->
+            if (layout.structName == "PreparedTextDrawUniforms") mutate(layout) else layout
+        },
+    )
+
+private fun WgslReflectionReport.withDrawMemberMutation(
+    memberIndex: Int,
+    mutate: (WgslLayoutMemberReflection) -> WgslLayoutMemberReflection,
+): WgslReflectionReport =
+    withDrawLayoutMutation { layout ->
+        layout.copy(
+            members = layout.members.mapIndexed { index, member ->
+                if (index == memberIndex) mutate(member) else member
+            },
+        )
+    }
+
+private fun String?.toggled(canonicalNonNullValue: String): String? =
+    if (this == null) canonicalNonNullValue else null
