@@ -47,18 +47,125 @@ internal sealed interface GPUPreparedTextAuthenticatedComposite {
 }
 
 private class GPUPreparedTextCompositeAdmission(
-    val wgslSource: String,
-    val vertexEntryPoint: String,
-    val fragmentEntryPoint: String,
-    val bindingPlan: GPUPreparedTextCompositeBindingPlan,
-    val vertexLayout: GPUPreparedTextVertexLayout,
-    val sourceHash: String,
-    val abiHash: String,
+    material: GPUPreparedMaterialProgram,
     val targetFormatClass: String,
     val blendPlanIdentity: String,
     val fixedFunctionBlendState: GPUFixedFunctionBlendState?,
-    val pipelineKey: String,
+    observer: GPUPreparedTextCompositionObserver,
 ) {
+    val wgslSource: String
+    val vertexEntryPoint: String = VERTEX_ENTRY_POINT
+    val fragmentEntryPoint: String = FRAGMENT_ENTRY_POINT
+    val bindingPlan: GPUPreparedTextCompositeBindingPlan
+    val vertexLayout: GPUPreparedTextVertexLayout
+    val sourceHash: String
+    val abiHash: String
+    val pipelineKey: String
+
+    init {
+        observer.onCompose()
+        if (targetFormatClass.isBlank()) {
+            preparedTextCompositeAdmissionRefused(
+                "Prepared text target format class must not be blank",
+            )
+        }
+        if (blendPlanIdentity.isBlank()) {
+            preparedTextCompositeAdmissionRefused(
+                "Prepared text blend-plan identity must not be blank",
+            )
+        }
+
+        val authenticatedMaterial = runCatching { material.authenticatedSnapshot() }
+            .getOrElse { failure ->
+                preparedTextCompositeAdmissionRefused(
+                    "Prepared material authentication failed: " +
+                        failure::class.simpleName.orEmpty(),
+                )
+            }
+        val fragment = authenticatedMaterial.composableFragment
+        if (
+            fragment.colorContract !=
+            GPUPreparedMaterialColorContract.LinearPremultipliedRgba ||
+            fragment.coordinateContract !=
+            GPUPreparedMaterialCoordinateContract.LocalPosition2D
+        ) {
+            preparedTextCompositeAdmissionRefused(
+                "Prepared material fragment contracts are not composable with text",
+            )
+        }
+        preparedTextReservedIdentifierCollision(fragment)?.let { identifier ->
+            preparedTextCompositeAdmissionRefused(
+                "Prepared material fragment collides with reserved identifier $identifier",
+            )
+        }
+
+        val source = preparedTextCompositeSourceForFragment(fragment)
+        observer.onParse()
+        val parsed = runCatching { parseWgslResult(source) }
+            .getOrElse { failure ->
+                preparedTextCompositeAdmissionRefused(
+                    "wgsl4k parser failed: ${failure::class.simpleName.orEmpty()}",
+                )
+            }
+        if (!parsed.isSuccess) {
+            preparedTextCompositeAdmissionRefused(
+                "wgsl4k parser diagnostics: ${parsed.errors.joinToString { it.message }}",
+            )
+        }
+        observer.onLower()
+        val lowered = runCatching { Lowerer().lower(parsed.translationUnit) }
+            .getOrElse { failure ->
+                preparedTextCompositeAdmissionRefused(
+                    "wgsl4k lowering failed: ${failure::class.simpleName.orEmpty()}",
+                )
+            }
+        val exactSourceHash = sha256Hex(source.encodeToByteArray())
+        observer.onReflect()
+        val report = runCatching {
+            lowered.reflectWgslModule(sourceId = exactSourceHash)
+        }.getOrElse { failure ->
+            preparedTextCompositeAdmissionRefused(
+                "wgsl4k reflection failed: ${failure::class.simpleName.orEmpty()}",
+            )
+        }
+        preparedTextFinalModuleRefusal(fragment, report)?.let { refusal ->
+            preparedTextCompositeAdmissionRefused(refusal.message)
+        }
+
+        val exactVertexLayout = PreparedTextA8Shader.VertexLayout
+        val exactAbiHash = CanonicalIdentityDigestEncoder(
+            "prepared-text-composite-abi-v1",
+        )
+            .texts(
+                "facts",
+                preparedTextCompositeAbiFacts(
+                    vertexLayout = exactVertexLayout,
+                    fragment = fragment,
+                    report = report,
+                ),
+            )
+            .digestHex()
+        wgslSource = source
+        bindingPlan = GPUPreparedTextCompositeBindingPlan(
+            drawUniformGroup = DRAW_UNIFORM_GROUP,
+            drawUniformBinding = DRAW_UNIFORM_BINDING,
+            materialFragment = fragment,
+            atlasTextureGroup = ATLAS_GROUP,
+            atlasTextureBinding = ATLAS_TEXTURE_BINDING,
+            atlasSamplerGroup = ATLAS_GROUP,
+            atlasSamplerBinding = ATLAS_SAMPLER_BINDING,
+        )
+        vertexLayout = exactVertexLayout
+        sourceHash = exactSourceHash
+        abiHash = exactAbiHash
+        pipelineKey = GPUPreparedTextShaderComposer.pipelineKey(
+            sourceHash = exactSourceHash,
+            abiHash = exactAbiHash,
+            targetFormatClass = targetFormatClass,
+            blendPlanIdentity = blendPlanIdentity,
+        )
+    }
+
     val token: GPUPreparedTextCompositeAdmissionToken =
         IssuedGPUPreparedTextCompositeAdmissionToken(this)
     val authenticatedSnapshot: GPUPreparedTextAuthenticatedComposite =
@@ -124,38 +231,32 @@ class GPUPreparedTextCompositeProgram private constructor(
             pipelineKey == admission.pipelineKey
 
     companion object {
-        /**
-         * The composer calls this only after parser, lowering, reflection and final ABI validation.
-         * It is hidden from Java and the public API; the resulting admission is identity-bearing.
-         */
         @JvmSynthetic
-        internal fun issueAfterValidation(
-            wgslSource: String,
-            vertexEntryPoint: String,
-            fragmentEntryPoint: String,
-            bindingPlan: GPUPreparedTextCompositeBindingPlan,
-            vertexLayout: GPUPreparedTextVertexLayout,
-            sourceHash: String,
-            abiHash: String,
+        internal fun composeValidated(
+            material: GPUPreparedMaterialProgram,
             targetFormatClass: String,
             blendPlanIdentity: String,
             fixedFunctionBlendState: GPUFixedFunctionBlendState?,
-            pipelineKey: String,
-        ): GPUPreparedTextCompositeProgram = GPUPreparedTextCompositeProgram(
-            GPUPreparedTextCompositeAdmission(
-                wgslSource = wgslSource,
-                vertexEntryPoint = vertexEntryPoint,
-                fragmentEntryPoint = fragmentEntryPoint,
-                bindingPlan = bindingPlan,
-                vertexLayout = vertexLayout,
-                sourceHash = sourceHash,
-                abiHash = abiHash,
-                targetFormatClass = targetFormatClass,
-                blendPlanIdentity = blendPlanIdentity,
-                fixedFunctionBlendState = fixedFunctionBlendState,
-                pipelineKey = pipelineKey,
-            ),
-        )
+            observer: GPUPreparedTextCompositionObserver,
+        ): GPUPreparedTextCompositeProgramResult =
+            try {
+                GPUPreparedTextCompositeProgramResult.Ready(
+                    GPUPreparedTextCompositeProgram(
+                        GPUPreparedTextCompositeAdmission(
+                            material = material,
+                            targetFormatClass = targetFormatClass,
+                            blendPlanIdentity = blendPlanIdentity,
+                            fixedFunctionBlendState = fixedFunctionBlendState,
+                            observer = observer,
+                        ),
+                    ),
+                )
+            } catch (refused: GPUPreparedTextCompositeAdmissionRefused) {
+                GPUPreparedTextCompositeProgramResult.Refused(
+                    code = REFUSAL_CODE,
+                    message = refused.refusalMessage,
+                )
+            }
     }
 }
 
@@ -204,116 +305,14 @@ object GPUPreparedTextShaderComposer {
         blendPlanIdentity: String,
         fixedFunctionBlendState: GPUFixedFunctionBlendState?,
         observer: GPUPreparedTextCompositionObserver,
-    ): GPUPreparedTextCompositeProgramResult {
-        observer.onCompose()
-        if (targetFormatClass.isBlank()) {
-            return refused("Prepared text target format class must not be blank")
-        }
-        if (blendPlanIdentity.isBlank()) {
-            return refused("Prepared text blend-plan identity must not be blank")
-        }
-
-        val authenticatedMaterial = runCatching { material.authenticatedSnapshot() }
-            .getOrElse { failure ->
-                return refused(
-                    "Prepared material authentication failed: " +
-                        failure::class.simpleName.orEmpty(),
-                )
-            }
-        val fragment = authenticatedMaterial.composableFragment
-        if (
-            fragment.colorContract !=
-            GPUPreparedMaterialColorContract.LinearPremultipliedRgba ||
-            fragment.coordinateContract !=
-            GPUPreparedMaterialCoordinateContract.LocalPosition2D
-        ) {
-            return refused("Prepared material fragment contracts are not composable with text")
-        }
-        reservedIdentifierCollision(fragment)?.let { identifier ->
-            return refused("Prepared material fragment collides with reserved identifier $identifier")
-        }
-
-        val source = sourceForFragment(fragment)
-        observer.onParse()
-        val parsed = runCatching { parseWgslResult(source) }
-            .getOrElse { failure ->
-                return refused(
-                    "wgsl4k parser failed: ${failure::class.simpleName.orEmpty()}",
-                )
-            }
-        if (!parsed.isSuccess) {
-            return refused(
-                "wgsl4k parser diagnostics: ${parsed.errors.joinToString { it.message }}",
-            )
-        }
-        observer.onLower()
-        val lowered = runCatching { Lowerer().lower(parsed.translationUnit) }
-            .getOrElse { failure ->
-                return refused(
-                    "wgsl4k lowering failed: ${failure::class.simpleName.orEmpty()}",
-                )
-            }
-        val sourceHash = sha256Hex(source.encodeToByteArray())
-        observer.onReflect()
-        val report = runCatching {
-            lowered.reflectWgslModule(sourceId = sourceHash)
-        }.getOrElse { failure ->
-            return refused(
-                "wgsl4k reflection failed: ${failure::class.simpleName.orEmpty()}",
-            )
-        }
-        preparedTextFinalModuleRefusal(fragment, report)?.let { refusal ->
-            return refusal
-        }
-
-        val vertexLayout = PreparedTextA8Shader.VertexLayout
-        val abiHash = CanonicalIdentityDigestEncoder("prepared-text-composite-abi-v1")
-            .texts(
-                "facts",
-                compositeAbiFacts(
-                    vertexLayout = vertexLayout,
-                    fragment = fragment,
-                    report = report,
-                ),
-            )
-            .digestHex()
-        val pipelineKey = pipelineKey(
-            sourceHash = sourceHash,
-            abiHash = abiHash,
+    ): GPUPreparedTextCompositeProgramResult =
+        GPUPreparedTextCompositeProgram.composeValidated(
+            material = material,
             targetFormatClass = targetFormatClass,
             blendPlanIdentity = blendPlanIdentity,
+            fixedFunctionBlendState = fixedFunctionBlendState,
+            observer = observer,
         )
-        return GPUPreparedTextCompositeProgramResult.Ready(
-            GPUPreparedTextCompositeProgram.issueAfterValidation(
-                wgslSource = source,
-                vertexEntryPoint = VERTEX_ENTRY_POINT,
-                fragmentEntryPoint = FRAGMENT_ENTRY_POINT,
-                bindingPlan = GPUPreparedTextCompositeBindingPlan(
-                    drawUniformGroup = DRAW_UNIFORM_GROUP,
-                    drawUniformBinding = DRAW_UNIFORM_BINDING,
-                    materialFragment = fragment,
-                    atlasTextureGroup = ATLAS_GROUP,
-                    atlasTextureBinding = ATLAS_TEXTURE_BINDING,
-                    atlasSamplerGroup = ATLAS_GROUP,
-                    atlasSamplerBinding = ATLAS_SAMPLER_BINDING,
-                ),
-                vertexLayout = vertexLayout,
-                sourceHash = sourceHash,
-                abiHash = abiHash,
-                targetFormatClass = targetFormatClass,
-                blendPlanIdentity = blendPlanIdentity,
-                fixedFunctionBlendState = fixedFunctionBlendState,
-                pipelineKey = pipelineKey,
-            ),
-        )
-    }
-
-    private fun sourceForFragment(fragment: GPUPreparedMaterialFragment): String = listOf(
-        fragment.declarationsWgsl,
-        fragment.evaluationFunctionWgsl,
-        PreparedTextA8Shader.vertexWgsl,
-        PreparedTextA8Shader.fragmentWgsl,
-    ).joinToString("\n\n")
 
     internal fun pipelineKey(
         sourceHash: String,
@@ -328,58 +327,68 @@ object GPUPreparedTextShaderComposer {
         .text("targetFormatClass", targetFormatClass)
         .text("blendPlanIdentity", blendPlanIdentity)
         .digestHex()
+}
 
-    private fun reservedIdentifierCollision(
-        fragment: GPUPreparedMaterialFragment,
-    ): String? {
-        val source = fragment.declarationsWgsl + "\n\n" + fragment.evaluationFunctionWgsl
-        return RESERVED_IDENTIFIERS.firstOrNull { identifier ->
-            Regex("""\b${Regex.escape(identifier)}\b""").containsMatchIn(source)
-        }
+private class GPUPreparedTextCompositeAdmissionRefused(
+    val refusalMessage: String,
+) : RuntimeException(refusalMessage)
+
+private fun preparedTextCompositeAdmissionRefused(message: String): Nothing =
+    throw GPUPreparedTextCompositeAdmissionRefused(message)
+
+private fun preparedTextCompositeSourceForFragment(
+    fragment: GPUPreparedMaterialFragment,
+): String = listOf(
+    fragment.declarationsWgsl,
+    fragment.evaluationFunctionWgsl,
+    PreparedTextA8Shader.vertexWgsl,
+    PreparedTextA8Shader.fragmentWgsl,
+).joinToString("\n\n")
+
+private fun preparedTextReservedIdentifierCollision(
+    fragment: GPUPreparedMaterialFragment,
+): String? {
+    val source = fragment.declarationsWgsl + "\n\n" + fragment.evaluationFunctionWgsl
+    return RESERVED_IDENTIFIERS.firstOrNull { identifier ->
+        Regex("""\b${Regex.escape(identifier)}\b""").containsMatchIn(source)
     }
+}
 
-    private fun compositeAbiFacts(
-        vertexLayout: GPUPreparedTextVertexLayout,
-        fragment: GPUPreparedMaterialFragment,
-        report: WgslReflectionReport,
-    ): List<String> = buildList {
-        add("prepared-text-composite-abi:v1")
-        add("vertex.arrayStrideBytes=${vertexLayout.arrayStrideBytes}")
-        add("vertex.stepMode=${vertexLayout.stepMode}")
-        vertexLayout.attributes.forEach { attribute ->
+private fun preparedTextCompositeAbiFacts(
+    vertexLayout: GPUPreparedTextVertexLayout,
+    fragment: GPUPreparedMaterialFragment,
+    report: WgslReflectionReport,
+): List<String> = buildList {
+    add("prepared-text-composite-abi:v1")
+    add("vertex.arrayStrideBytes=${vertexLayout.arrayStrideBytes}")
+    add("vertex.stepMode=${vertexLayout.stepMode}")
+    vertexLayout.attributes.forEach { attribute ->
+        add(
+            "vertex.attribute=${attribute.location}:" +
+                "${attribute.offsetBytes}:${attribute.format}",
+        )
+    }
+    report.bindings
+        .sortedWith(compareBy({ it.group }, { it.binding }))
+        .forEach { binding ->
             add(
-                "vertex.attribute=${attribute.location}:" +
-                    "${attribute.offsetBytes}:${attribute.format}",
+                "binding=${binding.group}:${binding.binding}:${binding.name}:" +
+                    "${binding.resourceKind}:${binding.access.orEmpty()}:" +
+                    "${binding.sampleType.orEmpty()}:" +
+                    "${binding.viewDimension.orEmpty()}:" +
+                    "${binding.storageFormat.orEmpty()}:" +
+                    "${binding.minBindingSize ?: -1}",
             )
         }
-        report.bindings
-            .sortedWith(compareBy({ it.group }, { it.binding }))
-            .forEach { binding ->
-                add(
-                    "binding=${binding.group}:${binding.binding}:${binding.name}:" +
-                        "${binding.resourceKind}:${binding.access.orEmpty()}:" +
-                        "${binding.sampleType.orEmpty()}:" +
-                        "${binding.viewDimension.orEmpty()}:" +
-                        "${binding.storageFormat.orEmpty()}:" +
-                        "${binding.minBindingSize ?: -1}",
-                )
-            }
-        report.entryPoints.forEach { entryPoint ->
-            add("entry=${entryPoint.name}:${entryPoint.stage}")
-        }
-        add("material.colorContract=${fragment.colorContract.name}")
-        add("material.coordinateContract=${fragment.coordinateContract.name}")
-        add("coordinate=device-pixels-to-ndc:y-down-to-y-up")
-        add("coordinate=device-to-local-affine-two-row")
-        add("coverage=a8-r-sampled-once:premul-modulated-once")
-        add("firstInstance=webgpu-instance-attribute-fetch-only")
+    report.entryPoints.forEach { entryPoint ->
+        add("entry=${entryPoint.name}:${entryPoint.stage}")
     }
-
-    private fun refused(message: String): GPUPreparedTextCompositeProgramResult.Refused =
-        GPUPreparedTextCompositeProgramResult.Refused(
-            code = REFUSAL_CODE,
-            message = message,
-        )
+    add("material.colorContract=${fragment.colorContract.name}")
+    add("material.coordinateContract=${fragment.coordinateContract.name}")
+    add("coordinate=device-pixels-to-ndc:y-down-to-y-up")
+    add("coordinate=device-to-local-affine-two-row")
+    add("coverage=a8-r-sampled-once:premul-modulated-once")
+    add("firstInstance=webgpu-instance-attribute-fetch-only")
 }
 
 internal fun preparedTextFinalModuleRefusal(

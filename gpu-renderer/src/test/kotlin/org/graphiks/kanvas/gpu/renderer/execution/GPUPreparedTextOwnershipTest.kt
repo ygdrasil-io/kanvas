@@ -21,10 +21,15 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextAuthenticatedComposite
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeAdmissionToken
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositionObserver
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextNativeProgramHandoff
+import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
@@ -65,6 +70,86 @@ class GPUPreparedTextOwnershipTest {
         assertEquals(
             listOf(GPUPreparedTextAuthenticatedComposite::class.java),
             nativeFactory.parameterTypes.toList(),
+        )
+
+        val admissionClass = Class.forName(
+            "org.graphiks.kanvas.gpu.renderer.materials." +
+                "GPUPreparedTextCompositeAdmission",
+        )
+        val fileFacadeClass = Class.forName(
+            "org.graphiks.kanvas.gpu.renderer.materials." +
+                "GPUPreparedTextShaderComposerKt",
+        )
+        val visibleEmitterClasses = listOf(
+            program,
+            GPUPreparedTextCompositeProgram.Companion::class.java,
+            GPUPreparedTextShaderComposer::class.java,
+            admissionClass,
+            fileFacadeClass,
+        )
+        val rawIssuers = visibleEmitterClasses
+            .flatMap { emitter -> emitter.declaredMethods.asList() }
+            .filter { method ->
+                (
+                    method.returnType == GPUPreparedTextCompositeProgram::class.java ||
+                        method.returnType == GPUPreparedTextCompositeProgramResult::class.java
+                    ) &&
+                    method.parameterTypes.count { type -> type == String::class.java } >= 4 &&
+                    (Modifier.isPublic(method.modifiers) || method.isSynthetic)
+            }
+        val visibleProgramConstructors = program.declaredConstructors
+            .filter { constructor ->
+                Modifier.isPublic(constructor.modifiers) || constructor.isSynthetic
+            }
+        val visibleAdmissionConstructors = admissionClass.declaredConstructors
+            .filter { constructor ->
+                Modifier.isPublic(constructor.modifiers) || constructor.isSynthetic
+            }
+        val visibleAdmissionApis = GPUPreparedTextCompositeProgram.Companion::class.java
+            .declaredMethods
+            .filter { method ->
+                (
+                    method.returnType == GPUPreparedTextCompositeProgram::class.java ||
+                        method.returnType == GPUPreparedTextCompositeProgramResult::class.java
+                    ) &&
+                    (Modifier.isPublic(method.modifiers) || method.isSynthetic)
+            }
+
+        assertEquals(
+            emptyList(),
+            rawIssuers.map { method ->
+                "${method.declaringClass.simpleName}.${method.name}:${method.modifiers}"
+            },
+        )
+        assertEquals(1, visibleProgramConstructors.size)
+        assertEquals(
+            listOf(
+                admissionClass.name,
+                "kotlin.jvm.internal.DefaultConstructorMarker",
+            ),
+            visibleProgramConstructors.single().parameterTypes.map(Class<*>::getName),
+        )
+        assertEquals(1, visibleAdmissionConstructors.size)
+        assertEquals(
+            listOf(
+                GPUPreparedMaterialProgram::class.java,
+                String::class.java,
+                String::class.java,
+                GPUFixedFunctionBlendState::class.java,
+                GPUPreparedTextCompositionObserver::class.java,
+            ),
+            visibleAdmissionConstructors.single().parameterTypes.toList(),
+        )
+        assertEquals(1, visibleAdmissionApis.size)
+        assertEquals(
+            listOf(
+                GPUPreparedMaterialProgram::class.java,
+                String::class.java,
+                String::class.java,
+                GPUFixedFunctionBlendState::class.java,
+                GPUPreparedTextCompositionObserver::class.java,
+            ),
+            visibleAdmissionApis.single().parameterTypes.toList(),
         )
     }
 
