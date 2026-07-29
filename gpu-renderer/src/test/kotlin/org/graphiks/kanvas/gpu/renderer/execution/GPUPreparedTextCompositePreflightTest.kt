@@ -1,15 +1,26 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import io.ygdrasil.webgpu.GPUBindGroupLayout
+import io.ygdrasil.webgpu.GPUDevice
+import io.ygdrasil.webgpu.GPUPipelineLayout
+import io.ygdrasil.webgpu.GPURenderPipeline
+import io.ygdrasil.webgpu.GPUSampler
+import io.ygdrasil.webgpu.GPUShaderModule
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.lang.reflect.Proxy
+import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightSeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
@@ -19,6 +30,105 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexAttribute
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
 
 class GPUPreparedTextCompositePreflightTest {
+    @Test
+    fun `correlated composite and seal forgery refuses before shader module creation`() {
+        val fixture = preparedTextNativePreflightFixture()
+        val binding = fixture.framePlan.textA8Bindings().first()
+        val original = binding.compositeProgram
+        val forgedSource = original.wgslSource.replace(
+            "return materialPremul * modulation;",
+            "return vec4<f32>(1.0, 0.0, 1.0, 1.0);",
+        )
+        val forgedSourceHash = forgedSource.sha256()
+        val forgedAbiHash = "a".repeat(64)
+        val forgedPipelineKey = GPUPreparedTextShaderComposer.pipelineKey(
+            sourceHash = forgedSourceHash,
+            abiHash = forgedAbiHash,
+            targetFormatClass = original.targetFormatClass,
+            blendPlanIdentity = original.blendPlanIdentity,
+        )
+        original.setPrivateField("wgslSource", forgedSource)
+        original.setPrivateField("sourceHash", forgedSourceHash)
+        original.setPrivateField("abiHash", forgedAbiHash)
+        original.setPrivateField("pipelineKey", forgedPipelineKey)
+        val originalBindingSeal = binding.preflightSeal
+        val originalCompositeSeal = requireNotNull(originalBindingSeal.textA8Composite)
+        val forgedCompositeSeal = GPUPreparedTextCompositePreflightSeal(
+            deviceToLocal = originalCompositeSeal.deviceToLocal,
+            drawUniformBufferRef = originalCompositeSeal.drawUniformBufferRef,
+            drawUniformAlignmentBytes = originalCompositeSeal.drawUniformAlignmentBytes,
+            drawUniformLogicalSliceSizeBytes =
+                originalCompositeSeal.drawUniformLogicalSliceSizeBytes,
+            drawUniformBufferByteSize = originalCompositeSeal.drawUniformBufferByteSize,
+            drawUniformBufferContentHash = originalCompositeSeal.drawUniformBufferContentHash,
+            drawUniformSlice = originalCompositeSeal.drawUniformSlice,
+            compositeSourceHash = forgedSourceHash,
+            compositeAbiHash = forgedAbiHash,
+            compositePipelineKey = forgedPipelineKey,
+            compositeVertexEntryPoint = originalCompositeSeal.compositeVertexEntryPoint,
+            compositeFragmentEntryPoint = originalCompositeSeal.compositeFragmentEntryPoint,
+            compositeVertexLayout = originalCompositeSeal.compositeVertexLayout,
+            compositeAdmissionToken = originalCompositeSeal.compositeAdmissionToken,
+        )
+        val forgedBindingSeal = GPUPreparedTextBindingPreflightSeal(
+            semanticCanonicalHash = originalBindingSeal.semanticCanonicalHash,
+            atlasKey = originalBindingSeal.atlasKey,
+            atlasWidth = originalBindingSeal.atlasWidth,
+            atlasHeight = originalBindingSeal.atlasHeight,
+            atlasRowBytes = originalBindingSeal.atlasRowBytes,
+            atlasGeneration = originalBindingSeal.atlasGeneration,
+            atlasContentHash = originalBindingSeal.atlasContentHash,
+            pageIndex = originalBindingSeal.pageIndex,
+            instanceStrideBytes = originalBindingSeal.instanceStrideBytes,
+            firstInstance = originalBindingSeal.firstInstance,
+            instanceCount = originalBindingSeal.instanceCount,
+            instanceBufferByteSize = originalBindingSeal.instanceBufferByteSize,
+            instanceBufferContentHash = originalBindingSeal.instanceBufferContentHash,
+            materialUniformOffsetBytes = originalBindingSeal.materialUniformOffsetBytes,
+            materialUniformSizeBytes = originalBindingSeal.materialUniformSizeBytes,
+            materialKey = originalBindingSeal.materialKey,
+            materialWgslSourceHash = originalBindingSeal.materialWgslSourceHash,
+            materialEntryPoint = originalBindingSeal.materialEntryPoint,
+            materialAbiHash = originalBindingSeal.materialAbiHash,
+            materialUniformContentHash = originalBindingSeal.materialUniformContentHash,
+            materialSampledResourceFacts = originalBindingSeal.materialSampledResourceFacts,
+            targetBounds = originalBindingSeal.targetBounds,
+            scissorBounds = originalBindingSeal.scissorBounds,
+            clipIdentity = originalBindingSeal.clipIdentity,
+            blendPlanIdentity = originalBindingSeal.blendPlanIdentity,
+            capabilitySnapshotHash = originalBindingSeal.capabilitySnapshotHash,
+            textA8Composite = forgedCompositeSeal,
+        )
+        binding.setPrivateField("preflightSeal", forgedBindingSeal)
+        val native = CorrelatedCompositeNativeProbe()
+
+        val refusal = GPUPreparedSurfaceNativePreflight().validateFramePlan(
+            fixture.framePlan,
+            fixture.context,
+            fixture.capabilities,
+        )
+        if (refusal == null) {
+            val cache = GPUWgpu4kPreparedTextSessionCache(
+                native.device,
+                fixture.context.deviceGeneration,
+            )
+            assertIs<GPUPreparedTextCacheBatchAcquire.Ready>(
+                cache.acquireBatch(
+                    programs = listOf(binding.nativeProgram),
+                    generation = fixture.context.deviceGeneration,
+                ),
+            )
+            cache.close()
+        }
+
+        assertEquals(
+            GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ADMISSION,
+            refusal?.code,
+            "nativeShaderModuleCreations=${native.shaderModuleCreations}",
+        )
+        assertEquals(0, native.shaderModuleCreations)
+    }
+
     @Test
     fun `accepted frame publishes one canonical draw uniform render operand`() {
         val fixture = preparedTextNativePreflightFixture()
@@ -39,12 +149,10 @@ class GPUPreparedTextCompositePreflightTest {
     fun `vertex refusal precedes source refusal`() {
         val fixture = preparedTextNativePreflightFixture()
         val binding = fixture.framePlan.textA8Bindings().first()
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(
-                sourceHash = "0".repeat(64),
-                vertexLayout = binding.compositeProgram.vertexLayout.copyWith(
-                    arrayStrideBytes = 68L,
-                ),
+        binding.compositeProgram.setPrivateField("sourceHash", "0".repeat(64))
+        binding.replaceVertexLayout(
+            binding.compositeProgram.vertexLayout.copyWith(
+                arrayStrideBytes = 68L,
             ),
         )
         val probe = GPUPreparedTextNativeCreationProbe()
@@ -67,14 +175,13 @@ class GPUPreparedTextCompositePreflightTest {
     fun `binding refusal precedes pipeline key refusal`() {
         val fixture = preparedTextNativePreflightFixture()
         val binding = fixture.framePlan.textA8Bindings().first()
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(
-                bindingPlan = binding.compositeProgram.bindingPlan.copy(
-                    drawUniformBinding = 7,
-                ),
-                pipelineKey = "2".repeat(64),
+        binding.compositeProgram.setPrivateField(
+            "bindingPlan",
+            binding.compositeProgram.bindingPlan.copy(
+                drawUniformBinding = 7,
             ),
         )
+        binding.compositeProgram.setPrivateField("pipelineKey", "2".repeat(64))
         val probe = GPUPreparedTextNativeCreationProbe()
 
         val refused = assertIs<GPUFramePreflightResult.Refused>(
@@ -151,37 +258,31 @@ private val compositeMutations = listOf(
         name = "composite source hash",
         expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_SOURCE,
     ) { binding ->
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(sourceHash = "0".repeat(64)),
-        )
+        binding.compositeProgram.setPrivateField("sourceHash", "0".repeat(64))
     },
     CompositeMutation(
         name = "composite WGSL source",
         expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_SOURCE,
     ) { binding ->
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(
-                wgslSource = binding.compositeProgram.wgslSource + "\n",
-            ),
+        binding.compositeProgram.setPrivateField(
+            "wgslSource",
+            binding.compositeProgram.wgslSource + "\n",
         )
     },
     CompositeMutation(
         name = "fragment entry point",
         expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ABI,
     ) { binding ->
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(fragmentEntryPoint = "fs_forged"),
-        )
+        binding.compositeProgram.setPrivateField("fragmentEntryPoint", "fs_forged")
     },
     CompositeMutation(
         name = "reflected draw binding",
         expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.BINDING_LAYOUT,
     ) { binding ->
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(
-                bindingPlan = binding.compositeProgram.bindingPlan.copy(
-                    drawUniformBinding = 7,
-                ),
+        binding.compositeProgram.setPrivateField(
+            "bindingPlan",
+            binding.compositeProgram.bindingPlan.copy(
+                drawUniformBinding = 7,
             ),
         )
     },
@@ -261,42 +362,33 @@ private val compositeMutations = listOf(
         name = "composite ABI hash",
         expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ABI,
     ) { binding ->
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(abiHash = "1".repeat(64)),
-        )
+        binding.compositeProgram.setPrivateField("abiHash", "1".repeat(64))
     },
     CompositeMutation(
         name = "pipeline key",
         expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ABI,
     ) { binding ->
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(pipelineKey = "2".repeat(64)),
-        )
+        binding.compositeProgram.setPrivateField("pipelineKey", "2".repeat(64))
     },
     CompositeMutation(
         name = "native target format class",
         expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ABI,
     ) { binding ->
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(targetFormatClass = "rgba8unorm"),
-        )
+        binding.compositeProgram.setPrivateField("targetFormatClass", "rgba8unorm")
     },
     CompositeMutation(
         name = "native blend plan identity",
         expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ABI,
     ) { binding ->
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(blendPlanIdentity = "forged:src"),
-        )
+        binding.compositeProgram.setPrivateField("blendPlanIdentity", "forged:src")
     },
     CompositeMutation(
         name = "native fixed-function blend state",
         expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ABI,
     ) { binding ->
-        binding.replaceCompositeProgram(
-            binding.compositeProgram.copy(
-                fixedFunctionBlendState = preparedTextBlendState(GPUBlendMode.SRC),
-            ),
+        binding.compositeProgram.setPrivateField(
+            "fixedFunctionBlendState",
+            preparedTextBlendState(GPUBlendMode.SRC),
         )
     },
 )
@@ -399,16 +491,10 @@ private val drawUniformTopologyMutations = listOf(
     },
 )
 
-private fun GPUPreparedTextRenderBinding.replaceCompositeProgram(
-    program: org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram,
-) {
-    setPrivateField("compositeProgramOrNull", program)
-}
-
 private fun GPUPreparedTextRenderBinding.replaceVertexLayout(
     layout: GPUPreparedTextVertexLayout,
 ) {
-    replaceCompositeProgram(compositeProgram.copy(vertexLayout = layout))
+    compositeProgram.setPrivateField("vertexLayout", layout)
 }
 
 private fun GPUPreparedTextVertexLayout.copyWith(
@@ -473,4 +559,45 @@ private fun PreparedTextNativePreflightFixture.drawUniformPreparation():
         .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
         .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
         .single { request -> request.resource == ref }
+}
+
+private fun String.sha256(): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(encodeToByteArray())
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
+private class CorrelatedCompositeNativeProbe {
+    var shaderModuleCreations: Int = 0
+        private set
+
+    val device: GPUDevice = handle(GPUDevice::class.java, "device") { method ->
+        when (method) {
+            "createBindGroupLayout" -> handle(GPUBindGroupLayout::class.java, "layout")
+            "createShaderModule" -> {
+                shaderModuleCreations += 1
+                handle(GPUShaderModule::class.java, "shader")
+            }
+            "createPipelineLayout" -> handle(GPUPipelineLayout::class.java, "pipeline-layout")
+            "createRenderPipeline" -> handle(GPURenderPipeline::class.java, "pipeline")
+            "createSampler" -> handle(GPUSampler::class.java, "sampler")
+            else -> null
+        }
+    }
+
+    private fun <T> handle(
+        type: Class<T>,
+        label: String,
+        other: (String) -> Any? = { null },
+    ): T {
+        val proxy = Proxy.newProxyInstance(type.classLoader, arrayOf(type)) { instance, method, args ->
+            when (method.name) {
+                "close", "setLabel" -> Unit
+                "getLabel", "toString" -> label
+                "hashCode" -> System.identityHashCode(instance)
+                "equals" -> instance === args?.singleOrNull()
+                else -> other(method.name)
+            }
+        }
+        return type.cast(proxy)
+    }
 }

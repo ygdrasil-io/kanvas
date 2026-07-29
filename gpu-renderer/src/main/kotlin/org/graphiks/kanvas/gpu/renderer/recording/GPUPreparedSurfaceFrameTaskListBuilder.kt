@@ -16,6 +16,11 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextAuthenticatedComposite
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeAdmissionToken
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramCache
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
@@ -51,9 +56,6 @@ import org.graphiks.kanvas.gpu.renderer.resources.buildMaterialTextureFrameResou
 import org.graphiks.kanvas.gpu.renderer.resources.buildR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramCache
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
 
 data class GPUPreparedSurfaceFrameRequest(
@@ -152,7 +154,7 @@ class GPUPreparedTextMaterialUniformBufferPlan(
 }
 
 /** TextA8-only immutable facts duplicated into the Task 8/9 preflight seal. */
-class GPUPreparedTextCompositePreflightSeal(
+class GPUPreparedTextCompositePreflightSeal internal constructor(
     deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
     val drawUniformBufferRef: GPUFrameBufferRef,
     val drawUniformAlignmentBytes: Long,
@@ -166,6 +168,7 @@ class GPUPreparedTextCompositePreflightSeal(
     val compositeVertexEntryPoint: String,
     val compositeFragmentEntryPoint: String,
     compositeVertexLayout: GPUPreparedTextVertexLayout,
+    internal val compositeAdmissionToken: GPUPreparedTextCompositeAdmissionToken,
 ) {
     val deviceToLocal: GPUPreparedTextDeviceToLocalAffine = deviceToLocal.copy()
     val drawUniformSlice: GPUPreparedTextDrawUniformSlice = drawUniformSlice.copy()
@@ -281,7 +284,21 @@ class GPUPreparedTextRenderBinding(
             "ColorGlyph binding has no TextA8 composite program before Task 11"
         }
     internal val nativeProgram: GPUPreparedTextNativeProgramHandoff
-        get() = GPUPreparedTextNativeProgramHandoff.fromAuthenticated(compositeProgram)
+        get() {
+            val compositeSeal = checkNotNull(preflightSeal.textA8Composite) {
+                "Prepared TextA8 native handoff requires a composite preflight seal"
+            }
+            val authenticatedComposite = checkNotNull(
+                compositeProgram.authenticatedSnapshot(
+                    compositeSeal.compositeAdmissionToken,
+                ),
+            ) {
+                "Prepared TextA8 native handoff requires an authenticated composite program"
+            }
+            return GPUPreparedTextNativeProgramHandoff.fromAuthenticated(
+                authenticatedComposite,
+            )
+        }
 
     init {
         require(firstInstance >= 0 && instanceCount > 0)
@@ -350,7 +367,7 @@ internal class GPUPreparedTextNativeProgramHandoff private constructor(
 
     companion object {
         internal fun fromAuthenticated(
-            program: GPUPreparedTextCompositeProgram,
+            program: GPUPreparedTextAuthenticatedComposite,
         ): GPUPreparedTextNativeProgramHandoff {
             val fragment = program.bindingPlan.materialFragment
             return GPUPreparedTextNativeProgramHandoff(
@@ -2250,6 +2267,7 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
                 compositeVertexEntryPoint = exactProgram.vertexEntryPoint,
                 compositeFragmentEntryPoint = exactProgram.fragmentEntryPoint,
                 compositeVertexLayout = exactProgram.vertexLayout,
+                compositeAdmissionToken = exactProgram.admissionToken,
             )
         }
         is GPUDrawSemanticPayload.ColorGlyph -> {

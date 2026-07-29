@@ -26,7 +26,27 @@ data class GPUPreparedTextCompositeBindingPlan(
     val atlasSamplerBinding: Int,
 )
 
-data class GPUPreparedTextCompositeProgram(
+internal sealed interface GPUPreparedTextCompositeAdmissionToken
+
+private class IssuedGPUPreparedTextCompositeAdmissionToken(
+    val admission: GPUPreparedTextCompositeAdmission,
+) : GPUPreparedTextCompositeAdmissionToken
+
+internal sealed interface GPUPreparedTextAuthenticatedComposite {
+    val wgslSource: String
+    val vertexEntryPoint: String
+    val fragmentEntryPoint: String
+    val bindingPlan: GPUPreparedTextCompositeBindingPlan
+    val vertexLayout: GPUPreparedTextVertexLayout
+    val sourceHash: String
+    val abiHash: String
+    val targetFormatClass: String
+    val blendPlanIdentity: String
+    val fixedFunctionBlendState: GPUFixedFunctionBlendState?
+    val pipelineKey: String
+}
+
+private class GPUPreparedTextCompositeAdmission(
     val wgslSource: String,
     val vertexEntryPoint: String,
     val fragmentEntryPoint: String,
@@ -38,7 +58,106 @@ data class GPUPreparedTextCompositeProgram(
     val blendPlanIdentity: String,
     val fixedFunctionBlendState: GPUFixedFunctionBlendState?,
     val pipelineKey: String,
-)
+) {
+    val token: GPUPreparedTextCompositeAdmissionToken =
+        IssuedGPUPreparedTextCompositeAdmissionToken(this)
+    val authenticatedSnapshot: GPUPreparedTextAuthenticatedComposite =
+        IssuedGPUPreparedTextAuthenticatedComposite(this)
+}
+
+private class IssuedGPUPreparedTextAuthenticatedComposite(
+    private val admission: GPUPreparedTextCompositeAdmission,
+) : GPUPreparedTextAuthenticatedComposite {
+    override val wgslSource: String get() = admission.wgslSource
+    override val vertexEntryPoint: String get() = admission.vertexEntryPoint
+    override val fragmentEntryPoint: String get() = admission.fragmentEntryPoint
+    override val bindingPlan: GPUPreparedTextCompositeBindingPlan get() = admission.bindingPlan
+    override val vertexLayout: GPUPreparedTextVertexLayout get() = admission.vertexLayout
+    override val sourceHash: String get() = admission.sourceHash
+    override val abiHash: String get() = admission.abiHash
+    override val targetFormatClass: String get() = admission.targetFormatClass
+    override val blendPlanIdentity: String get() = admission.blendPlanIdentity
+    override val fixedFunctionBlendState: GPUFixedFunctionBlendState?
+        get() = admission.fixedFunctionBlendState
+    override val pipelineKey: String get() = admission.pipelineKey
+}
+
+class GPUPreparedTextCompositeProgram private constructor(
+    private val admission: GPUPreparedTextCompositeAdmission,
+) {
+    val wgslSource: String = admission.wgslSource
+    val vertexEntryPoint: String = admission.vertexEntryPoint
+    val fragmentEntryPoint: String = admission.fragmentEntryPoint
+    val bindingPlan: GPUPreparedTextCompositeBindingPlan = admission.bindingPlan
+    val vertexLayout: GPUPreparedTextVertexLayout = admission.vertexLayout
+    val sourceHash: String = admission.sourceHash
+    val abiHash: String = admission.abiHash
+    val targetFormatClass: String = admission.targetFormatClass
+    val blendPlanIdentity: String = admission.blendPlanIdentity
+    val fixedFunctionBlendState: GPUFixedFunctionBlendState? =
+        admission.fixedFunctionBlendState
+    val pipelineKey: String = admission.pipelineKey
+
+    internal val admissionToken: GPUPreparedTextCompositeAdmissionToken
+        get() = admission.token
+
+    internal fun authenticatedSnapshot(
+        token: GPUPreparedTextCompositeAdmissionToken,
+    ): GPUPreparedTextAuthenticatedComposite? {
+        val issuedToken = token as? IssuedGPUPreparedTextCompositeAdmissionToken
+            ?: return null
+        if (issuedToken.admission !== admission || !matchesAdmission()) return null
+        return admission.authenticatedSnapshot
+    }
+
+    private fun matchesAdmission(): Boolean =
+        wgslSource == admission.wgslSource &&
+            vertexEntryPoint == admission.vertexEntryPoint &&
+            fragmentEntryPoint == admission.fragmentEntryPoint &&
+            bindingPlan == admission.bindingPlan &&
+            vertexLayout == admission.vertexLayout &&
+            sourceHash == admission.sourceHash &&
+            abiHash == admission.abiHash &&
+            targetFormatClass == admission.targetFormatClass &&
+            blendPlanIdentity == admission.blendPlanIdentity &&
+            fixedFunctionBlendState == admission.fixedFunctionBlendState &&
+            pipelineKey == admission.pipelineKey
+
+    companion object {
+        /**
+         * The composer calls this only after parser, lowering, reflection and final ABI validation.
+         * It is hidden from Java and the public API; the resulting admission is identity-bearing.
+         */
+        @JvmSynthetic
+        internal fun issueAfterValidation(
+            wgslSource: String,
+            vertexEntryPoint: String,
+            fragmentEntryPoint: String,
+            bindingPlan: GPUPreparedTextCompositeBindingPlan,
+            vertexLayout: GPUPreparedTextVertexLayout,
+            sourceHash: String,
+            abiHash: String,
+            targetFormatClass: String,
+            blendPlanIdentity: String,
+            fixedFunctionBlendState: GPUFixedFunctionBlendState?,
+            pipelineKey: String,
+        ): GPUPreparedTextCompositeProgram = GPUPreparedTextCompositeProgram(
+            GPUPreparedTextCompositeAdmission(
+                wgslSource = wgslSource,
+                vertexEntryPoint = vertexEntryPoint,
+                fragmentEntryPoint = fragmentEntryPoint,
+                bindingPlan = bindingPlan,
+                vertexLayout = vertexLayout,
+                sourceHash = sourceHash,
+                abiHash = abiHash,
+                targetFormatClass = targetFormatClass,
+                blendPlanIdentity = blendPlanIdentity,
+                fixedFunctionBlendState = fixedFunctionBlendState,
+                pipelineKey = pipelineKey,
+            ),
+        )
+    }
+}
 
 sealed interface GPUPreparedTextCompositeProgramResult {
     data class Ready(
@@ -165,7 +284,7 @@ object GPUPreparedTextShaderComposer {
             blendPlanIdentity = blendPlanIdentity,
         )
         return GPUPreparedTextCompositeProgramResult.Ready(
-            GPUPreparedTextCompositeProgram(
+            GPUPreparedTextCompositeProgram.issueAfterValidation(
                 wgslSource = source,
                 vertexEntryPoint = VERTEX_ENTRY_POINT,
                 fragmentEntryPoint = FRAGMENT_ENTRY_POINT,

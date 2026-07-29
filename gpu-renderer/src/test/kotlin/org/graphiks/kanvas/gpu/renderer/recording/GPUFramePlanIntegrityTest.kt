@@ -1382,6 +1382,7 @@ class GPUFramePlanIntegrityTest {
                     compositeVertexEntryPoint = compositeProgram.vertexEntryPoint,
                     compositeFragmentEntryPoint = compositeProgram.fragmentEntryPoint,
                     compositeVertexLayout = compositeProgram.vertexLayout,
+                    compositeAdmissionToken = compositeProgram.admissionToken,
                 )
                 mapOf(
                     packet.packetId to GPUPreparedTextRenderBinding(

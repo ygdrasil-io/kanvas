@@ -24,6 +24,7 @@ internal object GPUPreparedTextCompositePreflightRefusalCodes {
     const val NATIVE_BLEND = "invalid.preflight.text.blend"
     const val COMPOSITE_SOURCE = "invalid.preflight.text.composite_source"
     const val COMPOSITE_ABI = "invalid.preflight.text.composite_abi"
+    const val COMPOSITE_ADMISSION = "invalid.preflight.text.composite_admission"
     const val INSTANCE_VERTEX_ABI = "invalid.preflight.text.instance_vertex_abi"
     const val DRAW_UNIFORM = "invalid.preflight.text.draw_uniform"
     const val BINDING_LAYOUT = "invalid.preflight.text.composite_binding_layout"
@@ -149,6 +150,10 @@ internal object GPUPreparedTextCompositePreflight {
             fixedFunctionBlendState = fixedFunctionBlendState,
             seal = compositeSeal,
         )?.let { return it }
+        validateCompositeAdmission(
+            binding.compositeProgram,
+            compositeSeal,
+        )?.let { return it }
         validateDrawUniformTopology(
             binding,
             framePlan,
@@ -231,6 +236,18 @@ internal object GPUPreparedTextCompositePreflight {
         }
         return null
     }
+
+    private fun validateCompositeAdmission(
+        actual: GPUPreparedTextCompositeProgram,
+        seal: GPUPreparedTextCompositePreflightSeal,
+    ): GPUPreparedTextCompositePreflightRefusal? =
+        if (actual.authenticatedSnapshot(seal.compositeAdmissionToken) == null) {
+            compositeAdmissionRefusal(
+                "Prepared TextA8 composite program no longer matches its issued admission.",
+            )
+        } else {
+            null
+        }
 
     private fun validatePipelineKey(
         actual: GPUPreparedTextCompositeProgram,
@@ -588,6 +605,12 @@ internal object GPUPreparedTextCompositePreflight {
     private fun abiRefusal(message: String) =
         GPUPreparedTextCompositePreflightRefusal(
             GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ABI,
+            message,
+        )
+
+    private fun compositeAdmissionRefusal(message: String) =
+        GPUPreparedTextCompositePreflightRefusal(
+            GPUPreparedTextCompositePreflightRefusalCodes.COMPOSITE_ADMISSION,
             message,
         )
 

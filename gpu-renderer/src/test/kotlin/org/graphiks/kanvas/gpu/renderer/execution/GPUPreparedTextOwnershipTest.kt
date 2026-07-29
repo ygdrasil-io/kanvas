@@ -11,6 +11,7 @@ import io.ygdrasil.webgpu.GPUShaderModule
 import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureView
 import java.io.File
+import java.lang.reflect.Modifier
 import java.lang.reflect.Proxy
 import java.util.IdentityHashMap
 import kotlin.test.Test
@@ -20,10 +21,53 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextAuthenticatedComposite
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeAdmissionToken
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextNativeProgramHandoff
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
 class GPUPreparedTextOwnershipTest {
+    @Test
+    fun `composite admission and native handoff cannot be forged through the public model`() {
+        val program = GPUPreparedTextCompositeProgram::class.java
+        assertTrue(program.declaredConstructors.all { constructor ->
+            Modifier.isPrivate(constructor.modifiers) || constructor.isSynthetic
+        })
+        assertTrue(program.declaredMethods.none { method ->
+            method.name == "copy" || method.name.startsWith("copy$")
+        })
+
+        val tokenAuthority = GPUPreparedTextCompositeAdmissionToken::class.java
+        assertTrue(tokenAuthority.isSealed)
+        assertEquals(
+            listOf("IssuedGPUPreparedTextCompositeAdmissionToken"),
+            tokenAuthority.permittedSubclasses.map { issued -> issued.simpleName },
+        )
+        assertTrue(tokenAuthority.permittedSubclasses.all { issued ->
+            !Modifier.isPublic(issued.modifiers)
+        })
+
+        val snapshotAuthority = GPUPreparedTextAuthenticatedComposite::class.java
+        assertTrue(snapshotAuthority.isSealed)
+        assertEquals(
+            listOf("IssuedGPUPreparedTextAuthenticatedComposite"),
+            snapshotAuthority.permittedSubclasses.map { issued -> issued.simpleName },
+        )
+        assertTrue(snapshotAuthority.permittedSubclasses.all { issued ->
+            !Modifier.isPublic(issued.modifiers)
+        })
+
+        val nativeFactory = GPUPreparedTextNativeProgramHandoff.Companion::class.java
+            .declaredMethods
+            .single { method -> method.name.startsWith("fromAuthenticated") }
+        assertEquals(
+            listOf(GPUPreparedTextAuthenticatedComposite::class.java),
+            nativeFactory.parameterTypes.toList(),
+        )
+    }
+
     @Test
     fun `pipeline acquisition authority is sealed and only privately issued`() {
         val authority = GPUWgpu4kPreparedTextPipelineAcquisition::class.java
