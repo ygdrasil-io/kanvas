@@ -65,7 +65,9 @@ class GPUPreparedCompositeTestFixturesTest {
         val sample = intArrayOf(255, 0, 0, 255)
         val tint = floatArrayOf(1f, 1f, 1f, 1f)
         val result = GPUPreparedFilterCpuOracle.applySrgbPipelineOrder(sample, tint)
-        assertEquals(result[0], result[0])
+        assertEquals(255, result[0])
+        assertEquals(0, result[1])
+        assertEquals(0, result[2])
         assertTrue(result[3] in 250..255)
     }
 
