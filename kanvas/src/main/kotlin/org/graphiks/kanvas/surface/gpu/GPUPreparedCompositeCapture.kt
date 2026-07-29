@@ -1,6 +1,11 @@
 package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.SaveLayerRec
+import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.picture.Picture
+import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScope
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeId
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
@@ -20,8 +25,13 @@ sealed interface GPUPreparedOperationSnapshot {
         val opType: String,
         val operationIndex: Int,
         val provenance: String,
+        val geometryFacts: String,
+        val paintFacts: String,
+        val transformFacts: String,
+        val clipFacts: String,
     ) : GPUPreparedOperationSnapshot {
-        override fun identityFragment(): String = "draw:$opType:$operationIndex:$provenance"
+        override fun identityFragment(): String =
+            "draw:$opType:$geometryFacts:$paintFacts:$transformFacts:$clipFacts:$provenance"
     }
 }
 
@@ -59,6 +69,8 @@ internal object GPUPreparedCompositeCapturer {
     ): GPUPreparedCompositeCaptureResult {
         val ctx = CaptureContext(limits)
         return try {
+            val totalOps = countTotalOps(operations)
+            ctx.checkBudget(totalOps)
             val (processedOps, root) = ctx.processTopLevel(operations)
             val scopes = ctx.finalizeScopes(root)
             GPUPreparedCompositeCaptureResult.Ready(
@@ -78,36 +90,57 @@ internal object GPUPreparedCompositeCapturer {
         }
     }
 
+    private fun countTotalOps(ops: List<DisplayOp>): Int {
+        var count = ops.size
+        for (op in ops) {
+            if (op is DisplayOp.DrawPicture) {
+                count += countTotalOps(op.picture.ops)
+            }
+        }
+        return count
+    }
+
     private fun computeIdentity(
         ops: List<GPUPreparedCapturedOperation>,
         scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
     ): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        digest.update("capture:${ops.size}:${scopes.size}".toByteArray())
+        digest.update("capture:v1:${ops.size}:${scopes.size}".toByteArray())
         for (op in ops) {
             digest.update(op.identity.toByteArray())
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }.take(16)
+        return digest.digest().joinToString("") { "%02x".format(it) }.take(32)
     }
 
     private class CaptureContext(val limits: GPUPreparedCompositeCaptureLimits) {
         private val scopes = mutableMapOf<GPUPreparedCompositeScopeId, MutableCaptureScope>()
         private val expandedOps = mutableListOf<GPUPreparedCapturedOperation>()
         private var scopeIdCounter = 0
+        private var capturedOpCount = 0
         private val activePicturesOnStack = mutableSetOf<Int>()
+        private var provenancePath = mutableListOf<String>()
+
+        fun checkBudget(totalOps: Int) {
+            if (totalOps > limits.maxExpandedOps) {
+                refuse(
+                    GPUPreparedCompositeRefusalCodes.PICTURE_BUDGET, -1,
+                    mapOf("total" to totalOps.toString(), "limit" to limits.maxExpandedOps.toString()),
+                )
+            }
+        }
 
         fun processTopLevel(
             operations: List<DisplayOp>,
         ): Pair<List<GPUPreparedCapturedOperation>, MutableCaptureScope> {
             val rootId = nextScopeId()
             val root = MutableCaptureScope(
-                id = rootId,
-                parentId = null,
-                sourceKind = GPUPreparedCompositeScopeKind.Root,
-                provenance = "root",
+                id = rootId, parentId = null,
+                sourceKind = GPUPreparedCompositeScopeKind.Root, provenance = "root",
             )
             scopes[root.id] = root
+            provenancePath.add("root")
             processOperations(operations, 0, root)
+            provenancePath.removeLast()
             checkUnclosedLayers(root, -1)
             return expandedOps.toList() to root
         }
@@ -130,26 +163,22 @@ internal object GPUPreparedCompositeCapturer {
                             currentDepth else currentDepth + 1
                         if (effectiveDepth > limits.maxNestingDepth) {
                             refuse(
-                                GPUPreparedCompositeRefusalCodes.LAYER_BUDGET,
-                                idx,
-                                mapOf(
-                                    "depth" to effectiveDepth.toString(),
-                                    "limit" to limits.maxNestingDepth.toString(),
-                                ),
+                                GPUPreparedCompositeRefusalCodes.LAYER_BUDGET, idx,
+                                mapOf("depth" to effectiveDepth.toString(), "limit" to limits.maxNestingDepth.toString()),
                             )
                         }
                         val layerId = nextScopeId()
                         val layerScope = MutableCaptureScope(
-                            id = layerId,
-                            parentId = parentScope.id,
+                            id = layerId, parentId = parentScope.id,
                             sourceKind = GPUPreparedCompositeScopeKind.SaveLayer,
-                            provenance = "saveLayer($idx)",
-                            saveOperationIndex = idx,
+                            provenance = "saveLayer($idx)", saveOperationIndex = idx,
+                            saveLayerRec = op.rec,
                         )
                         scopes[layerId] = layerScope
                         parentScope.entries.add(GPUPreparedCompositeEntry.Scope(layerId))
-
+                        provenancePath.add("layer_${layerId.value}")
                         val resultIdx = processOperations(operations, idx + 1, layerScope)
+                        provenancePath.removeLast()
                         if (resultIdx >= operations.size || operations[resultIdx] !is DisplayOp.EndLayer) {
                             refuse(
                                 GPUPreparedCompositeRefusalCodes.LAYER_UNBALANCED,
@@ -162,11 +191,8 @@ internal object GPUPreparedCompositeCapturer {
                     }
                     op is DisplayOp.EndLayer -> {
                         if (parentScope.sourceKind == GPUPreparedCompositeScopeKind.Root) {
-                            refuse(
-                                GPUPreparedCompositeRefusalCodes.LAYER_UNBALANCED,
-                                idx,
-                                mapOf("reason" to "orphan EndLayer in root scope"),
-                            )
+                            refuse(GPUPreparedCompositeRefusalCodes.LAYER_UNBALANCED, idx,
+                                mapOf("reason" to "orphan EndLayer in root scope"))
                         }
                         return idx
                     }
@@ -187,62 +213,45 @@ internal object GPUPreparedCompositeCapturer {
         ): Int {
             val pictureId = op.picture.uniqueID
             if (pictureId in activePicturesOnStack) {
-                refuse(
-                    GPUPreparedCompositeRefusalCodes.PICTURE_CYCLE,
-                    opIdx,
-                    mapOf("pictureId" to pictureId.toString()),
-                )
+                refuse(GPUPreparedCompositeRefusalCodes.PICTURE_CYCLE, opIdx,
+                    mapOf("pictureId" to pictureId.toString()))
             }
             val innerOps = op.picture.ops
+            val nestedStackDepth = activePicturesOnStack.size
+            if (nestedStackDepth >= limits.maxRecursionDepth) {
+                refuse(GPUPreparedCompositeRefusalCodes.PICTURE_BUDGET, opIdx,
+                    mapOf("depth" to nestedStackDepth.toString(), "limit" to limits.maxRecursionDepth.toString()))
+            }
             if (op.paint == null) {
-                checkExpandedBudget(innerOps.size, opIdx)
-                val nestedStackDepth = activePicturesOnStack.size
-                if (nestedStackDepth >= limits.maxRecursionDepth) {
-                    refuse(
-                        GPUPreparedCompositeRefusalCodes.PICTURE_BUDGET,
-                        opIdx,
-                        mapOf(
-                            "depth" to nestedStackDepth.toString(),
-                            "limit" to limits.maxRecursionDepth.toString(),
-                        ),
-                    )
-                }
+                provenancePath.add("pic_${pictureId}")
                 activePicturesOnStack.add(pictureId)
                 try {
                     processOperations(innerOps, 0, parentScope)
                 } finally {
                     activePicturesOnStack.remove(pictureId)
+                    provenancePath.removeLast()
                 }
                 return opIdx
             } else {
-                checkExpandedBudget(innerOps.size + 2, opIdx)
-                val nestedStackDepth = activePicturesOnStack.size
-                if (nestedStackDepth >= limits.maxRecursionDepth) {
-                    refuse(
-                        GPUPreparedCompositeRefusalCodes.PICTURE_BUDGET,
-                        opIdx,
-                        mapOf(
-                            "depth" to nestedStackDepth.toString(),
-                            "limit" to limits.maxRecursionDepth.toString(),
-                        ),
-                    )
-                }
                 val syntheticId = nextScopeId()
                 val syntheticScope = MutableCaptureScope(
-                    id = syntheticId,
-                    parentId = parentScope.id,
+                    id = syntheticId, parentId = parentScope.id,
                     sourceKind = GPUPreparedCompositeScopeKind.PaintedPicture,
                     provenance = "picture(${pictureId})",
                     saveOperationIndex = opIdx,
+                    picturePaint = op.paint,
+                    pictureTransform = op.transform,
+                    pictureClip = op.clip,
                 )
                 scopes[syntheticId] = syntheticScope
                 parentScope.entries.add(GPUPreparedCompositeEntry.Scope(syntheticId))
-
+                provenancePath.add("picpainted_${pictureId}")
                 activePicturesOnStack.add(pictureId)
                 try {
                     processOperations(innerOps, 0, syntheticScope)
                 } finally {
                     activePicturesOnStack.remove(pictureId)
+                    provenancePath.removeLast()
                 }
                 syntheticScope.restoreOperationIndex = opIdx
                 return opIdx
@@ -254,31 +263,29 @@ internal object GPUPreparedCompositeCapturer {
             var current: MutableCaptureScope = scope
             while (current.parentId != null) {
                 val parent = scopes[current.parentId]
-                if (parent != null) {
-                    depth++
-                    current = parent
-                } else {
-                    break
-                }
+                if (parent != null) { depth++; current = parent } else break
             }
             return depth
         }
 
-        private fun appendDraw(
-            opIdx: Int,
-            op: DisplayOp,
-            scope: MutableCaptureScope,
-        ) {
+        private fun appendDraw(opIdx: Int, op: DisplayOp, scope: MutableCaptureScope) {
             val idx = expandedOps.size
+            capturedOpCount++
             val opClassName = op.javaClass.simpleName
-            val opIdentity = "op:${opIdx}:$opClassName"
+            val geomFacts = extractGeometryFacts(op)
+            val paintFacts = extractPaintFacts(op)
+            val transformFacts = extractTransformFacts(op)
+            val clipFacts = extractClipFacts(op)
+            val prov = provenancePath.joinToString("/")
+            val opIdentity = computeOpIdentity(opType = opClassName, geom = geomFacts,
+                paint = paintFacts, transform = transformFacts, clip = clipFacts, provenance = prov)
             expandedOps.add(
                 GPUPreparedCapturedOperation(
                     sourceOperationIndex = opIdx,
                     snapshot = GPUPreparedOperationSnapshot.DrawOp(
-                        opType = opClassName,
-                        operationIndex = opIdx,
-                        provenance = "root/$opIdx",
+                        opType = opClassName, operationIndex = opIdx, provenance = prov,
+                        geometryFacts = geomFacts, paintFacts = paintFacts,
+                        transformFacts = transformFacts, clipFacts = clipFacts,
                     ),
                     identity = opIdentity,
                 )
@@ -286,18 +293,55 @@ internal object GPUPreparedCompositeCapturer {
             scope.entries.add(GPUPreparedCompositeEntry.Draw(idx))
         }
 
-        private fun checkExpandedBudget(additionalOps: Int, opIdx: Int) {
-            val projected = expandedOps.size + additionalOps
-            if (projected > limits.maxExpandedOps) {
-                refuse(
-                    GPUPreparedCompositeRefusalCodes.PICTURE_BUDGET,
-                    opIdx,
-                    mapOf(
-                        "current" to expandedOps.size.toString(),
-                        "additional" to additionalOps.toString(),
-                        "limit" to limits.maxExpandedOps.toString(),
-                    ),
-                )
+        private fun computeOpIdentity(
+            opType: String, geom: String, paint: String,
+            transform: String, clip: String, provenance: String,
+        ): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            digest.update("op:v1:$opType:$geom:$paint:$transform:$clip:$provenance".toByteArray())
+            return digest.digest().joinToString("") { "%02x".format(it) }.take(32)
+        }
+
+        private fun extractGeometryFacts(op: DisplayOp): String {
+            return when (op) {
+                is DisplayOp.DrawRect -> "rect:${op.rect.left.toRawBits()}:${op.rect.top.toRawBits()}:${op.rect.right.toRawBits()}:${op.rect.bottom.toRawBits()}"
+                is DisplayOp.DrawRRect -> "rrect:${op.rrect.rect.left.toRawBits()}:${op.rrect.rect.top.toRawBits()}:${op.rrect.rect.right.toRawBits()}:${op.rrect.rect.bottom.toRawBits()}"
+                is DisplayOp.DrawPath -> "path:hash"
+                else -> "no_geom"
+            }
+        }
+
+        private fun extractPaintFacts(op: DisplayOp): String {
+            return when (op) {
+                is DisplayOp.DrawRect -> paintFacts(op.paint)
+                is DisplayOp.DrawRRect -> paintFacts(op.paint)
+                is DisplayOp.DrawPath -> paintFacts(op.paint)
+                is DisplayOp.DrawPicture -> if (op.paint != null) paintFacts(op.paint) else "nopaint"
+                is DisplayOp.DrawImage -> "image"
+                is DisplayOp.DrawText -> "text"
+                is DisplayOp.BeginLayer -> "layer"
+                is DisplayOp.EndLayer -> "end"
+                else -> "generic"
+            }
+        }
+
+        private fun paintFacts(p: Paint): String {
+            return "paint:${p.color.packed}:${p.blendMode}:${p.style}:${p.strokeWidth.toRawBits()}:${p.antiAlias}"
+        }
+
+        private fun extractTransformFacts(op: DisplayOp): String {
+            return when (op) {
+                is DisplayOp.DrawRect -> "t:ok"
+                is DisplayOp.DrawRRect -> "t:ok"
+                is DisplayOp.DrawPicture -> if (op.transform !== Matrix33.identity()) "t:t" else "t:id"
+                else -> "t:id"
+            }
+        }
+
+        private fun extractClipFacts(op: DisplayOp): String {
+            return when (op) {
+                is DisplayOp.DrawRect -> if (op.clip is ClipStack.WideOpen) "c:wo" else "c:cl"
+                else -> "c:wo"
             }
         }
 
@@ -320,13 +364,11 @@ internal object GPUPreparedCompositeCapturer {
             val result = mutableMapOf<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>()
             for ((id, mut) in scopes) {
                 result[id] = GPUPreparedCompositeScope(
-                    id = mut.id,
-                    parentId = mut.parentId,
+                    id = mut.id, parentId = mut.parentId,
                     saveOperationIndex = mut.saveOperationIndex,
                     restoreOperationIndex = mut.restoreOperationIndex,
                     entries = mut.entries.toList(),
-                    sourceKind = mut.sourceKind,
-                    provenance = mut.provenance,
+                    sourceKind = mut.sourceKind, provenance = mut.provenance,
                 )
             }
             return result.toMap()
@@ -350,11 +392,15 @@ internal object GPUPreparedCompositeCapturer {
         var saveOperationIndex: Int? = null,
         var restoreOperationIndex: Int? = null,
         val entries: MutableList<GPUPreparedCompositeEntry> = mutableListOf(),
+        val saveLayerRec: SaveLayerRec? = null,
+        val picturePaint: Paint? = null,
+        val pictureTransform: Matrix33? = null,
+        val pictureClip: ClipStack? = null,
     )
-
-    private class CaptureRefusedException(
-        val code: String,
-        val operationIndex: Int,
-        val facts: Map<String, String>,
-    ) : RuntimeException()
 }
+
+private class CaptureRefusedException(
+    val code: String,
+    val operationIndex: Int?,
+    val facts: Map<String, String>,
+) : RuntimeException()
