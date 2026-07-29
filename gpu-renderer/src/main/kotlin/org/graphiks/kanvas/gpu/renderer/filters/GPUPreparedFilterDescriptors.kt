@@ -562,6 +562,70 @@ data class GPUPreparedFilterNode(
     val parameters: GPUPreparedFilterParameters,
     val provenance: String,
 ) {
+    init {
+        validateKindParams()
+        validateInputArity()
+    }
+
+    private fun validateKindParams() {
+        val valid = when (kind) {
+            GPUPreparedFilterKind.Blur -> parameters is BlurParams
+            GPUPreparedFilterKind.Crop -> parameters is CropParams
+            GPUPreparedFilterKind.Offset -> parameters is OffsetParams
+            GPUPreparedFilterKind.ColorFilter -> parameters is ColorFilterParams
+            GPUPreparedFilterKind.DropShadow -> parameters is DropShadowParams
+            GPUPreparedFilterKind.Compose -> parameters is ComposeParams
+            GPUPreparedFilterKind.Blend -> parameters is BlendParams
+            GPUPreparedFilterKind.Dilate -> parameters is DilateParams
+            GPUPreparedFilterKind.Erode -> parameters is ErodeParams
+            GPUPreparedFilterKind.DistantLitDiffuse -> parameters is DistantLitDiffuseParams
+            GPUPreparedFilterKind.PointLitDiffuse -> parameters is PointLitDiffuseParams
+            GPUPreparedFilterKind.SpotLitDiffuse -> parameters is SpotLitDiffuseParams
+            GPUPreparedFilterKind.DistantLitSpecular -> parameters is DistantLitSpecularParams
+            GPUPreparedFilterKind.PointLitSpecular -> parameters is PointLitSpecularParams
+            GPUPreparedFilterKind.SpotLitSpecular -> parameters is SpotLitSpecularParams
+            GPUPreparedFilterKind.Tile -> parameters is TileParams
+            GPUPreparedFilterKind.Merge -> parameters is MergeParams
+            GPUPreparedFilterKind.DisplacementMap -> parameters is DisplacementMapParams
+            GPUPreparedFilterKind.Picture -> parameters is PictureParams
+            GPUPreparedFilterKind.Magnifier -> parameters is MagnifierParams
+            GPUPreparedFilterKind.MatrixConvolution -> parameters is MatrixConvolutionParams
+            GPUPreparedFilterKind.RuntimeEffect -> parameters is RuntimeEffectParams
+        }
+        require(valid) { "Node ${id.value}: kind $kind requires matching parameter type, got ${parameters::class.simpleName}" }
+    }
+
+    private fun validateInputArity() {
+        val expectedRange = when (kind) {
+            GPUPreparedFilterKind.Blur -> 1..1
+            GPUPreparedFilterKind.Crop -> 1..1
+            GPUPreparedFilterKind.Offset -> 1..1
+            GPUPreparedFilterKind.ColorFilter -> 1..1
+            GPUPreparedFilterKind.DropShadow -> 1..1
+            GPUPreparedFilterKind.Dilate -> 1..1
+            GPUPreparedFilterKind.Erode -> 1..1
+            GPUPreparedFilterKind.DistantLitDiffuse -> 1..1
+            GPUPreparedFilterKind.PointLitDiffuse -> 1..1
+            GPUPreparedFilterKind.SpotLitDiffuse -> 1..1
+            GPUPreparedFilterKind.DistantLitSpecular -> 1..1
+            GPUPreparedFilterKind.PointLitSpecular -> 1..1
+            GPUPreparedFilterKind.SpotLitSpecular -> 1..1
+            GPUPreparedFilterKind.Tile -> 1..1
+            GPUPreparedFilterKind.Picture -> 1..1
+            GPUPreparedFilterKind.Magnifier -> 1..1
+            GPUPreparedFilterKind.MatrixConvolution -> 1..1
+            GPUPreparedFilterKind.RuntimeEffect -> 1..1
+            GPUPreparedFilterKind.Compose -> 2..2
+            GPUPreparedFilterKind.Blend -> 2..2
+            GPUPreparedFilterKind.DisplacementMap -> 2..2
+            GPUPreparedFilterKind.Merge -> 1..Int.MAX_VALUE
+        }
+        val count = inputs.size
+        require(count in expectedRange) {
+            "Node ${id.value}: kind $kind expects ${expectedRange} inputs, got $count"
+        }
+    }
+
     fun canonicalIdentity(): String =
         "node:${id.value}:kind=$kind:inputs=[${inputs.joinToString(";") { it.identityFragment() }}]:" +
             "params=(${parameters.canonicalIdentity()}):provenance=$provenance"
@@ -579,9 +643,33 @@ class GPUPreparedFilterGraph(
 
     init {
         validateNodeIds(this.nodes)
-        validateOutputReference(this.nodes, output, identity)
+        validateOutputReference(this.nodes, output)
+        validateNoCycles(this.nodes)
         val computed = computeIdentity(this.nodes, output)
         this.identity = computed
+    }
+
+    private fun validateNoCycles(nodes: List<GPUPreparedFilterNode>) {
+        val nodeById = nodes.associateBy { it.id.value }
+        val visiting = mutableSetOf<String>()
+        val visited = mutableSetOf<String>()
+        fun dfs(id: String): Boolean {
+            if (id in visiting) return true
+            if (id in visited) return false
+            val node = nodeById[id] ?: return false
+            visiting.add(id)
+            for (input in node.inputs) {
+                if (input is GPUPreparedFilterInputRef.Node) {
+                    if (dfs(input.id.value)) return true
+                }
+            }
+            visiting.remove(id)
+            visited.add(id)
+            return false
+        }
+        for (node in nodes) {
+            require(!dfs(node.id.value)) { "Graph contains a cycle detected from node ${node.id.value}" }
+        }
     }
 
     private fun validateNodeIds(nodes: List<GPUPreparedFilterNode>) {
@@ -603,7 +691,6 @@ class GPUPreparedFilterGraph(
     private fun validateOutputReference(
         nodes: List<GPUPreparedFilterNode>,
         output: GPUPreparedFilterInputRef,
-        identity: String,
     ) {
         if (output is GPUPreparedFilterInputRef.Node) {
             val nodeIds = nodes.map { it.id.value }.toSet()
