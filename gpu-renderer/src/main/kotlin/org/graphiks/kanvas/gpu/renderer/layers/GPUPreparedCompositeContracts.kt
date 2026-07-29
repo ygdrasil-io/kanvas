@@ -38,32 +38,6 @@ data class GPUPreparedCompositeScope(
     val provenance: String,
 )
 
-/** Snapshot of a captured DisplayOp operation. */
-data class GPUPreparedCapturedOperation(
-    val sourceOperationIndex: Int,
-    val snapshot: Any,
-    val identity: String,
-)
-
-/** Immutable composite capture result. */
-data class GPUPreparedCompositeCapture(
-    val rootScopeId: GPUPreparedCompositeScopeId,
-    val scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
-    val expandedOperations: List<GPUPreparedCapturedOperation>,
-    val identity: String,
-)
-
-sealed interface GPUPreparedCompositeCaptureResult {
-    data class Ready(val capture: GPUPreparedCompositeCapture) :
-        GPUPreparedCompositeCaptureResult
-
-    data class Refused(
-        val code: String,
-        val operationIndex: Int?,
-        val facts: Map<String, String>,
-    ) : GPUPreparedCompositeCaptureResult
-}
-
 sealed interface GPUPreparedImageFilterLowering {
     data class Ready(val graph: GPUPreparedFilterGraph) :
         GPUPreparedImageFilterLowering
@@ -77,7 +51,7 @@ sealed interface GPUPreparedImageFilterLowering {
 data class GPUPreparedCompositePlan(
     val captureIdentity: String,
     val rootScopeId: GPUPreparedCompositeScopeId,
-    val layers: List<Any>,
+    val layers: List<GPULayerPlan>,
     val normalizedFilters: Map<GPUPreparedCompositeScopeId, GPUPreparedFilterNormalization>,
     val identity: String,
 )
