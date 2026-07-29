@@ -216,7 +216,6 @@ class GPUPreparedCompositeContractsTest {
         return GPUPreparedFilterGraph(
             nodes = emptyList(),
             output = GPUPreparedFilterInputRef.TransparentBlack,
-            identity = "graph_empty",
         )
     }
 }
