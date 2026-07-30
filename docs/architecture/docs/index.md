@@ -1,6 +1,6 @@
 # Architecture du Frame Plan WebGPU
 
-Inspiré de Graphite/Dawn — pipeline de rendu GPU pour Kanvas.
+Pipeline de rendu GPU pour Kanvas.
 
 ## Le pipeline en un schéma
 
@@ -82,12 +82,10 @@ d'envoyer chaque opération de dessin au GPU une par une, on **prépare
 toute la frame à l'avance** — on classe les opérations, on planifie les
 passes, on alloue les ressources, puis on exécute en une seule soumission.
 
-## Inspirations et limites
+## Backend GPU
 
-Ce design s'inspire de **Graphite** (le successeur de Ganesh dans Skia)
-et de **Dawn** (l'implémentation native de WebGPU), mais ne les porte pas.
-Kanvas a un seul backend GPU — WebGPU via wgpu4k — et adopte uniquement
-les invariants de performance utiles sans la complexité multi-backend.
+Kanvas a un seul backend GPU — WebGPU via wgpu4k — ce qui permet de
+garder une architecture simple sans la complexité multi-backend.
 
 ## État de la migration
 

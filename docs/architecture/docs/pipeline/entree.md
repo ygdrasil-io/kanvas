@@ -51,4 +51,4 @@ Types de commandes :
 | `Discard` | Ignorer le contenu précédent |
 
 **Pourquoi cette couche ?** C'est le point de séparation entre l'API
-compatible Skia (en amont) et le pipeline GPU Kanvas (en aval).
+l'API publique (en amont) et le pipeline GPU Kanvas (en aval).

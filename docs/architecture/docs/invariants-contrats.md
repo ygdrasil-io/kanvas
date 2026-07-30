@@ -39,7 +39,7 @@ Ces règles structurent toute l'architecture :
 
 ## Limites explicites (non-goals)
 
-- Pas de portage de Ganesh ou Graphite.
+- Pas de portage de moteurs de rendu externes.
 - Pas de compilateur SkSL, IR, ou VM.
 - Pas de multi-backend (WebGPU uniquement).
 - Pas de KanvasPipelineIR comme centre sémantique.

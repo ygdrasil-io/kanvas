@@ -6,7 +6,7 @@ transparence, les ombres, et les effets de calque.
 
 ## Les 29 modes
 
-Kanvas supporte les 29 modes de blend Skia. Voici les principaux :
+Kanvas supporte les 29 modes de blend. Voici les principaux :
 
 | Mode | Formule | Fixed-function ? |
 |------|---------|-----------------|

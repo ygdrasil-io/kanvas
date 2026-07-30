@@ -33,7 +33,7 @@
 | **Coverage** | Proportion de pixel recouverte. |
 | **Render pass** | Groupe de draws même cible/format/sample count. |
 | **Command encoder** | Objet WebGPU qui enregistre passes et copies. |
-| **Canvas** | API publique de dessin Kanvas, compatible Skia. |
+| **Canvas** | API publique de dessin Kanvas. |
 | **Surface** | Surface de rendu Kanvas. |
 | **Kadre** | Bibliothèque native de fenêtrage (ygdrasil-io/poc-koreos). |
 | **wgsl4k** | Bibliothèque Kotlin pour parsing/réflexion/génération WGSL. |
