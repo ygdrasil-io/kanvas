@@ -1,0 +1,43 @@
+site_name: Architecture GPU Kanvas
+site_description: Architecture du Frame Plan WebGPU inspiré de Graphite/Dawn
+theme:
+  name: material
+  language: fr
+  features:
+    - navigation.sections
+    - navigation.expand
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Accueil: index.md
+  - Pipeline:
+    - Entrée (DisplayList/GPUOpMapper): pipeline/entree.md
+    - Analyse & Recording: pipeline/analyse-recording.md
+    - Dépendances (GPUTaskList): pipeline/dependances.md
+    - Géométrie & Couverture: pipeline/geometrie-couverture.md
+    - Blend & Couleur: pipeline/blend-couleur.md
+    - Planification: pipeline/planification.md
+    - Pré-vol: pipeline/pre-vol.md
+    - Exécution: pipeline/execution.md
+    - Complétion: pipeline/completion.md
+    - Session Surface: pipeline/session-surface.md
+  - Concepts:
+    - Blend: concepts/blend.md
+    - Coverage: concepts/coverage.md
+    - Snapshots & Copies: concepts/snapshots.md
+    - Frame Plan: concepts/frame-plan.md
+    - Pré-vol & Exécution: concepts/pre-vol-execution.md
+    - Complétion & Cycle de vie: concepts/completion-cycle-vie.md
+  - Invariants & Contrats: invariants-contrats.md
+  - Glossaire: glossaire.md
