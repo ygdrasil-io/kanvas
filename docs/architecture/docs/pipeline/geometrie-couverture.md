@@ -36,9 +36,9 @@ flowchart TD
     style BLEND fill:#6b3a3a,color:#ffb3b3
 ```
 
-## Contexte de migration
+## Autorité
 
-`GPUGeometryPlan` et `GPUClipPlan` remplacent les anciens
-`GeometryPlan`/`CoveragePlan` hérités de KanvasPipelineIR. Les anciens
-existent encore comme entrée de migration et oracle CPU, mais sont
-traduits une fois à la frontière.
+`GPUGeometryPlan` et `GPUClipPlan` sont les autorités uniques de géométrie
+et de couverture dans le pipeline GPU. Ils consomment les
+`NormalizedDrawCommand` et produisent les plans consommés par le
+`GPUBlendPlan` et le `GPUFramePlanner`.

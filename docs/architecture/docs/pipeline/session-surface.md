@@ -30,6 +30,8 @@ flowchart TD
 Chaque `renderFrame()` crée un coordinateur frame-local frais. La session
 retient le backend et les caches entre appels.
 
-**État actuel :** non implémenté (FP-09). Un crash natif
-`EXCEPTION_ACCESS_VIOLATION` dans `wgpu_native.dll` bloque la
-réutilisation du backend entre frames.
+La session est conçue pour supporter des frames répétées sans
+réouverture du backend. Le device, la cible canonique, la génération
+et les caches survivent entre appels à `renderFrame()`. Chaque appel
+crée un coordinateur frame-local frais, qui enchaîne planification,
+pré-vol et exécution.

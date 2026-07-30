@@ -74,24 +74,31 @@ flowchart TD
     style Completion fill:#5a2a6b,color:#e0b3ff
 ```
 
-## Pourquoi cette architecture ?
+## Principes
 
-Kanvas remplace le rendu GPU immédiat (une opération = un appel GPU)
-par un **chemin de rendu mesuré et planifié**. L'idée centrale : au lieu
-d'envoyer chaque opération de dessin au GPU une par une, on **prépare
-toute la frame à l'avance** — on classe les opérations, on planifie les
-passes, on alloue les ressources, puis on exécute en une seule soumission.
+Le pipeline est conçu autour de quelques principes simples :
 
-## Backend GPU
+- **Toute la frame est préparée avant la première allocation GPU.**
+  L'analyse, le recording et le plan sont purement sémantiques — aucun
+  handle natif ne circule avant le pré-vol.
 
-Kanvas a un seul backend GPU — WebGPU via wgpu4k — ce qui permet de
-garder une architecture simple sans la complexité multi-backend.
+- **Une frame = une soumission.** Un command encoder, un command buffer,
+  un `queue.submit()`. Pas de soumissions intermédiaires.
 
-## État de la migration
+- **Le blend est décidé une fois pour toutes.** Le `GPUBlendPlan` couvre
+  les 29 modes et choisit la stratégie optimale : fixed-function quand
+  c'est possible, shader WGSL sinon, snapshot borné de la destination si
+  le shader doit la lire.
 
-| Opérations | Statut |
-|-----------|--------|
-| Images | ✅ Migré (FP-04) |
-| Texte & glyphes | ⏳ En attente (FP-05) |
-| Vertices & meshes | ⏳ En attente (FP-06) |
-| Composites (calques, filtres, masques) | ⏳ En attente (FP-07) |
+- **Tout passe par le GPU.** Pas de fallback CPU pour les lectures de
+  destination. Pas de snapshots uploadés.
+
+- **L'ordre du peintre est préservé.** Le plan est linéaire, pas un DAG
+  de tâches. Seule optimisation : le groupement par render pass.
+
+- **Une seule autorité par décision.** Chaque composant a un propriétaire
+  unique. Pas de double énumération, pas de chemin parallèle.
+
+## Backend
+
+Kanvas a un seul backend — WebGPU via wgpu4k.
