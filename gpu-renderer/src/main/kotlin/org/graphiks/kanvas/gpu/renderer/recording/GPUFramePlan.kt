@@ -1229,6 +1229,18 @@ private fun CanonicalHashSink.preparedTextBinding(value: GPUPreparedTextRenderBi
     string("sealClipIdentity", value.preflightSeal.clipIdentity)
     string("sealBlendPlanIdentity", value.preflightSeal.blendPlanIdentity)
     string("sealCapabilitySnapshotHash", value.preflightSeal.capabilitySnapshotHash)
+    value.preflightSeal.packetAuthority?.let { seal ->
+        tag("GPUPreparedTextPacketAuthoritySeal")
+        int("sealPacketCommandIdValue", seal.commandIdValue)
+        string("sealPacketRenderStepIdentity", seal.renderStepIdentity)
+        string("sealPacketRenderPipelineKey", seal.renderPipelineKey)
+        string("sealPacketBindingLayoutHash", seal.bindingLayoutHash)
+        string("sealPacketVertexSourceLabel", seal.vertexSourceLabel)
+        string("sealPacketTargetStateHash", seal.targetStateHash)
+        nullable("sealPacketScissorBoundsHash", seal.scissorBoundsHash) {
+            string("value", it)
+        }
+    }
     value.preflightSeal.textA8Composite?.let { seal ->
         tag("GPUPreparedTextCompositePreflightSeal")
         preparedTextAffine("sealDeviceToLocal", seal.deviceToLocal)
@@ -1998,6 +2010,12 @@ private fun GPUPreparedTextRenderBinding.stableDump(): String =
         "target=${preflightSeal.targetBounds},scissor=${preflightSeal.scissorBounds}," +
         "clip=${preflightSeal.clipIdentity},blend=${preflightSeal.blendPlanIdentity}," +
         "capability=${preflightSeal.capabilitySnapshotHash}," +
+        "packet=${preflightSeal.packetAuthority?.let { seal ->
+            "${seal.commandIdValue}/${seal.renderStepIdentity}/" +
+                "${seal.renderPipelineKey}/${seal.bindingLayoutHash}/" +
+                "${seal.vertexSourceLabel}/${seal.targetStateHash}/" +
+                (seal.scissorBoundsHash ?: "none")
+        } ?: "none"}," +
         "textA8Composite=${preflightSeal.textA8Composite?.stableDump() ?: "none"}}}"
 
 private fun GPUPreparedTextRenderBinding.textA8CompositeStableDump(): String {

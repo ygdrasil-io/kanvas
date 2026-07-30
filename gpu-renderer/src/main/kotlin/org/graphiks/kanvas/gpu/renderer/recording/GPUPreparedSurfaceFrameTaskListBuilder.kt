@@ -191,6 +191,27 @@ class GPUPreparedTextCompositePreflightSeal internal constructor(
     }
 }
 
+/** Exact handle-free packet facts shared by TextA8 and ColorGlyph preflight. */
+class GPUPreparedTextPacketAuthoritySeal internal constructor(
+    val commandIdValue: Int,
+    val renderStepIdentity: String,
+    val renderPipelineKey: String,
+    val bindingLayoutHash: String,
+    val vertexSourceLabel: String,
+    val targetStateHash: String,
+    val scissorBoundsHash: String?,
+) {
+    init {
+        require(commandIdValue >= 0)
+        require(renderStepIdentity.isNotBlank())
+        require(renderPipelineKey.isNotBlank())
+        require(bindingLayoutHash.isNotBlank())
+        require(vertexSourceLabel.isNotBlank())
+        require(targetStateHash.isNotBlank())
+        require(scissorBoundsHash == null || scissorBoundsHash.isNotBlank())
+    }
+}
+
 /**
  * Passive immutable Task 8 handoff facts consumed by Task 9 preflight.
  *
@@ -226,6 +247,7 @@ class GPUPreparedTextBindingPreflightSeal(
     val blendPlanIdentity: String,
     val capabilitySnapshotHash: String,
     val textA8Composite: GPUPreparedTextCompositePreflightSeal? = null,
+    val packetAuthority: GPUPreparedTextPacketAuthoritySeal? = null,
 ) {
     val materialSampledResourceFacts: List<String> =
         immutableList(materialSampledResourceFacts)
@@ -1372,6 +1394,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             materialUploadByResourceKey.getValue(resource.resourceKey).resources
                         },
                         preflightSeal = semantic.preparedTextPreflightSeal(
+                            packet = packet,
                             material = material,
                             atlasResourcePlan = r8UploadByIdentity
                                 .getValue(semantic.exactR8ArtifactIdentity())
@@ -2222,6 +2245,7 @@ private fun GPUDrawSemanticPayload.preparedTextMaterial() = when (this) {
 }
 
 private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
+    packet: GPUDrawPacket,
     material: org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram,
     atlasResourcePlan: GPUR8FrameResourcePlan,
     instanceBufferPlan: GPUPreparedTextInstanceBufferPlan,
@@ -2322,6 +2346,15 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
         blendPlanIdentity = blendPlanIdentity,
         capabilitySnapshotHash = capabilitySnapshotHash,
         textA8Composite = textA8Composite,
+        packetAuthority = GPUPreparedTextPacketAuthoritySeal(
+            commandIdValue = packet.commandIdValue,
+            renderStepIdentity = packet.renderStepId.value,
+            renderPipelineKey = requireNotNull(packet.renderPipelineKey).value,
+            bindingLayoutHash = packet.bindingLayoutHash,
+            vertexSourceLabel = packet.vertexSourceLabel,
+            targetStateHash = packet.targetStateHash,
+            scissorBoundsHash = packet.scissorBoundsHash,
+        ),
     )
 }
 

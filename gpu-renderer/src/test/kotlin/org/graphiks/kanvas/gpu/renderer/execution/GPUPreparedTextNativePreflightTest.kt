@@ -73,6 +73,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskPhase
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskUseToken
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
@@ -128,6 +129,28 @@ class GPUPreparedTextNativePreflightTest {
     }
 
     @Test
+    fun `preflight snapshots immutable text evidence once per unique identity`() {
+        val fixture = preparedTextNativePreflightFixture()
+        val observations = mutableMapOf<GPUPreparedTextImmutableEvidenceKind, Int>()
+        val preflight = GPUPreparedSurfaceNativePreflight(
+            preparedTextEvidenceObserver = { kind ->
+                observations[kind] = observations.getOrDefault(kind, 0) + 1
+            },
+        )
+
+        assertNull(
+            preflight.validateFramePlan(
+                fixture.framePlan,
+                fixture.context,
+                fixture.capabilities,
+            ),
+        )
+        GPUPreparedTextImmutableEvidenceKind.entries.forEach { kind ->
+            assertEquals(1, observations[kind], kind.name)
+        }
+    }
+
+    @Test
     fun `accepted TextA8 frame passes pure prepared surface preflight`() {
         val fixture = preparedTextNativePreflightFixture()
 
@@ -151,8 +174,149 @@ class GPUPreparedTextNativePreflightTest {
                     fixture.framePlan,
                     fixture.context,
                     fixture.capabilities,
-                ),
+            ),
         )
+    }
+
+    @Test
+    fun `prepared TextA8 packet command substitution refuses before native creation`() {
+        val fixture = preparedTextNativePreflightFixture()
+        val mutated = fixture.copy(
+            framePlan = fixture.framePlan.rebuilt(
+                steps = fixture.framePlan.steps.map { step ->
+                    if (step !is GPUFrameStep.RenderPassStep) {
+                        step
+                    } else {
+                        step.rebuilt(
+                            drawPackets = step.drawPackets.mapIndexed { index, packet ->
+                                if (index == 0) {
+                                    packet.rebuilt(commandIdValue = packet.commandIdValue + 100)
+                                } else {
+                                    packet
+                                }
+                            },
+                        )
+                    }
+                },
+            ),
+        )
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(
+            probe.preflight(mutated),
+        )
+
+        assertEquals(
+            GPUPreparedTextPreflightRefusalCodes.OPERAND,
+            refused.diagnostic.code.value,
+        )
+        assertEquals(0, probe.totalCreations)
+    }
+
+    @TestFactory
+    fun `every prepared TextA8 packet identity substitution refuses before native creation`():
+        List<DynamicTest> {
+        data class Mutation(
+            val name: String,
+            val transform: (GPUDrawPacket) -> GPUDrawPacket,
+        )
+        val mutations = listOf(
+            Mutation("render step") { packet ->
+                packet.rebuilt(renderStepId = GPURenderStepID("text.forged"))
+            },
+            Mutation("pipeline key") { packet ->
+                packet.rebuilt(renderPipelineKey = GPURenderPipelineKey("pipeline.forged"))
+            },
+            Mutation("binding layout") { packet ->
+                packet.rebuilt(bindingLayoutHash = "layout.forged")
+            },
+            Mutation("vertex source") { packet ->
+                packet.rebuilt(vertexSourceLabel = "vertex.forged")
+            },
+            Mutation("target state") { packet ->
+                packet.rebuilt(targetStateHash = "target.forged")
+            },
+            Mutation("scissor authority") { packet ->
+                packet.rebuilt(scissorBoundsHash = "scissor.forged")
+            },
+        )
+        return mutations.map { mutation ->
+            DynamicTest.dynamicTest(mutation.name) {
+                val fixture = preparedTextNativePreflightFixture()
+                var changed = false
+                val mutated = fixture.copy(
+                    framePlan = fixture.framePlan.rebuilt(
+                        steps = fixture.framePlan.steps.map { step ->
+                            if (step !is GPUFrameStep.RenderPassStep) {
+                                step
+                            } else {
+                                step.rebuilt(
+                                    drawPackets = step.drawPackets.map { packet ->
+                                        if (!changed &&
+                                            packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+                                        ) {
+                                            changed = true
+                                            mutation.transform(packet)
+                                        } else {
+                                            packet
+                                        }
+                                    },
+                                )
+                            }
+                        },
+                    ),
+                )
+                val probe = GPUPreparedTextNativeCreationProbe()
+
+                val refused = assertIs<GPUFramePreflightResult.Refused>(
+                    probe.preflight(mutated),
+                )
+
+                assertEquals(
+                    GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                    refused.diagnostic.code.value,
+                )
+                assertEquals(0, probe.totalCreations)
+            }
+        }
+    }
+
+    @Test
+    fun `prepared ColorGlyph packet substitution uses the shared packet authority`() {
+        val fixture = preparedTextNativePreflightFixture(includeColorGlyph = true)
+        val mutated = fixture.copy(
+            framePlan = fixture.framePlan.rebuilt(
+                steps = fixture.framePlan.steps.map { step ->
+                    if (step !is GPUFrameStep.RenderPassStep) {
+                        step
+                    } else {
+                        step.rebuilt(
+                            drawPackets = step.drawPackets.map { packet ->
+                                if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph) {
+                                    packet.rebuilt(
+                                        renderPipelineKey =
+                                            GPURenderPipelineKey("pipeline.forged"),
+                                    )
+                                } else {
+                                    packet
+                                }
+                            },
+                        )
+                    }
+                },
+            ),
+        )
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(
+            probe.preflight(mutated),
+        )
+
+        assertEquals(
+            GPUPreparedTextPreflightRefusalCodes.OPERAND,
+            refused.diagnostic.code.value,
+        )
+        assertEquals(0, probe.totalCreations)
     }
 
     @Test
@@ -184,6 +348,117 @@ class GPUPreparedTextNativePreflightTest {
             refused.diagnostic.code.value,
         )
         assertEquals(0, probe.totalCreations)
+    }
+
+    @TestFactory
+    fun `missing prepared text generations refuse before native creation`(): List<DynamicTest> {
+        val fixture = preparedTextNativePreflightFixture()
+        val binding = fixture.framePlan.preparedTextBindings().first()
+        val resources = listOfNotNull(
+            "atlas staging" to binding.atlasResourcePlan.stagingRef,
+            "atlas texture" to binding.atlasResourcePlan.frameTextureRef,
+            "instance buffer" to binding.instanceBufferPlan.bufferRef,
+            "draw uniform buffer" to binding.drawUniformBufferPlan.bufferRef,
+            binding.materialUniformBufferPlan?.let { "material uniform buffer" to it.bufferRef },
+        )
+        return resources.map { (label, resource) ->
+            DynamicTest.dynamicTest(label) {
+                val probe = GPUPreparedTextNativeCreationProbe()
+
+                val refused = assertIs<GPUFramePreflightResult.Refused>(
+                    probe.preflight(
+                        fixture,
+                        fixture.context.withoutResourceGeneration(resource),
+                    ),
+                )
+
+                assertEquals(
+                    GPUPreparedTextPreflightRefusalCodes.STALE_ATLAS_GENERATION,
+                    refused.diagnostic.code.value,
+                )
+                assertEquals(0, probe.totalCreations)
+            }
+        }
+    }
+
+    @TestFactory
+    fun `missing sampled material generations refuse before native creation`():
+        List<DynamicTest> {
+        val fixture = preparedTextNativePreflightFixture(
+            materialProgram = sampledPreparedTextMaterialProgram("source:generation"),
+        )
+        val sampled = fixture.framePlan.preparedTextBindings().first()
+            .materialSampledResourcePlans
+            .single()
+        return listOf(
+            "sampled staging" to sampled.stagingRef,
+            "sampled texture" to sampled.frameTextureRef,
+        ).map { (label, resource) ->
+            DynamicTest.dynamicTest(label) {
+                val probe = GPUPreparedTextNativeCreationProbe()
+
+                val refused = assertIs<GPUFramePreflightResult.Refused>(
+                    probe.preflight(
+                        fixture,
+                        fixture.context.withoutResourceGeneration(resource),
+                    ),
+                )
+
+                assertEquals(
+                    GPUPreparedTextPreflightRefusalCodes.STALE_ATLAS_GENERATION,
+                    refused.diagnostic.code.value,
+                )
+                assertEquals(0, probe.totalCreations)
+            }
+        }
+    }
+
+    @TestFactory
+    fun `rich generation seal covers every prepared text resource`(): List<DynamicTest> {
+        val inputs = capturedPreparedTextInputs()
+        val resources = inputs.framePlan.preparedTextBindings()
+            .flatMap { binding ->
+                buildList {
+                    add(binding.atlasResourcePlan.stagingRef)
+                    add(binding.atlasResourcePlan.frameTextureRef)
+                    add(binding.instanceBufferPlan.bufferRef)
+                    if (binding.hasTextA8Composite) {
+                        add(binding.drawUniformBufferPlan.bufferRef)
+                    }
+                    binding.materialUniformBufferPlan?.let { add(it.bufferRef) }
+                    binding.materialSampledResourcePlans.forEach { resource ->
+                        add(resource.stagingRef)
+                        add(resource.frameTextureRef)
+                    }
+                }
+            }
+            .distinct()
+        return resources.map { resource ->
+            DynamicTest.dynamicTest(resource.value) {
+                val mutatedSeal = GPUPreparedGenerationSeal(
+                    deviceGeneration = inputs.generationSeal.deviceGeneration,
+                    targetGeneration = inputs.generationSeal.targetGeneration,
+                    resourceGenerations =
+                        inputs.generationSeal.resourceGenerations - resource,
+                    capabilitySealHash = inputs.generationSeal.capabilitySealHash,
+                )
+
+                val refused = assertIs<GPUPreparedSurfaceNativePreflightResult.Refused>(
+                    GPUPreparedSurfaceNativePreflight().validate(
+                        inputs.framePlan,
+                        inputs.encoderPlan,
+                        inputs.resources,
+                        inputs.shaderContract,
+                        mutatedSeal,
+                    ),
+                )
+
+                assertEquals(
+                    GPUPreparedTextPreflightRefusalCodes.STALE_ATLAS_GENERATION,
+                    refused.code,
+                )
+            }
+        }
     }
 
     @Test
@@ -482,6 +757,305 @@ class GPUPreparedTextNativePreflightTest {
                 refused.diagnostic.code.value,
             )
             assertEquals(0, probe.totalCreations)
+        }
+    }
+
+    @TestFactory
+    fun `prepared text declarations match their immutable resource plans`(): List<DynamicTest> {
+        data class Mutation(
+            val name: String,
+            val resource: (
+                org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding,
+            ) -> org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef,
+            val transform: (GPUResourcePreparationRequest) -> GPUResourcePreparationRequest,
+            val expectedCode: String = GPUPreparedTextPreflightRefusalCodes.OPERAND_OWNERSHIP,
+        )
+        val fixture = preparedTextNativePreflightFixture()
+        val binding = fixture.framePlan.preparedTextBindings().first()
+        val mutations = listOf(
+            Mutation(
+                "atlas format",
+                { it.atlasResourcePlan.frameTextureRef },
+                { request ->
+                    val descriptor = assertIs<GPUFrameTextureDescriptor>(request.descriptor)
+                    request.rebuilt(
+                        descriptor = descriptor.copy(format = GPUColorFormat.RGBA8Unorm),
+                    )
+                },
+            ),
+            Mutation(
+                "atlas extent",
+                { it.atlasResourcePlan.frameTextureRef },
+                { request ->
+                    val descriptor = assertIs<GPUFrameTextureDescriptor>(request.descriptor)
+                    request.rebuilt(
+                        descriptor = descriptor.copy(
+                            logicalBounds = GPUPixelBounds(
+                                0,
+                                0,
+                                descriptor.logicalBounds.width + 1,
+                                descriptor.logicalBounds.height,
+                            ),
+                        ),
+                    )
+                },
+            ),
+            Mutation(
+                "atlas sample count",
+                { it.atlasResourcePlan.frameTextureRef },
+                { request ->
+                    val descriptor = assertIs<GPUFrameTextureDescriptor>(request.descriptor)
+                    request.rebuilt(descriptor = descriptor.copy(sampleCount = 2))
+                },
+            ),
+            Mutation(
+                "atlas byte size",
+                { it.atlasResourcePlan.frameTextureRef },
+                { request -> request.rebuilt(byteSize = request.byteSize + 1L) },
+            ),
+            Mutation(
+                "atlas staging size",
+                { it.atlasResourcePlan.stagingRef },
+                { request ->
+                    val descriptor = assertIs<GPUFrameBufferDescriptor>(request.descriptor)
+                    val byteSize = descriptor.byteSize + 256L
+                    request.rebuilt(
+                        descriptor = descriptor.copy(byteSize = byteSize),
+                        byteSize = byteSize,
+                    )
+                },
+            ),
+            Mutation(
+                "atlas staging alignment",
+                { it.atlasResourcePlan.stagingRef },
+                { request ->
+                    val descriptor = assertIs<GPUFrameBufferDescriptor>(request.descriptor)
+                    request.rebuilt(
+                        descriptor = descriptor.copy(
+                            alignmentBytes = descriptor.alignmentBytes * 2L,
+                        ),
+                    )
+                },
+            ),
+            Mutation(
+                "instance buffer size",
+                { it.instanceBufferPlan.bufferRef },
+                { request ->
+                    val descriptor = assertIs<GPUFrameBufferDescriptor>(request.descriptor)
+                    val byteSize = descriptor.byteSize + 4L
+                    request.rebuilt(
+                        descriptor = descriptor.copy(byteSize = byteSize),
+                        byteSize = byteSize,
+                    )
+                },
+                GPUPreparedTextCompositePreflightRefusalCodes.INSTANCE_VERTEX_ABI,
+            ),
+            Mutation(
+                "instance buffer alignment",
+                { it.instanceBufferPlan.bufferRef },
+                { request ->
+                    val descriptor = assertIs<GPUFrameBufferDescriptor>(request.descriptor)
+                    request.rebuilt(
+                        descriptor = descriptor.copy(
+                            alignmentBytes = descriptor.alignmentBytes * 2L,
+                        ),
+                    )
+                },
+                GPUPreparedTextCompositePreflightRefusalCodes.INSTANCE_VERTEX_ABI,
+            ),
+            Mutation(
+                "draw uniform buffer size",
+                { it.drawUniformBufferPlan.bufferRef },
+                { request ->
+                    val descriptor = assertIs<GPUFrameBufferDescriptor>(request.descriptor)
+                    val byteSize = descriptor.byteSize + 256L
+                    request.rebuilt(
+                        descriptor = descriptor.copy(byteSize = byteSize),
+                        byteSize = byteSize,
+                    )
+                },
+                GPUPreparedTextCompositePreflightRefusalCodes.BINDING_LAYOUT,
+            ),
+            Mutation(
+                "draw uniform buffer alignment",
+                { it.drawUniformBufferPlan.bufferRef },
+                { request ->
+                    val descriptor = assertIs<GPUFrameBufferDescriptor>(request.descriptor)
+                    request.rebuilt(
+                        descriptor = descriptor.copy(
+                            alignmentBytes = descriptor.alignmentBytes * 2L,
+                        ),
+                    )
+                },
+                GPUPreparedTextCompositePreflightRefusalCodes.BINDING_LAYOUT,
+            ),
+            Mutation(
+                "material uniform buffer size",
+                { requireNotNull(it.materialUniformBufferPlan).bufferRef },
+                { request ->
+                    val descriptor = assertIs<GPUFrameBufferDescriptor>(request.descriptor)
+                    val byteSize = descriptor.byteSize + 256L
+                    request.rebuilt(
+                        descriptor = descriptor.copy(byteSize = byteSize),
+                        byteSize = byteSize,
+                    )
+                },
+            ),
+        )
+        return mutations.map { mutation ->
+            DynamicTest.dynamicTest(mutation.name) {
+                val mutated = fixture.copy(
+                    framePlan = fixture.framePlan.withPreparationMutation(
+                        mutation.resource(binding),
+                        mutation.transform,
+                    ),
+                )
+                val probe = GPUPreparedTextNativeCreationProbe()
+
+                val refused = assertIs<GPUFramePreflightResult.Refused>(
+                    probe.preflight(mutated),
+                )
+
+                assertEquals(
+                    mutation.expectedCode,
+                    refused.diagnostic.code.value,
+                )
+                assertEquals(0, probe.totalCreations)
+            }
+        }
+    }
+
+    @Test
+    fun `sampled material declarations match their immutable resource plan`() {
+        val fixture = preparedTextNativePreflightFixture(
+            materialProgram = sampledPreparedTextMaterialProgram("source:declaration"),
+        )
+        val sampled = fixture.framePlan.preparedTextBindings().first()
+            .materialSampledResourcePlans
+            .single()
+        val mutated = fixture.copy(
+            framePlan = fixture.framePlan.withPreparationMutation(
+                sampled.frameTextureRef,
+            ) { request ->
+                val descriptor = assertIs<GPUFrameTextureDescriptor>(request.descriptor)
+                request.rebuilt(
+                    descriptor = descriptor.copy(format = GPUColorFormat.RGBA8Unorm),
+                )
+            },
+        )
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(
+            probe.preflight(mutated),
+        )
+
+        assertEquals(
+            GPUPreparedTextPreflightRefusalCodes.OPERAND_OWNERSHIP,
+            refused.diagnostic.code.value,
+        )
+        assertEquals(0, probe.totalCreations)
+    }
+
+    @TestFactory
+    fun `prepared text upload layouts match their immutable plans`(): List<DynamicTest> {
+        data class Mutation(
+            val name: String,
+            val transform: (
+                org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout,
+            ) -> org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout,
+        )
+        val mutations = listOf(
+            Mutation("source offset") { layout ->
+                layout.copy(sourceOffsetBytes = layout.sourceOffsetBytes + 1L)
+            },
+            Mutation("bytes per row") { layout ->
+                layout.copy(bytesPerRow = layout.bytesPerRow + 256L)
+            },
+            Mutation("rows per image") { layout ->
+                layout.copy(rowsPerImage = layout.rowsPerImage + 1)
+            },
+            Mutation("upload byte count") { layout ->
+                layout.copy(byteSize = layout.byteSize + 256L)
+            },
+        )
+        return mutations.map { mutation ->
+            DynamicTest.dynamicTest(mutation.name) {
+                val fixture = preparedTextNativePreflightFixture()
+                val mutated = fixture.copy(
+                    framePlan = fixture.framePlan.withR8UploadLayoutCorruption(
+                        mutation.transform,
+                    ),
+                )
+                val probe = GPUPreparedTextNativeCreationProbe()
+
+                val refused = assertIs<GPUFramePreflightResult.Refused>(
+                    probe.preflight(mutated),
+                )
+
+                assertEquals(
+                    GPUPreparedTextPreflightRefusalCodes.OPERAND_OWNERSHIP,
+                    refused.diagnostic.code.value,
+                )
+                assertEquals(0, probe.totalCreations)
+            }
+        }
+    }
+
+    @TestFactory
+    fun `prepared text memory budget is exact before native creation`(): List<DynamicTest> {
+        data class Mutation(
+            val name: String,
+            val transform: (GPUFrameMemoryBudgetPlan) -> GPUFrameMemoryBudgetPlan,
+        )
+        val mutations = listOf(
+            Mutation("category total") { budget ->
+                budget.copy(
+                    categoryTotals = budget.categoryTotals +
+                        (
+                            GPUFrameMemoryCategory.ReusableScratch to
+                                (
+                                    budget.categoryTotals.getValue(
+                                        GPUFrameMemoryCategory.ReusableScratch,
+                                    ) + 1L
+                                    )
+                            ),
+                )
+            },
+            Mutation("omitted text allocation") { budget ->
+                budget.copy(
+                    allocations = budget.allocations.filterNot { allocation ->
+                        allocation.label.startsWith("prepared-text.instances.")
+                    },
+                )
+            },
+            Mutation("under-reported transient peak") { budget ->
+                budget.copy(
+                    peakFrameTransientBytes = budget.peakFrameTransientBytes - 1L,
+                    diagnostic = null,
+                )
+            },
+        )
+        return mutations.map { mutation ->
+            DynamicTest.dynamicTest(mutation.name) {
+                val fixture = preparedTextNativePreflightFixture()
+                val mutated = fixture.copy(
+                    framePlan = fixture.framePlan.rebuilt(
+                        steps = fixture.framePlan.steps,
+                        memoryBudget = mutation.transform(fixture.framePlan.memoryBudget),
+                    ),
+                )
+                val probe = GPUPreparedTextNativeCreationProbe()
+
+                val refused = assertIs<GPUFramePreflightResult.Refused>(
+                    probe.preflight(mutated),
+                )
+
+                assertEquals(
+                    GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                    refused.diagnostic.code.value,
+                )
+                assertEquals(0, probe.totalCreations)
+            }
         }
     }
 
@@ -1024,6 +1598,7 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPre
     blendPlanIdentity = blendPlanIdentity,
     capabilitySnapshotHash = capabilitySnapshotHash,
     textA8Composite = textA8Composite,
+    packetAuthority = packetAuthority,
 )
 
 private fun PreparedTextNativePreflightFixture.withPreparationMutationForRole(
@@ -1067,10 +1642,34 @@ private fun GPUFramePreflightContext.withResourceGeneration(
     surfaceGeneration = surfaceGeneration,
 )
 
+private fun GPUFramePreflightContext.withoutResourceGeneration(
+    resource: org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef,
+): GPUFramePreflightContext = GPUFramePreflightContext(
+    targetId = targetId,
+    deviceGeneration = deviceGeneration,
+    targetGeneration = targetGeneration,
+    resourceGenerations = resourceGenerations - resource,
+    surfaceGeneration = surfaceGeneration,
+)
+
 private fun GPUFramePlan.preparedTextAtlasRequest(): GPUResourcePreparationRequest =
     steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
         .flatMap { it.requests }
         .single { it.role == GPUFrameResourceRole.GlyphAtlas }
+
+private fun GPUFramePlan.withR8UploadLayoutCorruption(
+    transform: (
+        org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout,
+    ) -> org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout,
+): GPUFramePlan {
+    val upload = steps.filterIsInstance<GPUFrameStep.UploadResourceStep>()
+        .single { it.r8ResourcePlan != null }
+    upload.javaClass.getDeclaredField("layout").run {
+        isAccessible = true
+        set(upload, transform(upload.layout))
+    }
+    return this
+}
 
 private fun GPUPreparedR8UploadArtifact.rebuilt(
     width: Int = this.width,
@@ -1137,6 +1736,7 @@ private fun GPUDrawSemanticPayload.TextA8.rebuilt(
 private fun GPUFramePlan.rebuilt(
     steps: List<GPUFrameStep>,
     dependencies: List<GPUTaskDependency> = this.dependencies,
+    memoryBudget: GPUFrameMemoryBudgetPlan = this.memoryBudget,
 ): GPUFramePlan =
     GPUFramePlan(
         frameId = frameId,
@@ -1174,7 +1774,14 @@ private fun GPUFrameStep.RenderPassStep.rebuilt(
 )
 
 private fun GPUDrawPacket.rebuilt(
+    commandIdValue: Int = this.commandIdValue,
+    renderStepId: GPURenderStepID = this.renderStepId,
+    renderPipelineKey: GPURenderPipelineKey? = this.renderPipelineKey,
+    bindingLayoutHash: String = this.bindingLayoutHash,
     semanticPayload: GPUDrawSemanticPayload? = this.semanticPayload,
+    vertexSourceLabel: String = this.vertexSourceLabel,
+    scissorBoundsHash: String? = this.scissorBoundsHash,
+    targetStateHash: String = this.targetStateHash,
 ): GPUDrawPacket = GPUDrawPacket(
     packetId = packetId,
     commandIdValue = commandIdValue,
@@ -1208,14 +1815,18 @@ private fun GPUDrawPacket.rebuilt(
 )
 
 private fun GPUResourcePreparationRequest.rebuilt(
+    descriptor:
+        org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceDescriptor =
+        this.descriptor,
     lifetime: GPUFrameResourceLifetime = this.lifetime,
     usages: Set<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage> =
         this.usages,
+    byteSize: Long = this.byteSize,
 ): GPUResourcePreparationRequest = GPUResourcePreparationRequest(
     resource = resource,
     descriptor = when (val value = descriptor) {
         is GPUFrameBufferDescriptor -> value.copy()
-        is org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor -> value.copy()
+        is GPUFrameTextureDescriptor -> value.copy()
     },
     role = role,
     usages = usages,

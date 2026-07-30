@@ -98,6 +98,7 @@ class GPUPreparedTextCompositePreflightTest {
             blendPlanIdentity = originalBindingSeal.blendPlanIdentity,
             capabilitySnapshotHash = originalBindingSeal.capabilitySnapshotHash,
             textA8Composite = forgedCompositeSeal,
+            packetAuthority = originalBindingSeal.packetAuthority,
         )
         binding.setPrivateField("preflightSeal", forgedBindingSeal)
         val native = CorrelatedCompositeNativeProbe()

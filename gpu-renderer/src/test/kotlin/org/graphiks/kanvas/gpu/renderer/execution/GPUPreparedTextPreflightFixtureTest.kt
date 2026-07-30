@@ -22,15 +22,16 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResu
  *
  * ## What this file does NOT prove
  *
- * - That any refusal is actually executed. The production preflight is
- *   not implemented in this branch. All 28 entries in the matrix are
- *   pending until the production preflight exists.
+ * - That a refusal reaches the production preflight. Those executable
+ *   zero-native-side-effect checks live in `GPUPreparedTextNativePreflightTest`,
+ *   which consumes this matrix as its single ordered mutation inventory.
  *
  * ## Counts
  *
- * - Fixture tests actually executed: see test count below.
- * - Invariants described in the matrix: 28.
- * - Refusals executed against the production preflight: 0.
+ * - Fixture and matrix self-validation: this class.
+ * - Production refusal coverage: `GPUPreparedTextNativePreflightTest`.
+ * - The matrix size is asserted from its canonical inventory instead of
+ *   being duplicated in this documentation.
  */
 class GPUPreparedTextPreflightFixtureTest {
 
