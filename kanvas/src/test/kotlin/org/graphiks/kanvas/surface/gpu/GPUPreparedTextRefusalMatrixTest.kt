@@ -192,8 +192,8 @@ class GPUPreparedTextRefusalMatrixTest {
                 GPUTextRefusalCodes.CLIP_ROUTE_UNACCEPTED,
             ),
             RefusalCase(
-                "unsupported paint style",
-                valid.copy(paint = valid.paint.copy(style = PaintStyle.STROKE, strokeWidth = 1f)),
+                "stroke and fill paint style unsupported",
+                valid.copy(paint = valid.paint.copy(style = PaintStyle.STROKE_AND_FILL)),
                 GPUTextRefusalCodes.PAINT_STYLE_UNSUPPORTED,
             ),
             RefusalCase(

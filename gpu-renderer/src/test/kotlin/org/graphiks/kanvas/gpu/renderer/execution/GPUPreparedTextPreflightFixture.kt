@@ -154,7 +154,9 @@ object GPUPreparedTextPreflightFixture {
     // ---- Page artifacts -----------------------------------------------------
 
     /** Create ONE valid A8 atlas page artifact for the baseline. */
-    fun baselinePage0(): GPUTextA8AtlasPageArtifact {
+    fun baselinePage0(
+        generation: Int = GENERATION,
+    ): GPUTextA8AtlasPageArtifact {
         val descriptors = glyphDescriptors()
         val bytes = pageBytes(descriptors)
         val placements = descriptors.map { gd ->
@@ -186,7 +188,7 @@ object GPUPreparedTextPreflightFixture {
         return GPUTextA8AtlasPageArtifact.create(
             artifactKey = GPUTextArtifactKey(
                 artifactID = page0ArtifactId(),
-                generation = GPUTextArtifactGeneration(GENERATION),
+                generation = GPUTextArtifactGeneration(generation),
                 contentFingerprint = fingerprint,
             ),
             pageIndex = 0,

@@ -48,6 +48,7 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
 import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.paint.MaskFilter
+import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.PreparedTextOutline
@@ -96,6 +97,32 @@ data class PreparedTextMaskIdentity(
     val layerIndex: Int?,
     val maskKeySha256: String,
 )
+
+class GPUPreparedTextStrokePath private constructor(
+    val operationIndex: Int,
+    val glyphIndex: Int,
+    val draw: GPUPreparedTextDraw,
+    sourcePath: Path,
+) {
+    private val pathSnapshot: Path = sourcePath.preparedTextPathSnapshot()
+
+    val path: Path
+        get() = pathSnapshot.preparedTextPathSnapshot()
+
+    companion object {
+        internal fun create(
+            operationIndex: Int,
+            glyphIndex: Int,
+            draw: GPUPreparedTextDraw,
+            path: Path,
+        ): GPUPreparedTextStrokePath = GPUPreparedTextStrokePath(
+            operationIndex = operationIndex,
+            glyphIndex = glyphIndex,
+            draw = draw,
+            sourcePath = path,
+        )
+    }
+}
 
 class GPUPreparedTextSubRun private constructor(
     val operationIndex: Int,
@@ -146,6 +173,7 @@ class PreparedTextFrameInventory private constructor(
     val generation: GPUTextArtifactGeneration,
     sourcePages: List<GPUTextA8AtlasPageArtifact>,
     sourceSubRunsByOperationIndex: Map<Int, List<GPUPreparedTextSubRun>>,
+    sourceStrokePathsByOperationIndex: Map<Int, List<GPUPreparedTextStrokePath>>,
     sourceAcceptedTextOperationIndices: Set<Int>,
     val metrics: GPUPreparedTextFrameMetrics,
     sourceMaskIdentityByGlyphUse: List<PreparedTextMaskIdentity>,
@@ -161,6 +189,14 @@ class PreparedTextFrameInventory private constructor(
                 }
             },
         )
+    val strokePathsByOperationIndex: Map<Int, List<GPUPreparedTextStrokePath>> =
+        Collections.unmodifiableMap(
+            LinkedHashMap<Int, List<GPUPreparedTextStrokePath>>().also { snapshot ->
+                sourceStrokePathsByOperationIndex.forEach { (operationIndex, paths) ->
+                    snapshot[operationIndex] = Collections.unmodifiableList(ArrayList(paths))
+                }
+            },
+        )
     val acceptedTextOperationIndices: Set<Int> =
         Collections.unmodifiableSet(LinkedHashSet(sourceAcceptedTextOperationIndices))
     val maskIdentityByGlyphUse: List<PreparedTextMaskIdentity> =
@@ -171,6 +207,7 @@ class PreparedTextFrameInventory private constructor(
             generation: GPUTextArtifactGeneration,
             pages: List<GPUTextA8AtlasPageArtifact>,
             subRunsByOperationIndex: Map<Int, List<GPUPreparedTextSubRun>>,
+            strokePathsByOperationIndex: Map<Int, List<GPUPreparedTextStrokePath>>,
             acceptedTextOperationIndices: Set<Int>,
             metrics: GPUPreparedTextFrameMetrics,
             maskIdentityByGlyphUse: List<PreparedTextMaskIdentity>,
@@ -179,6 +216,7 @@ class PreparedTextFrameInventory private constructor(
             generation = generation,
             sourcePages = pages,
             sourceSubRunsByOperationIndex = subRunsByOperationIndex,
+            sourceStrokePathsByOperationIndex = strokePathsByOperationIndex,
             sourceAcceptedTextOperationIndices = acceptedTextOperationIndices,
             metrics = metrics,
             sourceMaskIdentityByGlyphUse = maskIdentityByGlyphUse,
@@ -524,7 +562,20 @@ object PreparedTextFrameInventoryBuilder {
         val preparedMaskCache = LinkedHashMap<PreparedMaskCacheKey, PreparedMask>()
         val drawFacts = IdentityHashMap<GPUPreparedTextDraw, PreparedTextDrawFacts>()
         val resolvedUses = ArrayList<ResolvedGlyphUse>()
+        val strokePathsByOperation = LinkedHashMap<Int, List<GPUPreparedTextStrokePath>>()
         for (draw in draws) {
+            if (draw.paint.style == PaintStyle.STROKE) {
+                val strokePaths = when (val resolution = resolvePreparedTextStrokePaths(draw)) {
+                    is PreparedTextStrokePathResolution.Ready -> resolution.paths
+                    is PreparedTextStrokePathResolution.Refused -> return refused(
+                        code = resolution.code,
+                        operationIndex = draw.operationIndex,
+                        facts = resolution.facts,
+                    )
+                }
+                strokePathsByOperation[draw.operationIndex] = strokePaths
+                continue
+            }
             val facts = drawFacts.getOrPut(draw) { draw.inventoryFacts(observer) }
             if (draw.representationPolicy.representations.size != draw.glyphs.size) {
                 return refused(
@@ -808,11 +859,14 @@ object PreparedTextFrameInventoryBuilder {
             )
         }
         val groupedSubRuns = groupPreparedTextSubRuns(groupedInput)
-        val subRunCount = groupedSubRuns.size
+        val atlasSubRunCount = groupedSubRuns.size
+        val strokePathCount = strokePathsByOperation.values.sumOf { paths -> paths.size }
+        val subRunCount = Math.addExact(atlasSubRunCount, strokePathCount)
         if (subRunCount > limits.maxSubRuns) {
             return refused(
                 GPUTextRefusalCodes.SUBRUN_BUDGET_EXCEEDED,
-                groupedInput.firstOrNull()?.key?.operationIndex,
+                groupedInput.firstOrNull()?.key?.operationIndex
+                    ?: strokePathsByOperation.keys.firstOrNull(),
                 mapOf("subRunCount" to subRunCount.toString()),
             )
         }
@@ -875,7 +929,7 @@ object PreparedTextFrameInventoryBuilder {
                 colorGlyphLayerPlan = grouped.colorPlan,
             )
         }
-        check(subRunsByOperation.values.sumOf { subRuns -> subRuns.size } == subRunCount)
+        check(subRunsByOperation.values.sumOf { subRuns -> subRuns.size } == atlasSubRunCount)
 
         val immutableSubRuns = LinkedHashMap<Int, List<GPUPreparedTextSubRun>>()
         subRunsByOperation.forEach { (operationIndex, subRuns) ->
@@ -894,6 +948,7 @@ object PreparedTextFrameInventoryBuilder {
             generation = generation,
             pages = pageArtifacts,
             subRuns = immutableSubRuns,
+            strokePaths = strokePathsByOperation,
             acceptedTextOperationIndices = operationIndexes.toSet(),
             metrics = metrics,
             identities = maskIdentities,
@@ -903,6 +958,7 @@ object PreparedTextFrameInventoryBuilder {
                 generation = generation,
                 pages = pageArtifacts,
                 subRunsByOperationIndex = immutableSubRuns,
+                strokePathsByOperationIndex = strokePathsByOperation,
                 acceptedTextOperationIndices = operationIndexes.toSet(),
                 metrics = metrics,
                 maskIdentityByGlyphUse = maskIdentities,
@@ -932,6 +988,17 @@ private data class PreparedTextDrawFacts(
     val clipIdentity: String,
     val transformClass: String,
 )
+
+private sealed interface PreparedTextStrokePathResolution {
+    data class Ready(
+        val paths: List<GPUPreparedTextStrokePath>,
+    ) : PreparedTextStrokePathResolution
+
+    data class Refused(
+        val code: String,
+        val facts: Map<String, String>,
+    ) : PreparedTextStrokePathResolution
+}
 
 private sealed interface PreparedMaskResolution {
     data class Ready(val prepared: PreparedMask) : PreparedMaskResolution
@@ -1167,6 +1234,52 @@ private fun GPUPreparedTextDraw.inventoryFacts(
     )
 }
 
+private fun resolvePreparedTextStrokePaths(
+    draw: GPUPreparedTextDraw,
+): PreparedTextStrokePathResolution {
+    val typeface = when (val resolution = reconstructExactTypeface(draw)) {
+        is ExactTypefaceResolution.Ready -> resolution.typeface
+        is ExactTypefaceResolution.Refused -> return PreparedTextStrokePathResolution.Refused(
+            code = resolution.artifact.code,
+            facts = resolution.artifact.facts,
+        )
+    }
+    val paths = ArrayList<GPUPreparedTextStrokePath>(draw.glyphs.size)
+    draw.glyphs.forEachIndexed { glyphIndex, glyph ->
+        val outline = typeface.preparedTextOutline(
+            glyphId = glyph.glyphId,
+            fontSize = glyph.fontSize,
+            variationCoordinates = glyph.strikeKey.variationCoordinates,
+        )
+        when (outline) {
+            PreparedTextOutline.ProvenEmpty -> Unit
+            PreparedTextOutline.Unavailable -> return PreparedTextStrokePathResolution.Refused(
+                code = GPUTextRefusalCodes.RASTERIZATION_FAILED,
+                facts = mapOf(
+                    "reason" to "exact-outline-unavailable",
+                    "glyphIndex" to glyphIndex.toString(),
+                    "glyphId" to glyph.glyphId.toString(),
+                    "publishedStrokePathCount" to "0",
+                ),
+            )
+            is PreparedTextOutline.ProvenNonEmpty -> {
+                val effectiveX = draw.originX + glyph.positionX
+                val effectiveY = draw.originY + glyph.positionY
+                val positioned = outline.path.transform(effectiveX, effectiveY, 1f, 1f)
+                paths += GPUPreparedTextStrokePath.create(
+                    operationIndex = draw.operationIndex,
+                    glyphIndex = glyphIndex,
+                    draw = draw,
+                    path = positioned,
+                )
+            }
+        }
+    }
+    return PreparedTextStrokePathResolution.Ready(
+        Collections.unmodifiableList(paths),
+    )
+}
+
 private class PreparedTextMaskPreparationException(
     val code: String,
     val reason: String,
@@ -1376,6 +1489,7 @@ private fun inventoryHash(
     generation: GPUTextArtifactGeneration,
     pages: List<GPUTextA8AtlasPageArtifact>,
     subRuns: Map<Int, List<GPUPreparedTextSubRun>>,
+    strokePaths: Map<Int, List<GPUPreparedTextStrokePath>>,
     acceptedTextOperationIndices: Set<Int>,
     metrics: GPUPreparedTextFrameMetrics,
     identities: List<PreparedTextMaskIdentity>,
@@ -1417,6 +1531,29 @@ private fun inventoryHash(
                         instance.uvRect.right,
                         instance.uvRect.bottom,
                     ).forEach { value -> append(':').append(value.toRawBits()) }
+                }
+            }
+        }
+        strokePaths.forEach { (operationIndex, operationPaths) ->
+            append("|stroke-operation:").append(operationIndex)
+            operationPaths.forEach { strokePath ->
+                append("|stroke-path:").append(strokePath.glyphIndex)
+                val path = strokePath.path
+                path.verbs().forEach { verb -> append(':').append(verb.name) }
+                path.points().forEach { point ->
+                    append(':').append(point.x.toRawBits())
+                    append(':').append(point.y.toRawBits())
+                }
+                val paint = strokePath.draw.paint
+                append(":width=").append(paint.strokeWidth.toRawBits())
+                append(":cap=").append(paint.strokeCap.name)
+                append(":join=").append(paint.strokeJoin.name)
+                append(":miter=").append(paint.strokeMiter.toRawBits())
+                (paint.pathEffect as? org.graphiks.kanvas.paint.PathEffect.Dash)?.let { dash ->
+                    append(":dashPhase=").append(dash.phase.toRawBits())
+                    dash.intervals.forEach { interval ->
+                        append(':').append(interval.toRawBits())
+                    }
                 }
             }
         }
@@ -1726,6 +1863,11 @@ private fun sha256UnsignedBytes(values: List<Int>): String {
     return digest.digest().joinToString(separator = "") { byte ->
         String.format(Locale.ROOT, "%02x", byte.toInt() and 0xff)
     }
+}
+
+private fun Path.preparedTextPathSnapshot(): Path = Path().also { snapshot ->
+    snapshot.fillType = fillType
+    snapshot.addPath(this)
 }
 
 private val A8_PAGE_ARTIFACT_ID =

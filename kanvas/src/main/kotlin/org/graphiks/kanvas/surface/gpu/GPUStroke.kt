@@ -121,8 +121,15 @@ internal fun strokeToFillGeometry(
     dashPhase: Float = 0f,
     capStyle: StrokeCap = StrokeCap.BUTT,
     joinStyle: StrokeJoin = StrokeJoin.MITER,
+    miterLimit: Float = 4f,
 ): StrokeGeometry {
-    if (contourVertices.size < 2 || strokeWidth < 0f) {
+    if (
+        contourVertices.size < 2 ||
+        !strokeWidth.isFinite() ||
+        strokeWidth < 0f ||
+        !miterLimit.isFinite() ||
+        miterLimit <= 0f
+    ) {
         return StrokeGeometry(emptyList(), listOf(0))
     }
 
@@ -160,6 +167,85 @@ internal fun strokeToFillGeometry(
             previousX = x
             previousY = y
         }
+    }
+
+    fun admittedMiterOffset(
+        incomingNormal: Pair<Float, Float>,
+        outgoingNormal: Pair<Float, Float>,
+    ): Pair<Float, Float>? {
+        val summedX = incomingNormal.first + outgoingNormal.first
+        val summedY = incomingNormal.second + outgoingNormal.second
+        val summedLength = sqrt(summedX * summedX + summedY * summedY)
+        if (summedLength < 1e-6f) return null
+
+        val directionX = summedX / summedLength
+        val directionY = summedY / summedLength
+        val denominator =
+            directionX * outgoingNormal.first +
+                directionY * outgoingNormal.second
+        val length = if (kotlin.math.abs(denominator) < 1e-6f) {
+            Float.POSITIVE_INFINITY
+        } else {
+            kotlin.math.abs(halfWidth / denominator)
+        }
+        if (!length.isFinite() || length > halfWidth * miterLimit) return null
+        return Pair(directionX * length, directionY * length)
+    }
+
+    fun addBevelOrMiterJoin(
+        center: Pair<Float, Float>,
+        incomingNormal: Pair<Float, Float>,
+        outgoingNormal: Pair<Float, Float>,
+    ) {
+        val turn =
+            incomingNormal.first * outgoingNormal.second -
+                incomingNormal.second * outgoingNormal.first
+        if (kotlin.math.abs(turn) < 1e-6f) return
+        val side = if (turn > 0f) 1f else -1f
+        val incomingOuter = Pair(
+            center.first + incomingNormal.first * halfWidth * side,
+            center.second + incomingNormal.second * halfWidth * side,
+        )
+        val outgoingOuter = Pair(
+            center.first + outgoingNormal.first * halfWidth * side,
+            center.second + outgoingNormal.second * halfWidth * side,
+        )
+        if (joinStyle == StrokeJoin.BEVEL) {
+            addTriangle(
+                center.first,
+                center.second,
+                incomingOuter.first,
+                incomingOuter.second,
+                outgoingOuter.first,
+                outgoingOuter.second,
+            )
+            return
+        }
+
+        val miterOffset = admittedMiterOffset(incomingNormal, outgoingNormal)
+        if (miterOffset == null) {
+            addTriangle(
+                center.first,
+                center.second,
+                incomingOuter.first,
+                incomingOuter.second,
+                outgoingOuter.first,
+                outgoingOuter.second,
+            )
+            return
+        }
+        val miter = Pair(
+            center.first + miterOffset.first * side,
+            center.second + miterOffset.second * side,
+        )
+        addTriangle(
+            incomingOuter.first,
+            incomingOuter.second,
+            miter.first,
+            miter.second,
+            outgoingOuter.first,
+            outgoingOuter.second,
+        )
     }
 
     for (ci in contourStarts.indices) {
@@ -310,6 +396,63 @@ internal fun strokeToFillGeometry(
                     }
                 }
             }
+            if (n > 2) {
+                val edgeNormals = List(n - 1) { index ->
+                    edgeNormal(
+                        points[index].first,
+                        points[index].second,
+                        points[index + 1].first,
+                        points[index + 1].second,
+                    )
+                }
+                for (index in 1 until n - 1) {
+                    val centerPoint = points[index]
+                    val incomingNormal = edgeNormals[index - 1]
+                    val outgoingNormal = edgeNormals[index]
+                    if (joinStyle == StrokeJoin.ROUND) {
+                        val right = generateRoundJoin(
+                            centerPoint,
+                            outgoingNormal,
+                            incomingNormal,
+                            halfWidth,
+                            segments,
+                        )
+                        for (vertexIndex in 0 until right.size - 2 step 2) {
+                            addTriangle(
+                                centerPoint.first,
+                                centerPoint.second,
+                                right[vertexIndex],
+                                right[vertexIndex + 1],
+                                right[vertexIndex + 2],
+                                right[vertexIndex + 3],
+                            )
+                        }
+                        val left = generateRoundJoin(
+                            centerPoint,
+                            Pair(-outgoingNormal.first, -outgoingNormal.second),
+                            Pair(-incomingNormal.first, -incomingNormal.second),
+                            halfWidth,
+                            segments,
+                        )
+                        for (vertexIndex in 0 until left.size - 2 step 2) {
+                            addTriangle(
+                                centerPoint.first,
+                                centerPoint.second,
+                                left[vertexIndex],
+                                left[vertexIndex + 1],
+                                left[vertexIndex + 2],
+                                left[vertexIndex + 3],
+                            )
+                        }
+                    } else {
+                        addBevelOrMiterJoin(
+                            centerPoint,
+                            incomingNormal,
+                            outgoingNormal,
+                        )
+                    }
+                }
+            }
         } else {
             val effectiveN = if (isClosed) n - 1 else n
             val edgeNormals = List(effectiveN) { i ->
@@ -364,27 +507,75 @@ internal fun strokeToFillGeometry(
                     }
                 }
             } else {
-                val normals = List(effectiveN) { i ->
-                    val prev = edgeNormals[(i + effectiveN - 1) % effectiveN]
-                    val next = edgeNormals[i]
-                    val nx = prev.first + next.first
-                    val ny = prev.second + next.second
-                    val len = sqrt(nx * nx + ny * ny)
-                    if (len < 1e-6f) Pair(0f, 0f)
-                    else Pair(nx / len * halfWidth, ny / len * halfWidth)
+                val miterCandidates = if (joinStyle == StrokeJoin.MITER) {
+                    List(effectiveN) { index ->
+                        admittedMiterOffset(
+                            incomingNormal = edgeNormals[(index + effectiveN - 1) % effectiveN],
+                            outgoingNormal = edgeNormals[index],
+                        )
+                    }
+                } else {
+                    emptyList()
                 }
+                val admittedMiterOffsets = miterCandidates
+                    .takeIf { candidates ->
+                        candidates.size == effectiveN && candidates.all { it != null }
+                    }
+                    ?.map { offset -> requireNotNull(offset) }
 
-                for (i in 0 until effectiveN) {
-                    val p0 = points[i]; val p1 = points[(i + 1) % effectiveN]
-                    val n0 = normals[i]; val n1 = normals[(i + 1) % effectiveN]
+                if (admittedMiterOffsets != null) {
+                    for (i in 0 until effectiveN) {
+                        val p0 = points[i]; val p1 = points[(i + 1) % effectiveN]
+                        val n0 = admittedMiterOffsets[i]
+                        val n1 = admittedMiterOffsets[(i + 1) % effectiveN]
 
-                    val l0x = p0.first - n0.first; val l0y = p0.second - n0.second
-                    val l1x = p1.first - n1.first; val l1y = p1.second - n1.second
-                    val r0x = p0.first + n0.first; val r0y = p0.second + n0.second
-                    val r1x = p1.first + n1.first; val r1y = p1.second + n1.second
-
-                    addTriangle(l0x, l0y, r0x, r0y, r1x, r1y)
-                    addTriangle(l0x, l0y, r1x, r1y, l1x, l1y)
+                        addTriangle(
+                            p0.first - n0.first,
+                            p0.second - n0.second,
+                            p0.first + n0.first,
+                            p0.second + n0.second,
+                            p1.first + n1.first,
+                            p1.second + n1.second,
+                        )
+                        addTriangle(
+                            p0.first - n0.first,
+                            p0.second - n0.second,
+                            p1.first + n1.first,
+                            p1.second + n1.second,
+                            p1.first - n1.first,
+                            p1.second - n1.second,
+                        )
+                    }
+                } else {
+                    for (i in 0 until effectiveN) {
+                        val p0 = points[i]; val p1 = points[(i + 1) % effectiveN]
+                        val normal = edgeNormals[i]
+                        val nx = normal.first * halfWidth
+                        val ny = normal.second * halfWidth
+                        addTriangle(
+                            p0.first - nx,
+                            p0.second - ny,
+                            p0.first + nx,
+                            p0.second + ny,
+                            p1.first + nx,
+                            p1.second + ny,
+                        )
+                        addTriangle(
+                            p0.first - nx,
+                            p0.second - ny,
+                            p1.first + nx,
+                            p1.second + ny,
+                            p1.first - nx,
+                            p1.second - ny,
+                        )
+                    }
+                    for (index in 0 until effectiveN) {
+                        addBevelOrMiterJoin(
+                            center = points[index],
+                            incomingNormal = edgeNormals[(index + effectiveN - 1) % effectiveN],
+                            outgoingNormal = edgeNormals[index],
+                        )
+                    }
                 }
             }
         }

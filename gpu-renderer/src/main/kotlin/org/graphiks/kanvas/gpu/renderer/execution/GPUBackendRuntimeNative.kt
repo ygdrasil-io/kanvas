@@ -171,32 +171,33 @@ private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
 
 /**
- * Derives ColorGlyph generations solely from authenticated plan/artifact identity.
+ * Derives prepared-text generations solely from authenticated plan/artifact identity.
  *
  * Content hashes remain upload-integrity evidence and deliberately do not participate in
  * generation assignment.
  */
-internal fun preparedColorGlyphResourceGenerations(
+internal fun preparedTextResourceGenerations(
     framePlan: GPUFramePlan,
 ): Map<GPUFrameResourceRef, Long> {
     val generations = linkedMapOf<GPUFrameResourceRef, Long>()
     fun record(resource: GPUFrameResourceRef, generation: Long) {
         val previous = generations.putIfAbsent(resource, generation)
         require(previous == null || previous == generation) {
-            "One ColorGlyph resource cannot carry conflicting sealed generations"
+            "One prepared-text resource cannot carry conflicting sealed generations"
         }
     }
     framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
         .flatMap { render -> render.preparedTextBindingsByPacketId.values }
-        .filter { binding -> binding.hasColorGlyphBufferPlan }
         .forEach { binding ->
             val atlas = binding.atlasResourcePlan
             record(atlas.stagingRef, atlas.artifactGeneration)
             record(atlas.frameTextureRef, atlas.artifactGeneration)
-            val plan = binding.colorGlyphBufferPlan
-            record(plan.vertexBufferRef, plan.resourceGeneration)
-            record(plan.indexBufferRef, plan.resourceGeneration)
-            record(plan.uniformBufferRef, plan.resourceGeneration)
+            if (binding.hasColorGlyphBufferPlan) {
+                val plan = binding.colorGlyphBufferPlan
+                record(plan.vertexBufferRef, plan.resourceGeneration)
+                record(plan.indexBufferRef, plan.resourceGeneration)
+                record(plan.uniformBufferRef, plan.resourceGeneration)
+            }
         }
     return generations.toMap()
 }
@@ -1428,7 +1429,7 @@ private class WgpuBackendSession(
                     .resource as GPUFrameTargetRef
                 val generations = linkedMapOf<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef, Long>()
                 generations[target] = targetGeneration
-                val sealedColorGlyphGenerations = preparedColorGlyphResourceGenerations(
+                val sealedPreparedTextGenerations = preparedTextResourceGenerations(
                     org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner.plan(taskList),
                 )
                 taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
@@ -1436,7 +1437,7 @@ private class WgpuBackendSession(
                     .filter { it.resource != target }
                     .forEachIndexed { index, request ->
                         generations[request.resource] =
-                            sealedColorGlyphGenerations[request.resource]
+                            sealedPreparedTextGenerations[request.resource]
                                 ?: (index.toLong() + 2L)
                     }
 

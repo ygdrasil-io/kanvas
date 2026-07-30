@@ -424,7 +424,7 @@ class GPUPreparedTextNativePreflightTest {
             .flatMap { render -> render.preparedTextBindingsByPacketId.values }
             .filter(GPUPreparedTextRenderBinding::hasColorGlyphBufferPlan)
 
-        val generations = preparedColorGlyphResourceGenerations(fixture.framePlan)
+        val generations = preparedTextResourceGenerations(fixture.framePlan)
 
         assertEquals(setOf(31L, 47L), colorBindings.map {
             it.colorGlyphBufferPlan.resourceGeneration
@@ -447,6 +447,74 @@ class GPUPreparedTextNativePreflightTest {
                 generations[binding.atlasResourcePlan.stagingRef],
             )
         }
+    }
+
+    @Test
+    fun `pure TextA8 resource generations come from generation zero atlas identity`() {
+        val fixture = preparedTextNativePreflightFixture(
+            commandIds = listOf(0),
+            atlasGeneration = 0,
+        )
+        val binding = fixture.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap { render -> render.preparedTextBindingsByPacketId.values }
+            .single()
+
+        val generations = preparedTextResourceGenerations(fixture.framePlan)
+
+        assertEquals(
+            setOf(
+                binding.atlasResourcePlan.stagingRef,
+                binding.atlasResourcePlan.frameTextureRef,
+            ),
+            generations.keys,
+        )
+        assertEquals(
+            listOf(0L, 0L),
+            listOf(
+                generations[binding.atlasResourcePlan.stagingRef],
+                generations[binding.atlasResourcePlan.frameTextureRef],
+            ),
+        )
+    }
+
+    @Test
+    fun `mixed TextA8 and ColorGlyph generations stay distinct without ordinal values`() {
+        val fixture = preparedTextNativePreflightFixture(
+            commandIds = listOf(0, 1),
+            colorGlyphCommandIds = setOf(1),
+            colorGlyphPlanGenerations = mapOf(1 to 47),
+            atlasGeneration = 0,
+        )
+        val bindings = fixture.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap { render -> render.preparedTextBindingsByPacketId.values }
+        val atlas = bindings.map(GPUPreparedTextRenderBinding::atlasResourcePlan).distinct().single()
+        val colorPlan = bindings.single(GPUPreparedTextRenderBinding::hasColorGlyphBufferPlan)
+            .colorGlyphBufferPlan
+
+        val generations = preparedTextResourceGenerations(fixture.framePlan)
+
+        assertEquals(
+            setOf(
+                atlas.stagingRef,
+                atlas.frameTextureRef,
+                colorPlan.vertexBufferRef,
+                colorPlan.indexBufferRef,
+                colorPlan.uniformBufferRef,
+            ),
+            generations.keys,
+        )
+        assertEquals(0L, generations[atlas.stagingRef])
+        assertEquals(0L, generations[atlas.frameTextureRef])
+        assertEquals(
+            setOf(47L),
+            listOf(
+                colorPlan.vertexBufferRef,
+                colorPlan.indexBufferRef,
+                colorPlan.uniformBufferRef,
+            ).map(generations::get).toSet(),
+        )
     }
 
     @Test
@@ -2582,6 +2650,7 @@ internal fun preparedTextNativePreflightFixture(
     colorGlyphPremultipliedRgba: FloatArray = floatArrayOf(0.5f, 0f, 0f, 0.5f),
     colorGlyphUseForeground: Boolean = false,
     colorGlyphPaletteIndex: Int = 0,
+    atlasGeneration: Int = GPUPreparedTextPreflightFixture.GENERATION,
     textInstanceCounts: List<Int>? = null,
     targetFormat: GPUColorFormat = GPUColorFormat.RGBA8UnormSrgb,
     blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
@@ -2638,7 +2707,7 @@ internal fun preparedTextNativePreflightFixture(
         deviceGeneration,
         capabilities,
     )
-    val page = GPUPreparedTextPreflightFixture.baselinePage0()
+    val page = GPUPreparedTextPreflightFixture.baselinePage0(atlasGeneration)
     val atlas = page.toPreparedR8UploadArtifact()
     val semantics = packets.associate { packet ->
         val baselineInstances =

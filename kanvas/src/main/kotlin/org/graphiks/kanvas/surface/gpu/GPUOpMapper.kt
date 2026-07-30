@@ -150,6 +150,67 @@ internal object GPUOpMapper {
                             ),
                         )
                     }
+                    preparedTextInventory.strokePathsByOperationIndex[operationIndex]?.let {
+                        strokePaths ->
+                        val strokeVisuals = ArrayList<GPUFramePathVisualCommand>(strokePaths.size)
+                        strokePaths.forEach { strokePath ->
+                            val commandId = visual.size + strokeVisuals.size
+                            val strokeOperation = DisplayOp.DrawPath(
+                                path = strokePath.path,
+                                paint = strokePath.draw.paint,
+                                transform = strokePath.draw.transform,
+                                clip = strokePath.draw.clip,
+                            )
+                            val lowered = lowerPreparedCoreVisual(
+                                operation = strokeOperation,
+                                commandId = GPUDrawCommandID(commandId),
+                                paintOrder = commandId,
+                                context = GPUPreparedImageLoweringContext(
+                                    provenance = provenance,
+                                    target = target,
+                                    config = config,
+                                    capabilities = capabilities,
+                                ),
+                            )
+                            val basePath = lowered?.normalized as? NormalizedDrawCommand.FillPath
+                            val geometryRefusal = lowered?.geometryRefusal
+                            if (basePath == null || geometryRefusal != null) {
+                                return GPUOpMapping(
+                                    visualCommands = emptyList(),
+                                    stateEvents = stateEvents.toList(),
+                                    legacyDump = legacy.dump(),
+                                    preparedRefusal = GPUPreparedOperationRefusal(
+                                        commandId = commandId,
+                                        operationIndex = operationIndex,
+                                        code = geometryRefusal?.code
+                                            ?: "unsupported.core_primitive.stroke.path_lowering",
+                                        facts = geometryRefusal?.refusalFacts.orEmpty(),
+                                    ),
+                                )
+                            }
+                            val fillPath = basePath.toPreparedStrokeFillPath()
+                                ?: return GPUOpMapping(
+                                    visualCommands = emptyList(),
+                                    stateEvents = stateEvents.toList(),
+                                    legacyDump = legacy.dump(),
+                                    preparedRefusal = GPUPreparedOperationRefusal(
+                                        commandId = commandId,
+                                        operationIndex = operationIndex,
+                                        code = "unsupported.core_primitive.stroke.expansion_empty",
+                                        facts = mapOf(
+                                            "glyphIndex" to strokePath.glyphIndex.toString(),
+                                        ),
+                                    ),
+                                )
+                            strokeVisuals += lowered.copy(
+                                normalized = fillPath,
+                                targetSpaceBounds = fillPath.bounds,
+                                geometryRefusal = null,
+                            )
+                        }
+                        visual += strokeVisuals
+                        return@forEachIndexed
+                    }
                     val subRuns = preparedTextInventory.subRunsByOperationIndex[operationIndex].orEmpty()
                     for (subRun in subRuns) {
                         val commandId = visual.size
@@ -477,6 +538,58 @@ internal object GPUOpMapper {
             else -> error("Slice 12A mapper produced a non-core command")
         }
     }
+}
+
+private fun NormalizedDrawCommand.FillPath.toPreparedStrokeFillPath():
+    NormalizedDrawCommand.FillPath? {
+    if (!stroke) return null
+    val cap = when (strokeCap) {
+        "round" -> org.graphiks.kanvas.paint.StrokeCap.ROUND
+        "square" -> org.graphiks.kanvas.paint.StrokeCap.SQUARE
+        else -> org.graphiks.kanvas.paint.StrokeCap.BUTT
+    }
+    val join = when (strokeJoin) {
+        "round" -> org.graphiks.kanvas.paint.StrokeJoin.ROUND
+        "bevel" -> org.graphiks.kanvas.paint.StrokeJoin.BEVEL
+        else -> org.graphiks.kanvas.paint.StrokeJoin.MITER
+    }
+    val fill = strokeToFillGeometry(
+        contourVertices = tessellatedVertices,
+        contourStarts = contourStarts,
+        strokeWidth = strokeWidth,
+        dashArray = dashIntervals,
+        dashPhase = dashPhase,
+        capStyle = cap,
+        joinStyle = join,
+        miterLimit = strokeMiterLimit,
+    )
+    if (fill.vertices.isEmpty() || fill.vertices.any { vertex -> !vertex.isFinite() }) {
+        return null
+    }
+    val vertexCount = fill.vertices.size / 2
+    val exactContourStarts = fill.contourStarts
+        .filter { start -> start in 0 until vertexCount }
+        .distinct()
+        .ifEmpty { listOf(0) }
+    val preparedPathKey = "prepared-text-stroke-${commandId.value}"
+    return copy(
+        pathKey = preparedPathKey,
+        pathDescriptor = pathDescriptor.copy(
+            pathKey = preparedPathKey,
+            verbCount = exactContourStarts.size * 4,
+            pointCount = vertexCount,
+            fillRule = "winding",
+            inverseFill = false,
+            finiteProof = "all_finite",
+            edgeCount = vertexCount,
+        ),
+        tessellatedVertices = fill.vertices,
+        contourStarts = exactContourStarts,
+        totalVertexCount = vertexCount,
+        edgeCount = vertexCount,
+        source = source.copy(operation = "drawText.stroke-path"),
+        stroke = false,
+    )
 }
 
 private fun GPUPreparedTextSubRun.toPreparedTextVisual(

@@ -28,6 +28,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformValue
@@ -379,20 +380,6 @@ object GPUPreparedTextLowerer {
                 "Prepared text cannot normalize an arithmetic blender to BlendMode",
             )
         }
-        if (paint.style != PaintStyle.FILL) {
-            return refused(
-                GPUTextRefusalCodes.PAINT_STYLE_UNSUPPORTED,
-                operationIndex,
-                "Prepared text accepts fill paint only",
-            )
-        }
-        if (paint.pathEffect != null) {
-            return refused(
-                GPUTextRefusalCodes.PATH_EFFECT_UNSUPPORTED,
-                operationIndex,
-                "Prepared text path effects require geometry expansion",
-            )
-        }
         if (paint.imageFilter != null) {
             return refused(
                 GPUTextRefusalCodes.IMAGE_FILTER_REQUIRES_COMPOSITE,
@@ -400,8 +387,63 @@ object GPUPreparedTextLowerer {
                 "Text image filters require a composite route",
             )
         }
+        when (paint.style) {
+            PaintStyle.FILL -> if (paint.pathEffect != null) {
+                return refused(
+                    GPUTextRefusalCodes.PATH_EFFECT_UNSUPPORTED,
+                    operationIndex,
+                    "Fill text does not accept a path effect",
+                )
+            }
+            PaintStyle.STROKE -> {
+                if (
+                    !paint.strokeWidth.isFinite() ||
+                    paint.strokeWidth < 0f ||
+                    !paint.strokeMiter.isFinite() ||
+                    paint.strokeMiter <= 0f
+                ) {
+                    return refused(
+                        GPUTextRefusalCodes.PAINT_STYLE_UNSUPPORTED,
+                        operationIndex,
+                        "Prepared text stroke width and miter must be finite and admitted",
+                    )
+                }
+                when (val pathEffect = paint.pathEffect) {
+                    null -> Unit
+                    is PathEffect.Dash -> if (
+                        pathEffect.intervals.size < 2 ||
+                        pathEffect.intervals.size % 2 != 0 ||
+                        pathEffect.intervals.any { interval ->
+                            !interval.isFinite() || interval <= 0f
+                        } ||
+                        !pathEffect.phase.isFinite()
+                    ) {
+                        return refused(
+                            GPUTextRefusalCodes.PATH_EFFECT_UNSUPPORTED,
+                            operationIndex,
+                            "Prepared text dash parameters are outside the common stroke contract",
+                        )
+                    }
+                    else -> return refused(
+                        GPUTextRefusalCodes.PATH_EFFECT_UNSUPPORTED,
+                        operationIndex,
+                        "Prepared text path effect is not admitted by the common stroke authority",
+                    )
+                }
+            }
+            PaintStyle.STROKE_AND_FILL -> return refused(
+                GPUTextRefusalCodes.PAINT_STYLE_UNSUPPORTED,
+                operationIndex,
+                "Prepared text stroke-and-fill requires a separate ordered composite",
+            )
+        }
+        val coverage = if (paint.style == PaintStyle.STROKE) {
+            GPUCoverageConsumption.StencilCoverage1x
+        } else {
+            GPUCoverageConsumption.ScalarCoverage
+        }
         val blendPlan = paint.blendMode.toGpuBlendFacts().canonicalBlendPlan(
-            coverage = GPUCoverageConsumption.ScalarCoverage,
+            coverage = coverage,
             targetFormatClass = target.colorFormat,
         )
         if (blendPlan is GPUBlendPlan.UnsupportedBlend) {
@@ -415,7 +457,7 @@ object GPUPreparedTextLowerer {
                     "commonDiagnosticMessage" to blendPlan.diagnostic.message,
                     "blendMode" to paint.blendMode.name,
                     "targetFormatClass" to target.colorFormat,
-                    "coverage" to GPUCoverageConsumption.ScalarCoverage.name,
+                    "coverage" to coverage.name,
                 ),
             )
         }
@@ -739,6 +781,20 @@ private class PreparedTextPaintSnapshotter {
     fun snapshot(paint: Paint): Paint = paint.copy(
         shader = paint.shader?.let(::snapshotShader),
         colorFilter = paint.colorFilter?.let(::snapshotColorFilter),
+        pathEffect = when (val effect = paint.pathEffect) {
+            null -> null
+            is PathEffect.Dash -> effect.copy(intervals = effect.intervals.copyOf())
+            is PathEffect.Corner -> effect.copy()
+            is PathEffect.Discrete -> effect.copy()
+            is PathEffect.Path1D -> effect.copy(
+                path = effect.path.snapshotForPreparedText(),
+            )
+            is PathEffect.Path2D -> effect.copy(
+                matrix = effect.matrix.snapshotForPreparedText(),
+                path = effect.path.snapshotForPreparedText(),
+            )
+            is PathEffect.Trim -> effect.copy()
+        },
         maskFilter = when (val filter = paint.maskFilter) {
             null -> null
             is MaskFilter.Blur -> filter.copy()
