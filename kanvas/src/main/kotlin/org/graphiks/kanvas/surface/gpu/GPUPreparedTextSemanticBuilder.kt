@@ -260,9 +260,9 @@ private fun GPUPreparedTextSubRun.preparedColorLayers(
     val page = pageFacts.page
     val foreground = draw.foregroundColor
     val foregroundUnmodulated = floatArrayOf(
-        foreground.r,
-        foreground.g,
-        foreground.b,
+        srgbToLinear(foreground.r),
+        srgbToLinear(foreground.g),
+        srgbToLinear(foreground.b),
         1f,
     )
     return instances.map { instance ->

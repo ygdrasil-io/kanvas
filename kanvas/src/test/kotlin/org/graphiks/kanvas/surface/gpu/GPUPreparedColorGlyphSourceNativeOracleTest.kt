@@ -1,8 +1,8 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
-import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.Test
@@ -12,9 +12,6 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
-import org.graphiks.kanvas.font.glyph.A8Bitmap
-import org.graphiks.kanvas.font.glyph.A8Rasterizer
-import org.graphiks.kanvas.font.scaler.GlyphScaler
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeNativeFactory
@@ -50,7 +47,12 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         backend!!
         try {
             val typeface = FontTypeface(source.fontBytes, "Task 11 source COLRv0 currentColor")
-            val foreground = Color.fromRGBA(0f, 1f, 0f, PAINT_ALPHA)
+            val foreground = Color.fromRGBA(
+                CURRENT_COLOR_REQUESTED_R,
+                CURRENT_COLOR_REQUESTED_G,
+                CURRENT_COLOR_REQUESTED_B,
+                PAINT_ALPHA_REQUESTED,
+            )
             val operations = listOf(
                 textOperation(typeface, A8_GLYPH_ID, A8_ORIGIN_X, BASELINE_Y, Color.WHITE),
                 textOperation(typeface, BASE_GLYPH_ID, COLOR_ORIGIN_X_0, BASELINE_Y, foreground),
@@ -106,7 +108,7 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
             colorSemantics.forEach { semantic ->
                 semantic.layers.forEach { layer ->
                     assertEquals(
-                        foreground.a,
+                        EXPECTED_PAINT_ALPHA,
                         layer.premultipliedRgba[3],
                         0.000001f,
                         "paint alpha must modulate CPAL and currentColor exactly once",
@@ -161,36 +163,36 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
     }
 
     private fun independentCpuOracle(source: SourceFixture): ByteArray {
-        val scaler = GlyphScaler.fromBytes(source.fontBytes)
-        val rasterizer = A8Rasterizer()
-        val a8 = rasterizedSourceGlyph(scaler, rasterizer, A8_GLYPH_ID)
-        val colorLayers = source.layers.map { layer ->
-            layer to rasterizedSourceGlyph(scaler, rasterizer, layer.glyphId)
-        }
         val draws = buildList {
             add(
                 CpuLayer(
-                    bitmap = a8.bitmap,
-                    left = A8_ORIGIN_X + a8.left,
-                    top = BASELINE_Y + a8.top,
+                    bounds = GLYPH_7_RECTANGLE.toDeviceBounds(A8_ORIGIN_X, BASELINE_Y),
                     linearPremul = floatArrayOf(1f, 1f, 1f, 1f),
                 ),
             )
             listOf(COLOR_ORIGIN_X_0, COLOR_ORIGIN_X_1).forEach { originX ->
-                colorLayers.forEach { (layer, glyph) ->
+                source.layers.forEach { layer ->
+                    val rectangle = when (layer.glyphId) {
+                        7 -> GLYPH_7_RECTANGLE
+                        8 -> GLYPH_8_RECTANGLE
+                        else -> error("Unexpected source layer glyph ${layer.glyphId}")
+                    }
                     val sourceColor = if (layer.paletteIndex == FOREGROUND_PALETTE_INDEX) {
-                        floatArrayOf(0f, 1f, 0f, 1f)
+                        floatArrayOf(
+                            testSrgbToLinear(EXPECTED_CURRENT_COLOR_R),
+                            testSrgbToLinear(EXPECTED_CURRENT_COLOR_G),
+                            testSrgbToLinear(EXPECTED_CURRENT_COLOR_B),
+                            1f,
+                        )
                     } else {
                         requireNotNull(layer.colorArgb).toLinearPremultipliedRgba()
                     }
                     val paintModulated = FloatArray(4) { index ->
-                        sourceColor[index] * PAINT_ALPHA
+                        sourceColor[index] * EXPECTED_PAINT_ALPHA
                     }
                     add(
                         CpuLayer(
-                            bitmap = glyph.bitmap,
-                            left = originX + glyph.left,
-                            top = BASELINE_Y + glyph.top,
+                            bounds = rectangle.toDeviceBounds(originX, BASELINE_Y),
                             linearPremul = paintModulated,
                         ),
                     )
@@ -200,46 +202,23 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         return composeSourceOver(draws)
     }
 
-    private fun rasterizedSourceGlyph(
-        scaler: GlyphScaler,
-        rasterizer: A8Rasterizer,
-        glyphId: Int,
-    ): RasterizedSourceGlyph {
-        val scaled = scaler.scaleGlyph(glyphId, FONT_SIZE)
-        val bitmap = assertNotNull(
-            rasterizer.rasterize(scaled),
-            "source glyph $glyphId must have rasterizable coverage",
-        )
-        return RasterizedSourceGlyph(
-            bitmap = bitmap,
-            left = floor(scaled.bounds.left).toInt(),
-            top = floor(scaled.bounds.top).toInt(),
-        )
-    }
-
     private fun composeSourceOver(layers: List<CpuLayer>): ByteArray {
         val rgba = FloatArray(TARGET_WIDTH * TARGET_HEIGHT * 4)
         layers.forEach { layer ->
-            repeat(layer.bitmap.height) { localY ->
-                repeat(layer.bitmap.width) { localX ->
-                    val x = layer.left + localX
-                    val y = layer.top + localY
+            for (y in layer.bounds.top until layer.bounds.bottom) {
+                for (x in layer.bounds.left until layer.bounds.right) {
                     require(x in 0 until TARGET_WIDTH && y in 0 until TARGET_HEIGHT) {
-                        "source layer outside target: x=$x y=$y left=${layer.left} " +
-                            "top=${layer.top} size=${layer.bitmap.width}x${layer.bitmap.height}"
+                        "source rectangle outside target: x=$x y=$y bounds=${layer.bounds}"
                     }
-                    val coverage =
-                        (layer.bitmap.pixels[localY * layer.bitmap.width + localX].toInt() and
-                            0xff) / 255f
                     val pixel = (y * TARGET_WIDTH + x) * 4
-                    val sourceAlpha = layer.linearPremul[3] * coverage
+                    val sourceAlpha = layer.linearPremul[3]
                     val inverseSourceAlpha = 1f - sourceAlpha
                     rgba[pixel] =
-                        layer.linearPremul[0] * coverage + rgba[pixel] * inverseSourceAlpha
+                        layer.linearPremul[0] + rgba[pixel] * inverseSourceAlpha
                     rgba[pixel + 1] =
-                        layer.linearPremul[1] * coverage + rgba[pixel + 1] * inverseSourceAlpha
+                        layer.linearPremul[1] + rgba[pixel + 1] * inverseSourceAlpha
                     rgba[pixel + 2] =
-                        layer.linearPremul[2] * coverage + rgba[pixel + 2] * inverseSourceAlpha
+                        layer.linearPremul[2] + rgba[pixel + 2] * inverseSourceAlpha
                     rgba[pixel + 3] = sourceAlpha + rgba[pixel + 3] * inverseSourceAlpha
                 }
             }
@@ -254,6 +233,7 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         val bytes = assertNotNull(
             javaClass.classLoader.getResourceAsStream("fonts/skia/colr.ttf"),
         ).use { stream -> stream.readBytes() }
+        assertEquals(PINNED_SKIA_COLR_SHA256, bytes.sha256Hex())
         val colr = sfntTableOffset(bytes, "COLR")
         assertEquals(0, readU16(bytes, colr))
         val baseRecordCount = readU16(bytes, colr + 2)
@@ -267,6 +247,11 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         assertEquals(2, layerCount)
         val secondLayerPaletteOffset = layerRecords + (firstLayerIndex + 1) * 4 + 2
         writeU16(bytes, secondLayerPaletteOffset, FOREGROUND_PALETTE_INDEX)
+        patchSimpleRectangleGlyph(bytes, 7, GLYPH_7_RECTANGLE)
+        patchSimpleRectangleGlyph(bytes, 8, GLYPH_8_RECTANGLE)
+        assertEquals(GLYPH_7_SLOT_SHA256, glyphSlotBytes(bytes, 7).sha256Hex())
+        assertEquals(GLYPH_8_SLOT_SHA256, glyphSlotBytes(bytes, 8).sha256Hex())
+        assertEquals(PATCHED_SOURCE_FONT_SHA256, bytes.sha256Hex())
         val parsedLayers = (0 until layerCount).map { layerIndex ->
             val offset = layerRecords + (firstLayerIndex + layerIndex) * 4
             val paletteIndex = readU16(bytes, offset + 2)
@@ -286,6 +271,61 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         })
         assertEquals(0xFFFF2A2A.toInt(), parsedLayers.first().colorArgb)
         return SourceFixture(bytes, parsedLayers)
+    }
+
+    private fun patchSimpleRectangleGlyph(
+        bytes: ByteArray,
+        glyphId: Int,
+        rectangle: FontUnitRectangle,
+    ) {
+        val slot = glyphSlotRange(bytes, glyphId)
+        bytes.fill(0, slot.first, slot.last + 1)
+        var cursor = slot.first
+        fun signed(value: Int) {
+            writeU16(bytes, cursor, value and 0xffff)
+            cursor += 2
+        }
+        signed(1)
+        listOf(
+            rectangle.xMin,
+            rectangle.yMin,
+            rectangle.xMax,
+            rectangle.yMax,
+        ).forEach(::signed)
+        writeU16(bytes, cursor, 3)
+        cursor += 2
+        writeU16(bytes, cursor, 0)
+        cursor += 2
+        repeat(4) { bytes[cursor++] = 0x01 }
+        listOf(
+            rectangle.xMin,
+            rectangle.xMax - rectangle.xMin,
+            0,
+            rectangle.xMin - rectangle.xMax,
+        ).forEach(::signed)
+        listOf(
+            rectangle.yMin,
+            0,
+            rectangle.yMax - rectangle.yMin,
+            0,
+        ).forEach(::signed)
+        assertEquals(slot.first + SIMPLE_RECTANGLE_GLYPH_BYTES, cursor)
+    }
+
+    private fun glyphSlotBytes(bytes: ByteArray, glyphId: Int): ByteArray {
+        val range = glyphSlotRange(bytes, glyphId)
+        return bytes.copyOfRange(range.first, range.last + 1)
+    }
+
+    private fun glyphSlotRange(bytes: ByteArray, glyphId: Int): IntRange {
+        val head = sfntTableOffset(bytes, "head")
+        assertEquals(0, readU16(bytes, head + 50), "fixture must use short loca offsets")
+        val loca = sfntTableOffset(bytes, "loca")
+        val glyf = sfntTableOffset(bytes, "glyf")
+        val start = glyf + readU16(bytes, loca + glyphId * 2) * 2
+        val end = glyf + readU16(bytes, loca + (glyphId + 1) * 2) * 2
+        assertTrue(end - start >= SIMPLE_RECTANGLE_GLYPH_BYTES)
+        return start until end
     }
 
     private fun readCpalColor(bytes: ByteArray, paletteIndex: Int): Int {
@@ -369,6 +409,10 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         if (this <= 0.04045f) this / 12.92f
         else (((this + 0.055f) / 1.055f).toDouble().pow(2.4)).toFloat()
 
+    private fun testSrgbToLinear(value: Float): Float =
+        if (value <= 0.04045f) value / 12.92f
+        else (((value + 0.055f) / 1.055f).toDouble().pow(2.4)).toFloat()
+
     private fun Float.linearToSrgb(): Float =
         if (this <= 0.0031308f) this * 12.92f
         else (1.055 * toDouble().pow(1.0 / 2.4) - 0.055).toFloat()
@@ -395,6 +439,11 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         return maximumDelta
     }
 
+    private fun ByteArray.sha256Hex(): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(this)
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
     private data class SourceFixture(
         val fontBytes: ByteArray,
         val layers: List<SourceLayer>,
@@ -406,17 +455,37 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         val colorArgb: Int?,
     )
 
-    private data class RasterizedSourceGlyph(
-        val bitmap: A8Bitmap,
-        val left: Int,
-        val top: Int,
+    private data class CpuLayer(
+        val bounds: DeviceRectangle,
+        val linearPremul: FloatArray,
     )
 
-    private data class CpuLayer(
-        val bitmap: A8Bitmap,
+    private data class FontUnitRectangle(
+        val xMin: Int,
+        val yMin: Int,
+        val xMax: Int,
+        val yMax: Int,
+    ) {
+        fun toDeviceBounds(originX: Int, baselineY: Int): DeviceRectangle {
+            fun scaled(value: Int): Int {
+                val numerator = value * FONT_SIZE_PX
+                require(numerator % FONT_UNITS_PER_EM == 0)
+                return numerator / FONT_UNITS_PER_EM
+            }
+            return DeviceRectangle(
+                left = originX + scaled(xMin),
+                top = baselineY - scaled(yMax),
+                right = originX + scaled(xMax),
+                bottom = baselineY - scaled(yMin),
+            )
+        }
+    }
+
+    private data class DeviceRectangle(
         val left: Int,
         val top: Int,
-        val linearPremul: FloatArray,
+        val right: Int,
+        val bottom: Int,
     )
 
     private data class NativeEvidence(
@@ -431,12 +500,32 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         const val BASE_GLYPH_ID = 2
         const val A8_GLYPH_ID = 7
         const val FONT_SIZE = 48f
-        const val PAINT_ALPHA = 0.625f
+        const val FONT_SIZE_PX = 48
+        const val FONT_UNITS_PER_EM = 1_000
+        const val PAINT_ALPHA_REQUESTED = 0.625f
+        const val CURRENT_COLOR_REQUESTED_R = 0.5f
+        const val CURRENT_COLOR_REQUESTED_G = 0.25f
+        const val CURRENT_COLOR_REQUESTED_B = 0.75f
+        const val EXPECTED_PAINT_ALPHA = 159f / 255f
+        const val EXPECTED_CURRENT_COLOR_R = 128f / 255f
+        const val EXPECTED_CURRENT_COLOR_G = 64f / 255f
+        const val EXPECTED_CURRENT_COLOR_B = 191f / 255f
         const val TARGET_WIDTH = 176
         const val TARGET_HEIGHT = 104
         const val A8_ORIGIN_X = 4
         const val COLOR_ORIGIN_X_0 = 58
         const val COLOR_ORIGIN_X_1 = 118
         const val BASELINE_Y = 58
+        const val SIMPLE_RECTANGLE_GLYPH_BYTES = 34
+        const val PINNED_SKIA_COLR_SHA256 =
+            "77d9465a9a1c2bccceda4666fe3cebbd96a85cdfd07dbc42c2b310bc7767372e"
+        const val GLYPH_7_SLOT_SHA256 =
+            "d20c20e6cba9d58b883e3b82852b98bec7c7295e8f6bcf9662d9c50ee3b898fa"
+        const val GLYPH_8_SLOT_SHA256 =
+            "e4d7be24c5b85dc173a00f34cbaf2fc56a6ab6393f0b8ce389ddf5ccb1278f92"
+        const val PATCHED_SOURCE_FONT_SHA256 =
+            "7fe253c74758df56226679d9e43965e78bbdb2437d2b7d4788d918805323874d"
+        val GLYPH_7_RECTANGLE = FontUnitRectangle(0, -375, 500, 375)
+        val GLYPH_8_RECTANGLE = FontUnitRectangle(125, -250, 375, 250)
     }
 }

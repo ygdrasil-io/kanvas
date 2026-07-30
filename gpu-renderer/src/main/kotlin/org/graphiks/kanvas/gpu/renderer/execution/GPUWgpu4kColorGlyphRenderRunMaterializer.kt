@@ -45,13 +45,98 @@ internal data class GPUPreparedColorGlyphScopeRunPlan(
     }
 }
 
+internal data class GPUPreparedColorGlyphCanonicalizationEvidence(
+    val structuralValidationCount: Int,
+    val deepComparisonCount: Int,
+)
+
+internal sealed interface GPUPreparedColorGlyphCanonicalPlanAuthentication {
+    data class Accepted(
+        val table: GPUPreparedColorGlyphCanonicalPlanTable,
+    ) : GPUPreparedColorGlyphCanonicalPlanAuthentication
+
+    data class Refused(
+        val message: String,
+    ) : GPUPreparedColorGlyphCanonicalPlanAuthentication
+}
+
+internal class GPUPreparedColorGlyphCanonicalPlanTable private constructor(
+    plansByArtifactKey: Map<GPUTextArtifactKey, GPUPreparedColorGlyphBufferPlan>,
+    authenticatedPlans: List<GPUPreparedColorGlyphBufferPlan>,
+    val evidence: GPUPreparedColorGlyphCanonicalizationEvidence,
+) {
+    internal val plansByArtifactKey:
+        Map<GPUTextArtifactKey, GPUPreparedColorGlyphBufferPlan> =
+        immutableMap(plansByArtifactKey)
+    private val authenticatedPlansByIdentity: Set<GPUPreparedColorGlyphBufferPlan> =
+        Collections.unmodifiableSet(
+            Collections.newSetFromMap(
+                IdentityHashMap<GPUPreparedColorGlyphBufferPlan, Boolean>(),
+            ).apply {
+                addAll(authenticatedPlans)
+            },
+        )
+
+    internal fun authenticates(plan: GPUPreparedColorGlyphBufferPlan): Boolean =
+        plan in authenticatedPlansByIdentity
+
+    internal companion object {
+        fun authenticate(
+            bindings: List<GPUPreparedTextRenderBinding>,
+        ): GPUPreparedColorGlyphCanonicalPlanAuthentication {
+            val plansByArtifactKey =
+                linkedMapOf<GPUTextArtifactKey, GPUPreparedColorGlyphBufferPlan>()
+            val authenticatedPlans =
+                IdentityHashMap<GPUPreparedColorGlyphBufferPlan, Boolean>()
+            var structuralValidationCount = 0
+            var deepComparisonCount = 0
+            bindings.filter(GPUPreparedTextRenderBinding::hasColorGlyphBufferPlan)
+                .forEach { binding ->
+                    val candidate = binding.colorGlyphBufferPlan
+                    if (authenticatedPlans.containsKey(candidate)) {
+                        return@forEach
+                    }
+                    structuralValidationCount += 1
+                    if (!candidate.hasCanonicalNativePacking()) {
+                        return GPUPreparedColorGlyphCanonicalPlanAuthentication.Refused(
+                            "ColorGlyph buffer slices must form exact aligned ordered slab " +
+                                "partitions.",
+                        )
+                    }
+                    val canonical = plansByArtifactKey[candidate.planArtifactKey]
+                    if (canonical == null) {
+                        plansByArtifactKey[candidate.planArtifactKey] = candidate
+                    } else {
+                        deepComparisonCount += 1
+                        if (!canonical.sameCanonicalNativePlanAs(candidate)) {
+                            return GPUPreparedColorGlyphCanonicalPlanAuthentication.Refused(
+                                "One ColorGlyph artifact key cannot authenticate conflicting " +
+                                    "buffer plans.",
+                            )
+                        }
+                    }
+                    authenticatedPlans[candidate] = true
+                }
+            return GPUPreparedColorGlyphCanonicalPlanAuthentication.Accepted(
+                GPUPreparedColorGlyphCanonicalPlanTable(
+                    plansByArtifactKey = plansByArtifactKey,
+                    authenticatedPlans = authenticatedPlans.keys.toList(),
+                    evidence = GPUPreparedColorGlyphCanonicalizationEvidence(
+                        structuralValidationCount = structuralValidationCount,
+                        deepComparisonCount = deepComparisonCount,
+                    ),
+                ),
+            )
+        }
+    }
+}
+
 internal class GPUPreparedColorGlyphRenderRunPlan(
     val sourceScopeIndices: List<Int>,
     renderRuns: List<GPUPreparedColorGlyphScopeRunPlan>,
     val exactScopeKeys: List<GPUPreparedNativeScopeKey>,
     val atlasUploads: List<GPUPreparedTextTextureUploadPlan.Atlas>,
-    canonicalBufferPlansByArtifactKey:
-        Map<GPUTextArtifactKey, GPUPreparedColorGlyphBufferPlan>,
+    canonicalPlanTable: GPUPreparedColorGlyphCanonicalPlanTable,
 ) {
     val renderRuns: List<GPUPreparedColorGlyphScopeRunPlan> = immutableList(renderRuns)
     val packets: List<GPUDrawSemanticPayload.ColorGlyph> =
@@ -60,7 +145,9 @@ internal class GPUPreparedColorGlyphRenderRunPlan(
         immutableList(this.renderRuns.flatMap(GPUPreparedColorGlyphScopeRunPlan::bindings))
     val canonicalBufferPlansByArtifactKey:
         Map<GPUTextArtifactKey, GPUPreparedColorGlyphBufferPlan> =
-        immutableMap(canonicalBufferPlansByArtifactKey)
+        canonicalPlanTable.plansByArtifactKey
+    val canonicalizationEvidence: GPUPreparedColorGlyphCanonicalizationEvidence =
+        canonicalPlanTable.evidence
 
     init {
         require(this.renderRuns.isNotEmpty() && packets.size == bindings.size)
@@ -78,9 +165,7 @@ internal class GPUPreparedColorGlyphRenderRunPlan(
                 this.canonicalBufferPlansByArtifactKey.keys,
         )
         require(bindings.all { binding ->
-            val plan = binding.colorGlyphBufferPlan
-            this.canonicalBufferPlansByArtifactKey.getValue(plan.planArtifactKey)
-                .sameCanonicalNativePlanAs(plan)
+            canonicalPlanTable.authenticates(binding.colorGlyphBufferPlan)
         })
         val uploadKeys = exactScopeKeys.filter {
             it.operationKind == GPUEncoderOperationKind.Upload

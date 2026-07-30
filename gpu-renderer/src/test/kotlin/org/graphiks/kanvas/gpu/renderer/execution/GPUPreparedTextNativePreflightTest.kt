@@ -238,6 +238,63 @@ class GPUPreparedTextNativePreflightTest {
     }
 
     @Test
+    fun `shared ColorGlyph plan is structurally authenticated once for 64 bindings`() {
+        val commandIds = (0 until 64).toList()
+        val inputs = capturedPreparedTextInputs(
+            commandIds = commandIds,
+            colorGlyphCommandIds = commandIds.toSet(),
+            coalescedColorGlyphScope = true,
+        )
+
+        val accepted = assertIs<GPUPreparedSurfaceNativePreflightResult.Accepted>(
+            GPUPreparedSurfaceNativePreflight().validate(
+                inputs.framePlan,
+                inputs.encoderPlan,
+                inputs.resources,
+                inputs.shaderContract,
+                inputs.generationSeal,
+            ),
+        )
+        val evidence = requireNotNull(accepted.plan.colorGlyphPlan)
+            .canonicalizationEvidence
+
+        assertEquals(1, evidence.structuralValidationCount)
+        assertEquals(0, evidence.deepComparisonCount)
+    }
+
+    @Test
+    fun `three equivalent ColorGlyph plan instances are each authenticated once`() {
+        val commandIds = (0 until 5).toList()
+        val inputs = capturedPreparedTextInputs(
+            commandIds = commandIds,
+            colorGlyphCommandIds = commandIds.toSet(),
+            coalescedColorGlyphScope = true,
+        ).withColorGlyphPlanInstances(
+            instanceGroupByCommandId = mapOf(
+                1 to 1,
+                2 to 2,
+                3 to 1,
+                4 to 2,
+            ),
+        )
+
+        val accepted = assertIs<GPUPreparedSurfaceNativePreflightResult.Accepted>(
+            GPUPreparedSurfaceNativePreflight().validate(
+                inputs.framePlan,
+                inputs.encoderPlan,
+                inputs.resources,
+                inputs.shaderContract,
+                inputs.generationSeal,
+            ),
+        )
+        val evidence = requireNotNull(accepted.plan.colorGlyphPlan)
+            .canonicalizationEvidence
+
+        assertEquals(3, evidence.structuralValidationCount)
+        assertEquals(2, evidence.deepComparisonCount)
+    }
+
+    @Test
     fun `conflicting ColorGlyph plan instances under one artifact key refuse purely`() {
         val fixture = preparedTextNativePreflightFixture(
             colorGlyphCommandIds = setOf(0, 1),
@@ -1616,6 +1673,7 @@ internal class GPUPreparedTextNativeCreationProbe {
 }
 
 internal fun capturedPreparedTextInputs(
+    commandIds: List<Int> = listOf(0, 1),
     textInstanceCounts: List<Int> = listOf(64, 36),
     colorGlyphCommandIds: Set<Int> = emptySet(),
     coalescedColorGlyphScope: Boolean = false,
@@ -1623,6 +1681,7 @@ internal fun capturedPreparedTextInputs(
     colorGlyphUseForeground: Boolean = false,
 ): CapturedPreparedSurfaceInputs {
     val fixture = preparedTextNativePreflightFixture(
+        commandIds = commandIds,
         textInstanceCounts = textInstanceCounts,
         colorGlyphCommandIds = colorGlyphCommandIds,
         coalescedColorGlyphScope = coalescedColorGlyphScope,
@@ -1664,6 +1723,44 @@ internal fun CapturedPreparedSurfaceInputs.withSecondColorGlyphPlanCopy(
 ): CapturedPreparedSurfaceInputs = copy(
     framePlan = framePlan.withSecondColorGlyphPlanCopy(transform),
 )
+
+private fun CapturedPreparedSurfaceInputs.withColorGlyphPlanInstances(
+    instanceGroupByCommandId: Map<Int, Int>,
+): CapturedPreparedSurfaceInputs {
+    val basePlan = framePlan.preparedTextBindings()
+        .first(GPUPreparedTextRenderBinding::hasColorGlyphBufferPlan)
+        .colorGlyphBufferPlan
+    val planByInstanceGroup = instanceGroupByCommandId.values
+        .distinct()
+        .associateWith { basePlan.rebuiltForCanonicalityTest() }
+    return copy(
+        framePlan = framePlan.rebuilt(
+            steps = framePlan.steps.map { step ->
+                if (step !is GPUFrameStep.RenderPassStep) {
+                    step
+                } else {
+                    step.rebuilt(
+                        preparedTextBindingsByPacketId =
+                            step.preparedTextBindingsByPacketId.mapValues { (_, binding) ->
+                                val instanceGroup = instanceGroupByCommandId[
+                                    binding.colorGlyphBufferSlice.commandIdValue
+                                ]
+                                val plan = planByInstanceGroup[instanceGroup]
+                                    ?: return@mapValues binding
+                                binding.rebuilt(
+                                    colorGlyphBufferPlan = plan,
+                                    colorGlyphBufferSlice = plan.slices.single { candidate ->
+                                        candidate.commandIdValue ==
+                                            binding.colorGlyphBufferSlice.commandIdValue
+                                    },
+                                )
+                            },
+                    )
+                }
+            },
+        ),
+    )
+}
 
 private fun GPUFramePlan.withSecondColorGlyphPlanCopy(
     transform: (GPUPreparedColorGlyphBufferPlan) -> GPUPreparedColorGlyphBufferPlan,

@@ -29,6 +29,50 @@ import org.graphiks.kanvas.types.Point
 
 class GPUPreparedTextSemanticBuilderTest {
     @Test
+    fun `COLRv0 currentColor sRGB becomes exact linear premultiplied layer color`() {
+        val currentColor = Color.fromRGBA(0.5f, 0.25f, 0.75f, 0.625f)
+        val prepared = assertIs<GPUPreparedTextFramePreparation.Ready>(
+            GPUPreparedTextFramePreparer.prepare(
+                operations = listOf(
+                    colorTextOperation(
+                        paintColor = currentColor,
+                        useForegroundLayer = true,
+                    ),
+                ),
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities(),
+                generation = GPUTextArtifactGeneration(19),
+                limits = colorLimits(),
+            ),
+        )
+        val gathered = assertIs<GPUPreparedTextSemanticGatherResult.Gathered>(
+            GPUPreparedTextSemanticBuilder.gather(
+                visualCommands = prepared.mapping.visualCommands,
+                inventory = prepared.inventory,
+                targetBounds = GPUPixelBounds(0, 0, 64, 64),
+            ),
+        )
+        val semantic = assertIs<GPUDrawSemanticPayload.ColorGlyph>(
+            gathered.semanticsByCommandId.values.single(),
+        )
+        val foreground = semantic.layers.single { layer ->
+            layer.paletteIndex == 0xffff && layer.useForeground
+        }
+        val alpha = 159f / 255f
+        val expected = floatArrayOf(
+            testSrgbToLinear(128f / 255f) * alpha,
+            testSrgbToLinear(64f / 255f) * alpha,
+            testSrgbToLinear(191f / 255f) * alpha,
+            alpha,
+        )
+
+        expected.indices.forEach { index ->
+            assertEquals(expected[index], foreground.premultipliedRgba[index], 0.000001f)
+        }
+    }
+
+    @Test
     fun `COLRv0 CPAL sRGB bytes become exact linear premultiplied layer color`() {
         val prepared = assertIs<GPUPreparedTextFramePreparation.Ready>(
             GPUPreparedTextFramePreparer.prepare(
@@ -433,11 +477,19 @@ class GPUPreparedTextSemanticBuilderTest {
             ),
         )
 
-    private fun colorTextOperation(glyphCount: Int = 1): DisplayOp.DrawText {
+    private fun colorTextOperation(
+        glyphCount: Int = 1,
+        paintColor: Color = Color.WHITE,
+        useForegroundLayer: Boolean = false,
+    ): DisplayOp.DrawText {
+        val fontBytes = checkNotNull(
+            javaClass.classLoader.getResourceAsStream("fonts/skia/colr.ttf"),
+        ).use { stream -> stream.readBytes() }
+        if (useForegroundLayer) {
+            replaceSecondColrLayerWithCurrentColor(fontBytes)
+        }
         val typeface = FontTypeface(
-            checkNotNull(
-                javaClass.classLoader.getResourceAsStream("fonts/skia/colr.ttf"),
-            ).use { stream -> stream.readBytes() },
+            fontBytes,
             fontName = "Skia COLRv0 semantic test font",
         )
         return DisplayOp.DrawText(
@@ -454,11 +506,52 @@ class GPUPreparedTextSemanticBuilderTest {
             ),
             x = 0f,
             y = 0f,
-            paint = Paint.fill(Color.WHITE),
+            paint = Paint.fill(paintColor),
             transform = Matrix33.identity(),
             clip = ClipStack.WideOpen,
         )
     }
+
+    private fun replaceSecondColrLayerWithCurrentColor(bytes: ByteArray) {
+        val colr = sfntTableOffset(bytes, "COLR")
+        val baseRecordCount = readU16(bytes, colr + 2)
+        val baseRecords = colr + readU32(bytes, colr + 4)
+        val layerRecords = colr + readU32(bytes, colr + 8)
+        val baseRecord = (0 until baseRecordCount)
+            .map { index -> baseRecords + index * 6 }
+            .single { offset -> readU16(bytes, offset) == 2 }
+        val firstLayerIndex = readU16(bytes, baseRecord + 2)
+        writeU16(bytes, layerRecords + (firstLayerIndex + 1) * 4 + 2, 0xffff)
+    }
+
+    private fun sfntTableOffset(bytes: ByteArray, wantedTag: String): Int {
+        val tableCount = readU16(bytes, 4)
+        repeat(tableCount) { index ->
+            val entry = 12 + index * 16
+            val tag = String(bytes, entry, 4, Charsets.ISO_8859_1)
+            if (tag == wantedTag) return readU32(bytes, entry + 8)
+        }
+        error("Missing $wantedTag table")
+    }
+
+    private fun readU16(bytes: ByteArray, offset: Int): Int =
+        ((bytes[offset].toInt() and 0xff) shl 8) or
+            (bytes[offset + 1].toInt() and 0xff)
+
+    private fun readU32(bytes: ByteArray, offset: Int): Int =
+        ((bytes[offset].toInt() and 0xff) shl 24) or
+            ((bytes[offset + 1].toInt() and 0xff) shl 16) or
+            ((bytes[offset + 2].toInt() and 0xff) shl 8) or
+            (bytes[offset + 3].toInt() and 0xff)
+
+    private fun writeU16(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = (value ushr 8).toByte()
+        bytes[offset + 1] = value.toByte()
+    }
+
+    private fun testSrgbToLinear(value: Float): Float =
+        if (value <= 0.04045f) value / 12.92f
+        else ((value + 0.055f) / 1.055f).pow(2.4f)
 
     private fun multiStrikeColorTextOperation(): DisplayOp.DrawText {
         val typeface = FontTypeface(
