@@ -3,13 +3,14 @@ package org.graphiks.kanvas.gpu.renderer.execution
 import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.Test
-import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.font.atlas.GlyphAtlasPlacement
 import org.graphiks.kanvas.font.atlas.GlyphAtlasUploadPlan
@@ -22,6 +23,8 @@ import org.graphiks.kanvas.font.scaler.GlyphRepresentation
 import org.graphiks.kanvas.font.scaler.GlyphScaler
 import org.graphiks.kanvas.font.scaler.ScaledGlyph
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
@@ -112,7 +115,7 @@ class GPUColorGlyphTrueColrFixtureTest {
             GPUPreparedColorGlyphTestLayer(
                 placement = placement,
                 deviceBounds = layer.deviceBounds,
-                premultipliedRgba = layer.colorArgb.toPremultipliedRgba(),
+                premultipliedRgba = layer.colorArgb.toLinearPremultipliedRgba(),
             )
         }
         val taskList = buildPreparedColorGlyphTestTaskList(
@@ -128,7 +131,12 @@ class GPUColorGlyphTrueColrFixtureTest {
             requestId = requestId,
         )
         val session = backend.prepareSceneFrameSession(
-            GPUOffscreenTargetRequest(targetWidth, targetHeight),
+            GPUOffscreenTargetRequest(
+                targetWidth,
+                targetHeight,
+                GPUColorFormat.RGBA8UnormSrgb,
+                GPUColorInterpretation.LinearPremul,
+            ),
         )
         try {
             val terminal = session.renderFrame(
@@ -142,7 +150,7 @@ class GPUColorGlyphTrueColrFixtureTest {
                 "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
             )
             val actual = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output).bytes
-            assertContentEquals(expected, actual)
+            assertRgbaWithinOneByte(expected, actual)
             assertEquals(1L, session.nativeCounters().encoders)
             assertEquals(1L, session.nativeCounters().submits)
         } finally {
@@ -167,10 +175,9 @@ class GPUColorGlyphTrueColrFixtureTest {
         layers: List<RasterizedColorLayer>,
     ): ByteArray {
         val rgba = FloatArray(width * height * 4)
-        repeat(width * height) { pixel -> rgba[pixel * 4 + 3] = 1f }
 
         layers.forEach { layer ->
-            val color = layer.colorArgb.toPremultipliedRgba()
+            val color = layer.colorArgb.toLinearPremultipliedRgba()
             repeat(layer.bitmap.height) { localY ->
                 repeat(layer.bitmap.width) { localX ->
                     val coverage = (layer.bitmap.pixels[localY * layer.bitmap.width + localX].toInt() and 0xff) / 255f
@@ -186,19 +193,38 @@ class GPUColorGlyphTrueColrFixtureTest {
         }
 
         return ByteArray(rgba.size) { index ->
-            (rgba[index].coerceIn(0f, 1f) * 255f).roundToInt().toByte()
+            val encoded = if (index % 4 == 3) {
+                rgba[index]
+            } else {
+                rgba[index].linearToSrgb()
+            }
+            (encoded.coerceIn(0f, 1f) * 255f).roundToInt().toByte()
         }
     }
 
-    private fun Int.toPremultipliedRgba(): FloatArray {
+    private fun Int.toLinearPremultipliedRgba(): FloatArray {
         val alpha = (ushr(24) and 0xff) / 255f
         return floatArrayOf(
-            ((ushr(16) and 0xff) / 255f) * alpha,
-            ((ushr(8) and 0xff) / 255f) * alpha,
-            ((this and 0xff) / 255f) * alpha,
+            ((ushr(16) and 0xff).toFloat() / 255f).srgbToLinear() * alpha,
+            ((ushr(8) and 0xff).toFloat() / 255f).srgbToLinear() * alpha,
+            ((this and 0xff).toFloat() / 255f).srgbToLinear() * alpha,
             alpha,
         )
     }
+
+    private fun Float.srgbToLinear(): Float =
+        if (this <= 0.04045f) {
+            this / 12.92f
+        } else {
+            (((this + 0.055f) / 1.055f).toDouble().pow(2.4)).toFloat()
+        }
+
+    private fun Float.linearToSrgb(): Float =
+        if (this <= 0.0031308f) {
+            this * 12.92f
+        } else {
+            (1.055 * toDouble().pow(1.0 / 2.4) - 0.055).toFloat()
+        }
 
     private fun ByteArray.hasOpaqueRgb(red: Int, green: Int, blue: Int): Boolean =
         indices.step(4).any { index ->
@@ -207,6 +233,23 @@ class GPUColorGlyphTrueColrFixtureTest {
                 (this[index + 2].toInt() and 0xff) == blue &&
                 (this[index + 3].toInt() and 0xff) == 255
         }
+
+    private fun assertRgbaWithinOneByte(expected: ByteArray, actual: ByteArray) {
+        assertEquals(expected.size, actual.size)
+        val firstMismatch = expected.indices.firstOrNull { index ->
+            val expectedChannel = expected[index].toInt() and 0xff
+            val actualChannel = actual[index].toInt() and 0xff
+            kotlin.math.abs(expectedChannel - actualChannel) > 1
+        }
+        assertNull(
+            firstMismatch,
+            firstMismatch?.let { index ->
+                "RGBA channel $index differs beyond one sRGB quantization step: " +
+                    "expected=${expected[index].toInt() and 0xff}, " +
+                    "actual=${actual[index].toInt() and 0xff}"
+            },
+        )
+    }
 
     private companion object {
         const val COLR_FONT_RESOURCE = "/fonts/skia/colr.ttf"

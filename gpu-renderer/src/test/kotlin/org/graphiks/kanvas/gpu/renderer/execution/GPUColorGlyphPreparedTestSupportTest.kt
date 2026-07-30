@@ -52,7 +52,7 @@ class GPUColorGlyphPreparedTestSupportTest {
             requestId = GPUReadbackRequestID("readback.color-glyph.synthetic-test"),
         )
 
-        assertEquals(3, taskList.tasks.size)
+        assertEquals(4, taskList.tasks.size)
     }
 
     private fun capabilities() = GPUCapabilities(

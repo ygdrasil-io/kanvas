@@ -6,6 +6,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
@@ -56,7 +58,12 @@ class GPUColorGlyphRenderSmokeTest {
             )
 
             session.prepareSceneFrameSession(
-                GPUOffscreenTargetRequest(TARGET_WIDTH, TARGET_HEIGHT),
+                GPUOffscreenTargetRequest(
+                    TARGET_WIDTH,
+                    TARGET_HEIGHT,
+                    GPUColorFormat.RGBA8UnormSrgb,
+                    GPUColorInterpretation.LinearPremul,
+                ),
             ).use { prepared ->
                 val terminal = prepared.renderFrame(
                     taskList,

@@ -46,6 +46,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
@@ -92,7 +93,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
         val packet = render.drawPackets.single()
         assertSame(semantic, packet.semanticPayload)
         assertEquals(COLOR_GLYPH_RENDER_STEP_IDENTITY, packet.renderStepId.value)
-        assertEquals(PLAN_GENERATION, packet.resourceGeneration)
+        assertEquals(PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION, packet.resourceGeneration)
         assertEquals(COLOR_GLYPH_RENDER_PIPELINE_KEY, packet.renderPipelineKey)
         assertEquals(COLOR_GLYPH_BINDING_LAYOUT_HASH, packet.bindingLayoutHash)
         assertEquals(COLOR_GLYPH_VERTEX_SOURCE_LABEL, packet.vertexSourceLabel)
@@ -176,7 +177,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
     }
 
     @Test
-    fun `native materializer refuses every substituted prepared authority before native payload creation`() {
+    fun `retired isolated adapter never revives substituted one-packet authority`() {
         val semantic = semantic()
         val generation = GPUDeviceGenerationID(9L)
         val base = assertIs<GPUColorGlyphPreparedTaskListResult.Recorded>(
@@ -232,7 +233,7 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
             setupTransaction = targetSetup,
         )
         targetSetup.commit()
-        val sessionCache = GPUWgpu4kColorGlyphSessionCache(device, queue)
+        val sessionCache = GPUWgpu4kColorGlyphSessionCache(device)
         nativeEvents.clear()
         try {
             cases.forEach { (case, taskList) ->
@@ -262,7 +263,11 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
                 )
 
                 val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(result, case)
-                assertEquals("invalid.native-color-glyph.packet-authority", refused.code, case)
+                assertEquals(
+                    "unsupported.native-color-glyph.isolated-adapter-retired",
+                    refused.code,
+                    case,
+                )
                 assertEquals(emptyList(), nativeEvents, case)
                 materializer.close()
             }

@@ -1263,7 +1263,6 @@ private class WgpuBackendSession(
         val colorGlyphCache = setupTransaction.own(
             GPUWgpu4kColorGlyphSessionCache(
                 device = glfw.wgpuContext.device,
-                queue = glfw.wgpuContext.device.queue,
             ),
         )
         val registeredUniformRectCache = setupTransaction.own(
@@ -1424,6 +1423,7 @@ private class WgpuBackendSession(
                         corePrimitiveCache = corePrimitiveCache,
                         preparedImageCache = preparedImageCache,
                         preparedTextCache = preparedTextCache,
+                        colorGlyphCache = colorGlyphCache,
                         preparedImageHandleFactory =
                             GPUWgpu4kPreparedImageNativeHandleFactory(
                                 glfw.wgpuContext.device,
@@ -1440,7 +1440,6 @@ private class WgpuBackendSession(
                     preparedSceneTarget = preparedTarget,
                     solidRectCache = solidRectCache,
                     corePrimitiveCache = corePrimitiveCache,
-                    colorGlyphCache = colorGlyphCache,
                     registeredUniformRectCache = registeredUniformRectCache,
                     separableBlurRectCache = separableBlurRectCache,
                     destinationCopyCache = destinationCopyCache,

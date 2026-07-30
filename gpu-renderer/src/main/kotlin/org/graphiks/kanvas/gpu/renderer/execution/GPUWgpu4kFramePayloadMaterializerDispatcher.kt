@@ -13,7 +13,6 @@ internal sealed interface GPUWgpu4kPreparedFramePayloadRoute {
     data object DestinationCopySolidRect : GPUWgpu4kPreparedFramePayloadRoute
     data object SolidRect : GPUWgpu4kPreparedFramePayloadRoute
     data object CorePrimitive : GPUWgpu4kPreparedFramePayloadRoute
-    data object ColorGlyph : GPUWgpu4kPreparedFramePayloadRoute
     data object RegisteredUniformRect : GPUWgpu4kPreparedFramePayloadRoute
     data object SeparableBlurRect : GPUWgpu4kPreparedFramePayloadRoute
     data object PreparedSurfaceMixed : GPUWgpu4kPreparedFramePayloadRoute
@@ -181,8 +180,6 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             GPUWgpu4kPreparedFramePayloadRoute.SolidRect
         distinct == listOf(GPUDrawSemanticPayload.CorePrimitive::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.CorePrimitive
-        distinct == listOf(GPUDrawSemanticPayload.ColorGlyph::class) ->
-            GPUWgpu4kPreparedFramePayloadRoute.ColorGlyph
         distinct == listOf(GPUDrawSemanticPayload.RegisteredUniformRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.RegisteredUniformRect
         distinct == listOf(GPUDrawSemanticPayload.SeparableBlurRect::class) ->
@@ -191,12 +188,14 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
             semanticSet.isNotEmpty() &&
                 semanticSet.any {
                     it == GPUDrawSemanticPayload.SampledImage::class ||
-                        it == GPUDrawSemanticPayload.TextA8::class
+                        it == GPUDrawSemanticPayload.TextA8::class ||
+                        it == GPUDrawSemanticPayload.ColorGlyph::class
                 } &&
                 semanticSet.all {
                     it == GPUDrawSemanticPayload.CorePrimitive::class ||
                         it == GPUDrawSemanticPayload.SampledImage::class ||
-                        it == GPUDrawSemanticPayload.TextA8::class
+                        it == GPUDrawSemanticPayload.TextA8::class ||
+                        it == GPUDrawSemanticPayload.ColorGlyph::class
                 }
         } -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
         distinct.size > 1 -> GPUWgpu4kPreparedFramePayloadRoute.Refused(
@@ -217,7 +216,6 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
     private val preparedSceneTarget: GPUWgpu4kPreparedSceneTarget,
     private val solidRectCache: GPUWgpu4kSolidRectSessionCache,
     private val corePrimitiveCache: GPUWgpu4kCorePrimitiveSessionCache,
-    private val colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
     private val registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
     private val separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
     private val destinationCopyCache: GPUWgpu4kDestinationCopySessionCache,
@@ -330,20 +328,6 @@ internal class GPUWgpu4kFramePayloadMaterializerDispatcher(
                         "unsupported.native-core-primitive.limits-unavailable",
                         "The direct CorePrimitive route requires observed backend limits.",
                     ),
-                ),
-                reusableFramePlan,
-                reusableEncoderPlan,
-                encoderPlan,
-                surfaceRoute,
-                resources,
-                generationSeal,
-            )
-            GPUWgpu4kPreparedFramePayloadRoute.ColorGlyph -> dispatch(
-                GPUWgpu4kColorGlyphFramePayloadMaterializer(
-                    device,
-                    queue,
-                    preparedSceneTarget,
-                    colorGlyphCache,
                 ),
                 reusableFramePlan,
                 reusableEncoderPlan,

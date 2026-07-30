@@ -33,9 +33,10 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             inputOverride = capturedPreparedTextInputs(),
         )
         try {
+            val result = fixture.materialize()
             val materialized = assertIs<
                 GPUPreparedNativeFramePayloadMaterialization.Materialized
-                >(fixture.materialize())
+                >(result, result.toString())
             val payload = materialized.draft.payload
 
             assertEquals(
@@ -251,12 +252,12 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             val atlas = assertIs<GPUPreparedNativeScopeOperand.TextureUpload>(
                 payload.scopeOperands.first {
                     it is GPUPreparedNativeScopeOperand.TextureUpload &&
-                        it.uploadRole == "text-atlas"
+                        it.uploadRole == "prepared-text-r8"
                 },
             ).destination.texture
             assertEquals(
                 listOf(atlas),
-                fixture.native.createdHandles("Kanvas.frame.preparedText.text-atlas"),
+                fixture.native.createdHandles("Kanvas.frame.preparedText.r8-page"),
             )
             ownership = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
                 registry.registerPreparedNativeFrameDraft(draft),
@@ -271,17 +272,17 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
                 ownership.consume(payload.identity),
             )
             assertTrue(ownership.markSubmitted())
-            fixture.native.failCloseOnce("Kanvas.frame.preparedText.text-atlas")
+            fixture.native.failCloseOnce("Kanvas.frame.preparedText.r8-page")
 
             assertFalse(ownership.releaseAfterCompletion())
             assertEquals(
                 1,
-                fixture.native.closeAttempts("Kanvas.frame.preparedText.text-atlas"),
+                fixture.native.closeAttempts("Kanvas.frame.preparedText.r8-page"),
             )
             registry.close()
             assertEquals(
                 2,
-                fixture.native.closeAttempts("Kanvas.frame.preparedText.text-atlas"),
+                fixture.native.closeAttempts("Kanvas.frame.preparedText.r8-page"),
             )
             assertEquals(2, fixture.native.closeCounts[atlas])
         } finally {
@@ -307,7 +308,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             val atlas = assertIs<GPUPreparedNativeScopeOperand.TextureUpload>(
                 payload.scopeOperands.first {
                     it is GPUPreparedNativeScopeOperand.TextureUpload &&
-                        it.uploadRole == "text-atlas"
+                        it.uploadRole == "prepared-text-r8"
                 },
             ).destination.texture
             val readback = payload.scopeOperands
@@ -488,7 +489,6 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             native.device,
             input.generationSeal.deviceGeneration,
         )
-        val colorGlyphCache = GPUWgpu4kColorGlyphSessionCache(native.device, native.queue)
         val registeredUniformRectCache = GPUWgpu4kRegisteredUniformRectSessionCache(native.device)
         val blurCache = GPUWgpu4kSeparableBlurRectSessionCache(native.device)
         val destinationCopyCache = GPUWgpu4kDestinationCopySessionCache(native.device)
@@ -519,7 +519,6 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             preparedSceneTarget = target,
             solidRectCache = solidRectCache,
             corePrimitiveCache = coreCache,
-            colorGlyphCache = colorGlyphCache,
             registeredUniformRectCache = registeredUniformRectCache,
             separableBlurRectCache = blurCache,
             destinationCopyCache = destinationCopyCache,
@@ -662,7 +661,6 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             runCatching { destinationCopyCache.close() }
             runCatching { blurCache.close() }
             runCatching { registeredUniformRectCache.close() }
-            runCatching { colorGlyphCache.close() }
             runCatching { coreCache.close() }
             runCatching { solidRectCache.close() }
             runCatching { target.close() }
@@ -786,6 +784,32 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             assertTrue(draft.pendingOwnedHandlesSnapshot().isEmpty())
             assertTrue(fixture.imageFactory.closeCounts.values.all { it == 1 })
             assertTrue(fixture.native.closeCounts.values.all { it <= 1 })
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `failure after R8 creation rolls back its texture and view exactly once`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = capturedPreparedTextInputs(),
+        )
+        try {
+            fixture.native.fail("createBuffer", ordinal = 1)
+
+            assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.materialize(),
+            )
+
+            val texture = fixture.native
+                .createdHandles("Kanvas.frame.preparedText.r8-page")
+                .single()
+            val view = fixture.native
+                .createdHandles("Kanvas.frame.preparedText.r8-page-view")
+                .single()
+            assertEquals(1, fixture.native.closeCounts[texture])
+            assertEquals(1, fixture.native.closeCounts[view])
         } finally {
             fixture.close()
         }

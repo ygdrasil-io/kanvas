@@ -53,7 +53,7 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             selectWgpu4kPreparedFramePayloadRoute(listOf(GPUDrawSemanticPayload.SolidRect::class)),
         )
         assertEquals(
-            GPUWgpu4kPreparedFramePayloadRoute.ColorGlyph,
+            GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed,
             selectWgpu4kPreparedFramePayloadRoute(listOf(GPUDrawSemanticPayload.ColorGlyph::class)),
         )
         assertEquals(
@@ -487,7 +487,6 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             native.device,
             input.generationSeal.deviceGeneration,
         )
-        val colorGlyphCache = GPUWgpu4kColorGlyphSessionCache(native.device, native.queue)
         val registeredUniformRectCache =
             GPUWgpu4kRegisteredUniformRectSessionCache(native.device)
         val separableBlurRectCache = GPUWgpu4kSeparableBlurRectSessionCache(native.device)
@@ -499,7 +498,6 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             preparedSceneTarget = target,
             solidRectCache = solidRectCache,
             corePrimitiveCache = corePrimitiveCache,
-            colorGlyphCache = colorGlyphCache,
             registeredUniformRectCache = registeredUniformRectCache,
             separableBlurRectCache = separableBlurRectCache,
             destinationCopyCache = destinationCopyCache,
@@ -511,7 +509,6 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             target,
             solidRectCache,
             corePrimitiveCache,
-            colorGlyphCache,
             registeredUniformRectCache,
             separableBlurRectCache,
             destinationCopyCache,
@@ -524,7 +521,6 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
         private val target: GPUWgpu4kPreparedSceneTarget,
         private val solidRectCache: GPUWgpu4kSolidRectSessionCache,
         private val corePrimitiveCache: GPUWgpu4kCorePrimitiveSessionCache,
-        private val colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
         private val registeredUniformRectCache: GPUWgpu4kRegisteredUniformRectSessionCache,
         private val separableBlurRectCache: GPUWgpu4kSeparableBlurRectSessionCache,
         private val destinationCopyCache: GPUWgpu4kDestinationCopySessionCache,
@@ -536,7 +532,6 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
             runCatching { destinationCopyCache.close() }
             runCatching { separableBlurRectCache.close() }
             runCatching { registeredUniformRectCache.close() }
-            runCatching { colorGlyphCache.close() }
             runCatching { corePrimitiveCache.close() }
             runCatching { solidRectCache.close() }
             runCatching { target.close() }

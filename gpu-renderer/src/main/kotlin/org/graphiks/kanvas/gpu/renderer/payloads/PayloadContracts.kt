@@ -2279,12 +2279,20 @@ class GPUColorGlyphPayloadGatherer {
         ) {
             "Prepared color-glyph clip, blend and capability identities must not be blank"
         }
-        val vertexData = preparedColorGlyphVertexData(input.layers)
+        val paintAlpha = input.material.paintAlpha
+        val preparedLayers = input.layers.map { layer ->
+            layer.copy(
+                premultipliedRgba = layer.premultipliedRgba.map { component ->
+                    component * paintAlpha
+                }.toFloatArray(),
+            )
+        }
+        val vertexData = preparedColorGlyphVertexData(preparedLayers)
         val uniformBytes = preparedColorGlyphUniformBytes(
             targetBounds = input.targetBounds,
             atlasWidth = input.atlas.width,
             atlasHeight = input.atlas.height,
-            layers = input.layers,
+            layers = preparedLayers,
         )
         val base = gatherSemantic(
             commandIdValue = input.commandIdValue,
@@ -2295,7 +2303,7 @@ class GPUColorGlyphPayloadGatherer {
             atlasHeight = input.atlas.height,
             atlasFormat = GPUColorGlyphAtlasFormat.R8Unorm.gpuLabel,
             atlasGeneration = input.atlas.generation,
-            layers = input.layers,
+            layers = preparedLayers,
             vertexData = vertexData,
             indexData = COLOR_GLYPH_QUAD_INDICES,
             uniformBytes = uniformBytes,

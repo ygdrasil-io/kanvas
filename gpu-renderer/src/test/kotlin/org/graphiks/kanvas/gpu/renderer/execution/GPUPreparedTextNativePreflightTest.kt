@@ -619,7 +619,7 @@ class GPUPreparedTextNativePreflightTest {
     }
 
     @Test
-    fun `ColorGlyph retains the Task 11 native materialization guard`() {
+    fun `ColorGlyph uses the common late-bound authority and reaches native materialization`() {
         val fixture = preparedTextNativePreflightFixture(includeColorGlyph = true)
         val probe = GPUPreparedTextNativeCreationProbe()
 
@@ -628,10 +628,11 @@ class GPUPreparedTextNativePreflightTest {
         )
 
         assertEquals(
-            GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
+            "test.prepared-surface.boundary",
             refused.diagnostic.code.value,
         )
-        assertEquals(0, probe.materializerInvocations)
+        assertEquals(1, probe.materializerInvocations)
+        assertEquals(1, probe.nativePreparationEvents)
     }
 
     @Test

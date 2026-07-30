@@ -310,6 +310,7 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
     orderedRuns: List<GPUPreparedSurfaceNativeRunPlan>,
     imageFrames: List<GPUPreparedSurfaceImageFramePlan>,
     val textPlan: GPUPreparedTextRenderRunPlan?,
+    val colorGlyphPlan: GPUPreparedColorGlyphRenderRunPlan?,
     exactScopeKeys: List<GPUPreparedNativeScopeKey>,
     val generationSeal: GPUPreparedGenerationSeal,
 ) {
@@ -319,7 +320,7 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
 
     init {
         require(encoderPlanId.isNotBlank() && contextIdentity.isNotBlank())
-        require(this.orderedRuns.isNotEmpty() || textPlan != null)
+        require(this.orderedRuns.isNotEmpty() || textPlan != null || colorGlyphPlan != null)
         require(
             this.imageFrames.isNotEmpty() ==
                 this.orderedRuns.any { it is GPUPreparedSurfaceNativeRunPlan.Image },
@@ -330,7 +331,7 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
         require(this.exactScopeKeys.map(GPUPreparedNativeScopeKey::sourceStepIndex)
             .distinct().size == this.exactScopeKeys.size
         ) { "Global mixed preflight scope identities must be unique" }
-        val expectedScopeKeys = buildList {
+        val expectedScopeKeysWithSharedUploads = buildList {
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.imageFrames.map { it.uploadScopeKey })
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.orderedRuns.map { run ->
                 when (run) {
@@ -339,9 +340,20 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
                 }
             })
             textPlan?.let { addAll(it.exactScopeKeys) }
+            colorGlyphPlan?.let { addAll(it.exactScopeKeys) }
             readback?.let { add(it.exactScopeKey) }
             surfaceChain?.let { add(it.exactBlitScopeKey) }
-        }.sortedBy(GPUPreparedNativeScopeKey::sourceStepIndex)
+        }
+        require(expectedScopeKeysWithSharedUploads
+            .groupBy(GPUPreparedNativeScopeKey::sourceStepIndex)
+            .values
+            .all { sameStep -> sameStep.distinct().size == 1 }
+        ) {
+            "Shared prepared-text uploads must retain one identical global scope seal"
+        }
+        val expectedScopeKeys = expectedScopeKeysWithSharedUploads
+            .distinctBy(GPUPreparedNativeScopeKey::sourceStepIndex)
+            .sortedBy(GPUPreparedNativeScopeKey::sourceStepIndex)
         require(expectedScopeKeys == this.exactScopeKeys) {
             "Global mixed preflight scopes must be one exact, complete ordered partition"
         }
@@ -1670,13 +1682,6 @@ internal class GPUPreparedSurfaceNativePreflight(
             imageUploads,
             shaderContract,
         )?.let { return it }
-        if (packets.any { it.semanticPayload is GPUDrawSemanticPayload.ColorGlyph }) {
-            return refused(
-                GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
-                "Prepared ColorGlyph native materialization remains closed until Task 11.",
-            )
-        }
-
         val exactScopeKeys = encoderPlan.scopes.map { scope ->
             GPUPreparedNativeScopeKey(
                 scope.sourceStepIndex,
@@ -1834,10 +1839,18 @@ internal class GPUPreparedSurfaceNativePreflight(
                         render.preparedTextBindingsByPacketId.getValue(packet.packetId)
                     }
                 }
+                val requiredAtlasPlans = textBindings
+                    .map(GPUPreparedTextRenderBinding::atlasResourcePlan)
+                val requiredMaterialKeys = textBindings
+                    .flatMap(GPUPreparedTextRenderBinding::materialSampledResourcePlans)
+                    .map { resource -> resource.resourceKey }
+                    .toSet()
                 val textScopeIndices = buildSet {
                     uploadSteps.forEach { (index, upload) ->
-                        if (upload.r8ResourcePlan != null ||
-                            upload.materialResourcePlan != null
+                        if (upload.r8ResourcePlan?.let { candidate ->
+                                requiredAtlasPlans.any { it === candidate }
+                            } == true ||
+                            upload.materialResourcePlan?.resourceKey in requiredMaterialKeys
                         ) {
                             add(index)
                         }
@@ -1864,6 +1877,63 @@ internal class GPUPreparedSurfaceNativePreflight(
                     bindings = textBindings,
                     exactScopeKeys = textScopeKeys,
                     textureUploads = textTextureUploads,
+                )
+            }
+        val colorGlyphRenderEvidence = framePlan.steps.mapIndexedNotNull { index, step ->
+            (step as? GPUFrameStep.RenderPassStep)
+                ?.takeIf { render ->
+                    render.drawPackets.all { packet ->
+                        packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+                    }
+                }
+                ?.let { index to it }
+        }
+        val colorGlyphPlan = colorGlyphRenderEvidence
+            .takeIf { it.isNotEmpty() }
+            ?.let { colorRenders ->
+                val colorPackets = colorRenders.flatMap { (_, render) ->
+                    render.drawPackets.map { packet ->
+                        packet.semanticPayload as GPUDrawSemanticPayload.ColorGlyph
+                    }
+                }
+                val colorBindings = colorRenders.flatMap { (_, render) ->
+                    render.drawPackets.map { packet ->
+                        render.preparedTextBindingsByPacketId.getValue(packet.packetId)
+                    }
+                }
+                val requiredAtlasPlans = colorBindings
+                    .map(GPUPreparedTextRenderBinding::atlasResourcePlan)
+                val colorScopeIndices = buildSet {
+                    uploadSteps.forEach { (index, upload) ->
+                        if (upload.r8ResourcePlan?.let { candidate ->
+                                requiredAtlasPlans.any { it === candidate }
+                            } == true
+                        ) {
+                            add(index)
+                        }
+                    }
+                    colorRenders.forEach { (index, _) -> add(index) }
+                }
+                val colorScopeKeys = exactScopeKeys.filter { scope ->
+                    scope.sourceStepIndex in colorScopeIndices
+                }
+                val atlasUploads = uploadSteps.mapNotNull { (index, upload) ->
+                    val resource = upload.r8ResourcePlan ?: return@mapNotNull null
+                    if (requiredAtlasPlans.none { it === resource }) return@mapNotNull null
+                    GPUPreparedTextTextureUploadPlan.Atlas(
+                        exactScopeKey = colorScopeKeys.single { key ->
+                            key.sourceStepIndex == index
+                        },
+                        resourcePlan = resource,
+                    )
+                }
+                GPUPreparedColorGlyphRenderRunPlan(
+                    sourceScopeIndices =
+                        colorScopeKeys.map(GPUPreparedNativeScopeKey::sourceStepIndex),
+                    packets = colorPackets,
+                    bindings = colorBindings,
+                    exactScopeKeys = colorScopeKeys,
+                    atlasUploads = atlasUploads,
                 )
             }
         val sceneTarget = framePlan.steps
@@ -1926,6 +1996,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                     orderedRuns = orderedRuns,
                     imageFrames = imageFrames,
                     textPlan = textPlan,
+                    colorGlyphPlan = colorGlyphPlan,
                     exactScopeKeys = exactScopeKeys,
                     generationSeal = generationSeal,
                 ),
@@ -2705,6 +2776,11 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                             GPUPreparedNativeOperandRole.UploadDestination,
                             GPUPreparedNativeOperandKind.Texture,
                             labels[1],
+                            if (step.r8ResourcePlan != null) {
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion
+                            } else {
+                                GPUPreparedNativeOperandOwnership.Borrowed
+                            },
                         ),
                     )
             }
@@ -2757,12 +2833,22 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
             role: GPUPreparedNativeOperandRole,
             kind: GPUPreparedNativeOperandKind,
             binding: String,
+            ownership: GPUPreparedNativeOperandOwnership =
+                GPUPreparedNativeOperandOwnership.Borrowed,
         ) = GPUPreparedNativeOperandKey(
             role,
             kind,
             gpuPreparedNativeBindingKey(binding),
-            GPUPreparedNativeOperandOwnership.Borrowed,
+            ownership,
         )
+        val drawOwnership = if (render.drawPackets.all {
+                it.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+            }
+        ) {
+            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion
+        } else {
+            GPUPreparedNativeOperandOwnership.Borrowed
+        }
         fun bridgeKey(
             bridge: org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge,
         ): GPUPreparedNativeOperandKey? = when (bridge.operand.kind) {
@@ -2777,18 +2863,21 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                     GPUPreparedNativeOperandRole.RenderBindGroup,
                     GPUPreparedNativeOperandKind.BindGroup,
                     "${bridge.commandLabel}:${bridge.operand.label}",
+                    drawOwnership,
                 )
             org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.VertexBuffer ->
                 key(
                     GPUPreparedNativeOperandRole.RenderVertexBuffer,
                     GPUPreparedNativeOperandKind.Buffer,
                     "${bridge.commandLabel}:${bridge.operand.label}",
+                    drawOwnership,
                 )
             org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.IndexBuffer ->
                 key(
                     GPUPreparedNativeOperandRole.RenderIndexBuffer,
                     GPUPreparedNativeOperandKind.Buffer,
                     "${bridge.commandLabel}:${bridge.operand.label}",
+                    drawOwnership,
                 )
             else -> null
         }

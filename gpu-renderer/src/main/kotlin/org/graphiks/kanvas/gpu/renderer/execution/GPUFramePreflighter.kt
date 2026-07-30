@@ -176,7 +176,6 @@ internal class GPUFramePreflighter(
         }
         val hasExactPreparedSurfaceMixedBoundary =
             hasExactPreparedSurfaceMixedNativeBoundary(framePlan)
-        var colorGlyphPassedPureBoundary = false
         if (!hasExactPreparedSurfaceMixedBoundary &&
             framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
                 .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
@@ -199,27 +198,9 @@ internal class GPUFramePreflighter(
                         diagnostic(refused.code, refused.message),
                     )
                 }
-            if (framePlan.steps
-                    .filterIsInstance<GPUFrameStep.RenderPassStep>()
-                    .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
-                    .any { packet ->
-                        packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
-                    }
-            ) {
-                colorGlyphPassedPureBoundary = true
-            }
         }
         val pureValidation = pureValidation(framePlan)
         pureValidation.diagnostic?.let { return GPUFramePreflightResult.Refused(it) }
-        if (colorGlyphPassedPureBoundary) {
-            return GPUFramePreflightResult.Refused(
-                diagnostic(
-                    GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
-                    "Prepared ColorGlyph pure preflight passed; native materialization remains " +
-                        "closed until Task 11.",
-                ),
-            )
-        }
         val corePrimitiveDirectRoutes = pureValidation.corePrimitiveDirectRoutes
         val corePrimitivePathStencilRoutes = pureValidation.corePrimitivePathStencilRoutes
         val corePrimitiveNativeScopeRoutes = pureValidation.corePrimitiveNativeScopeRoutes
@@ -592,8 +573,8 @@ internal class GPUFramePreflighter(
                 ),
             )
         }
-        if (hasExactPreparedSurfaceMixedBoundary &&
-            encoderScopes.any { scope ->
+        val invalidPreparedSurfaceScopes = if (hasExactPreparedSurfaceMixedBoundary) {
+            encoderScopes.filter { scope ->
                 !GPUPreparedSurfaceEncoderScopeAuthority.matches(
                     framePlan,
                     framePlan.steps[scope.sourceStepIndex],
@@ -601,13 +582,22 @@ internal class GPUFramePreflighter(
                     generationSeal,
                 )
             }
-        ) {
+        } else {
+            emptyList()
+        }
+        if (invalidPreparedSurfaceScopes.isNotEmpty()) {
             return refuseWithRollback(
                 rollback,
                 true,
                 diagnostic(
                     "invalid.preflight.prepared_surface_encoder_authority",
                     "Mixed prepared-surface scopes diverged from their canonical frame authority.",
+                    mapOf(
+                        "scopeIndices" to invalidPreparedSurfaceScopes
+                            .joinToString(",") { it.sourceStepIndex.toString() },
+                        "scopeKinds" to invalidPreparedSurfaceScopes
+                            .joinToString(",") { it.operationKind.name },
+                    ),
                 ),
             )
         }
@@ -2008,15 +1998,14 @@ internal class GPUFramePreflighter(
                     val expected = context.resourceGenerations[step.target]
                         ?: return diagnostic("stale.preflight.resource_generation_missing", "Render target generation is unavailable.")
                     if (step.drawPackets.any { packet ->
-                            val colorGlyph = packet.semanticPayload as? GPUDrawSemanticPayload.ColorGlyph
                             val preparedLateBound =
                                 packet.semanticPayload is GPUDrawSemanticPayload.SolidRect ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.SampledImage ||
+                                    packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.RegisteredUniformRect ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.SeparableBlurRect
                             val acceptedGeneration = when {
-                                colorGlyph != null -> colorGlyph.planArtifactKey.generation.value.toLong()
                                 (preparedLateBound || packet.packetId in clipProducerValidation.sealedProducerPacketIds) &&
                                     packet.resourceGeneration == PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ->
                                     PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
@@ -4627,7 +4616,7 @@ internal class GPUFramePreflighter(
                 atlas.resource,
                 GPUFrameResourceRole.GlyphAtlas,
                 GPUFrameResourceUsage.TextureBinding,
-                GPUFrameResourceLifetime.SharedCache,
+                GPUFrameResourceLifetime.FrameLocal,
                 write = false,
             ),
             GPUFrameResourceUse(
@@ -4668,7 +4657,7 @@ internal class GPUFramePreflighter(
         if (atlasDescriptor?.logicalBounds != org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, semantic.atlasWidth, semantic.atlasHeight) ||
             atlasDescriptor.format.value != "r8unorm" || atlasDescriptor.sampleCount != 1 ||
             atlas.usages != setOf(GPUFrameResourceUsage.TextureBinding, GPUFrameResourceUsage.CopyDestination) ||
-            atlas.lifetime != GPUFrameResourceLifetime.SharedCache || atlas.byteSize != semantic.atlasA8Bytes.size.toLong() ||
+            atlas.lifetime != GPUFrameResourceLifetime.FrameLocal || atlas.byteSize != semantic.atlasA8Bytes.size.toLong() ||
             context.resourceGenerations[atlas.resource] != semantic.atlasGeneration
         ) return refuse("invalid.preflight.color_glyph_atlas_resource", "ColorGlyph atlas declaration or generation does not match its payload.")
         fun exactBuffer(
@@ -5647,6 +5636,11 @@ internal class GPUFramePreflighter(
                         GPUPreparedNativeOperandRole.UploadDestination,
                         GPUPreparedNativeOperandKind.Texture,
                         resources[1],
+                        if (step.r8ResourcePlan != null) {
+                            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion
+                        } else {
+                            GPUPreparedNativeOperandOwnership.Borrowed
+                        },
                     ),
                 )
             }

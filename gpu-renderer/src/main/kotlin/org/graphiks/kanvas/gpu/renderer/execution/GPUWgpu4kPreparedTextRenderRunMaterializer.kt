@@ -99,6 +99,7 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
     fun materializeAcceptedRun(
         plan: GPUPreparedTextRenderRunPlan,
         actualDeviceGeneration: GPUDeviceGenerationID,
+        preparedR8Resources: GPUWgpu4kPreparedR8FrameResources? = null,
     ): GPUPreparedRenderRunMaterialization {
         val acquisitions = when (
             val result = sessionCache.acquireBatch(
@@ -205,11 +206,20 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
             }
 
             val atlasNative = IdentityHashMap<GPUR8FrameResourcePlan, NativeTexture>()
+            preparedR8Resources?.texturesByPlan?.forEach { (resourcePlan, nativeTexture) ->
+                atlasNative[resourcePlan] = nativeTexture
+            }
             val materialNative = linkedMapOf<String, NativeTexture>()
             val textureUploads = mutableListOf<GPUPreparedNativeScopeOperand.TextureUpload>()
             plan.textureUploads.forEach { upload ->
                 when (upload) {
                     is GPUPreparedTextTextureUploadPlan.Atlas -> {
+                        if (preparedR8Resources != null) {
+                            require(atlasNative.containsKey(upload.resourcePlan)) {
+                                "Prepared-text R8 resources must cover every accepted atlas plan"
+                            }
+                            return@forEach
+                        }
                         val atlasPlan = upload.resourcePlan
                         val texture = createTexture(
                             width = atlasPlan.artifactWidth,
@@ -355,9 +365,10 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
             val operandsByStep = (textureUploads + renderRuns).associateBy {
                 it.sourceStepIndex
             }
-            val ordered = plan.exactScopeKeys.map { key ->
-                operandsByStep.getValue(key.sourceStepIndex)
+            val ordered = plan.exactScopeKeys.mapNotNull { key ->
+                operandsByStep[key.sourceStepIndex]
             }
+            require(ordered.size == operandsByStep.size)
             val owner = GPUPreparedRenderRunOwnedResources(created)
             created.clear()
             GPUPreparedRenderRunMaterialization.Ready(
@@ -528,12 +539,12 @@ private class PreparedTextTextureUploadLayout(
     override fun bytesForUpload(): ByteArray = snapshot.copyOf()
 }
 
-private data class NativeTexture(
+internal data class NativeTexture(
     val texture: GPUTexture,
     val view: GPUTextureView,
 )
 
-private fun preparedTextTextureUpload(
+internal fun preparedTextTextureUpload(
     role: String,
     scope: GPUPreparedNativeScopeKey,
     bytes: ByteArray,

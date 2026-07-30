@@ -1052,8 +1052,13 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             ) { "Prepared-image upload data requires the exact logical Buffer source key" }
             require(destinationKey.role == GPUPreparedNativeOperandRole.UploadDestination &&
                 destinationKey.kind == GPUPreparedNativeOperandKind.Texture &&
-                destinationKey.ownership == GPUPreparedNativeOperandOwnership.Borrowed
-            ) { "Prepared-image texture upload requires the borrowed preflight Texture destination key" }
+                destinationKey.ownership in setOf(
+                    GPUPreparedNativeOperandOwnership.Borrowed,
+                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                )
+            ) {
+                "Prepared texture upload requires a borrowed or payload-owned preflight destination key"
+            }
             require(data.bytes().contentEquals(layout.bytesForUpload())) {
                 "Prepared-image texture upload data must equal the sealed padded upload layout"
             }
@@ -1093,6 +1098,34 @@ internal sealed interface GPUPreparedNativeScopeOperand {
             ) {
                 "Prepared TextA8 render runs require one typed prepared-text acquisition per draw"
             }
+            require(this.exactOperandKeys.isNotEmpty())
+        }
+    }
+
+    /**
+     * Target-free COLRv0 run. It deliberately retains the ColorGlyph pipeline ABI instead of
+     * passing through the TextA8 shader or its bind-group topology.
+     */
+    class PreparedColorGlyphRenderRun(
+        override val sourceStepIndex: Int,
+        commands: List<GPUPreparedNativeRenderCommand>,
+        exactOperandKeys: List<GPUPreparedNativeOperandKey>,
+        semanticPayloads: List<GPUDrawSemanticPayload.ColorGlyph>,
+    ) : GPUPreparedNativeScopeOperand {
+        override val operationKind = GPUEncoderOperationKind.Render
+        val commands: List<GPUPreparedNativeRenderCommand> = immutableList(commands)
+        val semanticPayloads: List<GPUDrawSemanticPayload.ColorGlyph> =
+            immutableList(semanticPayloads)
+        override val operands: List<GPUPreparedNativeOperand> =
+            immutableList(this.commands.flatMap(GPUPreparedNativeRenderCommand::operands))
+        override val exactOperandKeys: List<GPUPreparedNativeOperandKey> =
+            immutableList(exactOperandKeys)
+
+        init {
+            require(this.semanticPayloads.isNotEmpty())
+            require(this.commands.filterIsInstance<GPUPreparedNativeRenderCommand.DrawIndexed>()
+                .size == this.semanticPayloads.size
+            )
             require(this.exactOperandKeys.isNotEmpty())
         }
     }

@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.recording
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
@@ -120,6 +121,7 @@ internal class GPUColorGlyphPreparedTaskListBuilder(
                         semantic.payloadRef.commandIdValue to semantic,
                     ),
                     readbackRequestId = request.readbackRequestId,
+                    targetFormat = GPUColorFormat.RGBA8UnormSrgb,
                 ),
                 configuredAggregateBudgetBytes = request.configuredAggregateBudgetBytes,
             )
@@ -154,7 +156,7 @@ internal class GPUColorGlyphPreparedTaskListBuilder(
             scissorBoundsHash = colorGlyphScissorAuthority(semantic.scissorBounds),
             targetStateHash = COLOR_GLYPH_TARGET_STATE_HASH,
             originalPaintOrder = commandId,
-            resourceGeneration = semantic.planArtifactKey.generation.value.toLong(),
+            resourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
             frameProvenance = requireNotNull(semantic.frameProvenance),
         )
     }

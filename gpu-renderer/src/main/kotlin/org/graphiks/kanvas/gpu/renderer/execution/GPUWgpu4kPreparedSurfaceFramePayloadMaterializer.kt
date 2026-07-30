@@ -15,7 +15,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 
 /**
- * The sole owner and assembler for the closed mixed {CorePrimitive, SampledImage} surface route.
+ * The sole owner and assembler for the closed mixed
+ * {CorePrimitive, SampledImage, TextA8, ColorGlyph} surface route.
  *
  * Pure preflight always runs before the first target borrow, cache acquisition, or native factory
  * call. Core and image resources are then materialized frame-globally and only their operands are
@@ -28,6 +29,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
     private val corePrimitiveCache: GPUWgpu4kCorePrimitiveSessionCache,
     private val preparedImageCache: GPUWgpu4kPreparedImageSessionCache,
     private val preparedTextCache: GPUWgpu4kPreparedTextSessionCache,
+    private val colorGlyphCache: GPUWgpu4kColorGlyphSessionCache? = null,
     private val preparedImageHandleFactory: GPUPreparedImageNativeHandleFactory,
     private val preparedImageCapabilities: GPUCapabilities,
     private val surfaceBlitCache: GPUWgpu4kSurfaceBlitSessionCache,
@@ -89,6 +91,10 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
         var textOwner: GPUPreparedRenderRunOwnedResources? = null
         var textAnchor: GPUPreparedNativeCompletionAnchor? = null
         var retainedTextRollbackOwner: AutoCloseable? = null
+        var r8Owner: GPUPreparedRenderRunOwnedResources? = null
+        var retainedR8RollbackOwner: AutoCloseable? = null
+        var colorGlyphOwner: GPUPreparedRenderRunOwnedResources? = null
+        var retainedColorGlyphRollbackOwner: AutoCloseable? = null
         val setupLedger = GPUPreRegistrationNativeHandleLedger()
         var coreMaterializer: GPUWgpu4kCorePrimitiveRenderRunMaterializer? = null
         return try {
@@ -207,6 +213,41 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 .takeIf(List<AutoCloseable>::isNotEmpty)
                 ?.let(::GPUPreparedNativeCompletionAnchor)
 
+            val acceptedR8Uploads = (
+                accepted.textPlan?.textureUploads
+                    ?.filterIsInstance<GPUPreparedTextTextureUploadPlan.Atlas>()
+                    .orEmpty() +
+                    accepted.colorGlyphPlan?.atlasUploads.orEmpty()
+                )
+                .groupBy { upload -> upload.exactScopeKey.sourceStepIndex }
+                .map { (_, uploads) ->
+                    require(uploads.map { it.exactScopeKey }.distinct().size == 1 &&
+                        uploads.all { it.resourcePlan === uploads.first().resourcePlan }
+                    ) {
+                        "A shared prepared-text upload must retain one exact R8 plan"
+                    }
+                    uploads.first()
+                }
+                .sortedBy { upload -> upload.exactScopeKey.sourceStepIndex }
+            val preparedR8Resources = if (acceptedR8Uploads.isEmpty()) {
+                null
+            } else {
+                when (
+                    val result = GPUWgpu4kPreparedR8FrameMaterializer(device)
+                        .materializeAcceptedUploads(
+                            acceptedR8Uploads,
+                            generationSeal.deviceGeneration,
+                        )
+                ) {
+                    is GPUWgpu4kPreparedR8FrameMaterialization.Ready -> result.resources
+                    is GPUWgpu4kPreparedR8FrameMaterialization.Refused -> {
+                        retainedR8RollbackOwner = result.retainedCloseOwner
+                        throw PreparedSurfaceMaterializationFailure(result.code, result.message)
+                    }
+                }
+            }
+            r8Owner = preparedR8Resources?.ownedResources
+
             val textReady = accepted.textPlan?.let { textPlan ->
                 when (
                     val result = GPUWgpu4kPreparedTextRenderRunMaterializer(
@@ -215,6 +256,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     ).materializeAcceptedRun(
                         textPlan,
                         generationSeal.deviceGeneration,
+                        preparedR8Resources,
                     )
                 ) {
                     is GPUPreparedRenderRunMaterialization.Ready -> result
@@ -278,6 +320,58 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             textAnchor = distinctVisibleTextHandles
                 .takeIf(List<AutoCloseable>::isNotEmpty)
                 ?.let(::GPUPreparedNativeCompletionAnchor)
+
+            val colorGlyphReady = accepted.colorGlyphPlan?.let { colorPlan ->
+                val r8Resources = preparedR8Resources
+                    ?: throw PreparedSurfaceMaterializationFailure(
+                        "invalid.prepared-surface.color-glyph-r8",
+                        "Prepared ColorGlyph requires its accepted frame-local R8 upload.",
+                    )
+                when (
+                    val result = GPUWgpu4kColorGlyphRenderRunMaterializer(
+                        device,
+                        queue,
+                        requireNotNull(colorGlyphCache) {
+                            "Prepared ColorGlyph requires the session invariant cache"
+                        },
+                    ).materializeAcceptedRun(
+                        colorPlan,
+                        r8Resources,
+                        generationSeal.deviceGeneration,
+                    )
+                ) {
+                    is GPUPreparedRenderRunMaterialization.Ready -> result
+                    is GPUPreparedRenderRunMaterialization.Refused -> {
+                        retainedColorGlyphRollbackOwner = result.retainedCloseOwner
+                        throw PreparedSurfaceMaterializationFailure(result.code, result.message)
+                    }
+                }
+            }
+            colorGlyphOwner = colorGlyphReady?.ownedResources?.singleOrNull()
+                as? GPUPreparedRenderRunOwnedResources
+            if (colorGlyphReady != null && colorGlyphOwner == null) {
+                throw PreparedSurfaceMaterializationFailure(
+                    "invalid.prepared-surface.color-glyph-owner",
+                    "The frame-global ColorGlyph lot must return one exact transferable owner.",
+                )
+            }
+            val visibleColorGlyphHandles = mutableListOf<AutoCloseable>()
+            val finalColorGlyphOperands = colorGlyphReady?.scopeOperands.orEmpty().map { operand ->
+                when (operand) {
+                    is GPUPreparedNativeScopeOperand.PreparedColorGlyphRenderRun ->
+                        operand.toTargetBoundRender(
+                            renderStep = renderStepsByIndex.getValue(operand.sourceStepIndex),
+                            target = targetViewOperand,
+                            visibleHandles = visibleColorGlyphHandles,
+                        )
+                    else -> throw PreparedSurfaceMaterializationFailure(
+                        "invalid.prepared-surface.color-glyph-operand",
+                        "The frame-global ColorGlyph lot returned an unsupported operand.",
+                    )
+                }
+            }
+            val distinctVisibleColorGlyphHandles =
+                visibleColorGlyphHandles.distinctByNativeIdentity()
 
             val targetFormat = framePlan.preparedSurfaceTargetFormat()
                 ?: throw PreparedSurfaceMaterializationFailure(
@@ -351,13 +445,15 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             val operandsByStep = (
                 coreReady?.renderOperands.orEmpty() +
                     finalImageOperands +
+                    preparedR8Resources?.uploadOperands.orEmpty() +
                     finalTextOperands +
+                    finalColorGlyphOperands +
                     listOfNotNull(readbackOperand, surfaceOperand)
                 ).associateBy(GPUPreparedNativeScopeOperand::sourceStepIndex)
             if (operandsByStep.size != accepted.exactScopeKeys.size) {
                 throw PreparedSurfaceMaterializationFailure(
                     "invalid.prepared-surface.operand-partition",
-                    "The native Core/Image lots do not form one exact encoder-scope partition.",
+                    "The native prepared-surface lots do not form one exact encoder-scope partition.",
                 )
             }
             val orderedOperands = accepted.exactScopeKeys.map { scope ->
@@ -402,8 +498,10 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 auxiliaryOwnedHandles = listOfNotNull(
                     imageAnchor,
                     imageOwner,
+                    r8Owner,
                     textAnchor,
                     textOwner,
+                    colorGlyphOwner,
                 ).map { owner ->
                     GPUPreparedNativeAuxiliaryHandle(
                         owner,
@@ -415,22 +513,47 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     coreReady?.pathDepthStencilViewAuthority.orEmpty(),
             )
             val draft = GPUPreparedNativeFrameDraft(payload)
+            r8Owner?.detachOwnedHandles(
+                requireNotNull(preparedR8Resources)
+                    .texturesByPlan
+                    .values
+                    .map(NativeTexture::texture),
+            )
+            colorGlyphOwner?.detachOwnedHandles(distinctVisibleColorGlyphHandles)
             setupLedger.transferAll()
             coreLifecycle = null
             imageAnchor = null
             imageOwner = null
+            r8Owner = null
             textAnchor = null
             textOwner = null
+            colorGlyphOwner = null
             GPUPreparedNativeFramePayloadMaterialization.Materialized(draft)
         } catch (failure: Throwable) {
             val rollbackOwner = PreparedSurfaceRollbackOwner(
-                listOfNotNull(imageAnchor, imageOwner, textAnchor, textOwner),
+                listOfNotNull(
+                    imageAnchor,
+                    imageOwner,
+                    r8Owner,
+                    textAnchor,
+                    textOwner,
+                    colorGlyphOwner,
+                ),
             )
             val locallyRetainedOwner = rollbackOwner.takeUnless(
                 PreparedSurfaceRollbackOwner::closeRetainingFailures,
             )
             val closeOwnerRetained = retainedCloseOwner(
-                retainedCloseOwner(retainedImageRollbackOwner, retainedTextRollbackOwner),
+                retainedCloseOwner(
+                    retainedCloseOwner(
+                        retainedImageRollbackOwner,
+                        retainedR8RollbackOwner,
+                    ),
+                    retainedCloseOwner(
+                        retainedTextRollbackOwner,
+                        retainedColorGlyphRollbackOwner,
+                    ),
+                ),
                 locallyRetainedOwner,
             )
             val ledgerRetained = setupLedger.takeUnless(
@@ -586,6 +709,50 @@ private fun GPUPreparedNativeScopeOperand.PreparedTextRenderRun.toTargetBoundRen
         semanticPayloads = semanticPayloads.map<GPUDrawSemanticPayload.TextA8, GPUDrawSemanticPayload> {
             it
         },
+    )
+}
+
+private fun GPUPreparedNativeScopeOperand.PreparedColorGlyphRenderRun.toTargetBoundRender(
+    renderStep: org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassStep,
+    target: GPUPreparedNativeTextureViewOperand,
+    visibleHandles: MutableList<AutoCloseable>,
+): GPUPreparedNativeScopeOperand.Render {
+    commands.forEach { command ->
+        when (command) {
+            is GPUPreparedNativeRenderCommand.SetBindGroup ->
+                visibleHandles += command.bindGroup.bindGroup
+            is GPUPreparedNativeRenderCommand.SetVertexBuffer ->
+                visibleHandles += command.buffer.buffer
+            is GPUPreparedNativeRenderCommand.SetIndexBuffer ->
+                visibleHandles += command.buffer.buffer
+            is GPUPreparedNativeRenderCommand.SetPipeline,
+            is GPUPreparedNativeRenderCommand.SetScissor,
+            is GPUPreparedNativeRenderCommand.DrawIndexed,
+            -> Unit
+            else -> throw PreparedSurfaceMaterializationFailure(
+                "invalid.prepared-surface.color-glyph-command",
+                "Prepared ColorGlyph emitted a command outside its closed indexed ABI.",
+            )
+        }
+    }
+    return GPUPreparedNativeScopeOperand.Render(
+        sourceStepIndex = sourceStepIndex,
+        pass = GPUPreparedNativeRenderPassConfig(
+            colorTarget = target,
+            loadOperation = when (renderStep.loadStore.loadOp) {
+                "clear" -> GPUPreparedNativeLoadOperation.Clear
+                "load" -> GPUPreparedNativeLoadOperation.Load
+                else -> error("Unsupported mixed prepared-surface load operation")
+            },
+            storeOperation = GPUPreparedNativeStoreOperation.Store,
+            clearColor = GPUPreparedNativeClearColor(0.0, 0.0, 0.0, 0.0)
+                .takeIf { renderStep.loadStore.loadOp == "clear" },
+        ),
+        commands = commands,
+        semanticPayloads =
+            semanticPayloads.map<GPUDrawSemanticPayload.ColorGlyph, GPUDrawSemanticPayload> {
+                it
+            },
     )
 }
 

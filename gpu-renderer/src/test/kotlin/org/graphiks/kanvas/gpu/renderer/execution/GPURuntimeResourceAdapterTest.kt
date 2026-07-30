@@ -2115,6 +2115,8 @@ private fun testOperandKeys(
             error("Prepared-image operand-only render runs are composed only by the Task 6 boundary")
         is GPUPreparedNativeScopeOperand.PreparedTextRenderRun ->
             error("Prepared-text operand-only render runs are composed only by the mixed boundary")
+        is GPUPreparedNativeScopeOperand.PreparedColorGlyphRenderRun ->
+            error("ColorGlyph operand-only render runs are composed only by the mixed boundary")
         is GPUPreparedNativeScopeOperand.Copy -> listOf(
             GPUPreparedNativeOperandRole.CopySource,
             GPUPreparedNativeOperandRole.CopyDestination,

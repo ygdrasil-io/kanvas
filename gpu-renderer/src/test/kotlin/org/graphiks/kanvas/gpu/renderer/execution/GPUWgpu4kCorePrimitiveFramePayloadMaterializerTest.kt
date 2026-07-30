@@ -4995,12 +4995,15 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                             createdHandlesByLabel.getOrPut(label) { mutableListOf() } += created
                         }
                     } else if (label == "Kanvas.frame.preparedImage.texture" ||
+                        label == "Kanvas.frame.preparedText.r8-page" ||
                         label == "Kanvas.frame.preparedText.text-atlas" ||
                         label.startsWith("Kanvas.frame.preparedText.material-texture.")
                     ) {
                         val imageViewLabel = when {
                             label == "Kanvas.frame.preparedImage.texture" ->
                                 "Kanvas.frame.preparedImage.textureView"
+                            label == "Kanvas.frame.preparedText.r8-page" ->
+                                "Kanvas.frame.preparedText.r8-page-view"
                             label == "Kanvas.frame.preparedText.text-atlas" ->
                                 "Kanvas.frame.preparedText.text-atlas-view"
                             else -> label.replace("material-texture.", "material-texture-view.")
