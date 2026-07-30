@@ -5,7 +5,7 @@
 | **DisplayList** | Séquence ordonnée de `DisplayOp` produite par la Surface. Indépendante du GPU. |
 | **DisplayOp** | Opération de dessin élémentaire (rectangle, image, texte, saveLayer...). |
 | **GPUOpMapper** | Traduit les `DisplayOp` en `NormalizedDrawCommand`. Résout l'état mutable. |
-| **NormalizedDrawCommand** | Commande normalisée, immuable, sans handles GPU. |
+| **NormalizedDrawCommand** | Commande normalisée, immuable. Ne référence aucune ressource GPU native. |
 | **GPURecorder** | Analyse et enregistre les commandes normalisées. Produit un `GPURecording`. |
 | **GPUDrawAnalysis** | Analyse par commande : route, calque, matériau, render step. |
 | **GPURecording** | Enregistrement complet de la frame. Immuable, scellé. |
@@ -15,11 +15,11 @@
 | **GPUColorPlan** | Classification alpha source, compatibilité format cible. |
 | **GPUGeometryPlan** | Chemin de rendu pour une géométrie. |
 | **GPUClipPlan** | Plan de couverture (scissor, stencil, MSAA, shader). |
-| **GPUFramePlanner** | Produit un GPUFramePlan sans handles. |
+| **GPUFramePlanner** | Produit un GPUFramePlan sans ressources GPU natives. |
 | **GPUFramePlan** | Plan d'exécution linéaire et immuable. |
 | **GPUFrameCoordinator** | Point d'entrée unique planification → pré-vol → exécution. |
 | **GPUFramePreflighter** | Seule frontière de matérialisation GPU. |
-| **PreparedGPUFrame** | Frame prête à exécuter, scellée, sans handles exposés. |
+| **PreparedGPUFrame** | Frame prête à exécuter, scellée, ressources GPU encapsulées. |
 | **GPUFrameExecutor** | Exécute un PreparedGPUFrame. Un submit par frame. |
 | **GPUQueueCompletionAdapter** | Complétion asynchrone post-soumission. |
 | **GPUPreparedSurfaceSession** | Session réutilisable entre frames. |

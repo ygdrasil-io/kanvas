@@ -8,10 +8,10 @@ ressources GPU concrètes.
 
 ```mermaid
 flowchart TD
-    PLAN["GPUFramePlan\n(sans handles)"] --> PRE["GPUFramePreflighter"]
+    PLAN["GPUFramePlan\n(sans ressources GPU)"] --> PRE["GPUFramePreflighter"]
     PRE --> VAL["Valide les payloads\nsémantiques"]
     PRE --> ALLOC["Alloue les ressources\n(GPUResourceProvider)"]
-    VAL & ALLOC --> PGF["PreparedGPUFrame\n(scellé, sans handles exposés)"]
+    VAL & ALLOC --> PGF["PreparedGPUFrame\n(scellé, ressources encapsulées)"]
 
     PGF --> TOKEN["Token de scellement"]
     PGF --> REG["GPURuntimeResourceAdapter\n(registre privé)"]

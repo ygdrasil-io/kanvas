@@ -12,7 +12,7 @@ flowchart TD
 
     subgraph Mapping["Traduction"]
         OPM["GPUOpMapper\n(résout l'état mutable)"]
-        NDC["NormalizedDrawCommand\n(immuable, sans handles GPU)"]
+        NDC["NormalizedDrawCommand\n(immuable, purement sémantique)"]
     end
 
     subgraph Analyse["Analyse & Recording"]
@@ -33,13 +33,13 @@ flowchart TD
 
     subgraph Planification["Planification"]
         FP["GPUFramePlanner"]
-        PLAN["GPUFramePlan\n(linéaire, sans handles)"]
+        PLAN["GPUFramePlan\n(linéaire, sans ressources GPU)"]
         COORD["GPUFrameCoordinator\n(point d'entrée unique)"]
     end
 
     subgraph Prevol["Pré-vol"]
         PRE["GPUFramePreflighter\n(seule frontière de matérialisation)"]
-        PGF["PreparedGPUFrame\n(scellé, sans handles exposés)"]
+        PGF["PreparedGPUFrame\n(scellé, ressources GPU encapsulées)"]
     end
 
     subgraph Execution["Exécution"]

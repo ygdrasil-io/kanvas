@@ -15,7 +15,8 @@ la configuration de cible. Il ne touche pas au GPU.
 
 ## GPUDrawAnalysis
 
-La **GPUDrawAnalysis** est explicite et sans handles. Chaque commande reçoit
+La **GPUDrawAnalysis** est explicite et ne référence aucune ressource GPU
+native. Chaque commande reçoit
 sa propre analyse, qui capture :
 
 - La **route** empruntée (quel chemin de rendu).

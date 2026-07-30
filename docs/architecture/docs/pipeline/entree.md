@@ -34,7 +34,8 @@ flowchart LR
 Un `NormalizedDrawCommand` est :
 
 - **immuable** — une fois produit, il ne change plus ;
-- **sans handles GPU** — il ne référence aucune ressource native ;
+- **purement sémantique** — il ne référence aucune ressource GPU native
+  (pas de textures, buffers, ou pipelines concrets) ;
 - **auto-suffisant** — il capture tout ce dont le pipeline a besoin.
 
 Types de commandes :

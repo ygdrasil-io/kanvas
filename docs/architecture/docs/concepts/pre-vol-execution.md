@@ -7,8 +7,8 @@ fondamental.
 
 ```mermaid
 flowchart TD
-    PLAN["GPUFramePlan\n(sans handles)"] --> PRE["GPUFramePreflighter\n(matérialisation)"]
-    PRE --> PGF["PreparedGPUFrame\n(scellé, sans handles)"]
+    PLAN["GPUFramePlan\n(sans ressources GPU)"] --> PRE["GPUFramePreflighter\n(matérialisation)"]
+    PRE --> PGF["PreparedGPUFrame\n(scellé, ressources encapsulées)"]
     PGF --> EXEC["GPUFrameExecutor\n(exécution native)"]
     EXEC --> GPU["WebGPU"]
 
