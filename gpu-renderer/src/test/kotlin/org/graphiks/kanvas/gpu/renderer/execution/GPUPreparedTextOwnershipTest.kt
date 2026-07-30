@@ -202,18 +202,36 @@ class GPUPreparedTextOwnershipTest {
                     native.device,
                     fixture.context.deviceGeneration,
                 )
-
-                val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(
-                    GPUWgpu4kPreparedTextRenderRunMaterializer(
-                        native.device,
-                        cache,
-                    ).materializeAcceptedRun(
-                        preparedTextTestRunPlan(fixture),
+                val plan = preparedTextTestRunPlan(fixture)
+                val r8Result = GPUWgpu4kPreparedR8FrameMaterializer(native.device)
+                    .materializeAcceptedUploads(
+                        plan.textureUploads
+                            .filterIsInstance<GPUPreparedTextTextureUploadPlan.Atlas>(),
                         fixture.context.deviceGeneration,
-                    ),
-                )
-                assertTrue(refused.code.startsWith("failed.prepared_text"))
-                refused.retainedCloseOwner?.close()
+                    )
+                if (point.label.startsWith("R8 ")) {
+                    val refused = assertIs<GPUWgpu4kPreparedR8FrameMaterialization.Refused>(
+                        r8Result,
+                    )
+                    refused.retainedCloseOwner?.close()
+                } else {
+                    val r8 = assertIs<GPUWgpu4kPreparedR8FrameMaterialization.Ready>(
+                        r8Result,
+                    ).resources
+                    val refused = assertIs<GPUPreparedRenderRunMaterialization.Refused>(
+                        GPUWgpu4kPreparedTextRenderRunMaterializer(
+                            native.device,
+                            cache,
+                        ).materializeAcceptedRun(
+                            plan,
+                            fixture.context.deviceGeneration,
+                            r8,
+                        ),
+                    )
+                    assertTrue(refused.code.startsWith("failed.prepared_text"))
+                    refused.retainedCloseOwner?.close()
+                    r8.ownedResources.close()
+                }
                 cache.close()
 
                 assertTrue(native.created.all { handle ->
@@ -231,34 +249,47 @@ class GPUPreparedTextOwnershipTest {
             fixture.context.deviceGeneration,
         )
         val materializer = GPUWgpu4kPreparedTextRenderRunMaterializer(native.device, cache)
+        val plan = preparedTextTestRunPlan(fixture)
+        val firstR8 = ownershipPreparedTextR8Resources(
+            native.device,
+            plan,
+            fixture.context.deviceGeneration,
+        )
 
         val first = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
             materializer.materializeAcceptedRun(
-                preparedTextTestRunPlan(fixture),
+                plan,
                 fixture.context.deviceGeneration,
+                firstR8,
             ),
         )
-        val firstTexture = first.scopeOperands
-            .filterIsInstance<GPUPreparedNativeScopeOperand.TextureUpload>()
+        val firstTexture = firstR8.uploadOperands
             .single().destination.texture
         val firstBuffers = first.uniformUploads.map { it.destination.buffer }
         assertTrue((listOf(firstTexture) + firstBuffers).all {
             native.closeCounts[it] == null
         })
         first.ownedResources.single().close()
+        firstR8.ownedResources.close()
         first.ownedResources.single().close()
+        firstR8.ownedResources.close()
         assertTrue((listOf(firstTexture) + firstBuffers).all {
             native.closeCounts[it] == 1
         })
 
+        val secondR8 = ownershipPreparedTextR8Resources(
+            native.device,
+            plan,
+            fixture.context.deviceGeneration,
+        )
         val second = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
             materializer.materializeAcceptedRun(
-                preparedTextTestRunPlan(fixture),
+                plan,
                 fixture.context.deviceGeneration,
+                secondR8,
             ),
         )
-        val secondTexture = second.scopeOperands
-            .filterIsInstance<GPUPreparedNativeScopeOperand.TextureUpload>()
+        val secondTexture = secondR8.uploadOperands
             .single().destination.texture
         val secondBuffers = second.uniformUploads.map { it.destination.buffer }
         assertNotSame(firstTexture, secondTexture)
@@ -268,6 +299,7 @@ class GPUPreparedTextOwnershipTest {
         })
 
         second.ownedResources.single().close()
+        secondR8.ownedResources.close()
         cache.close()
         assertTrue(native.created.all { native.closeCounts[it] == 1 })
     }
@@ -357,6 +389,17 @@ private data class FailurePoint(
     val ordinal: Int,
     val sampled: Boolean,
 )
+
+private fun ownershipPreparedTextR8Resources(
+    device: GPUDevice,
+    plan: GPUPreparedTextRenderRunPlan,
+    generation: GPUDeviceGenerationID,
+): GPUWgpu4kPreparedR8FrameResources = assertIs<GPUWgpu4kPreparedR8FrameMaterialization.Ready>(
+    GPUWgpu4kPreparedR8FrameMaterializer(device).materializeAcceptedUploads(
+        plan.textureUploads.filterIsInstance<GPUPreparedTextTextureUploadPlan.Atlas>(),
+        generation,
+    ),
+).resources
 
 private class OwnershipPreparedTextNative(
     private val failingOperation: String? = null,

@@ -7,6 +7,7 @@ import io.ygdrasil.webgpu.BufferBinding
 import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.Extent3D
 import io.ygdrasil.webgpu.GPUBufferUsage
+import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPUTexture
@@ -21,24 +22,49 @@ import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphBufferPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
 
-internal data class GPUPreparedColorGlyphRenderRunPlan(
-    val sourceScopeIndices: List<Int>,
+internal data class GPUPreparedColorGlyphScopeRunPlan(
+    val exactScopeKey: GPUPreparedNativeScopeKey,
     val packets: List<GPUDrawSemanticPayload.ColorGlyph>,
     val bindings: List<GPUPreparedTextRenderBinding>,
-    val exactScopeKeys: List<GPUPreparedNativeScopeKey>,
-    val atlasUploads: List<GPUPreparedTextTextureUploadPlan.Atlas>,
 ) {
     init {
+        require(exactScopeKey.operationKind == GPUEncoderOperationKind.Render)
         require(packets.isNotEmpty() && packets.size == bindings.size)
-        require(sourceScopeIndices == exactScopeKeys.map(GPUPreparedNativeScopeKey::sourceStepIndex))
-        require(sourceScopeIndices.distinct().size == sourceScopeIndices.size)
-        require(bindings.map(GPUPreparedTextRenderBinding::packetId).distinct().size == bindings.size)
+        require(bindings.map(GPUPreparedTextRenderBinding::packetId).distinct().size ==
+            bindings.size
+        )
         require(bindings.zip(packets).all { (binding, semantic) ->
             binding.preflightSeal.semanticCanonicalHash == semantic.canonicalHash
         })
+    }
+}
+
+internal class GPUPreparedColorGlyphRenderRunPlan(
+    val sourceScopeIndices: List<Int>,
+    renderRuns: List<GPUPreparedColorGlyphScopeRunPlan>,
+    val exactScopeKeys: List<GPUPreparedNativeScopeKey>,
+    val atlasUploads: List<GPUPreparedTextTextureUploadPlan.Atlas>,
+) {
+    val renderRuns: List<GPUPreparedColorGlyphScopeRunPlan> = immutableList(renderRuns)
+    val packets: List<GPUDrawSemanticPayload.ColorGlyph> =
+        immutableList(this.renderRuns.flatMap(GPUPreparedColorGlyphScopeRunPlan::packets))
+    val bindings: List<GPUPreparedTextRenderBinding> =
+        immutableList(this.renderRuns.flatMap(GPUPreparedColorGlyphScopeRunPlan::bindings))
+
+    init {
+        require(this.renderRuns.isNotEmpty() && packets.size == bindings.size)
+        require(sourceScopeIndices == exactScopeKeys.map(GPUPreparedNativeScopeKey::sourceStepIndex))
+        require(sourceScopeIndices.distinct().size == sourceScopeIndices.size)
+        require(this.renderRuns.map { it.exactScopeKey } ==
+            exactScopeKeys.filter { it.operationKind == GPUEncoderOperationKind.Render }
+        )
+        require(bindings.map(GPUPreparedTextRenderBinding::packetId).distinct().size ==
+            bindings.size
+        )
         val uploadKeys = exactScopeKeys.filter {
             it.operationKind == GPUEncoderOperationKind.Upload
         }
@@ -71,6 +97,12 @@ internal sealed interface GPUWgpu4kPreparedR8FrameMaterialization {
         val retainedCloseOwner: AutoCloseable? = null,
     ) : GPUWgpu4kPreparedR8FrameMaterialization
 }
+
+private data class GPUWgpu4kPreparedColorGlyphBuffers(
+    val vertex: GPUPreparedNativeBufferOperand,
+    val index: GPUPreparedNativeBufferOperand,
+    val uniform: GPUBuffer,
+)
 
 /**
  * Creates each generic R8 upload page exactly once for one frame. TextA8 and ColorGlyph borrow the
@@ -158,7 +190,7 @@ internal class GPUWgpu4kPreparedR8FrameMaterializer(
 internal class GPUWgpu4kColorGlyphRenderRunMaterializer(
     private val device: GPUDevice,
     private val queue: GPUQueue,
-    private val sessionCache: GPUWgpu4kColorGlyphSessionCache,
+    private val invariants: GPUWgpu4kColorGlyphInvariantHandles,
 ) {
     fun materializeAcceptedRun(
         plan: GPUPreparedColorGlyphRenderRunPlan,
@@ -167,91 +199,91 @@ internal class GPUWgpu4kColorGlyphRenderRunMaterializer(
     ): GPUPreparedRenderRunMaterialization {
         val created = mutableListOf<AutoCloseable>()
         return try {
-            val invariants = sessionCache.acquire()
-            val renderScopes = plan.exactScopeKeys.filter {
-                it.operationKind == GPUEncoderOperationKind.Render
-            }
-            require(renderScopes.size == plan.packets.size)
-            val runs = plan.packets.indices.map { index ->
-                val semantic = plan.packets[index]
-                val binding = plan.bindings[index]
-                val atlas = preparedR8Resources.texturesByPlan[binding.atlasResourcePlan]
-                    ?: error("Accepted ColorGlyph atlas has no frame-local R8 resource")
-                val vertexBytes = semantic.vertexData.size.toLong() * Float.SIZE_BYTES
-                val indexBytes = semantic.indexData.size.toLong() * Int.SIZE_BYTES
-                val uniformBytes = semantic.uniformBytes.size.toLong()
-                val vertexBuffer = device.createBuffer(
-                    BufferDescriptor(
-                        size = vertexBytes.toULong(),
-                        usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
-                        label = "Kanvas.frame.colorGlyph.vertices",
-                    ),
-                ).track(created).also { buffer ->
-                    queue.writeBuffer(
-                        buffer,
-                        0uL,
-                        ArrayBuffer.of(semantic.vertexData.toFloatArray()),
-                    )
-                }
-                val indexBuffer = device.createBuffer(
-                    BufferDescriptor(
-                        size = indexBytes.toULong(),
-                        usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
-                        label = "Kanvas.frame.colorGlyph.indices",
-                    ),
-                ).track(created).also { buffer ->
-                    queue.writeBuffer(
-                        buffer,
-                        0uL,
-                        ArrayBuffer.of(semantic.indexData.toIntArray()),
-                    )
-                }
-                val uniformBuffer = device.createBuffer(
-                    BufferDescriptor(
-                        size = uniformBytes.toULong(),
-                        usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
-                        label = "Kanvas.frame.colorGlyph.uniform784",
-                    ),
-                ).track(created).also { buffer ->
-                    queue.writeBuffer(
-                        buffer,
-                        0uL,
-                        ArrayBuffer.of(semantic.uniformBytes.map(Int::toByte).toByteArray()),
-                    )
-                }
-                val bindGroup = device.createBindGroup(
-                    BindGroupDescriptor(
-                        label = "Kanvas.frame.colorGlyph.bindGroup0",
-                        layout = invariants.bindGroupLayout,
-                        entries = listOf(
-                            BindGroupEntry(
-                                binding = 0u,
-                                resource = BufferBinding(
-                                    buffer = uniformBuffer,
-                                    offset = 0uL,
-                                    size = uniformBytes.toULong(),
-                                ),
-                            ),
-                            BindGroupEntry(binding = 1u, resource = atlas.view),
-                            BindGroupEntry(binding = 2u, resource = invariants.sampler),
+            val buffersByPlan =
+                IdentityHashMap<GPUPreparedColorGlyphBufferPlan, GPUWgpu4kPreparedColorGlyphBuffers>()
+            plan.bindings.map(GPUPreparedTextRenderBinding::colorGlyphBufferPlan)
+                .distinctByIdentity()
+                .forEach { bufferPlan ->
+                    val vertexBuffer = device.createBuffer(
+                        BufferDescriptor(
+                            size = bufferPlan.vertexByteSize.toULong(),
+                            usage = GPUBufferUsage.Vertex or GPUBufferUsage.CopyDst,
+                            label = "Kanvas.frame.colorGlyph.vertices",
                         ),
-                    ),
-                ).track(created)
-                val vertexOperand = GPUPreparedNativeBufferOperand(
-                    vertexBuffer,
-                    generation,
-                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                    vertexBytes,
-                )
-                val indexOperand = GPUPreparedNativeBufferOperand(
-                    indexBuffer,
-                    generation,
-                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                    indexBytes,
-                )
-                GPUPreparedNativeScopeOperand.PreparedColorGlyphRenderRun(
-                    sourceStepIndex = renderScopes[index].sourceStepIndex,
-                    commands = listOf(
+                    ).track(created)
+                    val indexBuffer = device.createBuffer(
+                        BufferDescriptor(
+                            size = bufferPlan.indexByteSize.toULong(),
+                            usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
+                            label = "Kanvas.frame.colorGlyph.indices",
+                        ),
+                    ).track(created)
+                    val uniformBuffer = device.createBuffer(
+                        BufferDescriptor(
+                            size = bufferPlan.uniformByteSize.toULong(),
+                            usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                            label = "Kanvas.frame.colorGlyph.uniforms",
+                        ),
+                    ).track(created)
+                    queue.writeBuffer(
+                        vertexBuffer,
+                        0uL,
+                        ArrayBuffer.of(bufferPlan.vertexBytesForUpload()),
+                    )
+                    queue.writeBuffer(
+                        indexBuffer,
+                        0uL,
+                        ArrayBuffer.of(bufferPlan.indexBytesForUpload()),
+                    )
+                    queue.writeBuffer(
+                        uniformBuffer,
+                        0uL,
+                        ArrayBuffer.of(bufferPlan.uniformBytesForUpload()),
+                    )
+                    buffersByPlan[bufferPlan] = GPUWgpu4kPreparedColorGlyphBuffers(
+                        vertex = GPUPreparedNativeBufferOperand(
+                            vertexBuffer,
+                            generation,
+                            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            bufferPlan.vertexByteSize,
+                        ),
+                        index = GPUPreparedNativeBufferOperand(
+                            indexBuffer,
+                            generation,
+                            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            bufferPlan.indexByteSize,
+                        ),
+                        uniform = uniformBuffer,
+                    )
+                }
+            val runs = plan.renderRuns.map { run ->
+                val commands = run.packets.indices.flatMap { index ->
+                    val semantic = run.packets[index]
+                    val binding = run.bindings[index]
+                    val bufferPlan = binding.colorGlyphBufferPlan
+                    val slice = binding.colorGlyphBufferSlice
+                    val buffers = buffersByPlan.getValue(bufferPlan)
+                    val atlas = preparedR8Resources.texturesByPlan[binding.atlasResourcePlan]
+                        ?: error("Accepted ColorGlyph atlas has no frame-local R8 resource")
+                    val bindGroup = device.createBindGroup(
+                        BindGroupDescriptor(
+                            label = "Kanvas.frame.colorGlyph.bindGroup0",
+                            layout = invariants.bindGroupLayout,
+                            entries = listOf(
+                                BindGroupEntry(
+                                    binding = 0u,
+                                    resource = BufferBinding(
+                                        buffer = buffers.uniform,
+                                        offset = slice.uniformOffsetBytes.toULong(),
+                                        size = slice.uniformSizeBytes.toULong(),
+                                    ),
+                                ),
+                                BindGroupEntry(binding = 1u, resource = atlas.view),
+                                BindGroupEntry(binding = 2u, resource = invariants.sampler),
+                            ),
+                        ),
+                    ).track(created)
+                    listOf(
                         GPUPreparedNativeRenderCommand.SetPipeline(
                             GPUPreparedNativeRenderPipelineOperand(
                                 invariants.pipeline,
@@ -269,16 +301,16 @@ internal class GPUWgpu4kColorGlyphRenderRunMaterializer(
                         ),
                         GPUPreparedNativeRenderCommand.SetVertexBuffer(
                             slot = 0,
-                            buffer = vertexOperand,
-                            offset = 0L,
-                            size = vertexBytes,
+                            buffer = buffers.vertex,
+                            offset = slice.vertexOffsetBytes,
+                            size = slice.vertexSizeBytes,
                             vertexStrideBytes = 16L,
                         ),
                         GPUPreparedNativeRenderCommand.SetIndexBuffer(
-                            indexOperand,
+                            buffers.index,
                             GPUPreparedNativeIndexFormat.Uint32,
-                            0L,
-                            indexBytes,
+                            slice.indexOffsetBytes,
+                            slice.indexSizeBytes,
                         ),
                         GPUPreparedNativeRenderCommand.SetScissor(
                             semantic.scissorBounds.left,
@@ -288,12 +320,16 @@ internal class GPUWgpu4kColorGlyphRenderRunMaterializer(
                         ),
                         GPUPreparedNativeRenderCommand.DrawIndexed(
                             GPUPreparedNativeDrawCall.DrawIndexed(
-                                indexCount = semantic.indexData.size,
+                                indexCount = slice.indexCount,
                             ),
                         ),
-                    ),
-                    exactOperandKeys = renderScopes[index].operandKeys,
-                    semanticPayloads = listOf(semantic),
+                    )
+                }
+                GPUPreparedNativeScopeOperand.PreparedColorGlyphRenderRun(
+                    sourceStepIndex = run.exactScopeKey.sourceStepIndex,
+                    commands = commands,
+                    exactOperandKeys = run.exactScopeKey.operandKeys,
+                    semanticPayloads = run.packets,
                 )
             }
             val owner = GPUPreparedRenderRunOwnedResources(created)

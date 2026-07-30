@@ -27,6 +27,42 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 
 class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
     @Test
+    fun `prepared text borrows the mandatory shared R8 frame resources without duplicate atlas`() {
+        val fixture = preparedTextNativePreflightFixture()
+        val native = RecordingPreparedTextNative()
+        val cache = GPUWgpu4kPreparedTextSessionCache(
+            native.device,
+            fixture.context.deviceGeneration,
+        )
+        val plan = preparedTextTestRunPlan(fixture)
+        val r8 = preparedTextTestR8Resources(
+            native.device,
+            plan,
+            fixture.context.deviceGeneration,
+        )
+
+        val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
+            GPUWgpu4kPreparedTextRenderRunMaterializer(
+                native.device,
+                cache,
+            ).materializeAcceptedRun(
+                plan,
+                fixture.context.deviceGeneration,
+                r8,
+            ),
+        )
+
+        assertEquals(1, native.createdR8Textures.size)
+        assertTrue(ready.scopeOperands.none {
+            it is GPUPreparedNativeScopeOperand.TextureUpload &&
+                it.uploadRole == "text-atlas"
+        })
+        ready.ownedResources.single().close()
+        r8.ownedResources.close()
+        cache.close()
+    }
+
+    @Test
     fun `unique image contents share the two exact material sampler states`() {
         val fixtures = (0 until 20).map { index ->
             val filter = if (index % 2 == 0) "nearest" else "linear"
@@ -98,13 +134,20 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
                     native.device,
                     fixture.context.deviceGeneration,
                 )
+                val plan = preparedTextTestRunPlan(fixture)
+                val r8 = preparedTextTestR8Resources(
+                    native.device,
+                    plan,
+                    fixture.context.deviceGeneration,
+                )
                 val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
                     GPUWgpu4kPreparedTextRenderRunMaterializer(
                         native.device,
                         cache,
                     ).materializeAcceptedRun(
-                        preparedTextTestRunPlan(fixture),
+                        plan,
                         fixture.context.deviceGeneration,
+                        r8,
                     ),
                 )
                 val target = native.pipelineDescriptors.single().fragment!!.targets.single()
@@ -131,6 +174,7 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
                 assertEquals(GPUBlendOperation.Add, target.blend!!.alpha.operation)
 
                 ready.ownedResources.single().close()
+                r8.ownedResources.close()
                 cache.close()
             }
         }
@@ -184,11 +228,12 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
             val generation = fixture.context.deviceGeneration
             val native = RecordingPreparedTextNative()
             val cache = GPUWgpu4kPreparedTextSessionCache(native.device, generation)
+            val r8 = preparedTextTestR8Resources(native.device, plan, generation)
             val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
                 GPUWgpu4kPreparedTextRenderRunMaterializer(
                     native.device,
                     cache,
-                ).materializeAcceptedRun(plan, generation),
+                ).materializeAcceptedRun(plan, generation, r8),
                 label,
             )
             val acquisition = assertIs<GPUPreparedTextCacheBatchAcquire.Ready>(
@@ -249,6 +294,7 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
                 }
 
             ready.ownedResources.single().close()
+            r8.ownedResources.close()
             cache.close()
         }
     }
@@ -262,12 +308,13 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
         val native = RecordingPreparedTextNative()
         val cache = GPUWgpu4kPreparedTextSessionCache(native.device, generation)
         val plan = preparedTextTestRunPlan(fixture)
+        val r8 = preparedTextTestR8Resources(native.device, plan, generation)
 
         val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
             GPUWgpu4kPreparedTextRenderRunMaterializer(
                 device = native.device,
                 sessionCache = cache,
-            ).materializeAcceptedRun(plan, generation),
+            ).materializeAcceptedRun(plan, generation, r8),
         )
 
         assertEquals(1, native.createdInstanceBuffers.size)
@@ -275,7 +322,7 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
         assertEquals(1, native.createdMaterialUniformBuffers.size)
         assertEquals(1, native.createdR8Textures.size)
         assertEquals(
-            1,
+            0,
             ready.scopeOperands.filterIsInstance<
                 GPUPreparedNativeScopeOperand.TextureUpload
                 >().count { it.uploadRole == "text-atlas" },
@@ -316,6 +363,7 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
         )
 
         ready.ownedResources.single().close()
+        r8.ownedResources.close()
         cache.close()
     }
 
@@ -331,23 +379,29 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
             native.device,
             fixture.context.deviceGeneration,
         )
+        val r8 = preparedTextTestR8Resources(
+            native.device,
+            plan,
+            fixture.context.deviceGeneration,
+        )
 
         val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
             GPUWgpu4kPreparedTextRenderRunMaterializer(
                 native.device,
                 cache,
-            ).materializeAcceptedRun(plan, fixture.context.deviceGeneration),
+            ).materializeAcceptedRun(plan, fixture.context.deviceGeneration, r8),
         )
 
-        val uploadsByStep = ready.scopeOperands
+        val uploadsByStep = (r8.uploadOperands + ready.scopeOperands
             .filterIsInstance<GPUPreparedNativeScopeOperand.TextureUpload>()
+            )
             .associateBy { it.sourceStepIndex }
         plan.textureUploads.forEach { upload ->
             val materialized = uploadsByStep.getValue(upload.exactScopeKey.sourceStepIndex)
             assertEquals(upload.exactScopeKey.operandKeys, materialized.exactOperandKeys)
             assertEquals(
                 when (upload) {
-                    is GPUPreparedTextTextureUploadPlan.Atlas -> "text-atlas"
+                    is GPUPreparedTextTextureUploadPlan.Atlas -> "prepared-text-r8"
                     is GPUPreparedTextTextureUploadPlan.Material ->
                         "material:${upload.resourcePlan.resourceKey}"
                 },
@@ -356,6 +410,7 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
         }
 
         ready.ownedResources.single().close()
+        r8.ownedResources.close()
         cache.close()
     }
 
@@ -546,6 +601,17 @@ internal fun preparedTextTestScopeKeys(
             else -> error("Unexpected prepared-text test scope $sourceStepIndex")
         }
     }
+
+private fun preparedTextTestR8Resources(
+    device: GPUDevice,
+    plan: GPUPreparedTextRenderRunPlan,
+    generation: GPUDeviceGenerationID,
+): GPUWgpu4kPreparedR8FrameResources = assertIs<GPUWgpu4kPreparedR8FrameMaterialization.Ready>(
+    GPUWgpu4kPreparedR8FrameMaterializer(device).materializeAcceptedUploads(
+        plan.textureUploads.filterIsInstance<GPUPreparedTextTextureUploadPlan.Atlas>(),
+        generation,
+    ),
+).resources
 
 private class RecordingPreparedTextNative {
     val createdInstanceBuffers = mutableListOf<GPUBuffer>()

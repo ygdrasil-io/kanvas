@@ -35,6 +35,17 @@ import io.ygdrasil.webgpu.VertexAttribute
 import io.ygdrasil.webgpu.VertexBufferLayout
 import io.ygdrasil.webgpu.VertexState
 
+/** Session-local evidence for invariant reuse; ColorGlyph atlases are frame-owned R8 resources. */
+internal data class GPUColorGlyphNativeCacheCounters(
+    val invariantCreations: Long = 0L,
+    val atlasCreations: Long = 0L,
+    val atlasUploads: Long = 0L,
+    val atlasReuses: Long = 0L,
+    val atlasInvalidations: Long = 0L,
+    val currentAtlasBytes: Long = 0L,
+    val atlasPeakResidentBytes: Long = 0L,
+)
+
 /** Native objects whose descriptors do not vary between ColorGlyph frames in one session. */
 internal class GPUWgpu4kColorGlyphInvariantHandles(
     val bindGroupLayout: GPUBindGroupLayout,

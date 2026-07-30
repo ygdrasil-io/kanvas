@@ -4155,7 +4155,11 @@ internal class GPUFramePreflighter(
                 if (hasExactPreparedSurfaceMixedNativeBoundary(framePlan)) {
                     null
                 } else {
-                    validateColorGlyphSemanticPayload(framePlan, render, packet, semantic)
+                    diagnostic(
+                        GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
+                        "Prepared color-glyph semantics have no executable native materialization route; " +
+                            "the sealed prepared-surface native boundary is required.",
+                    )
                 }
         }
     }
@@ -4537,168 +4541,6 @@ internal class GPUFramePreflighter(
                 "Registered uniform scissor must be contained by a zero-origin target.",
             )
         }
-        return null
-    }
-
-    private fun validateColorGlyphSemanticPayload(
-        framePlan: GPUFramePlan,
-        render: GPUFrameStep.RenderPassStep,
-        packet: GPUDrawPacket,
-        semantic: GPUDrawSemanticPayload.ColorGlyph,
-    ): GPUDiagnostic? {
-        fun refuse(code: String, message: String) = diagnostic(code, message)
-        if (packet.renderStepId.value != COLOR_GLYPH_RENDER_STEP_IDENTITY ||
-            semantic.payloadRef.renderStepIdentity != COLOR_GLYPH_RENDER_STEP_IDENTITY
-        ) return refuse("invalid.preflight.color_glyph_semantic_route", "ColorGlyph requires the exact canonical render step.")
-        if (semantic.payloadRef.commandIdValue != packet.commandIdValue) {
-            return refuse("invalid.preflight.color_glyph_semantic_command_mismatch", "ColorGlyph command identity differs from its packet.")
-        }
-        preparedColorGlyphPacketAuthorityRefusal(packet, semantic)?.let { authority ->
-            return refuse(authority.code, authority.message)
-        }
-        if (render.loadStore.loadOp != "clear" ||
-            render.loadStore.storePlan != GPUStorePlan.Store ||
-            render.loadStore.clearColorLabel != "opaque-black"
-        ) {
-            return refuse(
-                COLOR_GLYPH_PACKET_PASS_AUTHORITY_CODE,
-                COLOR_GLYPH_PACKET_PASS_AUTHORITY_MESSAGE,
-            )
-        }
-        if (semantic.planArtifactKey.generation.value < 0 ||
-            semantic.atlasArtifactKey.generation.value.toLong() != semantic.atlasGeneration
-        ) return refuse("stale.preflight.color_glyph_artifact_generation", "ColorGlyph plan or atlas generation evidence is inconsistent.")
-        if (render.samplePlan != GPUSamplePlan.SingleSampleFrame) {
-            return refuse("unsupported.preflight.color_glyph_sample_plan", "ColorGlyph first slice requires exact single-sample rendering.")
-        }
-        val blend = packet.blendPlan as? GPUBlendPlan.FixedFunctionBlend
-        if (blend == null || blend.mode != GPUBlendMode.SRC_OVER || blend.state.stateId != "one_isa" ||
-            blend.state.color.sourceFactor != "one" || blend.state.color.destinationFactor != "one-minus-src-alpha" ||
-            blend.state.alpha.sourceFactor != "one" || blend.state.alpha.destinationFactor != "one-minus-src-alpha" ||
-            blend.state.color.operation != "add" || blend.state.alpha.operation != "add" ||
-            blend.state.writeMask != "rgba"
-        ) return refuse("unsupported.preflight.color_glyph_blend", "ColorGlyph requires canonical fixed-function SRC_OVER.")
-        if (GPUTextureFormat.R8Unorm !in capabilities.supportedTextureFormats) {
-            return refuse("unsupported.preflight.color_glyph_r8unorm", "ColorGlyph requires an explicitly observed r8unorm texture capability.")
-        }
-        if (semantic.scissorBounds.left < semantic.targetBounds.left ||
-            semantic.scissorBounds.top < semantic.targetBounds.top ||
-            semantic.scissorBounds.right > semantic.targetBounds.right ||
-            semantic.scissorBounds.bottom > semantic.targetBounds.bottom
-        ) return refuse("invalid.preflight.color_glyph_scissor_bounds", "ColorGlyph scissor must be contained by its target bounds.")
-
-        val preparations = framePlan.steps.filterIsInstance<GPUFrameStep.PrepareResourcesStep>().flatMap { it.requests }
-        val readbacks = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
-        val expectedResourceCount = if (readbacks.isEmpty()) 5 else 6
-        if (preparations.size != expectedResourceCount) {
-            return refuse("invalid.preflight.color_glyph_resource_count", "ColorGlyph requires exactly five resources, plus staging only when readback is requested.")
-        }
-        fun exact(role: GPUFrameResourceRole): GPUResourcePreparationRequest? =
-            preparations.filter { it.role == role }.singleOrNull()
-        val targets = exact(GPUFrameResourceRole.SceneTarget)
-        val atlases = exact(GPUFrameResourceRole.GlyphAtlas)
-        val vertices = exact(GPUFrameResourceRole.VertexData)
-        val indices = exact(GPUFrameResourceRole.IndexData)
-        val uniforms = exact(GPUFrameResourceRole.UniformData)
-        val stagings = exact(GPUFrameResourceRole.ReadbackStaging)
-        if (listOf(targets, atlases, vertices, indices, uniforms).any { it == null } ||
-            (readbacks.isEmpty() != (stagings == null))
-        ) {
-            return refuse("invalid.preflight.color_glyph_resource_roles", "ColorGlyph requires one target, atlas, vertex, index, uniform, and staging exactly when readback exists.")
-        }
-        val target = requireNotNull(targets)
-        val atlas = requireNotNull(atlases)
-        val vertex = requireNotNull(vertices)
-        val index = requireNotNull(indices)
-        val uniform = requireNotNull(uniforms)
-        val exactRenderUses = listOf(
-            GPUFrameResourceUse(
-                atlas.resource,
-                GPUFrameResourceRole.GlyphAtlas,
-                GPUFrameResourceUsage.TextureBinding,
-                GPUFrameResourceLifetime.FrameLocal,
-                write = false,
-            ),
-            GPUFrameResourceUse(
-                vertex.resource,
-                GPUFrameResourceRole.VertexData,
-                GPUFrameResourceUsage.Vertex,
-                GPUFrameResourceLifetime.FrameLocal,
-                write = false,
-            ),
-            GPUFrameResourceUse(
-                index.resource,
-                GPUFrameResourceRole.IndexData,
-                GPUFrameResourceUsage.Index,
-                GPUFrameResourceLifetime.FrameLocal,
-                write = false,
-            ),
-            GPUFrameResourceUse(
-                uniform.resource,
-                GPUFrameResourceRole.UniformData,
-                GPUFrameResourceUsage.Uniform,
-                GPUFrameResourceLifetime.FrameLocal,
-                write = false,
-            ),
-        )
-        if (render.resourceUses.size != exactRenderUses.size || render.resourceUses.toSet() != exactRenderUses.toSet()) {
-            return refuse(
-                "invalid.preflight.color_glyph_render_resource_uses",
-                "ColorGlyph requires exact typed atlas, vertex, index, and uniform render uses.",
-            )
-        }
-        val targetDescriptor = target.descriptor as? GPUFrameTextureDescriptor
-        if (target.resource != render.target || targetDescriptor?.logicalBounds != semantic.targetBounds ||
-            targetDescriptor.format.value != "rgba8unorm" || targetDescriptor.sampleCount != 1 ||
-            target.usages != setOf(GPUFrameResourceUsage.RenderAttachment, GPUFrameResourceUsage.CopySource) ||
-            target.lifetime != GPUFrameResourceLifetime.FrameLocal || target.byteSize != semantic.targetBounds.width.toLong() * semantic.targetBounds.height * 4L
-        ) return refuse("invalid.preflight.color_glyph_target_resource", "ColorGlyph target declaration does not match its semantic bounds and format.")
-        val atlasDescriptor = atlas.descriptor as? GPUFrameTextureDescriptor
-        if (atlasDescriptor?.logicalBounds != org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds(0, 0, semantic.atlasWidth, semantic.atlasHeight) ||
-            atlasDescriptor.format.value != "r8unorm" || atlasDescriptor.sampleCount != 1 ||
-            atlas.usages != setOf(GPUFrameResourceUsage.TextureBinding, GPUFrameResourceUsage.CopyDestination) ||
-            atlas.lifetime != GPUFrameResourceLifetime.FrameLocal || atlas.byteSize != semantic.atlasA8Bytes.size.toLong() ||
-            context.resourceGenerations[atlas.resource] != semantic.atlasGeneration
-        ) return refuse("invalid.preflight.color_glyph_atlas_resource", "ColorGlyph atlas declaration or generation does not match its payload.")
-        fun exactBuffer(
-            request: GPUResourcePreparationRequest,
-            roleUsage: GPUFrameResourceUsage,
-            bytes: Long,
-            alignment: Long,
-        ): Boolean {
-            val descriptor = request.descriptor as? GPUFrameBufferDescriptor ?: return false
-            return descriptor.byteSize == bytes && descriptor.alignmentBytes == alignment && request.byteSize == bytes &&
-                request.usages == setOf(roleUsage, GPUFrameResourceUsage.CopyDestination) &&
-                request.lifetime == GPUFrameResourceLifetime.FrameLocal
-        }
-        if (!exactBuffer(vertex, GPUFrameResourceUsage.Vertex, semantic.vertexData.size * 4L, 4L)) {
-            return refuse("invalid.preflight.color_glyph_vertex_resource", "ColorGlyph vertex declaration does not match its payload.")
-        }
-        if (!exactBuffer(index, GPUFrameResourceUsage.Index, semantic.indexData.size * 4L, 4L)) {
-            return refuse("invalid.preflight.color_glyph_index_resource", "ColorGlyph index declaration does not match its payload.")
-        }
-        if (!exactBuffer(uniform, GPUFrameResourceUsage.Uniform, semantic.uniformBytes.size.toLong(), 16L)) {
-            return refuse("invalid.preflight.color_glyph_uniform_resource", "ColorGlyph uniform declaration does not match its payload.")
-        }
-        val planGeneration = semantic.planArtifactKey.generation.value.toLong()
-        if (packet.resourceGeneration != planGeneration || context.resourceGenerations[render.target] != context.targetGeneration ||
-            listOf(vertex, index, uniform).any { context.resourceGenerations[it.resource] != planGeneration } ||
-            preparations.any { context.resourceGenerations[it.resource] == null }
-        ) {
-            return refuse("stale.preflight.color_glyph_resource_generation_missing", "Every ColorGlyph prepared resource requires generation evidence.")
-        }
-        if (readbacks.isEmpty()) return null
-        val staging = requireNotNull(stagings)
-        val readback = readbacks.singleOrNull()
-        val plannedReadback = readback?.let { readbackLayoutPlanner.plan(it.request, capabilities) as? GPUReadbackLayoutPlan.Planned }
-        if (readback == null || readback.source != render.target || readback.staging != staging.resource ||
-            readback.request.sourceBounds != semantic.targetBounds ||
-            staging.usages != setOf(GPUFrameResourceUsage.CopyDestination, GPUFrameResourceUsage.MapRead) ||
-            staging.lifetime != GPUFrameResourceLifetime.FrameLocal ||
-            (staging.descriptor as? GPUFrameBufferDescriptor)?.byteSize != plannedReadback?.stagingDescriptor?.minimumBufferBytes ||
-            staging.byteSize != plannedReadback?.stagingDescriptor?.minimumBufferBytes
-        ) return refuse("invalid.preflight.color_glyph_readback_resource", "ColorGlyph readback declaration does not match the exact target layout.")
-
         return null
     }
 

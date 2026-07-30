@@ -8,7 +8,10 @@ import io.ygdrasil.webgpu.GPUTexture
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureView
 import java.lang.reflect.Proxy
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -26,6 +29,150 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 
 class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
+    @Test
+    fun `two ColorGlyph packets in one accepted scope keep native draw order`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = capturedPreparedTextInputs(
+                colorGlyphCommandIds = setOf(0, 1),
+                coalescedColorGlyphScope = true,
+            ),
+        )
+        try {
+            val result = fixture.materialize()
+            val materialized = assertIs<
+                GPUPreparedNativeFramePayloadMaterialization.Materialized
+                >(result, result.toString())
+            val render = materialized.draft.payload.scopeOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .single()
+
+            assertEquals(listOf(0, 1), render.semanticPayloads.map {
+                it.payloadRef.commandIdValue
+            })
+            assertEquals(
+                2,
+                render.commands
+                    .filterIsInstance<GPUPreparedNativeRenderCommand.DrawIndexed>()
+                    .size,
+            )
+            val colorWrites = fixture.native.writeBufferCalls.filter { call ->
+                call.bufferLabel.startsWith("Kanvas.frame.colorGlyph.")
+            }
+            assertEquals(
+                listOf(
+                    "Kanvas.frame.colorGlyph.vertices",
+                    "Kanvas.frame.colorGlyph.indices",
+                    "Kanvas.frame.colorGlyph.uniforms",
+                ),
+                colorWrites.map { call -> call.bufferLabel },
+            )
+            val semantics = render.semanticPayloads
+                .map { semantic -> assertIs<GPUDrawSemanticPayload.ColorGlyph>(semantic) }
+            val uniformSnapshot = colorWrites.single {
+                it.bufferLabel == "Kanvas.frame.colorGlyph.uniforms"
+            }.snapshot
+            val firstUniform = semantics[0].uniformBytes.map(Int::toByte).toByteArray()
+            val secondUniform = semantics[1].uniformBytes.map(Int::toByte).toByteArray()
+            assertContentEquals(firstUniform, uniformSnapshot.copyOfRange(0, firstUniform.size))
+            assertContentEquals(
+                secondUniform,
+                uniformSnapshot.copyOfRange(1024, 1024 + secondUniform.size),
+            )
+            val nativeUniforms = ByteBuffer.wrap(uniformSnapshot).order(ByteOrder.LITTLE_ENDIAN)
+            listOf(0, 1024).forEach { base ->
+                assertEquals(16f, nativeUniforms.getFloat(base))
+                assertEquals(16f, nativeUniforms.getFloat(base + 4))
+                assertEquals(1, nativeUniforms.getInt(base + 8))
+                assertEquals(0.5f, nativeUniforms.getFloat(base + 16))
+                assertEquals(0f, nativeUniforms.getFloat(base + 20))
+                assertEquals(0f, nativeUniforms.getFloat(base + 24))
+                assertEquals(0.5f, nativeUniforms.getFloat(base + 28))
+                assertEquals(0f, nativeUniforms.getFloat(base + 272))
+                assertEquals(0f, nativeUniforms.getFloat(base + 276))
+                assertEquals(0.25f, nativeUniforms.getFloat(base + 280))
+                assertEquals(0.25f, nativeUniforms.getFloat(base + 284))
+                assertEquals(1f, nativeUniforms.getFloat(base + 528))
+                assertEquals(1f, nativeUniforms.getFloat(base + 532))
+                assertEquals(4f, nativeUniforms.getFloat(base + 536))
+                assertEquals(4f, nativeUniforms.getFloat(base + 540))
+            }
+            assertTrue(materialized.draft.disposeBeforeRegistration())
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `ColorGlyph bind group failure rolls back every already created frame buffer once`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = capturedPreparedTextInputs(
+                colorGlyphCommandIds = setOf(0, 1),
+                coalescedColorGlyphScope = true,
+            ),
+        )
+        try {
+            fixture.native.fail("createBindGroup", ordinal = 1)
+
+            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.materialize(),
+            )
+
+            assertEquals("failed.color_glyph.materialization", refused.code)
+            val colorBuffers = fixture.native.writeBufferCalls
+                .filter { call -> call.bufferLabel.startsWith("Kanvas.frame.colorGlyph.") }
+                .mapNotNull { call -> call.buffer }
+                .distinctBy(System::identityHashCode)
+            assertEquals(3, colorBuffers.size)
+            assertTrue(colorBuffers.all { buffer ->
+                fixture.native.closeCounts[buffer] == 1
+            })
+            assertEquals(null, refused.retainedDraft)
+            assertEquals(null, refused.retainedPreRegistrationLedger)
+            assertEquals(null, refused.retainedCloseOwner)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `mixed TextA8 and ColorGlyph upload resolved currentColor premul alpha bytes`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = capturedPreparedTextInputs(
+                colorGlyphCommandIds = setOf(1),
+                colorGlyphPremultipliedRgba =
+                    floatArrayOf(0.125f, 0.25f, 0.375f, 0.5f),
+                colorGlyphUseForeground = true,
+            ),
+        )
+        try {
+            val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                fixture.materialize(),
+            )
+            val colorSemantic = materialized.draft.payload.scopeOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                .flatMap { render -> render.semanticPayloads }
+                .filterIsInstance<GPUDrawSemanticPayload.ColorGlyph>()
+                .single()
+            assertTrue(colorSemantic.layers.single().useForeground)
+            assertTrue(colorSemantic.layers.single().foregroundResolved)
+
+            val uploaded = fixture.native.writeBufferCalls.single { call ->
+                call.bufferLabel == "Kanvas.frame.colorGlyph.uniforms"
+            }.snapshot
+            val uniform = ByteBuffer.wrap(uploaded).order(ByteOrder.LITTLE_ENDIAN)
+            assertEquals(0.125f, uniform.getFloat(16))
+            assertEquals(0.25f, uniform.getFloat(20))
+            assertEquals(0.375f, uniform.getFloat(24))
+            assertEquals(0.5f, uniform.getFloat(28))
+            assertTrue(materialized.draft.disposeBeforeRegistration())
+        } finally {
+            fixture.close()
+        }
+    }
+
     @Test
     fun `prepared text materializer attaches exact uploads and instanced runs to one payload`() {
         val fixture = fixture(
@@ -73,10 +220,13 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
     }
 
     @Test
-    fun `prepared text frame resources stay open through submit and close once on completion`() {
+    fun `ColorGlyph frame resources stay open through submit and close once on completion`() {
         val fixture = fixture(
             shape = PreparedSurfaceFixtureShape.ImageOnly,
-            inputOverride = capturedPreparedTextInputs(),
+            inputOverride = capturedPreparedTextInputs(
+                colorGlyphCommandIds = setOf(0, 1),
+                coalescedColorGlyphScope = true,
+            ),
         )
         val backend = GPUWgpu4kFrameEncodingBackend(
             deviceGeneration = fixture.input.generationSeal.deviceGeneration,
@@ -105,6 +255,8 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
                                 add(command.bindGroup.bindGroup)
                             is GPUPreparedNativeRenderCommand.SetVertexBuffer ->
                                 add(command.buffer.buffer)
+                            is GPUPreparedNativeRenderCommand.SetIndexBuffer ->
+                                add(command.buffer.buffer)
                             else -> Unit
                         }
                     }
@@ -124,7 +276,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
                 ownership.consume(payload.identity),
             )
-            val encoder = backend.createCommandEncoder("prepared-text-completion")
+            val encoder = backend.createCommandEncoder("color-glyph-completion")
             fixture.input.encoderPlan.scopes.zip(payload.scopeOperands)
                 .forEach { (scope, operand) ->
                     encoder.encode(
@@ -500,6 +652,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             native.device,
             input.generationSeal.deviceGeneration,
         )
+        val colorCache = GPUWgpu4kColorGlyphSessionCache(native.device)
         val surfaceCache = GPUWgpu4kSurfaceBlitSessionCache(native.device, target)
         val mixed = GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             device = native.device,
@@ -508,6 +661,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             corePrimitiveCache = coreCache,
             preparedImageCache = imageCache,
             preparedTextCache = textCache,
+            colorGlyphCache = colorCache,
             preparedImageHandleFactory = GPUWgpu4kPreparedImageNativeHandleFactory(native.device),
             preparedImageCapabilities = preparedImageCapabilities(),
             surfaceBlitCache = surfaceCache,
@@ -1090,6 +1244,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
         val imageFactory = CompositePreparedImageHandleFactory(
             failFirstClose = failFirstImageClose,
         )
+        val colorCache = GPUWgpu4kColorGlyphSessionCache(native.device)
         val selectedImageFactory = if (failImageBindGroup) {
             FailOnFirstBindGroupPreparedImageHandleFactory(imageFactory)
         } else {
@@ -1104,6 +1259,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             corePrimitiveCache = coreCache,
             preparedImageCache = imageCache,
             preparedTextCache = textCache,
+            colorGlyphCache = colorCache,
             preparedImageHandleFactory = selectedImageFactory,
             preparedImageCapabilities = preparedImageCapabilities(),
             surfaceBlitCache = surfaceCache,
@@ -1132,6 +1288,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             coreCache,
             imageCache,
             textCache,
+            colorCache,
             surfaceCache,
             imageFactory,
             materializer,
@@ -1146,6 +1303,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
         val coreCache: GPUWgpu4kCorePrimitiveSessionCache,
         val imageCache: GPUWgpu4kPreparedImageSessionCache,
         val textCache: GPUWgpu4kPreparedTextSessionCache,
+        val colorCache: GPUWgpu4kColorGlyphSessionCache,
         val surfaceCache: GPUWgpu4kSurfaceBlitSessionCache,
         val imageFactory: CompositePreparedImageHandleFactory,
         val materializer: GPUWgpu4kPreparedSurfaceFramePayloadMaterializer,
@@ -1178,6 +1336,7 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             runCatching { surfaceCache.close() }
             runCatching { imageCache.close() }
             runCatching { textCache.close() }
+            runCatching { colorCache.close() }
             runCatching { coreCache.close() }
             runCatching { target.close() }
         }

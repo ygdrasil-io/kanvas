@@ -98,6 +98,8 @@ import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeyPreimage
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPUPipelineKeys
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUCacheTelemetry
@@ -139,6 +141,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUPayloadSlabSlotBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLease
@@ -166,6 +169,37 @@ private const val WGPU4K_QUEUE_COMPLETION_CAPABILITY = "on-submitted-work-done"
 internal const val GPU_NATIVE_DEVICE_LOSS_PROOF = "not-exercisable-public-api"
 private val sessionOrdinalCounter = AtomicLong(0L)
 private val windowRuntimeOrdinalCounter = AtomicLong(0L)
+
+/**
+ * Derives ColorGlyph generations solely from authenticated plan/artifact identity.
+ *
+ * Content hashes remain upload-integrity evidence and deliberately do not participate in
+ * generation assignment.
+ */
+internal fun preparedColorGlyphResourceGenerations(
+    framePlan: GPUFramePlan,
+): Map<GPUFrameResourceRef, Long> {
+    val generations = linkedMapOf<GPUFrameResourceRef, Long>()
+    fun record(resource: GPUFrameResourceRef, generation: Long) {
+        val previous = generations.putIfAbsent(resource, generation)
+        require(previous == null || previous == generation) {
+            "One ColorGlyph resource cannot carry conflicting sealed generations"
+        }
+    }
+    framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        .flatMap { render -> render.preparedTextBindingsByPacketId.values }
+        .filter { binding -> binding.hasColorGlyphBufferPlan }
+        .forEach { binding ->
+            val atlas = binding.atlasResourcePlan
+            record(atlas.stagingRef, atlas.artifactGeneration)
+            record(atlas.frameTextureRef, atlas.artifactGeneration)
+            val plan = binding.colorGlyphBufferPlan
+            record(plan.vertexBufferRef, plan.resourceGeneration)
+            record(plan.indexBufferRef, plan.resourceGeneration)
+            record(plan.uniformBufferRef, plan.resourceGeneration)
+        }
+    return generations.toMap()
+}
 
 /** Preserves every representable adapter limit and saturates wider native values without overflow. */
 internal fun observedMaxBufferSize(value: ULong): Long? = when {
@@ -1394,23 +1428,16 @@ private class WgpuBackendSession(
                     .resource as GPUFrameTargetRef
                 val generations = linkedMapOf<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef, Long>()
                 generations[target] = targetGeneration
-                val colorGlyph = taskList.tasks.filterIsInstance<GPUTask.Render>()
-                    .flatMap { it.drawPackets }
-                    .mapNotNull { it.semanticPayload as? org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.ColorGlyph }
-                    .singleOrNull()
+                val sealedColorGlyphGenerations = preparedColorGlyphResourceGenerations(
+                    org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner.plan(taskList),
+                )
                 taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
                     .flatMap { it.requests }
                     .filter { it.resource != target }
                     .forEachIndexed { index, request ->
-                        generations[request.resource] = when (request.role) {
-                            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.GlyphAtlas ->
-                                colorGlyph?.atlasGeneration ?: (index.toLong() + 2L)
-                            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.VertexData,
-                            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.IndexData,
-                            org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.UniformData,
-                            -> colorGlyph?.planArtifactKey?.generation?.value?.toLong() ?: (index.toLong() + 2L)
-                            else -> index.toLong() + 2L
-                        }
+                        generations[request.resource] =
+                            sealedColorGlyphGenerations[request.resource]
+                                ?: (index.toLong() + 2L)
                     }
 
                 val surfaceTargetResolver = windowOutput?.nativeTargetResolver

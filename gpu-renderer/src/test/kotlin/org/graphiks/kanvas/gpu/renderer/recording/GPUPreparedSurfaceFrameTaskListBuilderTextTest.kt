@@ -899,6 +899,100 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         )
     }
 
+    @Test
+    fun `two ColorGlyph packets seal one shared exact native buffer plan before allocation`() {
+        val sharedAtlas = atlas(
+            "atlas:color-buffer-plan",
+            generation = 7,
+            bytes = byteArrayOf(1, 2, 3, 4),
+        )
+        val semantics = linkedMapOf<Int, GPUDrawSemanticPayload>(
+            0 to colorSemantic(commandId = 0, atlas = sharedAtlas),
+            1 to colorSemantic(commandId = 1, atlas = sharedAtlas),
+        )
+        val result = GPUPreparedSurfaceFrameTaskListBuilder().build(
+            GPUPreparedSurfaceFrameRequest(
+                baseTaskList = baseTaskList(
+                    commandIds = semantics.keys.toList(),
+                    renderStepByCommandId = semantics.mapValues { (_, semantic) ->
+                        semantic.payloadRef.renderStepIdentity
+                    },
+                    semanticsByCommandId = semantics,
+                ),
+                capabilities = capabilities(),
+                target = TARGET,
+                targetBounds = BOUNDS,
+                semanticsByCommandId = semantics,
+                readbackRequestId = null,
+            ),
+        )
+
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            result,
+            (result as? GPUPreparedSurfaceFrameResult.Refused)?.diagnostic.toString(),
+        ).taskList
+        val preparations = taskList.tasks
+            .filterIsInstance<GPUTask.PrepareResources>()
+            .single()
+            .requests
+            .filter { it.diagnosticLabel.startsWith("prepared-color-glyph.") }
+        assertEquals(
+            listOf(
+                GPUFrameResourceRole.VertexData,
+                GPUFrameResourceRole.IndexData,
+                GPUFrameResourceRole.UniformData,
+            ),
+            preparations.map { preparation -> preparation.role },
+        )
+        assertEquals(
+            3,
+            taskList.memoryBudget.allocations.count { allocation ->
+                allocation.label.startsWith("prepared-color-glyph.")
+            },
+        )
+    }
+
+    @Test
+    fun `ColorGlyph shared uniform slab refuses maxBufferSize before task publication`() {
+        val sharedAtlas = atlas(
+            "atlas:color-buffer-limit",
+            generation = 7,
+            bytes = byteArrayOf(1, 2, 3, 4),
+        )
+        val semantics = linkedMapOf<Int, GPUDrawSemanticPayload>(
+            0 to colorSemantic(commandId = 0, atlas = sharedAtlas),
+            1 to colorSemantic(commandId = 1, atlas = sharedAtlas),
+        )
+        val limited = capabilities().let { observed ->
+            observed.copy(limits = observed.limits!!.copy(maxBufferSize = 1_024L))
+        }
+
+        val refused = assertIs<GPUPreparedSurfaceFrameResult.Refused>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(
+                GPUPreparedSurfaceFrameRequest(
+                    baseTaskList = baseTaskList(
+                        commandIds = semantics.keys.toList(),
+                        renderStepByCommandId = semantics.mapValues { (_, semantic) ->
+                            semantic.payloadRef.renderStepIdentity
+                        },
+                        capabilities = limited,
+                        semanticsByCommandId = semantics,
+                    ),
+                    capabilities = limited,
+                    target = TARGET,
+                    targetBounds = BOUNDS,
+                    semanticsByCommandId = semantics,
+                    readbackRequestId = null,
+                ),
+            ),
+        )
+
+        assertEquals(
+            "unsupported.recording.prepared_color_glyph_buffer",
+            refused.diagnostic.code.value,
+        )
+    }
+
     private fun coreSemantic(commandId: Int): GPUDrawSemanticPayload.CorePrimitive =
         GPUCorePrimitivePayloadGatherer().gatherSemantic(
             GPUCorePrimitivePayloadInput(

@@ -4,6 +4,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
 import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
@@ -170,6 +171,149 @@ class GPUPreparedTextMaterialUniformBufferPlan(
     fun bytesForUpload(): ByteArray = uploadSnapshot.copyOf()
 }
 
+/** Exact offsets for one ColorGlyph packet inside its artifact-key-owned frame buffers. */
+data class GPUPreparedColorGlyphBufferSlice(
+    val commandIdValue: Int,
+    val vertexOffsetBytes: Long,
+    val vertexSizeBytes: Long,
+    val indexOffsetBytes: Long,
+    val indexSizeBytes: Long,
+    val uniformOffsetBytes: Long,
+    val uniformSizeBytes: Long,
+    val indexCount: Int,
+) {
+    init {
+        require(commandIdValue >= 0)
+        require(vertexOffsetBytes >= 0L && vertexSizeBytes > 0L)
+        require(indexOffsetBytes >= 0L && indexSizeBytes > 0L)
+        require(uniformOffsetBytes >= 0L && uniformSizeBytes > 0L)
+        require(indexCount > 0)
+    }
+}
+
+/**
+ * Immutable handle-free ColorGlyph allocation and upload authority.
+ *
+ * One exact prepared plan artifact owns three frame buffers. Packet slices preserve source order,
+ * while the artifact generation remains the sole generation authority; byte hashes authenticate
+ * uploads but never synthesize generation semantics.
+ */
+class GPUPreparedColorGlyphBufferPlan(
+    val planArtifactKey: GPUTextArtifactKey,
+    val vertexBufferRef: GPUFrameBufferRef,
+    val indexBufferRef: GPUFrameBufferRef,
+    val uniformBufferRef: GPUFrameBufferRef,
+    val uniformAlignmentBytes: Long,
+    val vertexByteSize: Long,
+    val indexByteSize: Long,
+    val uniformByteSize: Long,
+    val vertexContentHash: String,
+    val indexContentHash: String,
+    val uniformContentHash: String,
+    slices: List<GPUPreparedColorGlyphBufferSlice>,
+    vertexBytes: ByteArray,
+    indexBytes: ByteArray,
+    uniformBytes: ByteArray,
+) {
+    private val vertexUploadSnapshot = vertexBytes.copyOf()
+    private val indexUploadSnapshot = indexBytes.copyOf()
+    private val uniformUploadSnapshot = uniformBytes.copyOf()
+    val slices: List<GPUPreparedColorGlyphBufferSlice> = immutableList(slices)
+    val resourceGeneration: Long = planArtifactKey.generation.value.toLong()
+    val memoryAllocations: List<GPUFrameMemoryAllocation> = immutableList(
+        listOf(
+            bufferAllocation("vertices", vertexByteSize),
+            bufferAllocation("indices", indexByteSize),
+            bufferAllocation("uniforms", uniformByteSize),
+        ),
+    )
+    val preparationRequests: List<GPUResourcePreparationRequest> = immutableList(
+        listOf(
+            bufferPreparation(
+                resource = vertexBufferRef,
+                role = GPUFrameResourceRole.VertexData,
+                usage = GPUFrameResourceUsage.Vertex,
+                byteSize = vertexByteSize,
+                alignmentBytes = 4L,
+                label = "vertices",
+                contentHash = vertexContentHash,
+            ),
+            bufferPreparation(
+                resource = indexBufferRef,
+                role = GPUFrameResourceRole.IndexData,
+                usage = GPUFrameResourceUsage.Index,
+                byteSize = indexByteSize,
+                alignmentBytes = 4L,
+                label = "indices",
+                contentHash = indexContentHash,
+            ),
+            bufferPreparation(
+                resource = uniformBufferRef,
+                role = GPUFrameResourceRole.UniformData,
+                usage = GPUFrameResourceUsage.Uniform,
+                byteSize = uniformByteSize,
+                alignmentBytes = uniformAlignmentBytes,
+                label = "uniforms",
+                contentHash = uniformContentHash,
+            ),
+        ),
+    )
+
+    init {
+        require(resourceGeneration >= 0L)
+        require(uniformAlignmentBytes > 0L &&
+            uniformAlignmentBytes and (uniformAlignmentBytes - 1L) == 0L
+        )
+        require(vertexByteSize == vertexUploadSnapshot.size.toLong())
+        require(indexByteSize == indexUploadSnapshot.size.toLong())
+        require(uniformByteSize == uniformUploadSnapshot.size.toLong())
+        require(vertexContentHash == vertexUploadSnapshot.sha256Hex())
+        require(indexContentHash == indexUploadSnapshot.sha256Hex())
+        require(uniformContentHash == uniformUploadSnapshot.sha256Hex())
+        require(this.slices.isNotEmpty())
+        require(this.slices.map(GPUPreparedColorGlyphBufferSlice::commandIdValue).distinct().size ==
+            this.slices.size
+        )
+        require(this.slices.all { slice ->
+            slice.uniformOffsetBytes % uniformAlignmentBytes == 0L &&
+                Math.addExact(slice.vertexOffsetBytes, slice.vertexSizeBytes) <= vertexByteSize &&
+                Math.addExact(slice.indexOffsetBytes, slice.indexSizeBytes) <= indexByteSize &&
+                Math.addExact(slice.uniformOffsetBytes, slice.uniformSizeBytes) <= uniformByteSize
+        })
+    }
+
+    fun vertexBytesForUpload(): ByteArray = vertexUploadSnapshot.copyOf()
+    fun indexBytesForUpload(): ByteArray = indexUploadSnapshot.copyOf()
+    fun uniformBytesForUpload(): ByteArray = uniformUploadSnapshot.copyOf()
+
+    private fun bufferAllocation(label: String, byteSize: Long) = GPUFrameMemoryAllocation(
+        label = "prepared-color-glyph.$label." +
+            "${planArtifactKey.artifactID.value}.${planArtifactKey.generation.value}",
+        category = GPUFrameMemoryCategory.ReusableScratch,
+        bytes = byteSize,
+        resourceKind = GPUFrameMemoryResourceKind.Buffer,
+        extent = null,
+    )
+
+    private fun bufferPreparation(
+        resource: GPUFrameBufferRef,
+        role: GPUFrameResourceRole,
+        usage: GPUFrameResourceUsage,
+        byteSize: Long,
+        alignmentBytes: Long,
+        label: String,
+        contentHash: String,
+    ) = GPUResourcePreparationRequest(
+        resource = resource,
+        descriptor = GPUFrameBufferDescriptor(byteSize, alignmentBytes),
+        role = role,
+        usages = setOf(usage, GPUFrameResourceUsage.CopyDestination),
+        lifetime = GPUFrameResourceLifetime.FrameLocal,
+        byteSize = byteSize,
+        diagnosticLabel = "prepared-color-glyph.$label.$contentHash",
+    )
+}
+
 /** TextA8-only immutable facts duplicated into the Task 8/9 preflight seal. */
 class GPUPreparedTextCompositePreflightSeal internal constructor(
     deviceToLocal: GPUPreparedTextDeviceToLocalAffine,
@@ -306,6 +450,8 @@ class GPUPreparedTextRenderBinding(
     private val drawUniformBufferPlanOrNull: GPUPreparedTextDrawUniformBufferPlan? = null,
     private val drawUniformSliceOrNull: GPUPreparedTextDrawUniformSlice? = null,
     private val compositeProgramOrNull: GPUPreparedTextCompositeProgram? = null,
+    private val colorGlyphBufferPlanOrNull: GPUPreparedColorGlyphBufferPlan? = null,
+    private val colorGlyphBufferSliceOrNull: GPUPreparedColorGlyphBufferSlice? = null,
 ) {
     val materialSampledResourcePlans: List<GPUMaterialTextureFrameResourcePlan> =
         immutableList(materialSampledResourcePlans)
@@ -323,6 +469,16 @@ class GPUPreparedTextRenderBinding(
         get() = checkNotNull(compositeProgramOrNull) {
             "ColorGlyph binding has no TextA8 composite program before Task 11"
         }
+    val colorGlyphBufferPlan: GPUPreparedColorGlyphBufferPlan
+        get() = checkNotNull(colorGlyphBufferPlanOrNull) {
+            "TextA8 binding has no ColorGlyph native buffer plan"
+        }
+    val colorGlyphBufferSlice: GPUPreparedColorGlyphBufferSlice
+        get() = checkNotNull(colorGlyphBufferSliceOrNull) {
+            "TextA8 binding has no ColorGlyph native buffer slice"
+        }
+    internal val hasColorGlyphBufferPlan: Boolean
+        get() = colorGlyphBufferPlanOrNull != null
     internal val nativeProgram: GPUPreparedTextNativeProgramHandoff
         get() {
             val compositeSeal = checkNotNull(preflightSeal.textA8Composite) {
@@ -379,6 +535,19 @@ class GPUPreparedTextRenderBinding(
             require(slice.packetId == packetId)
             require(drawUniformBufferPlanOrNull.slices.single { it.packetId == packetId } == slice)
             require(preflightSeal.textA8Composite?.drawUniformSlice == slice)
+        }
+        require(
+            (colorGlyphBufferPlanOrNull == null) == (colorGlyphBufferSliceOrNull == null),
+        ) {
+            "Prepared ColorGlyph native buffer facts must be published atomically"
+        }
+        if (colorGlyphBufferPlanOrNull != null) {
+            val slice = requireNotNull(colorGlyphBufferSliceOrNull)
+            require(
+                colorGlyphBufferPlanOrNull.slices.single {
+                    it.commandIdValue == slice.commandIdValue
+                } == slice,
+            )
         }
     }
 }
@@ -907,6 +1076,17 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     return refused(assembly.code, assembly.message)
             }
         }
+        val colorGlyphBufferPlans = when (
+            val assembly = buildPreparedColorGlyphBufferPlans(
+                semantics = r8Semantics.filterIsInstance<GPUDrawSemanticPayload.ColorGlyph>(),
+                frameIdentity = request.baseTaskList.frameId.value.toString(),
+                capabilities = request.capabilities,
+            )
+        ) {
+            is PreparedColorGlyphBufferAssemblyResult.Prepared -> assembly.plansByArtifactKey
+            is PreparedColorGlyphBufferAssemblyResult.Refused ->
+                return refused(assembly.code, assembly.message)
+        }
         val textMaterialUniformAssembly = if (r8Semantics.isEmpty()) {
             null
         } else {
@@ -946,6 +1126,9 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             }
             textInstanceAssembly?.let { assembly ->
                 add(assembly.plan.memoryAllocation)
+            }
+            colorGlyphBufferPlans.values.forEach { plan ->
+                addAll(plan.memoryAllocations)
             }
             textMaterialUniformAssembly?.plan?.let { plan ->
                 add(plan.memoryAllocation)
@@ -1047,6 +1230,9 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 byteSize = assembly.plan.byteSize,
                 diagnosticLabel = "prepared-text.instances.${assembly.plan.contentHash}",
             )
+        }
+        colorGlyphBufferPlans.values.forEach { plan ->
+            preparations += plan.preparationRequests
         }
         textMaterialUniformAssembly?.plan?.let { plan ->
             preparations += GPUResourcePreparationRequest(
@@ -1267,6 +1453,39 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                             write = false,
                         ),
                     )
+                    run.mapNotNull { packet ->
+                        (packet.semanticPayload as? GPUDrawSemanticPayload.ColorGlyph)
+                            ?.planArtifactKey
+                    }.distinct().forEach { artifactKey ->
+                        val colorPlan = colorGlyphBufferPlans.getValue(artifactKey)
+                        add(
+                            GPUFrameResourceUse(
+                                colorPlan.vertexBufferRef,
+                                GPUFrameResourceRole.VertexData,
+                                GPUFrameResourceUsage.Vertex,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                        add(
+                            GPUFrameResourceUse(
+                                colorPlan.indexBufferRef,
+                                GPUFrameResourceRole.IndexData,
+                                GPUFrameResourceUsage.Index,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                        add(
+                            GPUFrameResourceUse(
+                                colorPlan.uniformBufferRef,
+                                GPUFrameResourceRole.UniformData,
+                                GPUFrameResourceUsage.Uniform,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
                     textDrawUniformAssembly?.plan
                         ?.takeIf {
                             run.any { packet ->
@@ -1384,6 +1603,13 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                     } else {
                         null
                     }
+                    val colorGlyphBufferPlan =
+                        (semantic as? GPUDrawSemanticPayload.ColorGlyph)?.let { color ->
+                            colorGlyphBufferPlans.getValue(color.planArtifactKey)
+                        }
+                    val colorGlyphBufferSlice = colorGlyphBufferPlan?.slices?.single {
+                        it.commandIdValue == packet.commandIdValue
+                    }
                     packet.packetId to GPUPreparedTextRenderBinding(
                         packetId = packet.packetId,
                         atlasResourcePlan = r8UploadByIdentity
@@ -1416,6 +1642,8 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                         drawUniformBufferPlanOrNull = drawUniformPlan,
                         drawUniformSliceOrNull = drawUniformSlice,
                         compositeProgramOrNull = compositeProgram,
+                        colorGlyphBufferPlanOrNull = colorGlyphBufferPlan,
+                        colorGlyphBufferSliceOrNull = colorGlyphBufferSlice,
                     )
                 }.toMap(),
             )
@@ -2015,6 +2243,133 @@ private fun taskGraphLimitRefusal(
 }
 
 private const val PREPARED_TEXT_INSTANCE_ALIGNMENT_BYTES = 16
+
+private sealed interface PreparedColorGlyphBufferAssemblyResult {
+    class Prepared(
+        val plansByArtifactKey: Map<GPUTextArtifactKey, GPUPreparedColorGlyphBufferPlan>,
+    ) : PreparedColorGlyphBufferAssemblyResult
+
+    data class Refused(
+        val code: String,
+        val message: String,
+    ) : PreparedColorGlyphBufferAssemblyResult
+}
+
+private fun buildPreparedColorGlyphBufferPlans(
+    semantics: List<GPUDrawSemanticPayload.ColorGlyph>,
+    frameIdentity: String,
+    capabilities: GPUCapabilities,
+): PreparedColorGlyphBufferAssemblyResult {
+    if (semantics.isEmpty()) {
+        return PreparedColorGlyphBufferAssemblyResult.Prepared(emptyMap())
+    }
+    val limits = capabilities.limits ?: return PreparedColorGlyphBufferAssemblyResult.Refused(
+        "unsupported.recording.prepared_color_glyph_buffer",
+        "Prepared ColorGlyph buffers require observed device limits.",
+    )
+    val alignment = limits.minUniformBufferOffsetAlignment
+    if (alignment <= 0L || alignment and (alignment - 1L) != 0L) {
+        return PreparedColorGlyphBufferAssemblyResult.Refused(
+            "unsupported.recording.prepared_color_glyph_buffer",
+            "Prepared ColorGlyph uniform alignment is invalid.",
+        )
+    }
+    return try {
+        val plans = linkedMapOf<GPUTextArtifactKey, GPUPreparedColorGlyphBufferPlan>()
+        semantics.groupByTo(linkedMapOf(), GPUDrawSemanticPayload.ColorGlyph::planArtifactKey)
+            .entries
+            .forEachIndexed { planIndex, (artifactKey, packets) ->
+                var vertexOffset = 0L
+                var indexOffset = 0L
+                var uniformEnd = 0L
+                val slices = packets.map { semantic ->
+                    val vertexBytes = Math.multiplyExact(
+                        semantic.vertexData.size.toLong(),
+                        Float.SIZE_BYTES.toLong(),
+                    )
+                    val indexBytes = Math.multiplyExact(
+                        semantic.indexData.size.toLong(),
+                        Int.SIZE_BYTES.toLong(),
+                    )
+                    val uniformBytes = semantic.uniformBytes.size.toLong()
+                    val uniformOffset = alignUpPreparedText(uniformEnd, alignment)
+                    GPUPreparedColorGlyphBufferSlice(
+                        commandIdValue = semantic.payloadRef.commandIdValue,
+                        vertexOffsetBytes = vertexOffset,
+                        vertexSizeBytes = vertexBytes,
+                        indexOffsetBytes = indexOffset,
+                        indexSizeBytes = indexBytes,
+                        uniformOffsetBytes = uniformOffset,
+                        uniformSizeBytes = uniformBytes,
+                        indexCount = semantic.indexData.size,
+                    ).also {
+                        vertexOffset = Math.addExact(vertexOffset, vertexBytes)
+                        indexOffset = Math.addExact(indexOffset, indexBytes)
+                        uniformEnd = Math.addExact(uniformOffset, uniformBytes)
+                    }
+                }
+                val sizes = listOf(vertexOffset, indexOffset, uniformEnd)
+                if (sizes.any { size ->
+                        size <= 0L ||
+                            size > Int.MAX_VALUE.toLong() ||
+                            limits.maxBufferSize?.let { size > it } == true
+                    }
+                ) {
+                    return PreparedColorGlyphBufferAssemblyResult.Refused(
+                        "unsupported.recording.prepared_color_glyph_buffer",
+                        "Prepared ColorGlyph buffer exceeds the observed allocation limit.",
+                    )
+                }
+                val vertexBytes = ByteArray(vertexOffset.toInt())
+                val indexBytes = ByteArray(indexOffset.toInt())
+                val uniformBytes = ByteArray(uniformEnd.toInt())
+                val vertexWriter = ByteBuffer.wrap(vertexBytes).order(ByteOrder.LITTLE_ENDIAN)
+                val indexWriter = ByteBuffer.wrap(indexBytes).order(ByteOrder.LITTLE_ENDIAN)
+                packets.zip(slices).forEach { (semantic, slice) ->
+                    vertexWriter.position(slice.vertexOffsetBytes.toInt())
+                    semantic.vertexData.forEach(vertexWriter::putFloat)
+                    indexWriter.position(slice.indexOffsetBytes.toInt())
+                    semantic.indexData.forEach(indexWriter::putInt)
+                    semantic.uniformBytes.forEachIndexed { index, value ->
+                        uniformBytes[Math.addExact(slice.uniformOffsetBytes.toInt(), index)] =
+                            value.toByte()
+                    }
+                }
+                val vertexHash = vertexBytes.sha256Hex()
+                val indexHash = indexBytes.sha256Hex()
+                val uniformHash = uniformBytes.sha256Hex()
+                plans[artifactKey] = GPUPreparedColorGlyphBufferPlan(
+                    planArtifactKey = artifactKey,
+                    vertexBufferRef = GPUFrameBufferRef(
+                        "buffer.prepared-color-glyph.vertices:$frameIdentity:$planIndex",
+                    ),
+                    indexBufferRef = GPUFrameBufferRef(
+                        "buffer.prepared-color-glyph.indices:$frameIdentity:$planIndex",
+                    ),
+                    uniformBufferRef = GPUFrameBufferRef(
+                        "buffer.prepared-color-glyph.uniforms:$frameIdentity:$planIndex",
+                    ),
+                    uniformAlignmentBytes = alignment,
+                    vertexByteSize = vertexOffset,
+                    indexByteSize = indexOffset,
+                    uniformByteSize = uniformEnd,
+                    vertexContentHash = vertexHash,
+                    indexContentHash = indexHash,
+                    uniformContentHash = uniformHash,
+                    slices = slices,
+                    vertexBytes = vertexBytes,
+                    indexBytes = indexBytes,
+                    uniformBytes = uniformBytes,
+                )
+            }
+        PreparedColorGlyphBufferAssemblyResult.Prepared(plans)
+    } catch (_: ArithmeticException) {
+        PreparedColorGlyphBufferAssemblyResult.Refused(
+            "unsupported.recording.prepared_color_glyph_buffer",
+            "Prepared ColorGlyph buffer planning overflowed.",
+        )
+    }
+}
 
 private data class PreparedTextInstanceRange(
     val firstInstance: Int,

@@ -7,6 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
@@ -57,6 +58,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
@@ -230,6 +232,73 @@ class GPUPreparedTextNativePreflightTest {
                     fixture.capabilities,
             ),
         )
+    }
+
+    @Test
+    fun `ColorGlyph without sealed boundary refuses before every side effect`() {
+        val fixture = preparedTextNativePreflightFixture(
+            colorGlyphCommandIds = setOf(0, 1),
+            coalescedColorGlyphScope = true,
+        )
+        val adapter = GPURuntimeResourceAdapter()
+        val provider = GPUConcreteResourceProvider(leaseFactory = adapter)
+        try {
+            val refused = assertIs<GPUFramePreflightResult.Refused>(
+                GPUFramePreflighter(
+                    context = fixture.context,
+                    capabilities = fixture.capabilities,
+                    resourceProvider = provider,
+                    completionProvider = PreparedTextFailingCompletionProvider,
+                    surfaceProvider = PreparedTextFailingSurfaceProvider,
+                    nativeBoundary = null,
+                ).preflight(fixture.framePlan),
+            )
+
+            assertEquals(
+                GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
+                refused.diagnostic.code.value,
+            )
+            assertTrue(provider.telemetry.dumpEvents.isEmpty())
+            assertEquals(0L, adapter.preparedNativeFramePayloadRegistrationCount)
+        } finally {
+            adapter.close()
+        }
+    }
+
+    @Test
+    fun `ColorGlyph resource generations come from each exact sealed artifact identity`() {
+        val fixture = preparedTextNativePreflightFixture(
+            colorGlyphCommandIds = setOf(0, 1),
+            colorGlyphPlanGenerations = mapOf(0 to 31, 1 to 47),
+        )
+        val colorBindings = fixture.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap { render -> render.preparedTextBindingsByPacketId.values }
+            .filter(GPUPreparedTextRenderBinding::hasColorGlyphBufferPlan)
+
+        val generations = preparedColorGlyphResourceGenerations(fixture.framePlan)
+
+        assertEquals(setOf(31L, 47L), colorBindings.map {
+            it.colorGlyphBufferPlan.resourceGeneration
+        }.toSet())
+        colorBindings.forEach { binding ->
+            val plan = binding.colorGlyphBufferPlan
+            listOf(
+                plan.vertexBufferRef,
+                plan.indexBufferRef,
+                plan.uniformBufferRef,
+            ).forEach { resource ->
+                assertEquals(plan.resourceGeneration, generations[resource])
+            }
+            assertEquals(
+                binding.preflightSeal.atlasGeneration,
+                generations[binding.atlasResourcePlan.frameTextureRef],
+            )
+            assertEquals(
+                binding.preflightSeal.atlasGeneration,
+                generations[binding.atlasResourcePlan.stagingRef],
+            )
+        }
     }
 
     @Test
@@ -1431,9 +1500,17 @@ internal class GPUPreparedTextNativeCreationProbe {
 
 internal fun capturedPreparedTextInputs(
     textInstanceCounts: List<Int> = listOf(64, 36),
+    colorGlyphCommandIds: Set<Int> = emptySet(),
+    coalescedColorGlyphScope: Boolean = false,
+    colorGlyphPremultipliedRgba: FloatArray = floatArrayOf(0.5f, 0f, 0f, 0.5f),
+    colorGlyphUseForeground: Boolean = false,
 ): CapturedPreparedSurfaceInputs {
     val fixture = preparedTextNativePreflightFixture(
         textInstanceCounts = textInstanceCounts,
+        colorGlyphCommandIds = colorGlyphCommandIds,
+        coalescedColorGlyphScope = coalescedColorGlyphScope,
+        colorGlyphPremultipliedRgba = colorGlyphPremultipliedRgba,
+        colorGlyphUseForeground = colorGlyphUseForeground,
     )
     val adapter = GPURuntimeResourceAdapter()
     val provider = GPUConcreteResourceProvider(leaseFactory = adapter)
@@ -2204,13 +2281,21 @@ private object PreparedTextFailingSurfaceProvider : GPUSurfaceOutputProvider {
 }
 
 internal data class PreparedTextNativePreflightFixture(
+    val taskList: GPUTaskList,
     val framePlan: GPUFramePlan,
     val capabilities: GPUCapabilities,
     val context: GPUFramePreflightContext,
 )
 
 internal fun preparedTextNativePreflightFixture(
+    commandIds: List<Int> = listOf(0, 1),
     includeColorGlyph: Boolean = false,
+    colorGlyphCommandIds: Set<Int> = emptySet(),
+    colorGlyphPlanGenerations: Map<Int, Int> = emptyMap(),
+    coalescedColorGlyphScope: Boolean = false,
+    colorGlyphPremultipliedRgba: FloatArray = floatArrayOf(0.5f, 0f, 0f, 0.5f),
+    colorGlyphUseForeground: Boolean = false,
+    colorGlyphPaletteIndex: Int = 0,
     textInstanceCounts: List<Int>? = null,
     targetFormat: GPUColorFormat = GPUColorFormat.RGBA8UnormSrgb,
     blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
@@ -2219,15 +2304,27 @@ internal fun preparedTextNativePreflightFixture(
     materialProgram:
         org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram =
         GPUPreparedTextPreflightFixture.baselineMaterialProgram(),
+    capabilitiesOverride: GPUCapabilities? = null,
+    deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(19),
+    readbackRequestId: GPUReadbackRequestID =
+        GPUReadbackRequestID("readback.prepared-text.native-preflight"),
     taskListBuilder: GPUPreparedSurfaceFrameTaskListBuilder =
         GPUPreparedSurfaceFrameTaskListBuilder(),
 ): PreparedTextNativePreflightFixture {
-    val capabilities = preparedTextPreflightCapabilities()
+    require(commandIds.isNotEmpty() && commandIds.distinct().size == commandIds.size)
+    val capabilities = capabilitiesOverride ?: preparedTextPreflightCapabilities()
     val frameId = GPUFrameID(109)
     val recordingId = GPURecordingID("recording.prepared-text.native-preflight")
     val target = GPUFrameTargetRef("target.prepared-text.native-preflight")
     val bounds = GPUPixelBounds(0, 0, 16, 16)
-    val commandIds = listOf(0, 1)
+    val exactColorGlyphCommandIds = if (colorGlyphCommandIds.isEmpty() &&
+        includeColorGlyph
+    ) {
+        setOf(commandIds.last())
+    } else {
+        colorGlyphCommandIds
+    }
+    require(exactColorGlyphCommandIds.all { it in commandIds })
     val packets = commandIds.map { commandId ->
         preparedTextPreflightPacket(
             commandId = commandId,
@@ -2235,16 +2332,23 @@ internal fun preparedTextNativePreflightFixture(
             blendMode = blendMode,
             blendState = blendState,
             blendPlan = blendPlan,
-            renderStepIdentity = if (includeColorGlyph && commandId == commandIds.last()) {
+            renderStepIdentity = if (commandId in exactColorGlyphCommandIds) {
                 COLOR_GLYPH_RENDER_STEP_IDENTITY
             } else {
                 "text.a8_mask.sample"
+            },
+            passId = if (coalescedColorGlyphScope &&
+                commandId in exactColorGlyphCommandIds
+            ) {
+                "pass.prepared-text.color-glyph.shared"
+            } else {
+                "pass.prepared-text.$commandId"
             },
         )
     }
     val capabilitySeal = GPUFrameCapabilitySeal.capture(
         frameId,
-        GPUDeviceGenerationID(19),
+        deviceGeneration,
         capabilities,
     )
     val page = GPUPreparedTextPreflightFixture.baselinePage0()
@@ -2261,7 +2365,17 @@ internal fun preparedTextNativePreflightFixture(
             ?: baselineInstances
         packet.commandIdValue to
             if (packet.renderStepId.value == COLOR_GLYPH_RENDER_STEP_IDENTITY) {
-                preparedColorGlyphSemantic(packet, atlas, bounds, capabilities)
+                preparedColorGlyphSemantic(
+                    packet,
+                    atlas,
+                    bounds,
+                    capabilities,
+                    colorGlyphPlanGenerations[packet.commandIdValue],
+                    colorGlyphPremultipliedRgba,
+                    colorGlyphUseForeground,
+                    colorGlyphPaletteIndex,
+                    materialProgram,
+                )
             } else {
                 GPUPreparedTextPayloadGatherer().gather(
                     GPUPreparedTextA8PayloadInput(
@@ -2329,7 +2443,13 @@ internal fun preparedTextNativePreflightFixture(
                 samplePlan = GPUSamplePlan.SingleSampleFrame,
                 provisionalSegmentKey =
                     GPUProvisionalRenderSegmentKey(
-                        "segment.prepared-text.${packet.commandIdValue}",
+                        if (coalescedColorGlyphScope &&
+                            packet.commandIdValue in exactColorGlyphCommandIds
+                        ) {
+                            "segment.prepared-text.color-glyph.shared"
+                        } else {
+                            "segment.prepared-text.${packet.commandIdValue}"
+                        },
                     ),
                 drawPackets = listOf(packet),
                 batchEligibilityByPacketId = mapOf(
@@ -2358,8 +2478,7 @@ internal fun preparedTextNativePreflightFixture(
             target = target,
             targetBounds = bounds,
             semanticsByCommandId = semantics,
-            readbackRequestId =
-                GPUReadbackRequestID("readback.prepared-text.native-preflight"),
+            readbackRequestId = readbackRequestId,
             targetFormat = targetFormat,
         ),
     )
@@ -2379,6 +2498,7 @@ internal fun preparedTextNativePreflightFixture(
             request.resource to if (request.resource == target) targetGeneration else atlas.generation
         }
     return PreparedTextNativePreflightFixture(
+        taskList = taskList,
         framePlan = GPUFramePlanner.plan(taskList),
         capabilities = capabilities,
         context = GPUFramePreflightContext(
@@ -2425,11 +2545,18 @@ private fun preparedColorGlyphSemantic(
     atlas: GPUPreparedR8UploadArtifact,
     bounds: GPUPixelBounds,
     capabilities: GPUCapabilities,
+    planGenerationValue: Int? = null,
+    premultipliedRgba: FloatArray = floatArrayOf(0.5f, 0f, 0f, 0.5f),
+    useForeground: Boolean = false,
+    paletteIndex: Int = 0,
+    materialProgram:
+        org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram =
+        GPUPreparedTextPreflightFixture.baselineMaterialProgram(),
 ): GPUDrawSemanticPayload.ColorGlyph {
     val generation = GPUTextArtifactGeneration(atlas.generation.toInt())
     val planKey = GPUTextArtifactKey(
         GPUTextArtifactID(Uuid.parse("550e8400-e29b-41d4-a716-446655440091")),
-        generation,
+        GPUTextArtifactGeneration(planGenerationValue ?: generation.value),
         "task9-color-plan",
     )
     val atlasKey = GPUTextArtifactKey(
@@ -2457,11 +2584,11 @@ private fun preparedColorGlyphSemantic(
                 GPUColorGlyphLayerPayloadInput(
                     planArtifactKey = planKey,
                     layerGlyphID = 21u,
-                    paletteIndex = 0,
+                    paletteIndex = paletteIndex,
                     atlasBounds = GPUPixelBounds(0, 0, 2, 2),
                     deviceBounds = GPUPixelBounds(1, 1, 5, 5),
-                    premultipliedRgba = floatArrayOf(0.5f, 0f, 0f, 0.5f),
-                    useForeground = false,
+                    premultipliedRgba = premultipliedRgba.copyOf(),
+                    useForeground = useForeground,
                     foregroundResolved = true,
                     placementProof = GPUColorGlyphAtlasPlacementProofInput(
                         atlasArtifactKey = atlasKey,
@@ -2474,7 +2601,7 @@ private fun preparedColorGlyphSemantic(
                     colorLayerIndex = 0,
                 ),
             ),
-            material = GPUPreparedTextPreflightFixture.baselineMaterialProgram(),
+            material = materialProgram,
             targetBounds = bounds,
             scissorBounds = bounds,
             clipIdentity = "clip:none",
@@ -2516,12 +2643,13 @@ internal fun preparedTextPreflightPacket(
     blendState: GPUFixedFunctionBlendState = preparedTextBlendState(blendMode),
     blendPlan: GPUBlendPlan? = null,
     renderStepIdentity: String = "text.a8_mask.sample",
+    passId: String = "pass.prepared-text.$commandId",
 ): GPUDrawPacket =
     GPUDrawPacket(
         packetId = GPUDrawPacketID("packet.prepared-text.$commandId"),
         commandIdValue = commandId,
         analysisRecordId = "analysis.prepared-text.$commandId",
-        passId = "pass.prepared-text.$commandId",
+        passId = passId,
         layerId = "root",
         bindingListId = "bindings.prepared-text.$commandId",
         insertionReasonCode = "prepared-text",

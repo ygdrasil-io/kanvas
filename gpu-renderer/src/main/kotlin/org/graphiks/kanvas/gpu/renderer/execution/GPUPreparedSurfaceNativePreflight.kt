@@ -1,6 +1,8 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
 import io.ygdrasil.webgpu.GPUTextureFormat
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.security.MessageDigest
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
@@ -667,7 +669,16 @@ internal class GPUPreparedSurfaceNativePreflight(
                     current.resourceGenerations[binding.atlasResourcePlan.frameTextureRef] !=
                         generation ||
                         current.resourceGenerations[binding.atlasResourcePlan.stagingRef] !=
-                        generation
+                        generation ||
+                        binding.hasColorGlyphBufferPlan &&
+                        listOf(
+                            binding.colorGlyphBufferPlan.vertexBufferRef,
+                            binding.colorGlyphBufferPlan.indexBufferRef,
+                            binding.colorGlyphBufferPlan.uniformBufferRef,
+                        ).any { resource ->
+                            current.resourceGenerations[resource] !=
+                                binding.colorGlyphBufferPlan.resourceGeneration
+                        }
                 }
             ) {
                 return refused(
@@ -758,6 +769,17 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "Prepared-text instance UVs must be finite, ordered, and inside their page.",
                 )
             }
+        }
+        textPackets.zip(bindings).firstOrNull { (evidence, binding) ->
+            val semantic = evidence.semantic as? GPUDrawSemanticPayload.ColorGlyph
+                ?: return@firstOrNull false
+            !binding.hasColorGlyphBufferPlan ||
+                !binding.matchesPreparedColorGlyphBufferPlan(semantic)
+        }?.let {
+            return refused(
+                GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                "ColorGlyph packet bytes and slices must match one exact sealed artifact buffer plan.",
+            )
         }
         if (bindings.any { binding ->
                 val seal = binding.preflightSeal
@@ -1045,12 +1067,31 @@ internal class GPUPreparedSurfaceNativePreflight(
                 )
             }
             if (limits.maxBufferSize?.let { max ->
-                    bindings.any { binding -> binding.instanceBufferPlan.byteSize > max }
+                    bindings.any { binding ->
+                        binding.instanceBufferPlan.byteSize > max ||
+                            binding.hasColorGlyphBufferPlan &&
+                            listOf(
+                                binding.colorGlyphBufferPlan.vertexByteSize,
+                                binding.colorGlyphBufferPlan.indexByteSize,
+                                binding.colorGlyphBufferPlan.uniformByteSize,
+                            ).any { size -> size > max }
+                    }
                 } == true
             ) {
                 return refused(
                     GPUPreparedTextPreflightRefusalCodes.INSTANCE_BUFFER_LIMIT,
                     "Prepared-text instance buffer exceeds the observed device limit.",
+                )
+            }
+            if (bindings.any { binding ->
+                    binding.hasColorGlyphBufferPlan &&
+                        binding.colorGlyphBufferPlan.uniformAlignmentBytes !=
+                        limits.minUniformBufferOffsetAlignment
+                }
+            ) {
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                    "ColorGlyph uniform slab alignment must match the observed device limit.",
                 )
             }
             if (r8Uploads.any { upload ->
@@ -1138,6 +1179,12 @@ internal class GPUPreparedSurfaceNativePreflight(
                 .forEach { plan ->
                     add(plan.memoryAllocation)
                 }
+            bindings.filter(GPUPreparedTextRenderBinding::hasColorGlyphBufferPlan)
+                .map(GPUPreparedTextRenderBinding::colorGlyphBufferPlan)
+                .distinctBy { plan -> plan.planArtifactKey }
+                .forEach { plan ->
+                    addAll(plan.memoryAllocations)
+                }
             bindings.mapNotNull(GPUPreparedTextRenderBinding::materialUniformBufferPlan)
                 .distinctBy { plan -> plan.bufferRef }
                 .forEach { plan ->
@@ -1154,6 +1201,7 @@ internal class GPUPreparedSurfaceNativePreflight(
             expectedTextAllocations.associateBy(GPUFrameMemoryAllocation::label)
         val actualTextAllocations = framePlan.memoryBudget.allocations.filter { allocation ->
             allocation.label.startsWith("prepared-text.") ||
+                allocation.label.startsWith("prepared-color-glyph.") ||
                 allocation.label.startsWith("prepared-r8.") ||
                 allocation.label.startsWith("prepared-material.")
         }
@@ -1210,6 +1258,13 @@ internal class GPUPreparedSurfaceNativePreflight(
         if (exactTexturePlanRequests.any { expected ->
                 targetPreparations[expected.resource]?.samePreparationAs(expected) != true
             } ||
+            bindings.filter(GPUPreparedTextRenderBinding::hasColorGlyphBufferPlan)
+                .map(GPUPreparedTextRenderBinding::colorGlyphBufferPlan)
+                .distinctBy { plan -> plan.planArtifactKey }
+                .flatMap { plan -> plan.preparationRequests }
+                .any { expected ->
+                    targetPreparations[expected.resource]?.samePreparationAs(expected) != true
+                } ||
             bindings.any { binding ->
                 !targetPreparations[binding.instanceBufferPlan.bufferRef]
                     .matchesPreparedTextBufferPlan(
@@ -1283,6 +1338,38 @@ internal class GPUPreparedSurfaceNativePreflight(
                                 plan.bufferRef,
                                 GPUFrameResourceRole.VertexData,
                                 GPUFrameResourceUsage.Vertex,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
+                runBindings.filter(GPUPreparedTextRenderBinding::hasColorGlyphBufferPlan)
+                    .map(GPUPreparedTextRenderBinding::colorGlyphBufferPlan)
+                    .distinctBy { plan -> plan.planArtifactKey }
+                    .forEach { plan ->
+                        add(
+                            GPUFrameResourceUse(
+                                plan.vertexBufferRef,
+                                GPUFrameResourceRole.VertexData,
+                                GPUFrameResourceUsage.Vertex,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                        add(
+                            GPUFrameResourceUse(
+                                plan.indexBufferRef,
+                                GPUFrameResourceRole.IndexData,
+                                GPUFrameResourceUsage.Index,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                        add(
+                            GPUFrameResourceUse(
+                                plan.uniformBufferRef,
+                                GPUFrameResourceRole.UniformData,
+                                GPUFrameResourceUsage.Uniform,
                                 GPUFrameResourceLifetime.FrameLocal,
                                 write = false,
                             ),
@@ -1363,6 +1450,33 @@ internal class GPUPreparedSurfaceNativePreflight(
                                 GPUFrameResourceUsage.Vertex,
                                 GPUFrameResourceUsage.CopyDestination,
                             ),
+                        ) ||
+                    binding.hasColorGlyphBufferPlan &&
+                    (
+                        !targetPreparations[binding.colorGlyphBufferPlan.vertexBufferRef]
+                            .matchesPreparedTextOwnership(
+                                GPUFrameResourceRole.VertexData,
+                                setOf(
+                                    GPUFrameResourceUsage.Vertex,
+                                    GPUFrameResourceUsage.CopyDestination,
+                                ),
+                            ) ||
+                            !targetPreparations[binding.colorGlyphBufferPlan.indexBufferRef]
+                                .matchesPreparedTextOwnership(
+                                    GPUFrameResourceRole.IndexData,
+                                    setOf(
+                                        GPUFrameResourceUsage.Index,
+                                        GPUFrameResourceUsage.CopyDestination,
+                                    ),
+                                ) ||
+                            !targetPreparations[binding.colorGlyphBufferPlan.uniformBufferRef]
+                                .matchesPreparedTextOwnership(
+                                    GPUFrameResourceRole.UniformData,
+                                    setOf(
+                                        GPUFrameResourceUsage.Uniform,
+                                        GPUFrameResourceUsage.CopyDestination,
+                                    ),
+                                )
                         ) ||
                     binding.materialUniformBufferPlan?.let { uniform ->
                         !targetPreparations[uniform.bufferRef]
@@ -1901,6 +2015,19 @@ internal class GPUPreparedSurfaceNativePreflight(
                         render.preparedTextBindingsByPacketId.getValue(packet.packetId)
                     }
                 }
+                val colorRenderRuns = colorRenders.map { (index, render) ->
+                    GPUPreparedColorGlyphScopeRunPlan(
+                        exactScopeKey = exactScopeKeys.single { key ->
+                            key.sourceStepIndex == index
+                        },
+                        packets = render.drawPackets.map { packet ->
+                            packet.semanticPayload as GPUDrawSemanticPayload.ColorGlyph
+                        },
+                        bindings = render.drawPackets.map { packet ->
+                            render.preparedTextBindingsByPacketId.getValue(packet.packetId)
+                        },
+                    )
+                }
                 val requiredAtlasPlans = colorBindings
                     .map(GPUPreparedTextRenderBinding::atlasResourcePlan)
                 val colorScopeIndices = buildSet {
@@ -1930,8 +2057,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                 GPUPreparedColorGlyphRenderRunPlan(
                     sourceScopeIndices =
                         colorScopeKeys.map(GPUPreparedNativeScopeKey::sourceStepIndex),
-                    packets = colorPackets,
-                    bindings = colorBindings,
+                    renderRuns = colorRenderRuns,
                     exactScopeKeys = colorScopeKeys,
                     atlasUploads = atlasUploads,
                 )
@@ -3041,6 +3167,43 @@ private fun GPUResourcePreparationRequest?.matchesPreparedTextBufferPlan(
         request.lifetime == GPUFrameResourceLifetime.FrameLocal
 }
 
+private fun GPUPreparedTextRenderBinding.matchesPreparedColorGlyphBufferPlan(
+    semantic: GPUDrawSemanticPayload.ColorGlyph,
+): Boolean {
+    val plan = colorGlyphBufferPlan
+    val slice = colorGlyphBufferSlice
+    if (plan.planArtifactKey != semantic.planArtifactKey ||
+        slice.commandIdValue != semantic.payloadRef.commandIdValue ||
+        slice.vertexSizeBytes != semantic.vertexData.size.toLong() * Float.SIZE_BYTES ||
+        slice.indexSizeBytes != semantic.indexData.size.toLong() * Int.SIZE_BYTES ||
+        slice.uniformSizeBytes != semantic.uniformBytes.size.toLong() ||
+        slice.indexCount != semantic.indexData.size
+    ) {
+        return false
+    }
+    val vertexBytes = ByteBuffer.wrap(plan.vertexBytesForUpload()).order(ByteOrder.LITTLE_ENDIAN)
+    val indexBytes = ByteBuffer.wrap(plan.indexBytesForUpload()).order(ByteOrder.LITTLE_ENDIAN)
+    if (semantic.vertexData.indices.any { index ->
+            val planned = vertexBytes.getFloat(
+                Math.addExact(slice.vertexOffsetBytes.toInt(), index * Float.SIZE_BYTES),
+            )
+            planned.toRawBits() != semantic.vertexData[index].toRawBits()
+        } ||
+        semantic.indexData.indices.any { index ->
+            indexBytes.getInt(
+                Math.addExact(slice.indexOffsetBytes.toInt(), index * Int.SIZE_BYTES),
+            ) != semantic.indexData[index]
+        }
+    ) {
+        return false
+    }
+    val uniformBytes = plan.uniformBytesForUpload()
+    return semantic.uniformBytes.indices.none { index ->
+        uniformBytes[Math.addExact(slice.uniformOffsetBytes.toInt(), index)] !=
+            semantic.uniformBytes[index].toByte()
+    }
+}
+
 private fun GPUFrameStep.UploadResourceStep.matchesPreparedTextTextureUpload(
     plan: org.graphiks.kanvas.gpu.renderer.resources.GPUTextureFrameResourcePlan,
 ): Boolean =
@@ -3056,6 +3219,11 @@ private fun GPUPreparedTextRenderBinding.preparedTextResourceRefs() = buildList 
     add(atlasResourcePlan.stagingRef)
     add(atlasResourcePlan.frameTextureRef)
     add(instanceBufferPlan.bufferRef)
+    if (hasColorGlyphBufferPlan) {
+        add(colorGlyphBufferPlan.vertexBufferRef)
+        add(colorGlyphBufferPlan.indexBufferRef)
+        add(colorGlyphBufferPlan.uniformBufferRef)
+    }
     if (hasTextA8Composite) add(drawUniformBufferPlan.bufferRef)
     materialUniformBufferPlan?.let { add(it.bufferRef) }
     materialSampledResourcePlans.forEach { resource ->

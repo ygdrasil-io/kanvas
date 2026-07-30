@@ -29,7 +29,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
     private val corePrimitiveCache: GPUWgpu4kCorePrimitiveSessionCache,
     private val preparedImageCache: GPUWgpu4kPreparedImageSessionCache,
     private val preparedTextCache: GPUWgpu4kPreparedTextSessionCache,
-    private val colorGlyphCache: GPUWgpu4kColorGlyphSessionCache? = null,
+    private val colorGlyphCache: GPUWgpu4kColorGlyphSessionCache,
     private val preparedImageHandleFactory: GPUPreparedImageNativeHandleFactory,
     private val preparedImageCapabilities: GPUCapabilities,
     private val surfaceBlitCache: GPUWgpu4kSurfaceBlitSessionCache,
@@ -98,6 +98,9 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
         val setupLedger = GPUPreRegistrationNativeHandleLedger()
         var coreMaterializer: GPUWgpu4kCorePrimitiveRenderRunMaterializer? = null
         return try {
+            val colorGlyphInvariants = accepted.colorGlyphPlan?.let {
+                colorGlyphCache.acquire()
+            }
             val (targetTexture, targetView) = preparedSceneTarget.borrow()
             val targetViewOperand = GPUPreparedNativeTextureViewOperand(
                 targetView,
@@ -256,7 +259,9 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     ).materializeAcceptedRun(
                         textPlan,
                         generationSeal.deviceGeneration,
-                        preparedR8Resources,
+                        requireNotNull(preparedR8Resources) {
+                            "Accepted prepared text requires shared R8 frame resources"
+                        },
                     )
                 ) {
                     is GPUPreparedRenderRunMaterialization.Ready -> result
@@ -331,9 +336,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     val result = GPUWgpu4kColorGlyphRenderRunMaterializer(
                         device,
                         queue,
-                        requireNotNull(colorGlyphCache) {
-                            "Prepared ColorGlyph requires the session invariant cache"
-                        },
+                        requireNotNull(colorGlyphInvariants),
                     ).materializeAcceptedRun(
                         colorPlan,
                         r8Resources,

@@ -99,7 +99,7 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
     fun materializeAcceptedRun(
         plan: GPUPreparedTextRenderRunPlan,
         actualDeviceGeneration: GPUDeviceGenerationID,
-        preparedR8Resources: GPUWgpu4kPreparedR8FrameResources? = null,
+        preparedR8Resources: GPUWgpu4kPreparedR8FrameResources,
     ): GPUPreparedRenderRunMaterialization {
         val acquisitions = when (
             val result = sessionCache.acquireBatch(
@@ -206,7 +206,7 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
             }
 
             val atlasNative = IdentityHashMap<GPUR8FrameResourcePlan, NativeTexture>()
-            preparedR8Resources?.texturesByPlan?.forEach { (resourcePlan, nativeTexture) ->
+            preparedR8Resources.texturesByPlan.forEach { (resourcePlan, nativeTexture) ->
                 atlasNative[resourcePlan] = nativeTexture
             }
             val materialNative = linkedMapOf<String, NativeTexture>()
@@ -214,36 +214,10 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
             plan.textureUploads.forEach { upload ->
                 when (upload) {
                     is GPUPreparedTextTextureUploadPlan.Atlas -> {
-                        if (preparedR8Resources != null) {
-                            require(atlasNative.containsKey(upload.resourcePlan)) {
-                                "Prepared-text R8 resources must cover every accepted atlas plan"
-                            }
-                            return@forEach
+                        require(atlasNative.containsKey(upload.resourcePlan)) {
+                            "Prepared-text R8 resources must cover every accepted atlas plan"
                         }
-                        val atlasPlan = upload.resourcePlan
-                        val texture = createTexture(
-                            width = atlasPlan.artifactWidth,
-                            height = atlasPlan.artifactHeight,
-                            format = GPUTextureFormat.R8Unorm,
-                            label = "Kanvas.frame.preparedText.text-atlas",
-                        ).track(created)
-                        val view = createView(
-                            texture,
-                            GPUTextureFormat.R8Unorm,
-                            "Kanvas.frame.preparedText.text-atlas-view",
-                        ).track(created)
-                        atlasNative[atlasPlan] = NativeTexture(texture, view)
-                        textureUploads += preparedTextTextureUpload(
-                            role = "text-atlas",
-                            scope = upload.exactScopeKey,
-                            bytes = atlasPlan.bytesForUpload(),
-                            width = atlasPlan.artifactWidth,
-                            height = atlasPlan.artifactHeight,
-                            bytesPerRow = atlasPlan.uploadTaskLayout.bytesPerRow,
-                            rowsPerImage = atlasPlan.uploadTaskLayout.rowsPerImage,
-                            texture = texture,
-                            generation = actualDeviceGeneration,
-                        )
+                        return@forEach
                     }
                     is GPUPreparedTextTextureUploadPlan.Material -> {
                         val resource = upload.resourcePlan

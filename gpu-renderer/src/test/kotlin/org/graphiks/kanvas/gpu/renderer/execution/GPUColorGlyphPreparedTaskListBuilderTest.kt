@@ -58,7 +58,7 @@ import kotlin.uuid.Uuid
 
 class GPUColorGlyphPreparedTaskListBuilderTest {
     @Test
-    fun `typed color glyph adapter has common R8 topology without legacy per glyph resources`() {
+    fun `typed color glyph adapter declares exact shared native buffers and common R8 topology`() {
         val semantic = semantic()
         val result = GPUColorGlyphPreparedTaskListBuilder().build(
             request(semantic = semantic, readbackRequestId = null),
@@ -80,6 +80,9 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
                 GPUFrameResourceRole.UploadStaging,
                 GPUFrameResourceRole.GlyphAtlas,
                 GPUFrameResourceRole.VertexData,
+                GPUFrameResourceRole.VertexData,
+                GPUFrameResourceRole.IndexData,
+                GPUFrameResourceRole.UniformData,
                 GPUFrameResourceRole.UniformData,
             ),
             prepare.requests.map { it.role },
@@ -104,6 +107,9 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
             listOf(
                 GPUFrameResourceRole.GlyphAtlas,
                 GPUFrameResourceRole.VertexData,
+                GPUFrameResourceRole.VertexData,
+                GPUFrameResourceRole.IndexData,
+                GPUFrameResourceRole.UniformData,
                 GPUFrameResourceRole.UniformData,
             ),
             render.resourceUses.map { it.role },
@@ -122,8 +128,8 @@ class GPUColorGlyphPreparedTaskListBuilderTest {
             taskList.dependencies.map { it.reasonCode }.toSet(),
         )
         assertEquals(8L, taskList.memoryBudget.targetResidentBytes)
-        assertEquals(0, prepare.requests.count { it.role == GPUFrameResourceRole.IndexData })
-        assertEquals(1, prepare.requests.count { it.role == GPUFrameResourceRole.UniformData })
+        assertEquals(1, prepare.requests.count { it.role == GPUFrameResourceRole.IndexData })
+        assertEquals(2, prepare.requests.count { it.role == GPUFrameResourceRole.UniformData })
     }
 
     @Test

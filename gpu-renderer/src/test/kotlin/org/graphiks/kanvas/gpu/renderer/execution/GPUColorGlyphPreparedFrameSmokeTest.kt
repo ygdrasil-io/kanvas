@@ -1,16 +1,22 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.font.atlas.AtlasRegion
 import org.graphiks.kanvas.font.atlas.GlyphAtlasPlacement
 import org.graphiks.kanvas.font.glyph.GlyphStrikeKey
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
@@ -18,6 +24,89 @@ import org.graphiks.kanvas.gpu.renderer.text.GlyphAtlasTexture
 import org.junit.jupiter.api.Assumptions.assumeTrue
 
 class GPUColorGlyphPreparedFrameSmokeTest {
+    @Test
+    fun `native mixed A8 and two COLRv0 packets preserve foreground palette and alpha once`() {
+        withBackend { backend ->
+            val requestId = GPUReadbackRequestID("readback.color-glyph.prepared.mixed")
+            val fixture = preparedTextNativePreflightFixture(
+                commandIds = listOf(0, 1, 2),
+                colorGlyphCommandIds = setOf(1, 2),
+                coalescedColorGlyphScope = true,
+                colorGlyphPremultipliedRgba = floatArrayOf(0.25f, 0.5f, 0.75f, 1f),
+                colorGlyphUseForeground = true,
+                colorGlyphPaletteIndex = 0xffff,
+                materialProgram =
+                    GPUPreparedTextPreflightFixture.baselineMaterialProgram(paintAlpha = 0.5f),
+                capabilitiesOverride = requireNotNull(backend.capabilities),
+                deviceGeneration = backend.deviceGeneration,
+                readbackRequestId = requestId,
+            )
+            val recordedSemantics = fixture.taskList.tasks
+                .filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets)
+                .mapNotNull { packet -> packet.semanticPayload }
+            assertEquals(
+                1,
+                recordedSemantics.filterIsInstance<GPUDrawSemanticPayload.TextA8>().size,
+            )
+            val colorSemantics =
+                recordedSemantics.filterIsInstance<GPUDrawSemanticPayload.ColorGlyph>()
+            assertEquals(2, colorSemantics.size)
+            assertTrue(fixture.framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .any { step ->
+                    step.drawPackets.count { packet ->
+                        packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+                    } == 2
+                }
+            )
+            colorSemantics.forEach { semantic ->
+                val layer = semantic.layers.single()
+                assertEquals(0xffff, layer.paletteIndex)
+                assertTrue(layer.useForeground)
+                assertTrue(layer.foregroundResolved)
+                assertEquals(0.5f, requireNotNull(semantic.material).paintAlpha)
+                val uniform = ByteBuffer.wrap(
+                    semantic.uniformBytes.map(Int::toByte).toByteArray(),
+                ).order(ByteOrder.LITTLE_ENDIAN)
+                assertEquals(0.125f, uniform.getFloat(16))
+                assertEquals(0.25f, uniform.getFloat(20))
+                assertEquals(0.375f, uniform.getFloat(24))
+                assertEquals(0.5f, uniform.getFloat(28))
+            }
+
+            val session = backend.prepareSceneFrameSession(
+                GPUOffscreenTargetRequest(
+                    16,
+                    16,
+                    GPUColorFormat.RGBA8UnormSrgb,
+                    GPUColorInterpretation.LinearPremul,
+                ),
+            )
+            try {
+                val terminal = session.renderFrame(
+                    fixture.taskList,
+                    GPUSceneFrameOutputRequest.ReadbackRgba(requestId),
+                ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
+
+                assertEquals(
+                    GPUFrameStructuralOutcome.Succeeded,
+                    terminal.outcome,
+                    "${terminal.diagnostic?.code?.value}: ${terminal.diagnostic?.message}",
+                )
+                val output = assertIs<GPUSceneFrameOutput.ReadbackRgba>(terminal.output)
+                assertEquals(16 * 16 * 4, output.bytes.size)
+                assertTrue(output.bytes.any { byte -> byte != 0.toByte() })
+                val counters = session.nativeCounters()
+                assertEquals(1L, counters.encoders)
+                assertEquals(1L, counters.submits)
+                assertEquals(1L, counters.readbackCopies)
+                assertEquals(1L, counters.nativePayloadRegistrations)
+            } finally {
+                session.close()
+            }
+        }
+    }
+
     @Test
     fun `prepared frame renders canonical two layer color glyph in one submit and readback`() {
         withBackend { backend ->
@@ -177,6 +266,13 @@ class GPUColorGlyphPreparedFrameSmokeTest {
 
     private inline fun withBackend(block: (GPUBackendSession) -> Unit) {
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
+        println(
+            if (backend == null) {
+                "task11.native-color-glyph available=false executed=0 skipped=1"
+            } else {
+                "task11.native-color-glyph available=true executed=1 skipped=0"
+            },
+        )
         assumeTrue(backend != null, "GPU backend unavailable in current environment")
         try {
             block(requireNotNull(backend))
