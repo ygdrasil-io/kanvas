@@ -17,11 +17,13 @@ import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflight
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightSeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -143,6 +145,40 @@ class GPUPreparedTextCompositePreflightTest {
             render.resourceUses.count { use ->
                 use.resource == binding.drawUniformBufferPlan.bufferRef
             },
+        )
+    }
+
+    @Test
+    fun `composite preflight consumes the exact plan owned draw uniform allocation`() {
+        val fixture = preparedTextNativePreflightFixture()
+        val binding = fixture.framePlan.textA8Bindings().first()
+        val renderIndex = fixture.framePlan.steps.indexOfFirst { step ->
+            step is GPUFrameStep.RenderPassStep &&
+                binding.packetId in step.preparedTextBindingsByPacketId
+        }
+        val semantic = fixture.framePlan.steps[renderIndex]
+            .let { it as GPUFrameStep.RenderPassStep }
+            .drawPackets
+            .single { packet -> packet.packetId == binding.packetId }
+            .semanticPayload as GPUDrawSemanticPayload.TextA8
+        binding.drawUniformBufferPlan.setPrivateField(
+            "memoryAllocation",
+            binding.drawUniformBufferPlan.memoryAllocation.copy(
+                label = "forged.plan-owned.draw-uniform-allocation",
+            ),
+        )
+
+        val refusal = GPUPreparedTextCompositePreflight.validate(
+            binding = binding,
+            semantic = semantic,
+            capabilities = fixture.capabilities,
+            framePlan = fixture.framePlan,
+            renderSourceStepIndex = renderIndex,
+        )
+
+        assertEquals(
+            GPUPreparedTextCompositePreflightRefusalCodes.BINDING_LAYOUT,
+            refusal?.code,
         )
     }
 

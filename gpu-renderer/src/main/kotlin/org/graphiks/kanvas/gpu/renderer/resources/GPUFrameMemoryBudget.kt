@@ -81,25 +81,19 @@ object GPUFrameMemoryBudgetPlanner {
         val exact = aggregateFacts(request.allocations)
 
         val diagnostic = when {
-            request.allocations.any { allocation -> allocation.exceeds(request.deviceLimits) } -> diagnostic(
-                code = "unsupported.frame_memory.device_limit_exceeded",
-                message = "Frame memory allocation exceeds maxTextureDimension2D.",
-                request = request,
-                aggregatePeak = exact.aggregatePeak,
+            request.allocations.any { allocation -> allocation.exceeds(request.deviceLimits) } ->
+                frameMemoryDiagnostic(
+                    code = "unsupported.frame_memory.device_limit_exceeded",
+                    message = "Frame memory allocation exceeds maxTextureDimension2D.",
+                    aggregatePeak = exact.aggregatePeak,
+                    configuredAggregateBudgetBytes =
+                        request.configuredAggregateBudgetBytes,
+                    maxTextureDimension2D = request.deviceLimits.maxTextureDimension2D,
+                )
+            else -> limitIndependentDiagnostic(
+                exact = exact,
+                configuredAggregateBudgetBytes = request.configuredAggregateBudgetBytes,
             )
-            exact.aggregatePeak > Long.MAX_VALUE.toBigInteger() -> diagnostic(
-                code = "unsupported.frame_memory.accounting_overflow",
-                message = "Frame memory accounting exceeds the signed 64-bit byte range.",
-                request = request,
-                aggregatePeak = exact.aggregatePeak,
-            )
-            exact.aggregatePeak > request.configuredAggregateBudgetBytes.toBigInteger() -> diagnostic(
-                code = "unsupported.frame_memory.aggregate_budget_exceeded",
-                message = "Frame aggregate memory exceeds the configured budget.",
-                request = request,
-                aggregatePeak = exact.aggregatePeak,
-            )
-            else -> null
         }
 
         return GPUFrameMemoryBudgetPlan(
@@ -116,26 +110,49 @@ object GPUFrameMemoryBudgetPlanner {
     /**
      * Authenticates allocation-derived facts that do not require an observed device limit.
      *
-     * Device-limit facts and diagnostics remain the responsibility of [plan] when limits exist.
+     * A device-limit diagnostic is accepted here only as conditional evidence. The complete
+     * planner comparison authenticates it when observed limits are available.
      */
     fun hasExactLimitIndependentFacts(plan: GPUFrameMemoryBudgetPlan): Boolean {
+        if (plan.configuredAggregateBudgetBytes <= 0L) {
+            return false
+        }
         val exact = aggregateFacts(plan.allocations)
-        val requiredDiagnosticCode = when {
-            exact.aggregatePeak > Long.MAX_VALUE.toBigInteger() ->
-                "unsupported.frame_memory.accounting_overflow"
-            exact.aggregatePeak > plan.configuredAggregateBudgetBytes.toBigInteger() ->
-                "unsupported.frame_memory.aggregate_budget_exceeded"
-            else -> null
+        val exactDiagnostic = limitIndependentDiagnostic(
+            exact = exact,
+            configuredAggregateBudgetBytes = plan.configuredAggregateBudgetBytes,
+        )
+        val diagnosticMatches = when (plan.diagnostic?.code?.value) {
+            "unsupported.frame_memory.device_limit_exceeded" -> true
+            else -> plan.diagnostic == exactDiagnostic
         }
         return plan.peakFrameTransientBytes == exact.peakTransient.clampedLong() &&
             plan.targetResidentBytes == exact.targetResident.clampedLong() &&
             plan.categoryTotals ==
             exact.categoryTotals.mapValues { (_, total) -> total.clampedLong() } &&
-            (
-                requiredDiagnosticCode == null ||
-                    plan.diagnostic?.code?.value == requiredDiagnosticCode
-                )
+            diagnosticMatches
     }
+}
+
+private fun limitIndependentDiagnostic(
+    exact: GPUFrameMemoryAggregateFacts,
+    configuredAggregateBudgetBytes: Long,
+): GPUDiagnostic? = when {
+    exact.aggregatePeak > Long.MAX_VALUE.toBigInteger() ->
+        frameMemoryDiagnostic(
+            code = "unsupported.frame_memory.accounting_overflow",
+            message = "Frame memory accounting exceeds the signed 64-bit byte range.",
+            aggregatePeak = exact.aggregatePeak,
+            configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
+        )
+    exact.aggregatePeak > configuredAggregateBudgetBytes.toBigInteger() ->
+        frameMemoryDiagnostic(
+            code = "unsupported.frame_memory.aggregate_budget_exceeded",
+            message = "Frame aggregate memory exceeds the configured budget.",
+            aggregatePeak = exact.aggregatePeak,
+            configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
+        )
+    else -> null
 }
 
 private data class GPUFrameMemoryAggregateFacts(
@@ -181,19 +198,22 @@ private fun GPUFrameMemoryAllocation.exceeds(limits: GPULimits): Boolean = when 
 
 private fun BigInteger.clampedLong(): Long = min(Long.MAX_VALUE.toBigInteger()).toLong()
 
-private fun diagnostic(
+private fun frameMemoryDiagnostic(
     code: String,
     message: String,
-    request: GPUFrameMemoryBudgetRequest,
     aggregatePeak: BigInteger,
+    configuredAggregateBudgetBytes: Long,
+    maxTextureDimension2D: Long? = null,
 ): GPUDiagnostic = GPUDiagnostic(
     code = GPUDiagnosticCode(code),
     domain = GPUDiagnosticDomain.Resources,
     severity = GPUDiagnosticSeverity.Error,
     message = message,
-    facts = mapOf(
-        "aggregatePeakBytes" to aggregatePeak.toString(),
-        "configuredAggregateBudgetBytes" to request.configuredAggregateBudgetBytes.toString(),
-        "maxTextureDimension2D" to request.deviceLimits.maxTextureDimension2D.toString(),
-    ),
+    facts = buildMap {
+        put("aggregatePeakBytes", aggregatePeak.toString())
+        put("configuredAggregateBudgetBytes", configuredAggregateBudgetBytes.toString())
+        maxTextureDimension2D?.let { limit ->
+            put("maxTextureDimension2D", limit.toString())
+        }
+    },
 )

@@ -9,8 +9,6 @@ import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialF
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
-import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
-import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
@@ -491,8 +489,6 @@ internal object GPUPreparedTextCompositePreflight {
         val descriptor = preparation?.descriptor as? GPUFrameBufferDescriptor
         val uses = render.resourceUses.filter { use -> use.resource == plan.bufferRef }
         val use = uses.singleOrNull()
-        val expectedRef =
-            "buffer.prepared-text.draw-uniforms:${framePlan.frameId.value}:${plan.contentHash}"
         val aliasedBufferRefs = buildList {
             add(binding.instanceBufferPlan.bufferRef)
             binding.materialUniformBufferPlan?.let { add(it.bufferRef) }
@@ -501,8 +497,7 @@ internal object GPUPreparedTextCompositePreflight {
                 add(resource.stagingRef)
             }
         }
-        if (plan.bufferRef.value != expectedRef ||
-            aliasedBufferRefs.any { alias -> alias == plan.bufferRef } ||
+        if (aliasedBufferRefs.any { alias -> alias == plan.bufferRef } ||
             descriptor?.byteSize != plan.byteSize ||
             descriptor.alignmentBytes != plan.alignmentBytes ||
             preparation.role != GPUFrameResourceRole.UniformData ||
@@ -543,19 +538,14 @@ internal object GPUPreparedTextCompositePreflight {
             .any { upload ->
                 upload.staging == plan.bufferRef || upload.destination == plan.bufferRef
             }
-        val allocationLabel = "prepared-text.draw-uniforms.${plan.contentHash}"
         val allocations = framePlan.memoryBudget.allocations.filter { allocation ->
-            allocation.label == allocationLabel
+            allocation == plan.memoryAllocation
         }
         if (prepareStep == null ||
             prepareStep.first >= renderSourceStepIndex ||
             dependencyCount != 1 ||
             aliasesUpload ||
-            allocations.size != 1 ||
-            allocations.single().category != GPUFrameMemoryCategory.ReusableScratch ||
-            allocations.single().bytes != plan.byteSize ||
-            allocations.single().resourceKind != GPUFrameMemoryResourceKind.Buffer ||
-            allocations.single().extent != null
+            allocations.size != 1
         ) {
             return bindingLayoutRefusal(
                 "Prepared TextA8 draw-uniform allocation and prepare-before-consumer topology changed.",

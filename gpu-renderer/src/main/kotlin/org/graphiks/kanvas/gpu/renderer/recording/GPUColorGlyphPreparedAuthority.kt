@@ -21,6 +21,12 @@ internal const val COLOR_GLYPH_VERTEX_SOURCE_LABEL = "color-glyph-indexed-quad"
 
 internal const val COLOR_GLYPH_TARGET_STATE_HASH = "target.rgba8unorm.single-sample"
 
+internal const val COLOR_GLYPH_PACKET_PASS_AUTHORITY_CODE =
+    "invalid.preflight.color_glyph_packet_authority"
+
+internal const val COLOR_GLYPH_PACKET_PASS_AUTHORITY_MESSAGE =
+    "ColorGlyph packet and pass state must match the exact prepared native route authority."
+
 internal fun preparedColorGlyphBlendPlan(): GPUBlendPlan.FixedFunctionBlend =
     GPUBlendPlan.FixedFunctionBlend(
         mode = GPUBlendMode.SRC_OVER,
@@ -53,6 +59,12 @@ internal fun preparedColorGlyphPacketAuthorityRefusal(
             message = "ColorGlyph uniform slot differs from its packet evidence.",
         )
     }
+    if (!semantic.hasCanonicalHashIntegrity()) {
+        return GPUPreparedColorGlyphPacketAuthorityRefusal(
+            code = "invalid.preflight.color_glyph_canonical_hash_mismatch",
+            message = "ColorGlyph canonical hash does not match its immutable payload fields.",
+        )
+    }
     if (packet.renderPipelineKey != COLOR_GLYPH_RENDER_PIPELINE_KEY ||
         packet.bindingLayoutHash != COLOR_GLYPH_BINDING_LAYOUT_HASH ||
         packet.vertexSourceLabel != COLOR_GLYPH_VERTEX_SOURCE_LABEL ||
@@ -60,9 +72,8 @@ internal fun preparedColorGlyphPacketAuthorityRefusal(
         packet.scissorBoundsHash != colorGlyphScissorAuthority(semantic.scissorBounds)
     ) {
         return GPUPreparedColorGlyphPacketAuthorityRefusal(
-            code = "invalid.preflight.color_glyph_packet_authority",
-            message =
-                "ColorGlyph packet and pass state must match the exact prepared native route authority.",
+            code = COLOR_GLYPH_PACKET_PASS_AUTHORITY_CODE,
+            message = COLOR_GLYPH_PACKET_PASS_AUTHORITY_MESSAGE,
         )
     }
     return null

@@ -1147,19 +1147,25 @@ internal class GPUPreparedSurfaceNativePreflight(
         }
         val actualTextAllocationsByLabel =
             actualTextAllocations.associateBy(GPUFrameMemoryAllocation::label)
-        val exactAggregateBudget = capabilities?.limits?.let { limits ->
-            GPUFrameMemoryBudgetPlanner.plan(
-                GPUFrameMemoryBudgetRequest(
-                    allocations = framePlan.memoryBudget.allocations,
-                    configuredAggregateBudgetBytes =
-                        framePlan.memoryBudget.configuredAggregateBudgetBytes,
-                    deviceLimits = limits,
-                ),
-            )
+        val configuredAggregateBudgetBytes =
+            framePlan.memoryBudget.configuredAggregateBudgetBytes
+        val exactAggregateBudget = if (configuredAggregateBudgetBytes > 0L) {
+            capabilities?.limits?.let { limits ->
+                GPUFrameMemoryBudgetPlanner.plan(
+                    GPUFrameMemoryBudgetRequest(
+                        allocations = framePlan.memoryBudget.allocations,
+                        configuredAggregateBudgetBytes = configuredAggregateBudgetBytes,
+                        deviceLimits = limits,
+                    ),
+                )
+            }
+        } else {
+            null
         }
         if (expectedTextAllocations.size != expectedTextAllocationsByLabel.size ||
             actualTextAllocations.size != actualTextAllocationsByLabel.size ||
             actualTextAllocationsByLabel != expectedTextAllocationsByLabel ||
+            configuredAggregateBudgetBytes <= 0L ||
             !GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(
                 framePlan.memoryBudget,
             ) ||

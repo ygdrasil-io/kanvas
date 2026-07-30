@@ -70,6 +70,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_RENDER_PIPELINE_KE
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_TARGET_STATE_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_VERTEX_SOURCE_LABEL
 import org.graphiks.kanvas.gpu.renderer.recording.colorGlyphScissorAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.preparedColorGlyphPacketAuthorityRefusal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskDependency
@@ -80,6 +81,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
@@ -403,6 +406,34 @@ class GPUPreparedTextNativePreflightTest {
             refused.diagnostic.code.value,
         )
         assertEquals(0, probe.totalCreations)
+    }
+
+    @Test
+    fun `prepared ColorGlyph canonical hash precedes remaining packet authority`() {
+        val fixture = preparedTextNativePreflightFixture(includeColorGlyph = true)
+        val packet = fixture.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap { step -> step.drawPackets }
+            .single { candidate ->
+                candidate.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+            }
+        val semantic = assertIs<GPUDrawSemanticPayload.ColorGlyph>(packet.semanticPayload)
+        val forgedSemantic = semantic.copyForPreparedTextIntegrityTest(
+            canonicalHash = "0".repeat(64),
+        )
+        val forgedPacket = packet.rebuilt(
+            renderPipelineKey = GPURenderPipelineKey("pipeline.forged"),
+            semanticPayload = forgedSemantic,
+        )
+
+        val refusal = requireNotNull(
+            preparedColorGlyphPacketAuthorityRefusal(forgedPacket, forgedSemantic),
+        )
+
+        assertEquals(
+            "invalid.preflight.color_glyph_canonical_hash_mismatch",
+            refusal.code,
+        )
     }
 
     @Test
@@ -1200,6 +1231,106 @@ class GPUPreparedTextNativePreflightTest {
 
                 assertEquals(GPUPreparedTextPreflightRefusalCodes.OPERAND, refused.code)
             }
+        }
+    }
+
+    @TestFactory
+    fun `complete preflight authenticates the full limit independent budget diagnostic`():
+        List<DynamicTest> {
+        data class Mutation(
+            val name: String,
+            val transform: (
+                original: GPUFrameMemoryBudgetPlan,
+                aggregateRefusal: GPUFrameMemoryBudgetPlan,
+            ) -> GPUFrameMemoryBudgetPlan,
+        )
+        val mutations = listOf(
+            Mutation("inserted false aggregate diagnostic") { original, aggregateRefusal ->
+                original.copy(diagnostic = requireNotNull(aggregateRefusal.diagnostic))
+            },
+            Mutation("altered aggregate diagnostic message") { _, aggregateRefusal ->
+                aggregateRefusal.copy(
+                    diagnostic = requireNotNull(aggregateRefusal.diagnostic).copy(
+                        message = "forged aggregate budget message",
+                    ),
+                )
+            },
+            Mutation("altered aggregate diagnostic facts") { _, aggregateRefusal ->
+                aggregateRefusal.copy(
+                    diagnostic = requireNotNull(aggregateRefusal.diagnostic).copy(
+                        facts = aggregateRefusal.diagnostic.facts +
+                            ("aggregatePeakBytes" to "1"),
+                    ),
+                )
+            },
+        )
+        return mutations.map { mutation ->
+            DynamicTest.dynamicTest(mutation.name) {
+                val inputs = capturedPreparedTextInputs()
+                val original = inputs.framePlan.memoryBudget
+                val aggregatePeak =
+                    original.targetResidentBytes + original.peakFrameTransientBytes
+                val aggregateRefusal = GPUFrameMemoryBudgetPlanner.plan(
+                    GPUFrameMemoryBudgetRequest(
+                        allocations = original.allocations,
+                        configuredAggregateBudgetBytes = aggregatePeak - 1L,
+                        deviceLimits = requireNotNull(
+                            preparedTextNativePreflightFixture().capabilities.limits,
+                        ),
+                    ),
+                )
+                val mutatedPlan = inputs.framePlan.rebuilt(
+                    steps = inputs.framePlan.steps,
+                    memoryBudget = mutation.transform(original, aggregateRefusal),
+                )
+
+                val refused = assertIs<GPUPreparedSurfaceNativePreflightResult.Refused>(
+                    GPUPreparedSurfaceNativePreflight().validate(
+                        mutatedPlan,
+                        inputs.encoderPlan,
+                        inputs.resources,
+                        inputs.shaderContract,
+                        inputs.generationSeal,
+                    ),
+                )
+
+                assertEquals(GPUPreparedTextPreflightRefusalCodes.OPERAND, refused.code)
+            }
+        }
+    }
+
+    @TestFactory
+    fun `non positive configured budgets refuse without throwing in pure and rich preflight`():
+        List<DynamicTest> = listOf(0L, -1L).map { configuredBudget ->
+        DynamicTest.dynamicTest("configured budget $configuredBudget") {
+            val fixture = preparedTextNativePreflightFixture()
+            val mutated = fixture.copy(
+                framePlan = fixture.framePlan.rebuilt(
+                    steps = fixture.framePlan.steps,
+                    memoryBudget = fixture.framePlan.memoryBudget.copy(
+                        configuredAggregateBudgetBytes = configuredBudget,
+                    ),
+                ),
+            )
+
+            val pureRefusal = assertIs<GPUPreparedSurfaceNativePreflightResult.Refused>(
+                GPUPreparedSurfaceNativePreflight().validateFramePlan(
+                    framePlan = mutated.framePlan,
+                    context = mutated.context,
+                    capabilities = mutated.capabilities,
+                ),
+            )
+            val probe = GPUPreparedTextNativeCreationProbe()
+            val richRefusal = assertIs<GPUFramePreflightResult.Refused>(
+                probe.preflight(mutated),
+            )
+
+            assertEquals(GPUPreparedTextPreflightRefusalCodes.OPERAND, pureRefusal.code)
+            assertEquals(
+                GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                richRefusal.diagnostic.code.value,
+            )
+            assertEquals(0, probe.totalCreations)
         }
     }
 
@@ -2352,6 +2483,29 @@ private fun preparedColorGlyphSemantic(
         ),
     )
 }
+
+private fun GPUDrawSemanticPayload.ColorGlyph.copyForPreparedTextIntegrityTest(
+    canonicalHash: String = this.canonicalHash,
+): GPUDrawSemanticPayload.ColorGlyph = GPUDrawSemanticPayload.ColorGlyph(
+    payloadRef = payloadRef,
+    planArtifactKey = planArtifactKey,
+    atlasArtifactKey = atlasArtifactKey,
+    atlas = atlas,
+    atlasFormat = atlasFormat,
+    layers = layers,
+    vertexData = vertexData,
+    indexData = indexData,
+    uniformBytes = uniformBytes,
+    targetBounds = targetBounds,
+    scissorBounds = scissorBounds,
+    instances = instances,
+    material = material,
+    clipIdentity = clipIdentity,
+    blendPlanIdentity = blendPlanIdentity,
+    capabilitySnapshotHash = capabilitySnapshotHash,
+    frameProvenance = frameProvenance,
+    canonicalHash = canonicalHash,
+)
 
 internal fun preparedTextPreflightPacket(
     commandId: Int,

@@ -63,6 +63,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlanner
+import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_PACKET_PASS_AUTHORITY_CODE
+import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_PACKET_PASS_AUTHORITY_MESSAGE
 import org.graphiks.kanvas.gpu.renderer.recording.preparedColorGlyphPacketAuthorityRefusal
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
@@ -4565,16 +4567,13 @@ internal class GPUFramePreflighter(
         preparedColorGlyphPacketAuthorityRefusal(packet, semantic)?.let { authority ->
             return refuse(authority.code, authority.message)
         }
-        if (!semantic.hasCanonicalHashIntegrity()) {
-            return refuse("invalid.preflight.color_glyph_canonical_hash_mismatch", "ColorGlyph canonical hash does not match its immutable payload fields.")
-        }
         if (render.loadStore.loadOp != "clear" ||
             render.loadStore.storePlan != GPUStorePlan.Store ||
             render.loadStore.clearColorLabel != "opaque-black"
         ) {
             return refuse(
-                "invalid.preflight.color_glyph_packet_authority",
-                "ColorGlyph packet and pass state must match the exact prepared native route authority.",
+                COLOR_GLYPH_PACKET_PASS_AUTHORITY_CODE,
+                COLOR_GLYPH_PACKET_PASS_AUTHORITY_MESSAGE,
             )
         }
         if (semantic.planArtifactKey.generation.value < 0 ||
