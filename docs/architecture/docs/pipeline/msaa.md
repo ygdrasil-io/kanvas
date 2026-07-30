@@ -41,6 +41,8 @@ resolve, et on en commence une nouvelle.
 
 ## Store vs Resolve
 
+![MSAA Store vs Resolve](images/msaa-store-resolve.svg)
+
 Chaque passe MSAA doit faire deux choses :
 
 - **Store** — conserver l'attachment multi-échantillonné pour la passe

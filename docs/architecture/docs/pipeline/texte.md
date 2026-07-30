@@ -20,6 +20,8 @@ flowchart TD
 
 ## A8 (Alpha-only)
 
+![Atlas de glyphes](images/text-atlas.svg)
+
 Les glyphes A8 sont rasterisés côté CPU en niveaux de gris, stockés dans
 un atlas de texture, puis uploadés. Le shader utilise la valeur alpha du
 glyphe comme masque pour la couleur de peinture.

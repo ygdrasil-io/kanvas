@@ -31,6 +31,8 @@ flowchart TD
 
 ## Formes de couverture
 
+![Types de couverture](images/coverage-types.svg)
+
 | Forme | Usage |
 |-------|-------|
 | `FullOrScissor` | Shapes pleines, clipping rectangulaire |

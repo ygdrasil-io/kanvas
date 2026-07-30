@@ -10,6 +10,8 @@ WebGPU interdit de lire et écrire la même texture dans une render pass
 
 ## Snapshots bornés
 
+![Processus de snapshot](images/snapshot-process.svg)
+
 ```mermaid
 flowchart LR
     DRAW["Zone du draw"] --> BOUNDS["Bornes transformées\n+ expansion AA/filtre"]
