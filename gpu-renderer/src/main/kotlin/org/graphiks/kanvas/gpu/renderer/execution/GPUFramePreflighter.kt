@@ -63,11 +63,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlanner
-import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_BINDING_LAYOUT_HASH
-import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_RENDER_PIPELINE_KEY
-import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_TARGET_STATE_HASH
-import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_VERTEX_SOURCE_LABEL
-import org.graphiks.kanvas.gpu.renderer.recording.colorGlyphScissorAuthority
+import org.graphiks.kanvas.gpu.renderer.recording.preparedColorGlyphPacketAuthorityRefusal
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_SHAPE_BINDING_LAYOUT_HASH
 import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_ANALYTIC_CLIP_BINDING_LAYOUT_HASH
@@ -4566,18 +4562,13 @@ internal class GPUFramePreflighter(
         if (semantic.payloadRef.commandIdValue != packet.commandIdValue) {
             return refuse("invalid.preflight.color_glyph_semantic_command_mismatch", "ColorGlyph command identity differs from its packet.")
         }
-        if (packet.uniformSlot != semantic.payloadRef.uniformSlot) {
-            return refuse("invalid.preflight.color_glyph_semantic_packet_slot_mismatch", "ColorGlyph uniform slot differs from its packet evidence.")
+        preparedColorGlyphPacketAuthorityRefusal(packet, semantic)?.let { authority ->
+            return refuse(authority.code, authority.message)
         }
         if (!semantic.hasCanonicalHashIntegrity()) {
             return refuse("invalid.preflight.color_glyph_canonical_hash_mismatch", "ColorGlyph canonical hash does not match its immutable payload fields.")
         }
-        if (packet.renderPipelineKey != COLOR_GLYPH_RENDER_PIPELINE_KEY ||
-            packet.bindingLayoutHash != COLOR_GLYPH_BINDING_LAYOUT_HASH ||
-            packet.vertexSourceLabel != COLOR_GLYPH_VERTEX_SOURCE_LABEL ||
-            packet.targetStateHash != COLOR_GLYPH_TARGET_STATE_HASH ||
-            packet.scissorBoundsHash != colorGlyphScissorAuthority(semantic.scissorBounds) ||
-            render.loadStore.loadOp != "clear" ||
+        if (render.loadStore.loadOp != "clear" ||
             render.loadStore.storePlan != GPUStorePlan.Store ||
             render.loadStore.clearColorLabel != "opaque-black"
         ) {

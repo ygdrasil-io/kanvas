@@ -65,6 +65,11 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameTaskLis
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingSeal
+import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_BINDING_LAYOUT_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_RENDER_PIPELINE_KEY
+import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_TARGET_STATE_HASH
+import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_VERTEX_SOURCE_LABEL
+import org.graphiks.kanvas.gpu.renderer.recording.colorGlyphScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskDependency
@@ -88,6 +93,52 @@ import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 class GPUPreparedTextNativePreflightTest {
+    @Test
+    fun `uniform slab ranges compare in place with strict bounds`() {
+        val slab = byteArrayOf(0x11, 0x22, 0x33, 0x44, 0x55)
+
+        assertEquals(
+            true,
+            slab.contentEqualsPreparedTextUniformRange(
+                offsetBytes = 1L,
+                endBytes = 4L,
+                expected = byteArrayOf(0x22, 0x33, 0x44),
+            ),
+        )
+        assertEquals(
+            false,
+            slab.contentEqualsPreparedTextUniformRange(
+                offsetBytes = 1L,
+                endBytes = 4L,
+                expected = byteArrayOf(0x22, 0x33, 0x45),
+            ),
+        )
+        assertEquals(
+            false,
+            slab.contentEqualsPreparedTextUniformRange(
+                offsetBytes = -1L,
+                endBytes = 2L,
+                expected = byteArrayOf(0x11, 0x22),
+            ),
+        )
+        assertEquals(
+            false,
+            slab.contentEqualsPreparedTextUniformRange(
+                offsetBytes = 4L,
+                endBytes = 6L,
+                expected = byteArrayOf(0x55, 0x66),
+            ),
+        )
+        assertEquals(
+            false,
+            slab.contentEqualsPreparedTextUniformRange(
+                offsetBytes = 4L,
+                endBytes = Long.MAX_VALUE,
+                expected = byteArrayOf(0x55),
+            ),
+        )
+    }
+
     @Test
     fun `recording reuses one composite across subruns and warm builds without preflight composition`() {
         val cache = GPUPreparedTextCompositeProgramCache(maximumEntries = 4)
@@ -297,6 +348,41 @@ class GPUPreparedTextNativePreflightTest {
                                         renderPipelineKey =
                                             GPURenderPipelineKey("pipeline.forged"),
                                     )
+                                } else {
+                                    packet
+                                }
+                            },
+                        )
+                    }
+                },
+            ),
+        )
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(
+            probe.preflight(mutated),
+        )
+
+        assertEquals(
+            GPUPreparedTextPreflightRefusalCodes.OPERAND,
+            refused.diagnostic.code.value,
+        )
+        assertEquals(0, probe.totalCreations)
+    }
+
+    @Test
+    fun `prepared ColorGlyph uniform slot substitution uses the shared packet authority`() {
+        val fixture = preparedTextNativePreflightFixture(includeColorGlyph = true)
+        val mutated = fixture.copy(
+            framePlan = fixture.framePlan.rebuilt(
+                steps = fixture.framePlan.steps.map { step ->
+                    if (step !is GPUFrameStep.RenderPassStep) {
+                        step
+                    } else {
+                        step.rebuilt(
+                            drawPackets = step.drawPackets.map { packet ->
+                                if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph) {
+                                    packet.rebuilt(uniformSlot = null)
                                 } else {
                                     packet
                                 }
@@ -1059,6 +1145,64 @@ class GPUPreparedTextNativePreflightTest {
         }
     }
 
+    @TestFactory
+    fun `complete preflight authenticates limit independent budget totals without capabilities`():
+        List<DynamicTest> {
+        data class Mutation(
+            val name: String,
+            val transform: (GPUFrameMemoryBudgetPlan) -> GPUFrameMemoryBudgetPlan,
+        )
+        val mutations = listOf(
+            Mutation("category total") { budget ->
+                budget.copy(
+                    categoryTotals = budget.categoryTotals +
+                        (
+                            GPUFrameMemoryCategory.ReusableScratch to
+                                (
+                                    budget.categoryTotals.getValue(
+                                        GPUFrameMemoryCategory.ReusableScratch,
+                                    ) + 1L
+                                    )
+                            ),
+                    diagnostic = null,
+                )
+            },
+            Mutation("target resident total") { budget ->
+                budget.copy(
+                    targetResidentBytes = budget.targetResidentBytes - 1L,
+                    diagnostic = null,
+                )
+            },
+            Mutation("transient peak") { budget ->
+                budget.copy(
+                    peakFrameTransientBytes = budget.peakFrameTransientBytes - 1L,
+                    diagnostic = null,
+                )
+            },
+        )
+        return mutations.map { mutation ->
+            DynamicTest.dynamicTest(mutation.name) {
+                val inputs = capturedPreparedTextInputs()
+                val mutatedPlan = inputs.framePlan.rebuilt(
+                    steps = inputs.framePlan.steps,
+                    memoryBudget = mutation.transform(inputs.framePlan.memoryBudget),
+                )
+
+                val refused = assertIs<GPUPreparedSurfaceNativePreflightResult.Refused>(
+                    GPUPreparedSurfaceNativePreflight().validate(
+                        mutatedPlan,
+                        inputs.encoderPlan,
+                        inputs.resources,
+                        inputs.shaderContract,
+                        inputs.generationSeal,
+                    ),
+                )
+
+                assertEquals(GPUPreparedTextPreflightRefusalCodes.OPERAND, refused.code)
+            }
+        }
+    }
+
     @Test
     fun `overflowing sealed instance range refuses before native creation`() {
         val fixture = preparedTextNativePreflightFixture()
@@ -1778,6 +1922,9 @@ private fun GPUDrawPacket.rebuilt(
     renderStepId: GPURenderStepID = this.renderStepId,
     renderPipelineKey: GPURenderPipelineKey? = this.renderPipelineKey,
     bindingLayoutHash: String = this.bindingLayoutHash,
+    uniformSlot:
+        org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot? =
+        this.uniformSlot,
     semanticPayload: GPUDrawSemanticPayload? = this.semanticPayload,
     vertexSourceLabel: String = this.vertexSourceLabel,
     scissorBoundsHash: String? = this.scissorBoundsHash,
@@ -1968,51 +2115,6 @@ internal fun preparedTextNativePreflightFixture(
         GPUDeviceGenerationID(19),
         capabilities,
     )
-    val base = GPUTaskList(
-        frameId = frameId,
-        capabilitySeal = capabilitySeal,
-        recordingSeals = listOf(
-            GPURecordingSeal(
-                recordingId,
-                0,
-                "compat:prepared-text",
-                "replay:prepared-text",
-                capabilitySeal.sealHash,
-            ),
-        ),
-        expectedReplayKeyHash = "replay:prepared-text",
-        tasks = packets.map { packet ->
-            GPUTask.Render(
-                taskId = GPUTaskID("task.base.prepared-text.${packet.commandIdValue}"),
-                recordingId = recordingId,
-                phase = GPUTaskPhase.Render,
-                target = target,
-                loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
-                samplePlan = GPUSamplePlan.SingleSampleFrame,
-                provisionalSegmentKey =
-                    GPUProvisionalRenderSegmentKey(
-                        "segment.prepared-text.${packet.commandIdValue}",
-                    ),
-                drawPackets = listOf(packet),
-                batchEligibilityByPacketId = mapOf(
-                    packet.packetId to GPUPassBatchEligibility(
-                        kind = GPUPassBatchKind.Isolated,
-                        queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
-                    ),
-                ),
-            )
-        },
-        dependencies = emptyList(),
-        phaseOrder = GPUTaskPhase.entries,
-        memoryBudget = GPUFrameMemoryBudgetPlan(
-            peakFrameTransientBytes = 0,
-            targetResidentBytes = 0,
-            categoryTotals = GPUFrameMemoryCategory.entries.associateWith { 0L },
-            deviceLimitFacts = emptyList(),
-            configuredAggregateBudgetBytes = 1,
-            diagnostic = null,
-        ),
-    )
     val page = GPUPreparedTextPreflightFixture.baselinePage0()
     val atlas = page.toPreparedR8UploadArtifact()
     val semantics = packets.associate { packet ->
@@ -2057,6 +2159,66 @@ internal fun preparedTextNativePreflightFixture(
                 )
             }
     }
+    val recordingPackets = packets.map { packet ->
+        val semantic = semantics.getValue(packet.commandIdValue)
+        if (semantic is GPUDrawSemanticPayload.ColorGlyph) {
+            packet.rebuilt(
+                renderPipelineKey = COLOR_GLYPH_RENDER_PIPELINE_KEY,
+                bindingLayoutHash = COLOR_GLYPH_BINDING_LAYOUT_HASH,
+                uniformSlot = semantic.payloadRef.uniformSlot,
+                vertexSourceLabel = COLOR_GLYPH_VERTEX_SOURCE_LABEL,
+                scissorBoundsHash = colorGlyphScissorAuthority(semantic.scissorBounds),
+                targetStateHash = COLOR_GLYPH_TARGET_STATE_HASH,
+            )
+        } else {
+            packet
+        }
+    }
+    val base = GPUTaskList(
+        frameId = frameId,
+        capabilitySeal = capabilitySeal,
+        recordingSeals = listOf(
+            GPURecordingSeal(
+                recordingId,
+                0,
+                "compat:prepared-text",
+                "replay:prepared-text",
+                capabilitySeal.sealHash,
+            ),
+        ),
+        expectedReplayKeyHash = "replay:prepared-text",
+        tasks = recordingPackets.map { packet ->
+            GPUTask.Render(
+                taskId = GPUTaskID("task.base.prepared-text.${packet.commandIdValue}"),
+                recordingId = recordingId,
+                phase = GPUTaskPhase.Render,
+                target = target,
+                loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+                samplePlan = GPUSamplePlan.SingleSampleFrame,
+                provisionalSegmentKey =
+                    GPUProvisionalRenderSegmentKey(
+                        "segment.prepared-text.${packet.commandIdValue}",
+                    ),
+                drawPackets = listOf(packet),
+                batchEligibilityByPacketId = mapOf(
+                    packet.packetId to GPUPassBatchEligibility(
+                        kind = GPUPassBatchKind.Isolated,
+                        queueGuard = GPUPassBatchQueueGuard(emptyList(), emptyList()),
+                    ),
+                ),
+            )
+        },
+        dependencies = emptyList(),
+        phaseOrder = GPUTaskPhase.entries,
+        memoryBudget = GPUFrameMemoryBudgetPlan(
+            peakFrameTransientBytes = 0,
+            targetResidentBytes = 0,
+            categoryTotals = GPUFrameMemoryCategory.entries.associateWith { 0L },
+            deviceLimitFacts = emptyList(),
+            configuredAggregateBudgetBytes = 1,
+            diagnostic = null,
+        ),
+    )
     val result = taskListBuilder.build(
         GPUPreparedSurfaceFrameRequest(
             baseTaskList = base,

@@ -7,6 +7,9 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
 
 data class GPUPreparedTextDrawUniformSlice(
     val packetId: GPUDrawPacketID,
@@ -31,6 +34,13 @@ class GPUPreparedTextDrawUniformBufferPlan(
     uploadBytes: ByteArray,
 ) {
     private val uploadSnapshot = uploadBytes.copyOf()
+    val memoryAllocation = GPUFrameMemoryAllocation(
+        label = "prepared-text.draw-uniforms.$contentHash",
+        category = GPUFrameMemoryCategory.ReusableScratch,
+        bytes = byteSize,
+        resourceKind = GPUFrameMemoryResourceKind.Buffer,
+        extent = null,
+    )
     val slices: List<GPUPreparedTextDrawUniformSlice> =
         immutableList(slices.map(GPUPreparedTextDrawUniformSlice::copy))
 

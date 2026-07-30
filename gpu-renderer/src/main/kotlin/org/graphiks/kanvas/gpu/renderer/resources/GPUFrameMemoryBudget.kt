@@ -78,54 +78,96 @@ data class GPUFrameMemoryBudgetPlan(
 /** Pure checked planner for complete per-frame memory accounting. */
 object GPUFrameMemoryBudgetPlanner {
     fun plan(request: GPUFrameMemoryBudgetRequest): GPUFrameMemoryBudgetPlan {
-        val exactCategoryTotals = GPUFrameMemoryCategory.entries.associateWith { category ->
-            request.allocations
-                .asSequence()
-                .filter { allocation -> allocation.category == category }
-                .fold(BigInteger.ZERO) { total, allocation -> total + allocation.bytes.toBigInteger() }
-        }
-        val exactTargetResident = exactCategoryTotals
-            .filterKeys(GPUFrameMemoryCategory::targetResident)
-            .values
-            .fold(BigInteger.ZERO, BigInteger::add)
-        val exactPeakTransient = exactCategoryTotals
-            .filterKeys { category -> !category.targetResident }
-            .values
-            .fold(BigInteger.ZERO, BigInteger::add)
-        val exactAggregatePeak = exactTargetResident + exactPeakTransient
+        val exact = aggregateFacts(request.allocations)
 
         val diagnostic = when {
             request.allocations.any { allocation -> allocation.exceeds(request.deviceLimits) } -> diagnostic(
                 code = "unsupported.frame_memory.device_limit_exceeded",
                 message = "Frame memory allocation exceeds maxTextureDimension2D.",
                 request = request,
-                aggregatePeak = exactAggregatePeak,
+                aggregatePeak = exact.aggregatePeak,
             )
-            exactAggregatePeak > Long.MAX_VALUE.toBigInteger() -> diagnostic(
+            exact.aggregatePeak > Long.MAX_VALUE.toBigInteger() -> diagnostic(
                 code = "unsupported.frame_memory.accounting_overflow",
                 message = "Frame memory accounting exceeds the signed 64-bit byte range.",
                 request = request,
-                aggregatePeak = exactAggregatePeak,
+                aggregatePeak = exact.aggregatePeak,
             )
-            exactAggregatePeak > request.configuredAggregateBudgetBytes.toBigInteger() -> diagnostic(
+            exact.aggregatePeak > request.configuredAggregateBudgetBytes.toBigInteger() -> diagnostic(
                 code = "unsupported.frame_memory.aggregate_budget_exceeded",
                 message = "Frame aggregate memory exceeds the configured budget.",
                 request = request,
-                aggregatePeak = exactAggregatePeak,
+                aggregatePeak = exact.aggregatePeak,
             )
             else -> null
         }
 
         return GPUFrameMemoryBudgetPlan(
-            peakFrameTransientBytes = exactPeakTransient.clampedLong(),
-            targetResidentBytes = exactTargetResident.clampedLong(),
-            categoryTotals = exactCategoryTotals.mapValues { (_, total) -> total.clampedLong() },
+            peakFrameTransientBytes = exact.peakTransient.clampedLong(),
+            targetResidentBytes = exact.targetResident.clampedLong(),
+            categoryTotals = exact.categoryTotals.mapValues { (_, total) -> total.clampedLong() },
             deviceLimitFacts = request.deviceLimits.capabilityFacts("frame-memory-budget"),
             configuredAggregateBudgetBytes = request.configuredAggregateBudgetBytes,
             diagnostic = diagnostic,
             allocations = request.allocations.toList(),
         )
     }
+
+    /**
+     * Authenticates allocation-derived facts that do not require an observed device limit.
+     *
+     * Device-limit facts and diagnostics remain the responsibility of [plan] when limits exist.
+     */
+    fun hasExactLimitIndependentFacts(plan: GPUFrameMemoryBudgetPlan): Boolean {
+        val exact = aggregateFacts(plan.allocations)
+        val requiredDiagnosticCode = when {
+            exact.aggregatePeak > Long.MAX_VALUE.toBigInteger() ->
+                "unsupported.frame_memory.accounting_overflow"
+            exact.aggregatePeak > plan.configuredAggregateBudgetBytes.toBigInteger() ->
+                "unsupported.frame_memory.aggregate_budget_exceeded"
+            else -> null
+        }
+        return plan.peakFrameTransientBytes == exact.peakTransient.clampedLong() &&
+            plan.targetResidentBytes == exact.targetResident.clampedLong() &&
+            plan.categoryTotals ==
+            exact.categoryTotals.mapValues { (_, total) -> total.clampedLong() } &&
+            (
+                requiredDiagnosticCode == null ||
+                    plan.diagnostic?.code?.value == requiredDiagnosticCode
+                )
+    }
+}
+
+private data class GPUFrameMemoryAggregateFacts(
+    val categoryTotals: Map<GPUFrameMemoryCategory, BigInteger>,
+    val targetResident: BigInteger,
+    val peakTransient: BigInteger,
+) {
+    val aggregatePeak: BigInteger = targetResident + peakTransient
+}
+
+private fun aggregateFacts(
+    allocations: List<GPUFrameMemoryAllocation>,
+): GPUFrameMemoryAggregateFacts {
+    val categoryTotals = GPUFrameMemoryCategory.entries.associateWith { category ->
+        allocations
+            .asSequence()
+            .filter { allocation -> allocation.category == category }
+            .fold(BigInteger.ZERO) { total, allocation ->
+                total + allocation.bytes.toBigInteger()
+            }
+    }
+    return GPUFrameMemoryAggregateFacts(
+        categoryTotals = categoryTotals,
+        targetResident = categoryTotals
+            .filterKeys(GPUFrameMemoryCategory::targetResident)
+            .values
+            .fold(BigInteger.ZERO, BigInteger::add),
+        peakTransient = categoryTotals
+            .filterKeys { category -> !category.targetResident }
+            .values
+            .fold(BigInteger.ZERO, BigInteger::add),
+    )
 }
 
 private fun GPUFrameMemoryAllocation.exceeds(limits: GPULimits): Boolean = when (resourceKind) {

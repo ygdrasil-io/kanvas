@@ -10,6 +10,26 @@ import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 
 private const val WEBGPU_TEXTURE_COPY_BYTES_PER_ROW_ALIGNMENT = 256L
 
+/** Complete immutable identity shared by R8 recording, resource plans, and preflight. */
+internal data class GPUR8ArtifactIdentity(
+    val key: String,
+    val generation: Long,
+    val contentHash: String,
+    val width: Int,
+    val height: Int,
+    val rowBytes: Int,
+)
+
+internal val GPUPreparedR8UploadArtifact.r8ArtifactIdentity: GPUR8ArtifactIdentity
+    get() = GPUR8ArtifactIdentity(
+        key = key,
+        generation = generation,
+        contentHash = contentHash,
+        width = width,
+        height = height,
+        rowBytes = rowBytes,
+    )
+
 /** Immutable handle-free staging and texture plan for one R8 artifact. */
 class GPUR8FrameResourcePlan private constructor(
     override val stagingRef: GPUFrameBufferRef,
@@ -38,6 +58,16 @@ class GPUR8FrameResourcePlan private constructor(
     }
 
     override fun bytesForUpload(): ByteArray = uploadSnapshot.copyOf()
+
+    internal val r8ArtifactIdentity: GPUR8ArtifactIdentity
+        get() = GPUR8ArtifactIdentity(
+            key = artifactKey,
+            generation = artifactGeneration,
+            contentHash = artifactContentHash,
+            width = artifactWidth,
+            height = artifactHeight,
+            rowBytes = artifactRowBytes,
+        )
 
     internal companion object {
         fun create(

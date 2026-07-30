@@ -3,7 +3,9 @@ package org.graphiks.kanvas.gpu.renderer.recording
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
@@ -34,3 +36,34 @@ internal fun preparedColorGlyphBlendPlan(): GPUBlendPlan.FixedFunctionBlend =
 /** Dump-safe exact encoding shared by recording, preflight, and native materialization. */
 internal fun colorGlyphScissorAuthority(bounds: GPUPixelBounds): String =
     "scissor-${bounds.left}-${bounds.top}-${bounds.right}-${bounds.bottom}"
+
+internal data class GPUPreparedColorGlyphPacketAuthorityRefusal(
+    val code: String,
+    val message: String,
+)
+
+/** Canonical ColorGlyph packet authority shared by recording and preflight. */
+internal fun preparedColorGlyphPacketAuthorityRefusal(
+    packet: GPUDrawPacket,
+    semantic: GPUDrawSemanticPayload.ColorGlyph,
+): GPUPreparedColorGlyphPacketAuthorityRefusal? {
+    if (packet.uniformSlot != semantic.payloadRef.uniformSlot) {
+        return GPUPreparedColorGlyphPacketAuthorityRefusal(
+            code = "invalid.preflight.color_glyph_semantic_packet_slot_mismatch",
+            message = "ColorGlyph uniform slot differs from its packet evidence.",
+        )
+    }
+    if (packet.renderPipelineKey != COLOR_GLYPH_RENDER_PIPELINE_KEY ||
+        packet.bindingLayoutHash != COLOR_GLYPH_BINDING_LAYOUT_HASH ||
+        packet.vertexSourceLabel != COLOR_GLYPH_VERTEX_SOURCE_LABEL ||
+        packet.targetStateHash != COLOR_GLYPH_TARGET_STATE_HASH ||
+        packet.scissorBoundsHash != colorGlyphScissorAuthority(semantic.scissorBounds)
+    ) {
+        return GPUPreparedColorGlyphPacketAuthorityRefusal(
+            code = "invalid.preflight.color_glyph_packet_authority",
+            message =
+                "ColorGlyph packet and pass state must match the exact prepared native route authority.",
+        )
+    }
+    return null
+}

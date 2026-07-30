@@ -13,6 +13,8 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.TestFactory
 import org.graphiks.kanvas.glyph.gpu.GPUTextA8Instance
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactID
@@ -96,6 +98,89 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import kotlin.uuid.Uuid
 
 class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
+    @TestFactory
+    fun `ColorGlyph packet facts are canonical before prepared surface recording`():
+        List<DynamicTest> {
+        data class Mutation(
+            val name: String,
+            val expectedCode: String,
+            val transform: (GPUDrawPacket) -> GPUDrawPacket,
+        )
+        val mutations = listOf(
+            Mutation(
+                "pipeline",
+                "invalid.preflight.color_glyph_packet_authority",
+            ) { packet ->
+                packet.rebuiltForPreparedTextTest(
+                    renderPipelineKey = GPURenderPipelineKey("pipeline.forged"),
+                )
+            },
+            Mutation(
+                "binding layout",
+                "invalid.preflight.color_glyph_packet_authority",
+            ) { packet ->
+                packet.rebuiltForPreparedTextTest(bindingLayoutHash = "layout.forged")
+            },
+            Mutation(
+                "uniform slot",
+                "invalid.preflight.color_glyph_semantic_packet_slot_mismatch",
+            ) { packet ->
+                packet.rebuiltForPreparedTextTest(uniformSlot = null)
+            },
+            Mutation(
+                "vertex source",
+                "invalid.preflight.color_glyph_packet_authority",
+            ) { packet ->
+                packet.rebuiltForPreparedTextTest(vertexSourceLabel = "vertex.forged")
+            },
+            Mutation(
+                "target state",
+                "invalid.preflight.color_glyph_packet_authority",
+            ) { packet ->
+                packet.rebuiltForPreparedTextTest(targetStateHash = "target.forged")
+            },
+            Mutation(
+                "scissor authority",
+                "invalid.preflight.color_glyph_packet_authority",
+            ) { packet ->
+                packet.rebuiltForPreparedTextTest(scissorBoundsHash = "scissor.forged")
+            },
+        )
+        return mutations.map { mutation ->
+            DynamicTest.dynamicTest(mutation.name) {
+                val atlas = atlas(
+                    "atlas:color-authority",
+                    generation = 7,
+                    bytes = byteArrayOf(1, 2, 3, 4),
+                )
+                val semantic = colorSemantic(commandId = 0, atlas = atlas)
+                val semantics = mapOf<Int, GPUDrawSemanticPayload>(0 to semantic)
+
+                val result = GPUPreparedSurfaceFrameTaskListBuilder().build(
+                    GPUPreparedSurfaceFrameRequest(
+                        baseTaskList = baseTaskList(
+                            commandIds = listOf(0),
+                            renderStepByCommandId =
+                                mapOf(0 to COLOR_GLYPH_RENDER_STEP_IDENTITY),
+                            semanticsByCommandId = semantics,
+                            packetTransform = { packet, _ ->
+                                mutation.transform(packet)
+                            },
+                        ),
+                        capabilities = capabilities(),
+                        target = TARGET,
+                        targetBounds = BOUNDS,
+                        semanticsByCommandId = semantics,
+                        readbackRequestId = null,
+                    ),
+                )
+
+                val refused = assertIs<GPUPreparedSurfaceFrameResult.Refused>(result)
+                assertEquals(mutation.expectedCode, refused.diagnostic.code.value)
+            }
+        }
+    }
+
     @Test
     fun `TextA8 draw uniforms use the exact 48 byte ABI with aligned immutable slices`() {
         val atlas = atlas("atlas:draw-uniforms", generation = 7, bytes = byteArrayOf(1, 2, 3, 4))
@@ -202,6 +287,62 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
     }
 
     @Test
+    fun `prepared text buffer plans own the allocations used by builder and preflight`() {
+        val atlas = atlas(
+            "atlas:canonical-buffer-allocations",
+            generation = 7,
+            bytes = byteArrayOf(1, 2, 3, 4),
+        )
+        val semantics = mapOf<Int, GPUDrawSemanticPayload>(
+            0 to textSemantic(commandId = 0, atlas = atlas, glyphId = 11),
+        )
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(
+                GPUPreparedSurfaceFrameRequest(
+                    baseTaskList = baseTaskList(semantics.keys.toList()),
+                    capabilities = capabilities(),
+                    target = TARGET,
+                    targetBounds = BOUNDS,
+                    semanticsByCommandId = semantics,
+                    readbackRequestId = null,
+                    targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+                ),
+            ),
+        ).taskList
+        val plan = GPUFramePlanner.plan(taskList)
+        val binding = plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single()
+            .preparedTextBindingsByPacketId
+            .values
+            .single()
+        val canonicalAllocations = listOf(
+            binding.instanceBufferPlan.memoryAllocation,
+            requireNotNull(binding.materialUniformBufferPlan).memoryAllocation,
+            binding.drawUniformBufferPlan.memoryAllocation,
+        )
+
+        canonicalAllocations.forEach { allocation ->
+            assertSame(
+                allocation,
+                plan.memoryBudget.allocations.single { candidate ->
+                    candidate == allocation
+                },
+            )
+        }
+        assertNull(
+            GPUPreparedSurfaceNativePreflight().validateFramePlan(
+                framePlan = plan,
+                capabilities = capabilities().let { observed ->
+                    observed.copy(
+                        supportedTextureFormats =
+                            observed.supportedTextureFormats + GPUTextureFormat.R8Unorm,
+                    )
+                },
+            ),
+        )
+    }
+
+    @Test
     fun `shared TextA8 page records one FrameLocal upload before every ordered consumer`() {
         val atlas = atlas("atlas:shared", generation = 7, bytes = byteArrayOf(1, 2, 3, 4))
         val semantics = linkedMapOf<Int, GPUDrawSemanticPayload>(
@@ -241,6 +382,54 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
                     dependency.reasonCode == "prepared.text.upload-before-consumer"
             })
         }
+    }
+
+    @Test
+    fun `two R8 pages with equal content facts retain distinct extent identities`() {
+        val plan = twoLayoutR8FramePlan()
+
+        assertEquals(
+            2,
+            plan.steps.filterIsInstance<GPUFrameStep.UploadResourceStep>()
+                .count { step -> step.r8ResourcePlan != null },
+        )
+        assertNull(
+            GPUPreparedSurfaceNativePreflight().validateFramePlan(
+                framePlan = plan,
+                capabilities = capabilities().let { observed ->
+                    observed.copy(
+                        supportedTextureFormats =
+                            observed.supportedTextureFormats + GPUTextureFormat.R8Unorm,
+                    )
+                },
+            ),
+        )
+    }
+
+    @Test
+    fun `removing one exact R8 page upload refuses without throwing`() {
+        val plan = twoLayoutR8FramePlan()
+        val uploads = plan.steps.filterIsInstance<GPUFrameStep.UploadResourceStep>()
+            .filter { step -> step.r8ResourcePlan != null }
+        val removed = uploads.last()
+        val mutated = plan.rebuiltForPreparedTextTest(
+            steps = plan.steps.filterNot { step -> step === removed },
+        )
+
+        val refusal = GPUPreparedSurfaceNativePreflight().validateFramePlan(
+            framePlan = mutated,
+            capabilities = capabilities().let { observed ->
+                observed.copy(
+                    supportedTextureFormats =
+                        observed.supportedTextureFormats + GPUTextureFormat.R8Unorm,
+                )
+            },
+        )
+
+        assertEquals(
+            "invalid.preflight.text.upload_missing",
+            refusal?.code,
+        )
     }
 
     @Test
@@ -640,6 +829,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
                 baseTaskList = baseTaskList(
                     semantics.keys.toList(),
                     renderStepByCommandId = renderSteps,
+                    semanticsByCommandId = semantics,
                 ),
                 capabilities = capabilities(),
                 target = TARGET,
@@ -908,16 +1098,59 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         key: String,
         generation: Long,
         bytes: ByteArray,
+        width: Int = 2,
+        height: Int = 2,
         rowBytes: Int = 2,
     ): GPUPreparedR8UploadArtifact = GPUPreparedR8UploadArtifact(
         key = key,
-        width = 2,
-        height = 2,
+        width = width,
+        height = height,
         rowBytes = rowBytes,
         generation = generation,
         contentHash = sha256(bytes),
         bytes = bytes,
     )
+
+    private fun twoLayoutR8FramePlan(): GPUFramePlan {
+        val bytes = byteArrayOf(1, 2, 3, 4)
+        val first = atlas(
+            key = "atlas:two-layouts",
+            generation = 7,
+            bytes = bytes,
+            width = 2,
+            height = 2,
+            rowBytes = 2,
+        )
+        val second = atlas(
+            key = first.key,
+            generation = first.generation,
+            bytes = bytes,
+            width = 1,
+            height = 2,
+            rowBytes = 2,
+        )
+        val semantics = linkedMapOf<Int, GPUDrawSemanticPayload>(
+            0 to textSemantic(commandId = 0, atlas = first, glyphId = 11),
+            1 to textSemantic(commandId = 1, atlas = second, glyphId = 12),
+        )
+        val result = GPUPreparedSurfaceFrameTaskListBuilder().build(
+            GPUPreparedSurfaceFrameRequest(
+                baseTaskList = baseTaskList(semantics.keys.toList()),
+                capabilities = capabilities(),
+                target = TARGET,
+                targetBounds = BOUNDS,
+                semanticsByCommandId = semantics,
+                readbackRequestId = null,
+                targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+            ),
+        )
+        return GPUFramePlanner.plan(
+            assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+                result,
+                (result as? GPUPreparedSurfaceFrameResult.Refused)?.diagnostic.toString(),
+            ).taskList,
+        )
+    }
 
     private fun baseTaskList(
         commandIds: List<Int>,
@@ -925,6 +1158,11 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
             "text.a8_mask.sample"
         },
         capabilities: GPUCapabilities = capabilities(),
+        semanticsByCommandId: Map<Int, GPUDrawSemanticPayload> = emptyMap(),
+        packetTransform: (
+            GPUDrawPacket,
+            GPUDrawSemanticPayload?,
+        ) -> GPUDrawPacket = { packet, _ -> packet },
     ): GPUTaskList {
         val frameId = GPUFrameID(41)
         val recordingId = GPURecordingID("recording.text.task8")
@@ -934,7 +1172,21 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
             capabilities,
         )
         val renders = commandIds.map { commandId ->
-            val packet = packet(commandId, renderStepByCommandId.getValue(commandId))
+            val semantic = semanticsByCommandId[commandId]
+            val sourcePacket = packet(commandId, renderStepByCommandId.getValue(commandId))
+            val canonicalPacket = if (semantic is GPUDrawSemanticPayload.ColorGlyph) {
+                sourcePacket.rebuiltForPreparedTextTest(
+                    renderPipelineKey = COLOR_GLYPH_RENDER_PIPELINE_KEY,
+                    bindingLayoutHash = COLOR_GLYPH_BINDING_LAYOUT_HASH,
+                    uniformSlot = semantic.payloadRef.uniformSlot,
+                    vertexSourceLabel = COLOR_GLYPH_VERTEX_SOURCE_LABEL,
+                    scissorBoundsHash = colorGlyphScissorAuthority(semantic.scissorBounds),
+                    targetStateHash = COLOR_GLYPH_TARGET_STATE_HASH,
+                )
+            } else {
+                sourcePacket
+            }
+            val packet = packetTransform(canonicalPacket, semantic)
             GPUTask.Render(
                 taskId = GPUTaskID("task.base.text.$commandId"),
                 recordingId = recordingId,
@@ -1069,3 +1321,59 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         val BOUNDS = GPUPixelBounds(0, 0, 16, 16)
     }
 }
+
+private fun GPUDrawPacket.rebuiltForPreparedTextTest(
+    renderPipelineKey: GPURenderPipelineKey? = this.renderPipelineKey,
+    bindingLayoutHash: String = this.bindingLayoutHash,
+    uniformSlot:
+        org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot? =
+        this.uniformSlot,
+    vertexSourceLabel: String = this.vertexSourceLabel,
+    scissorBoundsHash: String? = this.scissorBoundsHash,
+    targetStateHash: String = this.targetStateHash,
+): GPUDrawPacket = GPUDrawPacket(
+    packetId = packetId,
+    commandIdValue = commandIdValue,
+    analysisRecordId = analysisRecordId,
+    passId = passId,
+    layerId = layerId,
+    bindingListId = bindingListId,
+    insertionReasonCode = insertionReasonCode,
+    sortKey = sortKey,
+    sortKeyPreimage = sortKeyPreimage,
+    renderStepId = renderStepId,
+    renderStepVersion = renderStepVersion,
+    role = role,
+    blendPlan = blendPlan,
+    renderPipelineKey = renderPipelineKey,
+    computePipelineKey = computePipelineKey,
+    bindingLayoutHash = bindingLayoutHash,
+    uniformSlot = uniformSlot,
+    resourceSlot = resourceSlot,
+    semanticPayload = semanticPayload,
+    vertexSourceLabel = vertexSourceLabel,
+    scissorBoundsHash = scissorBoundsHash,
+    targetStateHash = targetStateHash,
+    originalPaintOrder = originalPaintOrder,
+    resourceGeneration = resourceGeneration,
+    frameProvenance = frameProvenance,
+    clipCoveragePlan = clipCoveragePlan,
+    clipExecutionPlan = clipExecutionPlan,
+    diagnostics = diagnostics,
+    clipProducerAuthority = clipProducerAuthority,
+)
+
+private fun GPUFramePlan.rebuiltForPreparedTextTest(
+    steps: List<GPUFrameStep> = this.steps,
+): GPUFramePlan = GPUFramePlan(
+    frameId = frameId,
+    capabilitySeal = capabilitySeal,
+    recordingSeals = recordingSeals,
+    steps = steps,
+    memoryBudget = memoryBudget,
+    diagnostics = diagnostics,
+    dependencies = dependencies,
+    phaseOrder = phaseOrder,
+    elidedNoOpDraws = elidedNoOpDraws,
+    atomicallyRefused = atomicallyRefused,
+)

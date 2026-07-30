@@ -1235,6 +1235,11 @@ private fun CanonicalHashSink.preparedTextBinding(value: GPUPreparedTextRenderBi
         string("sealPacketRenderStepIdentity", seal.renderStepIdentity)
         string("sealPacketRenderPipelineKey", seal.renderPipelineKey)
         string("sealPacketBindingLayoutHash", seal.bindingLayoutHash)
+        nullable("sealPacketUniformSlot", seal.uniformSlot) { slot ->
+            string("slotId", slot.slotId.value)
+            string("fingerprint", slot.fingerprint.value)
+            long("byteOffset", slot.byteOffset)
+        }
         string("sealPacketVertexSourceLabel", seal.vertexSourceLabel)
         string("sealPacketTargetStateHash", seal.targetStateHash)
         nullable("sealPacketScissorBoundsHash", seal.scissorBoundsHash) {
@@ -2013,6 +2018,9 @@ private fun GPUPreparedTextRenderBinding.stableDump(): String =
         "packet=${preflightSeal.packetAuthority?.let { seal ->
             "${seal.commandIdValue}/${seal.renderStepIdentity}/" +
                 "${seal.renderPipelineKey}/${seal.bindingLayoutHash}/" +
+                "${seal.uniformSlot?.let { slot ->
+                    "${slot.slotId.value}:${slot.fingerprint.value}:${slot.byteOffset}"
+                } ?: "none"}/" +
                 "${seal.vertexSourceLabel}/${seal.targetStateHash}/" +
                 (seal.scissorBoundsHash ?: "none")
         } ?: "none"}," +

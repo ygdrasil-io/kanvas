@@ -29,6 +29,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometryClass
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageBindingLayoutTopology
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageVertex
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.preparedImageScissorAuthority
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -50,10 +51,12 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingInput
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterialTextureFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUR8ArtifactIdentity
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFromBindings
 import org.graphiks.kanvas.gpu.renderer.resources.buildMaterialTextureFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.buildR8FrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.r8ArtifactIdentity
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
@@ -121,6 +124,13 @@ class GPUPreparedTextInstanceBufferPlan(
     uploadBytes: ByteArray,
 ) {
     private val uploadSnapshot = uploadBytes.copyOf()
+    val memoryAllocation = GPUFrameMemoryAllocation(
+        label = "prepared-text.instances.$contentHash",
+        category = GPUFrameMemoryCategory.ReusableScratch,
+        bytes = byteSize,
+        resourceKind = GPUFrameMemoryResourceKind.Buffer,
+        extent = null,
+    )
 
     init {
         require(strideBytes == GPUTextA8Instance.ENCODED_BYTE_SIZE)
@@ -143,6 +153,13 @@ class GPUPreparedTextMaterialUniformBufferPlan(
     uploadBytes: ByteArray,
 ) {
     private val uploadSnapshot = uploadBytes.copyOf()
+    val memoryAllocation = GPUFrameMemoryAllocation(
+        label = "prepared-text.material-uniforms.$contentHash",
+        category = GPUFrameMemoryCategory.ReusableScratch,
+        bytes = byteSize,
+        resourceKind = GPUFrameMemoryResourceKind.Buffer,
+        extent = null,
+    )
 
     init {
         require(alignmentBytes > 0L && alignmentBytes and (alignmentBytes - 1L) == 0L)
@@ -197,6 +214,7 @@ class GPUPreparedTextPacketAuthoritySeal internal constructor(
     val renderStepIdentity: String,
     val renderPipelineKey: String,
     val bindingLayoutHash: String,
+    val uniformSlot: GPUUniformPayloadSlot?,
     val vertexSourceLabel: String,
     val targetStateHash: String,
     val scissorBoundsHash: String?,
@@ -639,6 +657,17 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 "Prepared-surface packets and semantics must retain one identical closed render route.",
             )
         }
+        val invalidColorGlyphAuthority = packets.firstNotNullOfOrNull { packet ->
+            val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
+                GPUDrawSemanticPayload.ColorGlyph ?: return@firstNotNullOfOrNull null
+            preparedColorGlyphPacketAuthorityRefusal(packet, semantic)
+        }
+        if (invalidColorGlyphAuthority != null) {
+            return refused(
+                invalidColorGlyphAuthority.code,
+                invalidColorGlyphAuthority.message,
+            )
+        }
         val invalidCoreAuthority = packets.firstOrNull { packet ->
             val semantic = request.semanticsByCommandId.getValue(packet.commandIdValue) as?
                 GPUDrawSemanticPayload.CorePrimitive ?: return@firstOrNull false
@@ -916,37 +945,13 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 addAll(upload.resources.memoryAllocations)
             }
             textInstanceAssembly?.let { assembly ->
-                add(
-                    GPUFrameMemoryAllocation(
-                        label = "prepared-text.instances.${assembly.plan.contentHash}",
-                        category = GPUFrameMemoryCategory.ReusableScratch,
-                        bytes = assembly.plan.byteSize,
-                        resourceKind = GPUFrameMemoryResourceKind.Buffer,
-                        extent = null,
-                    ),
-                )
+                add(assembly.plan.memoryAllocation)
             }
             textMaterialUniformAssembly?.plan?.let { plan ->
-                add(
-                    GPUFrameMemoryAllocation(
-                        label = "prepared-text.material-uniforms.${plan.contentHash}",
-                        category = GPUFrameMemoryCategory.ReusableScratch,
-                        bytes = plan.byteSize,
-                        resourceKind = GPUFrameMemoryResourceKind.Buffer,
-                        extent = null,
-                    ),
-                )
+                add(plan.memoryAllocation)
             }
             textDrawUniformAssembly?.plan?.let { plan ->
-                add(
-                    GPUFrameMemoryAllocation(
-                        label = "prepared-text.draw-uniforms.${plan.contentHash}",
-                        category = GPUFrameMemoryCategory.ReusableScratch,
-                        bytes = plan.byteSize,
-                        resourceKind = GPUFrameMemoryResourceKind.Buffer,
-                        extent = null,
-                    ),
-                )
+                add(plan.memoryAllocation)
             }
             readbackPlan?.let { plan ->
                 add(
@@ -1956,15 +1961,6 @@ private fun GPUDiagnostic.atRecordingBoundary(): GPUDiagnostic =
         this
     }
 
-private data class PreparedR8ArtifactIdentity(
-    val key: String,
-    val generation: Long,
-    val contentHash: String,
-    val width: Int,
-    val height: Int,
-    val rowBytes: Int,
-)
-
 private data class PreparedSurfaceTaskGraphRefusal(
     val code: String,
     val message: String,
@@ -2351,6 +2347,7 @@ private fun GPUDrawSemanticPayload.preparedTextPreflightSeal(
             renderStepIdentity = packet.renderStepId.value,
             renderPipelineKey = requireNotNull(packet.renderPipelineKey).value,
             bindingLayoutHash = packet.bindingLayoutHash,
+            uniformSlot = packet.uniformSlot,
             vertexSourceLabel = packet.vertexSourceLabel,
             targetStateHash = packet.targetStateHash,
             scissorBoundsHash = packet.scissorBoundsHash,
@@ -2367,27 +2364,11 @@ private fun GPUDrawSemanticPayload.r8Artifact() = when (this) {
     else -> error("Only prepared text semantics own an R8 artifact")
 }
 
-private fun GPUDrawSemanticPayload.exactR8ArtifactIdentity(): PreparedR8ArtifactIdentity =
-    r8Artifact().let { artifact ->
-        PreparedR8ArtifactIdentity(
-            key = artifact.key,
-            generation = artifact.generation,
-            contentHash = artifact.contentHash,
-            width = artifact.width,
-            height = artifact.height,
-            rowBytes = artifact.rowBytes,
-        )
-    }
+private fun GPUDrawSemanticPayload.exactR8ArtifactIdentity(): GPUR8ArtifactIdentity =
+    r8Artifact().r8ArtifactIdentity
 
-private fun GPUR8FrameResourcePlan.exactR8ArtifactIdentity(): PreparedR8ArtifactIdentity =
-    PreparedR8ArtifactIdentity(
-        key = artifactKey,
-        generation = artifactGeneration,
-        contentHash = artifactContentHash,
-        width = artifactWidth,
-        height = artifactHeight,
-        rowBytes = artifactRowBytes,
-    )
+private fun GPUR8FrameResourcePlan.exactR8ArtifactIdentity(): GPUR8ArtifactIdentity =
+    r8ArtifactIdentity
 
 private fun ByteArray.sha256Hex(): String =
     buildString(64) {

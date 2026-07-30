@@ -49,8 +49,6 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest
-import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
-import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
@@ -62,6 +60,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedImageUniformAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUReadbackStagingLease
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.r8ArtifactIdentity
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
@@ -118,15 +117,6 @@ private data class GPUPreparedTextMaterialEvidence(
     val wgslSourceHash: String,
     val uniformBytes: ByteArray,
     val uniformContentHash: String,
-)
-
-private data class GPUPreparedTextAtlasEvidenceKey(
-    val key: String,
-    val generation: Long,
-    val contentHash: String,
-    val width: Int,
-    val height: Int,
-    val rowBytes: Int,
 )
 
 private data class GPUPreparedTextMaterialEvidenceKey(
@@ -621,7 +611,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                 )
         }
         val atlasBytesByIdentity =
-            HashMap<GPUPreparedTextAtlasEvidenceKey, ByteArray>()
+            HashMap<org.graphiks.kanvas.gpu.renderer.resources.GPUR8ArtifactIdentity, ByteArray>()
         val materialEvidenceByIdentity =
             HashMap<GPUPreparedTextMaterialEvidenceKey, GPUPreparedTextMaterialEvidence>()
         val uniformSlabBytesByIdentity =
@@ -637,6 +627,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                 authority.renderStepIdentity != packet.renderStepId.value ||
                 authority.renderPipelineKey != packet.renderPipelineKey?.value ||
                 authority.bindingLayoutHash != packet.bindingLayoutHash ||
+                authority.uniformSlot != packet.uniformSlot ||
+                semantic.payloadRef.uniformSlot != packet.uniformSlot ||
                 authority.vertexSourceLabel != packet.vertexSourceLabel ||
                 authority.targetStateHash != packet.targetStateHash ||
                 authority.scissorBoundsHash != packet.scissorBoundsHash
@@ -701,14 +693,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "Prepared-text source row bytes changed after recording.",
                 )
             }
-            val atlasEvidenceKey = GPUPreparedTextAtlasEvidenceKey(
-                key = atlas.key,
-                generation = atlas.generation,
-                contentHash = atlas.contentHash,
-                width = atlas.width,
-                height = atlas.height,
-                rowBytes = atlas.rowBytes,
-            )
+            val atlasEvidenceKey = atlas.r8ArtifactIdentity
             val tightBytes = atlasBytesByIdentity.getOrPut(atlasEvidenceKey) {
                 preparedTextEvidenceObserver?.invoke(
                     GPUPreparedTextImmutableEvidenceKind.AtlasBytes,
@@ -917,11 +902,11 @@ internal class GPUPreparedSurfaceNativePreflight(
                 uniformEnd < binding.materialUniformOffsetBytes ||
                 uniformEnd > uniformPlan.byteSize ||
                 !requireNotNull(uniformSlabBytes)
-                    .copyOfRange(
-                        binding.materialUniformOffsetBytes.toInt(),
-                        uniformEnd.toInt(),
+                    .contentEqualsPreparedTextUniformRange(
+                        offsetBytes = binding.materialUniformOffsetBytes,
+                        endBytes = uniformEnd,
+                        expected = uniformBytes,
                     )
-                    .contentEquals(uniformBytes)
             ) {
                 return refused(
                     GPUPreparedTextPreflightRefusalCodes.MATERIAL_UNIFORMS,
@@ -968,9 +953,7 @@ internal class GPUPreparedSurfaceNativePreflight(
             }
         }
         val requiredPages = bindings.map { it.atlasResourcePlan }
-            .distinctBy { plan ->
-                "${plan.artifactKey}:${plan.artifactGeneration}:${plan.artifactContentHash}"
-            }
+            .distinctBy(GPUR8FrameResourcePlan::r8ArtifactIdentity)
         requiredPages.firstOrNull { required ->
             r8Uploads.none { upload ->
                 upload.plan.samePreparedTextPageAs(required)
@@ -1141,42 +1124,18 @@ internal class GPUPreparedSurfaceNativePreflight(
             bindings.map(GPUPreparedTextRenderBinding::instanceBufferPlan)
                 .distinctBy { plan -> plan.bufferRef }
                 .forEach { plan ->
-                    add(
-                        GPUFrameMemoryAllocation(
-                            label = "prepared-text.instances.${plan.contentHash}",
-                            category = GPUFrameMemoryCategory.ReusableScratch,
-                            bytes = plan.byteSize,
-                            resourceKind = GPUFrameMemoryResourceKind.Buffer,
-                            extent = null,
-                        ),
-                    )
+                    add(plan.memoryAllocation)
                 }
             bindings.mapNotNull(GPUPreparedTextRenderBinding::materialUniformBufferPlan)
                 .distinctBy { plan -> plan.bufferRef }
                 .forEach { plan ->
-                    add(
-                        GPUFrameMemoryAllocation(
-                            label = "prepared-text.material-uniforms.${plan.contentHash}",
-                            category = GPUFrameMemoryCategory.ReusableScratch,
-                            bytes = plan.byteSize,
-                            resourceKind = GPUFrameMemoryResourceKind.Buffer,
-                            extent = null,
-                        ),
-                    )
+                    add(plan.memoryAllocation)
                 }
             bindings.filter(GPUPreparedTextRenderBinding::hasTextA8Composite)
                 .map(GPUPreparedTextRenderBinding::drawUniformBufferPlan)
                 .distinctBy { plan -> plan.bufferRef }
                 .forEach { plan ->
-                    add(
-                        GPUFrameMemoryAllocation(
-                            label = "prepared-text.draw-uniforms.${plan.contentHash}",
-                            category = GPUFrameMemoryCategory.ReusableScratch,
-                            bytes = plan.byteSize,
-                            resourceKind = GPUFrameMemoryResourceKind.Buffer,
-                            extent = null,
-                        ),
-                    )
+                    add(plan.memoryAllocation)
                 }
         }
         val expectedTextAllocationsByLabel =
@@ -1201,6 +1160,9 @@ internal class GPUPreparedSurfaceNativePreflight(
         if (expectedTextAllocations.size != expectedTextAllocationsByLabel.size ||
             actualTextAllocations.size != actualTextAllocationsByLabel.size ||
             actualTextAllocationsByLabel != expectedTextAllocationsByLabel ||
+            !GPUFrameMemoryBudgetPlanner.hasExactLimitIndependentFacts(
+                framePlan.memoryBudget,
+            ) ||
             exactAggregateBudget != null &&
             exactAggregateBudget != framePlan.memoryBudget
         ) {
@@ -1283,9 +1245,7 @@ internal class GPUPreparedSurfaceNativePreflight(
             }
             val expectedUses = buildList {
                 runBindings.map(GPUPreparedTextRenderBinding::atlasResourcePlan)
-                    .distinctBy { plan ->
-                        "${plan.artifactKey}:${plan.artifactGeneration}:${plan.artifactContentHash}"
-                    }
+                    .distinctBy(GPUR8FrameResourcePlan::r8ArtifactIdentity)
                     .forEach { plan ->
                         add(
                             GPUFrameResourceUse(
@@ -3084,12 +3044,7 @@ private fun GPUDrawSemanticPayload.hasPreparedTextCanonicalIntegrity(): Boolean 
 private fun GPUR8FrameResourcePlan.samePreparedTextPageAs(
     other: GPUR8FrameResourcePlan,
 ): Boolean =
-    artifactKey == other.artifactKey &&
-        artifactGeneration == other.artifactGeneration &&
-        artifactContentHash == other.artifactContentHash &&
-        artifactWidth == other.artifactWidth &&
-        artifactHeight == other.artifactHeight &&
-        artifactRowBytes == other.artifactRowBytes
+    r8ArtifactIdentity == other.r8ArtifactIdentity
 
 private fun org.graphiks.kanvas.gpu.renderer.resources.GPUMaterialTextureFrameResourcePlan
     .samePreparedMaterialResourceAs(
@@ -3365,6 +3320,27 @@ private fun preparedSurfaceSha256(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { byte ->
         "%02x".format(byte.toInt() and 0xff)
     }
+
+internal fun ByteArray.contentEqualsPreparedTextUniformRange(
+    offsetBytes: Long,
+    endBytes: Long,
+    expected: ByteArray,
+): Boolean {
+    if (offsetBytes < 0L ||
+        endBytes < offsetBytes ||
+        endBytes > size.toLong() ||
+        endBytes - offsetBytes != expected.size.toLong()
+    ) {
+        return false
+    }
+    val startIndex = offsetBytes.toInt()
+    expected.indices.forEach { index ->
+        if (this[startIndex + index] != expected[index]) {
+            return false
+        }
+    }
+    return true
+}
 
 private fun refused(
     code: String,
