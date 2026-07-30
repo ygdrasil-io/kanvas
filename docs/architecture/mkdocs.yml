@@ -1,5 +1,5 @@
 site_name: Architecture GPU Kanvas
-site_description: Architecture du Frame Plan WebGPU inspiré de Graphite/Dawn
+site_description: Architecture du pipeline de rendu GPU de Kanvas
 theme:
   name: material
   language: fr
@@ -32,6 +32,15 @@ nav:
     - Exécution: pipeline/execution.md
     - Complétion: pipeline/completion.md
     - Session Surface: pipeline/session-surface.md
+    - Payloads: pipeline/payloads.md
+    - Ressources: pipeline/ressources.md
+    - WGSL & Pipelines: pipeline/wgsl.md
+    - MSAA: pipeline/msaa.md
+  - Opérations:
+    - Images: pipeline/images.md
+    - Texte: pipeline/texte.md
+    - Vertices: pipeline/vertices.md
+    - Composites: pipeline/composites.md
   - Concepts:
     - Blend: concepts/blend.md
     - Coverage: concepts/coverage.md
@@ -41,3 +50,4 @@ nav:
     - Complétion & Cycle de vie: concepts/completion-cycle-vie.md
   - Invariants & Contrats: invariants-contrats.md
   - Glossaire: glossaire.md
+  - Guide du code: guide-code.md
