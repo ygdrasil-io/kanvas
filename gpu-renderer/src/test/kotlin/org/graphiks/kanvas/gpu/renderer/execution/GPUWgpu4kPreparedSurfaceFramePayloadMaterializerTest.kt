@@ -30,6 +30,71 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 
 class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
     @Test
+    fun `equivalent ColorGlyph plan instances canonicalize to one native buffer triplet`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = capturedPreparedTextInputs(
+                colorGlyphCommandIds = setOf(0, 1),
+                coalescedColorGlyphScope = true,
+            ).withSecondColorGlyphPlanCopy(),
+        )
+        try {
+            val result = fixture.materialize()
+            val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                result,
+                result.toString(),
+            )
+
+            val colorWrites = fixture.native.writeBufferCalls.filter { call ->
+                call.bufferLabel.startsWith("Kanvas.frame.colorGlyph.")
+            }
+            assertEquals(
+                listOf(
+                    "Kanvas.frame.colorGlyph.vertices",
+                    "Kanvas.frame.colorGlyph.indices",
+                    "Kanvas.frame.colorGlyph.uniforms",
+                ),
+                colorWrites.map { call -> call.bufferLabel },
+            )
+            assertTrue(materialized.draft.disposeBeforeRegistration())
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `conflicting ColorGlyph plans refuse before native side effects`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = capturedPreparedTextInputs(
+                colorGlyphCommandIds = setOf(0, 1),
+                coalescedColorGlyphScope = true,
+            ).withSecondColorGlyphPlanCopy { plan ->
+                val bytes = plan.uniformBytesForUpload()
+                bytes[plan.slices.first().uniformSizeBytes.toInt()] =
+                    (bytes[plan.slices.first().uniformSizeBytes.toInt()].toInt() xor 0x01).toByte()
+                plan.rebuiltForMaterializerCanonicalityTest(bytes)
+            },
+        )
+        try {
+            val eventsBefore = fixture.native.events.toList()
+            val writesBefore = fixture.native.writeBufferCalls.size
+
+            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.materialize(),
+            )
+
+            assertEquals(GPUPreparedTextPreflightRefusalCodes.OPERAND, refused.code)
+            assertEquals(eventsBefore, fixture.native.events)
+            assertEquals(writesBefore, fixture.native.writeBufferCalls.size)
+            assertEquals(0, fixture.native.events.count { it == "encoder.finish" })
+            assertEquals(0, fixture.native.events.count { it == "queue.submit" })
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `two ColorGlyph packets in one accepted scope keep native draw order`() {
         val fixture = fixture(
             shape = PreparedSurfaceFixtureShape.ImageOnly,
@@ -1448,6 +1513,30 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
         )
     }
 }
+
+private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphBufferPlan
+    .rebuiltForMaterializerCanonicalityTest(
+        uniformBytes: ByteArray,
+    ): org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphBufferPlan =
+    org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphBufferPlan(
+        planArtifactKey = planArtifactKey,
+        vertexBufferRef = vertexBufferRef,
+        indexBufferRef = indexBufferRef,
+        uniformBufferRef = uniformBufferRef,
+        uniformAlignmentBytes = uniformAlignmentBytes,
+        vertexByteSize = vertexByteSize,
+        indexByteSize = indexByteSize,
+        uniformByteSize = uniformBytes.size.toLong(),
+        vertexContentHash = vertexContentHash,
+        indexContentHash = indexContentHash,
+        uniformContentHash = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(uniformBytes)
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) },
+        slices = slices,
+        vertexBytes = vertexBytesForUpload(),
+        indexBytes = indexBytesForUpload(),
+        uniformBytes = uniformBytes,
+    )
 
 private fun GPUFramePlan.withReversedPreparedImageBindings(): GPUFramePlan {
     var reversedBindingCount = 0

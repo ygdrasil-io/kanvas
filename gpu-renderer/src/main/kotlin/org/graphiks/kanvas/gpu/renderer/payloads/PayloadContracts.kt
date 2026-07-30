@@ -968,6 +968,7 @@ data class GPUPreparedColorGlyphPayloadInput(
     val instances: List<GPUTextA8Instance>,
     val layers: List<GPUColorGlyphLayerPayloadInput>,
     val material: GPUPreparedMaterialProgram,
+    val globalPaintAlpha: Float = material.paintAlpha,
     val targetBounds: GPUPixelBounds,
     val scissorBounds: GPUPixelBounds,
     val clipIdentity: String,
@@ -2279,11 +2280,13 @@ class GPUColorGlyphPayloadGatherer {
         ) {
             "Prepared color-glyph clip, blend and capability identities must not be blank"
         }
-        val paintAlpha = input.material.paintAlpha
+        require(input.globalPaintAlpha.isFinite() && input.globalPaintAlpha in 0f..1f) {
+            "Prepared color-glyph global paint alpha must be finite and normalized"
+        }
         val preparedLayers = input.layers.map { layer ->
             layer.copy(
                 premultipliedRgba = layer.premultipliedRgba.map { component ->
-                    component * paintAlpha
+                    component * input.globalPaintAlpha
                 }.toFloatArray(),
             )
         }

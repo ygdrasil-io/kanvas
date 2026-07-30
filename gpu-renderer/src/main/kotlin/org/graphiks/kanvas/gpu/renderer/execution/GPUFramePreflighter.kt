@@ -2002,6 +2002,7 @@ internal class GPUFramePreflighter(
                                 packet.semanticPayload is GPUDrawSemanticPayload.SolidRect ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.SampledImage ||
+                                    packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.RegisteredUniformRect ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.SeparableBlurRect

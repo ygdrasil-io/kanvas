@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.surface.gpu
 
+import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -27,6 +28,39 @@ import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 
 class GPUPreparedTextSemanticBuilderTest {
+    @Test
+    fun `COLRv0 CPAL sRGB bytes become exact linear premultiplied layer color`() {
+        val prepared = assertIs<GPUPreparedTextFramePreparation.Ready>(
+            GPUPreparedTextFramePreparer.prepare(
+                operations = listOf(colorTextOperation()),
+                target = target(),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities(),
+                generation = GPUTextArtifactGeneration(18),
+                limits = colorLimits(),
+            ),
+        )
+        val gathered = assertIs<GPUPreparedTextSemanticGatherResult.Gathered>(
+            GPUPreparedTextSemanticBuilder.gather(
+                visualCommands = prepared.mapping.visualCommands,
+                inventory = prepared.inventory,
+                targetBounds = GPUPixelBounds(0, 0, 64, 64),
+            ),
+        )
+        val semantic = assertIs<GPUDrawSemanticPayload.ColorGlyph>(
+            gathered.semanticsByCommandId.values.single(),
+        )
+        val cpalRed = semantic.layers.single { layer ->
+            layer.paletteIndex == 0 && layer.layerGlyphID == 7u
+        }
+        val linear42 = ((42f / 255f + 0.055f) / 1.055f).pow(2.4f)
+
+        assertEquals(1f, cpalRed.premultipliedRgba[0], 0.000001f)
+        assertEquals(linear42, cpalRed.premultipliedRgba[1], 0.000001f)
+        assertEquals(linear42, cpalRed.premultipliedRgba[2], 0.000001f)
+        assertEquals(1f, cpalRed.premultipliedRgba[3], 0.000001f)
+    }
+
     @Test
     fun `A8 semantic snapshots the exact inverse of the subrun Surface transform`() {
         val transform = Matrix33.makeAll(

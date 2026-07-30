@@ -24,6 +24,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgra
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedTextDeviceToLocalAffine
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUPreparedImageGeometry
@@ -285,6 +286,88 @@ class GPUPreparedColorGlyphBufferPlan(
     fun vertexBytesForUpload(): ByteArray = vertexUploadSnapshot.copyOf()
     fun indexBytesForUpload(): ByteArray = indexUploadSnapshot.copyOf()
     fun uniformBytesForUpload(): ByteArray = uniformUploadSnapshot.copyOf()
+
+    /**
+     * Pure WebGPU packing validation used before any native allocation.
+     *
+     * Vertex/index slabs are exact contiguous 4-byte partitions. Uniform slices retain only the
+     * padding mandated by the sealed device alignment and the final slice closes each slab.
+     */
+    internal fun hasCanonicalNativePacking(): Boolean {
+        if (vertexByteSize <= 0L || vertexByteSize % 4L != 0L ||
+            indexByteSize <= 0L || indexByteSize % 4L != 0L ||
+            uniformByteSize <= 0L
+        ) {
+            return false
+        }
+        var expectedVertexOffset = 0L
+        var expectedIndexOffset = 0L
+        var expectedUniformOffset = 0L
+        return try {
+            slices.forEach { slice ->
+                expectedUniformOffset =
+                    alignUpPreparedText(expectedUniformOffset, uniformAlignmentBytes)
+                if (slice.vertexOffsetBytes != expectedVertexOffset ||
+                    slice.vertexOffsetBytes % 4L != 0L ||
+                    slice.vertexSizeBytes % 4L != 0L ||
+                    slice.indexOffsetBytes != expectedIndexOffset ||
+                    slice.indexOffsetBytes % 4L != 0L ||
+                    slice.indexSizeBytes % 4L != 0L ||
+                    slice.uniformOffsetBytes != expectedUniformOffset ||
+                    slice.uniformOffsetBytes % uniformAlignmentBytes != 0L ||
+                    slice.indexSizeBytes !=
+                    Math.multiplyExact(slice.indexCount.toLong(), Int.SIZE_BYTES.toLong())
+                ) {
+                    return false
+                }
+                expectedVertexOffset =
+                    Math.addExact(slice.vertexOffsetBytes, slice.vertexSizeBytes)
+                expectedIndexOffset =
+                    Math.addExact(slice.indexOffsetBytes, slice.indexSizeBytes)
+                expectedUniformOffset =
+                    Math.addExact(slice.uniformOffsetBytes, slice.uniformSizeBytes)
+            }
+            expectedVertexOffset == vertexByteSize &&
+                expectedIndexOffset == indexByteSize &&
+                expectedUniformOffset == uniformByteSize &&
+                vertexContentHash == vertexUploadSnapshot.sha256Hex() &&
+                indexContentHash == indexUploadSnapshot.sha256Hex() &&
+                uniformContentHash == uniformUploadSnapshot.sha256Hex()
+        } catch (_: ArithmeticException) {
+            false
+        }
+    }
+
+    /** Exact immutable equality for two instances carrying the same artifact-key authority. */
+    internal fun sameCanonicalNativePlanAs(
+        other: GPUPreparedColorGlyphBufferPlan,
+    ): Boolean =
+        planArtifactKey == other.planArtifactKey &&
+            vertexBufferRef == other.vertexBufferRef &&
+            indexBufferRef == other.indexBufferRef &&
+            uniformBufferRef == other.uniformBufferRef &&
+            uniformAlignmentBytes == other.uniformAlignmentBytes &&
+            vertexByteSize == other.vertexByteSize &&
+            indexByteSize == other.indexByteSize &&
+            uniformByteSize == other.uniformByteSize &&
+            vertexContentHash == other.vertexContentHash &&
+            indexContentHash == other.indexContentHash &&
+            uniformContentHash == other.uniformContentHash &&
+            slices == other.slices &&
+            memoryAllocations == other.memoryAllocations &&
+            preparationRequests.size == other.preparationRequests.size &&
+            preparationRequests.zip(other.preparationRequests).all { (left, right) ->
+                left.resource == right.resource &&
+                    left.descriptor == right.descriptor &&
+                    left.role == right.role &&
+                    left.usages == right.usages &&
+                    left.lifetime == right.lifetime &&
+                    left.byteSize == right.byteSize &&
+                    left.diagnosticLabel == right.diagnosticLabel
+            } &&
+            vertexUploadSnapshot.contentEquals(other.vertexUploadSnapshot) &&
+            indexUploadSnapshot.contentEquals(other.indexUploadSnapshot) &&
+            uniformUploadSnapshot.contentEquals(other.uniformUploadSnapshot)
 
     private fun bufferAllocation(label: String, byteSize: Long) = GPUFrameMemoryAllocation(
         label = "prepared-color-glyph.$label." +
@@ -672,6 +755,16 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
         val packets = baseRenders.flatMap(GPUTask.Render::drawPackets)
             .sortedBy(GPUDrawPacket::originalPaintOrder)
+            .map { packet ->
+                val semantic = request.semanticsByCommandId[packet.commandIdValue]
+                if (semantic is GPUDrawSemanticPayload.ColorGlyph &&
+                    packet.hasPendingColorGlyphRecordingAuthority()
+                ) {
+                    packet.withPreparedColorGlyphAuthority(semantic)
+                } else {
+                    packet
+                }
+            }
         val commandIds = packets.map(GPUDrawPacket::commandIdValue)
         val semanticRefs = request.semanticsByCommandId.values
             .map { semantic -> semantic.payloadRef.commandIdValue }
@@ -1550,7 +1643,15 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 ),
                 samplePlan = original.samplePlan,
                 resourceUses = uses,
-                provisionalSegmentKey = original.provisionalSegmentKey,
+                provisionalSegmentKey =
+                    if (requireNotNull(run.first().semanticPayload).isPreparedTextSemantic()) {
+                        GPUProvisionalRenderSegmentKey(
+                            "segment.prepared-surface.text." +
+                                "${request.baseTaskList.frameId.value}.$index",
+                        )
+                    } else {
+                        original.provisionalSegmentKey
+                    },
                 drawPackets = run,
                 batchEligibilityByPacketId = run.associate { packet ->
                     packet.packetId to
@@ -2112,6 +2213,54 @@ private fun GPUDrawPacket.withSemantic(
     frameProvenance = frameProvenance,
     clipCoveragePlan = clipCoverageOverride,
     clipExecutionPlan = clipExecutionOverride,
+    diagnostics = diagnostics,
+    clipProducerAuthority = clipProducerAuthority,
+)
+
+/**
+ * The general recorder can seal only the resolved ColorGlyph route identity; atlas placement makes
+ * the exact uniform slot available later at semantic gathering. Only that exact pending handoff may
+ * be completed here. Any partially forged or already-sealed packet continues to strict validation.
+ */
+private fun GPUDrawPacket.hasPendingColorGlyphRecordingAuthority(): Boolean =
+    renderStepId.value ==
+        org.graphiks.kanvas.gpu.renderer.payloads.COLOR_GLYPH_RENDER_STEP_IDENTITY &&
+        renderPipelineKey?.value ==
+        "pending.pipeline.draw_text_run.colrv0_composite.rgba8unorm.src_over" &&
+        bindingLayoutHash == "preflight.pending" &&
+        uniformSlot == null &&
+        vertexSourceLabel == "preflight.pending"
+
+private fun GPUDrawPacket.withPreparedColorGlyphAuthority(
+    semantic: GPUDrawSemanticPayload.ColorGlyph,
+): GPUDrawPacket = GPUDrawPacket(
+    packetId = packetId,
+    commandIdValue = commandIdValue,
+    analysisRecordId = analysisRecordId,
+    passId = passId,
+    layerId = layerId,
+    bindingListId = bindingListId,
+    insertionReasonCode = insertionReasonCode,
+    sortKey = sortKey,
+    sortKeyPreimage = sortKeyPreimage,
+    renderStepId = renderStepId,
+    renderStepVersion = renderStepVersion,
+    role = role,
+    blendPlan = blendPlan,
+    renderPipelineKey = COLOR_GLYPH_RENDER_PIPELINE_KEY,
+    computePipelineKey = computePipelineKey,
+    bindingLayoutHash = COLOR_GLYPH_BINDING_LAYOUT_HASH,
+    uniformSlot = semantic.payloadRef.uniformSlot,
+    resourceSlot = resourceSlot,
+    semanticPayload = semanticPayload,
+    vertexSourceLabel = COLOR_GLYPH_VERTEX_SOURCE_LABEL,
+    scissorBoundsHash = colorGlyphScissorAuthority(semantic.scissorBounds),
+    targetStateHash = COLOR_GLYPH_TARGET_STATE_HASH,
+    originalPaintOrder = originalPaintOrder,
+    resourceGeneration = resourceGeneration,
+    frameProvenance = frameProvenance,
+    clipCoveragePlan = clipCoveragePlan,
+    clipExecutionPlan = clipExecutionPlan,
     diagnostics = diagnostics,
     clipProducerAuthority = clipProducerAuthority,
 )

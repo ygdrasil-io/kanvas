@@ -21,10 +21,12 @@ import java.util.Collections
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphBufferPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
+import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
 
 internal data class GPUPreparedColorGlyphScopeRunPlan(
     val exactScopeKey: GPUPreparedNativeScopeKey,
@@ -48,12 +50,17 @@ internal class GPUPreparedColorGlyphRenderRunPlan(
     renderRuns: List<GPUPreparedColorGlyphScopeRunPlan>,
     val exactScopeKeys: List<GPUPreparedNativeScopeKey>,
     val atlasUploads: List<GPUPreparedTextTextureUploadPlan.Atlas>,
+    canonicalBufferPlansByArtifactKey:
+        Map<GPUTextArtifactKey, GPUPreparedColorGlyphBufferPlan>,
 ) {
     val renderRuns: List<GPUPreparedColorGlyphScopeRunPlan> = immutableList(renderRuns)
     val packets: List<GPUDrawSemanticPayload.ColorGlyph> =
         immutableList(this.renderRuns.flatMap(GPUPreparedColorGlyphScopeRunPlan::packets))
     val bindings: List<GPUPreparedTextRenderBinding> =
         immutableList(this.renderRuns.flatMap(GPUPreparedColorGlyphScopeRunPlan::bindings))
+    val canonicalBufferPlansByArtifactKey:
+        Map<GPUTextArtifactKey, GPUPreparedColorGlyphBufferPlan> =
+        immutableMap(canonicalBufferPlansByArtifactKey)
 
     init {
         require(this.renderRuns.isNotEmpty() && packets.size == bindings.size)
@@ -65,6 +72,16 @@ internal class GPUPreparedColorGlyphRenderRunPlan(
         require(bindings.map(GPUPreparedTextRenderBinding::packetId).distinct().size ==
             bindings.size
         )
+        require(this.canonicalBufferPlansByArtifactKey.isNotEmpty())
+        require(
+            bindings.map { binding -> binding.colorGlyphBufferPlan.planArtifactKey }.toSet() ==
+                this.canonicalBufferPlansByArtifactKey.keys,
+        )
+        require(bindings.all { binding ->
+            val plan = binding.colorGlyphBufferPlan
+            this.canonicalBufferPlansByArtifactKey.getValue(plan.planArtifactKey)
+                .sameCanonicalNativePlanAs(plan)
+        })
         val uploadKeys = exactScopeKeys.filter {
             it.operationKind == GPUEncoderOperationKind.Upload
         }
@@ -199,11 +216,9 @@ internal class GPUWgpu4kColorGlyphRenderRunMaterializer(
     ): GPUPreparedRenderRunMaterialization {
         val created = mutableListOf<AutoCloseable>()
         return try {
-            val buffersByPlan =
-                IdentityHashMap<GPUPreparedColorGlyphBufferPlan, GPUWgpu4kPreparedColorGlyphBuffers>()
-            plan.bindings.map(GPUPreparedTextRenderBinding::colorGlyphBufferPlan)
-                .distinctByIdentity()
-                .forEach { bufferPlan ->
+            val buffersByArtifactKey =
+                HashMap<GPUTextArtifactKey, GPUWgpu4kPreparedColorGlyphBuffers>()
+            plan.canonicalBufferPlansByArtifactKey.forEach { (artifactKey, bufferPlan) ->
                     val vertexBuffer = device.createBuffer(
                         BufferDescriptor(
                             size = bufferPlan.vertexByteSize.toULong(),
@@ -240,7 +255,7 @@ internal class GPUWgpu4kColorGlyphRenderRunMaterializer(
                         0uL,
                         ArrayBuffer.of(bufferPlan.uniformBytesForUpload()),
                     )
-                    buffersByPlan[bufferPlan] = GPUWgpu4kPreparedColorGlyphBuffers(
+                    buffersByArtifactKey[artifactKey] = GPUWgpu4kPreparedColorGlyphBuffers(
                         vertex = GPUPreparedNativeBufferOperand(
                             vertexBuffer,
                             generation,
@@ -262,7 +277,7 @@ internal class GPUWgpu4kColorGlyphRenderRunMaterializer(
                     val binding = run.bindings[index]
                     val bufferPlan = binding.colorGlyphBufferPlan
                     val slice = binding.colorGlyphBufferSlice
-                    val buffers = buffersByPlan.getValue(bufferPlan)
+                    val buffers = buffersByArtifactKey.getValue(bufferPlan.planArtifactKey)
                     val atlas = preparedR8Resources.texturesByPlan[binding.atlasResourcePlan]
                         ?: error("Accepted ColorGlyph atlas has no frame-local R8 resource")
                     val bindGroup = device.createBindGroup(

@@ -58,6 +58,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphBufferPlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphBufferSlice
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
@@ -79,6 +81,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskDependency
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskPhase
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskUseToken
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor
@@ -232,6 +235,94 @@ class GPUPreparedTextNativePreflightTest {
                     fixture.capabilities,
             ),
         )
+    }
+
+    @Test
+    fun `conflicting ColorGlyph plan instances under one artifact key refuse purely`() {
+        val fixture = preparedTextNativePreflightFixture(
+            colorGlyphCommandIds = setOf(0, 1),
+            coalescedColorGlyphScope = true,
+        )
+        val mutated = fixture.copy(
+            framePlan = fixture.framePlan.withSecondColorGlyphPlanCopy { plan ->
+                val bytes = plan.uniformBytesForUpload()
+                val paddingIndex = plan.slices.first().uniformSizeBytes.toInt()
+                check(paddingIndex < plan.slices.last().uniformOffsetBytes.toInt())
+                bytes[paddingIndex] = (bytes[paddingIndex].toInt() xor 0x01).toByte()
+                plan.rebuiltForCanonicalityTest(uniformBytes = bytes)
+            },
+        )
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(probe.preflight(mutated))
+
+        assertEquals(GPUPreparedTextPreflightRefusalCodes.OPERAND, refused.diagnostic.code.value)
+        assertEquals(0, probe.totalCreations)
+        assertEquals(0L, probe.nativePayloadRegistrations)
+    }
+
+    @Test
+    fun `misaligned ColorGlyph vertex and index slices refuse purely`() {
+        val fixture = preparedTextNativePreflightFixture(
+            colorGlyphCommandIds = setOf(0, 1),
+            coalescedColorGlyphScope = true,
+        )
+        val mutated = fixture.copy(
+            framePlan = fixture.framePlan.withSecondColorGlyphPlanCopy { plan ->
+                val slices = plan.slices.mapIndexed { index, slice ->
+                    if (index == 1) {
+                        slice.copy(
+                            vertexOffsetBytes = slice.vertexOffsetBytes + 2L,
+                            indexOffsetBytes = slice.indexOffsetBytes + 2L,
+                            vertexSizeBytes = slice.vertexSizeBytes - 2L,
+                            indexSizeBytes = slice.indexSizeBytes - 2L,
+                        )
+                    } else {
+                        slice
+                    }
+                }
+                plan.rebuiltForCanonicalityTest(slices = slices)
+            },
+        )
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(probe.preflight(mutated))
+
+        assertEquals(GPUPreparedTextPreflightRefusalCodes.OPERAND, refused.diagnostic.code.value)
+        assertEquals(0, probe.totalCreations)
+        assertEquals(0L, probe.nativePayloadRegistrations)
+    }
+
+    @Test
+    fun `overlapping ColorGlyph partitions refuse purely`() {
+        val fixture = preparedTextNativePreflightFixture(
+            colorGlyphCommandIds = setOf(0, 1),
+            coalescedColorGlyphScope = true,
+        )
+        val mutated = fixture.copy(
+            framePlan = fixture.framePlan.withSecondColorGlyphPlanCopy { plan ->
+                val first = plan.slices.first()
+                val slices = plan.slices.mapIndexed { index, slice ->
+                    if (index == 1) {
+                        slice.copy(
+                            vertexOffsetBytes = first.vertexOffsetBytes,
+                            indexOffsetBytes = first.indexOffsetBytes,
+                            uniformOffsetBytes = first.uniformOffsetBytes,
+                        )
+                    } else {
+                        slice
+                    }
+                }
+                plan.rebuiltForCanonicalityTest(slices = slices)
+            },
+        )
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(probe.preflight(mutated))
+
+        assertEquals(GPUPreparedTextPreflightRefusalCodes.OPERAND, refused.diagnostic.code.value)
+        assertEquals(0, probe.totalCreations)
+        assertEquals(0L, probe.nativePayloadRegistrations)
     }
 
     @Test
@@ -660,6 +751,32 @@ class GPUPreparedTextNativePreflightTest {
             "test.prepared-surface.boundary",
             refused.diagnostic.code.value,
         )
+        assertEquals(1, probe.materializerInvocations)
+        assertEquals(1, probe.nativePreparationEvents)
+    }
+
+    @Test
+    fun `late bound TextA8 packet accepts the current runtime target generation`() {
+        val fixture = preparedTextNativePreflightFixture(
+            packetResourceGeneration = PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION,
+        )
+        val target = fixture.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .first()
+            .target
+        val runtimeContext = GPUFramePreflightContext(
+            targetId = fixture.context.targetId,
+            deviceGeneration = fixture.context.deviceGeneration,
+            targetGeneration = 1L,
+            resourceGenerations = fixture.context.resourceGenerations + (target to 1L),
+        )
+        val probe = GPUPreparedTextNativeCreationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(
+            probe.preflight(fixture, runtimeContext),
+        )
+
+        assertEquals("test.prepared-surface.boundary", refused.diagnostic.code.value)
         assertEquals(1, probe.materializerInvocations)
         assertEquals(1, probe.nativePreparationEvents)
     }
@@ -1540,6 +1657,71 @@ internal fun capturedPreparedTextInputs(
     }
 }
 
+internal fun CapturedPreparedSurfaceInputs.withSecondColorGlyphPlanCopy(
+    transform: (GPUPreparedColorGlyphBufferPlan) -> GPUPreparedColorGlyphBufferPlan = {
+        it.rebuiltForCanonicalityTest()
+    },
+): CapturedPreparedSurfaceInputs = copy(
+    framePlan = framePlan.withSecondColorGlyphPlanCopy(transform),
+)
+
+private fun GPUFramePlan.withSecondColorGlyphPlanCopy(
+    transform: (GPUPreparedColorGlyphBufferPlan) -> GPUPreparedColorGlyphBufferPlan,
+): GPUFramePlan {
+    var colorBindingIndex = 0
+    return rebuilt(
+        steps = steps.map { step ->
+            if (step !is GPUFrameStep.RenderPassStep) {
+                step
+            } else {
+                step.rebuilt(
+                    preparedTextBindingsByPacketId =
+                        step.preparedTextBindingsByPacketId.mapValues { (_, binding) ->
+                            if (!binding.hasColorGlyphBufferPlan ||
+                                colorBindingIndex++ != 1
+                            ) {
+                                binding
+                            } else {
+                                val plan = transform(binding.colorGlyphBufferPlan)
+                                val slice = plan.slices.single { candidate ->
+                                    candidate.commandIdValue ==
+                                        binding.colorGlyphBufferSlice.commandIdValue
+                                }
+                                binding.rebuilt(
+                                    colorGlyphBufferPlan = plan,
+                                    colorGlyphBufferSlice = slice,
+                                )
+                            }
+                        },
+                )
+            }
+        },
+    )
+}
+
+private fun GPUPreparedColorGlyphBufferPlan.rebuiltForCanonicalityTest(
+    slices: List<GPUPreparedColorGlyphBufferSlice> = this.slices,
+    vertexBytes: ByteArray = vertexBytesForUpload(),
+    indexBytes: ByteArray = indexBytesForUpload(),
+    uniformBytes: ByteArray = uniformBytesForUpload(),
+): GPUPreparedColorGlyphBufferPlan = GPUPreparedColorGlyphBufferPlan(
+    planArtifactKey = planArtifactKey,
+    vertexBufferRef = vertexBufferRef,
+    indexBufferRef = indexBufferRef,
+    uniformBufferRef = uniformBufferRef,
+    uniformAlignmentBytes = uniformAlignmentBytes,
+    vertexByteSize = vertexBytes.size.toLong(),
+    indexByteSize = indexBytes.size.toLong(),
+    uniformByteSize = uniformBytes.size.toLong(),
+    vertexContentHash = vertexBytes.sha256(),
+    indexContentHash = indexBytes.sha256(),
+    uniformContentHash = uniformBytes.sha256(),
+    slices = slices,
+    vertexBytes = vertexBytes,
+    indexBytes = indexBytes,
+    uniformBytes = uniformBytes,
+)
+
 private fun PreparedTextNativePreflightFixture.withViolation(
     kind: GPUPreparedTextViolationKind,
 ): PreparedTextNativePreflightFixture = when (kind) {
@@ -1899,6 +2081,10 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBind
     preflightSeal:
         org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal =
         this.preflightSeal,
+    colorGlyphBufferPlan: GPUPreparedColorGlyphBufferPlan? =
+        if (hasColorGlyphBufferPlan) this.colorGlyphBufferPlan else null,
+    colorGlyphBufferSlice: GPUPreparedColorGlyphBufferSlice? =
+        if (hasColorGlyphBufferPlan) this.colorGlyphBufferSlice else null,
 ) = org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding(
     packetId = packetId,
     atlasResourcePlan = atlasResourcePlan,
@@ -1916,6 +2102,8 @@ private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBind
         if (hasTextA8Composite) drawUniformSlice else null,
     compositeProgramOrNull =
         if (hasTextA8Composite) compositeProgram else null,
+    colorGlyphBufferPlanOrNull = colorGlyphBufferPlan,
+    colorGlyphBufferSliceOrNull = colorGlyphBufferSlice,
 )
 
 private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal.rebuilt(
@@ -2289,6 +2477,7 @@ internal data class PreparedTextNativePreflightFixture(
 
 internal fun preparedTextNativePreflightFixture(
     commandIds: List<Int> = listOf(0, 1),
+    packetResourceGeneration: Long = GPUPreparedTextPreflightFixture.GENERATION.toLong(),
     includeColorGlyph: Boolean = false,
     colorGlyphCommandIds: Set<Int> = emptySet(),
     colorGlyphPlanGenerations: Map<Int, Int> = emptyMap(),
@@ -2328,6 +2517,7 @@ internal fun preparedTextNativePreflightFixture(
     val packets = commandIds.map { commandId ->
         preparedTextPreflightPacket(
             commandId = commandId,
+            resourceGeneration = packetResourceGeneration,
             targetFormat = targetFormat,
             blendMode = blendMode,
             blendState = blendState,

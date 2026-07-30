@@ -36,6 +36,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflight
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphBufferPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.recording.preparedTextNativeBlendDomainRefusal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayout
@@ -623,6 +624,14 @@ internal class GPUPreparedSurfaceNativePreflight(
                     GPUPreparedTextPreflightRefusalCodes.OPERAND,
                     "Every prepared-text packet requires one exact immutable binding.",
                 )
+        }
+        when (val canonical = canonicalPreparedColorGlyphBufferPlans(bindings)) {
+            is CanonicalPreparedColorGlyphBufferPlans.Refused ->
+                return refused(
+                    GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                    canonical.message,
+                )
+            is CanonicalPreparedColorGlyphBufferPlans.Accepted -> Unit
         }
         val atlasBytesByIdentity =
             HashMap<org.graphiks.kanvas.gpu.renderer.resources.GPUR8ArtifactIdentity, ByteArray>()
@@ -2060,6 +2069,19 @@ internal class GPUPreparedSurfaceNativePreflight(
                     renderRuns = colorRenderRuns,
                     exactScopeKeys = colorScopeKeys,
                     atlasUploads = atlasUploads,
+                    canonicalBufferPlansByArtifactKey =
+                        when (
+                            val canonical =
+                                canonicalPreparedColorGlyphBufferPlans(colorBindings)
+                        ) {
+                            is CanonicalPreparedColorGlyphBufferPlans.Accepted ->
+                                canonical.plansByArtifactKey
+                            is CanonicalPreparedColorGlyphBufferPlans.Refused ->
+                                error(
+                                    "Validated ColorGlyph plans changed during pure preflight: " +
+                                        canonical.message,
+                                )
+                        },
                 )
             }
         val sceneTarget = framePlan.steps
@@ -3202,6 +3224,42 @@ private fun GPUPreparedTextRenderBinding.matchesPreparedColorGlyphBufferPlan(
         uniformBytes[Math.addExact(slice.uniformOffsetBytes.toInt(), index)] !=
             semantic.uniformBytes[index].toByte()
     }
+}
+
+private sealed interface CanonicalPreparedColorGlyphBufferPlans {
+    data class Accepted(
+        val plansByArtifactKey:
+            Map<org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey, GPUPreparedColorGlyphBufferPlan>,
+    ) : CanonicalPreparedColorGlyphBufferPlans
+
+    data class Refused(val message: String) : CanonicalPreparedColorGlyphBufferPlans
+}
+
+private fun canonicalPreparedColorGlyphBufferPlans(
+    bindings: List<GPUPreparedTextRenderBinding>,
+): CanonicalPreparedColorGlyphBufferPlans {
+    val plans = linkedMapOf<
+        org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey,
+        GPUPreparedColorGlyphBufferPlan,
+        >()
+    bindings.filter(GPUPreparedTextRenderBinding::hasColorGlyphBufferPlan)
+        .forEach { binding ->
+            val candidate = binding.colorGlyphBufferPlan
+            if (!candidate.hasCanonicalNativePacking()) {
+                return CanonicalPreparedColorGlyphBufferPlans.Refused(
+                    "ColorGlyph buffer slices must form exact aligned ordered slab partitions.",
+                )
+            }
+            val canonical = plans[candidate.planArtifactKey]
+            if (canonical == null) {
+                plans[candidate.planArtifactKey] = candidate
+            } else if (!canonical.sameCanonicalNativePlanAs(candidate)) {
+                return CanonicalPreparedColorGlyphBufferPlans.Refused(
+                    "One ColorGlyph artifact key cannot authenticate conflicting buffer plans.",
+                )
+            }
+        }
+    return CanonicalPreparedColorGlyphBufferPlans.Accepted(plans)
 }
 
 private fun GPUFrameStep.UploadResourceStep.matchesPreparedTextTextureUpload(

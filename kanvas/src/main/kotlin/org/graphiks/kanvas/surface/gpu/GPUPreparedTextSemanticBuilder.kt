@@ -186,6 +186,7 @@ internal object GPUPreparedTextSemanticBuilder {
                                 instances = subRun.instances,
                                 layers = layers,
                                 material = subRun.draw.material,
+                                globalPaintAlpha = subRun.draw.foregroundColor.a,
                                 targetBounds = targetBounds,
                                 scissorBounds = scissor,
                                 clipIdentity = subRun.draw.clipContentKey,
@@ -258,11 +259,11 @@ private fun GPUPreparedTextSubRun.preparedColorLayers(
     val plan = colorGlyphLayerPlan ?: return null
     val page = pageFacts.page
     val foreground = draw.foregroundColor
-    val foregroundPremultiplied = floatArrayOf(
-        foreground.r * foreground.a,
-        foreground.g * foreground.a,
-        foreground.b * foreground.a,
-        foreground.a,
+    val foregroundUnmodulated = floatArrayOf(
+        foreground.r,
+        foreground.g,
+        foreground.b,
+        1f,
     )
     return instances.map { instance ->
         val sourceGlyph = draw.glyphs.getOrNull(instance.sourceGlyphIndex.value) ?: return null
@@ -285,9 +286,9 @@ private fun GPUPreparedTextSubRun.preparedColorLayers(
         }
         val deviceBounds = instance.preparedTextPixelBounds(targetBounds) ?: return null
         val color = if (layer.useForeground) {
-            foregroundPremultiplied
+            foregroundUnmodulated
         } else {
-            requireNotNull(layer.resolvedColorArgb).toPremultipliedRgba()
+            requireNotNull(layer.resolvedColorArgb).toLinearPremultipliedRgba()
         }
         GPUColorGlyphLayerPayloadInput(
             planArtifactKey = plan.artifactKey,
@@ -311,12 +312,12 @@ private fun GPUPreparedTextSubRun.preparedColorLayers(
     }
 }
 
-private fun Int.toPremultipliedRgba(): FloatArray {
+private fun Int.toLinearPremultipliedRgba(): FloatArray {
     val alpha = ((this ushr 24) and 0xff) / 255f
     return floatArrayOf(
-        ((this ushr 16) and 0xff) / 255f * alpha,
-        ((this ushr 8) and 0xff) / 255f * alpha,
-        (this and 0xff) / 255f * alpha,
+        srgbToLinear(((this ushr 16) and 0xff) / 255f) * alpha,
+        srgbToLinear(((this ushr 8) and 0xff) / 255f) * alpha,
+        srgbToLinear((this and 0xff) / 255f) * alpha,
         alpha,
     )
 }
