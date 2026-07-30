@@ -6,21 +6,38 @@ le MSAA natif via WebGPU.
 
 ## GPUSampleContinuationKey
 
-La **GPUSampleContinuationKey** garantit qu'un même render pass MSAA
-conserve son attachment multi-échantillonné d'un draw à l'autre. Une
-texture MSAA fraîche n'est jamais acceptée comme continuation — chaque
-groupe de passes MSAA possède sa propre clé.
+Quand on dessine plusieurs formes dans un même render pass MSAA, chaque
+draw s'accumule dans l'attachment multi-échantillonné. Pour que le
+deuxième draw « voie » les échantillons du premier (et que
+l'anti-aliasing fonctionne), il faut que ce soit **exactement la même
+texture MSAA** qui serve d'attachment d'un draw à l'autre.
+
+La **GPUSampleContinuationKey** est la clé qui garantit cette identité.
+Elle est produite au premier draw MSAA et vérifiée à chaque draw suivant.
+Si un draw essaie d'utiliser une nouvelle texture MSAA (une texture
+fraîchement allouée, qui ne contient pas les échantillons des draws
+précédents), la clé ne correspond pas et le plan est refusé.
 
 ```mermaid
 flowchart TD
-    PASS1["RenderPass 1 (MSAA)"] --> KEY["GPUSampleContinuationKey"]
-    KEY --> PASS2["RenderPass 2 (MSAA)\n(même attachment)"]
-    PASS2 --> RESOLVE["Resolve → texture canonique"]
-    RESOLVE --> CANONICAL["GPUSceneTarget\n(single-sample)"]
+    DRAW1["Draw 1 (MSAA)\n→ produit la clé"] --> KEY["GPUSampleContinuationKey\n(vérifie l'identité de l'attachment)"]
+    KEY --> DRAW2["Draw 2 (MSAA)\n✓ même attachment, OK"]
+    DRAW2 --> KEY2["Même clé"]
+    KEY2 --> DRAW3["Draw 3 (MSAA)\n✓ même attachment, OK"]
+    DRAW3 --> RESOLVE["Resolve → texture canonique"]
+
+    FRESH["Nouvelle texture MSAA\n(fraîche, sans échantillons)"] -->|"✗ clé différente"| REFUSE["Refus"]
 
     style KEY fill:#613783,color:#d4bfff
+    style REFUSE fill:#8b0000,color:#fff
     style RESOLVE fill:#2d6a4f,color:#fff
 ```
+
+En pratique, cela signifie qu'un render pass MSAA utilise **une seule
+texture multi-échantillonnée** pour tous ses draws. On ne peut pas
+changer d'attachment MSAA au milieu d'une passe. Si on doit changer
+(par exemple pour un calque intermédiaire), on termine la passe, on
+resolve, et on en commence une nouvelle.
 
 ## Store vs Resolve
 
