@@ -8,20 +8,19 @@ transparence, les ombres, et les effets de calque.
 
 Kanvas supporte les 29 modes de blend. Voici les principaux :
 
-| Mode | Formule | Fixed-function ? |
-|------|---------|-----------------|
-| `SrcOver` | src + dst × (1 − src.a) | ✅ Oui |
-| `SrcIn` | src × dst.a | ✅ Oui |
-| `SrcOut` | src × (1 − dst.a) | ✅ Oui |
-| `DstOver` | dst + src × (1 − dst.a) | ✅ Oui |
-| `DstIn` | dst × src.a | ✅ Oui |
-| `SrcATop` | src × dst.a + dst × (1 − src.a) | ✅ Oui |
-| `DstATop` | dst × src.a + src × (1 − dst.a) | ✅ Oui |
-| `Xor` | src × (1 − dst.a) + dst × (1 − src.a) | ✅ Oui |
-| `Plus` | src + dst | ✅ Oui (sauf coverage partielle) |
-| `Multiply` | src × dst | ❌ Shader |
-| `Screen` | src + dst − src × dst | ❌ Shader |
-| `Overlay` | hard-light(dst, src) | ❌ Shader |
+| Mode | Illustration | Formule | Fixed-function ? |
+|------|-------------|---------|-----------------|
+| `SrcOver` | ![SrcOver](images/blend-srcover.svg) | src + dst × (1 − src.a) | ✅ Oui |
+| `SrcIn` | ![SrcIn](images/blend-srcin.svg) | src × dst.a | ✅ Oui |
+| `SrcOut` | ![SrcOut](images/blend-srcout.svg) | src × (1 − dst.a) | ✅ Oui |
+| `DstOver` | ![DstOver](images/blend-dstover.svg) | dst + src × (1 − dst.a) | ✅ Oui |
+| `DstIn` | ![DstIn](images/blend-dstin.svg) | dst × src.a | ✅ Oui |
+| `SrcATop` | ![SrcATop](images/blend-srcatop.svg) | src × dst.a + dst × (1 − src.a) | ✅ Oui |
+| `DstATop` | ![DstATop](images/blend-dstatop.svg) | dst × src.a + src × (1 − dst.a) | ✅ Oui |
+| `Xor` | ![Xor](images/blend-xor.svg) | src × (1 − dst.a) + dst × (1 − src.a) | ✅ Oui |
+| `Plus` | ![Plus](images/blend-plus.svg) | src + dst | ✅ Oui (sauf coverage partielle) |
+| `Multiply` | ![Multiply](images/blend-multiply.svg) | src × dst | ❌ Shader |
+| `Screen` | ![Screen](images/blend-screen.svg) | src + dst − src × dst | ❌ Shader |
 
 ## Fixed-function vs Shader
 
