@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 340">
+  <defs>
+    <pattern id="checker" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="4" height="4" fill="#f0f0f0"/>
+      <rect x="4" y="0" width="4" height="4" fill="#e0e0e0"/>
+      <rect x="0" y="4" width="4" height="4" fill="#e0e0e0"/>
+      <rect x="4" y="4" width="4" height="4" fill="#f0f0f0"/>
+    </pattern>
+    <clipPath id="tile1"><rect x="15" y="50" width="80" height="80"/></clipPath>
+    <clipPath id="tile2"><rect x="110" y="50" width="80" height="80"/></clipPath>
+    <clipPath id="tile3"><rect x="205" y="50" width="80" height="80"/></clipPath>
+    <clipPath id="tile4"><rect x="300" y="50" width="80" height="80"/></clipPath>
+    <clipPath id="tile5"><rect x="395" y="50" width="80" height="80"/></clipPath>
+  </defs>
+
+  <rect width="500" height="340" fill="#2d2d2d"/>
+
+  <text x="250" y="28" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#ccc" font-weight="bold">Formes de couverture</text>
+
+  <!-- Tile backgrounds -->
+  <rect x="15" y="50" width="80" height="80" fill="url(#checker)" rx="3"/>
+  <rect x="110" y="50" width="80" height="80" fill="url(#checker)" rx="3"/>
+  <rect x="205" y="50" width="80" height="80" fill="url(#checker)" rx="3"/>
+  <rect x="300" y="50" width="80" height="80" fill="url(#checker)" rx="3"/>
+  <rect x="395" y="50" width="80" height="80" fill="url(#checker)" rx="3"/>
+
+  <!-- 1. FullOrScissor — aliased, hard pixelated edges -->
+  <g clip-path="url(#tile1)">
+    <polygon points="55,130 20,60 90,60" fill="rgba(255,255,255,0.95)" clip-path="url(#tile1)"/>
+  </g>
+
+  <!-- 2. ScalarCoverage — smooth AA edges -->
+  <g clip-path="url(#tile2)">
+    <polygon points="150,130 115,60 185,60" fill="rgba(255,255,255,0.95)" clip-path="url(#tile2)"/>
+  </g>
+
+  <!-- 3. StencilCoverage1x — smooth edges with subtle stencil pattern -->
+  <g clip-path="url(#tile3)">
+    <polygon points="245,130 210,60 280,60" fill="rgba(255,255,255,0.95)" clip-path="url(#tile3)"/>
+    <line x1="248" y1="60" x2="245" y2="130" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+    <line x1="260" y1="60" x2="248" y2="130" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+    <line x1="272" y1="60" x2="252" y2="130" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+  </g>
+
+  <!-- 4. MSAA — edges with 4-sample grid dots -->
+  <g clip-path="url(#tile4)">
+    <polygon points="340,130 305,60 375,60" fill="rgba(255,255,255,0.92)" clip-path="url(#tile4)"/>
+    <circle cx="310" cy="75" r="0.8" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="320" cy="75" r="0.8" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="310" cy="85" r="0.8" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="320" cy="85" r="0.8" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="310" cy="95" r="0.8" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="320" cy="95" r="0.8" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="370" cy="75" r="0.8" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="360" cy="75" r="0.8" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="370" cy="85" r="0.8" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="360" cy="85" r="0.8" fill="rgba(255,255,255,0.5)"/>
+  </g>
+
+  <!-- 5. LCDCoverage — edges with RGB fringing -->
+  <g clip-path="url(#tile5)">
+    <polygon points="435,130 400,60 470,60" fill="rgba(255,255,255,0.9)" clip-path="url(#tile5)"/>
+    <g opacity="0.3">
+      <line x1="400" y1="60" x2="435" y2="130" stroke="#ff0000" stroke-width="2.5"/>
+      <line x1="401.5" y1="60" x2="436.5" y2="130" stroke="#00ff00" stroke-width="1.5"/>
+      <line x1="403" y1="60" x2="438" y2="130" stroke="#0000ff" stroke-width="1"/>
+      <line x1="467" y1="60" x2="432" y2="130" stroke="#ff0000" stroke-width="2.5"/>
+      <line x1="465.5" y1="60" x2="430.5" y2="130" stroke="#00ff00" stroke-width="1.5"/>
+      <line x1="464" y1="60" x2="429" y2="130" stroke="#0000ff" stroke-width="1"/>
+    </g>
+  </g>
+
+  <!-- Labels -->
+  <text x="55" y="150" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#aaa">FullOrScissor</text>
+  <text x="150" y="150" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#aaa">ScalarCoverage</text>
+  <text x="245" y="150" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#aaa">Stencil 1×</text>
+  <text x="340" y="150" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#aaa">MSAA 4×</text>
+  <text x="435" y="150" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#aaa">LCD</text>
+</svg>
