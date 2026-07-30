@@ -35,3 +35,8 @@ réouverture du backend. Le device, la cible canonique, la génération
 et les caches survivent entre appels à `renderFrame()`. Chaque appel
 crée un coordinateur frame-local frais, qui enchaîne planification,
 pré-vol et exécution.
+
+> Voir [Concepts — Frame Plan](../concepts/frame-plan.md) pour le
+> coordinateur et l'enchaînement des étapes. Voir
+> [Concepts — Pré-vol & Exécution](../concepts/pre-vol-execution.md)
+> pour le cycle de vie des frames.

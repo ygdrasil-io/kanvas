@@ -42,3 +42,6 @@ flowchart TD
 et de couverture dans le pipeline GPU. Ils consomment les
 `NormalizedDrawCommand` et produisent les plans consommés par le
 `GPUBlendPlan` et le `GPUFramePlanner`.
+
+> Voir [Concepts — Coverage](../concepts/coverage.md) pour le détail
+> de la formule de couverture et son impact sur le blend.

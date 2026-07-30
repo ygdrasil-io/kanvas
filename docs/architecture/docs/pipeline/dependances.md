@@ -34,3 +34,6 @@ flowchart LR
     style TL fill:#613783,color:#d4bfff
     style PLAN fill:#4a4a4a,color:#ccc
 ```
+
+> Voir [Concepts — Frame Plan](../concepts/frame-plan.md) pour la
+> comparaison entre plan linéaire et DAG de tâches.

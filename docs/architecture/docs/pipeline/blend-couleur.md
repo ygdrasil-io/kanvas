@@ -31,6 +31,8 @@ Quand le blend exige de lire la destination, le GPUBlendPlan émet un
 native, ou refus.
 
 > Voir [Concepts — Blend](../concepts/blend.md) pour le détail des 29 modes.
+> Voir [Concepts — Snapshots](../concepts/snapshots.md) pour le fonctionnement
+> des copies bornées de la destination.
 
 ## GPUColorPlan et GPUTargetState
 

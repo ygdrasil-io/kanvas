@@ -24,3 +24,7 @@ soumission**. Aucune soumission intermédiaire, aucun flush partiel.
 Le GPUFrameExecutor arme également le ticket de complétion avant la
 soumission, et invoque l'action de présent post-soumission si la frame
 est destinée à une fenêtre.
+
+> Voir [Concepts — Pré-vol & Exécution](../concepts/pre-vol-execution.md)
+> pour le détail de la séparation planification/exécution et la gestion
+> des erreurs.

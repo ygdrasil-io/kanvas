@@ -38,3 +38,6 @@ flowchart LR
     style REC fill:#2a3a6b,color:#aac4ff
     style GR fill:#2a3a6b,color:#aac4ff
 ```
+
+> Le `GPURecording` est l'entrée du [GPUTaskList](dependances.md), qui
+> alimente le [Frame Plan](../concepts/frame-plan.md).
