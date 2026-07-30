@@ -67,3 +67,4 @@ bin/
 /depot_tools/
 /skia/
 /int-result/
+docs/architecture/site/
