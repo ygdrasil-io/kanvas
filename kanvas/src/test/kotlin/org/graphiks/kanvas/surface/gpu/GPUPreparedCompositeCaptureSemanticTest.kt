@@ -215,6 +215,51 @@ class GPUPreparedCompositeCaptureSemanticTest {
         }
     }
 
+    @Test
+    fun `saveLayer with backdrop filter is captured not refused`() {
+        val backdrop = org.graphiks.kanvas.paint.ImageFilter.Blur(
+            sigmaX = 4f, sigmaY = 4f,
+        )
+        val result = capture(
+            listOf(
+                DisplayOp.BeginLayer(SaveLayerRec(backdrop = backdrop)),
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(0f, 0f, 10f, 10f),
+                    black,
+                    identity,
+                    open,
+                ),
+                DisplayOp.EndLayer,
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedCompositeCaptureResult.Ready>(result)
+        val layerScope = ready.capture.scopes.values.find { it.sourceKind == GPUPreparedCompositeScopeKind.SaveLayer }
+            ?: throw AssertionError("Expected a SaveLayer scope")
+        val state = layerScope.state ?: throw AssertionError("Expected scope state")
+        assertEquals(true, state.backdropRequired)
+    }
+
+    @Test
+    fun `saveLayer with backdrop and without backdrop produce different identities`() {
+        val body = DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 10f, 10f), black, identity, open)
+        val backdrop = org.graphiks.kanvas.paint.ImageFilter.Blur(
+            sigmaX = 4f, sigmaY = 4f,
+        )
+
+        val withBackdrop = capture(
+            listOf(DisplayOp.BeginLayer(SaveLayerRec(backdrop = backdrop)), body, DisplayOp.EndLayer),
+        )
+        val withoutBackdrop = capture(
+            listOf(DisplayOp.BeginLayer(SaveLayerRec()), body, DisplayOp.EndLayer),
+        )
+
+        assertNotEquals(
+            assertIs<GPUPreparedCompositeCaptureResult.Ready>(withBackdrop).capture.identity,
+            assertIs<GPUPreparedCompositeCaptureResult.Ready>(withoutBackdrop).capture.identity,
+        )
+    }
+
     private fun readyIdentity(op: DisplayOp): String =
         assertIs<GPUPreparedCompositeCaptureResult.Ready>(capture(listOf(op)))
             .capture

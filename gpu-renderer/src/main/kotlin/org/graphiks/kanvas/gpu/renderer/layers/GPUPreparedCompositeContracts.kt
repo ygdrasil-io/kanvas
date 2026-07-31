@@ -95,6 +95,7 @@ data class GPUPreparedCompositeScopeState(
     val paint: GPUPreparedPaintSnapshot?,
     val transform: GPUPreparedMatrixSnapshot,
     val clip: GPUPreparedClipSnapshot,
+    val backdropRequired: Boolean = false,
 )
 
 /** Ordered entry in a composite scope. */
