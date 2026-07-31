@@ -87,6 +87,58 @@ data class GPUVertexLayoutPlan(
     val shaderLocations: Map<String, Int>,
 )
 
+/** Single structural authority for the four FP-06 interleaved vertex layouts. */
+internal object GPUPreparedVerticesLayoutAuthority {
+    private val position = GPUVertexLayoutPlan(
+        attributes = listOf("position"),
+        strideBytes = 8,
+        offsets = mapOf("position" to 0),
+        shaderLocations = mapOf("position" to 0),
+    )
+    private val positionColor = GPUVertexLayoutPlan(
+        attributes = listOf("position", "color"),
+        strideBytes = 12,
+        offsets = mapOf("position" to 0, "color" to 8),
+        shaderLocations = mapOf("position" to 0, "color" to 1),
+    )
+    private val positionTexCoord = GPUVertexLayoutPlan(
+        attributes = listOf("position", "texcoord"),
+        strideBytes = 16,
+        offsets = mapOf("position" to 0, "texcoord" to 8),
+        shaderLocations = mapOf("position" to 0, "texcoord" to 2),
+    )
+    private val positionColorTexCoord = GPUVertexLayoutPlan(
+        attributes = listOf("position", "color", "texcoord"),
+        strideBytes = 20,
+        offsets = mapOf("position" to 0, "color" to 8, "texcoord" to 12),
+        shaderLocations = mapOf("position" to 0, "color" to 1, "texcoord" to 2),
+    )
+    private val canonicalLayouts = setOf(
+        position,
+        positionColor,
+        positionTexCoord,
+        positionColorTexCoord,
+    )
+
+    fun layout(hasColors: Boolean, hasTexCoords: Boolean): GPUVertexLayoutPlan =
+        when {
+            hasColors && hasTexCoords -> positionColorTexCoord
+            hasColors -> positionColor
+            hasTexCoords -> positionTexCoord
+            else -> position
+        }.structuralSnapshot()
+
+    fun isCanonical(layout: GPUVertexLayoutPlan): Boolean = layout in canonicalLayouts
+
+    private fun GPUVertexLayoutPlan.structuralSnapshot(): GPUVertexLayoutPlan =
+        GPUVertexLayoutPlan(
+            attributes = attributes.toList(),
+            strideBytes = strideBytes,
+            offsets = offsets.toMap(),
+            shaderLocations = shaderLocations.toMap(),
+        )
+}
+
 /**
  * Mutable-source input for the vertices packer; it is not a durable identity.
  * The packer must snapshot its arrays before validation or publication.
@@ -1274,33 +1326,11 @@ private fun String.indexElementBytes(): Long? =
         else -> null
     }
 
-private fun GPUVerticesDescriptor.layoutPlan(): GPUVertexLayoutPlan {
-    val attributes = mutableListOf("position")
-    val offsets = linkedMapOf("position" to 0)
-    val locations = linkedMapOf("position" to 0)
-    var stride = 8
-
-    if (hasColors) {
-        attributes += "color"
-        offsets["color"] = stride
-        locations["color"] = 1
-        stride += 4
-    }
-
-    if (hasTexCoords) {
-        attributes += "texcoord"
-        offsets["texcoord"] = stride
-        locations["texcoord"] = 2
-        stride += 8
-    }
-
-    return GPUVertexLayoutPlan(
-        attributes = attributes,
-        strideBytes = stride,
-        offsets = offsets,
-        shaderLocations = locations,
+private fun GPUVerticesDescriptor.layoutPlan(): GPUVertexLayoutPlan =
+    GPUPreparedVerticesLayoutAuthority.layout(
+        hasColors = hasColors,
+        hasTexCoords = hasTexCoords,
     )
-}
 
 private fun GPUVerticesDescriptor.variantLabel(): String =
     when {

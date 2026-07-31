@@ -3,8 +3,15 @@ package org.graphiks.kanvas.gpu.renderer.artifacts
 import java.security.MessageDigest
 import java.util.Collections
 import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesLayoutAuthority
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexLayoutPlan
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
+
+/** Versioned identity of the topology canonicalization embodied by an artifact. */
+enum class GPUPreparedVerticesCanonicalizationIdentity(val stableIdentity: String) {
+    IdentityV1("identity-v1"),
+    TriangleFanToTriangleListV1("triangle-fan-to-triangle-list-v1"),
+}
 
 /**
  * Immutable frame-owned vertex/index payload. Its identity intentionally excludes
@@ -19,6 +26,7 @@ class GPUPreparedVerticesUploadArtifact internal constructor(
     val indexCount: Int?,
     val indexFormat: String?,
     val provenance: String,
+    val canonicalizationIdentity: GPUPreparedVerticesCanonicalizationIdentity,
 ) {
     private val vertexSnapshot = vertexBytes.copyOf()
     private val indexSnapshot = indexBytes?.copyOf()
@@ -36,6 +44,7 @@ class GPUPreparedVerticesUploadArtifact internal constructor(
             indexCount = indexCount,
             indexFormat = indexFormat,
             provenance = provenance,
+            canonicalizationIdentity = canonicalizationIdentity,
         )
     }
 
@@ -46,6 +55,7 @@ class GPUPreparedVerticesUploadArtifact internal constructor(
         .int("vertexCount", vertexCount)
         .boolean("hasIndices", indexSnapshot != null)
         .int("indexCount", indexCount ?: 0)
+        .text("canonicalizationIdentity", canonicalizationIdentity.stableIdentity)
         .int("strideBytes", this.layout.strideBytes)
         .texts("attributes", this.layout.attributes)
         .texts(
@@ -70,18 +80,6 @@ class GPUPreparedVerticesUploadArtifact internal constructor(
     fun indexBytesForUpload(): ByteArray? = indexSnapshot?.copyOf()
 
     private companion object {
-        val canonicalLayouts = setOf(
-            listOf("position"),
-            listOf("position", "color"),
-            listOf("position", "texcoord"),
-            listOf("position", "color", "texcoord"),
-        )
-        val attributeByteSizes = mapOf(
-            "position" to 8,
-            "color" to 4,
-            "texcoord" to 8,
-        )
-
         fun validate(
             topology: GPUVertexMode,
             layout: GPUVertexLayoutPlan,
@@ -91,46 +89,37 @@ class GPUPreparedVerticesUploadArtifact internal constructor(
             indexCount: Int?,
             indexFormat: String?,
             provenance: String,
+            canonicalizationIdentity: GPUPreparedVerticesCanonicalizationIdentity,
         ) {
             require(provenance.isNotBlank()) { "Prepared vertices provenance must not be blank" }
             require(topology == GPUVertexMode.Triangles || topology == GPUVertexMode.TriangleStrip) {
                 "Prepared vertices topology must be canonical"
             }
             require(vertexCount > 0) { "Prepared vertices vertexCount must be positive" }
-            require(layout.strideBytes > 0) { "Prepared vertices layout stride must be positive" }
+            validateLayout(layout)
             require(vertexBytes.size == checkedProduct(vertexCount, layout.strideBytes, "vertex bytes")) {
                 "Prepared vertices bytes must exactly match vertexCount * strideBytes"
             }
-            validateLayout(layout)
             validateIndices(indexBytes, indexCount, indexFormat)
+            validateCanonicalization(topology, indexBytes, canonicalizationIdentity)
         }
 
         fun validateLayout(layout: GPUVertexLayoutPlan) {
-            require(layout.attributes in canonicalLayouts) {
-                "Prepared vertices layout attributes must be canonical"
+            require(GPUPreparedVerticesLayoutAuthority.isCanonical(layout)) {
+                "Prepared vertices layout must exactly match the canonical FP-06 layout authority"
             }
-            val attributes = layout.attributes
-            require(layout.offsets.keys == attributes.toSet()) {
-                "Prepared vertices layout offsets must exactly match attributes"
-            }
-            require(layout.shaderLocations.keys == attributes.toSet()) {
-                "Prepared vertices layout shader locations must exactly match attributes"
-            }
-            require(layout.offsets.values.all { offset -> offset >= 0 && offset < layout.strideBytes }) {
-                "Prepared vertices layout offsets must be within stride"
-            }
-            require(layout.shaderLocations.values.all { location -> location >= 0 }) {
-                "Prepared vertices layout shader locations must be non-negative"
-            }
-            require(layout.offsets.values.toSet().size == attributes.size) {
-                "Prepared vertices layout offsets must be unique"
-            }
-            require(layout.shaderLocations.values.toSet().size == attributes.size) {
-                "Prepared vertices layout shader locations must be unique"
-            }
-            attributes.forEach { attribute ->
-                require(layout.offsets.getValue(attribute) + attributeByteSizes.getValue(attribute) <= layout.strideBytes) {
-                    "Prepared vertices attribute must fit within stride"
+        }
+
+        fun validateCanonicalization(
+            topology: GPUVertexMode,
+            indexBytes: ByteArray?,
+            canonicalizationIdentity: GPUPreparedVerticesCanonicalizationIdentity,
+        ) {
+            if (canonicalizationIdentity ==
+                GPUPreparedVerticesCanonicalizationIdentity.TriangleFanToTriangleListV1
+            ) {
+                require(topology == GPUVertexMode.Triangles && indexBytes != null) {
+                    "Triangle-fan canonicalization requires triangle-list topology and an index payload"
                 }
             }
         }

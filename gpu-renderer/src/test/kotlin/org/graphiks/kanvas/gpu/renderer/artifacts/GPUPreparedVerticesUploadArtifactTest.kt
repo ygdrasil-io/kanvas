@@ -53,12 +53,10 @@ class GPUPreparedVerticesUploadArtifactTest {
         val baseline = preparedArtifact(validVertexBytes(), validUint16Indices())
         val colorLayout = GPUVertexLayoutPlan(
             attributes = listOf("position", "color"),
-            strideBytes = 16,
+            strideBytes = 12,
             offsets = linkedMapOf("position" to 0, "color" to 8),
             shaderLocations = linkedMapOf("position" to 0, "color" to 1),
         )
-        val shiftedColorLayout = colorLayout.copy(offsets = linkedMapOf("position" to 0, "color" to 12))
-        val relocatedColorLayout = colorLayout.copy(shaderLocations = linkedMapOf("position" to 0, "color" to 2))
 
         val variants = listOf(
             preparedArtifact(validVertexBytes(), validUint16Indices(), topology = GPUVertexMode.TriangleStrip),
@@ -67,21 +65,15 @@ class GPUPreparedVerticesUploadArtifactTest {
             preparedArtifact(validVertexBytes(8, 4), validUint16Indices(), vertexCount = 4),
             preparedArtifact(validVertexBytes(), byteArrayOf(0, 0, 1, 0, 2, 0), indexCount = 3),
             preparedArtifact(ByteArray(24), ByteArray(8), indexCount = 2, indexFormat = "uint32"),
-            preparedArtifact(validVertexBytes(12), validUint16Indices(), layout = positionLayout(strideBytes = 12)),
-            preparedArtifact(validVertexBytes(16), validUint16Indices(), layout = colorLayout),
-            preparedArtifact(validVertexBytes(16), validUint16Indices(), layout = shiftedColorLayout),
-            preparedArtifact(validVertexBytes(16), validUint16Indices(), layout = relocatedColorLayout),
+            preparedArtifact(validVertexBytes(12), validUint16Indices(), layout = colorLayout),
+            preparedArtifact(
+                validVertexBytes(),
+                validUint16Indices(),
+                canonicalizationIdentity = GPUPreparedVerticesCanonicalizationIdentity.TriangleFanToTriangleListV1,
+            ),
         )
 
         variants.forEach { variant -> assertNotEquals(baseline.key, variant.key) }
-        assertNotEquals(
-            preparedArtifact(validVertexBytes(16), validUint16Indices(), layout = colorLayout).key,
-            preparedArtifact(validVertexBytes(16), validUint16Indices(), layout = shiftedColorLayout).key,
-        )
-        assertNotEquals(
-            preparedArtifact(validVertexBytes(16), validUint16Indices(), layout = colorLayout).key,
-            preparedArtifact(validVertexBytes(16), validUint16Indices(), layout = relocatedColorLayout).key,
-        )
     }
 
     @Test
@@ -116,14 +108,48 @@ class GPUPreparedVerticesUploadArtifactTest {
     }
 
     @Test
-    fun `artifact accepts nonnegative shader locations independent from stride bytes`() {
-        val artifact = preparedArtifact(
-            vertices = validVertexBytes(),
-            indices = null,
-            layout = positionLayout().copy(shaderLocations = mapOf("position" to 8)),
+    fun `artifact rejects a noncanonical shader location without comparing it to stride`() {
+        assertFailsWith<IllegalArgumentException> {
+            preparedArtifact(
+                vertices = validVertexBytes(),
+                indices = null,
+                layout = positionLayout().copy(shaderLocations = mapOf("position" to 8)),
+            )
+        }
+    }
+
+    @Test
+    fun `artifact canonicalization identity is versioned key-visible and coherent`() {
+        val direct = preparedArtifact(validVertexBytes(), validUint16Indices())
+        val fan = preparedArtifact(
+            validVertexBytes(),
+            validUint16Indices(),
+            canonicalizationIdentity = GPUPreparedVerticesCanonicalizationIdentity.TriangleFanToTriangleListV1,
         )
 
-        assertEquals(8, artifact.layout.shaderLocations.getValue("position"))
+        assertEquals(GPUPreparedVerticesCanonicalizationIdentity.IdentityV1, direct.canonicalizationIdentity)
+        assertEquals("identity-v1", direct.canonicalizationIdentity.stableIdentity)
+        assertEquals(
+            GPUPreparedVerticesCanonicalizationIdentity.TriangleFanToTriangleListV1,
+            fan.canonicalizationIdentity,
+        )
+        assertEquals("triangle-fan-to-triangle-list-v1", fan.canonicalizationIdentity.stableIdentity)
+        assertNotEquals(direct.key, fan.key)
+        assertFailsWith<IllegalArgumentException> {
+            preparedArtifact(
+                validVertexBytes(),
+                null,
+                canonicalizationIdentity = GPUPreparedVerticesCanonicalizationIdentity.TriangleFanToTriangleListV1,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            preparedArtifact(
+                validVertexBytes(),
+                validUint16Indices(),
+                topology = GPUVertexMode.TriangleStrip,
+                canonicalizationIdentity = GPUPreparedVerticesCanonicalizationIdentity.TriangleFanToTriangleListV1,
+            )
+        }
     }
 
     @Test
@@ -134,6 +160,21 @@ class GPUPreparedVerticesUploadArtifactTest {
         }
         assertFailsWith<IllegalArgumentException> { preparedArtifact(validVertexBytes(), null, vertexCount = 0) }
         assertFailsWith<IllegalArgumentException> { preparedArtifact(ByteArray(23), null) }
+        assertFailsWith<IllegalArgumentException> {
+            preparedArtifact(validVertexBytes(12), null, layout = positionLayout(strideBytes = 12))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            preparedArtifact(
+                validVertexBytes(12),
+                null,
+                layout = GPUVertexLayoutPlan(
+                    listOf("position", "color"),
+                    12,
+                    mapOf("position" to 0, "color" to 4),
+                    mapOf("position" to 0, "color" to 1),
+                ),
+            )
+        }
         assertFailsWith<IllegalArgumentException> {
             preparedArtifact(
                 validVertexBytes(),
@@ -203,6 +244,8 @@ private fun preparedArtifact(
     vertexCount: Int = 3,
     indexCount: Int? = indices?.size?.div(2),
     indexFormat: String? = indices?.let { "uint16" },
+    canonicalizationIdentity: GPUPreparedVerticesCanonicalizationIdentity =
+        GPUPreparedVerticesCanonicalizationIdentity.IdentityV1,
 ): GPUPreparedVerticesUploadArtifact =
     GPUPreparedVerticesUploadArtifact(
         topology = topology,
@@ -213,6 +256,7 @@ private fun preparedArtifact(
         indexCount = indexCount,
         indexFormat = indexFormat,
         provenance = provenance,
+        canonicalizationIdentity = canonicalizationIdentity,
     )
 
 private fun positionLayout(strideBytes: Int = 8): GPUVertexLayoutPlan =
