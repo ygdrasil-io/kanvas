@@ -269,6 +269,17 @@ private sealed interface PreparedMeshColorFilterMapping {
     data class Refused(val reason: String) : PreparedMeshColorFilterMapping
 }
 
+private fun PreparedMeshColorFilterMapping.admitAtDepth(
+    depth: Int,
+): PreparedMeshColorFilterMapping =
+    if (this is PreparedMeshColorFilterMapping.Ready &&
+        graphDepth > PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH - depth + 1
+    ) {
+        PreparedMeshColorFilterMapping.Refused("child_graph_depth")
+    } else {
+        this
+    }
+
 private class PreparedMeshProgramChildMapper(
     private val descriptorAssembly: GPUMaterialDescriptorAssemblySession,
 ) {
@@ -324,39 +335,38 @@ private class PreparedMeshProgramChildMapper(
     private fun mapColorFilter(
         filter: ColorFilter,
         depth: Int,
-    ): PreparedMeshColorFilterMapping {
-        if (depth > PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH) {
-            return PreparedMeshColorFilterMapping.Refused("child_graph_depth")
-        }
-        return when (val mapped = analyzeColorFilter(filter)) {
-            is PreparedMeshColorFilterMapping.Ready ->
-                if (mapped.graphDepth > PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH - depth + 1) {
-                    PreparedMeshColorFilterMapping.Refused("child_graph_depth")
-                } else {
-                    mapped
-                }
-            is PreparedMeshColorFilterMapping.Refused -> mapped
-        }
-    }
+    ): PreparedMeshColorFilterMapping = analyzeColorFilter(filter, depth)
 
     private fun analyzeColorFilter(
         filter: ColorFilter,
+        activeDepth: Int,
     ): PreparedMeshColorFilterMapping {
-        colorFilterMappings[filter]?.let { return it }
-        if (!colorFilterActive.add(filter)) {
+        if (colorFilterActive.contains(filter)) {
             return PreparedMeshColorFilterMapping.Refused("child_graph_cycle")
         }
+        if (activeDepth > PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH) {
+            return PreparedMeshColorFilterMapping.Refused("child_graph_depth")
+        }
+        colorFilterMappings[filter]?.let { mapped ->
+            return mapped.admitAtDepth(activeDepth)
+        }
+        colorFilterActive.add(filter)
         val result = try {
-            analyzeActiveColorFilter(filter)
+            analyzeActiveColorFilter(filter, activeDepth)
         } finally {
             colorFilterActive.remove(filter)
         }
-        colorFilterMappings[filter] = result
-        return result
+        if (result !is PreparedMeshColorFilterMapping.Refused ||
+            result.reason != "child_graph_depth"
+        ) {
+            colorFilterMappings[filter] = result
+        }
+        return result.admitAtDepth(activeDepth)
     }
 
     private fun analyzeActiveColorFilter(
         filter: ColorFilter,
+        activeDepth: Int,
     ): PreparedMeshColorFilterMapping =
         when (filter) {
             is ColorFilter.Matrix -> {
@@ -383,9 +393,9 @@ private class PreparedMeshProgramChildMapper(
                 graphDepth = 1,
             )
             is ColorFilter.Compose -> {
-                val outer = analyzeColorFilter(filter.outer)
+                val outer = analyzeColorFilter(filter.outer, activeDepth + 1)
                 if (outer is PreparedMeshColorFilterMapping.Refused) return outer
-                val inner = analyzeColorFilter(filter.inner)
+                val inner = analyzeColorFilter(filter.inner, activeDepth + 1)
                 if (inner is PreparedMeshColorFilterMapping.Refused) return inner
                 PreparedMeshColorFilterMapping.Ready(
                     GPUPreparedColorFilterChildDescriptor.Compose(
@@ -395,7 +405,7 @@ private class PreparedMeshProgramChildMapper(
                     graphDepth = 1 + maxOf(outer.graphDepth, inner.graphDepth),
                 )
             }
-            is ColorFilter.RuntimeEffect -> analyzeRuntimeColorFilter(filter)
+            is ColorFilter.RuntimeEffect -> analyzeRuntimeColorFilter(filter, activeDepth)
             is ColorFilter.Table,
             is ColorFilter.Lighting,
             ColorFilter.SRGBToLinear,
@@ -410,6 +420,7 @@ private class PreparedMeshProgramChildMapper(
 
     private fun analyzeRuntimeColorFilter(
         filter: ColorFilter.RuntimeEffect,
+        activeDepth: Int,
     ): PreparedMeshColorFilterMapping {
         if (filter.effect.id.isBlank()) {
             return PreparedMeshColorFilterMapping.Refused("blank_registered_effect_id")
@@ -420,7 +431,7 @@ private class PreparedMeshProgramChildMapper(
             if (name.isBlank()) {
                 return PreparedMeshColorFilterMapping.Refused("blank_child_name")
             }
-            when (val mapped = analyzeColorFilter(child)) {
+            when (val mapped = analyzeColorFilter(child, activeDepth + 1)) {
                 is PreparedMeshColorFilterMapping.Ready -> {
                     mappedChildren[name] =
                         GPURuntimeEffectChildDescriptor.ColorFilter(mapped.descriptor)

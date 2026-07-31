@@ -383,6 +383,23 @@ class GPUPreparedMeshProgramMapperTest {
     }
 
     @Test
+    fun `hostile compose chain refuses at the active depth guard`() {
+        var hostile: ColorFilter = identityMatrixFilter()
+        repeat(65_536) {
+            hostile = ColorFilter.Compose(identityMatrixFilter(), hostile)
+        }
+
+        val refused = assertIs<GPUPreparedMeshProgramMappingResult.Refused>(
+            program(MeshChildren.of("hostile" to ColorFilterChild(hostile)))
+                .toPreparedMeshProgramMappingResult(1f),
+        )
+
+        assertEquals(GPUPreparedVerticesRefusalCodes.MeshProgramChild, refused.code)
+        assertEquals("child_graph_depth", refused.facts["reason"])
+        assertEquals("hostile", refused.facts["childName"])
+    }
+
+    @Test
     fun `draw mesh override or paint blend is retained separately from material identity`() {
         val base = drawMesh(blendMode = null, paintBlendMode = BlendMode.DST_OVER)
         val overridden = drawMesh(blendMode = BlendMode.PLUS, paintBlendMode = BlendMode.DST_OVER)
