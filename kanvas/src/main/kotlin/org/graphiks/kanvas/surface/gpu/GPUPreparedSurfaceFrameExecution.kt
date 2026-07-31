@@ -420,6 +420,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 build.stateEventCount,
                 completion.outputKind,
                 build.textMetrics,
+                build.textCommandIds,
+                build.pathStrokeCommandIds,
                 beforeSubmit,
                 afterCompletion,
                 telemetryBefore,
@@ -481,9 +483,20 @@ internal class GPUPreparedSurfaceFrameExecutor(
                     pageCount = pending.textMetrics.pageCount,
                     pageBytes = pending.textMetrics.pageBytes,
                     subRuns = pending.textMetrics.subRunCount,
-                    draws = pending.textMetrics.subRunCount,
-                    bindGroups = pending.textMetrics.subRunCount,
-                    submits = if (pending.textMetrics.subRunCount == 0) {
+                    draws = Math.toIntExact(
+                        pending.textCommandIds.sumOf { commandId ->
+                            commandDelta(pending, commandId).totalDraws
+                        },
+                    ),
+                    bindGroups = Math.toIntExact(
+                        pending.textCommandIds.sumOf { commandId ->
+                            commandDelta(pending, commandId).bindGroups
+                        },
+                    ),
+                    submits = if (pending.textCommandIds.none { commandId ->
+                            commandDelta(pending, commandId).totalDraws > 0L
+                        }
+                    ) {
                         0
                     } else {
                         Math.toIntExact(
@@ -503,6 +516,11 @@ internal class GPUPreparedSurfaceFrameExecutor(
             )
             check(evidence.destinationSnapshotCreations == 0L)
             check(evidence.destinationReadbackSnapshots == 0L)
+            check(
+                pending.pathStrokeCommandIds.count { commandId ->
+                    commandDelta(pending, commandId).totalDraws > 0L
+                } == evidence.textCounters.pathStrokeDraws,
+            )
             GPUPreparedSurfaceExecutionResult.Succeeded(
                 pending.rgba,
                 pending.visualOperationCount,
@@ -551,12 +569,29 @@ internal class GPUPreparedSurfaceFrameExecutor(
         check(it >= 0L)
     }
 
+    private fun commandDelta(
+        pending: PendingPreparedSuccess,
+        commandId: Int,
+    ): org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedNativeCommandEncodingCounters {
+        val before = pending.beforeSubmit.commandsByCommandId[commandId]
+            ?: org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedNativeCommandEncodingCounters()
+        val after = pending.afterCompletion.commandsByCommandId[commandId]
+            ?: org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedNativeCommandEncodingCounters()
+        return org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedNativeCommandEncodingCounters(
+            draws = delta(before.draws, after.draws),
+            drawIndexed = delta(before.drawIndexed, after.drawIndexed),
+            bindGroups = delta(before.bindGroups, after.bindGroups),
+        )
+    }
+
     private class PendingPreparedSuccess(
         rgba: ByteArray,
         val visualOperationCount: Int,
         val stateEventCount: Int,
         val outputKind: GPUPreparedSurfaceOutputKind,
         val textMetrics: GPUPreparedTextFrameMetrics,
+        val textCommandIds: Set<Int>,
+        val pathStrokeCommandIds: Set<Int>,
         val beforeSubmit: GPUPreparedSceneNativeCounters,
         val afterCompletion: GPUPreparedSceneNativeCounters,
         val telemetryBefore: GPUBackendRuntimeTelemetry,

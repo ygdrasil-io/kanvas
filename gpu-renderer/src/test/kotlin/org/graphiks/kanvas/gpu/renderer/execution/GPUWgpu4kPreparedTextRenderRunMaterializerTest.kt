@@ -361,6 +361,14 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
             runCommands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
                 .map { it.index },
         )
+        val encodedByCommand = ready.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.PreparedTextRenderRun>()
+            .flatMap(::preparedNativeRenderCommandEvidence)
+            .associateBy { evidence -> evidence.commandIdValue }
+        assertEquals(plan.packets.map { packet -> packet.payloadRef.commandIdValue }.toSet(), encodedByCommand.keys)
+        assertEquals(listOf(1, 1), encodedByCommand.values.map { evidence -> evidence.draws })
+        assertEquals(listOf(0, 0), encodedByCommand.values.map { evidence -> evidence.drawIndexed })
+        assertEquals(listOf(3, 3), encodedByCommand.values.map { evidence -> evidence.bindGroups })
 
         ready.ownedResources.single().close()
         r8.ownedResources.close()

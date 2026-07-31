@@ -12,6 +12,29 @@ import kotlin.math.roundToInt
  * then is encoded to the sRGB target. A8 coverage is never decoded as color.
  */
 object GPUPreparedTextPixelOracle {
+    data class IntRect(
+        val left: Int,
+        val top: Int,
+        val right: Int,
+        val bottom: Int,
+    ) {
+        init {
+            require(left <= right && top <= bottom)
+        }
+    }
+
+    data class Layer(
+        val bounds: IntRect,
+        val color: StraightSrgb,
+        val paintAlpha: Float,
+        val coverage: Int = 255,
+    ) {
+        init {
+            require(paintAlpha.isFinite() && paintAlpha in 0f..1f)
+            require(coverage in 0..255)
+        }
+    }
+
     data class StraightSrgb(
         val red: Int,
         val green: Int,
@@ -82,6 +105,49 @@ object GPUPreparedTextPixelOracle {
         return actual.indices.maxOfOrNull { index ->
             abs((actual[index].toInt() and 0xff) - (expected[index].toInt() and 0xff))
         } ?: 0
+    }
+
+    fun renderLayers(
+        width: Int,
+        height: Int,
+        layers: List<Layer>,
+    ): ByteArray {
+        require(width > 0 && height > 0)
+        val linearPremul = FloatArray(Math.multiplyExact(Math.multiplyExact(width, height), 4))
+        layers.forEach { layer ->
+            require(
+                layer.bounds.left in 0..width &&
+                    layer.bounds.right in 0..width &&
+                    layer.bounds.top in 0..height &&
+                    layer.bounds.bottom in 0..height,
+            )
+            val sourceAlpha =
+                layer.color.alpha / 255f * layer.paintAlpha * (layer.coverage / 255f)
+            val sourceRed = decodeSrgb(layer.color.red / 255f) * sourceAlpha
+            val sourceGreen = decodeSrgb(layer.color.green / 255f) * sourceAlpha
+            val sourceBlue = decodeSrgb(layer.color.blue / 255f) * sourceAlpha
+            val inverseSourceAlpha = 1f - sourceAlpha
+            for (y in layer.bounds.top until layer.bounds.bottom) {
+                for (x in layer.bounds.left until layer.bounds.right) {
+                    val pixel = (y * width + x) * 4
+                    linearPremul[pixel] = sourceRed + linearPremul[pixel] * inverseSourceAlpha
+                    linearPremul[pixel + 1] =
+                        sourceGreen + linearPremul[pixel + 1] * inverseSourceAlpha
+                    linearPremul[pixel + 2] =
+                        sourceBlue + linearPremul[pixel + 2] * inverseSourceAlpha
+                    linearPremul[pixel + 3] =
+                        sourceAlpha + linearPremul[pixel + 3] * inverseSourceAlpha
+                }
+            }
+        }
+        return ByteArray(linearPremul.size) { index ->
+            val encoded = if (index % 4 == 3) {
+                linearPremul[index]
+            } else {
+                encodeSrgb(linearPremul[index])
+            }
+            quantize(encoded).toByte()
+        }
     }
 
     private fun sourceOver(

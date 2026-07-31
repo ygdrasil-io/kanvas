@@ -941,6 +941,12 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
                     pendingCommandBuffers = 0,
                     drawIndexed = 0,
                     pipelineBinds = 1,
+                    commandsByCommandId = mapOf(
+                        1 to GPUPreparedNativeCommandEncodingCounters(
+                            draws = 1,
+                            bindGroups = 1,
+                        ),
+                    ),
                 ),
                 backend.counters(),
             )

@@ -1591,6 +1591,7 @@ private class WgpuBackendSession(
                     draws = encoding.draws,
                     drawIndexed = encoding.drawIndexed,
                     pipelineBinds = encoding.pipelineBinds,
+                    commandsByCommandId = encoding.commandsByCommandId,
                 ).withPreparedImageNativeCounters(preparedImage)
             },
         ).also { child ->

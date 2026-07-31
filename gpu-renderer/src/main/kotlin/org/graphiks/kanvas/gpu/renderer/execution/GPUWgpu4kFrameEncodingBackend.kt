@@ -36,6 +36,7 @@ internal data class GPUWgpu4kFrameEncodingCounters(
     val msaaResolves: Long = 0L,
     val drawIndexed: Long = 0L,
     val pipelineBinds: Long = 0L,
+    val commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> = emptyMap(),
 )
 
 internal class GPUWgpu4kRenderCommandActions(
@@ -223,6 +224,8 @@ internal class GPUWgpu4kFrameEncodingBackend(
     private var destinationCopyCount = 0L
     private var resourceCopyCount = 0L
     private var msaaResolveCount = 0L
+    private val commandsByCommandId =
+        linkedMapOf<Int, GPUPreparedNativeCommandEncodingCounters>()
 
     override fun isCanonicalSceneTargetView(
         sceneTarget: GPUSceneTarget,
@@ -284,6 +287,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
         resourceCopies = resourceCopyCount,
         msaaResolves = msaaResolveCount,
         pipelineBinds = pipelineBindCount,
+        commandsByCommandId = commandsByCommandId.toMap(),
     )
 
     override fun close() {
@@ -419,6 +423,24 @@ internal class GPUWgpu4kFrameEncodingBackend(
                     synchronized(this@GPUWgpu4kFrameEncodingBackend) { pipelineBindCount += 1 }
                 },
             )
+            preparedNativeRenderCommandEvidence(render).forEach { encoded ->
+                synchronized(this@GPUWgpu4kFrameEncodingBackend) {
+                    val previous = commandsByCommandId[encoded.commandIdValue]
+                        ?: GPUPreparedNativeCommandEncodingCounters()
+                    commandsByCommandId[encoded.commandIdValue] =
+                        GPUPreparedNativeCommandEncodingCounters(
+                            draws = Math.addExact(previous.draws, encoded.draws.toLong()),
+                            drawIndexed = Math.addExact(
+                                previous.drawIndexed,
+                                encoded.drawIndexed.toLong(),
+                            ),
+                            bindGroups = Math.addExact(
+                                previous.bindGroups,
+                                encoded.bindGroups.toLong(),
+                            ),
+                        )
+                }
+            }
             if (pass.resolveTarget != null) {
                 synchronized(this@GPUWgpu4kFrameEncodingBackend) { msaaResolveCount += 1 }
             }

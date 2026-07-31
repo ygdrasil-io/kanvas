@@ -2,13 +2,9 @@ package org.graphiks.kanvas.surface.gpu
 
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
-import kotlin.math.abs
-import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -37,7 +33,7 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 
 class GPUPreparedColorGlyphSourceNativeOracleTest {
     @Test
-    fun `source COLRv0 CPAL currentColor and paint alpha match independent CPU pixels`() {
+    fun `source COLRv0 CPAL currentColor and paint alpha match the sole CPU oracle`() {
         val source = sourceFixtureWithForegroundLayer()
         val backend = GPUBackendRuntimeNativeFactory.createOrNull()
         if (backend == null) {
@@ -120,7 +116,7 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
                 colorSemantics.map { semantic -> semantic.planArtifactKey }.distinct().size,
             )
 
-            val expected = independentCpuOracle(source)
+            val expected = oracleBuffer(source)
             val session = backend.prepareSceneFrameSession(
                 GPUOffscreenTargetRequest(
                     width = TARGET_WIDTH,
@@ -140,7 +136,9 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
                     completed.diagnostic.toString(),
                 )
                 val actual = assertIs<GPUSceneFrameOutput.ReadbackRgba>(completed.output).bytes
-                val maximumDelta = assertRgbaWithinOneByte(expected, actual)
+                val maximumDelta =
+                    GPUPreparedTextPixelOracle.maxChannelDelta(actual, expected)
+                assertTrue(maximumDelta <= 1, "maxChannelDelta=$maximumDelta")
                 val counters = session.nativeCounters()
                 assertEquals(1L, counters.encoders)
                 assertEquals(1L, counters.commandBuffers)
@@ -162,12 +160,18 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         }
     }
 
-    private fun independentCpuOracle(source: SourceFixture): ByteArray {
-        val draws = buildList {
+    private fun oracleBuffer(source: SourceFixture): ByteArray =
+        GPUPreparedTextPixelOracle.renderLayers(
+            width = TARGET_WIDTH,
+            height = TARGET_HEIGHT,
+            layers = buildList {
             add(
-                CpuLayer(
-                    bounds = GLYPH_7_RECTANGLE.toDeviceBounds(A8_ORIGIN_X, BASELINE_Y),
-                    linearPremul = floatArrayOf(1f, 1f, 1f, 1f),
+                GPUPreparedTextPixelOracle.Layer(
+                    bounds = GLYPH_7_RECTANGLE
+                        .toDeviceBounds(A8_ORIGIN_X, BASELINE_Y)
+                        .toOracleRect(),
+                    color = GPUPreparedTextPixelOracle.StraightSrgb(255, 255, 255),
+                    paintAlpha = 1f,
                 ),
             )
             listOf(COLOR_ORIGIN_X_0, COLOR_ORIGIN_X_1).forEach { originX ->
@@ -177,57 +181,35 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
                         8 -> GLYPH_8_RECTANGLE
                         else -> error("Unexpected source layer glyph ${layer.glyphId}")
                     }
-                    val sourceColor = if (layer.paletteIndex == FOREGROUND_PALETTE_INDEX) {
-                        floatArrayOf(
-                            testSrgbToLinear(EXPECTED_CURRENT_COLOR_R),
-                            testSrgbToLinear(EXPECTED_CURRENT_COLOR_G),
-                            testSrgbToLinear(EXPECTED_CURRENT_COLOR_B),
-                            1f,
-                        )
-                    } else {
-                        requireNotNull(layer.colorArgb).toLinearPremultipliedRgba()
-                    }
-                    val paintModulated = FloatArray(4) { index ->
-                        sourceColor[index] * EXPECTED_PAINT_ALPHA
-                    }
+                    val sourceColor =
+                        if (layer.paletteIndex == FOREGROUND_PALETTE_INDEX) {
+                            GPUPreparedTextPixelOracle.StraightSrgb(
+                                red = 128,
+                                green = 64,
+                                blue = 191,
+                            )
+                        } else {
+                            val argb = requireNotNull(layer.colorArgb)
+                            GPUPreparedTextPixelOracle.StraightSrgb(
+                                red = argb ushr 16 and 0xff,
+                                green = argb ushr 8 and 0xff,
+                                blue = argb and 0xff,
+                                alpha = argb ushr 24 and 0xff,
+                            )
+                        }
                     add(
-                        CpuLayer(
-                            bounds = rectangle.toDeviceBounds(originX, BASELINE_Y),
-                            linearPremul = paintModulated,
-                        ),
+                        GPUPreparedTextPixelOracle.Layer(
+                            bounds = rectangle
+                                .toDeviceBounds(originX, BASELINE_Y)
+                                .toOracleRect(),
+                            color = sourceColor,
+                            paintAlpha = EXPECTED_PAINT_ALPHA,
+                        )
                     )
                 }
             }
-        }
-        return composeSourceOver(draws)
-    }
-
-    private fun composeSourceOver(layers: List<CpuLayer>): ByteArray {
-        val rgba = FloatArray(TARGET_WIDTH * TARGET_HEIGHT * 4)
-        layers.forEach { layer ->
-            for (y in layer.bounds.top until layer.bounds.bottom) {
-                for (x in layer.bounds.left until layer.bounds.right) {
-                    require(x in 0 until TARGET_WIDTH && y in 0 until TARGET_HEIGHT) {
-                        "source rectangle outside target: x=$x y=$y bounds=${layer.bounds}"
-                    }
-                    val pixel = (y * TARGET_WIDTH + x) * 4
-                    val sourceAlpha = layer.linearPremul[3]
-                    val inverseSourceAlpha = 1f - sourceAlpha
-                    rgba[pixel] =
-                        layer.linearPremul[0] + rgba[pixel] * inverseSourceAlpha
-                    rgba[pixel + 1] =
-                        layer.linearPremul[1] + rgba[pixel + 1] * inverseSourceAlpha
-                    rgba[pixel + 2] =
-                        layer.linearPremul[2] + rgba[pixel + 2] * inverseSourceAlpha
-                    rgba[pixel + 3] = sourceAlpha + rgba[pixel + 3] * inverseSourceAlpha
-                }
-            }
-        }
-        return ByteArray(rgba.size) { index ->
-            val encoded = if (index % 4 == 3) rgba[index] else rgba[index].linearToSrgb()
-            (encoded.coerceIn(0f, 1f) * 255f).roundToInt().toByte()
-        }
-    }
+            },
+        )
 
     private fun sourceFixtureWithForegroundLayer(): SourceFixture {
         val bytes = GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer()
@@ -326,50 +308,6 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         clip = ClipStack.WideOpen,
     )
 
-    private fun Int.toLinearPremultipliedRgba(): FloatArray {
-        val alpha = (ushr(24) and 0xff) / 255f
-        return floatArrayOf(
-            ((ushr(16) and 0xff) / 255f).srgbToLinear() * alpha,
-            ((ushr(8) and 0xff) / 255f).srgbToLinear() * alpha,
-            ((this and 0xff) / 255f).srgbToLinear() * alpha,
-            alpha,
-        )
-    }
-
-    private fun Float.srgbToLinear(): Float =
-        if (this <= 0.04045f) this / 12.92f
-        else (((this + 0.055f) / 1.055f).toDouble().pow(2.4)).toFloat()
-
-    private fun testSrgbToLinear(value: Float): Float =
-        if (value <= 0.04045f) value / 12.92f
-        else (((value + 0.055f) / 1.055f).toDouble().pow(2.4)).toFloat()
-
-    private fun Float.linearToSrgb(): Float =
-        if (this <= 0.0031308f) this * 12.92f
-        else (1.055 * toDouble().pow(1.0 / 2.4) - 0.055).toFloat()
-
-    private fun assertRgbaWithinOneByte(expected: ByteArray, actual: ByteArray): Int {
-        assertEquals(expected.size, actual.size)
-        var maximumDelta = 0
-        var maximumDeltaIndex = -1
-        expected.indices.forEach { index ->
-            val delta = abs(
-                (expected[index].toInt() and 0xff) - (actual[index].toInt() and 0xff),
-            )
-            if (delta > maximumDelta) {
-                maximumDelta = delta
-                maximumDeltaIndex = index
-            }
-        }
-        assertTrue(
-            maximumDelta <= 1,
-            "maxChannelDelta=$maximumDelta at rgba[$maximumDeltaIndex], " +
-                "expected=${expected.getOrNull(maximumDeltaIndex)?.toInt()?.and(0xff)}, " +
-                "actual=${actual.getOrNull(maximumDeltaIndex)?.toInt()?.and(0xff)}",
-        )
-        return maximumDelta
-    }
-
     private fun ByteArray.sha256Hex(): String =
         MessageDigest.getInstance("SHA-256")
             .digest(this)
@@ -384,11 +322,6 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         val glyphId: Int,
         val paletteIndex: Int,
         val colorArgb: Int?,
-    )
-
-    private data class CpuLayer(
-        val bounds: DeviceRectangle,
-        val linearPremul: FloatArray,
     )
 
     private data class FontUnitRectangle(
@@ -417,7 +350,10 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         val top: Int,
         val right: Int,
         val bottom: Int,
-    )
+    ) {
+        fun toOracleRect(): GPUPreparedTextPixelOracle.IntRect =
+            GPUPreparedTextPixelOracle.IntRect(left, top, right, bottom)
+    }
 
     private data class NativeEvidence(
         val available: Boolean,

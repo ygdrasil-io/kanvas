@@ -357,6 +357,7 @@ data class GPUPreparedSceneNativeCounters(
     val preparedImageFrameSamplerCreations: Long = 0L,
     val preparedImageFrameUniformBufferCreations: Long = 0L,
     val preparedImageFrameBindGroupCreations: Long = 0L,
+    val commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> = emptyMap(),
 )
 
 internal fun GPUPreparedSceneNativeCounters.withPreparedImageNativeCounters(

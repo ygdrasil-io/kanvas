@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.surface.gpu
 
+import org.graphiks.kanvas.text.FontTypeface
+
 /**
  * Deterministic FP-05 inputs. Accessors intentionally allocate fresh arrays/lists so tests
  * cannot turn a later cold frame into a shared mutable or cache-like sample.
@@ -17,49 +19,32 @@ object GPUPreparedTextTestFixtures {
 
     fun repeatedGlyphPageSharing(): List<Int> = listOf(7, 7, 8, 7)
 
-    fun fontFaces(): List<FontFaceCase> = listOf(
-        FontFaceCase("liberation-sans", 0),
-        FontFaceCase("task13-colrv0", 1),
-    )
+    fun fontFaces(): List<FontTypeface> {
+        val collection = ttcFont(
+            colrFontBytesWithForegroundLayer(),
+            colrFontBytesWithForegroundLayer(),
+        )
+        return listOf(
+            FontTypeface(collection, "task13-ttc-face-0", faceIndex = 0),
+            FontTypeface(collection, "task13-ttc-face-1", faceIndex = 1),
+        )
+    }
 
-    fun transformAndScissor(): TransformScissorCase = TransformScissorCase(
-        affine = listOf(1f, 0.25f, 3f, -0.125f, 1f, 5f, 0f, 0f, 1f),
-        scissor = listOf(2, 3, 29, 31),
-    )
-
-    fun commonComplexClip(): List<List<Float>> = listOf(
-        listOf(2f, 2f, 30f, 2f, 30f, 30f, 2f, 30f),
-        listOf(8f, 8f, 24f, 8f, 24f, 24f, 8f, 24f),
-    )
-
-    fun materialCases(): List<String> = listOf(
-        "solid",
-        "linear-gradient",
-        "radial-gradient",
-        "sweep-gradient",
-        "conical-gradient",
-        "registered-runtime-effect",
-        "supported-image-shader",
-    )
-
-    fun strokeCases(): List<StrokeCase> = listOf(
-        StrokeCase("butt", "miter", listOf(4f, 2f)),
-        StrokeCase("round", "round", listOf(3f, 1f)),
-        StrokeCase("square", "bevel", emptyList()),
-    )
-
-    fun blurCases(): List<String> = listOf("normal", "solid", "outer", "inner")
+    fun fontWithoutNotdef(source: FontTypeface): FontTypeface {
+        val bytes = source.fontBytes
+        val loca = sfntTableOffset(bytes, "loca")
+        val head = sfntTableOffset(bytes, "head")
+        when (readU16(bytes, head + 50)) {
+            0 -> writeU16(bytes, loca + 2, readU16(bytes, loca))
+            1 -> writeU32(bytes, loca + 4, readU32(bytes, loca))
+            else -> error("Unsupported task13 loca format")
+        }
+        return FontTypeface(bytes, "task13-missing-notdef")
+    }
 
     fun colrPaletteAndForeground(): ColrPaletteCase = ColrPaletteCase(
         paletteArgb = listOf(0xffff2a2a.toInt(), 0xff2244ee.toInt()),
         foregroundArgb = 0x9f8040bf.toInt(),
-    )
-
-    fun emojiRepresentations(): List<String> = listOf("monochrome-a8", "colrv0")
-
-    fun missingGlyphCases(): List<MissingGlyphCase> = listOf(
-        MissingGlyphCase(hasNotdef = true, expected = "glyph-0"),
-        MissingGlyphCase(hasNotdef = false, expected = "font.glyph.representation-missing"),
     )
 
     fun colrFontBytesWithForegroundLayer(): ByteArray {
@@ -87,27 +72,9 @@ object GPUPreparedTextTestFixtures {
         return bytes.copyOf()
     }
 
-    data class FontFaceCase(val sourceIdentity: String, val faceIndex: Int)
-
-    data class TransformScissorCase(
-        val affine: List<Float>,
-        val scissor: List<Int>,
-    )
-
-    data class StrokeCase(
-        val cap: String,
-        val join: String,
-        val dash: List<Float>,
-    )
-
     data class ColrPaletteCase(
         val paletteArgb: List<Int>,
         val foregroundArgb: Int,
-    )
-
-    data class MissingGlyphCase(
-        val hasNotdef: Boolean,
-        val expected: String,
     )
 
     private fun patchSimpleRectangleGlyph(
@@ -171,6 +138,37 @@ object GPUPreparedTextTestFixtures {
     private fun writeU16(bytes: ByteArray, offset: Int, value: Int) {
         bytes[offset] = (value ushr 8).toByte()
         bytes[offset + 1] = value.toByte()
+    }
+
+    private fun writeU32(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = (value ushr 24).toByte()
+        bytes[offset + 1] = (value ushr 16).toByte()
+        bytes[offset + 2] = (value ushr 8).toByte()
+        bytes[offset + 3] = value.toByte()
+    }
+
+    private fun ttcFont(vararg faces: ByteArray): ByteArray {
+        val headerLength = 12 + faces.size * 4
+        val collection = ByteArray(headerLength + faces.sumOf(ByteArray::size))
+        writeU32(collection, 0, 0x74746366)
+        writeU32(collection, 4, 0x00010000)
+        writeU32(collection, 8, faces.size)
+        var cursor = headerLength
+        faces.forEachIndexed { index, face ->
+            writeU32(collection, 12 + index * 4, cursor)
+            val routedFace = face.copyOf()
+            repeat(readU16(routedFace, 4)) { tableIndex ->
+                val recordOffset = 12 + tableIndex * 16
+                writeU32(
+                    routedFace,
+                    recordOffset + 8,
+                    cursor + readU32(routedFace, recordOffset + 8),
+                )
+            }
+            routedFace.copyInto(collection, destinationOffset = cursor)
+            cursor += routedFace.size
+        }
+        return collection
     }
 
     private fun ByteArray.sha256Hex(): String =

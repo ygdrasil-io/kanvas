@@ -11,6 +11,7 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedTextColdFrameSamples
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
@@ -91,7 +92,15 @@ class GPUPreparedTextPixelTest {
         )
 
         assertEquals(
-            GPUPreparedTextTestFixtures.materialCases(),
+            listOf(
+                "solid",
+                "linear-gradient",
+                "radial-gradient",
+                "sweep-gradient",
+                "conical-gradient",
+                "registered-runtime-effect",
+                "supported-image-shader",
+            ),
             evaluatedMaterialByCase.map { it.first },
         )
         evaluatedMaterialByCase.forEachIndexed { index, (_, material) ->
@@ -109,7 +118,7 @@ class GPUPreparedTextPixelTest {
     @Test
     fun `stroke cases and blur styles consume hand derived mask coverage`() {
         val strokeExpected = byteArrayOf(188.toByte(), 0, 0, 128.toByte())
-        GPUPreparedTextTestFixtures.strokeCases().forEach { stroke ->
+        listOf("butt-miter-dash", "round-round-dash", "square-bevel").forEach { stroke ->
             assertContentEquals(
                 strokeExpected,
                 GPUPreparedTextPixelOracle.a8SourceOver(
@@ -117,7 +126,7 @@ class GPUPreparedTextPixelTest {
                     paintAlpha = 1f,
                     coverage = 128,
                 ).bytes(),
-                "cap=${stroke.cap} join=${stroke.join} dash=${stroke.dash}",
+                stroke,
             )
         }
 
@@ -128,7 +137,7 @@ class GPUPreparedTextPixelTest {
             byteArrayOf(225.toByte(), 0, 0, 192.toByte()),
             byteArrayOf(255.toByte(), 0, 0, 255.toByte()),
         )
-        GPUPreparedTextTestFixtures.blurCases().forEachIndexed { index, style ->
+        BlurStyle.entries.forEachIndexed { index, style ->
             assertContentEquals(
                 literalBlurExpected[index],
                 GPUPreparedTextPixelOracle.a8SourceOver(
@@ -168,7 +177,35 @@ class GPUPreparedTextPixelTest {
     }
 
     @Test
-    fun `every mutable fixture accessor returns a fresh snapshot`() {
+    fun `sole oracle composes ordered source over rectangles into one RGBA buffer`() {
+        val actual = GPUPreparedTextPixelOracle.renderLayers(
+            width = 2,
+            height = 1,
+            layers = listOf(
+                GPUPreparedTextPixelOracle.Layer(
+                    bounds = GPUPreparedTextPixelOracle.IntRect(0, 0, 2, 1),
+                    color = GPUPreparedTextPixelOracle.StraightSrgb(255, 0, 0),
+                    paintAlpha = 0.5f,
+                ),
+                GPUPreparedTextPixelOracle.Layer(
+                    bounds = GPUPreparedTextPixelOracle.IntRect(1, 0, 2, 1),
+                    color = GPUPreparedTextPixelOracle.StraightSrgb(0, 0, 255),
+                    paintAlpha = 0.5f,
+                ),
+            ),
+        )
+
+        assertContentEquals(
+            byteArrayOf(
+                188.toByte(), 0, 0, 128.toByte(),
+                137.toByte(), 0, 188.toByte(), 191.toByte(),
+            ),
+            actual,
+        )
+    }
+
+    @Test
+    fun `every mutable byte fixture accessor returns a fresh snapshot`() {
         val coverageFirst = GPUPreparedTextTestFixtures.a8CoverageLevels()
         val coverageSecond = GPUPreparedTextTestFixtures.a8CoverageLevels()
         coverageFirst[0] = 99
@@ -181,27 +218,7 @@ class GPUPreparedTextPixelTest {
         assertNotSame(diagonalFirst, diagonalSecond)
         assertEquals(255, diagonalSecond[0].toInt() and 0xff)
 
-        assertEquals(listOf(7, 7, 8, 7), GPUPreparedTextTestFixtures.repeatedGlyphPageSharing())
-        assertEquals(listOf(0, 1), GPUPreparedTextTestFixtures.fontFaces().map { it.faceIndex })
-        assertEquals(9, GPUPreparedTextTestFixtures.transformAndScissor().affine.size)
-        assertEquals(2, GPUPreparedTextTestFixtures.commonComplexClip().size)
-        assertEquals(
-            listOf(
-                "solid",
-                "linear-gradient",
-                "radial-gradient",
-                "sweep-gradient",
-                "conical-gradient",
-                "registered-runtime-effect",
-                "supported-image-shader",
-            ),
-            GPUPreparedTextTestFixtures.materialCases(),
-        )
-        assertEquals(setOf("butt", "round", "square"), GPUPreparedTextTestFixtures.strokeCases().map { it.cap }.toSet())
-        assertEquals(listOf("normal", "solid", "outer", "inner"), GPUPreparedTextTestFixtures.blurCases())
         assertEquals(2, GPUPreparedTextTestFixtures.colrPaletteAndForeground().paletteArgb.size)
-        assertEquals(listOf("monochrome-a8", "colrv0"), GPUPreparedTextTestFixtures.emojiRepresentations())
-        assertEquals(listOf(true, false), GPUPreparedTextTestFixtures.missingGlyphCases().map { it.hasNotdef })
     }
 
     @Test

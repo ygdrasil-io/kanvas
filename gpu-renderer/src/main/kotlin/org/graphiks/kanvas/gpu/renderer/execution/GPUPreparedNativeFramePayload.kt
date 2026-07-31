@@ -162,6 +162,77 @@ data class GPUPreparedTextFrameCounters(
     }
 }
 
+/** Exact handle-free native commands encoded for one prepared draw-command identity. */
+data class GPUPreparedNativeCommandEncodingCounters(
+    val draws: Long = 0L,
+    val drawIndexed: Long = 0L,
+    val bindGroups: Long = 0L,
+) {
+    init {
+        require(draws >= 0L)
+        require(drawIndexed >= 0L)
+        require(bindGroups >= 0L)
+    }
+
+    val totalDraws: Long = Math.addExact(draws, drawIndexed)
+}
+
+internal data class GPUPreparedNativeRenderCommandEvidence(
+    val commandIdValue: Int,
+    val draws: Int,
+    val drawIndexed: Int,
+    val bindGroups: Int,
+)
+
+/**
+ * Pairs the exact Draw/DrawIndexed command order with the materializer-retained semantic order.
+ * Bind-group evidence belongs to the next draw, so a reused binding is not counted twice.
+ */
+internal fun preparedNativeRenderCommandEvidence(
+    render: GPUPreparedNativeScopeOperand.Render,
+): List<GPUPreparedNativeRenderCommandEvidence> =
+    preparedNativeRenderCommandEvidence(render.commands, render.semanticPayloads)
+
+internal fun preparedNativeRenderCommandEvidence(
+    render: GPUPreparedNativeScopeOperand.PreparedTextRenderRun,
+): List<GPUPreparedNativeRenderCommandEvidence> =
+    preparedNativeRenderCommandEvidence(render.commands, render.semanticPayloads)
+
+private fun preparedNativeRenderCommandEvidence(
+    commands: List<GPUPreparedNativeRenderCommand>,
+    semanticPayloads: List<GPUDrawSemanticPayload>,
+): List<GPUPreparedNativeRenderCommandEvidence> {
+    if (semanticPayloads.isEmpty()) return emptyList()
+    val evidence = ArrayList<GPUPreparedNativeRenderCommandEvidence>(semanticPayloads.size)
+    var semanticIndex = 0
+    var bindGroupsSinceDraw = 0
+    commands.forEach { command ->
+        when (command) {
+            is GPUPreparedNativeRenderCommand.SetBindGroup -> bindGroupsSinceDraw += 1
+            is GPUPreparedNativeRenderCommand.Draw,
+            is GPUPreparedNativeRenderCommand.DrawIndexed,
+            -> {
+                val semantic = semanticPayloads.getOrNull(semanticIndex)
+                    ?: error("Native render draw has no matching semantic payload")
+                semanticIndex += 1
+                evidence += GPUPreparedNativeRenderCommandEvidence(
+                    commandIdValue = semantic.payloadRef.commandIdValue,
+                    draws = if (command is GPUPreparedNativeRenderCommand.Draw) 1 else 0,
+                    drawIndexed =
+                        if (command is GPUPreparedNativeRenderCommand.DrawIndexed) 1 else 0,
+                    bindGroups = bindGroupsSinceDraw,
+                )
+                bindGroupsSinceDraw = 0
+            }
+            else -> Unit
+        }
+    }
+    require(semanticIndex == semanticPayloads.size) {
+        "Native render semantic payload has no matching encoded draw"
+    }
+    return evidence
+}
+
 /**
  * Sorted raw cold-frame samples with the FP-05 nearest-rank index policy.
  *

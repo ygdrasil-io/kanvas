@@ -15,8 +15,11 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.StrokeCap
+import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
@@ -53,6 +56,14 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         assertEquals(0L, completionOnly.evidence.readbackCopies)
         assertEquals(1L, completionOnly.evidence.targetCloses)
         assertEquals(0, completionOnly.evidence.activeNativePayloads)
+        assertEquals(0, completionOnly.evidence.outputOwnedNativePayloads)
+        assertEquals(0, completionOnly.evidence.quarantinedNativePayloads)
+        assertEquals(
+            completionOnly.evidence.retentionRegistrations,
+            completionOnly.evidence.retentionCompletions,
+        )
+        assertEquals(0L, completionOnly.evidence.retentionQuarantines)
+        assertEquals(1, completionOnly.evidence.distinctRetentionTickets)
 
         GPUBackendRuntimeFactory.dispose()
 
@@ -69,6 +80,30 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         assertEquals(1L, recreated.evidence.readbackCopies)
         assertEquals(1L, recreated.evidence.targetCloses)
         assertEquals(0, recreated.evidence.activeNativePayloads)
+        assertEquals(0, recreated.evidence.outputOwnedNativePayloads)
+        assertEquals(0, recreated.evidence.quarantinedNativePayloads)
+        assertEquals(
+            recreated.evidence.retentionRegistrations,
+            recreated.evidence.retentionCompletions,
+        )
+        assertEquals(0L, recreated.evidence.retentionQuarantines)
+        assertEquals(1, recreated.evidence.distinctRetentionTickets)
+        assertTrue(recreated.rgba.any { byte -> byte.toInt() != 0 })
+        val expected = GPUPreparedTextPixelOracle.renderLayers(
+            width = 40,
+            height = 80,
+            layers = listOf(
+                GPUPreparedTextPixelOracle.Layer(
+                    bounds = GPUPreparedTextPixelOracle.IntRect(4, 40, 28, 76),
+                    color = GPUPreparedTextPixelOracle.StraightSrgb(255, 255, 255),
+                    paintAlpha = 1f,
+                ),
+            ),
+        )
+        assertTrue(
+            GPUPreparedTextPixelOracle.maxChannelDelta(recreated.rgba, expected) <= 1,
+            "recreated readback must match the sole pixel oracle",
+        )
     }
 
     @Test
@@ -171,14 +206,87 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         assertEquals(512 * 512, result.evidence.textCounters.pageBytes)
         assertEquals(3, result.evidence.textCounters.subRuns)
         assertEquals(3, result.evidence.textCounters.draws)
-        assertEquals(3, result.evidence.textCounters.bindGroups)
+        assertEquals(7, result.evidence.textCounters.bindGroups)
         assertEquals(1, result.evidence.textCounters.submits)
+        assertEquals(5L, result.evidence.draws + result.evidence.drawIndexed)
 
         println(
             "task13.native prepared=true skipped=0 encoders=${result.evidence.encoders} " +
                 "submits=${result.evidence.submits} readbacks=${result.evidence.readbackCopies} " +
                 "maxChannelDelta=${deltas.max()}",
         )
+    }
+
+    @Test
+    fun `native stroke dash text counts encoded path work independently from nontext work`() {
+        val typeface = FontTypeface(
+            GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+            "Task 13 stroke counters",
+        )
+        val stroke = Paint.stroke(Color.WHITE, 3f).copy(
+            antiAlias = false,
+            strokeCap = StrokeCap.ROUND,
+            strokeJoin = StrokeJoin.BEVEL,
+            pathEffect = PathEffect.Dash(floatArrayOf(100f, 20f), phase = 1f),
+        )
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(0f, 0f, 4f, 4f),
+                Paint.fill(Color.RED).copy(antiAlias = false),
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+            text(
+                typeface,
+                GPUPreparedTextTestFixtures.A8_GLYPH_ID,
+                12,
+                58,
+                Color.WHITE,
+                stroke,
+            ),
+        )
+
+        val result = execute(
+            operations,
+            width = 80,
+            height = 96,
+            output = GPUPreparedSurfaceRequestedOutput.CompletionOnly,
+        )
+
+        assertEquals(1, result.evidence.textCounters.pathStrokeDraws)
+        assertEquals(0, result.evidence.textCounters.atlasInstances)
+        assertEquals(1, result.evidence.textCounters.subRuns)
+        assertEquals(2, result.evidence.textCounters.draws)
+        assertEquals(2, result.evidence.textCounters.bindGroups)
+        assertEquals(1, result.evidence.textCounters.submits)
+        assertTrue(
+            result.evidence.draws + result.evidence.drawIndexed >
+                result.evidence.textCounters.draws,
+            "the nontext rectangle must remain outside exact text counters",
+        )
+    }
+
+    @Test
+    fun `native frame without text publishes zero exact text command counters`() {
+        val result = execute(
+            listOf(
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(0f, 0f, 4f, 4f),
+                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Matrix33.identity(),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            width = 16,
+            height = 16,
+            output = GPUPreparedSurfaceRequestedOutput.CompletionOnly,
+        )
+
+        assertEquals(0, result.evidence.textCounters.draws)
+        assertEquals(0, result.evidence.textCounters.bindGroups)
+        assertEquals(0, result.evidence.textCounters.submits)
+        assertEquals(0, result.evidence.textCounters.pathStrokeDraws)
+        assertEquals(0, result.evidence.textCounters.atlasInstances)
     }
 
     private fun execute(
@@ -222,6 +330,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         x: Int,
         baselineY: Int,
         color: Color,
+        paint: Paint = Paint.fill(color),
     ): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(
             glyphRuns = listOf(
@@ -236,7 +345,7 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         ),
         x = x.toFloat(),
         y = baselineY.toFloat(),
-        paint = Paint.fill(color),
+        paint = paint,
         transform = Matrix33.identity(),
         clip = ClipStack.WideOpen,
     )

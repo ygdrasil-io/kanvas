@@ -6,7 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 
 class GPUPreparedSceneNativeCountersTest {
     @Test
-    fun `public counters preserve source compatibility and the order of 41 historical fields`() {
+    fun `public counters preserve historical field order and append exact command evidence`() {
         val counters = GPUPreparedSceneNativeCounters(
             11L,
             12L,
@@ -42,10 +42,10 @@ class GPUPreparedSceneNativeCountersTest {
         assertEquals(47L, counters.preparedImageFrameSamplerCreations)
         assertEquals(53L, counters.preparedImageFrameUniformBufferCreations)
         assertEquals(59L, counters.preparedImageFrameBindGroupCreations)
-        assertEquals(48, type.declaredMethods.count { it.name.matches(Regex("component\\d+")) })
-        assertEquals(48, type.declaredMethods.single { it.name == "copy" }.parameterCount)
+        assertEquals(49, type.declaredMethods.count { it.name.matches(Regex("component\\d+")) })
+        assertEquals(49, type.declaredMethods.single { it.name == "copy" }.parameterCount)
         assertEquals(
-            48,
+            49,
             type.declaredConstructors.filterNot { it.isSynthetic }.maxOf { it.parameterCount },
         )
     }

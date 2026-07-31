@@ -50,6 +50,8 @@ internal sealed interface GPUPreparedSurfaceFrameBuildResult {
         val visualOperationCount: Int,
         val stateEventCount: Int,
         val textMetrics: GPUPreparedTextFrameMetrics,
+        val textCommandIds: Set<Int>,
+        val pathStrokeCommandIds: Set<Int>,
     ) : GPUPreparedSurfaceFrameBuildResult
 
     data class Refused(val diagnostic: GPUDiagnostic) : GPUPreparedSurfaceFrameBuildResult
@@ -182,6 +184,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                                 event.kind == GPUFramePathStateKind.Annotation
                         },
                         textMetrics = textPreparation.metrics,
+                        textCommandIds = preparedImages.textCommandIds,
+                        pathStrokeCommandIds = preparedImages.pathStrokeCommandIds,
                     )
                 }
                 is GPUPreparedSurfaceFrameResult.Refused ->
@@ -217,6 +221,8 @@ private sealed interface PreparedImageVisuals {
     data class Ready(
         val visualCommands: List<GPUFramePathVisualCommand>,
         val artifactsByCommandId: Map<Int, GPUPreparedImageUploadArtifact>,
+        val textCommandIds: Set<Int>,
+        val pathStrokeCommandIds: Set<Int>,
     ) : PreparedImageVisuals
 
     data class Refused(val diagnostic: GPUDiagnostic) : PreparedImageVisuals
@@ -237,6 +243,10 @@ private sealed interface PreparedVisualSource {
     data class Text(
         override val operationIndex: Int,
         val subRunIndex: Int,
+    ) : PreparedVisualSource
+
+    data class TextStroke(
+        override val operationIndex: Int,
     ) : PreparedVisualSource
 }
 
@@ -266,10 +276,16 @@ private fun collectPreparedImageVisuals(
                 operation.texRects.map {
                     PreparedVisualSource.Image(operationIndex, operation.atlas)
                 }
-            is DisplayOp.DrawText ->
-                inventory.subRunsByOperationIndex[operationIndex].orEmpty().map { subRun ->
-                    PreparedVisualSource.Text(operationIndex, subRun.subRunIndex)
+            is DisplayOp.DrawText -> {
+                val strokePaths = inventory.strokePathsByOperationIndex[operationIndex].orEmpty()
+                if (strokePaths.isNotEmpty()) {
+                    strokePaths.map { PreparedVisualSource.TextStroke(operationIndex) }
+                } else {
+                    inventory.subRunsByOperationIndex[operationIndex].orEmpty().map { subRun ->
+                        PreparedVisualSource.Text(operationIndex, subRun.subRunIndex)
+                    }
                 }
+            }
             else -> if (operation.isCorePreparedVisual()) {
                 listOf(PreparedVisualSource.Core(operationIndex))
             } else {
@@ -289,6 +305,8 @@ private fun collectPreparedImageVisuals(
         )
     }
     val artifacts = linkedMapOf<Int, GPUPreparedImageUploadArtifact>()
+    val textCommandIds = linkedSetOf<Int>()
+    val pathStrokeCommandIds = linkedSetOf<Int>()
     visualSources.zip(mapping.visualCommands).forEachIndexed { commandIndex, (source, visual) ->
         val operationIndex = source.operationIndex
         if (visual.normalized.commandId.value != commandIndex ||
@@ -336,6 +354,27 @@ private fun collectPreparedImageVisuals(
                     ),
                 )
             }
+            textCommandIds += commandIndex
+            return@forEachIndexed
+        }
+        if (source is PreparedVisualSource.TextStroke) {
+            if (visual.normalized !is NormalizedDrawCommand.FillPath ||
+                visual.normalized.source.operation != "drawText.stroke-path" ||
+                visual.preparedText != null ||
+                visual.preparedImage != null
+            ) {
+                return PreparedImageVisuals.Refused(
+                    imageCommandSourceDiagnostic(
+                        message = "Prepared text stroke source lost its common path facts.",
+                        facts = mapOf(
+                            "commandId" to commandIndex.toString(),
+                            "operationIndex" to operationIndex.toString(),
+                        ),
+                    ),
+                )
+            }
+            textCommandIds += commandIndex
+            pathStrokeCommandIds += commandIndex
             return@forEachIndexed
         }
         source as PreparedVisualSource.Image
@@ -388,7 +427,12 @@ private fun collectPreparedImageVisuals(
         }
         artifacts[commandIndex] = artifact
     }
-    return PreparedImageVisuals.Ready(mapping.visualCommands.toList(), artifacts)
+    return PreparedImageVisuals.Ready(
+        mapping.visualCommands.toList(),
+        artifacts,
+        textCommandIds.toSet(),
+        pathStrokeCommandIds.toSet(),
+    )
 }
 
 private fun DisplayOp.isCorePreparedVisual(): Boolean = when (this) {
