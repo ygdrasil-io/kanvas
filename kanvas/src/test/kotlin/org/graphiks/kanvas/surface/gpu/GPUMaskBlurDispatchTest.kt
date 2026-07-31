@@ -14,6 +14,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectCornerRadii
 import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
@@ -45,6 +46,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.math.abs
 
 class GPUMaskBlurDispatchTest {
     @Test
@@ -234,6 +236,130 @@ class GPUMaskBlurDispatchTest {
         assertEquals(expectedEdgeFan.vertices.toList(), requireNotNull(target.maskTriangleData).vertices.toList())
     }
 
+    @Test
+    fun `positive stroke blur composes scale transform once before mask localization`() {
+        assertLocalizedPath(
+            command = transformedPathCommand(
+                strokeWidth = 4f,
+                transform = GPUTransformFacts.scale(2f, 2f),
+                deviceBounds = GPUBounds(20f, 16f, 40f, 24f),
+            ),
+            expectedPlanBounds = GPUBounds(14f, 10f, 46f, 30f),
+            expectedVertices = listOf(
+                6f, 6f,
+                6f, 14f,
+                26f, 14f,
+                26f, 6f,
+            ),
+            expectedBounds = GPUBounds(6f, 6f, 26f, 14f),
+            expectedScissor = listOf(6, 6, 20, 8),
+        )
+    }
+
+    @Test
+    fun `hairline blur remains one device pixel before scale mask localization`() {
+        assertLocalizedPath(
+            command = transformedPathCommand(
+                strokeWidth = 0f,
+                transform = GPUTransformFacts.scale(2f, 2f),
+                deviceBounds = GPUBounds(20f, 19.5f, 40f, 20.5f),
+            ),
+            expectedPlanBounds = GPUBounds(14f, 13.5f, 46f, 26.5f),
+            expectedVertices = listOf(
+                6f, 6f,
+                6f, 7f,
+                26f, 7f,
+                26f, 6f,
+            ),
+            expectedBounds = GPUBounds(6f, 6f, 26f, 7f),
+            expectedScissor = listOf(6, 6, 20, 1),
+        )
+    }
+
+    @Test
+    fun `positive stroke blur composes nonuniform shear once before mask localization`() {
+        assertLocalizedPath(
+            command = transformedPathCommand(
+                strokeWidth = 4f,
+                transform = GPUTransformFacts.affine(
+                    scaleX = 2f,
+                    skewX = 1f,
+                    skewY = 0.5f,
+                    scaleY = 3f,
+                ),
+                deviceBounds = GPUBounds(28f, 29f, 52f, 46f),
+            ),
+            expectedPlanBounds = GPUBounds(22f, 23f, 58f, 52f),
+            expectedVertices = listOf(
+                6f, 6f,
+                10f, 18f,
+                30f, 23f,
+                26f, 11f,
+            ),
+            expectedBounds = GPUBounds(6f, 6f, 30f, 23f),
+            expectedScissor = listOf(6, 6, 24, 17),
+        )
+    }
+
+    @Test
+    fun `hairline blur uses device normal before nonuniform shear mask localization`() {
+        assertLocalizedPath(
+            command = transformedPathCommand(
+                strokeWidth = 0f,
+                transform = GPUTransformFacts.affine(
+                    scaleX = 2f,
+                    skewX = 1f,
+                    skewY = 0.5f,
+                    scaleY = 3f,
+                ),
+                deviceBounds = GPUBounds(
+                    29.878733f,
+                    34.514927f,
+                    50.121267f,
+                    40.485073f,
+                ),
+            ),
+            expectedPlanBounds = GPUBounds(
+                23.878733f,
+                28.514927f,
+                56.121267f,
+                46.485073f,
+            ),
+            expectedVertices = listOf(
+                6.242534f, 6f,
+                6f, 6.970146f,
+                26f, 11.970146f,
+                26.242534f, 11f,
+            ),
+            expectedBounds = GPUBounds(6f, 6f, 26.242534f, 11.970146f),
+            expectedScissor = listOf(6, 6, 20, 5),
+        )
+    }
+
+    @Test
+    fun `fill path blur maps local through device into mask and publishes identity`() {
+        assertLocalizedPath(
+            command = transformedPathCommand(
+                strokeWidth = null,
+                transform = GPUTransformFacts.scale(2f, 2f),
+                deviceBounds = GPUBounds(20f, 20f, 40f, 40f),
+                vertices = listOf(
+                    10f, 10f,
+                    20f, 10f,
+                    10f, 20f,
+                ),
+            ),
+            expectedPlanBounds = GPUBounds(14f, 14f, 46f, 46f),
+            expectedVertices = listOf(
+                6f, 6f,
+                26f, 6f,
+                6f, 26f,
+            ),
+            expectedBounds = GPUBounds(6f, 6f, 26f, 26f),
+            expectedScissor = listOf(6, 6, 20, 20),
+        )
+    }
+
     private fun solidRectCommand(): NormalizedDrawCommand.FillRect {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val bounds = GPUBounds(10f, 10f, 30f, 30f)
@@ -312,6 +438,136 @@ class GPUMaskBlurDispatchTest {
         )
     }
 
+    private fun transformedPathCommand(
+        strokeWidth: Float?,
+        transform: GPUTransformFacts,
+        deviceBounds: GPUBounds,
+        vertices: List<Float> = listOf(10f, 10f, 20f, 10f),
+    ): NormalizedDrawCommand.FillPath {
+        val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
+        val vertexCount = vertices.size / 2
+        return NormalizedDrawCommand.FillPath(
+            commandId = GPUDrawCommandID(5),
+            pathKey = "transformed-mask-path",
+            pathDescriptor = GPUPathFacts(
+                pathKey = "transformed-mask-path",
+                verbCount = vertexCount + 1,
+                pointCount = vertexCount,
+                fillRule = "winding",
+                inverseFill = false,
+                finiteProof = "all_finite",
+                volatility = "static",
+                transformClass = transform.type.name.lowercase(),
+                edgeCount = (vertexCount - 1).coerceAtLeast(0),
+            ),
+            tessellatedVertices = vertices,
+            contourStarts = listOf(0),
+            totalVertexCount = vertexCount,
+            edgeCount = (vertexCount - 1).coerceAtLeast(0),
+            transform = transform,
+            clip = GPUClipFacts.wideOpen(GPUBounds(0f, 0f, 64f, 64f)),
+            layer = GPULayerFacts.root(target),
+            material = GPUMaterialDescriptor.SolidColor(1f, 0.25f, 0.5f, 1f),
+            blend = GPUBlendFacts.srcOver(),
+            bounds = deviceBounds,
+            ordering = GPUOrderingFacts(0, dependsOnDestination = false, requiresBarrier = false),
+            source = GPUCommandSource(adapter = "unit-test", operation = "fillPath"),
+            stroke = strokeWidth != null,
+            strokeWidth = strokeWidth ?: 1f,
+            antiAlias = false,
+            maskFilter = NormalizedMaskFilter.Blur(
+                NormalizedBlurStyle.NORMAL,
+                sigma = 2f,
+            ),
+        )
+    }
+
+    private fun assertLocalizedPath(
+        command: NormalizedDrawCommand.FillPath,
+        expectedPlanBounds: GPUBounds,
+        expectedVertices: List<Float>,
+        expectedBounds: GPUBounds,
+        expectedScissor: List<Int>,
+    ) {
+        val plan = MaskBlurPlanner.plan(
+            command.toMaskBlurRequest(64, 64, 4096, RenderConfig.DEFAULT),
+        )
+        assertTrue(plan is MaskBlurPlan.Ready)
+        plan as MaskBlurPlan.Ready
+        assertEquals(expectedPlanBounds, plan.deviceBounds)
+        assertEquals(1f, plan.scale)
+
+        val local = command.toLocalMaskCommand(plan)
+        assertTrue(local is NormalizedDrawCommand.FillPath)
+        local as NormalizedDrawCommand.FillPath
+        assertEquals(GPUTransformType.Identity, local.transform.type)
+        assertEquals("identity", local.pathDescriptor.transformClass)
+        assertFalse(local.stroke)
+        assertFloatListEquals(expectedVertices, local.tessellatedVertices)
+        assertBoundsEquals(expectedBounds, local.bounds)
+        local.tessellatedVertices.chunked(2).forEach { (x, y) ->
+            assertTrue(x in 0f..plan.localWidth.toFloat(), "x=$x outside mask")
+            assertTrue(y in 0f..plan.localHeight.toFloat(), "y=$y outside mask")
+        }
+
+        val target = CapturingMaskBlurTarget()
+        val diagnostics = Diagnostics()
+        val result = target.renderMaskBlurCommand(
+            "scene",
+            command,
+            plan,
+            GPUClearColor(0.0, 0.0, 0.0, 0.0),
+            mutableListOf(),
+            diagnostics,
+            "rgba8unorm",
+        )
+
+        assertTrue(result.rendered)
+        assertEquals(0, diagnostics.fatalCount)
+        assertPointSetEquals(expectedVertices, target.maskOutlinePoints())
+        assertEquals(expectedScissor, target.maskScissor)
+    }
+
+    private fun assertFloatListEquals(
+        expected: List<Float>,
+        actual: List<Float>,
+        tolerance: Float = 1e-5f,
+    ) {
+        assertEquals(expected.size, actual.size)
+        expected.zip(actual).forEachIndexed { index, (expectedValue, actualValue) ->
+            assertTrue(
+                abs(expectedValue - actualValue) <= tolerance,
+                "coordinate[$index]: expected=$expectedValue actual=$actualValue",
+            )
+        }
+    }
+
+    private fun assertBoundsEquals(
+        expected: GPUBounds,
+        actual: GPUBounds,
+        tolerance: Float = 1e-5f,
+    ) {
+        assertTrue(abs(expected.left - actual.left) <= tolerance)
+        assertTrue(abs(expected.top - actual.top) <= tolerance)
+        assertTrue(abs(expected.right - actual.right) <= tolerance)
+        assertTrue(abs(expected.bottom - actual.bottom) <= tolerance)
+    }
+
+    private fun assertPointSetEquals(
+        expectedCoordinates: List<Float>,
+        actual: Set<Pair<Float, Float>>,
+        tolerance: Float = 1e-5f,
+    ) {
+        val expected = expectedCoordinates.chunked(2).map { (x, y) -> x to y }.toSet()
+        assertEquals(expected.size, actual.size)
+        assertTrue(expected.all { expectedPoint ->
+            actual.any { actualPoint ->
+                abs(expectedPoint.first - actualPoint.first) <= tolerance &&
+                    abs(expectedPoint.second - actualPoint.second) <= tolerance
+            }
+        })
+    }
+
     private fun readyPlan(style: NormalizedBlurStyle) = MaskBlurPlan.Ready(
         style = style,
         requestedSigma = 2f,
@@ -337,6 +593,7 @@ class GPUMaskBlurDispatchTest {
         val releasedTextureLabels = mutableListOf<String>()
         val targetCopyTextureLabels = mutableListOf<String>()
         var maskTriangleData: GPUBackendTriangleData? = null
+        var maskScissor: List<Int>? = null
 
         override val target: GPUSurfaceTarget
             get() = error("target is not used by this pass-planning test")
@@ -440,6 +697,13 @@ class GPUMaskBlurDispatchTest {
                     maskTriangleData = triangleData
                 } else {
                     passKinds += "mask"
+                    val draw = draws.single()
+                    maskScissor = listOf(
+                        draw.scissorX,
+                        draw.scissorY,
+                        draw.scissorWidth,
+                        draw.scissorHeight,
+                    )
                 }
             }
             override fun drawFullscreenTextureUniformPass(wgsl: String, colorFormat: String, textureRgba: ByteArray, textureWidth: Int, textureHeight: Int, textureFormat: String, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUFixedFunctionBlendState?, stencilMode: GPUBackendStencilMode?, stencilConfig: org.graphiks.kanvas.gpu.renderer.execution.GPUBackendStencilCoverConfig) = unexpected()
@@ -454,6 +718,13 @@ class GPUMaskBlurDispatchTest {
             override fun drawColorGlyphPass(atlasRgba: ByteArray, atlasWidth: Int, atlasHeight: Int, atlasFormat: String, vertexData: FloatArray, indexData: IntArray, draws: List<GPUBackendRawUniformDraw>, blendMode: GPUFixedFunctionBlendState?) = unexpected()
 
             private fun unexpected(): Nothing = error("Unexpected recorder call")
+        }
+
+        fun maskOutlinePoints(): Set<Pair<Float, Float>> {
+            val vertices = requireNotNull(maskTriangleData).vertices
+            return vertices.asList().chunked(6).flatMap { edge ->
+                listOf(edge[2] to edge[3], edge[4] to edge[5])
+            }.toSet()
         }
     }
 }
