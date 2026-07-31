@@ -5,6 +5,7 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialLoweringContext
@@ -45,6 +46,19 @@ import org.graphiks.kanvas.surface.RenderConfig
 private const val PREPARED_VERTICES_MATERIAL_DICTIONARY_VERSION =
     "material-dictionary:prepared-vertices:v1"
 
+internal fun interface GPUPreparedVerticesMaterialCompiler {
+    fun compile(
+        descriptor: GPUMaterialDescriptor,
+        paintAlpha: Float,
+        context: GPUMaterialLoweringContext,
+    ): GPUPreparedMaterialProgramResult
+}
+
+private val canonicalPreparedVerticesMaterialCompiler = GPUPreparedVerticesMaterialCompiler {
+        descriptor, paintAlpha, context ->
+    GPUPreparedMaterialProgramCompiler.compile(descriptor, paintAlpha, context)
+}
+
 /** Pure FP-06 lowering for a single recorded DrawVertices or DrawMesh operation. */
 object GPUPreparedVerticesLowerer {
     fun lower(
@@ -53,6 +67,22 @@ object GPUPreparedVerticesLowerer {
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
         runtimeEffectResolver: GPUPreparedRuntimeEffectResolver = KanvasPreparedRuntimeEffectResolver(),
+    ): GPUPreparedVerticesLowering = lower(
+        operation = operation,
+        operationIndex = operationIndex,
+        target = target,
+        capabilities = capabilities,
+        runtimeEffectResolver = runtimeEffectResolver,
+        materialCompiler = canonicalPreparedVerticesMaterialCompiler,
+    )
+
+    internal fun lower(
+        operation: DisplayOp,
+        operationIndex: Int,
+        target: GPUTargetFacts,
+        capabilities: GPUCapabilities,
+        runtimeEffectResolver: GPUPreparedRuntimeEffectResolver,
+        materialCompiler: GPUPreparedVerticesMaterialCompiler,
     ): GPUPreparedVerticesLowering {
         if (operation is DisplayOp.DrawVertices) {
             val vertices = operation.vertices.snapshotForPreparedVertices()
@@ -79,7 +109,9 @@ object GPUPreparedVerticesLowerer {
             )
         }
         if (operation is DisplayOp.DrawMesh) {
-            return lowerMesh(operation, operationIndex, target, capabilities, runtimeEffectResolver)
+            return lowerMesh(
+                operation, operationIndex, target, capabilities, runtimeEffectResolver, materialCompiler,
+            )
         }
         return refused(
             GPUPreparedVerticesRefusalCodes.Material,
@@ -96,6 +128,7 @@ object GPUPreparedVerticesLowerer {
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
         runtimeEffectResolver: GPUPreparedRuntimeEffectResolver,
+        materialCompiler: GPUPreparedVerticesMaterialCompiler,
     ): GPUPreparedVerticesLowering {
         val vertices = operation.mesh.vertices.snapshotForPreparedVertices()
         val bounds = operation.mesh.bounds.copy()
@@ -142,40 +175,47 @@ object GPUPreparedVerticesLowerer {
                 mapped.code, operationIndex, "mesh-program", mapped.facts["reason"] ?: "mapping_refused", mapped.facts,
             )
         }
-        val resolution = try {
-            runtimeEffectResolver.resolve(
-                mapping.descriptor.effectId,
-                mapping.descriptor.descriptorVersion,
+        val guardedResolver = GuardedPreparedRuntimeEffectResolver(runtimeEffectResolver)
+        val resolution = when (val attempt = guardedResolver.resolveAttempt(
+            mapping.descriptor.effectId,
+            mapping.descriptor.descriptorVersion,
+        )) {
+            is PreparedRuntimeEffectResolutionAttempt.Ready -> attempt.resolution
+            is PreparedRuntimeEffectResolutionAttempt.Failed -> return runtimeResolverFailure(
+                operationIndex, attempt.kind, guardedResolver.authority,
             )
-        } catch (_: Exception) {
-            return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "runtime-resolver", "resolver_exception",
-                mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
-        } catch (_: LinkageError) {
-            return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "runtime-resolver", "resolver_linkage_failure",
-                mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
         }
-        meshProgramAvailabilityRefusal(resolution)?.let { refusal ->
+        meshProgramAvailabilityRefusal(resolution, guardedResolver.authority)?.let { refusal ->
             return refused(refusal.code, operationIndex, "mesh-program", "runtime_effect_unavailable", refusal.facts)
         }
-        val compilerResolver = guardedMemoizedResolver(
-            mapping.descriptor.effectId, mapping.descriptor.descriptorVersion, resolution, runtimeEffectResolver,
-        )
-        val material = try { when (val compiled = GPUPreparedMaterialProgramCompiler.compile(
+        val material = try { when (val compiled = materialCompiler.compile(
             descriptor = mapping.descriptor,
             paintAlpha = mapping.paintAlpha,
-            context = materialContext(target, capabilities, compilerResolver),
+            context = materialContext(target, capabilities, guardedResolver),
         )) {
             is GPUPreparedMaterialProgramResult.Ready -> compiled.program
             is GPUPreparedMaterialProgramResult.Refused -> return refused(
                 meshMaterialCode(compiled.code), operationIndex, "mesh-program", "compiler_refused",
-                mapOf("compilerCode" to compiled.code, "sourceKind" to compiled.sourceKind.name),
+                mapOf(
+                    "authority" to "GPUPreparedMaterialProgramCompiler",
+                    "compilerCode" to compiled.code,
+                    "sourceKind" to compiled.sourceKind.name,
+                ),
             )
-        } } catch (_: Exception) {
-            return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "runtime-resolver", "resolver_exception",
-                mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
+        } } catch (failure: PreparedRuntimeEffectResolverBoundaryFailure) {
+            return runtimeResolverFailure(operationIndex, failure.kind, guardedResolver.authority)
+        } catch (_: Exception) {
+            return refused(
+                GPUPreparedVerticesRefusalCodes.Material, operationIndex,
+                "material-compiler", "compiler_exception",
+                mapOf("authority" to "GPUPreparedMaterialProgramCompiler"),
+            )
         } catch (_: LinkageError) {
-            return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "runtime-resolver", "resolver_linkage_failure",
-                mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
+            return refused(
+                GPUPreparedVerticesRefusalCodes.Material, operationIndex,
+                "material-compiler", "compiler_linkage_failure",
+                mapOf("authority" to "GPUPreparedMaterialProgramCompiler"),
+            )
         }
         return lowerVertices(
             vertices = vertices,
@@ -439,38 +479,98 @@ private data class MeshProgramAvailabilityRefusal(val code: String, val facts: M
 
 private fun meshProgramAvailabilityRefusal(
     resolution: GPUPreparedRuntimeEffectResolution,
+    resolverAuthority: String,
 ): MeshProgramAvailabilityRefusal? = when (resolution) {
     is GPUPreparedRuntimeEffectResolution.Ready -> null
     is GPUPreparedRuntimeEffectResolution.DescriptorUnavailable ->
-        MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered, mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
+        MeshProgramAvailabilityRefusal(
+            GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered,
+            mapOf("authority" to resolverAuthority),
+        )
     is GPUPreparedRuntimeEffectResolution.ProgramUnavailable -> when (resolution.reason) {
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable ->
-            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable, mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable, mapOf("authority" to resolverAuthority))
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslUnavailable ->
-            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable, mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable, mapOf("authority" to resolverAuthority))
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation ->
-            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation, mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation, mapOf("authority" to resolverAuthority))
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Abi ->
-            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramAbi, mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramAbi, mapOf("authority" to resolverAuthority))
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Unknown ->
             MeshProgramAvailabilityRefusal(
                 GPUPreparedVerticesRefusalCodes.Material,
-                mapOf("runtimeReason" to resolution.reason.name),
+                mapOf("authority" to resolverAuthority, "runtimeReason" to resolution.reason.name),
             )
     }
 }
 
-private fun guardedMemoizedResolver(
-    effectId: String,
-    version: Int,
-    resolution: GPUPreparedRuntimeEffectResolution,
-    fallback: GPUPreparedRuntimeEffectResolver,
-): GPUPreparedRuntimeEffectResolver {
-    val resolved = linkedMapOf(effectId to version to resolution)
-    return GPUPreparedRuntimeEffectResolver { requestedId, requestedVersion ->
-        resolved.getOrPut(requestedId to requestedVersion) { fallback.resolve(requestedId, requestedVersion) }
+private enum class PreparedRuntimeEffectResolverFailureKind { Exception, Linkage }
+
+private sealed interface PreparedRuntimeEffectResolutionAttempt {
+    data class Ready(val resolution: GPUPreparedRuntimeEffectResolution) :
+        PreparedRuntimeEffectResolutionAttempt
+
+    data class Failed(val kind: PreparedRuntimeEffectResolverFailureKind) :
+        PreparedRuntimeEffectResolutionAttempt
+}
+
+private class PreparedRuntimeEffectResolverBoundaryFailure(
+    val kind: PreparedRuntimeEffectResolverFailureKind,
+) : RuntimeException()
+
+private class GuardedPreparedRuntimeEffectResolver(
+    private val source: GPUPreparedRuntimeEffectResolver,
+) : GPUPreparedRuntimeEffectResolver {
+    private val attempts = linkedMapOf<Pair<String, Int>, PreparedRuntimeEffectResolutionAttempt>()
+    val authority: String = if (source is KanvasPreparedRuntimeEffectResolver) {
+        "KanvasPreparedRuntimeEffectResolver"
+    } else {
+        "GPUPreparedRuntimeEffectResolver"
+    }
+
+    fun resolveAttempt(
+        effectId: String,
+        descriptorVersion: Int,
+    ): PreparedRuntimeEffectResolutionAttempt = attempts.getOrPut(effectId to descriptorVersion) {
+        try {
+            PreparedRuntimeEffectResolutionAttempt.Ready(source.resolve(effectId, descriptorVersion))
+        } catch (_: Exception) {
+            PreparedRuntimeEffectResolutionAttempt.Failed(
+                PreparedRuntimeEffectResolverFailureKind.Exception,
+            )
+        } catch (_: LinkageError) {
+            PreparedRuntimeEffectResolutionAttempt.Failed(
+                PreparedRuntimeEffectResolverFailureKind.Linkage,
+            )
+        }
+    }
+
+    override fun resolve(
+        effectId: String,
+        descriptorVersion: Int,
+    ): GPUPreparedRuntimeEffectResolution = when (
+        val attempt = resolveAttempt(effectId, descriptorVersion)
+    ) {
+        is PreparedRuntimeEffectResolutionAttempt.Ready -> attempt.resolution
+        is PreparedRuntimeEffectResolutionAttempt.Failed ->
+            throw PreparedRuntimeEffectResolverBoundaryFailure(attempt.kind)
     }
 }
+
+private fun runtimeResolverFailure(
+    operationIndex: Int,
+    kind: PreparedRuntimeEffectResolverFailureKind,
+    authority: String,
+): GPUPreparedVerticesLowering.Refused = refused(
+    GPUPreparedVerticesRefusalCodes.Material,
+    operationIndex,
+    "runtime-resolver",
+    when (kind) {
+        PreparedRuntimeEffectResolverFailureKind.Exception -> "resolver_exception"
+        PreparedRuntimeEffectResolverFailureKind.Linkage -> "resolver_linkage_failure"
+    },
+    mapOf("authority" to authority),
+)
 
 private fun refused(
     code: String,

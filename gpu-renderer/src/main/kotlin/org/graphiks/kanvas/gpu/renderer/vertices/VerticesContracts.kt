@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.vertices
 
 import java.security.MessageDigest
+import java.util.Collections
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -85,7 +86,16 @@ data class GPUVertexLayoutPlan(
     val strideBytes: Int,
     val offsets: Map<String, Int>,
     val shaderLocations: Map<String, Int>,
-)
+) {
+    /** Exact WebGPU format in the same order as [attributes]. */
+    val attributeFormats: List<String> = Collections.unmodifiableList(attributes.map { attribute ->
+        when (attribute) {
+            "position", "texcoord" -> "f32x2"
+            "color" -> "rgba8unorm-premul"
+            else -> "unsupported"
+        }
+    })
+}
 
 /** Single structural authority for the four FP-06 interleaved vertex layouts. */
 internal object GPUPreparedVerticesLayoutAuthority {

@@ -16,10 +16,13 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolution
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolver
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramCompiler
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexLayoutPlan
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
+import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MeshProgram
@@ -150,35 +153,111 @@ class GPUPreparedVerticesLowererTest {
 
     @Test
     fun `closed public topology layout and index product preserves exact prepared artifacts`() {
-        val layouts = listOf(
-            Triple(null, null, 8),
-            Triple(null, listOf(Point(0f, 0f), Point(1f, 0f), Point(1f, 1f), Point(0f, 1f)), 16),
-            Triple(listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE), null, 12),
-            Triple(listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE), listOf(Point(0f, 0f), Point(1f, 0f), Point(1f, 1f), Point(0f, 1f)), 20),
+        val position = GPUVertexLayoutPlan(
+            attributes = listOf("position"), strideBytes = 8,
+            offsets = mapOf("position" to 0), shaderLocations = mapOf("position" to 0),
         )
-        VertexMode.entries.forEach { mode ->
-            layouts.forEach { (colors, uvs, stride) ->
-                listOf(false, true).forEach { indexed ->
-                    val indices = if (indexed) when (mode) {
-                        VertexMode.TRIANGLES -> listOf(0, 1, 2)
-                        VertexMode.TRIANGLE_STRIP, VertexMode.TRIANGLE_FAN -> listOf(0, 1, 2, 3)
-                    } else null
-                    val count = if (mode == VertexMode.TRIANGLES) 3 else 4
-                    val draw = lower(DisplayOp.DrawVertices(
-                        Vertices(mode, listOf(Point(0f, 0f), Point(2f, 0f), Point(2f, 2f), Point(0f, 2f)).take(count), uvs?.take(count), colors?.take(count), indices),
-                        Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen,
-                    )).ready().draw
-                    val artifact = draw.artifact
-                    assertEquals(when (mode) {
-                        VertexMode.TRIANGLES, VertexMode.TRIANGLE_FAN -> GPUVertexMode.Triangles
-                        VertexMode.TRIANGLE_STRIP -> GPUVertexMode.TriangleStrip
-                    }, artifact.topology)
-                    assertEquals(stride, artifact.layout.strideBytes)
-                    assertEquals(indexed || mode == VertexMode.TRIANGLE_FAN, artifact.indexFormat != null)
-                    if (indexed) assertEquals("uint16", artifact.indexFormat)
-                }
+        val positionUv = GPUVertexLayoutPlan(
+            attributes = listOf("position", "texcoord"), strideBytes = 16,
+            offsets = mapOf("position" to 0, "texcoord" to 8),
+            shaderLocations = mapOf("position" to 0, "texcoord" to 2),
+        )
+        val positionColor = GPUVertexLayoutPlan(
+            attributes = listOf("position", "color"), strideBytes = 12,
+            offsets = mapOf("position" to 0, "color" to 8),
+            shaderLocations = mapOf("position" to 0, "color" to 1),
+        )
+        val positionColorUv = GPUVertexLayoutPlan(
+            attributes = listOf("position", "color", "texcoord"), strideBytes = 20,
+            offsets = mapOf("position" to 0, "color" to 8, "texcoord" to 12),
+            shaderLocations = mapOf("position" to 0, "color" to 1, "texcoord" to 2),
+        )
+        val expectedAttributeFormats = mapOf(
+            position to listOf("f32x2"),
+            positionUv to listOf("f32x2", "f32x2"),
+            positionColor to listOf("f32x2", "rgba8unorm-premul"),
+            positionColorUv to listOf("f32x2", "rgba8unorm-premul", "f32x2"),
+        )
+        val noIndices: ByteArray? = null
+        val triangleIndices = byteArrayOf(2, 0, 0, 0, 1, 0)
+        val stripIndices = byteArrayOf(3, 0, 1, 0, 2, 0, 0, 0)
+        val implicitFanIndices = byteArrayOf(0, 0, 1, 0, 2, 0, 0, 0, 2, 0, 3, 0)
+        val explicitFanIndices = byteArrayOf(2, 0, 3, 0, 0, 0, 2, 0, 0, 0, 1, 0)
+        val cases = listOf(
+            ProductCase("triangles-position-unindexed", VertexMode.TRIANGLES, position, false, 3, GPUVertexMode.Triangles, null, null, noIndices),
+            ProductCase("triangles-position-indexed", VertexMode.TRIANGLES, position, true, 3, GPUVertexMode.Triangles, 3, "uint16", triangleIndices),
+            ProductCase("triangles-uv-unindexed", VertexMode.TRIANGLES, positionUv, false, 3, GPUVertexMode.Triangles, null, null, noIndices),
+            ProductCase("triangles-uv-indexed", VertexMode.TRIANGLES, positionUv, true, 3, GPUVertexMode.Triangles, 3, "uint16", triangleIndices),
+            ProductCase("triangles-color-unindexed", VertexMode.TRIANGLES, positionColor, false, 3, GPUVertexMode.Triangles, null, null, noIndices),
+            ProductCase("triangles-color-indexed", VertexMode.TRIANGLES, positionColor, true, 3, GPUVertexMode.Triangles, 3, "uint16", triangleIndices),
+            ProductCase("triangles-color-uv-unindexed", VertexMode.TRIANGLES, positionColorUv, false, 3, GPUVertexMode.Triangles, null, null, noIndices),
+            ProductCase("triangles-color-uv-indexed", VertexMode.TRIANGLES, positionColorUv, true, 3, GPUVertexMode.Triangles, 3, "uint16", triangleIndices),
+            ProductCase("strip-position-unindexed", VertexMode.TRIANGLE_STRIP, position, false, 4, GPUVertexMode.TriangleStrip, null, null, noIndices),
+            ProductCase("strip-position-indexed", VertexMode.TRIANGLE_STRIP, position, true, 4, GPUVertexMode.TriangleStrip, 4, "uint16", stripIndices),
+            ProductCase("strip-uv-unindexed", VertexMode.TRIANGLE_STRIP, positionUv, false, 4, GPUVertexMode.TriangleStrip, null, null, noIndices),
+            ProductCase("strip-uv-indexed", VertexMode.TRIANGLE_STRIP, positionUv, true, 4, GPUVertexMode.TriangleStrip, 4, "uint16", stripIndices),
+            ProductCase("strip-color-unindexed", VertexMode.TRIANGLE_STRIP, positionColor, false, 4, GPUVertexMode.TriangleStrip, null, null, noIndices),
+            ProductCase("strip-color-indexed", VertexMode.TRIANGLE_STRIP, positionColor, true, 4, GPUVertexMode.TriangleStrip, 4, "uint16", stripIndices),
+            ProductCase("strip-color-uv-unindexed", VertexMode.TRIANGLE_STRIP, positionColorUv, false, 4, GPUVertexMode.TriangleStrip, null, null, noIndices),
+            ProductCase("strip-color-uv-indexed", VertexMode.TRIANGLE_STRIP, positionColorUv, true, 4, GPUVertexMode.TriangleStrip, 4, "uint16", stripIndices),
+            ProductCase("fan-position-unindexed", VertexMode.TRIANGLE_FAN, position, false, 4, GPUVertexMode.Triangles, 6, "uint16", implicitFanIndices),
+            ProductCase("fan-position-indexed", VertexMode.TRIANGLE_FAN, position, true, 4, GPUVertexMode.Triangles, 6, "uint16", explicitFanIndices),
+            ProductCase("fan-uv-unindexed", VertexMode.TRIANGLE_FAN, positionUv, false, 4, GPUVertexMode.Triangles, 6, "uint16", implicitFanIndices),
+            ProductCase("fan-uv-indexed", VertexMode.TRIANGLE_FAN, positionUv, true, 4, GPUVertexMode.Triangles, 6, "uint16", explicitFanIndices),
+            ProductCase("fan-color-unindexed", VertexMode.TRIANGLE_FAN, positionColor, false, 4, GPUVertexMode.Triangles, 6, "uint16", implicitFanIndices),
+            ProductCase("fan-color-indexed", VertexMode.TRIANGLE_FAN, positionColor, true, 4, GPUVertexMode.Triangles, 6, "uint16", explicitFanIndices),
+            ProductCase("fan-color-uv-unindexed", VertexMode.TRIANGLE_FAN, positionColorUv, false, 4, GPUVertexMode.Triangles, 6, "uint16", implicitFanIndices),
+            ProductCase("fan-color-uv-indexed", VertexMode.TRIANGLE_FAN, positionColorUv, true, 4, GPUVertexMode.Triangles, 6, "uint16", explicitFanIndices),
+        )
+
+        cases.forEach { case ->
+            val points = listOf(Point(0f, 0f), Point(2f, 0f), Point(2f, 2f), Point(0f, 2f))
+                .take(case.vertexCount)
+            val colors = if ("color" in case.layout.attributes) {
+                listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE).take(case.vertexCount)
+            } else null
+            val uvs = if ("texcoord" in case.layout.attributes) {
+                listOf(Point(0f, 0f), Point(1f, 0f), Point(1f, 1f), Point(0f, 1f)).take(case.vertexCount)
+            } else null
+            val sourceIndices = if (!case.indexed) null else when (case.mode) {
+                VertexMode.TRIANGLES -> listOf(2, 0, 1)
+                VertexMode.TRIANGLE_STRIP -> listOf(3, 1, 2, 0)
+                VertexMode.TRIANGLE_FAN -> listOf(2, 3, 0, 1)
             }
+            val artifact = lower(DisplayOp.DrawVertices(
+                Vertices(case.mode, points, uvs, colors, sourceIndices),
+                Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen,
+            )).ready().draw.artifact
+
+            assertEquals(case.vertexCount, artifact.vertexCount, case.name)
+            assertEquals(case.indexCount, artifact.indexCount, case.name)
+            assertEquals(case.topology, artifact.topology, case.name)
+            assertEquals(case.indexFormat, artifact.indexFormat, case.name)
+            assertEquals(case.layout, artifact.layout, case.name)
+            assertEquals(
+                expectedAttributeFormats.getValue(case.layout),
+                artifact.layout.attributeFormats,
+                case.name,
+            )
+            assertEquals(
+                case.indexBytes?.toList(),
+                artifact.indexBytesForUpload()?.toList(),
+                case.name,
+            )
         }
+    }
+
+    @Test
+    fun `published attribute formats reject hostile mutation`() {
+        val formats = lower(DisplayOp.DrawVertices(
+            vertices(), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen,
+        )).ready().draw.artifact.layout.attributeFormats
+
+        @Suppress("UNCHECKED_CAST")
+        assertFailsWith<UnsupportedOperationException> {
+            (formats as MutableList<String>).clear()
+        }
+        assertEquals(listOf("f32x2"), formats)
     }
 
     @Test
@@ -320,17 +399,35 @@ class GPUPreparedVerticesLowererTest {
             GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("cpu", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable) }).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("wgsl", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslUnavailable) }).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("wgsl", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation) }).refused() },
-            GPUPreparedVerticesRefusalCodes.MeshProgramAbi to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("abi", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Abi) }).refused() },
+            GPUPreparedVerticesRefusalCodes.MeshProgramAbi to { lower(meshOperation(program = registeredMeshProgram(uniforms = UniformBlock { }))).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramChild to { lower(meshOperation(program = child)).refused() },
         )
         val reserved = GPUPreparedVerticesRefusalCoverage.classifications
             .filterValues { it.disposition == GPUPreparedVerticesRefusalDisposition.Reserved }
         assertEquals(GPUPreparedVerticesRefusalCodes.ALL, (cases.keys + reserved.keys).toSet())
+        val expectedAuthorities = mapOf(
+            GPUPreparedVerticesRefusalCodes.PositionCount to "GPUPreparedVerticesPacker",
+            GPUPreparedVerticesRefusalCodes.AttributeCount to "GPUPreparedVerticesPacker",
+            GPUPreparedVerticesRefusalCodes.NonFinite to "GPUPreparedVerticesPacker",
+            GPUPreparedVerticesRefusalCodes.IndexOutOfRange to "GPUPreparedVerticesPacker",
+            GPUPreparedVerticesRefusalCodes.IndexFormat to "GPUPreparedVerticesPacker",
+            GPUPreparedVerticesRefusalCodes.Transform to "GPUPreparedVerticesLowerer",
+            GPUPreparedVerticesRefusalCodes.Material to "PreparedTextPaintSnapshotter",
+            GPUPreparedVerticesRefusalCodes.Budget to "GPUPreparedVerticesPacker",
+            GPUPreparedVerticesRefusalCodes.MeshBounds to "GPUPreparedVerticesLowerer",
+            GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered to "KanvasPreparedRuntimeEffectResolver",
+            GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable to "GPUPreparedRuntimeEffectResolver",
+            GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable to "GPUPreparedRuntimeEffectResolver",
+            GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation to "GPUPreparedRuntimeEffectResolver",
+            GPUPreparedVerticesRefusalCodes.MeshProgramAbi to "GPUPreparedMaterialProgramCompiler",
+            GPUPreparedVerticesRefusalCodes.MeshProgramChild to "GPUMaterialMapper",
+        )
+        assertEquals(cases.keys, expectedAuthorities.keys)
         cases.forEach { (code, execute) ->
             val refusal = execute()
             assertEquals(code, refusal.code)
             assertEquals(7, refusal.operationIndex)
-            assertTrue(refusal.facts["authority"].orEmpty().isNotBlank())
+            assertEquals(expectedAuthorities.getValue(code), refusal.facts["authority"], code)
             assertTrue(refusal.facts["reason"].orEmpty().isNotBlank())
         }
         reserved.values.forEach { assertTrue(it.reason.isNotBlank() && it.authority.isNotBlank()) }
@@ -465,28 +562,154 @@ class GPUPreparedVerticesLowererTest {
     }
 
     @Test
-    fun `resolver exception is terminal typed refusal`() {
-        val refusal = lower(meshOperation(program = registeredMeshProgram()),
-            GPUPreparedRuntimeEffectResolver { _, _ -> throw IllegalStateException("boom") }).refused()
-        assertEquals(GPUPreparedVerticesRefusalCodes.Material, refusal.code)
-        assertEquals("runtime-resolver", refusal.facts["stage"])
-        assertEquals("resolver_exception", refusal.facts["reason"])
+    fun `root resolver exception and linkage failure retain the resolver boundary`() {
+        val cases = listOf(
+            GPUPreparedRuntimeEffectResolver { _, _ -> throw IllegalStateException("boom") } to
+                "resolver_exception",
+            GPUPreparedRuntimeEffectResolver { _, _ -> throw LinkageError("missing") } to
+                "resolver_linkage_failure",
+        )
+
+        cases.forEach { (resolver, reason) ->
+            val refusal = lower(meshOperation(program = registeredMeshProgram()), resolver).refused()
+            assertEquals(GPUPreparedVerticesRefusalCodes.Material, refusal.code)
+            assertEquals(7, refusal.operationIndex)
+            assertEquals(
+                mapOf(
+                    "stage" to "runtime-resolver",
+                    "reason" to reason,
+                    "authority" to "GPUPreparedRuntimeEffectResolver",
+                ),
+                refusal.facts,
+            )
+        }
     }
 
     @Test
-    fun `resolver linkage failure and ABI reason keep terminal source authority`() {
-        val linkage = lower(meshOperation(program = registeredMeshProgram()),
-            GPUPreparedRuntimeEffectResolver { _, _ -> throw LinkageError("missing") }).refused()
-        assertEquals(GPUPreparedVerticesRefusalCodes.Material, linkage.code)
-        assertEquals("resolver_linkage_failure", linkage.facts["reason"])
-        assertEquals("GPUPreparedRuntimeEffectResolver", linkage.facts["authority"])
+    fun `canonical registered program with missing uniform payload reaches compiler ABI refusal`() {
+        val abi = lower(meshOperation(program = registeredMeshProgram(uniforms = UniformBlock { }))).refused()
 
-        val abi = lower(meshOperation(program = registeredMeshProgram()),
-            GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
-                "abi", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Abi,
-            ) }).refused()
         assertEquals(GPUPreparedVerticesRefusalCodes.MeshProgramAbi, abi.code)
-        assertEquals("GPUPreparedRuntimeEffectResolver", abi.facts["authority"])
+        assertEquals(7, abi.operationIndex)
+        assertEquals(
+            mapOf(
+                "stage" to "mesh-program",
+                "reason" to "compiler_refused",
+                "authority" to "GPUPreparedMaterialProgramCompiler",
+                "compilerCode" to "unsupported.material.runtime_effect.uniform_payload",
+                "sourceKind" to "RuntimeEffect",
+            ),
+            abi.facts,
+        )
+    }
+
+    @Test
+    fun `compiler exception and linkage failure retain the compiler boundary`() {
+        val failures = listOf<() -> Nothing>(
+            { throw IllegalStateException("compiler boom") },
+            { throw LinkageError("compiler missing") },
+        )
+        val expectedReasons = listOf("compiler_exception", "compiler_linkage_failure")
+
+        failures.zip(expectedReasons).forEach { (failure, reason) ->
+            val refusal = lower(
+                meshOperation(program = registeredMeshProgram()),
+                KanvasPreparedRuntimeEffectResolver(),
+                GPUPreparedVerticesMaterialCompiler { _, _, _ -> failure() },
+            ).refused()
+            assertEquals(GPUPreparedVerticesRefusalCodes.Material, refusal.code)
+            assertEquals(
+                mapOf(
+                    "stage" to "material-compiler",
+                    "reason" to reason,
+                    "authority" to "GPUPreparedMaterialProgramCompiler",
+                ),
+                refusal.facts,
+            )
+        }
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun `fatal JVM errors escape resolver and compiler boundaries`() {
+        val fatalFactories = listOf<() -> Error>(
+            { OutOfMemoryError("fatal vm") },
+            { ThreadDeath() },
+        )
+
+        fatalFactories.forEach { fatal ->
+            assertFailsWith<Error> {
+                lower(
+                    meshOperation(program = registeredMeshProgram()),
+                    GPUPreparedRuntimeEffectResolver { _, _ -> throw fatal() },
+                )
+            }
+            assertFailsWith<Error> {
+                lower(
+                    meshOperation(program = registeredMeshProgram()),
+                    KanvasPreparedRuntimeEffectResolver(),
+                    GPUPreparedVerticesMaterialCompiler { _, _, _ -> throw fatal() },
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `child resolver failure inside compiler retains resolver source authority`() {
+        val canonical = KanvasPreparedRuntimeEffectResolver()
+        val resolver = GPUPreparedRuntimeEffectResolver { effectId, version ->
+            if (effectId == "runtime.child") throw IllegalStateException("child resolver boom")
+            canonical.resolve(effectId, version)
+        }
+        val refusal = lower(
+            meshOperation(program = registeredMeshProgram()),
+            resolver,
+            GPUPreparedVerticesMaterialCompiler { _, _, context ->
+                context.runtimeEffectResolver.resolve("runtime.child", 1)
+                error("unreachable")
+            },
+        ).refused()
+
+        assertEquals(
+            mapOf(
+                "stage" to "runtime-resolver",
+                "reason" to "resolver_exception",
+                "authority" to "GPUPreparedRuntimeEffectResolver",
+            ),
+            refusal.facts,
+        )
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, refusal.code)
+        assertEquals(7, refusal.operationIndex)
+    }
+
+    @Test
+    fun `root and child resolutions are memoized independently by key`() {
+        val canonical = KanvasPreparedRuntimeEffectResolver()
+        val calls = linkedMapOf<Pair<String, Int>, Int>()
+        val resolver = GPUPreparedRuntimeEffectResolver { effectId, version ->
+            val key = effectId to version
+            calls[key] = calls.getOrDefault(key, 0) + 1
+            if (effectId == "runtime.child") {
+                GPUPreparedRuntimeEffectResolution.DescriptorUnavailable("child unavailable")
+            } else {
+                canonical.resolve(effectId, version)
+            }
+        }
+        val draw = lower(
+            meshOperation(program = registeredMeshProgram()),
+            resolver,
+            GPUPreparedVerticesMaterialCompiler { descriptor, paintAlpha, context ->
+                context.runtimeEffectResolver.resolve("runtime.child", 1)
+                context.runtimeEffectResolver.resolve("runtime.child", 1)
+                GPUPreparedMaterialProgramCompiler.compile(descriptor, paintAlpha, context)
+            },
+        ).ready().draw
+
+        assertEquals(GPUPreparedVerticesOperationKind.DrawMesh, draw.operationKind)
+        assertEquals(
+            mapOf(("runtime.simple_rt" to 1) to 1, ("runtime.child" to 1) to 1),
+            calls,
+        )
     }
 
     @Test
@@ -525,6 +748,14 @@ class GPUPreparedVerticesLowererTest {
     ): GPUPreparedVerticesLowering =
         GPUPreparedVerticesLowerer.lower(operation, 7, target(), capabilities(), runtimeEffectResolver)
 
+    private fun lower(
+        operation: DisplayOp,
+        runtimeEffectResolver: GPUPreparedRuntimeEffectResolver,
+        materialCompiler: GPUPreparedVerticesMaterialCompiler,
+    ): GPUPreparedVerticesLowering = GPUPreparedVerticesLowerer.lower(
+        operation, 7, target(), capabilities(), runtimeEffectResolver, materialCompiler,
+    )
+
     private fun meshOperation(
         paintBlend: BlendMode = BlendMode.SRC_OVER,
         overrideBlend: BlendMode? = null,
@@ -542,9 +773,23 @@ class GPUPreparedVerticesLowererTest {
         listOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f)),
     )
 
-    private fun registeredMeshProgram(): MeshProgram = MeshProgram(
+    private fun registeredMeshProgram(
+        uniforms: UniformBlock = UniformBlock { float4("gColor", 1f, 0f, 0f, 1f) },
+    ): MeshProgram = MeshProgram(
         effect("runtime.simple_rt"),
-        uniforms = UniformBlock { float4("gColor", 1f, 0f, 0f, 1f) },
+        uniforms = uniforms,
+    )
+
+    private data class ProductCase(
+        val name: String,
+        val mode: VertexMode,
+        val layout: GPUVertexLayoutPlan,
+        val indexed: Boolean,
+        val vertexCount: Int,
+        val topology: GPUVertexMode,
+        val indexCount: Int?,
+        val indexFormat: String?,
+        val indexBytes: ByteArray?,
     )
 
     private fun effect(id: String): RuntimeEffect = RuntimeEffect(
