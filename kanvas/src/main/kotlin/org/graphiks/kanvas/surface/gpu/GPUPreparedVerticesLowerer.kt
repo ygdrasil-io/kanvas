@@ -21,6 +21,8 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUTargetBlendFacts
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPrimitiveBlendPlan
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolution
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolver
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesArtifactInput
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesPacker
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesPackingLimits
@@ -49,12 +51,23 @@ object GPUPreparedVerticesLowerer {
         operationIndex: Int,
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
-    ): GPUPreparedVerticesLowering = when (operation) {
-        is DisplayOp.DrawVertices -> lowerVertices(
-            vertices = operation.vertices,
-            paint = operation.paint.snapshotForPreparedText(),
-            transform = operation.transform,
-            clip = operation.clip,
+        runtimeEffectResolver: GPUPreparedRuntimeEffectResolver = KanvasPreparedRuntimeEffectResolver(),
+    ): GPUPreparedVerticesLowering {
+        if (operation is DisplayOp.DrawVertices) {
+            val vertices = operation.vertices.snapshotForPreparedVertices()
+            val paint = snapshotPaint(operation.paint) ?: return refused(
+                GPUPreparedVerticesRefusalCodes.Material, operationIndex, "paint-snapshot", "snapshot_exception",
+                mapOf("exception" to "IllegalArgumentException"),
+            )
+            val clip = snapshotClip(operation.clip) ?: return refused(
+                GPUPreparedVerticesRefusalCodes.Material, operationIndex, "clip-snapshot", "snapshot_exception",
+                mapOf("exception" to "IllegalArgumentException"),
+            )
+            return lowerVertices(
+            vertices = vertices,
+            paint = paint,
+            transform = operation.transform.snapshotForPreparedVertices(),
+            clip = clip,
             operationKind = GPUPreparedVerticesOperationKind.DrawVertices,
             operationIndex = operationIndex,
             target = target,
@@ -62,9 +75,12 @@ object GPUPreparedVerticesLowerer {
             provenance = "drawVertices",
             meshBounds = null,
             finalBlend = operation.paint.blendMode.toGpuBlendFacts(),
-        )
-        is DisplayOp.DrawMesh -> lowerMesh(operation, operationIndex, target, capabilities)
-        else -> refused(
+            )
+        }
+        if (operation is DisplayOp.DrawMesh) {
+            return lowerMesh(operation, operationIndex, target, capabilities, runtimeEffectResolver)
+        }
+        return refused(
             GPUPreparedVerticesRefusalCodes.Material,
             operationIndex,
             "operation",
@@ -78,17 +94,25 @@ object GPUPreparedVerticesLowerer {
         operationIndex: Int,
         target: GPUTargetFacts,
         capabilities: GPUCapabilities,
+        runtimeEffectResolver: GPUPreparedRuntimeEffectResolver,
     ): GPUPreparedVerticesLowering {
+        val vertices = operation.mesh.vertices.snapshotForPreparedVertices()
+        val bounds = operation.mesh.bounds.copy()
+        val transform = operation.transform.snapshotForPreparedVertices()
+        val clip = snapshotClip(operation.clip) ?: return refused(
+            GPUPreparedVerticesRefusalCodes.Material, operationIndex, "clip-snapshot", "snapshot_exception",
+            mapOf("exception" to "IllegalArgumentException"),
+        )
         val finalBlend = (operation.blendMode ?: operation.paint.blendMode).toGpuBlendFacts()
         val program = operation.mesh.program
         if (program == null) {
             // This is the exact public Canvas.drawMesh normalization, kept as one route.
             return lowerVertices(
-                vertices = operation.mesh.vertices,
-                paint = operation.paint.copy(blendMode = operation.blendMode ?: operation.paint.blendMode)
-                    .snapshotForPreparedText(),
-                transform = operation.transform,
-                clip = operation.clip,
+                vertices = vertices,
+                paint = snapshotPaint(operation.paint.copy(blendMode = operation.blendMode ?: operation.paint.blendMode))
+                    ?: return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "paint-snapshot", "snapshot_exception", mapOf("exception" to "IllegalArgumentException")),
+                transform = transform,
+                clip = clip,
                 operationKind = GPUPreparedVerticesOperationKind.DrawVertices,
                 operationIndex = operationIndex,
                 target = target,
@@ -98,7 +122,6 @@ object GPUPreparedVerticesLowerer {
                 finalBlend = finalBlend,
             )
         }
-        val bounds = operation.mesh.bounds
         if (listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).any { !it.isFinite() } ||
             bounds.right < bounds.left || bounds.bottom < bounds.top
         ) {
@@ -118,10 +141,18 @@ object GPUPreparedVerticesLowerer {
                 mapped.code, operationIndex, "mesh-program", mapped.facts["reason"] ?: "mapping_refused", mapped.facts,
             )
         }
+        meshProgramAvailabilityRefusal(
+            runtimeEffectResolver.resolve(
+                mapping.descriptor.effectId,
+                mapping.descriptor.descriptorVersion,
+            ),
+        )?.let { code ->
+            return refused(code, operationIndex, "mesh-program", "runtime_effect_unavailable")
+        }
         val material = when (val compiled = GPUPreparedMaterialProgramCompiler.compile(
             descriptor = mapping.descriptor,
             paintAlpha = mapping.paintAlpha,
-            context = materialContext(target, capabilities),
+            context = materialContext(target, capabilities, runtimeEffectResolver),
         )) {
             is GPUPreparedMaterialProgramResult.Ready -> compiled.program
             is GPUPreparedMaterialProgramResult.Refused -> return refused(
@@ -130,10 +161,13 @@ object GPUPreparedVerticesLowerer {
             )
         }
         return lowerVertices(
-            vertices = operation.mesh.vertices,
-            paint = operation.paint.snapshotForPreparedText(),
-            transform = operation.transform,
-            clip = operation.clip,
+            vertices = vertices,
+            paint = org.graphiks.kanvas.paint.Paint(
+                color = operation.paint.color,
+                blendMode = operation.paint.blendMode,
+            ),
+            transform = transform,
+            clip = clip,
             operationKind = GPUPreparedVerticesOperationKind.DrawMesh,
             operationIndex = operationIndex,
             target = target,
@@ -242,6 +276,34 @@ object GPUPreparedVerticesLowerer {
     }
 }
 
+private fun snapshotPaint(
+    paint: org.graphiks.kanvas.paint.Paint,
+): org.graphiks.kanvas.paint.Paint? = try {
+    paint.snapshotForPreparedText()
+} catch (_: IllegalArgumentException) {
+    null
+}
+
+private fun snapshotClip(source: org.graphiks.kanvas.canvas.ClipStack): org.graphiks.kanvas.canvas.ClipStack? = try {
+    source.snapshotForPreparedText()
+} catch (_: IllegalArgumentException) {
+    null
+}
+
+private fun Matrix33.snapshotForPreparedVertices(): Matrix33 = Matrix33.makeAll(
+    scaleX, skewX, transX,
+    skewY, scaleY, transY,
+    persp0, persp1, persp2,
+)
+
+private fun Vertices.snapshotForPreparedVertices(): Vertices = Vertices(
+    mode = mode,
+    positions = positions.map { org.graphiks.kanvas.types.Point(it.x, it.y) },
+    texCoords = texCoords?.map { org.graphiks.kanvas.types.Point(it.x, it.y) },
+    colors = colors?.toList(),
+    indices = indices?.toList(),
+)
+
 private sealed interface MaterialResult {
     data class Ready(val material: GPUPreparedMaterialProgram) : MaterialResult
     data class Refused(val reason: String, val facts: Map<String, String>) : MaterialResult
@@ -261,16 +323,23 @@ private fun compilePaint(
             "compiler_refused", mapOf("compilerCode" to compiled.code, "sourceKind" to compiled.sourceKind.name),
         )
     }
-} catch (_: Exception) {
+} catch (_: IllegalArgumentException) {
     MaterialResult.Refused("mapper_exception", emptyMap())
 }
 
 private fun materialContext(target: GPUTargetFacts, capabilities: GPUCapabilities): GPUMaterialLoweringContext =
+    materialContext(target, capabilities, KanvasPreparedRuntimeEffectResolver())
+
+private fun materialContext(
+    target: GPUTargetFacts,
+    capabilities: GPUCapabilities,
+    runtimeEffectResolver: GPUPreparedRuntimeEffectResolver,
+): GPUMaterialLoweringContext =
     GPUMaterialLoweringContext(
         capabilityClass = capabilities.canonicalSnapshotHash(),
         targetFormatClass = target.colorFormat,
         dictionaryVersion = PREPARED_VERTICES_MATERIAL_DICTIONARY_VERSION,
-        runtimeEffectResolver = KanvasPreparedRuntimeEffectResolver(),
+        runtimeEffectResolver = runtimeEffectResolver,
     )
 
 private fun Vertices.toArtifactInput(provenance: String): GPUPreparedVerticesArtifactInput =
@@ -325,6 +394,10 @@ internal fun meshMaterialCode(compilerCode: String): String = when {
         GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable
     compilerCode == "unsupported.material.runtime_effect.uniform_payload" ->
         GPUPreparedVerticesRefusalCodes.MeshProgramAbi
+    compilerCode == "unsupported.material.wgsl_validation" ->
+        GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation
+    compilerCode == "unsupported.material.image_resource" ->
+        GPUPreparedVerticesRefusalCodes.MeshProgramResource
     compilerCode in setOf(
         "unsupported.material.runtime_effect.child_abi",
         "unsupported.material.runtime_effect.child_binding",
@@ -335,6 +408,24 @@ internal fun meshMaterialCode(compilerCode: String): String = when {
         "unsupported.material.runtime_effect.child_role",
     ) -> GPUPreparedVerticesRefusalCodes.MeshProgramChild
     else -> GPUPreparedVerticesRefusalCodes.Material
+}
+
+private fun meshProgramAvailabilityRefusal(
+    resolution: GPUPreparedRuntimeEffectResolution,
+): String? = when (resolution) {
+    is GPUPreparedRuntimeEffectResolution.Ready -> null
+    is GPUPreparedRuntimeEffectResolution.DescriptorUnavailable ->
+        GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered
+    is GPUPreparedRuntimeEffectResolution.ProgramUnavailable -> when (resolution.reason) {
+        GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable ->
+            GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable
+        GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslUnavailable ->
+            GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable
+        GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation ->
+            GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation
+        GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Unknown ->
+            GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable
+    }
 }
 
 private fun refused(
@@ -353,8 +444,9 @@ private fun refused(
             "geometry" -> "GPUPreparedVerticesPacker"
             "mesh-program" -> "GPUMaterialMapper"
             "material" -> "GPUPreparedMaterialProgramCompiler"
+            "paint-snapshot" -> "PreparedTextPaintSnapshotter"
             "transform" -> "GPUPreparedVerticesLowerer"
-            "clip" -> "GPUClipMapper"
+            "clip", "clip-snapshot" -> "GPUClipMapper"
             else -> "GPUPreparedVerticesLowerer"
         },
     ).apply { putAll(facts) },
@@ -372,7 +464,7 @@ private fun prepareClip(
 ): PreparedVerticesClipResult {
     val snapshot = try {
         source.snapshotForPreparedText()
-    } catch (_: Exception) {
+    } catch (_: IllegalArgumentException) {
         return PreparedVerticesClipResult.Refused(
             GPUPreparedVerticesRefusalCodes.Material, "snapshot_exception", emptyMap(),
         )
@@ -384,7 +476,7 @@ private fun prepareClip(
     }
     val facts = try {
         snapshot.toGPUClipFacts(target)
-    } catch (_: Exception) {
+    } catch (_: IllegalArgumentException) {
         return PreparedVerticesClipResult.Refused(
             GPUPreparedVerticesRefusalCodes.Material, "clip_mapping_exception", emptyMap(),
         )
@@ -403,7 +495,7 @@ private fun prepareClip(
         ?.coerceAtMost(Int.MAX_VALUE.toLong())?.toInt() ?: maxOf(target.width, target.height)
     val plan = try {
         GPUClipCoveragePlanner.planForFrameRoute(request, RenderConfig.DEFAULT, maxTextureDimension)
-    } catch (_: Exception) {
+    } catch (_: IllegalArgumentException) {
         return PreparedVerticesClipResult.Refused(
             GPUPreparedVerticesRefusalCodes.Material, "clip_planning_exception", emptyMap(),
         )

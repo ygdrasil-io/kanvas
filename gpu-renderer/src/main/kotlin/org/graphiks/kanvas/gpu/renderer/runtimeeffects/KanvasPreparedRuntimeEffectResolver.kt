@@ -59,6 +59,7 @@ class KanvasPreparedRuntimeEffectResolver internal constructor(
         val candidate = programAuthority.lookup(id, descriptor.version)
             ?: return GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
                 "Registered runtime effect has no proven Kanvas CPU/WGSL program",
+                GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable,
             )
 
         return when (
@@ -71,9 +72,15 @@ class KanvasPreparedRuntimeEffectResolver internal constructor(
             is GPUPreparedRuntimeEffectProgramValidation.Valid ->
                 GPUPreparedRuntimeEffectResolution.Ready(candidate.program)
             is GPUPreparedRuntimeEffectProgramValidation.Unavailable ->
-                GPUPreparedRuntimeEffectResolution.ProgramUnavailable(validation.message)
+                GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
+                    validation.message,
+                    GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslUnavailable,
+                )
             is GPUPreparedRuntimeEffectProgramValidation.Invalid ->
-                GPUPreparedRuntimeEffectResolution.ProgramUnavailable(validation.message)
+                GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
+                    validation.message,
+                    GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation,
+                )
         }
     }
 }

@@ -12,14 +12,18 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolution
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolver
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MeshProgram
 import org.graphiks.kanvas.paint.MeshChildren
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.BlenderChild
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.pipeline.RuntimeEffect
 import org.graphiks.kanvas.pipeline.ShaderModule
 import org.graphiks.kanvas.pipeline.UniformBlock
@@ -31,6 +35,8 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
+import org.graphiks.kanvas.pipeline.ClipOp
+import org.graphiks.kanvas.canvas.ClipStackOp
 
 class GPUPreparedVerticesLowererTest {
     @Test
@@ -177,7 +183,6 @@ class GPUPreparedVerticesLowererTest {
             GPUPreparedVerticesRefusalCoverage.classifications.keys,
         )
         GPUPreparedVerticesRefusalCoverage.classifications.values.forEach { classification ->
-            assertTrue(classification.phase.isNotBlank())
             assertTrue(classification.authority.isNotBlank())
             assertTrue(classification.reason.isNotBlank())
         }
@@ -192,6 +197,14 @@ class GPUPreparedVerticesLowererTest {
         assertEquals(
             GPUPreparedVerticesRefusalCodes.MeshProgramChild,
             meshMaterialCode("unsupported.material.runtime_effect.child_role"),
+        )
+        assertEquals(
+            GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation,
+            meshMaterialCode("unsupported.material.wgsl_validation"),
+        )
+        assertEquals(
+            GPUPreparedVerticesRefusalCodes.MeshProgramResource,
+            meshMaterialCode("unsupported.material.image_resource"),
         )
         assertEquals(
             GPUPreparedVerticesRefusalCodes.Material,
@@ -220,8 +233,92 @@ class GPUPreparedVerticesLowererTest {
         assertEquals(1, draw.paintAlphaApplicationCount)
     }
 
+    @Test
+    fun `hostile paint snapshot becomes one typed material refusal`() {
+        val result = lower(DisplayOp.DrawVertices(
+            vertices(), Paint.fill(Color.RED).copy(shader = hostileShader()),
+            Matrix33.identity(), ClipStack.WideOpen,
+        ))
+
+        val refusal = result.refused()
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, refusal.code)
+        assertEquals(7, refusal.operationIndex)
+        assertEquals("paint-snapshot", refusal.facts["stage"])
+        assertEquals("PreparedTextPaintSnapshotter", refusal.facts["authority"])
+        assertEquals("snapshot_exception", refusal.facts["reason"])
+    }
+
+    @Test
+    fun `mesh program lowering does not visit unused hostile paint shader`() {
+        val draw = lower(meshOperation(program = registeredMeshProgram()).copy(
+            paint = Paint.fill(Color.RED).copy(shader = hostileShader()),
+        )).ready().draw
+
+        assertEquals(GPUPreparedVerticesOperationKind.DrawMesh, draw.operationKind)
+    }
+
+    @Test
+    fun `mesh runtime resolver maps each executable unavailability authority to one canonical code`() {
+        val cases = listOf(
+            GPUPreparedRuntimeEffectResolution.DescriptorUnavailable("missing") to
+                GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered,
+            GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
+                "cpu", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable,
+            ) to GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable,
+            GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
+                "wgsl", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslUnavailable,
+            ) to GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable,
+            GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
+                "invalid", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation,
+            ) to GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation,
+        )
+
+        cases.forEach { (resolution, expected) ->
+            val result = lower(
+                meshOperation(program = registeredMeshProgram()),
+                GPUPreparedRuntimeEffectResolver { _, _ -> resolution },
+            ).refused()
+            assertEquals(expected, result.code)
+            assertEquals("mesh-program", result.facts["stage"])
+            assertEquals("runtime_effect_unavailable", result.facts["reason"])
+        }
+    }
+
+    @Test
+    fun `mesh snapshots vertices and clips before resolver can mutate caller objects`() {
+        val positions = mutableListOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f))
+        val path = Path().addRect(Rect.fromLTRB(0f, 0f, 4f, 4f))
+        val operation = meshOperation(program = registeredMeshProgram()).copy(
+            mesh = Mesh(
+                Vertices(VertexMode.TRIANGLES, positions),
+                registeredMeshProgram(),
+                Rect.fromLTRB(0f, 0f, 2f, 2f),
+            ),
+            clip = ClipStack.Complex(listOf(ClipStackOp.PathOp(path, ClipOp.INTERSECT))),
+        )
+        val resolver = GPUPreparedRuntimeEffectResolver { effectId, version ->
+            positions[0] = Point(99f, 99f)
+            path.addRect(Rect.fromLTRB(50f, 50f, 60f, 60f))
+            org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver()
+                .resolve(effectId, version)
+        }
+
+        val draw = lower(operation, resolver).ready().draw
+
+        assertEquals(0f, java.nio.ByteBuffer.wrap(draw.artifact.vertexBytesForUpload())
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN).float)
+        val snapshottedPath = ((draw.clip as ClipStack.Complex).ops.single() as ClipStackOp.PathOp).path
+        assertEquals(Rect.fromLTRB(0f, 0f, 4f, 4f), snapshottedPath.computeBounds())
+    }
+
     private fun lower(operation: DisplayOp): GPUPreparedVerticesLowering =
         GPUPreparedVerticesLowerer.lower(operation, 7, target(), capabilities())
+
+    private fun lower(
+        operation: DisplayOp,
+        runtimeEffectResolver: GPUPreparedRuntimeEffectResolver,
+    ): GPUPreparedVerticesLowering =
+        GPUPreparedVerticesLowerer.lower(operation, 7, target(), capabilities(), runtimeEffectResolver)
 
     private fun meshOperation(
         paintBlend: BlendMode = BlendMode.SRC_OVER,
@@ -251,6 +348,12 @@ class GPUPreparedVerticesLowererTest {
         uniformLayout = UniformLayout(emptyList()),
         children = emptyList(),
     )
+
+    private fun hostileShader(): Shader {
+        var shader: Shader = Shader.SolidColor(Color.RED)
+        repeat(66) { shader = Shader.Blend(BlendMode.SRC_OVER, shader, Shader.SolidColor(Color.BLUE)) }
+        return shader
+    }
 
     private fun target() = GPUTargetFacts(64, 64, "rgba8unorm-srgb")
 

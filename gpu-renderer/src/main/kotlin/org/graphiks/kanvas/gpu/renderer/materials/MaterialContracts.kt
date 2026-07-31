@@ -328,8 +328,19 @@ sealed interface GPUPreparedRuntimeEffectResolution {
     data class DescriptorUnavailable(val message: String) :
         GPUPreparedRuntimeEffectResolution
 
+    /** The closed authority which prevented an executable program from being issued. */
+    enum class ProgramUnavailableReason {
+        CpuUnavailable,
+        WgslUnavailable,
+        WgslValidation,
+        Unknown,
+    }
+
     /** The descriptor exists but no fully proven Kotlin/CPU plus WGSL program is available. */
-    data class ProgramUnavailable(val message: String) :
+    data class ProgramUnavailable(
+        val message: String,
+        val reason: ProgramUnavailableReason = ProgramUnavailableReason.Unknown,
+    ) :
         GPUPreparedRuntimeEffectResolution
 
     /** A descriptor-, CPU-, parser-, reflection-, and ABI-validated program. */
