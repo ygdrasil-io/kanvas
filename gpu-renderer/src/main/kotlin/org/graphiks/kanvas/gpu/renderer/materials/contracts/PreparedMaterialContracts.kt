@@ -60,6 +60,38 @@ enum class GPUMaterialSourceKind {
     Unsupported,
 }
 
+/** Exact callable role exposed by one registered prepared runtime-effect child slot. */
+enum class GPUPreparedRuntimeEffectChildRole {
+    Shader,
+    ColorFilter,
+    Blender,
+}
+
+/** Handle-free compiled payload for one exact registered runtime-effect child. */
+@ConsistentCopyVisibility
+data class GPUPreparedRuntimeEffectChildProgram internal constructor(
+    val name: String,
+    val role: GPUPreparedRuntimeEffectChildRole,
+    val programKey: String,
+    val abiHash: String,
+    val uniformBytes: List<Int>,
+    val resourceFacts: List<String>,
+) {
+    init {
+        require(name.isNotBlank()) { "Prepared runtime-effect child name must not be blank" }
+        require(programKey.isNotBlank()) { "Prepared runtime-effect child program key must not be blank" }
+        require(abiHash.matches(Regex("sha256:[0-9a-f]{64}"))) {
+            "Prepared runtime-effect child ABI hash must be canonical"
+        }
+        require(uniformBytes.all { byte -> byte in 0..255 }) {
+            "Prepared runtime-effect child uniforms must be unsigned bytes"
+        }
+        require(resourceFacts.all(String::isNotBlank)) {
+            "Prepared runtime-effect child resource facts must not be blank"
+        }
+    }
+}
+
 /**
  * Immutable, handle-free result of prepared-material compilation.
  *
@@ -72,6 +104,7 @@ class GPUPreparedMaterialProgram private constructor(
     val composableFragment: GPUPreparedMaterialFragment,
     uniformBytes: List<Int>,
     sampledResources: List<GPUPreparedMaterialSampledResource>,
+    childPrograms: List<GPUPreparedRuntimeEffectChildProgram>,
     val paintAlpha: Float,
     val sourceKind: GPUMaterialSourceKind,
     val preCoverageSourceAlpha: GPUSourceAlphaClassification,
@@ -81,6 +114,8 @@ class GPUPreparedMaterialProgram private constructor(
     val uniformBytes: List<Int> = immutableList(uniformBytes)
     val sampledResources: List<GPUPreparedMaterialSampledResource> =
         immutableList(sampledResources)
+    val childPrograms: List<GPUPreparedRuntimeEffectChildProgram> =
+        immutableList(childPrograms)
 
     init {
         require(materialKey.isNotBlank()) { "Prepared material key must not be blank" }
@@ -111,6 +146,9 @@ class GPUPreparedMaterialProgram private constructor(
         require(composableFragment.sampledBindings.size == this.sampledResources.size) {
             "Prepared material fragment sampled topology must match its resources"
         }
+        require(this.childPrograms.map { child -> child.name }.distinct().size == this.childPrograms.size) {
+            "Prepared runtime-effect child program names must be unique"
+        }
     }
 
     @JvmSynthetic
@@ -121,6 +159,7 @@ class GPUPreparedMaterialProgram private constructor(
             entryPoint = entryPoint,
             uniformBytes = uniformBytes,
             sampledResources = sampledResources,
+            childPrograms = childPrograms,
             paintAlpha = paintAlpha,
             sourceKind = sourceKind,
             preCoverageSourceAlpha = preCoverageSourceAlpha,
@@ -149,6 +188,8 @@ class GPUPreparedMaterialProgram private constructor(
 
     operator fun component10(): GPUSourceAlphaClassification = preCoverageSourceAlpha
 
+    operator fun component11(): List<GPUPreparedRuntimeEffectChildProgram> = childPrograms
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is GPUPreparedMaterialProgram) return false
@@ -159,6 +200,7 @@ class GPUPreparedMaterialProgram private constructor(
             composableFragment == other.composableFragment &&
             uniformBytes == other.uniformBytes &&
             sampledResources == other.sampledResources &&
+            childPrograms == other.childPrograms &&
             paintAlpha.compareTo(other.paintAlpha) == 0 &&
             sourceKind == other.sourceKind &&
             preCoverageSourceAlpha == other.preCoverageSourceAlpha &&
@@ -172,6 +214,7 @@ class GPUPreparedMaterialProgram private constructor(
         result = 31 * result + composableFragment.hashCode()
         result = 31 * result + uniformBytes.hashCode()
         result = 31 * result + sampledResources.hashCode()
+        result = 31 * result + childPrograms.hashCode()
         result = 31 * result + paintAlpha.hashCode()
         result = 31 * result + sourceKind.hashCode()
         result = 31 * result + preCoverageSourceAlpha.hashCode()
@@ -187,6 +230,7 @@ class GPUPreparedMaterialProgram private constructor(
             "composableFragment=$composableFragment, " +
             "uniformBytes=$uniformBytes, " +
             "sampledResources=$sampledResources, " +
+            "childPrograms=$childPrograms, " +
             "paintAlpha=$paintAlpha, " +
             "sourceKind=$sourceKind, " +
             "preCoverageSourceAlpha=$preCoverageSourceAlpha, " +
@@ -203,6 +247,7 @@ class GPUPreparedMaterialProgram private constructor(
             sourceKind: GPUMaterialSourceKind,
             preCoverageSourceAlpha: GPUSourceAlphaClassification,
             admission: GPUPreparedMaterialProgramAdmission,
+            childPrograms: List<GPUPreparedRuntimeEffectChildProgram> = emptyList(),
         ): GPUPreparedMaterialProgram =
             createAuthenticatedCore(
                 materialKey = admission.materialKey(),
@@ -210,6 +255,7 @@ class GPUPreparedMaterialProgram private constructor(
                 entryPoint = entryPoint,
                 uniformBytes = uniformBytes,
                 sampledResources = sampledResources,
+                childPrograms = childPrograms,
                 paintAlpha = paintAlpha,
                 sourceKind = sourceKind,
                 preCoverageSourceAlpha = preCoverageSourceAlpha,
@@ -224,6 +270,7 @@ class GPUPreparedMaterialProgram private constructor(
             entryPoint: String,
             uniformBytes: List<Int>,
             sampledResources: List<GPUPreparedMaterialSampledResource>,
+            childPrograms: List<GPUPreparedRuntimeEffectChildProgram>,
             paintAlpha: Float,
             sourceKind: GPUMaterialSourceKind,
             preCoverageSourceAlpha: GPUSourceAlphaClassification,
@@ -238,6 +285,7 @@ class GPUPreparedMaterialProgram private constructor(
                 sourceKind = sourceKind,
                 uniformBytes = uniformBytes,
                 sampledResources = sampledResources,
+                childPrograms = childPrograms,
                 paintAlpha = paintAlpha,
                 preCoverageSourceAlpha = preCoverageSourceAlpha,
             )
@@ -275,6 +323,7 @@ class GPUPreparedMaterialProgram private constructor(
                 composableFragment = fragment,
                 uniformBytes = uniformBytes,
                 sampledResources = sampledResources,
+                childPrograms = childPrograms,
                 paintAlpha = paintAlpha,
                 sourceKind = sourceKind,
                 preCoverageSourceAlpha = preCoverageSourceAlpha,

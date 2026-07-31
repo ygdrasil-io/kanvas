@@ -252,6 +252,41 @@ enum class GPUPreparedRuntimeEffectSourceColorContract {
     LinearPremultipliedRgba,
 }
 
+/** Reflected, ordered child-slot ABI owned by a registered runtime-effect program. */
+@ConsistentCopyVisibility
+data class GPUPreparedRuntimeEffectChildSlot internal constructor(
+    val name: String,
+    val role: GPUPreparedRuntimeEffectChildRole,
+    val bindingIndex: Int?,
+    val abiHash: String,
+) {
+    init {
+        require(name.isNotBlank()) { "Prepared runtime-effect child slot name must not be blank" }
+        require(bindingIndex == null || bindingIndex >= 0) {
+            "Prepared runtime-effect child binding index must be non-negative"
+        }
+        require(abiHash.matches(Regex("sha256:[0-9a-f]{64}"))) {
+            "Prepared runtime-effect child slot ABI hash must be canonical"
+        }
+    }
+}
+
+/** Canonical invocation ABI shared by every child program admitted for [role]. */
+internal fun preparedRuntimeEffectChildAbiHash(
+    role: GPUPreparedRuntimeEffectChildRole,
+): String = CanonicalIdentityEncoder("prepared-runtime-effect-child-abi-v1")
+    .text("role", role.name)
+    .text(
+        "inputContract",
+        when (role) {
+            GPUPreparedRuntimeEffectChildRole.Shader -> "local-position-vec2-f32"
+            GPUPreparedRuntimeEffectChildRole.ColorFilter -> "linear-premul-rgba-f32"
+            GPUPreparedRuntimeEffectChildRole.Blender -> "two-linear-premul-rgba-f32"
+        },
+    )
+    .text("outputContract", "linear-premul-rgba-f32")
+    .digestIdentity()
+
 /**
  * Canonical executable facts for one registered Kanvas runtime effect.
  *
@@ -274,7 +309,18 @@ data class GPUPreparedRuntimeEffectProgram internal constructor(
     val bindings: List<GPUPreparedRuntimeEffectBinding>,
     val bindingPlanHash: String,
     val routeContractHash: String,
-)
+    val childSlots: List<GPUPreparedRuntimeEffectChildSlot> = emptyList(),
+) {
+    init {
+        require(childSlots.map { slot -> slot.name }.distinct().size == childSlots.size) {
+            "Prepared runtime-effect child slot names must be unique"
+        }
+        val bindingIndices = childSlots.mapNotNull { slot -> slot.bindingIndex }
+        require(bindingIndices.distinct().size == bindingIndices.size) {
+            "Prepared runtime-effect child binding indices must be unique"
+        }
+    }
+}
 
 /** Result of resolving a descriptor against registered Kanvas program authority. */
 sealed interface GPUPreparedRuntimeEffectResolution {

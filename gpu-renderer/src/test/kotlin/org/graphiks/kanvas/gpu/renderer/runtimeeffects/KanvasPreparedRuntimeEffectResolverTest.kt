@@ -7,10 +7,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectBinding
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectChildRole
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectChildSlot
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectSourceColorContract
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformField
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformType
+import org.graphiks.kanvas.gpu.renderer.materials.preparedRuntimeEffectChildAbiHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTBindingPlanHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTModuleHash
@@ -113,6 +116,87 @@ class KanvasPreparedRuntimeEffectResolverTest {
     }
 
     @Test
+    fun `ordered registered child slots contribute to every prepared program hash`() {
+        val slots = childSlots()
+        val sourceColorContract = requireNotNull(descriptor.sourceColorContract)
+
+        assertNotEquals(
+            preparedRuntimeEffectModuleContractHash(SimpleRTModuleHash, sourceColorContract),
+            preparedRuntimeEffectModuleContractHash(
+                SimpleRTModuleHash,
+                sourceColorContract,
+                slots,
+            ),
+        )
+        assertNotEquals(
+            preparedRuntimeEffectReflectionContractHash(SimpleRTReflectionHash, emptyList()),
+            preparedRuntimeEffectReflectionContractHash(SimpleRTReflectionHash, slots),
+        )
+        assertNotEquals(
+            preparedRuntimeEffectBindingContractHash(
+                SimpleRTBindingPlanHash,
+                sourceColorContract,
+            ),
+            preparedRuntimeEffectBindingContractHash(
+                SimpleRTBindingPlanHash,
+                sourceColorContract,
+                slots,
+            ),
+        )
+        assertNotEquals(
+            preparedRuntimeEffectRouteContractHash(descriptor, sourceColorContract),
+            preparedRuntimeEffectRouteContractHash(
+                descriptor.copy(childSlots = descriptorSlots()),
+                sourceColorContract,
+            ),
+        )
+    }
+
+    @Test
+    fun `validator admits exact ordered child slots and refuses order role and ABI mismatch`() {
+        val registered = descriptor.copy(childSlots = descriptorSlots())
+        val exact = childSlots()
+        val validation = KanvasPreparedRuntimeEffectProgramValidator().validate(
+            program = simpleProgram(registeredDescriptor = registered, childSlots = exact),
+            descriptor = registered,
+            cpuOracle = SimpleRTCPUOracle,
+        )
+        val reordered = KanvasPreparedRuntimeEffectProgramValidator().validate(
+            program = simpleProgram(
+                registeredDescriptor = registered,
+                childSlots = exact.reversed(),
+            ),
+            descriptor = registered,
+            cpuOracle = SimpleRTCPUOracle,
+        )
+        val wrongRole = KanvasPreparedRuntimeEffectProgramValidator().validate(
+            program = simpleProgram(
+                registeredDescriptor = registered,
+                childSlots = exact.toMutableList().apply {
+                    this[0] = this[0].copy(role = GPUPreparedRuntimeEffectChildRole.Blender)
+                },
+            ),
+            descriptor = registered,
+            cpuOracle = SimpleRTCPUOracle,
+        )
+        val wrongAbi = KanvasPreparedRuntimeEffectProgramValidator().validate(
+            program = simpleProgram(
+                registeredDescriptor = registered,
+                childSlots = exact.toMutableList().apply {
+                    this[0] = this[0].copy(abiHash = "sha256:${"f".repeat(64)}")
+                },
+            ),
+            descriptor = registered,
+            cpuOracle = SimpleRTCPUOracle,
+        )
+
+        assertIs<GPUPreparedRuntimeEffectProgramValidation.Valid>(validation)
+        assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(reordered)
+        assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(wrongRole)
+        assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(wrongAbi)
+    }
+
+    @Test
     fun `parser unavailable and parser failure never expose a ready program`() {
         val unavailable = KanvasPreparedRuntimeEffectProgramValidator(
             beforeParserUse = { throw NoClassDefFoundError("wgsl4k unavailable") },
@@ -187,6 +271,8 @@ class KanvasPreparedRuntimeEffectResolverTest {
     }
 
     private fun simpleProgram(
+        registeredDescriptor: GPURuntimeEffectDescriptor = descriptor,
+        childSlots: List<GPUPreparedRuntimeEffectChildSlot> = emptyList(),
         wgslSource: String = SimpleRTWgsl,
         sourceFunction: String = SimpleRTEntryPoint,
         sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract =
@@ -195,12 +281,16 @@ class KanvasPreparedRuntimeEffectResolverTest {
         moduleHash: String = preparedRuntimeEffectModuleContractHash(
             wgslModuleHash = SimpleRTModuleHash,
             sourceColorContract = sourceColorContract,
+            childSlots = childSlots,
         ),
-        reflectionHash: String = SimpleRTReflectionHash,
+        reflectionHash: String = preparedRuntimeEffectReflectionContractHash(
+            reflectedAbiHash = SimpleRTReflectionHash,
+            childSlots = childSlots,
+        ),
     ): GPUPreparedRuntimeEffectProgram =
         GPUPreparedRuntimeEffectProgram(
-            effectId = SimpleRTDescriptor.effectId.value,
-            descriptorVersion = SimpleRTDescriptor.descriptorVersion.value,
+            effectId = registeredDescriptor.id.value,
+            descriptorVersion = registeredDescriptor.version.value,
             wgslSource = wgslSource,
             sourceFunction = sourceFunction,
             sourceColorContract = sourceColorContract,
@@ -226,15 +316,40 @@ class KanvasPreparedRuntimeEffectResolverTest {
                     minBindingSizeBytes = 16,
                 ),
             ),
+            childSlots = childSlots,
             bindingPlanHash = preparedRuntimeEffectBindingContractHash(
                 descriptorBindingPlanHash = SimpleRTBindingPlanHash,
                 sourceColorContract = sourceColorContract,
+                childSlots = childSlots,
             ),
             routeContractHash = preparedRuntimeEffectRouteContractHash(
-                descriptor = descriptor,
+                descriptor = registeredDescriptor,
                 sourceColorContract = sourceColorContract,
             ),
         )
+
+    private fun descriptorSlots(): List<GPURuntimeEffectChildSlotPlan> = listOf(
+        GPURuntimeEffectChildSlotPlan("source", setOf("shader"), required = true),
+        GPURuntimeEffectChildSlotPlan("filter", setOf("color-filter"), required = true),
+        GPURuntimeEffectChildSlotPlan("blender", setOf("blender"), required = true),
+    )
+
+    private fun childSlots(): List<GPUPreparedRuntimeEffectChildSlot> = listOf(
+        childSlot("source", GPUPreparedRuntimeEffectChildRole.Shader, 0),
+        childSlot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter, 1),
+        childSlot("blender", GPUPreparedRuntimeEffectChildRole.Blender, 2),
+    )
+
+    private fun childSlot(
+        name: String,
+        role: GPUPreparedRuntimeEffectChildRole,
+        bindingIndex: Int,
+    ): GPUPreparedRuntimeEffectChildSlot = GPUPreparedRuntimeEffectChildSlot(
+        name = name,
+        role = role,
+        bindingIndex = bindingIndex,
+        abiHash = preparedRuntimeEffectChildAbiHash(role),
+    )
 
     private fun materialInput(
         r: Float,

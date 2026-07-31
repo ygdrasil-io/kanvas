@@ -4,12 +4,15 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectBinding
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectChildRole
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectChildSlot
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolution
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolver
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectSourceColorContract
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformField
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformType
+import org.graphiks.kanvas.gpu.renderer.materials.preparedRuntimeEffectChildAbiHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformBlockSizeBytes
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
@@ -106,8 +109,12 @@ internal class KanvasPreparedRuntimeEffectProgramAuthority {
                 moduleHash = preparedRuntimeEffectModuleContractHash(
                     wgslModuleHash = simpleRTDescriptor.wgslPlan.moduleHash,
                     sourceColorContract = simpleRTSourceColorContract,
+                    childSlots = emptyList(),
                 ),
-                reflectionHash = simpleRTDescriptor.wgslPlan.reflectionHash,
+                reflectionHash = preparedRuntimeEffectReflectionContractHash(
+                    reflectedAbiHash = simpleRTDescriptor.wgslPlan.reflectionHash,
+                    childSlots = emptyList(),
+                ),
                 uniformSchemaHash = simpleRTDescriptor.uniformSchema.schemaHash,
                 uniformBlockSizeBytes = simpleRTDescriptor.uniformBlockPlan.blockSizeBytes.toInt(),
                 uniformFields = listOf(
@@ -130,11 +137,13 @@ internal class KanvasPreparedRuntimeEffectProgramAuthority {
                 bindingPlanHash = preparedRuntimeEffectBindingContractHash(
                     descriptorBindingPlanHash = simpleRTDescriptor.resources.bindingPlanHash,
                     sourceColorContract = simpleRTSourceColorContract,
+                    childSlots = emptyList(),
                 ),
                 routeContractHash = preparedRuntimeEffectRouteContractHash(
                     descriptor = simpleRTDescriptor,
                     sourceColorContract = simpleRTSourceColorContract,
                 ),
+                childSlots = emptyList(),
             ),
             cpuOracle = SimpleRTCPUOracle,
         ),
@@ -183,6 +192,7 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
         val expectedModuleHash = preparedRuntimeEffectModuleContractHash(
             wgslModuleHash = expectedWgslModuleHash,
             sourceColorContract = program.sourceColorContract,
+            childSlots = program.childSlots,
         )
         if (
             program.moduleHash != expectedModuleHash ||
@@ -241,8 +251,12 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(message)
         }
         val reflectedHash = report.reflectionFactsHash()
+        val reflectedContractHash = preparedRuntimeEffectReflectionContractHash(
+            reflectedAbiHash = reflectedHash,
+            childSlots = program.childSlots,
+        )
         if (
-            program.reflectionHash != reflectedHash ||
+            program.reflectionHash != reflectedContractHash ||
             descriptor.wgslPlan.reflectionHash != reflectedHash
         ) {
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
@@ -313,17 +327,28 @@ private fun descriptorProgramMismatch(
     if (program.sourceColorContract != registeredSourceColorContract) {
         return "Runtime-effect source color contract does not match the descriptor"
     }
+    val expectedChildSlots = reflectedChildSlots(descriptor)
+        ?: return "Runtime-effect descriptor child slots do not define exact prepared roles"
+    if (program.childSlots != expectedChildSlots) {
+        return "Runtime-effect child slots do not match the descriptor schema"
+    }
     val expectedModuleHash = preparedRuntimeEffectModuleContractHash(
         wgslModuleHash = descriptor.wgslPlan.moduleHash,
         sourceColorContract = registeredSourceColorContract,
+        childSlots = expectedChildSlots,
+    )
+    val expectedReflectionHash = preparedRuntimeEffectReflectionContractHash(
+        reflectedAbiHash = descriptor.wgslPlan.reflectionHash,
+        childSlots = expectedChildSlots,
     )
     val expectedBindingPlanHash = preparedRuntimeEffectBindingContractHash(
         descriptorBindingPlanHash = descriptor.resources.bindingPlanHash,
         sourceColorContract = registeredSourceColorContract,
+        childSlots = expectedChildSlots,
     )
     if (
         program.moduleHash != expectedModuleHash ||
-        program.reflectionHash != descriptor.wgslPlan.reflectionHash ||
+        program.reflectionHash != expectedReflectionHash ||
         program.uniformSchemaHash != descriptor.uniformSchema.schemaHash ||
         program.bindingPlanHash != expectedBindingPlanHash ||
         program.routeContractHash != preparedRuntimeEffectRouteContractHash(
@@ -448,7 +473,7 @@ internal fun preparedRuntimeEffectRouteContractHash(
     descriptor: GPURuntimeEffectDescriptor,
     sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract,
 ): String =
-    CanonicalIdentityEncoder("prepared-runtime-effect-route-v3")
+    CanonicalIdentityEncoder("prepared-runtime-effect-route-v4")
         .text("effectId", descriptor.id.value)
         .int("descriptorVersion", descriptor.version.value)
         .text("uniformSchemaHash", descriptor.uniformSchema.schemaHash)
@@ -457,25 +482,71 @@ internal fun preparedRuntimeEffectRouteContractHash(
         .text("sourceColorContract", sourceColorContract.name)
         .text("entryPoint", descriptor.wgslPlan.entryPoint)
         .text("reflectionHash", descriptor.wgslPlan.reflectionHash)
+        .texts("childSlots", descriptor.childSlots.descriptorChildSlotFacts())
         .digestIdentity()
 
 internal fun preparedRuntimeEffectModuleContractHash(
     wgslModuleHash: String,
     sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract,
+    childSlots: List<GPUPreparedRuntimeEffectChildSlot> = emptyList(),
 ): String =
-    CanonicalIdentityEncoder("prepared-runtime-effect-module-v3")
+    CanonicalIdentityEncoder("prepared-runtime-effect-module-v4")
         .text("wgslModuleHash", wgslModuleHash)
         .text("sourceColorContract", sourceColorContract.name)
+        .texts("childSlots", childSlots.preparedChildSlotFacts())
         .digestIdentity()
+
+internal fun preparedRuntimeEffectReflectionContractHash(
+    reflectedAbiHash: String,
+    childSlots: List<GPUPreparedRuntimeEffectChildSlot> = emptyList(),
+): String = CanonicalIdentityEncoder("prepared-runtime-effect-reflection-v1")
+    .text("reflectedAbiHash", reflectedAbiHash)
+    .texts("childSlots", childSlots.preparedChildSlotFacts())
+    .digestIdentity()
 
 internal fun preparedRuntimeEffectBindingContractHash(
     descriptorBindingPlanHash: String,
     sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract,
+    childSlots: List<GPUPreparedRuntimeEffectChildSlot> = emptyList(),
 ): String =
-    CanonicalIdentityEncoder("prepared-runtime-effect-bindings-v3")
+    CanonicalIdentityEncoder("prepared-runtime-effect-bindings-v4")
         .text("descriptorBindingPlanHash", descriptorBindingPlanHash)
         .text("sourceColorContract", sourceColorContract.name)
+        .texts("childSlots", childSlots.preparedChildSlotFacts())
         .digestIdentity()
+
+private fun reflectedChildSlots(
+    descriptor: GPURuntimeEffectDescriptor,
+): List<GPUPreparedRuntimeEffectChildSlot>? {
+    val names = descriptor.childSlots.map { slot -> slot.slotName }
+    if (names.any(String::isBlank) || names.distinct().size != names.size) return null
+    return descriptor.childSlots.mapIndexed { index, slot ->
+        if (!slot.required) return null
+        val role = when (slot.acceptedSourceKinds) {
+            setOf("shader") -> GPUPreparedRuntimeEffectChildRole.Shader
+            setOf("color-filter") -> GPUPreparedRuntimeEffectChildRole.ColorFilter
+            setOf("blender") -> GPUPreparedRuntimeEffectChildRole.Blender
+            else -> return null
+        }
+        GPUPreparedRuntimeEffectChildSlot(
+            name = slot.slotName,
+            role = role,
+            bindingIndex = index,
+            abiHash = preparedRuntimeEffectChildAbiHash(role),
+        )
+    }
+}
+
+private fun List<GPUPreparedRuntimeEffectChildSlot>.preparedChildSlotFacts(): List<String> =
+    mapIndexed { index, slot ->
+        "slot[$index]=${slot.name}:${slot.role.name}:${slot.bindingIndex}:${slot.abiHash}"
+    }
+
+private fun List<GPURuntimeEffectChildSlotPlan>.descriptorChildSlotFacts(): List<String> =
+    mapIndexed { index, slot ->
+        "slot[$index]=${slot.slotName}:${slot.acceptedSourceKinds.sorted().joinToString("+")}:" +
+            "${slot.required}"
+    }
 
 private val DESCRIPTOR_FIELD = Regex("""^([^:]+):(.+)@(\d+):(\d+)$""")
 private val SHA256_IDENTITY = Regex("""^sha256:[0-9a-f]{64}$""")

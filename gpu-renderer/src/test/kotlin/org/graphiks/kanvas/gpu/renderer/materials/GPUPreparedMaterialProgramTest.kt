@@ -713,7 +713,7 @@ class GPUPreparedMaterialProgramTest {
     }
 
     @Test
-    fun `runtime child facts are retained and unsupported children refuse canonically`() {
+    fun `runtime child facts are retained and undeclared children refuse canonically`() {
         val children = linkedMapOf<String, GPUMaterialDescriptor>(
             "input" to solidDescriptor(),
         )
@@ -731,11 +731,11 @@ class GPUPreparedMaterialProgramTest {
         val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
             compiler.compile(descriptor, 1f, context),
         )
-        assertEquals("unsupported.material.runtime_effect.children", refused.code)
+        assertEquals("unsupported.material.runtime_effect.child_extra", refused.code)
     }
 
     @Test
-    fun `typed only runtime children refuse until the common compiler supports them`() {
+    fun `typed runtime children still refuse when the registered program declares no slots`() {
         val typedChildren = listOf(
             GPURuntimeEffectChildDescriptor.ColorFilter(
                 GPUPreparedColorFilterChildDescriptor.Matrix(
@@ -766,7 +766,7 @@ class GPUPreparedMaterialProgramTest {
                 compiler.compile(descriptor, 1f, context),
             )
 
-            assertEquals("unsupported.material.runtime_effect.children", refused.code)
+            assertEquals("unsupported.material.runtime_effect.child_extra", refused.code)
         }
     }
 

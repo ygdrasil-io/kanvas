@@ -97,6 +97,9 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
     private val uniformBytesHash: String,
     private val sampledResourceCount: Int,
     sampledResourceFacts: List<String>,
+    private val childProgramCount: Int,
+    childProgramKeyFacts: List<String>,
+    childProgramAbiFacts: List<String>,
     private val paintAlpha: Float,
     private val preCoverageSourceAlpha: GPUSourceAlphaClassification,
     private val capabilityClass: String,
@@ -107,6 +110,8 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
     reflectedAbiFacts: List<String>,
 ) {
     private val sampledResourceFacts: List<String> = immutableList(sampledResourceFacts)
+    private val childProgramKeyFacts: List<String> = immutableList(childProgramKeyFacts)
+    private val childProgramAbiFacts: List<String> = immutableList(childProgramAbiFacts)
     private val keyFacts: List<String> = immutableList(keyFacts)
     private val registeredAbiFacts: List<String> = immutableList(registeredAbiFacts)
     private val reflectedAbiFacts: List<String> = immutableList(reflectedAbiFacts)
@@ -126,6 +131,7 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
                 .text("preCoverageSourceAlpha", preCoverageSourceAlpha.name)
                 .texts("keyFacts", keyFacts)
                 .texts("sampledResourceFacts", sampledResourceFacts)
+                .texts("childPrograms", childProgramKeyFacts)
                 .digestHex()
 
     fun requireMatches(
@@ -135,6 +141,7 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
         sourceKind: GPUMaterialSourceKind,
         uniformBytes: List<Int>,
         sampledResources: List<GPUPreparedMaterialSampledResource>,
+        childPrograms: List<GPUPreparedRuntimeEffectChildProgram>,
         paintAlpha: Float,
         preCoverageSourceAlpha: GPUSourceAlphaClassification,
     ) {
@@ -162,6 +169,12 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
         require(sampledResources.identityFacts() == sampledResourceFacts) {
             "Prepared material resource content must match its admitted program facts"
         }
+        require(childPrograms.size == childProgramCount) {
+            "Prepared runtime-effect child count must match its admitted program facts"
+        }
+        require(childPrograms.keyFacts() == childProgramKeyFacts) {
+            "Prepared runtime-effect children must match their admitted program facts"
+        }
         require(paintAlpha.toRawBits() == this.paintAlpha.toRawBits()) {
             "Prepared material paint alpha must match its admitted program facts"
         }
@@ -185,6 +198,7 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
             .text("fragmentHash", fragmentHash)
             .text("fragmentAbiHash", fragmentAbiHash)
             .texts("registeredAbiFacts", registeredAbiFacts)
+            .texts("childPrograms", childProgramAbiFacts)
             .texts("reflectedAbiFacts", reflectedAbiFacts)
             .digestIdentity()
 
@@ -198,6 +212,7 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
             uniformLayoutHash: String,
             uniformBytes: List<Int>,
             sampledResources: List<GPUPreparedMaterialSampledResource>,
+            childPrograms: List<GPUPreparedRuntimeEffectChildProgram> = emptyList(),
             paintAlpha: Float,
             preCoverageSourceAlpha: GPUSourceAlphaClassification,
             capabilityClass: String,
@@ -228,6 +243,9 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
                 uniformBytesHash = uniformBytesHash,
                 sampledResourceCount = sampledResources.size,
                 sampledResourceFacts = sampledResources.identityFacts(),
+                childProgramCount = childPrograms.size,
+                childProgramKeyFacts = childPrograms.keyFacts(),
+                childProgramAbiFacts = childPrograms.abiFacts(),
                 paintAlpha = paintAlpha,
                 preCoverageSourceAlpha = preCoverageSourceAlpha,
                 capabilityClass = capabilityClass,
@@ -309,6 +327,25 @@ private fun List<Int>.toUnsignedByteArray(): ByteArray =
 private fun List<GPUPreparedMaterialSampledResource>.identityFacts(): List<String> =
     flatMapIndexed { index, resource ->
         resource.identityFacts().map { fact -> "resource[$index].$fact" }
+    }
+
+private fun List<GPUPreparedRuntimeEffectChildProgram>.keyFacts(): List<String> =
+    flatMapIndexed { index, child ->
+        buildList {
+            add("child[$index].name=${child.name}")
+            add("child[$index].role=${child.role.name}")
+            add("child[$index].programKey=${child.programKey}")
+            add("child[$index].abiHash=${child.abiHash}")
+            add("child[$index].uniformBytesHash=${sha256Hex(child.uniformBytes.toUnsignedByteArray())}")
+            child.resourceFacts.forEachIndexed { factIndex, fact ->
+                add("child[$index].resource[$factIndex]=$fact")
+            }
+        }
+    }
+
+private fun List<GPUPreparedRuntimeEffectChildProgram>.abiFacts(): List<String> =
+    mapIndexed { index, child ->
+        "child[$index]=${child.name}:${child.role.name}:${child.abiHash}"
     }
 
 private const val MATERIAL_EVALUATION_FUNCTION = "kanvas_evaluate_material"
