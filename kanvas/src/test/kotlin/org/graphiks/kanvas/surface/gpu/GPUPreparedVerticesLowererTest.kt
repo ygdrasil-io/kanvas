@@ -3,12 +3,15 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.paint.BlendMode
@@ -152,6 +155,69 @@ class GPUPreparedVerticesLowererTest {
         val childRefusal = lower(meshOperation(program = child)).refused()
         assertEquals(GPUPreparedVerticesRefusalCodes.MeshProgramChild, childRefusal.code)
         assertEquals("mesh-program", childRefusal.facts["stage"])
+    }
+
+    @Test
+    fun `ready draw retains conservative transformed and scissor clipped bounds with clip identity`() {
+        val clip = ClipStack.DeviceRect(Rect.fromLTRB(4f, 6f, 12f, 14f), antiAlias = false)
+        val draw = lower(DisplayOp.DrawVertices(
+            vertices(), Paint.fill(Color.RED), Matrix33.translate(5f, 7f), clip,
+        )).ready().draw
+
+        assertEquals(GPUBounds(5f, 7f, 7f, 9f), draw.deviceBounds)
+        assertEquals(GPUBounds(5f, 7f, 7f, 9f), draw.clippedBounds)
+        assertEquals("prepared-vertices-clip:device-rect", draw.clipSnapshot.identity)
+        assertIs<GPUClipCoveragePlan.Scissor>(draw.clipSnapshot.coveragePlan)
+    }
+
+    @Test
+    fun `prepared refusal coverage closes every canonical code as executable or reserved`() {
+        assertEquals(
+            GPUPreparedVerticesRefusalCodes.ALL,
+            GPUPreparedVerticesRefusalCoverage.classifications.keys,
+        )
+        GPUPreparedVerticesRefusalCoverage.classifications.values.forEach { classification ->
+            assertTrue(classification.phase.isNotBlank())
+            assertTrue(classification.authority.isNotBlank())
+            assertTrue(classification.reason.isNotBlank())
+        }
+    }
+
+    @Test
+    fun `compiler refusal mapping is closed and unknown remains generic material`() {
+        assertEquals(
+            GPUPreparedVerticesRefusalCodes.MeshProgramAbi,
+            meshMaterialCode("unsupported.material.runtime_effect.uniform_payload"),
+        )
+        assertEquals(
+            GPUPreparedVerticesRefusalCodes.MeshProgramChild,
+            meshMaterialCode("unsupported.material.runtime_effect.child_role"),
+        )
+        assertEquals(
+            GPUPreparedVerticesRefusalCodes.Material,
+            meshMaterialCode("unsupported.material.runtime_effect.unknown_future"),
+        )
+    }
+
+    @Test
+    fun `partial alpha vertex colors retain primitive src-over plan independently of material paint alpha`() {
+        val draw = lower(DisplayOp.DrawVertices(
+            Vertices(
+                VertexMode.TRIANGLES,
+                vertices().positions,
+                colors = listOf(Color.fromRGBA(1f, 0f, 0f, 0.5f), Color.GREEN, Color.BLUE),
+            ),
+            Paint.fill(Color.fromRGBA(1f, 1f, 1f, 0.5f)), Matrix33.identity(), ClipStack.WideOpen,
+        )).ready().draw
+
+        assertEquals(1f, draw.material.paintAlpha)
+        assertEquals(
+            128f / 255f,
+            java.nio.ByteBuffer.wrap(draw.material.uniformBytes.map(Int::toByte).toByteArray())
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN).getFloat(12),
+        )
+        assertEquals(GPUBlendMode.SRC_OVER, draw.primitiveBlendPlan?.plan?.mode)
+        assertEquals(1, draw.paintAlphaApplicationCount)
     }
 
     private fun lower(operation: DisplayOp): GPUPreparedVerticesLowering =
