@@ -51,7 +51,6 @@ class GPUPreparedVerticesFramePreparerTest {
     @Test
     fun `first lowering refusal publishes no inventory and never invokes mapper`() {
         var mapCount = 0
-        var inventoryCount = 0
         val invalid = verticesOp(1f).copy(
             vertices = Vertices(
                 VertexMode.TRIANGLES,
@@ -73,7 +72,6 @@ class GPUPreparedVerticesFramePreparerTest {
         assertEquals(GPUPreparedVerticesRefusalCodes.NonFinite, refused.refusal.code)
         assertEquals(1, refused.refusal.operationIndex)
         assertEquals(0, mapCount)
-        assertEquals(0, inventoryCount)
     }
 
     @Test
@@ -118,51 +116,93 @@ class GPUPreparedVerticesFramePreparerTest {
     }
 
     @Test
-    fun `expected mapper failures become stable transactional refusal while fatal errors pass through`() {
-        listOf(
-            IllegalStateException("expected") to "mapper_exception",
-            LinkageError("linkage") to "mapper_linkage_error",
-        ).forEach { (failure, reason) ->
-            val result = GPUPreparedVerticesFramePreparer.prepare(
-                operations = listOf(verticesOp(1f)), target = target(),
-                config = RenderConfig.DEFAULT, capabilities = capabilities(), limits = limits(),
-                mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ -> throw failure },
-            )
-            val refused = assertIs<GPUPreparedVerticesFramePreparation.Refused>(result)
-            assertEquals("invalid.surface.prepared.vertices-mapping", refused.refusal.code)
-            assertEquals(reason, refused.refusal.facts["reason"])
-            assertEquals("GPUOpMapper", refused.refusal.facts["authority"])
-        }
-        assertFailsWith<OutOfMemoryError> {
+    fun `foreign mapper exception propagates for a frame without vertices`() {
+        val failure = IllegalStateException("foreign-core-mapper")
+
+        val thrown = assertFailsWith<IllegalStateException> {
             GPUPreparedVerticesFramePreparer.prepare(
-                listOf(verticesOp(1f)), target(), RenderConfig.DEFAULT, capabilities(), limits(),
+                operations = listOf(rectOp()), target = target(),
+                config = RenderConfig.DEFAULT, capabilities = capabilities(), limits = limits(),
                 mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ ->
-                    throw OutOfMemoryError("fatal")
+                    throw failure
                 },
             )
         }
-        assertFailsWith<ThreadDeath> {
-            GPUPreparedVerticesFramePreparer.prepare(
-                listOf(verticesOp(1f)), target(), RenderConfig.DEFAULT, capabilities(), limits(),
-                mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ -> throw ThreadDeath() },
-            )
+
+        assertTrue(thrown === failure)
+    }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `foreign mapper exception linkage and fatal errors propagate with vertices`() {
+        val failures = listOf<Throwable>(
+            IllegalStateException("foreign-text-image-core"),
+            LinkageError("foreign-linkage"),
+            OutOfMemoryError("fatal"),
+            ThreadDeath(),
+        )
+        failures.forEach { failure ->
+            val thrown = assertFailsWith<Throwable>(failure.javaClass.name) {
+                GPUPreparedVerticesFramePreparer.prepare(
+                    listOf(verticesOp(1f)), target(), RenderConfig.DEFAULT, capabilities(), limits(),
+                    mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ ->
+                        throw failure
+                    },
+                )
+            }
+            assertTrue(thrown === failure, failure.javaClass.name)
         }
     }
+
+    @Test
+    fun `vertices binding refusal keeps its dedicated authority without publishing inventory`() {
+        val result = GPUPreparedVerticesFramePreparer.prepare(
+            operations = listOf(verticesOp(1f)), target = target(),
+            config = RenderConfig.DEFAULT, capabilities = capabilities(), limits = limits(),
+            mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, inventory ->
+                when (val binding = inventory.bindCommandIds(mapOf(0 to -1))) {
+                    is PreparedVerticesCommandBindingResult.Ready -> error("invalid binding was accepted")
+                    is PreparedVerticesCommandBindingResult.Refused -> GPUOpMapping(
+                        visualCommands = emptyList(), stateEvents = emptyList(),
+                        legacyDump = GPULegacyImmediatePathDump(0, emptyMap()),
+                        preparedRefusal = binding.toOperationRefusal(),
+                    )
+                }
+            },
+        )
+
+        val refusal = assertIs<GPUPreparedVerticesFramePreparation.Refused>(result).refusal
+        assertEquals("invalid.surface.prepared.vertices-command-binding", refusal.code)
+        assertEquals(0, refusal.operationIndex)
+        assertEquals("negative_command_id", refusal.facts["reason"])
+        assertEquals("PreparedVerticesFrameInventory", refusal.facts["authority"])
+    }
+
+    private fun PreparedVerticesCommandBindingResult.Refused.toOperationRefusal() =
+        GPUPreparedOperationRefusal(
+            commandId = 0,
+            operationIndex = operationIndex,
+            code = code,
+            facts = facts,
+        )
 
     @Test
     fun `operations are snapshotted before lowering and mapping`() {
         val mutable = mutableListOf<DisplayOp>(verticesOp(1f))
         var mappedSize = -1
+        var mapCount = 0
         val result = GPUPreparedVerticesFramePreparer.prepare(
             operations = mutable, target = target(), config = RenderConfig.DEFAULT,
             capabilities = capabilities(), limits = limits(),
             mappingBoundary = GPUPreparedFrameMappingBoundary { operations, target, config, capabilities, text, vertices ->
+                mapCount++
                 mutable += verticesOp(2f)
                 mappedSize = operations.size
                 GPUOpMapper.mapOperations(operations, target, config, capabilities, text, vertices)
             },
         )
         assertIs<GPUPreparedVerticesFramePreparation.Ready>(result)
+        assertEquals(1, mapCount)
         assertEquals(1, mappedSize)
         assertEquals(2, mutable.size)
     }

@@ -122,6 +122,88 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `global command slots authenticate expansions vertices and explicit elisions without holes`() {
+        val image = org.graphiks.kanvas.image.Image.fromPixels(
+            4, 4, ByteArray(4 * 4 * 4) { 0xff.toByte() },
+            sourceId = "fp06-command-slot-expansion",
+            alphaType = org.graphiks.kanvas.image.AlphaType.PREMUL,
+        )
+        fun nine(dstLeft: Float) = DisplayOp.DrawImageNine(
+            image = image,
+            center = Rect.fromLTRB(1f, 1f, 3f, 3f),
+            dst = Rect.fromLTRB(dstLeft, 0f, dstLeft + 12f, 12f),
+            paint = null,
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+        fun vertices(clip: ClipStack) = DisplayOp.DrawVertices(
+            Vertices(
+                VertexMode.TRIANGLES,
+                listOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f)),
+            ),
+            Paint.fill(Color.RED), Matrix33.identity(), clip,
+        )
+        val culledText = DisplayOp.DrawText(
+            blob = TextBlob(
+                glyphRuns = listOf(
+                    KanvasGlyphRun(
+                        glyphs = listOf(36u), positions = listOf(Point(0f, 0f)),
+                        fontSize = 12f,
+                    ),
+                ),
+                typeface = liberationTypeface(), fontSize = 12f,
+            ),
+            x = 4f, y = 16f, paint = Paint.fill(Color.WHITE),
+            transform = Matrix33.identity(),
+            clip = ClipStack.DeviceRect(Rect.fromLTRB(80f, 80f, 96f, 96f), false),
+        )
+        val operations = listOf(
+            DisplayOp.Annotation(Rect.fromLTRB(0f, 0f, 1f, 1f), "state", "kept"),
+            nine(0f),
+            vertices(ClipStack.WideOpen),
+            culledText,
+            vertices(ClipStack.DeviceRect(Rect.fromLTRB(80f, 80f, 96f, 96f), false)),
+            DisplayOp.SetTransform(Matrix33.identity()),
+            nine(16f),
+        )
+
+        val plan = GPUFramePathApiInventory.plan(
+            operations, target(), RenderConfig.DEFAULT, capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+
+        val preparedVertices = assertNotNull(
+            plan.preparedVerticesInventory,
+            plan.preparedRefusal?.let { "${it.code}: ${it.facts}" },
+        )
+        assertEquals((0..18).toSet(), plan.allocatedCommandIds)
+        assertEquals(
+            (0..8).toList() + (10..18).toList(),
+            plan.visualCommands.map { it.normalized.commandId.value },
+        )
+        assertEquals(mapOf(9 to preparedVertices.commandsByOperationIndex.getValue(2).artifactKey),
+            preparedVertices.artifactKeyByCommandId)
+        assertEquals(setOf(4), preparedVertices.elidedVerticesOperationIndices)
+        assertEquals(setOf(3), assertNotNull(plan.preparedTextInventory).acceptedTextOperationIndices)
+        assertTrue(plan.visualCommands.none { it.preparedText != null })
+        assertEquals(listOf(0, 5), plan.stateEvents.map { it.operationIndex })
+    }
+
+    @Test
+    fun `vertices mapper hot path is indexed by immutable inventory structures`() {
+        val mapperSource = File(
+            "src/main/kotlin/org/graphiks/kanvas/surface/gpu/GPUOpMapper.kt",
+        ).readText()
+        val verticesBranch = mapperSource.substringAfter(
+            "is DisplayOp.DrawVertices, is DisplayOp.DrawMesh -> {",
+        ).substringBefore("\n                else -> {")
+
+        assertTrue("elidedVerticesOperationIndices" in verticesBranch)
+        assertTrue("commandsByOperationIndex[operationIndex]" in verticesBranch)
+        assertTrue("commands.singleOrNull" !in verticesBranch)
+        assertTrue("commands.firstOrNull" !in verticesBranch)
+    }
+
+    @Test
     fun `affine fill rect is publicly analyzed as rect family direct triangles`() {
         val baseCapabilities = capabilitiesWith(
             FILL_RECT_CAPABILITY,

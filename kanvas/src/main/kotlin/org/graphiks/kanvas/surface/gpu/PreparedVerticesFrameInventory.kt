@@ -111,14 +111,24 @@ class PreparedVerticesFrameInventory internal constructor(
 ) {
     val commands: List<PreparedVerticesFrameCommand> =
         Collections.unmodifiableList(commands.toList())
+    val commandsByOperationIndex: Map<Int, PreparedVerticesFrameCommand> =
+        Collections.unmodifiableMap(linkedMapOf<Int, PreparedVerticesFrameCommand>().apply {
+            commands.forEach { command ->
+                require(put(command.operationIndex, command) == null) {
+                    "Prepared vertices commands must have unique operation indices"
+                }
+            }
+        })
     val artifactsByKey: Map<String, GPUPreparedVerticesUploadArtifact> =
         Collections.unmodifiableMap(LinkedHashMap(artifactsByKey))
     val materialsByKey: Map<String, GPUPreparedMaterialProgram> =
         Collections.unmodifiableMap(LinkedHashMap(materialsByKey))
     val artifactKeyByOperationIndex: Map<Int, String> =
         Collections.unmodifiableMap(LinkedHashMap(artifactKeyByOperationIndex))
-    val elidedVerticesOperationIndices: List<Int> =
+    val elidedVerticesOperationOrder: List<Int> =
         Collections.unmodifiableList(elidedVerticesOperationIndices.toList())
+    val elidedVerticesOperationIndices: Set<Int> =
+        Collections.unmodifiableSet(LinkedHashSet(elidedVerticesOperationIndices))
     val mappedCommands: List<PreparedVerticesMappedCommand> =
         Collections.unmodifiableList(mappedCommands.toList())
     val artifactKeyByCommandId: Map<Int, String> = Collections.unmodifiableMap(
@@ -131,23 +141,86 @@ class PreparedVerticesFrameInventory internal constructor(
     val indexUploadRanges: List<PreparedVerticesUploadRange> =
         Collections.unmodifiableList(indexUploadRanges.toList())
 
-    internal fun bindCommandIds(commandIdByOperationIndex: Map<Int, Int>): PreparedVerticesFrameInventory {
-        require(commandIdByOperationIndex.keys == artifactKeyByOperationIndex.keys) {
-            "Prepared vertices command bindings must cover every accepted operation exactly once"
+    init {
+        require(commandsByOperationIndex.keys == this.artifactKeyByOperationIndex.keys) {
+            "Prepared vertices command and artifact ownership must match"
         }
-        val bindings = commands.map { command ->
-            PreparedVerticesMappedCommand(
-                commandId = commandIdByOperationIndex.getValue(command.operationIndex),
+        require(elidedVerticesOperationIndices.size == elidedVerticesOperationOrder.size) {
+            "Prepared vertices elided operation indices must be unique"
+        }
+        require(commandsByOperationIndex.keys.none(elidedVerticesOperationIndices::contains)) {
+            "Prepared vertices accepted and elided ownership must be disjoint"
+        }
+    }
+
+    internal fun bindCommandIds(
+        commandIdByOperationIndex: Map<Int, Int>,
+    ): PreparedVerticesCommandBindingResult {
+        commands.firstOrNull { command ->
+            command.operationIndex !in commandIdByOperationIndex
+        }?.let { command ->
+            return bindingRefusal(command.operationIndex, "missing_operation_binding")
+        }
+        commandIdByOperationIndex.keys.firstOrNull { operationIndex ->
+            operationIndex !in commandsByOperationIndex
+        }?.let { operationIndex ->
+            return bindingRefusal(operationIndex, "unexpected_operation_binding")
+        }
+        val operationIndexByCommandId = linkedMapOf<Int, Int>()
+        val bindings = ArrayList<PreparedVerticesMappedCommand>(commands.size)
+        commands.forEach { command ->
+            val commandId = commandIdByOperationIndex.getValue(command.operationIndex)
+            if (commandId < 0) {
+                return bindingRefusal(command.operationIndex, "negative_command_id")
+            }
+            if (operationIndexByCommandId.put(commandId, command.operationIndex) != null) {
+                return bindingRefusal(
+                    command.operationIndex,
+                    "duplicate_command_id",
+                    mapOf("commandId" to commandId.toString()),
+                )
+            }
+            bindings += PreparedVerticesMappedCommand(
+                commandId = commandId,
                 operationIndex = command.operationIndex,
                 artifactKey = command.artifactKey,
             )
         }
-        require(bindings.map { it.commandId }.distinct().size == bindings.size)
-        return PreparedVerticesFrameInventory(
-            commands, artifactsByKey, materialsByKey, artifactKeyByOperationIndex,
-            vertexUploadRanges, indexUploadRanges, elidedVerticesOperationIndices,
-            bindings, metrics, limitEvidence,
+        return PreparedVerticesCommandBindingResult.Ready(
+            PreparedVerticesFrameInventory(
+                commands, artifactsByKey, materialsByKey, artifactKeyByOperationIndex,
+                vertexUploadRanges, indexUploadRanges, elidedVerticesOperationOrder,
+                bindings, metrics, limitEvidence,
+            ),
         )
+    }
+
+    private fun bindingRefusal(
+        operationIndex: Int,
+        reason: String,
+        extraFacts: Map<String, String> = emptyMap(),
+    ) = PreparedVerticesCommandBindingResult.Refused(
+        operationIndex = operationIndex,
+        code = "invalid.surface.prepared.vertices-command-binding",
+        facts = linkedMapOf(
+            "authority" to "PreparedVerticesFrameInventory",
+            "reason" to reason,
+            "operationIndex" to operationIndex.toString(),
+        ).apply { putAll(extraFacts) },
+    )
+}
+
+internal sealed interface PreparedVerticesCommandBindingResult {
+    data class Ready(val inventory: PreparedVerticesFrameInventory) :
+        PreparedVerticesCommandBindingResult
+
+    class Refused internal constructor(
+        val operationIndex: Int,
+        val code: String,
+        facts: Map<String, String>,
+    ) : PreparedVerticesCommandBindingResult {
+        val facts: Map<String, String> =
+            Collections.unmodifiableMap(LinkedHashMap(facts))
     }
 }
 

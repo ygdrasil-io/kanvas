@@ -92,16 +92,10 @@ internal object GPUPreparedVerticesFramePreparer {
                 )
             }
         }
-        val mapping = try {
-            mappingBoundary.map(
-                operationSnapshot, target, config, capabilities,
-                preparedTextInventory, inventory,
-            )
-        } catch (failure: Exception) {
-            return mapperFailure(operationSnapshot, "mapper_exception", failure)
-        } catch (failure: LinkageError) {
-            return mapperFailure(operationSnapshot, "mapper_linkage_error", failure)
-        }
+        val mapping = mappingBoundary.map(
+            operationSnapshot, target, config, capabilities,
+            preparedTextInventory, inventory,
+        )
         mapping.preparedRefusal?.let { refusal ->
             return GPUPreparedVerticesFramePreparation.Refused(refusal)
         }
@@ -119,23 +113,6 @@ internal object GPUPreparedVerticesFramePreparer {
             )
         return GPUPreparedVerticesFramePreparation.Ready(mapping, mappedInventory)
     }
-
-    private fun mapperFailure(
-        operations: List<DisplayOp>,
-        reason: String,
-        failure: Throwable,
-    ) = GPUPreparedVerticesFramePreparation.Refused(
-        GPUPreparedOperationRefusal(
-            commandId = 0,
-            operationIndex = firstVerticesOperationIndex(operations),
-            code = "invalid.surface.prepared.vertices-mapping",
-            facts = mapOf(
-                "authority" to "GPUOpMapper",
-                "reason" to reason,
-                "failure" to failure.javaClass.name,
-            ),
-        ),
-    )
 
     private fun firstVerticesOperationIndex(operations: List<DisplayOp>): Int =
         operations.indexOfFirst { it is DisplayOp.DrawVertices || it is DisplayOp.DrawMesh }

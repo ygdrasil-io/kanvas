@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.Collections
 import kotlin.math.ceil
 import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -97,6 +98,7 @@ internal data class GPUOpMapping(
     val preparedRefusal: GPUPreparedOperationRefusal? = null,
     val culledTextOperationIndices: Set<Int> = emptySet(),
     val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
+    val allocatedCommandIds: Set<Int> = emptySet(),
 )
 
 data class GPUPreparedOperationRefusal(
@@ -105,6 +107,12 @@ data class GPUPreparedOperationRefusal(
     val code: String,
     val facts: Map<String, String>,
 )
+
+private sealed interface GPUPreparedCommandSlotAuthentication {
+    data class Ready(val commandIds: Set<Int>) : GPUPreparedCommandSlotAuthentication
+    data class Refused(val refusal: GPUPreparedOperationRefusal) :
+        GPUPreparedCommandSlotAuthentication
+}
 
 /** Sole Canvas-state translator for the Slice 12A frame route. */
 internal object GPUOpMapper {
@@ -129,9 +137,11 @@ internal object GPUOpMapper {
             val sourceIndices = operations.mapIndexedNotNull { index, operation ->
                 index.takeIf { operation is DisplayOp.DrawVertices || operation is DisplayOp.DrawMesh }
             }
-            val owned = (inventory.commands.map { it.operationIndex } +
-                inventory.elidedVerticesOperationIndices).sorted()
-            if (owned != sourceIndices || inventory.mappedCommands.isNotEmpty()) {
+            val owned = inventory.commandsByOperationIndex.keys +
+                inventory.elidedVerticesOperationIndices
+            if (owned != sourceIndices.toSet() || owned.size != sourceIndices.size ||
+                inventory.mappedCommands.isNotEmpty()
+            ) {
                 return GPUOpMapping(
                     visualCommands = emptyList(), stateEvents = emptyList(), legacyDump = legacy.dump(),
                     preparedRefusal = GPUPreparedOperationRefusal(
@@ -405,17 +415,16 @@ internal object GPUOpMapper {
                     if (operationIndex in preparedVerticesInventory.elidedVerticesOperationIndices) {
                         return@forEachIndexed
                     }
-                    val command = preparedVerticesInventory.commands.singleOrNull {
-                        it.operationIndex == operationIndex
-                    } ?: return GPUOpMapping(
-                        visualCommands = emptyList(), stateEvents = stateEvents.toList(),
-                        legacyDump = legacy.dump(),
-                        preparedRefusal = GPUPreparedOperationRefusal(
-                            commandId = nextCommandId(), operationIndex = operationIndex,
-                            code = "invalid.surface.prepared.vertices-operation-ownership",
-                            facts = mapOf("authority" to "GPUOpMapper"),
-                        ),
-                    )
+                    val command = preparedVerticesInventory.commandsByOperationIndex[operationIndex]
+                        ?: return GPUOpMapping(
+                            visualCommands = emptyList(), stateEvents = stateEvents.toList(),
+                            legacyDump = legacy.dump(),
+                            preparedRefusal = GPUPreparedOperationRefusal(
+                                commandId = nextCommandId(), operationIndex = operationIndex,
+                                code = "invalid.surface.prepared.vertices-operation-ownership",
+                                facts = mapOf("authority" to "GPUOpMapper"),
+                            ),
+                        )
                     preparedVerticesCommandIds[command.operationIndex] = nextCommandId()
                 }
                 else -> {
@@ -439,17 +448,120 @@ internal object GPUOpMapper {
                 }
             }
         }
-        val mappedVerticesInventory = preparedVerticesInventory?.bindCommandIds(
-            preparedVerticesCommandIds,
-        )
+        val mappedVerticesInventory = when (
+            val binding = preparedVerticesInventory?.bindCommandIds(preparedVerticesCommandIds)
+        ) {
+            null -> null
+            is PreparedVerticesCommandBindingResult.Ready -> binding.inventory
+            is PreparedVerticesCommandBindingResult.Refused -> return GPUOpMapping(
+                visualCommands = emptyList(),
+                stateEvents = stateEvents.toList(),
+                legacyDump = legacy.dump(),
+                preparedRefusal = GPUPreparedOperationRefusal(
+                    commandId = preparedVerticesCommandIds[binding.operationIndex]
+                        ?.coerceAtLeast(0) ?: nextCommandId(),
+                    operationIndex = binding.operationIndex,
+                    code = binding.code,
+                    facts = binding.facts,
+                ),
+                culledTextOperationIndices = culledTextOperationIndices.toSet(),
+            )
+        }
+        val allocatedCommandIds = when (
+            val authenticated = authenticateCommandSlots(
+                visualCommands = visual,
+                mappedVerticesCommands = mappedVerticesInventory?.mappedCommands.orEmpty(),
+                allocatedSlotCount = nextCommandId(),
+            )
+        ) {
+            is GPUPreparedCommandSlotAuthentication.Ready -> authenticated.commandIds
+            is GPUPreparedCommandSlotAuthentication.Refused -> return GPUOpMapping(
+                visualCommands = emptyList(),
+                stateEvents = stateEvents.toList(),
+                legacyDump = legacy.dump(),
+                preparedRefusal = authenticated.refusal,
+                culledTextOperationIndices = culledTextOperationIndices.toSet(),
+            )
+        }
         return GPUOpMapping(
             visualCommands = visual.toList(),
             stateEvents = stateEvents.toList(),
             legacyDump = legacy.dump(),
             culledTextOperationIndices = culledTextOperationIndices.toSet(),
             preparedVerticesInventory = mappedVerticesInventory,
+            allocatedCommandIds = allocatedCommandIds,
         )
     }
+
+    private fun authenticateCommandSlots(
+        visualCommands: List<GPUFramePathVisualCommand>,
+        mappedVerticesCommands: List<PreparedVerticesMappedCommand>,
+        allocatedSlotCount: Int,
+    ): GPUPreparedCommandSlotAuthentication {
+        val observed = linkedSetOf<Int>()
+        visualCommands.forEach { visualCommand ->
+            val commandId = visualCommand.normalized.commandId.value
+            if (commandId < 0 || !observed.add(commandId)) {
+                return commandSlotRefusal(
+                    operationIndex = 0,
+                    reason = if (commandId < 0) "negative_visual_command_id" else
+                        "duplicate_visual_command_id",
+                    commandId = commandId,
+                    allocatedSlotCount = allocatedSlotCount,
+                )
+            }
+        }
+        mappedVerticesCommands.forEach { verticesCommand ->
+            if (!observed.add(verticesCommand.commandId)) {
+                return commandSlotRefusal(
+                    operationIndex = verticesCommand.operationIndex,
+                    reason = "overlapping_vertices_command_id",
+                    commandId = verticesCommand.commandId,
+                    allocatedSlotCount = allocatedSlotCount,
+                )
+            }
+        }
+        val expected = (0 until allocatedSlotCount).toSet()
+        if (observed != expected) {
+            val firstUnexpected = observed.firstOrNull { it !in expected }
+            val firstMissing = expected.firstOrNull { it !in observed }
+            val operationIndex = firstUnexpected?.let { unexpected ->
+                mappedVerticesCommands.firstOrNull { it.commandId == unexpected }?.operationIndex
+            } ?: 0
+            return commandSlotRefusal(
+                operationIndex = operationIndex,
+                reason = "non_contiguous_command_slots",
+                commandId = firstUnexpected ?: firstMissing ?: allocatedSlotCount,
+                allocatedSlotCount = allocatedSlotCount,
+                extraFacts = listOfNotNull(
+                    firstUnexpected?.let { "firstUnexpectedCommandId" to it.toString() },
+                    firstMissing?.let { "firstMissingCommandId" to it.toString() },
+                ).toMap(),
+            )
+        }
+        return GPUPreparedCommandSlotAuthentication.Ready(
+            Collections.unmodifiableSet(LinkedHashSet(observed)),
+        )
+    }
+
+    private fun commandSlotRefusal(
+        operationIndex: Int,
+        reason: String,
+        commandId: Int,
+        allocatedSlotCount: Int,
+        extraFacts: Map<String, String> = emptyMap(),
+    ) = GPUPreparedCommandSlotAuthentication.Refused(
+        GPUPreparedOperationRefusal(
+            commandId = commandId.coerceAtLeast(0),
+            operationIndex = operationIndex,
+            code = "invalid.surface.prepared.command-slot-authentication",
+            facts = linkedMapOf(
+                "authority" to "GPUOpMapper",
+                "reason" to reason,
+                "allocatedSlotCount" to allocatedSlotCount.toString(),
+            ).apply { putAll(extraFacts) },
+        ),
+    )
 
     internal fun lowerPreparedCoreVisual(
         operation: DisplayOp,

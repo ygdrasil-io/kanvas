@@ -82,6 +82,7 @@ data class GPUFramePathInventoryPlan(
     val preparedRefusal: GPUPreparedOperationRefusal?,
     val preparedTextInventory: PreparedTextFrameInventory? = null,
     val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
+    val allocatedCommandIds: Set<Int> = emptySet(),
 )
 
 /**
@@ -159,6 +160,7 @@ object GPUFramePathApiInventory {
             preparedTextInventory =
                 publishedTextInventory,
             preparedVerticesInventory = publishedVerticesInventory,
+            allocatedCommandIds = mapping.allocatedCommandIds,
         )
     }
 

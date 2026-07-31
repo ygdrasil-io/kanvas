@@ -34,6 +34,9 @@ class PreparedVerticesFrameInventoryTest {
         assertEquals(1, inventory.artifactsByKey.size)
         assertEquals(listOf(4, 9), inventory.commands.map { it.operationIndex })
         assertEquals(2, inventory.commands.size)
+        assertEquals(setOf(4, 9), inventory.commandsByOperationIndex.keys)
+        assertSame(inventory.commands[0], inventory.commandsByOperationIndex.getValue(4))
+        assertSame(inventory.commands[1], inventory.commandsByOperationIndex.getValue(9))
         assertEquals(inventory.commands[0].artifactKey, inventory.commands[1].artifactKey)
         assertNotEquals(inventory.commands[0].draw.transform, inventory.commands[1].draw.transform)
         assertNotEquals(inventory.commands[0].draw.material.materialKey, inventory.commands[1].draw.material.materialKey)
@@ -156,18 +159,44 @@ class PreparedVerticesFrameInventoryTest {
         val inventory = buildReady(listOf(visible, culledShared, culledDifferent, noOp))
 
         assertEquals(listOf(1), inventory.commands.map { it.operationIndex })
-        assertEquals(listOf(4, 9, 12), inventory.elidedVerticesOperationIndices)
+        assertIs<Set<Int>>(inventory.elidedVerticesOperationIndices)
+        assertEquals(setOf(4, 9, 12), inventory.elidedVerticesOperationIndices)
+        assertEquals(listOf(4, 9, 12), inventory.elidedVerticesOperationOrder)
         assertEquals(1, inventory.metrics.drawCount)
         assertEquals(1, inventory.metrics.uniqueArtifactCount)
         assertEquals(setOf(1), inventory.artifactKeyByOperationIndex.keys)
 
         val allCulled = buildReady(listOf(culledShared, culledDifferent))
         assertTrue(allCulled.commands.isEmpty())
-        assertEquals(listOf(4, 9), allCulled.elidedVerticesOperationIndices)
+        assertEquals(setOf(4, 9), allCulled.elidedVerticesOperationIndices)
+        assertEquals(listOf(4, 9), allCulled.elidedVerticesOperationOrder)
         assertEquals(0, allCulled.metrics.drawCount)
         assertEquals(0, allCulled.metrics.totalUploadBytes)
         assertTrue(allCulled.artifactsByKey.isEmpty())
         assertTrue(allCulled.materialsByKey.isEmpty())
+    }
+
+    @Test
+    fun `command binding rejects missing unexpected duplicate and negative ids without throwing`() {
+        val inventory = buildReady(listOf(draw(4), draw(9, positions = points(2f))))
+        val cases = listOf(
+            Triple(mapOf(4 to 0), 9, "missing_operation_binding"),
+            Triple(mapOf(4 to 0, 9 to 1, 11 to 2), 11, "unexpected_operation_binding"),
+            Triple(mapOf(4 to 0, 9 to 0), 9, "duplicate_command_id"),
+            Triple(mapOf(4 to 0, 9 to -1), 9, "negative_command_id"),
+        )
+
+        cases.forEach { (bindings, operationIndex, reason) ->
+            val refusal = assertIs<PreparedVerticesCommandBindingResult.Refused>(
+                inventory.bindCommandIds(bindings),
+                reason,
+            )
+            assertEquals("invalid.surface.prepared.vertices-command-binding", refusal.code, reason)
+            assertEquals(operationIndex, refusal.operationIndex, reason)
+            assertEquals("PreparedVerticesFrameInventory", refusal.facts["authority"], reason)
+            assertEquals(reason, refusal.facts["reason"], reason)
+            assertEquals(operationIndex.toString(), refusal.facts["operationIndex"], reason)
+        }
     }
 
     @Test
@@ -257,6 +286,15 @@ class PreparedVerticesFrameInventoryTest {
         @Suppress("UNCHECKED_CAST")
         assertFailsWith<UnsupportedOperationException> {
             (inventory.artifactsByKey as MutableMap<String, Any>).clear()
+        }
+        @Suppress("UNCHECKED_CAST")
+        assertFailsWith<UnsupportedOperationException> {
+            (inventory.commandsByOperationIndex as MutableMap<Int, PreparedVerticesFrameCommand>).clear()
+        }
+        val culled = buildReady(listOf(asCulled(draw(4))))
+        @Suppress("UNCHECKED_CAST")
+        assertFailsWith<UnsupportedOperationException> {
+            (culled.elidedVerticesOperationIndices as MutableSet<Int>).clear()
         }
         assertEquals(1, inventory.commands.size)
     }
