@@ -230,10 +230,8 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
     }
 
     private fun sourceFixtureWithForegroundLayer(): SourceFixture {
-        val bytes = assertNotNull(
-            javaClass.classLoader.getResourceAsStream("fonts/skia/colr.ttf"),
-        ).use { stream -> stream.readBytes() }
-        assertEquals(PINNED_SKIA_COLR_SHA256, bytes.sha256Hex())
+        val bytes = GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer()
+        assertEquals(PATCHED_SOURCE_FONT_SHA256, bytes.sha256Hex())
         val colr = sfntTableOffset(bytes, "COLR")
         assertEquals(0, readU16(bytes, colr))
         val baseRecordCount = readU16(bytes, colr + 2)
@@ -245,13 +243,6 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         val firstLayerIndex = readU16(bytes, baseRecord + 2)
         val layerCount = readU16(bytes, baseRecord + 4)
         assertEquals(2, layerCount)
-        val secondLayerPaletteOffset = layerRecords + (firstLayerIndex + 1) * 4 + 2
-        writeU16(bytes, secondLayerPaletteOffset, FOREGROUND_PALETTE_INDEX)
-        patchSimpleRectangleGlyph(bytes, 7, GLYPH_7_RECTANGLE)
-        patchSimpleRectangleGlyph(bytes, 8, GLYPH_8_RECTANGLE)
-        assertEquals(GLYPH_7_SLOT_SHA256, glyphSlotBytes(bytes, 7).sha256Hex())
-        assertEquals(GLYPH_8_SLOT_SHA256, glyphSlotBytes(bytes, 8).sha256Hex())
-        assertEquals(PATCHED_SOURCE_FONT_SHA256, bytes.sha256Hex())
         val parsedLayers = (0 until layerCount).map { layerIndex ->
             val offset = layerRecords + (firstLayerIndex + layerIndex) * 4
             val paletteIndex = readU16(bytes, offset + 2)
@@ -271,61 +262,6 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         })
         assertEquals(0xFFFF2A2A.toInt(), parsedLayers.first().colorArgb)
         return SourceFixture(bytes, parsedLayers)
-    }
-
-    private fun patchSimpleRectangleGlyph(
-        bytes: ByteArray,
-        glyphId: Int,
-        rectangle: FontUnitRectangle,
-    ) {
-        val slot = glyphSlotRange(bytes, glyphId)
-        bytes.fill(0, slot.first, slot.last + 1)
-        var cursor = slot.first
-        fun signed(value: Int) {
-            writeU16(bytes, cursor, value and 0xffff)
-            cursor += 2
-        }
-        signed(1)
-        listOf(
-            rectangle.xMin,
-            rectangle.yMin,
-            rectangle.xMax,
-            rectangle.yMax,
-        ).forEach(::signed)
-        writeU16(bytes, cursor, 3)
-        cursor += 2
-        writeU16(bytes, cursor, 0)
-        cursor += 2
-        repeat(4) { bytes[cursor++] = 0x01 }
-        listOf(
-            rectangle.xMin,
-            rectangle.xMax - rectangle.xMin,
-            0,
-            rectangle.xMin - rectangle.xMax,
-        ).forEach(::signed)
-        listOf(
-            rectangle.yMin,
-            0,
-            rectangle.yMax - rectangle.yMin,
-            0,
-        ).forEach(::signed)
-        assertEquals(slot.first + SIMPLE_RECTANGLE_GLYPH_BYTES, cursor)
-    }
-
-    private fun glyphSlotBytes(bytes: ByteArray, glyphId: Int): ByteArray {
-        val range = glyphSlotRange(bytes, glyphId)
-        return bytes.copyOfRange(range.first, range.last + 1)
-    }
-
-    private fun glyphSlotRange(bytes: ByteArray, glyphId: Int): IntRange {
-        val head = sfntTableOffset(bytes, "head")
-        assertEquals(0, readU16(bytes, head + 50), "fixture must use short loca offsets")
-        val loca = sfntTableOffset(bytes, "loca")
-        val glyf = sfntTableOffset(bytes, "glyf")
-        val start = glyf + readU16(bytes, loca + glyphId * 2) * 2
-        val end = glyf + readU16(bytes, loca + (glyphId + 1) * 2) * 2
-        assertTrue(end - start >= SIMPLE_RECTANGLE_GLYPH_BYTES)
-        return start until end
     }
 
     private fun readCpalColor(bytes: ByteArray, paletteIndex: Int): Int {
@@ -364,11 +300,6 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
             ((bytes[offset + 1].toInt() and 0xff) shl 16) or
             ((bytes[offset + 2].toInt() and 0xff) shl 8) or
             (bytes[offset + 3].toInt() and 0xff)
-
-    private fun writeU16(bytes: ByteArray, offset: Int, value: Int) {
-        bytes[offset] = (value ushr 8).toByte()
-        bytes[offset + 1] = value.toByte()
-    }
 
     private fun textOperation(
         typeface: FontTypeface,
@@ -516,13 +447,6 @@ class GPUPreparedColorGlyphSourceNativeOracleTest {
         const val COLOR_ORIGIN_X_0 = 58
         const val COLOR_ORIGIN_X_1 = 118
         const val BASELINE_Y = 58
-        const val SIMPLE_RECTANGLE_GLYPH_BYTES = 34
-        const val PINNED_SKIA_COLR_SHA256 =
-            "77d9465a9a1c2bccceda4666fe3cebbd96a85cdfd07dbc42c2b310bc7767372e"
-        const val GLYPH_7_SLOT_SHA256 =
-            "d20c20e6cba9d58b883e3b82852b98bec7c7295e8f6bcf9662d9c50ee3b898fa"
-        const val GLYPH_8_SLOT_SHA256 =
-            "e4d7be24c5b85dc173a00f34cbaf2fc56a6ab6393f0b8ce389ddf5ccb1278f92"
         const val PATCHED_SOURCE_FONT_SHA256 =
             "7fe253c74758df56226679d9e43965e78bbdb2437d2b7d4788d918805323874d"
         val GLYPH_7_RECTANGLE = FontUnitRectangle(0, -375, 500, 375)

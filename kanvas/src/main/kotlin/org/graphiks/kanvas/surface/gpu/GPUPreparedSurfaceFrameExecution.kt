@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.execution.GPUFrameImmediateState
 import org.graphiks.kanvas.gpu.renderer.execution.GPUOffscreenTargetRequest
 import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneFrameSession
 import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSceneNativeCounters
+import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedTextFrameCounters
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutput
 import org.graphiks.kanvas.gpu.renderer.execution.GPUSceneFrameOutputRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
@@ -33,7 +34,13 @@ internal data class GPUPreparedSurfaceExecutionRequest(
     val candidate: GPUPreparedSurfaceEligibility.Candidate,
     val width: Int,
     val height: Int,
+    val output: GPUPreparedSurfaceRequestedOutput = GPUPreparedSurfaceRequestedOutput.ReadbackRgba,
 )
+
+internal enum class GPUPreparedSurfaceRequestedOutput {
+    CompletionOnly,
+    ReadbackRgba,
+}
 
 internal enum class GPUPreparedSurfaceExecutionRouteMarker(
     val stableLabel: String,
@@ -63,6 +70,7 @@ internal data class GPUPreparedSurfaceExecutionEvidence(
     val retentionQuarantines: Long,
     val distinctRetentionTickets: Int,
     val routeMarker: GPUPreparedSurfaceExecutionRouteMarker,
+    val textCounters: GPUPreparedTextFrameCounters = GPUPreparedTextFrameCounters(),
 )
 
 internal sealed interface GPUPreparedSurfaceExecutionResult {
@@ -73,6 +81,7 @@ internal sealed interface GPUPreparedSurfaceExecutionResult {
         val visualOperationCount: Int,
         val stateEventCount: Int,
         val evidence: GPUPreparedSurfaceExecutionEvidence,
+        val outputKind: GPUPreparedSurfaceOutputKind = GPUPreparedSurfaceOutputKind.ReadbackRgba,
     ) : GPUPreparedSurfaceExecutionResult {
         private val ownedRgba = rgba.copyOf()
         val rgba: ByteArray get() = ownedRgba.copyOf()
@@ -98,6 +107,8 @@ internal interface GPUPreparedSurfaceBackendPort : AutoCloseable {
 
 internal interface GPUPreparedSurfaceSessionPort : AutoCloseable {
     fun submit(taskList: GPUTaskList, readbackId: GPUReadbackRequestID): GPUPreparedSurfaceSubmission
+    fun submitCompletionOnly(taskList: GPUTaskList): GPUPreparedSurfaceSubmission =
+        throw UnsupportedOperationException("Completion-only prepared Surface output is unavailable.")
     fun counters(): GPUPreparedSceneNativeCounters
 }
 
@@ -182,6 +193,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
                         recordingId = recordingId,
                         frameId = frameId,
                         readbackRequestId = readbackId,
+                        includeReadback =
+                            request.output == GPUPreparedSurfaceRequestedOutput.ReadbackRgba,
                     ),
                 )
                 primary = when (build) {
@@ -304,7 +317,12 @@ internal class GPUPreparedSurfaceFrameExecutor(
         openSession(session)
         val beforeSubmit = session.counters()
         val submission = try {
-            session.submit(build.taskList, build.readbackRequestId)
+            when (request.output) {
+                GPUPreparedSurfaceRequestedOutput.CompletionOnly ->
+                    session.submitCompletionOnly(build.taskList)
+                GPUPreparedSurfaceRequestedOutput.ReadbackRgba ->
+                    session.submit(build.taskList, build.readbackRequestId)
+            }
         } catch (failure: Throwable) {
             return terminal(
                 "failed.surface.prepared.completion",
@@ -342,43 +360,66 @@ internal class GPUPreparedSurfaceFrameExecutor(
                     ),
             )
         }
-        if (completion.outputKind != GPUPreparedSurfaceOutputKind.ReadbackRgba) {
-            return terminal(
-                "invalid.surface.prepared.readback-output",
-                "Prepared Surface completion did not provide the requested RGBA readback.",
-                mapOf(
-                    "expected" to GPUPreparedSurfaceOutputKind.ReadbackRgba.name,
-                    "actual" to completion.outputKind.name,
-                ),
-            )
-        }
-        if (completion.readbackId != build.readbackRequestId) {
-            return terminal(
-                "invalid.surface.prepared.readback-output",
-                "Prepared Surface completion did not provide the requested RGBA readback.",
-                buildMap {
-                    put("expected", build.readbackRequestId.value)
-                    completion.readbackId?.let { put("actual", it.value) }
-                },
-            )
-        }
-        val rgba = completion.rgba ?: return terminal(
-            "invalid.surface.prepared.readback-output",
-            "Prepared Surface completion did not provide the requested RGBA readback.",
-            mapOf("expected" to build.readbackRequestId.value),
-        )
-        if (rgba.size.toLong() != expectedByteCount) {
-            return terminal(
-                "invalid.surface.prepared.readback-byte-count",
-                "Prepared Surface readback byte count does not match the target.",
-                mapOf("expected" to expectedByteCount.toString(), "actual" to rgba.size.toString()),
-            )
+        val rgba = when (request.output) {
+            GPUPreparedSurfaceRequestedOutput.CompletionOnly -> {
+                if (completion.outputKind != GPUPreparedSurfaceOutputKind.CurrentFrameCompletionOnly ||
+                    completion.readbackId != null ||
+                    completion.rgba != null
+                ) {
+                    return terminal(
+                        "invalid.surface.prepared.completion-only-output",
+                        "Prepared Surface completion did not provide completion-only output.",
+                        mapOf(
+                            "expected" to GPUPreparedSurfaceOutputKind.CurrentFrameCompletionOnly.name,
+                            "actual" to completion.outputKind.name,
+                        ),
+                    )
+                }
+                ByteArray(0)
+            }
+            GPUPreparedSurfaceRequestedOutput.ReadbackRgba -> {
+                if (completion.outputKind != GPUPreparedSurfaceOutputKind.ReadbackRgba) {
+                    return terminal(
+                        "invalid.surface.prepared.readback-output",
+                        "Prepared Surface completion did not provide the requested RGBA readback.",
+                        mapOf(
+                            "expected" to GPUPreparedSurfaceOutputKind.ReadbackRgba.name,
+                            "actual" to completion.outputKind.name,
+                        ),
+                    )
+                }
+                if (completion.readbackId != build.readbackRequestId) {
+                    return terminal(
+                        "invalid.surface.prepared.readback-output",
+                        "Prepared Surface completion did not provide the requested RGBA readback.",
+                        buildMap {
+                            put("expected", build.readbackRequestId.value)
+                            completion.readbackId?.let { put("actual", it.value) }
+                        },
+                    )
+                }
+                val bytes = completion.rgba ?: return terminal(
+                    "invalid.surface.prepared.readback-output",
+                    "Prepared Surface completion did not provide the requested RGBA readback.",
+                    mapOf("expected" to build.readbackRequestId.value),
+                )
+                if (bytes.size.toLong() != expectedByteCount) {
+                    return terminal(
+                        "invalid.surface.prepared.readback-byte-count",
+                        "Prepared Surface readback byte count does not match the target.",
+                        mapOf("expected" to expectedByteCount.toString(), "actual" to bytes.size.toString()),
+                    )
+                }
+                bytes
+            }
         }
         onSuccess(
             PendingPreparedSuccess(
                 rgba,
                 build.visualOperationCount,
                 build.stateEventCount,
+                completion.outputKind,
+                build.textMetrics,
                 beforeSubmit,
                 afterCompletion,
                 telemetryBefore,
@@ -433,13 +474,33 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 retentionCompletions = afterClose.retentionCompletions,
                 retentionQuarantines = afterClose.retentionQuarantines,
                 distinctRetentionTickets = afterClose.distinctRetentionTickets,
+                textCounters = GPUPreparedTextFrameCounters(
+                    a8Instances = pending.textMetrics.a8InstanceCount,
+                    colorGlyphInstances = pending.textMetrics.colorGlyphInstanceCount,
+                    pathStrokeDraws = pending.textMetrics.pathStrokeDrawCount,
+                    pageCount = pending.textMetrics.pageCount,
+                    pageBytes = pending.textMetrics.pageBytes,
+                    subRuns = pending.textMetrics.subRunCount,
+                    draws = pending.textMetrics.subRunCount,
+                    bindGroups = pending.textMetrics.subRunCount,
+                    submits = if (pending.textMetrics.subRunCount == 0) {
+                        0
+                    } else {
+                        Math.toIntExact(
+                            delta(pending.beforeSubmit.submits, pending.afterCompletion.submits),
+                        )
+                    },
+                ),
                 routeMarker = GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
             )
             check(evidence.frameCoordinatorCreations == 1L)
             check(evidence.encoders == 1L)
             check(evidence.commandBuffers == 1L)
             check(evidence.submits == 1L)
-            check(evidence.readbackCopies == 1L)
+            check(
+                evidence.readbackCopies ==
+                    if (pending.outputKind == GPUPreparedSurfaceOutputKind.ReadbackRgba) 1L else 0L,
+            )
             check(evidence.destinationSnapshotCreations == 0L)
             check(evidence.destinationReadbackSnapshots == 0L)
             GPUPreparedSurfaceExecutionResult.Succeeded(
@@ -447,6 +508,7 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 pending.visualOperationCount,
                 pending.stateEventCount,
                 evidence,
+                pending.outputKind,
             )
         } catch (failure: Throwable) {
             terminal(
@@ -493,6 +555,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
         rgba: ByteArray,
         val visualOperationCount: Int,
         val stateEventCount: Int,
+        val outputKind: GPUPreparedSurfaceOutputKind,
+        val textMetrics: GPUPreparedTextFrameMetrics,
         val beforeSubmit: GPUPreparedSceneNativeCounters,
         val afterCompletion: GPUPreparedSceneNativeCounters,
         val telemetryBefore: GPUBackendRuntimeTelemetry,
@@ -605,6 +669,40 @@ private class GPUPreparedSurfaceNativeSessionPort(
                     },
                     readbackId = output?.requestId,
                     rgba = output?.bytes,
+                )
+            },
+        )
+    }
+
+    override fun submitCompletionOnly(taskList: GPUTaskList): GPUPreparedSurfaceSubmission {
+        val handle = session.renderFrame(
+            taskList,
+            GPUSceneFrameOutputRequest.CurrentFrameCompletionOnly,
+        )
+        val immediate = when (val state = handle.immediateState) {
+            is GPUFrameImmediateState.Refused -> GPUPreparedSurfaceImmediateState.Refused(state.diagnostic)
+            is GPUFrameImmediateState.FailedBeforeSubmit ->
+                GPUPreparedSurfaceImmediateState.FailedBeforeSubmit(state.diagnostic)
+            is GPUFrameImmediateState.Submitted -> GPUPreparedSurfaceImmediateState.Submitted
+            is GPUFrameImmediateState.FailedAfterSubmit ->
+                GPUPreparedSurfaceImmediateState.FailedAfterSubmit(state.diagnostic)
+        }
+        return GPUPreparedSurfaceSubmission(
+            attemptId = handle.attemptId,
+            immediateState = immediate,
+            completion = handle.completion.thenApply { completed ->
+                GPUPreparedSurfaceCompletion(
+                    attemptId = completed.attemptId,
+                    outcome = completed.outcome,
+                    diagnostic = completed.diagnostic,
+                    outputKind = when (completed.output) {
+                        null -> GPUPreparedSurfaceOutputKind.Absent
+                        GPUSceneFrameOutput.CurrentFrameCompletionOnly ->
+                            GPUPreparedSurfaceOutputKind.CurrentFrameCompletionOnly
+                        is GPUSceneFrameOutput.ReadbackRgba -> GPUPreparedSurfaceOutputKind.ReadbackRgba
+                    },
+                    readbackId = null,
+                    rgba = null,
                 )
             },
         )

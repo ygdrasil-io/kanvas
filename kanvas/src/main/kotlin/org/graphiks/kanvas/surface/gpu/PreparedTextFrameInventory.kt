@@ -86,10 +86,16 @@ data class GPUPreparedTextFrameMetrics(
     val glyphCount: Int,
     val uniqueMaskCount: Int,
     val instanceCount: Int,
+    val a8InstanceCount: Int,
+    val colorGlyphInstanceCount: Int,
+    val pathStrokeDrawCount: Int,
     val subRunCount: Int,
     val pageCount: Int,
     val pageBytes: Int,
     val instanceBytes: Int,
+    val loweringNanoseconds: Long = 0L,
+    val rasterNanoseconds: Long = 0L,
+    val packingNanoseconds: Long = 0L,
 )
 
 data class PreparedTextMaskIdentity(
@@ -227,7 +233,11 @@ class PreparedTextFrameInventory private constructor(
 }
 
 sealed interface PreparedTextFrameInventoryResult {
-    data class Ready(val inventory: PreparedTextFrameInventory) :
+    data class Ready(
+        val inventory: PreparedTextFrameInventory,
+        val rasterNanoseconds: Long,
+        val packingNanoseconds: Long,
+    ) :
         PreparedTextFrameInventoryResult
 
     class Refused internal constructor(
@@ -564,6 +574,7 @@ object PreparedTextFrameInventoryBuilder {
         val drawFacts = IdentityHashMap<GPUPreparedTextDraw, PreparedTextDrawFacts>()
         val resolvedUses = ArrayList<ResolvedGlyphUse>()
         val strokePathsByOperation = LinkedHashMap<Int, List<GPUPreparedTextStrokePath>>()
+        val rasterStartedAt = System.nanoTime()
         for (draw in draws) {
             if (draw.paint.style == PaintStyle.STROKE) {
                 val strokePaths = when (val resolution = resolvePreparedTextStrokePaths(draw)) {
@@ -753,6 +764,8 @@ object PreparedTextFrameInventoryBuilder {
                 }
             }
         }
+        val rasterNanoseconds = Math.subtractExact(System.nanoTime(), rasterStartedAt)
+        val packingStartedAt = System.nanoTime()
 
         val maskKeyByHash = LinkedHashMap<String, GlyphMaskKey>()
         uniqueMasks.keys.forEach { maskKey ->
@@ -940,11 +953,19 @@ object PreparedTextFrameInventoryBuilder {
             glyphCount = glyphCount.toInt(),
             uniqueMaskCount = uniqueMasks.size,
             instanceCount = resolvedUses.size,
+            a8InstanceCount = resolvedUses.count { use ->
+                use.representation == GPUPreparedTextRepresentation.A8_MASK
+            },
+            colorGlyphInstanceCount = resolvedUses.count { use ->
+                use.representation == GPUPreparedTextRepresentation.COLRV0
+            },
+            pathStrokeDrawCount = strokePathCount,
             subRunCount = subRunCount,
             pageCount = pageArtifacts.size,
             pageBytes = totalPageBytes.toInt(),
             instanceBytes = instanceBytes.toInt(),
         )
+        val packingNanoseconds = Math.subtractExact(System.nanoTime(), packingStartedAt)
         val contentHash = inventoryHash(
             generation = generation,
             pages = pageArtifacts,
@@ -955,7 +976,7 @@ object PreparedTextFrameInventoryBuilder {
             identities = maskIdentities,
         )
         return PreparedTextFrameInventoryResult.Ready(
-            PreparedTextFrameInventory.create(
+            inventory = PreparedTextFrameInventory.create(
                 generation = generation,
                 pages = pageArtifacts,
                 subRunsByOperationIndex = immutableSubRuns,
@@ -965,6 +986,8 @@ object PreparedTextFrameInventoryBuilder {
                 maskIdentityByGlyphUse = maskIdentities,
                 contentSha256 = contentHash,
             ),
+            rasterNanoseconds = rasterNanoseconds,
+            packingNanoseconds = packingNanoseconds,
         )
     }
 }

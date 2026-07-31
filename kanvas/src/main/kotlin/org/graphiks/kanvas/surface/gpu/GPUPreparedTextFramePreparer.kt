@@ -11,6 +11,7 @@ internal sealed interface GPUPreparedTextFramePreparation {
     data class Ready(
         val mapping: GPUOpMapping,
         val inventory: PreparedTextFrameInventory,
+        val metrics: GPUPreparedTextFrameMetrics,
     ) : GPUPreparedTextFramePreparation
 
     data class Refused(
@@ -29,6 +30,7 @@ internal object GPUPreparedTextFramePreparer {
         limits: PreparedTextFrameInventoryLimits = defaultLimits(target, capabilities),
     ): GPUPreparedTextFramePreparation {
         val preparedDraws = ArrayList<GPUPreparedTextDraw>()
+        val loweringStartedAt = System.nanoTime()
         operations.forEachIndexed { operationIndex, operation ->
             if (operation !is DisplayOp.DrawText) return@forEachIndexed
             when (
@@ -51,14 +53,15 @@ internal object GPUPreparedTextFramePreparer {
                     )
             }
         }
-        val inventory = when (
+        val loweringNanoseconds = Math.subtractExact(System.nanoTime(), loweringStartedAt)
+        val inventoryResult = when (
             val built = PreparedTextFrameInventoryBuilder.build(
                 draws = preparedDraws,
                 generation = generation,
                 limits = limits,
             )
         ) {
-            is PreparedTextFrameInventoryResult.Ready -> built.inventory
+            is PreparedTextFrameInventoryResult.Ready -> built
             is PreparedTextFrameInventoryResult.Refused ->
                 return GPUPreparedTextFramePreparation.Refused(
                     GPUPreparedOperationRefusal(
@@ -69,6 +72,7 @@ internal object GPUPreparedTextFramePreparer {
                     ),
                 )
         }
+        val inventory = inventoryResult.inventory
         val mapping = GPUOpMapper.mapOperations(
             operations = operations,
             target = target,
@@ -82,6 +86,11 @@ internal object GPUPreparedTextFramePreparer {
         return GPUPreparedTextFramePreparation.Ready(
             mapping = mapping,
             inventory = inventory,
+            metrics = inventory.metrics.copy(
+                loweringNanoseconds = loweringNanoseconds,
+                rasterNanoseconds = inventoryResult.rasterNanoseconds,
+                packingNanoseconds = inventoryResult.packingNanoseconds,
+            ),
         )
     }
 

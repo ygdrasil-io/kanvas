@@ -40,6 +40,7 @@ internal data class GPUPreparedSurfaceFrameBuildRequest(
     val recordingId: GPURecordingID,
     val frameId: GPUFrameID,
     val readbackRequestId: GPUReadbackRequestID,
+    val includeReadback: Boolean = true,
 )
 
 internal sealed interface GPUPreparedSurfaceFrameBuildResult {
@@ -48,6 +49,7 @@ internal sealed interface GPUPreparedSurfaceFrameBuildResult {
         val readbackRequestId: GPUReadbackRequestID,
         val visualOperationCount: Int,
         val stateEventCount: Int,
+        val textMetrics: GPUPreparedTextFrameMetrics,
     ) : GPUPreparedSurfaceFrameBuildResult
 
     data class Refused(val diagnostic: GPUDiagnostic) : GPUPreparedSurfaceFrameBuildResult
@@ -162,7 +164,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     target = request.target,
                     targetBounds = request.targetBounds,
                     semanticsByCommandId = semantics,
-                    readbackRequestId = request.readbackRequestId,
+                    readbackRequestId = request.readbackRequestId.takeIf { request.includeReadback },
                     targetFormat = GPUColorFormat(request.targetFacts.colorFormat),
                 ),
             )) {
@@ -179,6 +181,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                                 event.kind == GPUFramePathStateKind.Clip ||
                                 event.kind == GPUFramePathStateKind.Annotation
                         },
+                        textMetrics = textPreparation.metrics,
                     )
                 }
                 is GPUPreparedSurfaceFrameResult.Refused ->

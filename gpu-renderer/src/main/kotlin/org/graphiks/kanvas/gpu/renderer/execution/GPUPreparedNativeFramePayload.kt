@@ -130,6 +130,75 @@ internal enum class GPUPreparedNativeOperandRole {
     SurfaceBindGroup,
 }
 
+/**
+ * Handle-free per-frame text work evidence.
+ *
+ * A8 atlas work, COLRv0 layer work, and outline-path stroke work deliberately remain
+ * disjoint. These are cold-frame counters, not cache hit/miss or residency telemetry.
+ */
+data class GPUPreparedTextFrameCounters(
+    val a8Instances: Int = 0,
+    val colorGlyphInstances: Int = 0,
+    val pathStrokeDraws: Int = 0,
+    val pageCount: Int = 0,
+    val pageBytes: Int = 0,
+    val subRuns: Int = 0,
+    val draws: Int = 0,
+    val bindGroups: Int = 0,
+    val submits: Int = 0,
+) {
+    val atlasInstances: Int = Math.addExact(a8Instances, colorGlyphInstances)
+
+    init {
+        require(a8Instances >= 0)
+        require(colorGlyphInstances >= 0)
+        require(pathStrokeDraws >= 0)
+        require(pageCount >= 0)
+        require(pageBytes >= 0)
+        require(subRuns >= 0)
+        require(draws >= 0)
+        require(bindGroups >= 0)
+        require(submits in 0..1)
+    }
+}
+
+/**
+ * Sorted raw cold-frame samples with the FP-05 nearest-rank index policy.
+ *
+ * No warmup sample is removed: every supplied independently rebuilt frame remains in
+ * [sortedNanoseconds].
+ */
+class GPUPreparedTextColdFrameSamples private constructor(
+    sourceNanoseconds: List<Long>,
+) {
+    private val sortedSnapshot = sourceNanoseconds.sorted()
+
+    val sortedNanoseconds: List<Long>
+        get() = sortedSnapshot.toList()
+    val sampleCount: Int
+        get() = sortedSnapshot.size
+    val p50Index: Int
+        get() = (sampleCount - 1) * 50 / 100
+    val p95Index: Int
+        get() = (sampleCount - 1) * 95 / 100
+    val p50Nanoseconds: Long
+        get() = sortedSnapshot[p50Index]
+    val p95Nanoseconds: Long
+        get() = sortedSnapshot[p95Index]
+
+    companion object {
+        fun from(nanoseconds: List<Long>): GPUPreparedTextColdFrameSamples {
+            require(nanoseconds.size >= 30) {
+                "Cold-frame evidence requires at least 30 independent samples."
+            }
+            require(nanoseconds.all { it >= 0L }) {
+                "Cold-frame nanoseconds must be non-negative."
+            }
+            return GPUPreparedTextColdFrameSamples(nanoseconds.toList())
+        }
+    }
+}
+
 internal data class GPUPreparedNativeOperandKey(
     val role: GPUPreparedNativeOperandRole,
     val kind: GPUPreparedNativeOperandKind,
