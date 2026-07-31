@@ -8,6 +8,7 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedClipSnapshot
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMaskFilterKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMaskFilterPlan
+import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.paint.Paint
@@ -299,6 +300,52 @@ class GPUPreparedCompositeCaptureSemanticTest {
 
         val refused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(result)
         assertEquals("unsupported.composite.paint", refused.code)
+    }
+
+    @Test
+    fun `draw picture with image filter creates FilterPictureSource scope`() {
+        val picture = Picture(
+            Rect.fromLTRB(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), black, identity, open)),
+        )
+        val paintWithFilter = black.copy(imageFilter = ImageFilter.Blur(sigmaX = 4f, sigmaY = 4f))
+
+        val result = capture(
+            listOf(DisplayOp.DrawPicture(picture, paintWithFilter, identity, open)),
+        )
+
+        val ready = assertIs<GPUPreparedCompositeCaptureResult.Ready>(result)
+        val filterScopes = ready.capture.scopes.values.filter {
+            it.sourceKind == GPUPreparedCompositeScopeKind.FilterPictureSource
+        }
+        assertEquals(1, filterScopes.size, "Expected exactly one FilterPictureSource scope")
+    }
+
+    @Test
+    fun `painted picture with image filter and without produce different identities`() {
+        val picture = Picture(
+            Rect.fromLTRB(0f, 0f, 10f, 10f),
+            listOf(DisplayOp.DrawRect(Rect.fromLTRB(0f, 0f, 5f, 5f), black, identity, open)),
+        )
+
+        val noFilter = capture(
+            listOf(DisplayOp.DrawPicture(picture, black, identity, open)),
+        )
+        val withFilter = capture(
+            listOf(
+                DisplayOp.DrawPicture(
+                    picture,
+                    black.copy(imageFilter = ImageFilter.Blur(sigmaX = 4f, sigmaY = 4f)),
+                    identity,
+                    open,
+                ),
+            ),
+        )
+
+        assertNotEquals(
+            assertIs<GPUPreparedCompositeCaptureResult.Ready>(noFilter).capture.identity,
+            assertIs<GPUPreparedCompositeCaptureResult.Ready>(withFilter).capture.identity,
+        )
     }
 
     private fun readyIdentity(op: DisplayOp): String =
