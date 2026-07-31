@@ -81,6 +81,7 @@ data class GPUFramePathInventoryPlan(
     val legacyDump: GPULegacyImmediatePathDump,
     val preparedRefusal: GPUPreparedOperationRefusal?,
     val preparedTextInventory: PreparedTextFrameInventory? = null,
+    val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
 )
 
 /**
@@ -98,21 +99,35 @@ object GPUFramePathApiInventory {
         capabilities: GPUCapabilities = GPUProductFlagConfig.fromSystemProperties().buildCapabilities(),
         deviceGeneration: GPUDeviceGenerationID = GPUDeviceGenerationID(0),
     ): GPUFramePathInventoryPlan {
-        val prepared = GPUPreparedTextFramePreparer.prepare(
-            operations = operations,
+        val operationSnapshot = operations.toList()
+        val textPreparation = GPUPreparedTextFramePreparer.prepareInventory(
+            operations = operationSnapshot,
             target = target,
-            config = config,
             capabilities = capabilities,
             generation = GPUTextArtifactGeneration(0),
         )
-        val mapping = when (prepared) {
-            is GPUPreparedTextFramePreparation.Ready -> prepared.mapping
-            is GPUPreparedTextFramePreparation.Refused -> GPUOpMapper.mapOperations(
-                operations = emptyList(),
-                target = target,
-                config = config,
-                capabilities = capabilities,
-            ).copy(preparedRefusal = prepared.refusal)
+        var publishedTextInventory: PreparedTextFrameInventory? = null
+        var publishedVerticesInventory: PreparedVerticesFrameInventory? = null
+        val mapping = when (textPreparation) {
+            is GPUPreparedTextFrameInventoryPreparation.Refused ->
+                refusedMapping(textPreparation.refusal)
+            is GPUPreparedTextFrameInventoryPreparation.Ready -> when (
+                val verticesPreparation = GPUPreparedVerticesFramePreparer.prepare(
+                    operations = operationSnapshot,
+                    target = target,
+                    config = config,
+                    capabilities = capabilities,
+                    preparedTextInventory = textPreparation.inventory,
+                )
+            ) {
+                is GPUPreparedVerticesFramePreparation.Refused ->
+                    refusedMapping(verticesPreparation.refusal)
+                is GPUPreparedVerticesFramePreparation.Ready -> {
+                    publishedTextInventory = textPreparation.inventory
+                    publishedVerticesInventory = verticesPreparation.inventory
+                    verticesPreparation.mapping
+                }
+            }
         }
         val visual = mapping.visualCommands
 
@@ -142,9 +157,18 @@ object GPUFramePathApiInventory {
             legacyDump = mapping.legacyDump,
             preparedRefusal = mapping.preparedRefusal,
             preparedTextInventory =
-                (prepared as? GPUPreparedTextFramePreparation.Ready)?.inventory,
+                publishedTextInventory,
+            preparedVerticesInventory = publishedVerticesInventory,
         )
     }
+
+    private fun refusedMapping(refusal: GPUPreparedOperationRefusal): GPUOpMapping =
+        GPUOpMapping(
+            visualCommands = emptyList(),
+            stateEvents = emptyList(),
+            legacyDump = GPULegacyImmediatePathDump(0, emptyMap()),
+            preparedRefusal = refusal,
+        )
 
     /** Adds the canonical native frame envelope after the mapper and recorder have made route decisions. */
     fun prepareNativeTaskList(

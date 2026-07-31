@@ -11,6 +11,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoverageElementKind
@@ -54,6 +55,8 @@ import org.graphiks.kanvas.paint.StrokeJoin
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.Surface
+import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.CornerRadii
 import org.graphiks.kanvas.types.Lattice
@@ -62,8 +65,62 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.VertexMode
+import org.graphiks.kanvas.types.Vertices
 
 class GPUFramePathApiInventoryTest {
+    @Test
+    fun `public inventory path prepares vertices with text and maps the snapshot once`() {
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(1f, 1f, 4f, 4f), Paint.fill(Color.RED),
+                Matrix33.identity(), ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawText(
+                blob = TextBlob(
+                    glyphRuns = listOf(
+                        KanvasGlyphRun(
+                            glyphs = listOf(36u), positions = listOf(Point(0f, 0f)),
+                            fontSize = 12f,
+                        ),
+                    ),
+                    typeface = liberationTypeface(), fontSize = 12f,
+                ),
+                x = 4f, y = 16f, paint = Paint.fill(Color.WHITE),
+                transform = Matrix33.identity(), clip = ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawVertices(
+                Vertices(
+                    VertexMode.TRIANGLES,
+                    listOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f)),
+                ),
+                Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawVertices(
+                Vertices(
+                    VertexMode.TRIANGLES,
+                    listOf(Point(0f, 0f), Point(3f, 0f), Point(0f, 3f)),
+                ),
+                Paint.fill(Color.BLUE), Matrix33.identity(), ClipStack.WideOpen,
+            ),
+            DisplayOp.DrawRect(
+                Rect.fromLTRB(5f, 5f, 8f, 8f), Paint.fill(Color.GREEN),
+                Matrix33.identity(), ClipStack.WideOpen,
+            ),
+        )
+
+        val inventory = GPUFramePathApiInventory.plan(
+            operations, target(), RenderConfig.DEFAULT, capabilitiesWith(FILL_RECT_CAPABILITY),
+        )
+
+        val vertices = assertNotNull(inventory.preparedVerticesInventory)
+        assertEquals(listOf(2, 3), vertices.commands.map { it.operationIndex })
+        assertEquals(setOf(2, 3), vertices.artifactKeyByCommandId.keys)
+        assertEquals(listOf(0, 1, 4), inventory.visualCommands.map { it.normalized.commandId.value })
+        assertEquals(0, inventory.legacyDump.invocationCount)
+        assertNotNull(inventory.preparedTextInventory)
+    }
+
     @Test
     fun `affine fill rect is publicly analyzed as rect family direct triangles`() {
         val baseCapabilities = capabilitiesWith(

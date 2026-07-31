@@ -16,24 +16,26 @@ internal sealed interface GPUPreparedVerticesFramePreparation {
     ) : GPUPreparedVerticesFramePreparation
 }
 
-internal fun interface GPUPreparedVerticesOperationMapper {
+internal fun interface GPUPreparedFrameMappingBoundary {
     fun map(
         operations: List<DisplayOp>,
         target: GPUTargetFacts,
         config: RenderConfig,
         capabilities: GPUCapabilities,
-        inventory: PreparedVerticesFrameInventory,
+        preparedTextInventory: PreparedTextFrameInventory?,
+        preparedVerticesInventory: PreparedVerticesFrameInventory,
     ): GPUOpMapping
 }
 
-private val canonicalPreparedVerticesOperationMapper = GPUPreparedVerticesOperationMapper {
-        operations, target, config, capabilities, inventory ->
-    GPUOpMapper.mapOperationsWithPreparedVerticesInventory(
+private val canonicalPreparedFrameMappingBoundary = GPUPreparedFrameMappingBoundary {
+        operations, target, config, capabilities, textInventory, verticesInventory ->
+    GPUOpMapper.mapOperations(
         operations = operations,
         target = target,
         config = config,
         capabilities = capabilities,
-        inventory = inventory,
+        preparedTextInventory = textInventory,
+        preparedVerticesInventory = verticesInventory,
     )
 }
 
@@ -44,11 +46,12 @@ internal object GPUPreparedVerticesFramePreparer {
         config: RenderConfig,
         capabilities: GPUCapabilities,
         limits: PreparedVerticesFrameInventoryLimits = defaultLimits(capabilities),
-        mapper: GPUPreparedVerticesOperationMapper = canonicalPreparedVerticesOperationMapper,
-        inventoryObserver: (PreparedVerticesFrameInventory) -> Unit = {},
+        preparedTextInventory: PreparedTextFrameInventory? = null,
+        mappingBoundary: GPUPreparedFrameMappingBoundary = canonicalPreparedFrameMappingBoundary,
     ): GPUPreparedVerticesFramePreparation {
+        val operationSnapshot = operations.toList()
         val draws = ArrayList<GPUPreparedVerticesDraw>()
-        operations.forEachIndexed { operationIndex, operation ->
+        operationSnapshot.forEachIndexed { operationIndex, operation ->
             if (operation !is DisplayOp.DrawVertices && operation !is DisplayOp.DrawMesh) {
                 return@forEachIndexed
             }
@@ -89,13 +92,54 @@ internal object GPUPreparedVerticesFramePreparer {
                 )
             }
         }
-        inventoryObserver(inventory)
-        val mapping = mapper.map(operations, target, config, capabilities, inventory)
+        val mapping = try {
+            mappingBoundary.map(
+                operationSnapshot, target, config, capabilities,
+                preparedTextInventory, inventory,
+            )
+        } catch (failure: Exception) {
+            return mapperFailure(operationSnapshot, "mapper_exception", failure)
+        } catch (failure: LinkageError) {
+            return mapperFailure(operationSnapshot, "mapper_linkage_error", failure)
+        }
         mapping.preparedRefusal?.let { refusal ->
             return GPUPreparedVerticesFramePreparation.Refused(refusal)
         }
-        return GPUPreparedVerticesFramePreparation.Ready(mapping, inventory)
+        val mappedInventory = mapping.preparedVerticesInventory
+            ?: return GPUPreparedVerticesFramePreparation.Refused(
+                GPUPreparedOperationRefusal(
+                    commandId = 0,
+                    operationIndex = firstVerticesOperationIndex(operationSnapshot),
+                    code = "invalid.surface.prepared.vertices-mapping",
+                    facts = mapOf(
+                        "authority" to "GPUOpMapper",
+                        "reason" to "missing_mapped_inventory",
+                    ),
+                ),
+            )
+        return GPUPreparedVerticesFramePreparation.Ready(mapping, mappedInventory)
     }
+
+    private fun mapperFailure(
+        operations: List<DisplayOp>,
+        reason: String,
+        failure: Throwable,
+    ) = GPUPreparedVerticesFramePreparation.Refused(
+        GPUPreparedOperationRefusal(
+            commandId = 0,
+            operationIndex = firstVerticesOperationIndex(operations),
+            code = "invalid.surface.prepared.vertices-mapping",
+            facts = mapOf(
+                "authority" to "GPUOpMapper",
+                "reason" to reason,
+                "failure" to failure.javaClass.name,
+            ),
+        ),
+    )
+
+    private fun firstVerticesOperationIndex(operations: List<DisplayOp>): Int =
+        operations.indexOfFirst { it is DisplayOp.DrawVertices || it is DisplayOp.DrawMesh }
+            .coerceAtLeast(0)
 
     private fun defaultLimits(capabilities: GPUCapabilities): PreparedVerticesFrameInventoryLimits {
         val policyBufferBytes = 64L * 1024L * 1024L
@@ -111,24 +155,4 @@ internal object GPUPreparedVerticesFramePreparer {
             maxRuntimeChildren = 65_536,
         )
     }
-}
-
-private fun GPUOpMapper.mapOperationsWithPreparedVerticesInventory(
-    operations: List<DisplayOp>,
-    target: GPUTargetFacts,
-    config: RenderConfig,
-    capabilities: GPUCapabilities,
-    inventory: PreparedVerticesFrameInventory,
-): GPUOpMapping {
-    val sourceVerticesOperationIndices = operations.mapIndexedNotNull { operationIndex, operation ->
-        operationIndex.takeIf {
-            operation is DisplayOp.DrawVertices || operation is DisplayOp.DrawMesh
-        }
-    }
-    require(inventory.commands.map(PreparedVerticesFrameCommand::operationIndex) ==
-        sourceVerticesOperationIndices
-    ) {
-        "Prepared vertices inventory must be complete and preserve source operation order"
-    }
-    return mapOperations(operations, target, config, capabilities)
 }

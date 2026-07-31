@@ -32,6 +32,40 @@ class GPUPreparedMaterialProgramTest {
     )
 
     @Test
+    fun `frame identity authority is snapshot stable and exact across resource bytes and runtime payload`() {
+        val programs = listOf(
+            ready(solidDescriptor(), 1f),
+            ready(supportedImageShaderDescriptor(
+                pixels = byteArrayOf(1, 2, 3, 4),
+            ), 1f),
+            ready(registeredRuntimeEffectDescriptor(
+                GPURuntimeEffectUniformValue.Float4(0.1f, 0.2f, 0.3f, 0.4f),
+            ), 1f),
+        )
+        programs.forEach { program ->
+            val snapshot = program.authenticatedSnapshot()
+            assertEquals(
+                GPUPreparedMaterialFrameIdentityAuthority.identity(program).bucketKey,
+                GPUPreparedMaterialFrameIdentityAuthority.identity(snapshot).bucketKey,
+            )
+            assertTrue(GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(program, snapshot))
+        }
+
+        val differentImageBytes = ready(supportedImageShaderDescriptor(
+            pixels = byteArrayOf(4, 3, 2, 1),
+        ), 1f)
+        assertNotEquals(
+            GPUPreparedMaterialFrameIdentityAuthority.identity(programs[1]).bucketKey,
+            GPUPreparedMaterialFrameIdentityAuthority.identity(differentImageBytes).bucketKey,
+        )
+        assertTrue(
+            !GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(
+                programs[1], differentImageBytes,
+            ),
+        )
+    }
+
+    @Test
     fun `prepared material compiler accepts exactly common proven sources`() {
         val accepted = listOf(
             solidDescriptor(),

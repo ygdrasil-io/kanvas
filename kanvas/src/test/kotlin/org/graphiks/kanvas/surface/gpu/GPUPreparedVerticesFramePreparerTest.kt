@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
@@ -16,34 +17,35 @@ import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.Rect
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedVerticesFramePreparerTest {
     @Test
-    fun `preparer lowers all vertices builds one inventory then maps exactly once`() {
-        val events = mutableListOf<String>()
-        var mappedInventory: PreparedVerticesFrameInventory? = null
-        val mapper = GPUPreparedVerticesOperationMapper { operations, target, config, capabilities, inventory ->
-            events += "map"
-            mappedInventory = inventory
-            GPUOpMapper.mapOperations(operations, target, config, capabilities)
-        }
-
+    fun `canonical mapper consumes complete inventory and binds true command ids without legacy`() {
         val prepared = GPUPreparedVerticesFramePreparer.prepare(
-                operations = listOf(verticesOp(1f), verticesOp(2f)),
+                operations = listOf(
+                    rectOp(),
+                    DisplayOp.Annotation(Rect.fromLTRB(0f, 0f, 1f, 1f), "test", "state"),
+                    verticesOp(1f),
+                    verticesOp(2f),
+                    rectOp(),
+                ),
                 target = target(), config = RenderConfig.DEFAULT, capabilities = capabilities(),
-                limits = limits(), mapper = mapper,
-                inventoryObserver = { events += "inventory" },
+                limits = limits(),
             )
         val result = assertIs<GPUPreparedVerticesFramePreparation.Ready>(
             prepared,
             (prepared as? GPUPreparedVerticesFramePreparation.Refused)?.refusal?.facts.toString(),
         )
 
-        assertEquals(listOf("inventory", "map"), events)
-        assertEquals(listOf(0, 1), result.inventory.commands.map { it.operationIndex })
-        assertTrue(mappedInventory === result.inventory)
+        assertEquals(listOf(2, 3), result.inventory.commands.map { it.operationIndex })
+        assertEquals(mapOf(1 to result.inventory.commands[0].artifactKey,
+            2 to result.inventory.commands[1].artifactKey), result.inventory.artifactKeyByCommandId)
+        assertEquals(listOf(0, 3), result.mapping.visualCommands.map { it.normalized.commandId.value })
+        assertEquals(0, result.mapping.legacyDump.invocationCount)
+        assertTrue(result.mapping.preparedVerticesInventory === result.inventory)
     }
 
     @Test
@@ -61,11 +63,10 @@ class GPUPreparedVerticesFramePreparerTest {
             operations = listOf(verticesOp(1f), invalid, verticesOp(2f)),
             target = target(), config = RenderConfig.DEFAULT, capabilities = capabilities(),
             limits = limits(),
-            mapper = GPUPreparedVerticesOperationMapper { _, _, _, _, _ ->
+            mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ ->
                 mapCount++
                 error("mapper must not be called")
             },
-            inventoryObserver = { inventoryCount++ },
         )
 
         val refused = assertIs<GPUPreparedVerticesFramePreparation.Refused>(result)
@@ -82,12 +83,88 @@ class GPUPreparedVerticesFramePreparerTest {
             operations = listOf(verticesOp(1f), verticesOp(2f)),
             target = target(), config = RenderConfig.DEFAULT, capabilities = capabilities(),
             limits = limits().copy(maxDraws = 1),
-            mapper = GPUPreparedVerticesOperationMapper { _, _, _, _, _ -> mapCount++; error("unreachable") },
+            mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ ->
+                mapCount++
+                error("unreachable")
+            },
         )
 
         val refused = assertIs<GPUPreparedVerticesFramePreparation.Refused>(result)
         assertEquals(GPUPreparedVerticesRefusalCodes.Budget, refused.refusal.code)
         assertEquals(0, mapCount)
+    }
+
+    @Test
+    fun `mapper refusal publishes neither mapping nor inventory`() {
+        val expected = GPUPreparedOperationRefusal(
+            commandId = 0, operationIndex = 0,
+            code = "invalid.surface.prepared.vertices-operation-ownership",
+            facts = mapOf("authority" to "GPUOpMapper"),
+        )
+        val result = GPUPreparedVerticesFramePreparer.prepare(
+            operations = listOf(verticesOp(1f)), target = target(),
+            config = RenderConfig.DEFAULT, capabilities = capabilities(), limits = limits(),
+            mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ ->
+                GPUOpMapping(
+                    visualCommands = emptyList(), stateEvents = emptyList(),
+                    legacyDump = GPULegacyImmediatePathDump(0, emptyMap()),
+                    preparedRefusal = expected,
+                )
+            },
+        )
+
+        val refused = assertIs<GPUPreparedVerticesFramePreparation.Refused>(result)
+        assertEquals(expected, refused.refusal)
+    }
+
+    @Test
+    fun `expected mapper failures become stable transactional refusal while fatal errors pass through`() {
+        listOf(
+            IllegalStateException("expected") to "mapper_exception",
+            LinkageError("linkage") to "mapper_linkage_error",
+        ).forEach { (failure, reason) ->
+            val result = GPUPreparedVerticesFramePreparer.prepare(
+                operations = listOf(verticesOp(1f)), target = target(),
+                config = RenderConfig.DEFAULT, capabilities = capabilities(), limits = limits(),
+                mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ -> throw failure },
+            )
+            val refused = assertIs<GPUPreparedVerticesFramePreparation.Refused>(result)
+            assertEquals("invalid.surface.prepared.vertices-mapping", refused.refusal.code)
+            assertEquals(reason, refused.refusal.facts["reason"])
+            assertEquals("GPUOpMapper", refused.refusal.facts["authority"])
+        }
+        assertFailsWith<OutOfMemoryError> {
+            GPUPreparedVerticesFramePreparer.prepare(
+                listOf(verticesOp(1f)), target(), RenderConfig.DEFAULT, capabilities(), limits(),
+                mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ ->
+                    throw OutOfMemoryError("fatal")
+                },
+            )
+        }
+        assertFailsWith<ThreadDeath> {
+            GPUPreparedVerticesFramePreparer.prepare(
+                listOf(verticesOp(1f)), target(), RenderConfig.DEFAULT, capabilities(), limits(),
+                mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, _ -> throw ThreadDeath() },
+            )
+        }
+    }
+
+    @Test
+    fun `operations are snapshotted before lowering and mapping`() {
+        val mutable = mutableListOf<DisplayOp>(verticesOp(1f))
+        var mappedSize = -1
+        val result = GPUPreparedVerticesFramePreparer.prepare(
+            operations = mutable, target = target(), config = RenderConfig.DEFAULT,
+            capabilities = capabilities(), limits = limits(),
+            mappingBoundary = GPUPreparedFrameMappingBoundary { operations, target, config, capabilities, text, vertices ->
+                mutable += verticesOp(2f)
+                mappedSize = operations.size
+                GPUOpMapper.mapOperations(operations, target, config, capabilities, text, vertices)
+            },
+        )
+        assertIs<GPUPreparedVerticesFramePreparation.Ready>(result)
+        assertEquals(1, mappedSize)
+        assertEquals(2, mutable.size)
     }
 
     private fun verticesOp(scale: Float) = DisplayOp.DrawVertices(
@@ -96,6 +173,11 @@ class GPUPreparedVerticesFramePreparerTest {
             listOf(Point(0f, 0f), Point(2f * scale, 0f), Point(0f, 2f * scale)),
         ),
         Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen,
+    )
+
+    private fun rectOp() = DisplayOp.DrawRect(
+        Rect.fromLTRB(1f, 1f, 3f, 3f), Paint.fill(Color.RED),
+        Matrix33.identity(), ClipStack.WideOpen,
     )
 
     private fun limits() = PreparedVerticesFrameInventoryLimits(

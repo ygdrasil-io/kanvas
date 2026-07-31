@@ -96,6 +96,7 @@ internal data class GPUOpMapping(
     val legacyDump: GPULegacyImmediatePathDump,
     val preparedRefusal: GPUPreparedOperationRefusal? = null,
     val culledTextOperationIndices: Set<Int> = emptySet(),
+    val preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
 )
 
 data class GPUPreparedOperationRefusal(
@@ -113,12 +114,34 @@ internal object GPUOpMapper {
         config: RenderConfig,
         capabilities: GPUCapabilities,
         preparedTextInventory: PreparedTextFrameInventory? = null,
+        preparedVerticesInventory: PreparedVerticesFrameInventory? = null,
     ): GPUOpMapping {
         val visual = mutableListOf<GPUFramePathVisualCommand>()
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
         val culledTextOperationIndices = linkedSetOf<Int>()
         val legacy = GPULegacyImmediatePathAdapter()
+        val preparedVerticesCommandIds = linkedMapOf<Int, Int>()
         var provenance = GPUFrameProvenance.None
+
+        fun nextCommandId(): Int = Math.addExact(visual.size, preparedVerticesCommandIds.size)
+
+        preparedVerticesInventory?.let { inventory ->
+            val sourceIndices = operations.mapIndexedNotNull { index, operation ->
+                index.takeIf { operation is DisplayOp.DrawVertices || operation is DisplayOp.DrawMesh }
+            }
+            val owned = (inventory.commands.map { it.operationIndex } +
+                inventory.elidedVerticesOperationIndices).sorted()
+            if (owned != sourceIndices || inventory.mappedCommands.isNotEmpty()) {
+                return GPUOpMapping(
+                    visualCommands = emptyList(), stateEvents = emptyList(), legacyDump = legacy.dump(),
+                    preparedRefusal = GPUPreparedOperationRefusal(
+                        commandId = 0, operationIndex = sourceIndices.firstOrNull() ?: 0,
+                        code = "invalid.surface.prepared.vertices-operation-ownership",
+                        facts = mapOf("authority" to "GPUOpMapper"),
+                    ),
+                )
+            }
+        }
 
         operations.forEachIndexed { operationIndex, operation ->
             when (operation) {
@@ -145,7 +168,7 @@ internal object GPUOpMapper {
                             stateEvents = stateEvents.toList(),
                             legacyDump = legacy.dump(),
                             preparedRefusal = GPUPreparedOperationRefusal(
-                                commandId = visual.size,
+                                commandId = nextCommandId(),
                                 operationIndex = operationIndex,
                                 code = "invalid.surface.prepared.text-operation-ownership",
                                 facts = emptyMap(),
@@ -164,7 +187,7 @@ internal object GPUOpMapper {
                         strokePaths ->
                         val strokeVisuals = ArrayList<GPUFramePathVisualCommand>(strokePaths.size)
                         strokePaths.forEach { strokePath ->
-                            val commandId = visual.size + strokeVisuals.size
+                            val commandId = nextCommandId() + strokeVisuals.size
                             val strokeOperation = DisplayOp.DrawPath(
                                 path = strokePath.path,
                                 paint = strokePath.draw.paint,
@@ -223,7 +246,7 @@ internal object GPUOpMapper {
                     }
                     val subRuns = preparedTextInventory.subRunsByOperationIndex[operationIndex].orEmpty()
                     for (subRun in subRuns) {
-                        val commandId = visual.size
+                        val commandId = nextCommandId()
                         when (
                             val lowered = subRun.toPreparedTextVisual(
                                 commandId = commandId,
@@ -254,7 +277,7 @@ internal object GPUOpMapper {
                     }
                 }
                 is DisplayOp.DrawImage -> {
-                    val commandId = visual.size
+                    val commandId = nextCommandId()
                     when (
                         val lowered = GPUPreparedDrawImageLowerer.lower(
                             operation = operation,
@@ -281,7 +304,7 @@ internal object GPUOpMapper {
                     }
                 }
                 is DisplayOp.DrawImageNine -> {
-                    val commandId = visual.size
+                    val commandId = nextCommandId()
                     val context = GPUPreparedImageLoweringContext(
                         provenance = provenance,
                         target = target,
@@ -312,7 +335,7 @@ internal object GPUOpMapper {
                     }
                 }
                 is DisplayOp.DrawImageLattice -> {
-                    val commandId = visual.size
+                    val commandId = nextCommandId()
                     val context = GPUPreparedImageLoweringContext(
                         provenance = provenance,
                         target = target,
@@ -343,7 +366,7 @@ internal object GPUOpMapper {
                     }
                 }
                 is DisplayOp.DrawAtlas -> {
-                    val commandId = visual.size
+                    val commandId = nextCommandId()
                     val context = GPUPreparedImageLoweringContext(
                         provenance = provenance,
                         target = target,
@@ -374,8 +397,29 @@ internal object GPUOpMapper {
                         )
                     }
                 }
+                is DisplayOp.DrawVertices, is DisplayOp.DrawMesh -> {
+                    if (preparedVerticesInventory == null) {
+                        if (legacy.accepts(operation)) legacy.recordInvocation(operation)
+                        return@forEachIndexed
+                    }
+                    if (operationIndex in preparedVerticesInventory.elidedVerticesOperationIndices) {
+                        return@forEachIndexed
+                    }
+                    val command = preparedVerticesInventory.commands.singleOrNull {
+                        it.operationIndex == operationIndex
+                    } ?: return GPUOpMapping(
+                        visualCommands = emptyList(), stateEvents = stateEvents.toList(),
+                        legacyDump = legacy.dump(),
+                        preparedRefusal = GPUPreparedOperationRefusal(
+                            commandId = nextCommandId(), operationIndex = operationIndex,
+                            code = "invalid.surface.prepared.vertices-operation-ownership",
+                            facts = mapOf("authority" to "GPUOpMapper"),
+                        ),
+                    )
+                    preparedVerticesCommandIds[command.operationIndex] = nextCommandId()
+                }
                 else -> {
-                    val paintOrder = visual.size
+                    val paintOrder = nextCommandId()
                     val lowered = lowerPreparedCoreVisual(
                         operation = operation,
                         commandId = GPUDrawCommandID(paintOrder),
@@ -395,11 +439,15 @@ internal object GPUOpMapper {
                 }
             }
         }
+        val mappedVerticesInventory = preparedVerticesInventory?.bindCommandIds(
+            preparedVerticesCommandIds,
+        )
         return GPUOpMapping(
             visualCommands = visual.toList(),
             stateEvents = stateEvents.toList(),
             legacyDump = legacy.dump(),
             culledTextOperationIndices = culledTextOperationIndices.toSet(),
+            preparedVerticesInventory = mappedVerticesInventory,
         )
     }
 

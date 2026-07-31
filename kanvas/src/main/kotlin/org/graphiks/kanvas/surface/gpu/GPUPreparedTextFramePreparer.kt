@@ -21,6 +21,16 @@ internal sealed interface GPUPreparedTextFramePreparation {
     ) : GPUPreparedTextFramePreparation
 }
 
+internal sealed interface GPUPreparedTextFrameInventoryPreparation {
+    data class Ready(
+        val inventory: PreparedTextFrameInventory,
+        val metrics: GPUPreparedTextFrameMetrics,
+    ) : GPUPreparedTextFrameInventoryPreparation
+
+    data class Refused(val refusal: GPUPreparedOperationRefusal) :
+        GPUPreparedTextFrameInventoryPreparation
+}
+
 /** Single production authority shared by direct Surface and diagnostic inventory paths. */
 internal object GPUPreparedTextFramePreparer {
     fun prepare(
@@ -31,6 +41,34 @@ internal object GPUPreparedTextFramePreparer {
         generation: GPUTextArtifactGeneration,
         limits: PreparedTextFrameInventoryLimits = defaultLimits(target, capabilities),
     ): GPUPreparedTextFramePreparation {
+        val inventoryPreparation = prepareInventory(
+            operations, target, capabilities, generation, limits,
+        )
+        val ready = when (inventoryPreparation) {
+            is GPUPreparedTextFrameInventoryPreparation.Ready -> inventoryPreparation
+            is GPUPreparedTextFrameInventoryPreparation.Refused ->
+                return GPUPreparedTextFramePreparation.Refused(inventoryPreparation.refusal)
+        }
+        val mapping = GPUOpMapper.mapOperations(
+            operations = operations,
+            target = target,
+            config = config,
+            capabilities = capabilities,
+            preparedTextInventory = ready.inventory,
+        )
+        mapping.preparedRefusal?.let { refusal ->
+            return GPUPreparedTextFramePreparation.Refused(refusal)
+        }
+        return GPUPreparedTextFramePreparation.Ready(mapping, ready.inventory, ready.metrics)
+    }
+
+    fun prepareInventory(
+        operations: List<DisplayOp>,
+        target: GPUTargetFacts,
+        capabilities: GPUCapabilities,
+        generation: GPUTextArtifactGeneration,
+        limits: PreparedTextFrameInventoryLimits = defaultLimits(target, capabilities),
+    ): GPUPreparedTextFrameInventoryPreparation {
         val preparedDraws = ArrayList<GPUPreparedTextDraw>()
         val elidedTextOperationIndices = linkedSetOf<Int>()
         val loweringStartedAt = System.nanoTime()
@@ -56,7 +94,7 @@ internal object GPUPreparedTextFramePreparer {
                     }
                 }
                 is GPUPreparedTextLowering.Refused ->
-                    return GPUPreparedTextFramePreparation.Refused(
+                    return GPUPreparedTextFrameInventoryPreparation.Refused(
                         GPUPreparedOperationRefusal(
                             commandId = operationIndex,
                             operationIndex = operationIndex,
@@ -77,7 +115,7 @@ internal object GPUPreparedTextFramePreparer {
         ) {
             is PreparedTextFrameInventoryResult.Ready -> built
             is PreparedTextFrameInventoryResult.Refused ->
-                return GPUPreparedTextFramePreparation.Refused(
+                return GPUPreparedTextFrameInventoryPreparation.Refused(
                     GPUPreparedOperationRefusal(
                         commandId = built.operationIndex ?: 0,
                         operationIndex = built.operationIndex ?: 0,
@@ -97,7 +135,7 @@ internal object GPUPreparedTextFramePreparer {
                     ) != null
             }
         if (refusedTextA8SubRun != null) {
-            return GPUPreparedTextFramePreparation.Refused(
+            return GPUPreparedTextFrameInventoryPreparation.Refused(
                 GPUPreparedOperationRefusal(
                     commandId = refusedTextA8SubRun.operationIndex,
                     operationIndex = refusedTextA8SubRun.operationIndex,
@@ -106,18 +144,7 @@ internal object GPUPreparedTextFramePreparer {
                 ),
             )
         }
-        val mapping = GPUOpMapper.mapOperations(
-            operations = operations,
-            target = target,
-            config = config,
-            capabilities = capabilities,
-            preparedTextInventory = inventory,
-        )
-        mapping.preparedRefusal?.let { refusal ->
-            return GPUPreparedTextFramePreparation.Refused(refusal)
-        }
-        return GPUPreparedTextFramePreparation.Ready(
-            mapping = mapping,
+        return GPUPreparedTextFrameInventoryPreparation.Ready(
             inventory = inventory,
             metrics = inventory.metrics.copy(
                 loweringNanoseconds = loweringNanoseconds,

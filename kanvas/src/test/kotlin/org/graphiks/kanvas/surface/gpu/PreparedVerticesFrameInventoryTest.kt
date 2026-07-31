@@ -13,6 +13,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
@@ -60,6 +62,22 @@ class PreparedVerticesFrameInventoryTest {
     }
 
     @Test
+    fun `forced material bucket collision is refused by material structural authority`() {
+        val first = draw(0, color = Color.RED)
+        val second = draw(1, color = Color.BLUE)
+        val collision = PreparedVerticesFrameInventoryBuilder.build(
+            draws = listOf(first, second), limits = limits(), capabilities = capabilities(),
+            artifactKeySelector = { it.key },
+            materialBucketKeySelector = { "forced-collision" },
+        )
+
+        val refused = assertIs<PreparedVerticesFrameInventoryResult.Refused>(collision)
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, refused.code)
+        assertEquals("material_identity_collision", refused.facts["reason"])
+        assertEquals("GPUPreparedMaterialProgram", refused.facts["authority"])
+    }
+
+    @Test
     fun `upload ranges are deterministic aligned separate non overlapping and aggregate checked`() {
         val indexed = draw(2, indices = listOf(0, 1, 2))
         val anotherIndexed = draw(5, positions = points(scale = 2f), indices = listOf(0, 2, 1))
@@ -83,7 +101,10 @@ class PreparedVerticesFrameInventoryTest {
 
     @Test
     fun `each exact frame budget refuses transactionally with stable facts`() {
-        val draws = listOf(draw(0, indices = listOf(0, 1, 2)), draw(1, positions = points(2f)))
+        val draws = listOf(
+            asMesh(draw(3, indices = listOf(0, 1, 2))),
+            asMesh(draw(8, positions = points(2f), indices = listOf(0, 2, 1))),
+        )
         val baseline = buildReady(draws)
         val cases = listOf(
             "maxDraws" to limits(maxDraws = 1),
@@ -97,9 +118,56 @@ class PreparedVerticesFrameInventoryTest {
         cases.forEach { (budget, constrained) ->
             val result = PreparedVerticesFrameInventoryBuilder.build(draws, constrained, capabilities())
             val refused = assertIs<PreparedVerticesFrameInventoryResult.Refused>(result, budget)
-            assertEquals(GPUPreparedVerticesRefusalCodes.Budget, refused.code, budget)
+            assertEquals(GPUPreparedVerticesRefusalCodes.MeshBudget, refused.code, budget)
             assertEquals(budget, refused.facts["budget"], budget)
+            assertEquals(refused.operationIndex.toString(), refused.facts["operationIndex"], budget)
+            assertEquals("PreparedVerticesFrameInventory", refused.facts["authority"], budget)
+            assertEquals("budget_exceeded", refused.facts["reason"], budget)
+            assertTrue(refused.operationIndex == 3 || refused.operationIndex == 8, budget)
         }
+    }
+
+    @Test
+    fun `mixed draw budget uses first operation that crosses the limit and its refusal family`() {
+        val first = draw(2)
+        val second = asMesh(draw(7, positions = points(2f)))
+        val baseline = buildReady(listOf(first, second))
+
+        val refusal = assertIs<PreparedVerticesFrameInventoryResult.Refused>(
+            PreparedVerticesFrameInventoryBuilder.build(
+                listOf(first, second),
+                limits(maxTotalUploadBytes = baseline.vertexUploadRanges.first().occupiedByteCount),
+                capabilities(),
+            ),
+        )
+
+        assertEquals(7, refusal.operationIndex)
+        assertEquals("7", refusal.facts["operationIndex"])
+        assertEquals(GPUPreparedVerticesRefusalCodes.MeshBudget, refusal.code)
+    }
+
+    @Test
+    fun `culled draws retain ordered ownership but allocate and charge nothing`() {
+        val visible = draw(1)
+        val culledShared = asCulled(draw(4))
+        val culledDifferent = asCulled(draw(9, positions = points(3f)))
+        val noOp = asNoOp(draw(12, positions = points(4f)))
+
+        val inventory = buildReady(listOf(visible, culledShared, culledDifferent, noOp))
+
+        assertEquals(listOf(1), inventory.commands.map { it.operationIndex })
+        assertEquals(listOf(4, 9, 12), inventory.elidedVerticesOperationIndices)
+        assertEquals(1, inventory.metrics.drawCount)
+        assertEquals(1, inventory.metrics.uniqueArtifactCount)
+        assertEquals(setOf(1), inventory.artifactKeyByOperationIndex.keys)
+
+        val allCulled = buildReady(listOf(culledShared, culledDifferent))
+        assertTrue(allCulled.commands.isEmpty())
+        assertEquals(listOf(4, 9), allCulled.elidedVerticesOperationIndices)
+        assertEquals(0, allCulled.metrics.drawCount)
+        assertEquals(0, allCulled.metrics.totalUploadBytes)
+        assertTrue(allCulled.artifactsByKey.isEmpty())
+        assertTrue(allCulled.materialsByKey.isEmpty())
     }
 
     @Test
@@ -146,7 +214,7 @@ class PreparedVerticesFrameInventoryTest {
     @Test
     fun `aggregate long addition overflow refuses before inventory publication`() {
         val result = PreparedVerticesFrameInventoryBuilder.build(
-            draws = listOf(draw(0), draw(1)),
+            draws = listOf(draw(0), asMesh(draw(1))),
             limits = limits(maxRuntimeUniformBytes = Long.MAX_VALUE),
             capabilities = capabilities(),
             artifactKeySelector = { it.key },
@@ -154,10 +222,11 @@ class PreparedVerticesFrameInventoryTest {
         )
 
         val refused = assertIs<PreparedVerticesFrameInventoryResult.Refused>(result)
-        assertEquals(GPUPreparedVerticesRefusalCodes.Budget, refused.code)
+        assertEquals(GPUPreparedVerticesRefusalCodes.MeshBudget, refused.code)
         assertEquals(1, refused.operationIndex)
         assertEquals("checked_arithmetic_overflow", refused.facts["reason"])
         assertEquals("runtimeUniformBytes", refused.facts["field"])
+        assertEquals("1", refused.facts["operationIndex"])
     }
 
     @Test
@@ -216,6 +285,47 @@ class PreparedVerticesFrameInventoryTest {
             GPUPreparedVerticesLowerer.lower(operation, operationIndex, target(), capabilities()),
         ).draw
     }
+
+    private fun asMesh(draw: GPUPreparedVerticesDraw): GPUPreparedVerticesDraw = cloneDraw(
+        draw = draw,
+        operationKind = GPUPreparedVerticesOperationKind.DrawMesh,
+    )
+
+    private fun asCulled(draw: GPUPreparedVerticesDraw): GPUPreparedVerticesDraw = cloneDraw(
+        draw = draw,
+        culledByClip = true,
+    )
+
+    private fun asNoOp(draw: GPUPreparedVerticesDraw): GPUPreparedVerticesDraw = cloneDraw(
+        draw = draw,
+        blendPlan = GPUBlendPlan.NoOp(GPUBlendMode.DST, "destination_preserved"),
+    )
+
+    private fun cloneDraw(
+        draw: GPUPreparedVerticesDraw,
+        operationKind: GPUPreparedVerticesOperationKind = draw.operationKind,
+        culledByClip: Boolean = draw.culledByClip,
+        blendPlan: GPUBlendPlan = draw.blendPlan,
+    ): GPUPreparedVerticesDraw = GPUPreparedVerticesDraw.create(
+        artifact = draw.artifact,
+        operationKind = operationKind,
+        material = draw.material,
+        transform = draw.transform,
+        clip = draw.clip,
+        clipSnapshot = draw.clipSnapshot,
+        finalBlend = draw.finalBlend,
+        blendPlan = blendPlan,
+        sourceBounds = draw.sourceBounds,
+        deviceBounds = draw.deviceBounds,
+        clippedBounds = if (culledByClip) null else draw.clippedBounds,
+        culledByClip = culledByClip,
+        meshBounds = draw.meshBounds,
+        operationIndex = draw.operationIndex,
+        provenance = draw.provenance,
+        paintAlphaApplicationCount = draw.paintAlphaApplicationCount,
+        primitiveColorPresent = draw.primitiveColorPresent,
+        primitiveBlendPlan = draw.primitiveBlendPlan,
+    )
 
 
     private fun limits(
