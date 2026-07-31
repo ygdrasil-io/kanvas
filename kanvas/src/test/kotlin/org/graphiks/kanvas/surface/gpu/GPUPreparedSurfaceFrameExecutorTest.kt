@@ -48,6 +48,193 @@ import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceFrameExecutorTest {
     @Test
+    fun `pure pre-backend no-op gate accepts only empty glyph runs with exact accounting`() {
+        val request = executionRequest(
+            listOf(
+                DisplayOp.SetTransform(Matrix33.identity()),
+                emptyGlyphText(),
+                nonEmptyText(
+                    typeface = liberationTypeface(),
+                    clip = targetEmptyClip(),
+                ),
+            ),
+            width = 8,
+            height = 8,
+        )
+
+        val noOp = assertIs<GPUPreparedSurfaceFrameBuildResult.NoOp>(
+            GPUPreparedSurfacePreBackendNoOpGate.classify(request),
+        )
+
+        assertEquals(1, noOp.stateEventCount)
+        assertEquals(setOf(1, 2), noOp.acceptedTextOperationIndices)
+        assertEquals(setOf(1), noOp.elidedTextOperationIndices)
+        assertEquals(setOf(2), noOp.culledTextOperationIndices)
+        assertEquals(0, noOp.textMetrics.glyphCount)
+        assertEquals(0, noOp.textMetrics.instanceCount)
+    }
+
+    @Test
+    fun `empty glyph and valid integral target-empty text complete before backend open`() {
+        var backendOpenCalls = 0
+        val backend = FakeBackend(capabilities(), FakeSession())
+        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory {
+            backendOpenCalls++
+            backend
+        })
+        val request = executionRequest(
+            listOf(
+                emptyGlyphText(),
+                nonEmptyText(
+                    typeface = liberationTypeface(),
+                    clip = targetEmptyClip(),
+                ),
+            ),
+            width = 8,
+            height = 8,
+        )
+
+        val result = executor.execute(request)
+        val success = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(result, result.toString())
+
+        assertContentEquals(ByteArray(8 * 8 * 4), success.rgba)
+        assertEquals(0, success.visualOperationCount)
+        assertEquals(0, success.evidence.targetCreations)
+        assertEquals(0, success.evidence.frameCoordinatorCreations)
+        assertEquals(0, success.evidence.submits)
+        assertEquals(0, backendOpenCalls)
+        assertEquals(0, backend.prepareCalls)
+        assertEquals(0, backend.closeCalls)
+    }
+
+    @Test
+    fun `mixed target-empty text and visible rect bypasses no-op gate and creates one target`() {
+        var backendOpenCalls = 0
+        val session = FakeSession()
+        val backend = FakeBackend(capabilities(preparedText = true), session)
+        val executor = GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory {
+            backendOpenCalls++
+            backend
+        })
+        val request = executionRequest(
+            listOf(
+                nonEmptyText(
+                    typeface = liberationTypeface(),
+                    clip = targetEmptyClip(),
+                ),
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(0f, 0f, 1f, 4f),
+                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Matrix33.identity(),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            width = 1,
+            height = 4,
+        )
+
+        val success = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(executor.execute(request))
+
+        assertEquals(1, success.visualOperationCount)
+        assertEquals(1, success.evidence.targetCreations)
+        assertEquals(1, backendOpenCalls)
+        assertEquals(1, backend.prepareCalls)
+        assertEquals(1, session.submitCalls)
+    }
+
+    @Test
+    fun `missing typeface and destination-read TextA8 are never swallowed by pre-backend no-op`() {
+        val missingTypeface = executionRequest(
+            listOf(nonEmptyText(typeface = null, clip = targetEmptyClip())),
+            width = 32,
+            height = 32,
+        )
+        val destinationReadTextA8 = executionRequest(
+            listOf(
+                nonEmptyText(
+                    typeface = liberationTypeface(),
+                    clip = targetEmptyClip(),
+                    blendMode = BlendMode.DARKEN,
+                ),
+            ),
+            width = 32,
+            height = 32,
+        )
+        assertEquals(null, GPUPreparedSurfacePreBackendNoOpGate.classify(missingTypeface))
+        assertEquals(null, GPUPreparedSurfacePreBackendNoOpGate.classify(destinationReadTextA8))
+
+        var missingTypefaceBackendOpenCalls = 0
+        val missingTypefaceSession = FakeSession()
+        val missingTypefaceBackend = FakeBackend(
+            capabilities(preparedText = true),
+            missingTypefaceSession,
+        )
+        val missingTypefaceRefused =
+            assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
+                GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory {
+                    missingTypefaceBackendOpenCalls++
+                    missingTypefaceBackend
+                }).execute(missingTypeface),
+            )
+        assertEquals(
+            org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes.TYPEFACE_MISSING,
+            missingTypefaceRefused.diagnostic.code.value,
+        )
+        assertEquals(1, missingTypefaceBackendOpenCalls)
+        assertEquals(0, missingTypefaceBackend.prepareCalls)
+        assertEquals(0, missingTypefaceSession.submitCalls)
+        assertEquals(0, missingTypefaceSession.closeCalls)
+        assertEquals(1, missingTypefaceBackend.closeCalls)
+
+        var destinationReadBackendOpenCalls = 0
+        val destinationReadSession = FakeSession()
+        val destinationReadBackend = FakeBackend(
+            capabilities(preparedText = true),
+            destinationReadSession,
+        )
+        val refused = assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
+            GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceBackendPortFactory {
+                destinationReadBackendOpenCalls++
+                destinationReadBackend
+            }).execute(destinationReadTextA8),
+        )
+        assertEquals("invalid.preflight.text.blend", refused.diagnostic.code.value)
+        assertEquals(1, destinationReadBackendOpenCalls)
+        assertEquals(0, destinationReadBackend.prepareCalls)
+        assertEquals(0, destinationReadSession.submitCalls)
+        assertEquals(0, destinationReadSession.closeCalls)
+    }
+
+    @Test
+    fun `pre-backend no-op classification never queries typeface outlines`() {
+        val typeface = ThrowingOutlineTypeface()
+        val targetEmpty = executionRequest(
+            listOf(nonEmptyText(typeface = typeface, clip = targetEmptyClip())),
+            width = 8,
+            height = 8,
+        )
+        val mixed = executionRequest(
+            listOf(
+                nonEmptyText(typeface = typeface, clip = targetEmptyClip()),
+                DisplayOp.DrawRect(
+                    Rect.fromLTRB(0f, 0f, 1f, 4f),
+                    Paint.fill(Color.RED).copy(antiAlias = false),
+                    Matrix33.identity(),
+                    ClipStack.WideOpen,
+                ),
+            ),
+            width = 1,
+            height = 4,
+        )
+
+        assertIs<GPUPreparedSurfaceFrameBuildResult.NoOp>(
+            GPUPreparedSurfacePreBackendNoOpGate.classify(targetEmpty),
+        )
+        assertEquals(null, GPUPreparedSurfacePreBackendNoOpGate.classify(mixed))
+        assertEquals(0, typeface.getGlyphPathCalls)
+    }
+
+    @Test
     fun `execution values defensively own every readback array`() {
         val attempt = GPUFrameAttemptID("attempt")
         val readback = GPUReadbackRequestID("readback")
@@ -98,30 +285,29 @@ class GPUPreparedSurfaceFrameExecutorTest {
         assertEquals(1, noCapabilitiesBackend.closeCalls)
     }
 
-    @TestFactory
-    fun `destination-read prepared text blends refuse before native entry`(): List<DynamicTest> =
-        listOf(BlendMode.SRC, BlendMode.PLUS).map { blendMode ->
-            DynamicTest.dynamicTest(blendMode.name) {
-                val session = FakeSession()
-                val backend = FakeBackend(capabilities(preparedText = true), session)
-                val executor = GPUPreparedSurfaceFrameExecutor(
-                    GPUPreparedSurfaceBackendPortFactory { backend },
-                )
+    @Test
+    fun `destination-read prepared text blend refuses before native entry`() {
+        val session = FakeSession()
+        val backend = FakeBackend(capabilities(preparedText = true), session)
+        val executor = GPUPreparedSurfaceFrameExecutor(
+            GPUPreparedSurfaceBackendPortFactory { backend },
+        )
 
-                val refused = assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
-                    executor.execute(textRequest(blendMode)),
-                )
+        val refused = assertIs<GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused>(
+            executor.execute(
+                textRequest(
+                    BlendMode.DARKEN,
+                    ClipStack.DeviceRect(Rect.fromLTRB(6f, 6f, 14f, 14f), antiAlias = false),
+                ),
+            ),
+        )
 
-                assertEquals(
-                    "invalid.preflight.text.blend",
-                    refused.diagnostic.code.value,
-                )
-                assertEquals(0, backend.prepareCalls)
-                assertEquals(0, session.submitCalls)
-                assertEquals(0, session.closeCalls)
-                assertEquals(1, backend.closeCalls)
-            }
-        }
+        assertEquals("invalid.preflight.text.blend", refused.diagnostic.code.value)
+        assertEquals(0, backend.prepareCalls)
+        assertEquals(0, session.submitCalls)
+        assertEquals(0, session.closeCalls)
+        assertEquals(1, backend.closeCalls)
+    }
 
     @Test
     fun `success preserves build facts and returns exact frame-local evidence after close`() {
@@ -491,7 +677,67 @@ class GPUPreparedSurfaceFrameExecutorTest {
         )
     }
 
-    private fun textRequest(blendMode: BlendMode): GPUPreparedSurfaceExecutionRequest {
+    private fun executionRequest(
+        operations: List<DisplayOp>,
+        width: Int,
+        height: Int,
+    ): GPUPreparedSurfaceExecutionRequest = GPUPreparedSurfaceExecutionRequest(
+        GPUPreparedSurfaceEligibility.Candidate(
+            operations = operations,
+            config = RenderConfig.DEFAULT,
+            color = assertIs(RenderConfig.DEFAULT.mapPreparedGpuColorConfig()),
+        ),
+        width,
+        height,
+    )
+
+    private fun emptyGlyphText(): DisplayOp.DrawText = DisplayOp.DrawText(
+        blob = TextBlob(
+            glyphRuns = listOf(
+                KanvasGlyphRun(emptyList(), emptyList(), fontSize = 16f),
+            ),
+            fontSize = 16f,
+        ),
+        x = 4f,
+        y = 24f,
+        paint = Paint.fill(Color.WHITE),
+        transform = Matrix33.identity(),
+        clip = ClipStack.WideOpen,
+    )
+
+    private fun nonEmptyText(
+        typeface: org.graphiks.kanvas.text.Typeface?,
+        glyph: UShort = 36u,
+        clip: ClipStack = ClipStack.WideOpen,
+        blendMode: BlendMode = BlendMode.SRC_OVER,
+    ): DisplayOp.DrawText = DisplayOp.DrawText(
+        blob = TextBlob(
+            glyphRuns = listOf(
+                KanvasGlyphRun(
+                    glyphs = listOf(glyph),
+                    positions = listOf(Point(0f, 0f)),
+                    fontSize = 16f,
+                ),
+            ),
+            typeface = typeface,
+            fontSize = 16f,
+        ),
+        x = 4f,
+        y = 24f,
+        paint = Paint.fill(Color.WHITE).copy(blendMode = blendMode),
+        transform = Matrix33.identity(),
+        clip = clip,
+    )
+
+    private fun targetEmptyClip(): ClipStack.DeviceRect = ClipStack.DeviceRect(
+        Rect.fromLTRB(40f, 0f, 48f, 8f),
+        antiAlias = false,
+    )
+
+    private fun textRequest(
+        blendMode: BlendMode,
+        clip: ClipStack = ClipStack.WideOpen,
+    ): GPUPreparedSurfaceExecutionRequest {
         val operations = listOf(
             DisplayOp.DrawText(
                 blob = TextBlob(
@@ -509,7 +755,7 @@ class GPUPreparedSurfaceFrameExecutorTest {
                 y = 24f,
                 paint = Paint.fill(Color.WHITE).copy(blendMode = blendMode),
                 transform = Matrix33.identity(),
-                clip = ClipStack.WideOpen,
+                clip = clip,
             ),
         )
         return GPUPreparedSurfaceExecutionRequest(
@@ -644,6 +890,24 @@ class GPUPreparedSurfaceFrameExecutorTest {
         override fun close() {
             closeCalls++
             closeFailure?.let { throw it }
+        }
+    }
+
+    private class ThrowingOutlineTypeface : org.graphiks.kanvas.text.Typeface {
+        override val fontName: String = "throwing-outline-probe"
+        var getGlyphPathCalls = 0
+            private set
+
+        override fun glyphIdForCodepoint(codepoint: Int): Int = codepoint
+
+        override fun getAdvance(glyphId: Int, fontSize: Float): Float = 1f
+
+        override fun getGlyphPath(
+            glyphId: Int,
+            fontSize: Float,
+        ): org.graphiks.kanvas.geometry.Path? {
+            getGlyphPathCalls++
+            error("pre-backend no-op classification queried a typeface outline")
         }
     }
 

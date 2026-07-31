@@ -3,6 +3,8 @@ package org.graphiks.kanvas.gpu.renderer.passes
 import org.graphiks.kanvas.gpu.renderer.state.GPUAlphaPlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendComponent
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceAlphaClassification as GPUStateSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceCoverageEncoding as GPUStateSourceCoverageEncoding
 import java.security.MessageDigest
 
 /** Coverage topology consumed by the final target blend. */
@@ -14,22 +16,14 @@ enum class GPUCoverageConsumption {
     LCDCoverage,
 }
 
-/** Proof available for source alpha during blend specialization. */
-enum class GPUSourceAlphaClassification {
-    Translucent,
-    ProvenOpaque,
-}
+/**
+ * Compatibility name for the one passive prepared-material source-alpha
+ * authority. Blend planning consumes this fact but does not own it.
+ */
+typealias GPUSourceAlphaClassification = GPUStateSourceAlphaClassification
 
-/** Fragment-output transformation required by an exact coverage-aware route. */
-enum class GPUSourceCoverageEncoding {
-    None,
-    Coverage,
-    ModulateRGBA,
-    CoverageTimesOneMinusSourceAlpha,
-    CoverageTimesOneMinusSourceRGBA,
-    ScalarCoverageInShader,
-    LCDCoverageInShader,
-}
+/** Compatibility name for the passive fragment-output coverage authority. */
+typealias GPUSourceCoverageEncoding = GPUStateSourceCoverageEncoding
 
 /** Semantic destination input required by a canonical blend plan. */
 enum class GPUBlendDestinationReadRequirement {

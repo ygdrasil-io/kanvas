@@ -236,8 +236,12 @@ class GPUPassBatcher {
         currentEligibility: GPUPassBatchEligibility,
         nextEligibility: GPUPassBatchEligibility,
         currentTarget: String,
-    ): GPUPassBatchCut? =
-        when {
+    ): GPUPassBatchCut? {
+        val sameCoverageMaskScope = previousPacket.corePrimitivePreparedAuthority
+            ?.coverageMaskUniformSlabSeal?.let { seal ->
+                seal === nextPacket.corePrimitivePreparedAuthority?.coverageMaskUniformSlabSeal
+            } == true
+        return when {
             nextPacket.targetStateHash != currentTarget ->
                 GPUPassBatchCut(
                     beforePacketId = previousPacket.packetId,
@@ -249,12 +253,12 @@ class GPUPassBatcher {
                 nextEligibility.adjacency != GPUPassBatchAdjacency.Compatible ||
                 nextEligibility.kind != currentEligibility.kind ||
                 nextPacket.role != previousPacket.role ||
-                nextPacket.blendPlan != previousPacket.blendPlan ||
+                (!sameCoverageMaskScope && nextPacket.blendPlan != previousPacket.blendPlan) ||
                 nextPacket.renderStepId != previousPacket.renderStepId ||
                 nextPacket.renderStepVersion != previousPacket.renderStepVersion ||
-                nextPacket.renderPipelineKey != previousPacket.renderPipelineKey ||
+                (!sameCoverageMaskScope && nextPacket.renderPipelineKey != previousPacket.renderPipelineKey) ||
                 nextPacket.computePipelineKey != previousPacket.computePipelineKey ||
-                nextPacket.bindingLayoutHash != previousPacket.bindingLayoutHash ||
+                (!sameCoverageMaskScope && nextPacket.bindingLayoutHash != previousPacket.bindingLayoutHash) ||
                 nextPacket.resourceGeneration != previousPacket.resourceGeneration ->
                 GPUPassBatchCut(
                     beforePacketId = previousPacket.packetId,
@@ -264,6 +268,7 @@ class GPUPassBatcher {
                 )
             else -> null
         }
+    }
 
     private fun mergeQueueGuards(
         packets: List<GPUDrawPacket>,

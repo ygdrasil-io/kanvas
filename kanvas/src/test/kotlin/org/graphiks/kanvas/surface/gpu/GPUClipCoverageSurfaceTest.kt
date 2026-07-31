@@ -27,6 +27,7 @@ import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontTypeface
+import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Rect
@@ -575,6 +576,7 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `scissor destination read DrawText keeps exterior intact`() {
         requireWebGpu()
+        var legacyCalls = 0
         val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
         val typeface = FontTypeface(
             javaClass.classLoader
@@ -582,29 +584,34 @@ class GPUClipCoverageSurfaceTest {
                 .readBytes(),
             fontName = "LiberationSans-Regular",
         )
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
-                    DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
-                    DisplayOp.DrawText(
-                        blob = Font(typeface, 20f).toTextBlob("W", 0f, 15f),
-                        x = 0f,
-                        y = 0f,
-                        paint = Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
-                        transform = Matrix33.identity(),
-                        clip = clip,
-                    ),
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = listOf(
+                        DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
+                        DisplayOp.DrawText(
+                            blob = Font(typeface, 20f).toTextBlob("W", 0f, 15f),
+                            x = 0f,
+                            y = 0f,
+                            paint = Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
+                            transform = Matrix33.identity(),
+                            clip = clip,
+                        ),
                 ),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
+                width = 16,
+                height = 16,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort =
+                    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    error("destination-read TextA8 must not continue through legacy")
+                },
+            )
+        }
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
-        assertDarkenedInsideClip(result.pixels, 16, clip.rect)
+        assertEquals("invalid.preflight.text.blend", failure.diagnostic.code.value)
+        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -667,8 +674,9 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `empty scissor destination read DrawText keeps destination intact`() {
+    fun `empty scissor destination read DrawText remains terminal before legacy`() {
         requireWebGpu()
+        var legacyCalls = 0
         val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
         val typeface = FontTypeface(
             javaClass.classLoader
@@ -676,9 +684,9 @@ class GPUClipCoverageSurfaceTest {
                 .readBytes(),
             fontName = "LiberationSans-Regular",
         )
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = listOf(
                     DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
                     DisplayOp.DrawText(
                         blob = Font(typeface, 20f).toTextBlob("W", 0f, 15f),
@@ -689,16 +697,21 @@ class GPUClipCoverageSurfaceTest {
                         clip = clip,
                     ),
                 ),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
+                width = 16,
+                height = 16,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort =
+                    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    error("destination-read TextA8 must not continue through legacy")
+                },
+            )
+        }
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(1, result.stats.opsDispatched, result.diagnostics.entries.toString())
-        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
+        assertEquals("invalid.preflight.text.blend", failure.diagnostic.code.value)
+        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -1113,35 +1126,49 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `outline text without a typeface reports a stable degradation without a source`() {
+    fun `outline text without a typeface is terminal before legacy`() {
         requireWebGpu()
+        var legacyCalls = 0
         val clip = ClipStack.Complex(
             listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
         )
         val trace = GPUClipRouteTrace()
 
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
-                    DisplayOp.DrawText(
-                        TextBlob(emptyList()),
-                        0f,
-                        0f,
-                        Paint.stroke(Color.RED, 1f),
-                        Matrix33.identity(),
-                        clip,
-                    ),
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = listOf(
+                        DisplayOp.DrawText(
+                            TextBlob(
+                                glyphRuns = listOf(
+                                    KanvasGlyphRun(
+                                        glyphs = listOf(1u),
+                                        positions = listOf(Point(0f, 0f)),
+                                    ),
+                                ),
+                            ),
+                            0f,
+                            0f,
+                            Paint.stroke(Color.RED, 1f),
+                            Matrix33.identity(),
+                            clip,
+                        ),
                 ),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-            trace,
-        )
+                width = 16,
+                height = 16,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort =
+                    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    error("missing typeface must not continue through legacy")
+                },
+                legacyRouteTrace = trace,
+            )
+        }
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.text.outline.no_typeface" })
+        assertEquals("unsupported.text.typeface_missing", failure.diagnostic.code.value)
+        assertEquals(0, legacyCalls)
         assertEquals(0, trace.logicalDrawCount)
     }
 

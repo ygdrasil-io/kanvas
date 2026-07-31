@@ -80,6 +80,7 @@ class GPUColorGlyphPaintAlphaTest {
                 },
                 result.diagnostics.entries.toString(),
             )
+            assertDestinationReadFacts(result, expectedClipStrategy = "direct")
         }
         assertEquals(
             telemetryBefore.destinationReadbackSnapshots,
@@ -96,6 +97,65 @@ class GPUColorGlyphPaintAlphaTest {
             premultipliedSrgb(
                 modulateCpalLayerAlpha(fixture.cpalColor, Color.fromArgb(128, 255, 255, 255)),
             ),
+            tolerance = 2,
+        )
+    }
+
+    @Test
+    fun `WebGPU COLRv0 destination read samples one shared CoverageMask`() {
+        val session = GPUBackendRuntimeFactory.createOrNull()
+        assumeTrue(session != null, "GPU backend unavailable in current environment")
+        val fixture = loadSkiaColrV0Fixture()
+        val baseline = renderFixtureGlyph(fixture, paintAlpha = 255)
+        val clippedPixel = findOpaquePalettePixel(baseline.pixels, fixture.cpalColor)
+        val clippedX = clippedPixel % FIXTURE_DIMENSION
+        val clippedY = clippedPixel / FIXTURE_DIMENSION
+        val hole = Rect(
+            (clippedX - 1).coerceAtLeast(0).toFloat(),
+            (clippedY - 1).coerceAtLeast(0).toFloat(),
+            (clippedX + 2).coerceAtMost(FIXTURE_DIMENSION).toFloat(),
+            (clippedY + 2).coerceAtMost(FIXTURE_DIMENSION).toFloat(),
+        )
+        val survivingPixel = findOpaquePalettePixelOutside(
+            baseline.pixels,
+            fixture.cpalColor,
+            hole,
+        )
+        val telemetryBefore = GPUBackendRuntimeFactory.createOrNull()!!.runtimeTelemetry
+
+        val result = renderFixtureGlyph(
+            fixture,
+            paintAlpha = 255,
+            coverageMaskHole = hole,
+        )
+        val telemetryAfter = GPUBackendRuntimeFactory.createOrNull()!!.runtimeTelemetry
+
+        assertEquals(0, baseline.diagnostics.fatalCount, baseline.diagnostics.entries.toString())
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused, result.diagnostics.entries.toString())
+        assertTrue(result.diagnostics.entries.any { entry ->
+            entry.code.startsWith("route:destination-read:DrawText") &&
+                entry.reason == "gpu-copy-then-formula"
+        })
+        assertDestinationReadFacts(result, expectedClipStrategy = "alpha-mask")
+        assertEquals(
+            telemetryBefore.destinationCopies + 1L,
+            telemetryAfter.destinationCopies,
+        )
+        assertEquals(
+            telemetryBefore.destinationReadbackSnapshots,
+            telemetryAfter.destinationReadbackSnapshots,
+        )
+        assertPixelNear(
+            result.pixels,
+            clippedPixel,
+            Color.TRANSPARENT,
+            tolerance = 2,
+        )
+        assertPixelNear(
+            result.pixels,
+            survivingPixel,
+            fixture.cpalColor,
             tolerance = 2,
         )
     }
@@ -130,12 +190,34 @@ class GPUColorGlyphPaintAlphaTest {
         )
     }
 
-    private fun renderFixtureGlyph(fixture: FixtureGlyph, paintAlpha: Int) =
+    private fun renderFixtureGlyph(
+        fixture: FixtureGlyph,
+        paintAlpha: Int,
+        coverageMaskHole: Rect? = null,
+    ) =
         Surface(FIXTURE_DIMENSION, FIXTURE_DIMENSION).run {
             canvas {
                 save()
-                // A fractional AA device clip deliberately selects the alpha-mask S/G route.
-                clipRect(Rect(0.5f, 0.5f, 191.5f, 191.5f), ClipOp.INTERSECT, antiAlias = true)
+                if (coverageMaskHole == null) {
+                    // A fractional AA device clip selects the analytic scalar S/G route.
+                    clipRect(
+                        Rect(0.5f, 0.5f, 191.5f, 191.5f),
+                        ClipOp.INTERSECT,
+                        antiAlias = true,
+                    )
+                } else {
+                    // Two non-AA elements select the shared, single-sample CoverageMask route.
+                    clipRect(
+                        Rect(0f, 0f, FIXTURE_DIMENSION.toFloat(), FIXTURE_DIMENSION.toFloat()),
+                        ClipOp.INTERSECT,
+                        antiAlias = false,
+                    )
+                    clipRect(
+                        coverageMaskHole,
+                        ClipOp.DIFFERENCE,
+                        antiAlias = false,
+                    )
+                }
                 drawText(
                     TextBlob(
                         glyphRuns = listOf(
@@ -168,6 +250,26 @@ class GPUColorGlyphPaintAlphaTest {
                 (pixels[offset + 3].toInt() and 0xFF) == expected.alphaByte
         } ?: error("fixture glyph produced no opaque CPAL pixel for $expected")
 
+    private fun findOpaquePalettePixelOutside(
+        pixels: UByteArray,
+        expected: Color,
+        excluded: Rect,
+    ): Int =
+        (0 until FIXTURE_DIMENSION * FIXTURE_DIMENSION).firstOrNull { index ->
+            val x = index % FIXTURE_DIMENSION
+            val y = index / FIXTURE_DIMENSION
+            val outside = x + 0.5f < excluded.left ||
+                x + 0.5f >= excluded.right ||
+                y + 0.5f < excluded.top ||
+                y + 0.5f >= excluded.bottom
+            val offset = index * 4
+            outside &&
+                (pixels[offset].toInt() and 0xFF) == expected.redByte &&
+                (pixels[offset + 1].toInt() and 0xFF) == expected.greenByte &&
+                (pixels[offset + 2].toInt() and 0xFF) == expected.blueByte &&
+                (pixels[offset + 3].toInt() and 0xFF) == expected.alphaByte
+        } ?: error("fixture glyph produced no surviving opaque CPAL pixel outside $excluded")
+
     private fun assertPixelNear(pixels: UByteArray, index: Int, expected: Color, tolerance: Int) {
         val offset = index * 4
         val actual = List(4) { channel -> pixels[offset + channel].toInt() and 0xFF }
@@ -178,6 +280,22 @@ class GPUColorGlyphPaintAlphaTest {
                 "pixel=$index channel=$channel expected=$target actual=$value tolerance=$tolerance",
             )
         }
+    }
+
+    private fun assertDestinationReadFacts(
+        result: org.graphiks.kanvas.surface.RenderResult,
+        expectedClipStrategy: String,
+    ) {
+        val route = result.diagnostics.entries.single { entry ->
+            entry.code.startsWith("route:destination-read:DrawText") &&
+                entry.reason == "gpu-copy-then-formula"
+        }
+        val facts = route.facts.associate { fact -> fact.key to fact.value }
+        assertEquals("color_dodge", facts["destination-read.mode"])
+        assertEquals("copy-then-formula", facts["destination-read.action"])
+        assertEquals(expectedClipStrategy, facts["clip.strategy"])
+        assertTrue(facts["destination-read.source"].orEmpty().isNotBlank())
+        assertTrue(facts["destination-read.snapshot"].orEmpty().isNotBlank())
     }
 
     /** RGBA8 sRGB readback stores premultiplied linear color, then transfers it to sRGB. */

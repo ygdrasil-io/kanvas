@@ -131,6 +131,17 @@ class GPUWgpu4kFramePayloadMaterializerDispatcherTest {
     }
 
     @Test
+    fun `dispatcher keeps ColorGlyph destination copy inside the sealed prepared surface route`() {
+        assertEquals(
+            GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed,
+            selectWgpu4kPreparedFramePayloadRoute(
+                semanticClasses = listOf(GPUDrawSemanticPayload.ColorGlyph::class),
+                hasDestinationCopy = true,
+            ),
+        )
+    }
+
+    @Test
     fun `dispatcher refuses mixed solid and color shapes before invoking a native delegate`() {
         val route = selectWgpu4kPreparedFramePayloadRoute(
             listOf(

@@ -5,6 +5,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import io.ygdrasil.webgpu.ArrayBuffer
 import io.ygdrasil.webgpu.BindGroupDescriptor
 import io.ygdrasil.webgpu.BindGroupLayoutDescriptor
+import io.ygdrasil.webgpu.BufferBinding
 import io.ygdrasil.webgpu.BufferDescriptor
 import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUCommandBuffer
@@ -173,7 +174,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
-    fun `sRGB 4x refuses centrally before encoder validation and every native acquisition`() {
+    fun `sRGB 4x invalid encoder plan refuses before every native acquisition`() {
         val fixture = fixture(
             targetFormat = GPUColorFormat.RGBA8UnormSrgb,
         )
@@ -212,7 +213,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             guardedFixture.materializeCoreResult(),
         )
 
-        assertEquals("unsupported.native-core-primitive.srgb-msaa", refused.code)
+        assertEquals("unsupported.native-core-primitive.render-plan", refused.code)
         assertEquals(nativeEventsBefore, fixture.native.events)
         assertEquals(cacheBefore, fixture.cache.counters())
         assertEquals(poolSlotsBefore, framePoolSlotCount(fixture.cache))
@@ -581,6 +582,32 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `prepared coverage mask delegates producer ownership exactly once`() {
+        val fixture = fixture(
+            routeShape = RouteShape.CoverageMask,
+            useRealPreflight = true,
+        )
+        val delegate = GPUWgpu4kCoverageMaskProducerMaterializer(
+            fixture.native.queue,
+            fixture.cache,
+            fixture.limits,
+        )
+        var materializationCalls = 0
+        val spy = GPUWgpu4kCoverageMaskProducerMaterializerPort { request ->
+            materializationCalls += 1
+            delegate.materialize(request)
+        }
+
+        val result = fixture.materializeCoreResult(spy)
+
+        assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(result)
+        assertEquals(1, materializationCalls)
+        assertEquals(3, fixture.native.writeBufferCalls.size)
+        assertTrue(result.draft.disposeBeforeRegistration())
+        fixture.close()
+    }
+
+    @Test
     fun `prepared coverage mask materializes color-only producers and consumers with one shared mask`() {
         val fixture = fixture(
             readback = true,
@@ -591,90 +618,100 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val materialized = fixture.materializeCore()
         val renders = materialized.draft.payload.scopeOperands
             .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
-        assertEquals(4, renders.size)
-        val producers = renders.take(2)
-        val consumers = renders.drop(2)
+        assertEquals(2, renders.size)
+        val producer = renders[0]
+        val consumer = renders[1]
         assertTrue(renders.all { it.pass.depthStencilTarget == null })
-        assertEquals(1, distinctIdentityCount(producers.map { it.pass.colorTarget.view }))
-        assertEquals(1, distinctIdentityCount(consumers.map { it.pass.colorTarget.view }))
-        assertNotSame(producers.first().pass.colorTarget.view, consumers.first().pass.colorTarget.view)
+        assertNotSame(producer.pass.colorTarget.view, consumer.pass.colorTarget.view)
         assertEquals(
-            listOf(GPUPreparedNativeLoadOperation.Clear, GPUPreparedNativeLoadOperation.Load),
-            producers.map { it.pass.loadOperation },
+            GPUPreparedNativeLoadOperation.Clear,
+            producer.pass.loadOperation,
         )
-        assertEquals(GPUPreparedNativeClearColor(1.0, 1.0, 1.0, 1.0), producers.first().pass.clearColor)
-        assertEquals(null, producers.last().pass.clearColor)
+        assertEquals(GPUPreparedNativeClearColor(1.0, 1.0, 1.0, 1.0), producer.pass.clearColor)
         assertEquals(
-            listOf(GPUPreparedNativeLoadOperation.Clear, GPUPreparedNativeLoadOperation.Load),
-            consumers.map { it.pass.loadOperation },
+            GPUPreparedNativeLoadOperation.Clear,
+            consumer.pass.loadOperation,
         )
         assertEquals(
             listOf(0L, 256L),
-            producers.map { producer ->
-                producer.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
-                    .single().dynamicOffsets.single()
-            },
+            producer.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                .map { it.dynamicOffsets.single() },
         )
-        producers.forEach { producer ->
-            assertEquals(3, producer.commands.size)
-            assertIs<GPUPreparedNativeRenderCommand.SetPipeline>(producer.commands[0])
-            assertEquals(
-                listOf(producer.commands[1]),
-                producer.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>(),
-            )
-            assertEquals(
-                GPUPreparedNativeDrawCall.Draw(3),
-                assertIs<GPUPreparedNativeRenderCommand.Draw>(producer.commands[2]).drawCall,
-            )
-            assertTrue(producer.commands.none {
-                it is GPUPreparedNativeRenderCommand.SetVertexBuffer ||
-                    it is GPUPreparedNativeRenderCommand.SetIndexBuffer ||
-                    it is GPUPreparedNativeRenderCommand.SetScissor
-            })
-        }
+        assertEquals(6, producer.commands.size)
+        assertEquals(
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline::class,
+                GPUPreparedNativeRenderCommand.SetBindGroup::class,
+                GPUPreparedNativeRenderCommand.Draw::class,
+                GPUPreparedNativeRenderCommand.SetPipeline::class,
+                GPUPreparedNativeRenderCommand.SetBindGroup::class,
+                GPUPreparedNativeRenderCommand.Draw::class,
+            ),
+            producer.commands.map { it::class },
+        )
+        assertEquals(
+            List(2) { GPUPreparedNativeDrawCall.Draw(3) },
+            producer.commands.filterIsInstance<GPUPreparedNativeRenderCommand.Draw>()
+                .map { it.drawCall },
+        )
+        assertTrue(producer.commands.none {
+            it is GPUPreparedNativeRenderCommand.SetVertexBuffer ||
+                it is GPUPreparedNativeRenderCommand.SetIndexBuffer ||
+                it is GPUPreparedNativeRenderCommand.SetScissor
+        })
         assertEquals(
             listOf(512L, 768L),
-            consumers.map { consumer ->
-                consumer.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
-                    .single().dynamicOffsets.single()
-            },
+            consumer.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                .map { it.dynamicOffsets.single() },
         )
-        consumers.forEach { consumer ->
-            assertEquals(GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitiveFullTarget, consumer.operandLayout)
-            assertEquals(1, consumer.commands.filterIsInstance<GPUPreparedNativeRenderCommand.DrawIndexed>().size)
-            assertTrue(consumer.commands.none {
-                it is GPUPreparedNativeRenderCommand.SetScissor ||
-                    it is GPUPreparedNativeRenderCommand.SetStencilReference
-            })
-        }
+        assertEquals(8, consumer.commands.size)
+        assertEquals(GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitiveFullTarget, consumer.operandLayout)
+        assertEquals(
+            listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline::class,
+                GPUPreparedNativeRenderCommand.SetBindGroup::class,
+                GPUPreparedNativeRenderCommand.SetVertexBuffer::class,
+                GPUPreparedNativeRenderCommand.SetIndexBuffer::class,
+                GPUPreparedNativeRenderCommand.DrawIndexed::class,
+                GPUPreparedNativeRenderCommand.SetPipeline::class,
+                GPUPreparedNativeRenderCommand.SetBindGroup::class,
+                GPUPreparedNativeRenderCommand.DrawIndexed::class,
+            ),
+            consumer.commands.map { it::class },
+        )
+        assertTrue(consumer.commands.none {
+            it is GPUPreparedNativeRenderCommand.SetScissor ||
+                it is GPUPreparedNativeRenderCommand.SetStencilReference
+        })
+        val producerPipelines = producer.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+        val consumerPipelines = consumer.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
         assertNotSame(
-            producers[0].commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
-                .single().pipeline.pipeline,
-            producers[1].commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
-                .single().pipeline.pipeline,
+            producerPipelines[0].pipeline.pipeline,
+            producerPipelines[1].pipeline.pipeline,
         )
         assertSame(
-            consumers[0].commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
-                .single().pipeline.pipeline,
-            consumers[1].commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
-                .single().pipeline.pipeline,
+            consumerPipelines[0].pipeline.pipeline,
+            consumerPipelines[1].pipeline.pipeline,
         )
-        val producerBindGroups = producers.map {
-            it.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
-                .single().bindGroup.bindGroup
-        }
-        val consumerBindGroups = consumers.map {
-            it.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
-                .single().bindGroup.bindGroup
-        }
+        val producerBindGroups = producer.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+            .map { it.bindGroup.bindGroup }
+        val consumerBindGroups = consumer.commands
+            .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+            .map { it.bindGroup.bindGroup }
         assertEquals(1, distinctIdentityCount(producerBindGroups))
         assertEquals(1, distinctIdentityCount(consumerBindGroups))
         assertNotSame(producerBindGroups.first(), consumerBindGroups.first())
         assertEquals(3, fixture.native.writeBufferCalls.size)
-        val routeSeal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer>(
+        val routeSeal = assertIs<
+            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+            >(
             fixture.encoderPlan.scopes.first().corePrimitiveCoverageMaskPreparedRouteSeal,
         )
-        val packedGeometry = packCorePrimitiveFrameGeometry(routeSeal.route.consumers.map { consumer ->
+        val producerUnit = routeSeal.units.first()
+        val packedGeometry = packCorePrimitiveFrameGeometry(producerUnit.route.consumers.map { consumer ->
             when (val geometry = consumer.geometry) {
                 is GPUCorePrimitiveCoverageMaskConsumerGeometrySnapshot.Rect ->
                     GPUCorePrimitiveDirectNativeRoute.Accepted(
@@ -693,19 +730,19 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         })
         val exactUploads = listOf(
             Triple(
+                "Kanvas.session.corePrimitive.framePool.uniforms",
+                producerUnit.slabAuthority.uniformSlabSeal.packedBytesSnapshot(),
+                producerUnit.slabAuthority.uniformByteSize,
+            ),
+            Triple(
                 "Kanvas.session.corePrimitive.framePool.vertices",
                 ArrayBuffer.of(packedGeometry.vertices).toByteArray(),
-                routeSeal.slabAuthority.vertexByteSize,
+                producerUnit.slabAuthority.vertexByteSize,
             ),
             Triple(
                 "Kanvas.session.corePrimitive.framePool.indices",
                 ArrayBuffer.of(packedGeometry.indices).toByteArray(),
-                routeSeal.slabAuthority.indexByteSize,
-            ),
-            Triple(
-                "Kanvas.session.corePrimitive.framePool.uniforms",
-                routeSeal.slabAuthority.uniformSlabSeal.packedBytesSnapshot(),
-                routeSeal.slabAuthority.uniformByteSize,
+                producerUnit.slabAuthority.indexByteSize,
             ),
         )
         fixture.native.writeBufferCalls.zip(exactUploads).forEach { (call, expected) ->
@@ -855,7 +892,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             },
             Scenario("consumer-load-store") { fixture ->
                 val render = fixture.plan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
-                    .first { it.drawPackets.single().role == GPUDrawPacketRole.Shading }
+                    .first { step -> step.drawPackets.all { it.role == GPUDrawPacketRole.Shading } }
                 CoverageMaskMaterializationInput(
                     fixture.plan.replacingStep(
                         render,
@@ -950,21 +987,21 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 setPrivateField(fixture.encoderPlan.scopes.first(), "sourcePacketIds", emptyList<Any>())
             },
             Scenario("consumer-token") { fixture ->
-                val seal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer>(
+                val seal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition>(
                     fixture.encoderPlan.scopes.last().corePrimitiveCoverageMaskPreparedRouteSeal,
-                )
+                ).units[1]
                 setPrivateField(seal, "dependencyFromPreviousConsumerToken", "forged.consumer.token")
             },
             Scenario("last-consumer") { fixture ->
-                val seal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer>(
+                val seal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition>(
                     fixture.encoderPlan.scopes.last().corePrimitiveCoverageMaskPreparedRouteSeal,
-                )
+                ).units[1]
                 setPrivateField(seal, "isLastConsumer", false)
             },
             Scenario("aligned-wrong-offset") { fixture ->
-                val seal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer>(
+                val seal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition>(
                     fixture.encoderPlan.scopes.first().corePrimitiveCoverageMaskPreparedRouteSeal,
-                )
+                ).units[1]
                 setPrivateField(
                     seal,
                     "uniformSlice",
@@ -974,11 +1011,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             Scenario("geometry-slice") { fixture ->
                 val scope = fixture.encoderPlan.scopes.first {
                     it.corePrimitiveCoverageMaskPreparedRouteSeal is
-                        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
+                        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition
                 }
-                val seal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer>(
+                val seal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition>(
                     scope.corePrimitiveCoverageMaskPreparedRouteSeal,
-                )
+                ).units[1]
                 setPrivateField(
                     seal,
                     "geometrySlice",
@@ -993,10 +1030,13 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 setPrivateField(scope, "nativeOperandKeys", scope.nativeOperandKeys.dropLast(1))
             },
             Scenario("uniform-padding") { fixture ->
-                val seal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer>(
+                val seal = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition>(
                     fixture.encoderPlan.scopes.first().corePrimitiveCoverageMaskPreparedRouteSeal,
-                ).slabAuthority.uniformSlabSeal
-                val packed = privateFieldValue<ByteArray>(seal, "packedBytesSnapshot")
+                ).units[1].slabAuthority.uniformSlabSeal
+                val packed = privateFieldValue<ByteArray>(
+                    seal.producerUniformSlabSeal,
+                    "packedBytesSnapshot",
+                )
                 packed[64] = 1
             },
         )
@@ -1023,24 +1063,24 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
     @Test
     fun `coverage mask revalidates every live consumer authority on a cold cache`() {
         data class Scenario(val label: String, val mutate: (Fixture, GPUDrawPacket) -> Unit)
-        fun firstConsumer(fixture: Fixture): GPUDrawPacket = fixture.plan.steps
+        fun secondConsumer(fixture: Fixture): GPUDrawPacket = fixture.plan.steps
             .filterIsInstance<GPUFrameStep.RenderPassStep>()
             .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
-            .first { it.role == GPUDrawPacketRole.Shading }
-        fun firstConsumerSlot(fixture: Fixture) =
-            assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer>(
+            .filter { it.role == GPUDrawPacketRole.Shading }[1]
+        fun secondConsumerSlot(fixture: Fixture) =
+            assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition>(
                 fixture.encoderPlan.scopes.first().corePrimitiveCoverageMaskPreparedRouteSeal,
-            ).slabAuthority.uniformSlabSeal.consumerSlots.first()
+            ).units[1].slabAuthority.uniformSlabSeal.consumerSlots[1]
 
         val forgedPipelineKey = "pipeline.forged.coverage-mask-consumer"
         val scenarios = listOf(
             Scenario("slot-structural-key") { fixture, _ ->
-                val slot = firstConsumerSlot(fixture)
+                val slot = secondConsumerSlot(fixture)
                 val producerStructuralKey = assertIs<
-                    GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer
+                    GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition
                     >(
                     fixture.encoderPlan.scopes.first().corePrimitiveCoverageMaskPreparedRouteSeal,
-                ).slabAuthority.uniformSlabSeal.producerSlots.first().structuralPipelineKey
+                ).units[1].slabAuthority.uniformSlabSeal.producerSlots[1].structuralPipelineKey
                 setPrivateField(
                     slot,
                     "structuralPipelineKey",
@@ -1048,10 +1088,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 )
             },
             Scenario("slot-render-pipeline-key") { fixture, _ ->
-                setPrivateField(firstConsumerSlot(fixture), "renderPipelineKey", forgedPipelineKey)
+                setPrivateField(secondConsumerSlot(fixture), "renderPipelineKey", forgedPipelineKey)
             },
             Scenario("slot-binding-layout-hash") { fixture, _ ->
-                setPrivateField(firstConsumerSlot(fixture), "bindingLayoutHash", "layout.forged")
+                setPrivateField(secondConsumerSlot(fixture), "bindingLayoutHash", "layout.forged")
             },
             Scenario("packet-render-pipeline-key") { _, packet ->
                 setPrivateField(packet, "renderPipelineKey", forgedPipelineKey)
@@ -1101,10 +1141,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             Scenario("authority-structural-key") { fixture, packet ->
                 val authority = requireNotNull(packet.corePrimitivePreparedAuthority)
                 val producerStructuralKey = assertIs<
-                    GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer
+                    GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition
                     >(
                     fixture.encoderPlan.scopes.first().corePrimitiveCoverageMaskPreparedRouteSeal,
-                ).slabAuthority.uniformSlabSeal.producerSlots.first().structuralPipelineKey
+                ).units[1].slabAuthority.uniformSlabSeal.producerSlots[1].structuralPipelineKey
                 setPrivateField(
                     authority,
                     "structuralPipelineKey",
@@ -1126,9 +1166,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                 )
             },
             Scenario("authority-foreign-uniform-seal") { fixture, packet ->
-                val coverageSlab = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer>(
+                val coverageSlab = assertIs<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition>(
                     fixture.encoderPlan.scopes.first().corePrimitiveCoverageMaskPreparedRouteSeal,
-                ).slabAuthority.uniformSlabSeal
+                ).units[1].slabAuthority.uniformSlabSeal
                 val foreignSeal = GPUCorePrimitiveUniformSlabSeal(
                     coverageSlab.plan,
                     coverageSlab.plan.slots.indices.toList(),
@@ -1153,7 +1193,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
 
         scenarios.forEach { scenario ->
             val fixture = fixture(routeShape = RouteShape.CoverageMask, useRealPreflight = true)
-            scenario.mutate(fixture, firstConsumer(fixture))
+            scenario.mutate(fixture, secondConsumer(fixture))
             fixture.native.events.clear()
             fixture.native.writeBufferCalls.clear()
             val cacheBefore = fixture.cache.counters()
@@ -1487,7 +1527,11 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             val refused = fixture.materializeCoreResult()
 
             assertEquals(
-                "failed.native-core-primitive.coverage-mask-materialization",
+                if (ordinal == 1) {
+                    "failed.native.coverage-mask.producer-materialization"
+                } else {
+                    "failed.native-core-primitive.coverage-mask-materialization"
+                },
                 assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(refused).code,
                 "upload $ordinal",
             )
@@ -3085,6 +3129,172 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         )
         assertTrue(materialized.draft.disposeBeforeRegistration())
         fixture.close()
+    }
+
+    @Test
+    fun `two analytic path glyphs share one uniform slab and encode one exact 4x native pass`() {
+        val fixture = fixture(
+            routeShape = RouteShape.TwoPathPairs,
+            useRealPreflight = true,
+            analyticClip = true,
+            sampleCount = 4,
+            targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+        )
+        fixture.native.events.clear()
+        fixture.native.writeBufferCalls.clear()
+        fixture.native.bindGroupDescriptors.clear()
+
+        val materialized = fixture.materializeCore()
+        val prepared = requireNotNull(fixture.preparedByPreflight)
+        val render = materialized.draft.payload.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+            .single()
+        val pipelines = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
+        val bindGroups = render.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+
+        assertEquals(
+            listOf(
+                "Kanvas.session.corePrimitive.pipeline.PathStencilProducerWinding",
+                "Kanvas.session.corePrimitive.pipeline.PathStencilCoverAnalyticRectAARegular",
+                "Kanvas.session.corePrimitive.pipeline.PathStencilProducerEvenOdd",
+                "Kanvas.session.corePrimitive.pipeline.PathStencilCoverAnalyticRectAAInverse",
+            ),
+            pipelines.map { it.pipeline.pipeline.toString() },
+        )
+        assertEquals(
+            listOf(2, 2, 3, 3),
+            render.semanticPayloads.map { payload ->
+                assertIs<GPUDrawSemanticPayload.CorePrimitive>(payload).payloadRef.commandIdValue
+            },
+        )
+        assertEquals(
+            listOf(listOf(0L), listOf(0L), listOf(256L), listOf(256L)),
+            bindGroups.map { it.dynamicOffsets },
+        )
+        assertSame(bindGroups[0].bindGroup.bindGroup, bindGroups[2].bindGroup.bindGroup)
+        assertSame(bindGroups[1].bindGroup.bindGroup, bindGroups[3].bindGroup.bindGroup)
+        assertNotSame(bindGroups[0].bindGroup.bindGroup, bindGroups[1].bindGroup.bindGroup)
+
+        val layoutsBySize = fixture.native.bindGroupLayoutDescriptors.associateBy { descriptor ->
+            requireNotNull(descriptor.entries.single().buffer).minBindingSize
+        }
+        assertEquals(setOf(32uL, 64uL), layoutsBySize.keys)
+        val bindingsBySize = fixture.native.bindGroupDescriptors.associate { descriptor ->
+            val binding = assertIs<BufferBinding>(descriptor.entries.single().resource)
+            requireNotNull(binding.size) to binding
+        }
+        assertEquals(setOf(32uL, 64uL), bindingsBySize.keys)
+        assertSame(bindingsBySize.getValue(32uL).buffer, bindingsBySize.getValue(64uL).buffer)
+
+        val uniformUpload = fixture.native.writeBufferCalls.single {
+            it.bufferLabel == "Kanvas.session.corePrimitive.framePool.uniforms"
+        }
+        assertSame(bindingsBySize.getValue(64uL).buffer, uniformUpload.buffer)
+        assertEquals(512uL, uniformUpload.size)
+        assertEquals(512uL, uniformUpload.dataBytes)
+        assertEquals(1, fixture.native.writeBufferCalls.count {
+            it.bufferLabel == "Kanvas.session.corePrimitive.framePool.uniforms"
+        })
+
+        val color = render.pass.colorTarget
+        val resolve = requireNotNull(render.pass.resolveTarget)
+        val depthStencil = requireNotNull(render.pass.depthStencilTarget)
+        assertNotSame(color.view, resolve.view)
+        assertNotSame(color.view, depthStencil.view)
+        assertNotSame(resolve.view, depthStencil.view)
+        assertEquals(GPUPreparedNativeLoadOperation.Clear, render.pass.loadOperation)
+        assertEquals(GPUPreparedNativeLoadOperation.Clear, render.pass.stencilLoadOperation)
+        assertEquals(GPUPreparedNativeStoreOperation.Discard, render.pass.stencilStoreOperation)
+        assertEquals(
+            GPUTextureFormat.RGBA8UnormSrgb,
+            fixture.native.textureDescriptors.single {
+                it.label == "Kanvas.session.corePrimitive.framePool.msaaColor4x"
+            }.format,
+        )
+        val pathDepthStencil = fixture.native.textureDescriptors.single {
+            it.label == "Kanvas.session.corePrimitive.framePool.pathDepthStencil"
+        }
+        assertEquals(GPUTextureFormat.Depth24PlusStencil8, pathDepthStencil.format)
+        assertEquals(4u, pathDepthStencil.sampleCount)
+        assertTrue(fixture.native.renderPipelineDescriptors.all { it.multisample.count == 4u })
+
+        val continuation = requireNotNull(
+            prepared.semanticPlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .single().sampleContinuation,
+        )
+        val sceneTarget = org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget(
+            targetId = continuation.key.target.value,
+            resolvedTexture = GPUTextureResourceRef("prepared:${continuation.key.target.value}"),
+            retainedMsaaAttachment = null,
+            width = TARGET.width,
+            height = TARGET.height,
+            format = continuation.key.colorFormat,
+            colorInterpretation = continuation.key.colorInterpretation,
+            usages = setOf(
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.RenderAttachment,
+            ),
+            sampleCount = 1,
+            deviceGeneration = fixture.generationSeal.deviceGeneration,
+            targetGeneration = fixture.generationSeal.targetGeneration,
+        )
+        val backend = GPUWgpu4kFrameEncodingBackend(
+            fixture.generationSeal.deviceGeneration,
+            fixture.native.device,
+            fixture.native.queue,
+            fixture.target.view,
+        )
+        val encoder = backend.createCommandEncoder("analytic-path-glyph-pair")
+        encoder.encode(
+            prepared.encoderPlan.scopes.single(),
+            prepared,
+            sceneTarget,
+            render,
+        )
+        backend.submit(encoder.finish())
+
+        val counters = backend.counters()
+        assertEquals(1L, counters.encoders)
+        assertEquals(1L, counters.renderPasses)
+        assertEquals(4L, counters.drawIndexed)
+        assertEquals(4L, counters.pipelineBinds)
+        assertEquals(1L, counters.msaaResolves)
+        assertEquals(1L, counters.finishes)
+        assertEquals(1L, counters.submits)
+        assertEquals(0, counters.pendingCommandBuffers)
+        assertEquals(1, fixture.native.events.count { it == "createCommandEncoder" })
+        assertEquals(1, fixture.native.events.count { it == "render.begin" })
+        assertEquals(1, fixture.native.events.count { it == "encoder.finish" })
+        assertEquals(1, fixture.native.events.count { it == "queue.submit" })
+        backend.close()
+
+        assertTrue(materialized.draft.disposeBeforeRegistration())
+        fixture.close()
+        val primaryBindClose = fixture.native.events.indexOf(
+            "close:Kanvas.session.corePrimitive.framePool.bindGroup0",
+        )
+        val analyticBindClose = fixture.native.events.indexOfFirst { event ->
+            event.startsWith("close:Kanvas.session.corePrimitive.framePool.bindGroup0.") &&
+                event != "close:Kanvas.session.corePrimitive.framePool.bindGroup0"
+        }
+        val uniformClose = fixture.native.events.indexOf(
+            "close:Kanvas.session.corePrimitive.framePool.uniforms",
+        )
+        val pathViewClose = fixture.native.events.indexOf(
+            "close:Kanvas.session.corePrimitive.framePool.pathDepthStencil.view",
+        )
+        val pathTextureClose = fixture.native.events.indexOf(
+            "close:Kanvas.session.corePrimitive.framePool.pathDepthStencil",
+        )
+        val msaaViewClose = fixture.native.events.indexOf(
+            "close:Kanvas.session.corePrimitive.framePool.msaaColor4x.view",
+        )
+        val msaaTextureClose = fixture.native.events.indexOf(
+            "close:Kanvas.session.corePrimitive.framePool.msaaColor4x",
+        )
+        assertTrue(primaryBindClose in 0 until uniformClose)
+        assertTrue(analyticBindClose in 0 until uniformClose)
+        assertTrue(pathViewClose in 0 until pathTextureClose)
+        assertTrue(msaaViewClose in 0 until msaaTextureClose)
     }
 
     @Test
@@ -4923,6 +5133,22 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
             }
         }
 
+        fun materializeCoreResult(
+            coverageMaskProducerMaterializer: GPUWgpu4kCoverageMaskProducerMaterializerPort,
+        ): GPUPreparedNativeFramePayloadMaterialization {
+            val materializer = GPUWgpu4kCorePrimitiveFramePayloadMaterializer(
+                native.device,
+                native.queue,
+                target,
+                cache,
+                limits,
+                coverageMaskProducerMaterializer,
+            )
+            return materializer.materializeReusable(plan, encoderPlan, resources, generationSeal).also {
+                materializer.close()
+            }
+        }
+
         fun materializeCore(): GPUPreparedNativeFramePayloadMaterialization.Materialized {
             val result = materializeCoreResult()
             return assertIs(
@@ -4951,6 +5177,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
         val renderPipelineKinds = mutableListOf<String>()
         var readbackCopyCalls = 0
             private set
+        val bindGroupDescriptors = mutableListOf<BindGroupDescriptor>()
         val bindGroupLayoutDescriptors = mutableListOf<BindGroupLayoutDescriptor>()
         val textureDescriptors = mutableListOf<TextureDescriptor>()
         val renderPipelineDescriptors = mutableListOf<RenderPipelineDescriptor>()
@@ -4997,6 +5224,7 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     } else if (label == "Kanvas.frame.preparedImage.texture" ||
                         label == "Kanvas.frame.preparedText.r8-page" ||
                         label == "Kanvas.frame.preparedText.text-atlas" ||
+                        label == "Kanvas.frame.colorGlyph.destinationSnapshot" ||
                         label.startsWith("Kanvas.frame.preparedText.material-texture.")
                     ) {
                         val imageViewLabel = when {
@@ -5006,6 +5234,8 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                                 "Kanvas.frame.preparedText.r8-page-view"
                             label == "Kanvas.frame.preparedText.text-atlas" ->
                                 "Kanvas.frame.preparedText.text-atlas-view"
+                            label == "Kanvas.frame.colorGlyph.destinationSnapshot" ->
+                                "Kanvas.frame.colorGlyph.destinationSnapshot-view"
                             else -> label.replace("material-texture.", "material-texture-view.")
                         }
                         handle(GPUTexture::class.java, label) { textureMethod ->
@@ -5032,7 +5262,9 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     recordedHandle(GPUBuffer::class.java, label)
                 }
                 "createBindGroup" -> {
-                    val label = (args?.firstOrNull() as BindGroupDescriptor).label.orEmpty()
+                    val descriptor = args?.firstOrNull() as BindGroupDescriptor
+                    bindGroupDescriptors += descriptor
+                    val label = descriptor.label.orEmpty()
                     events += "createBindGroup:$label"
                     failIfRequested("createBindGroup")
                     recordedHandle(method.returnType, label)
@@ -5054,7 +5286,10 @@ class GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest {
                     events += method.name
                     recordedHandle(method.returnType, method.name)
                 }
-                "createCommandEncoder" -> frameCommandEncoder()
+                "createCommandEncoder" -> {
+                    events += "createCommandEncoder"
+                    frameCommandEncoder()
+                }
                 "createShaderModule", "createPipelineLayout" -> {
                     events += method.name
                     handle(method.returnType, method.name)

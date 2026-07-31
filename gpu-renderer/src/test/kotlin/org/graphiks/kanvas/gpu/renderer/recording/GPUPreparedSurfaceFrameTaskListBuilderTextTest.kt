@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -22,8 +23,14 @@ import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactKey
 import org.graphiks.kanvas.glyph.gpu.GPUTextFloatRect
 import org.graphiks.kanvas.glyph.gpu.GPUTextSourceGlyphIndex
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipOrderingToken
 import org.graphiks.kanvas.gpu.renderer.images.AlphaType
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactFactory
 import org.graphiks.kanvas.gpu.renderer.images.GPUPreparedImageArtifactResult
@@ -39,6 +46,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUImplementationIdentity
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.execution.GPUPreparedSurfaceNativePreflight
@@ -98,6 +106,223 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import kotlin.uuid.Uuid
 
 class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
+    @Test
+    fun `ColorGlyph destination read records one exact final packet snapshot association`() {
+        val atlas = atlas(
+            "atlas:color-destination-read",
+            generation = 7,
+            bytes = byteArrayOf(1, 2, 3, 4),
+        )
+        val destinationBlend = GPUBlendPlan.ShaderBlendWithDstRead(
+            mode = GPUBlendMode.COLOR_DODGE,
+            formulaId = "color_dodge@v1",
+            sourceCoverageEncoding = GPUSourceCoverageEncoding.ScalarCoverageInShader,
+        )
+        val analyticClip = GPUClipExecutionPlan.AnalyticCoverage(
+            geometry = GPUClipExecutionGeometry.Rect(
+                GPUBounds(0.25f, 0.5f, 14.75f, 15.5f),
+            ),
+            scissor = BOUNDS,
+            antiAlias = true,
+        )
+        val semantic = colorSemantic(
+            commandId = 0,
+            atlas = atlas,
+            blendPlanIdentity = destinationBlend.canonicalIdentity(),
+            clipIdentity = analyticClip.canonicalIdentity(),
+        )
+        val result = GPUPreparedSurfaceFrameTaskListBuilder().build(
+            GPUPreparedSurfaceFrameRequest(
+                baseTaskList = baseTaskList(
+                    commandIds = listOf(0),
+                    renderStepByCommandId = mapOf(0 to COLOR_GLYPH_RENDER_STEP_IDENTITY),
+                    semanticsByCommandId = mapOf(0 to semantic),
+                    packetTransform = { packet, _ ->
+                        packet.rebuiltForPreparedTextTest(
+                            blendPlan = destinationBlend,
+                            clipExecutionPlan = analyticClip,
+                        )
+                    },
+                ),
+                capabilities = capabilities(),
+                target = TARGET,
+                targetBounds = BOUNDS,
+                semanticsByCommandId = mapOf(0 to semantic),
+                readbackRequestId = null,
+                targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+            ),
+        )
+
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            result,
+            (result as? GPUPreparedSurfaceFrameResult.Refused)?.diagnostic.toString(),
+        ).taskList
+        val render = taskList.tasks.filterIsInstance<GPUTask.Render>().single()
+        val packet = render.drawPackets.single()
+        val framePlan = GPUFramePlanner.plan(taskList)
+        assertTrue(!framePlan.atomicallyRefused, framePlan.diagnostics.joinToString())
+        val snapshots = taskList.tasks.filterIsInstance<GPUTask.DestinationSnapshots>().single()
+        val operation = assertIs<GPUDestinationSnapshotOperation.TextureCopy>(
+            snapshots.payload.operations.single(),
+        )
+        assertEquals(
+            GPUDestinationSnapshotConsumerRef(
+                groupingCommandId = packet.commandIdValue.toString(),
+                renderTaskId = render.taskId,
+                packetId = packet.packetId,
+                commandId = GPUDrawCommandID(packet.commandIdValue),
+            ),
+            operation.consumers.single(),
+        )
+        assertTrue(taskList.dependencies.any { dependency ->
+            dependency.fromTaskId == snapshots.taskId &&
+                dependency.toTaskId == render.taskId
+        })
+        assertTrue(taskList.dependencies.any { dependency ->
+            dependency.toTaskId == snapshots.taskId &&
+                taskList.tasks.single { task -> task.taskId == dependency.fromTaskId } is
+                    GPUTask.PrepareResources
+        })
+        val copyIndex = framePlan.steps.indexOfFirst {
+            it is GPUFrameStep.CopyDestinationStep
+        }
+        val renderIndex = framePlan.steps.indexOfFirst { step ->
+            step is GPUFrameStep.RenderPassStep &&
+                step.drawPackets.any { candidate -> candidate.packetId == packet.packetId }
+        }
+        assertTrue(copyIndex >= 0 && copyIndex < renderIndex)
+        assertNull(
+            GPUPreparedSurfaceNativePreflight().validateFramePlan(
+                framePlan = framePlan,
+                capabilities = capabilities().let { observed ->
+                    observed.copy(
+                        supportedTextureFormats =
+                            observed.supportedTextureFormats + GPUTextureFormat.R8Unorm,
+                    )
+                },
+            ),
+        )
+    }
+
+    @Test
+    fun `ColorGlyph destination mask records one shared producer and exact operand order`() {
+        val atlas = atlas(
+            "atlas:color-destination-mask",
+            generation = 7,
+            bytes = byteArrayOf(1, 2, 3, 4),
+        )
+        val destinationBlend = GPUBlendPlan.ShaderBlendWithDstRead(
+            mode = GPUBlendMode.COLOR_DODGE,
+            formulaId = "color_dodge@v1",
+            sourceCoverageEncoding = GPUSourceCoverageEncoding.ScalarCoverageInShader,
+        )
+        val maskPlan = GPUClipExecutionPlan.CoverageMask(
+            contentKey = "clip:color-destination-mask",
+            bounds = BOUNDS,
+            sampleCount = 1,
+            depthStencilRequired = false,
+            orderingToken = GPUClipOrderingToken("clip-order:color-destination-mask"),
+            producers = listOf(
+                GPUClipMaskProducerPlan(
+                    sourceOrder = 0,
+                    geometry = GPUClipExecutionGeometry.Rect(
+                        GPUBounds(0f, 0f, 16f, 16f),
+                    ),
+                    combine = GPUClipMaskCombine.Intersect,
+                    antiAlias = false,
+                ),
+                GPUClipMaskProducerPlan(
+                    sourceOrder = 1,
+                    geometry = GPUClipExecutionGeometry.Rect(
+                        GPUBounds(2f, 2f, 4f, 4f),
+                    ),
+                    combine = GPUClipMaskCombine.Difference,
+                    antiAlias = false,
+                ),
+            ),
+            consumer = GPUClipMaskConsumerPlan(),
+        )
+        val semantic = colorSemantic(
+            commandId = 0,
+            atlas = atlas,
+            blendPlanIdentity = destinationBlend.canonicalIdentity(),
+            clipIdentity = "clip-semantic:color-destination-mask",
+        )
+        val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+            GPUPreparedSurfaceFrameTaskListBuilder().build(
+                GPUPreparedSurfaceFrameRequest(
+                    baseTaskList = baseTaskList(
+                        commandIds = listOf(0),
+                        renderStepByCommandId =
+                            mapOf(0 to COLOR_GLYPH_RENDER_STEP_IDENTITY),
+                        semanticsByCommandId = mapOf(0 to semantic),
+                        packetTransform = { packet, _ ->
+                            packet.rebuiltForPreparedTextTest(
+                                blendPlan = destinationBlend,
+                                clipExecutionPlan = maskPlan,
+                            )
+                        },
+                    ),
+                    capabilities = capabilities(),
+                    target = TARGET,
+                    targetBounds = BOUNDS,
+                    semanticsByCommandId = mapOf(0 to semantic),
+                    readbackRequestId = null,
+                    targetFormat = GPUColorFormat.RGBA8UnormSrgb,
+                ),
+            ),
+        ).taskList
+
+        val producer = taskList.tasks.filterIsInstance<GPUTask.Render>().single { render ->
+            render.drawPackets.all { packet -> packet.role == GPUDrawPacketRole.ClipProducer }
+        }
+        val consumer = taskList.tasks.filterIsInstance<GPUTask.Render>().single { render ->
+            render.drawPackets.any { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph
+            }
+        }
+        val consumerPacket = consumer.drawPackets.single()
+        val binding = consumer.preparedTextBindingsByPacketId.getValue(consumerPacket.packetId)
+        val maskResource = assertNotNull(binding.coverageMaskResource)
+        val maskPreparation = taskList.tasks
+            .filterIsInstance<GPUTask.PrepareResources>()
+            .single()
+            .requests
+            .single { request -> request.role == GPUFrameResourceRole.ClipMask }
+
+        assertEquals(2, producer.drawPackets.size)
+        assertEquals(maskResource, producer.target)
+        assertEquals(maskResource, maskPreparation.resource)
+        assertEquals(
+            listOf(maskResource),
+            consumer.resourceUses
+                .filter { use -> use.role == GPUFrameResourceRole.ClipMask }
+                .map { use -> use.resource },
+        )
+        assertTrue(taskList.dependencies.any { dependency ->
+            dependency.fromTaskId == producer.taskId &&
+                dependency.toTaskId == consumer.taskId &&
+                dependency.dependencyKind == "clip-producer-consumer" &&
+                dependency.useToken?.value == maskPlan.orderingToken.value
+        })
+
+        val colorPlan = binding.colorGlyphBufferPlan
+        val orderedOperandResources = listOf(
+            binding.atlasResourcePlan.frameTextureRef,
+            binding.instanceBufferPlan.bufferRef,
+            maskResource,
+            colorPlan.vertexBufferRef,
+            colorPlan.indexBufferRef,
+            colorPlan.uniformBufferRef,
+        )
+        assertEquals(
+            orderedOperandResources,
+            consumer.resourceUses
+                .map { use -> use.resource }
+                .filter { resource -> resource in orderedOperandResources },
+        )
+    }
+
     @TestFactory
     fun `ColorGlyph packet facts are canonical before prepared surface recording`():
         List<DynamicTest> {
@@ -182,7 +407,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
     }
 
     @Test
-    fun `TextA8 draw uniforms use the exact 48 byte ABI with aligned immutable slices`() {
+    fun `TextA8 draw uniforms use the exact 80 byte ABI with aligned immutable slices`() {
         val atlas = atlas("atlas:draw-uniforms", generation = 7, bytes = byteArrayOf(1, 2, 3, 4))
         val material = preparedMaterial("material:draw-uniforms")
         val firstAffine = GPUPreparedTextDeviceToLocalAffine(
@@ -223,16 +448,16 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
             .flatMap { render -> render.preparedTextBindingsByPacketId.values }
         val plan = bindings.first().drawUniformBufferPlan
         assertSame(plan, bindings.last().drawUniformBufferPlan)
-        assertEquals(48L, plan.logicalSliceSizeBytes)
+        assertEquals(80L, plan.logicalSliceSizeBytes)
         assertEquals(256L, plan.alignmentBytes)
         assertEquals(listOf(0L, 256L), plan.slices.map { it.offsetBytes })
-        assertEquals(listOf(48L, 48L), plan.slices.map { it.sizeBytes })
+        assertEquals(listOf(80L, 80L), plan.slices.map { it.sizeBytes })
         assertEquals(512L, plan.byteSize)
         assertEquals(plan.slices, bindings.map { it.drawUniformSlice })
 
         val bytes = plan.bytesForUpload()
-        assertTrue(bytes.sliceArray(48 until 256).all { it == 0.toByte() })
-        assertTrue(bytes.sliceArray(304 until 512).all { it == 0.toByte() })
+        assertTrue(bytes.sliceArray(80 until 256).all { it == 0.toByte() })
+        assertTrue(bytes.sliceArray(336 until 512).all { it == 0.toByte() })
         fun floatsAt(offset: Int): List<Float> = ByteBuffer.wrap(bytes)
             .order(ByteOrder.LITTLE_ENDIAN)
             .also { it.position(offset) }
@@ -251,7 +476,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         assertEquals(listOf(secondAffine.m10, secondAffine.m11, secondAffine.m12, 0f), floatsAt(288))
         plan.slices.forEach { slice ->
             assertEquals(
-                sha256(bytes.copyOfRange(slice.offsetBytes.toInt(), (slice.offsetBytes + 48L).toInt())),
+                sha256(bytes.copyOfRange(slice.offsetBytes.toInt(), (slice.offsetBytes + 80L).toInt())),
                 slice.contentHash,
             )
         }
@@ -740,10 +965,16 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
             GPUPreparedTextDrawUniformInput(
                 GPUDrawPacketID("packet.draw-uniform.0"),
                 textSemantic(0, atlas, 11),
+                GPUPreparedTextClipPlan.Direct(
+                    GPUClipExecutionPlan.NoClip.canonicalIdentity(),
+                ),
             ),
             GPUPreparedTextDrawUniformInput(
                 GPUDrawPacketID("packet.draw-uniform.1"),
                 textSemantic(1, atlas, 12),
+                GPUPreparedTextClipPlan.Direct(
+                    GPUClipExecutionPlan.NoClip.canonicalIdentity(),
+                ),
             ),
         )
         val invalidAlignment = assertIs<GPUPreparedTextDrawUniformPlanResult.Refused>(
@@ -1062,6 +1293,10 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
     private fun colorSemantic(
         commandId: Int,
         atlas: GPUPreparedR8UploadArtifact,
+        blendPlanIdentity: String = requireNotNull(
+            packet(commandId, COLOR_GLYPH_RENDER_STEP_IDENTITY).blendPlan,
+        ).canonicalIdentity(),
+        clipIdentity: String = "clip:none",
     ): GPUDrawSemanticPayload.ColorGlyph {
         val planKey = GPUTextArtifactKey(
             GPUTextArtifactID(Uuid.parse("550e8400-e29b-41d4-a716-446655440071")),
@@ -1112,10 +1347,8 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
                 material = preparedMaterial("material:color:$commandId"),
                 targetBounds = BOUNDS,
                 scissorBounds = BOUNDS,
-                clipIdentity = "clip:none",
-                blendPlanIdentity = requireNotNull(
-                    packet(commandId, COLOR_GLYPH_RENDER_STEP_IDENTITY).blendPlan,
-                ).canonicalIdentity(),
+                clipIdentity = clipIdentity,
+                blendPlanIdentity = blendPlanIdentity,
                 capabilitySnapshotHash = "capability:text",
                 frameProvenance = GPUFrameProvenance.GmContent,
             ),
@@ -1343,7 +1576,11 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
                 alpha = GPUFixedFunctionBlendComponent("one", "one-minus-src-alpha", "add"),
                 writeMask = "rgba",
             ),
-            sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+            sourceCoverageEncoding = if (renderStepIdentity == "text.a8_mask.sample") {
+                GPUSourceCoverageEncoding.ModulateRGBA
+            } else {
+                GPUSourceCoverageEncoding.None
+            },
         ),
         renderPipelineKey = GPURenderPipelineKey("pending.pipeline.text"),
         bindingLayoutHash = "pending.layout.text",
@@ -1352,22 +1589,8 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
         originalPaintOrder = commandId,
         resourceGeneration = 7,
         frameProvenance = GPUFrameProvenance.GmContent,
-        clipCoveragePlan = if (
-            renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
-            renderStepIdentity == "image.draw.texture_upload"
-        ) {
-            GPUClipCoveragePlan.NoClip
-        } else {
-            null
-        },
-        clipExecutionPlan = if (
-            renderStepIdentity == CORE_PRIMITIVE_RENDER_STEP_IDENTITY ||
-            renderStepIdentity == "image.draw.texture_upload"
-        ) {
-            GPUClipExecutionPlan.NoClip
-        } else {
-            null
-        },
+        clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+        clipExecutionPlan = GPUClipExecutionPlan.NoClip,
     )
 
     private fun capabilities() = GPUCapabilities(
@@ -1417,6 +1640,7 @@ class GPUPreparedSurfaceFrameTaskListBuilderTextTest {
 }
 
 private fun GPUDrawPacket.rebuiltForPreparedTextTest(
+    blendPlan: GPUBlendPlan? = this.blendPlan,
     renderPipelineKey: GPURenderPipelineKey? = this.renderPipelineKey,
     bindingLayoutHash: String = this.bindingLayoutHash,
     uniformSlot:
@@ -1425,6 +1649,7 @@ private fun GPUDrawPacket.rebuiltForPreparedTextTest(
     vertexSourceLabel: String = this.vertexSourceLabel,
     scissorBoundsHash: String? = this.scissorBoundsHash,
     targetStateHash: String = this.targetStateHash,
+    clipExecutionPlan: GPUClipExecutionPlan? = this.clipExecutionPlan,
 ): GPUDrawPacket = GPUDrawPacket(
     packetId = packetId,
     commandIdValue = commandIdValue,

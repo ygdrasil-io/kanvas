@@ -1,11 +1,15 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.stream.Stream
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
@@ -14,12 +18,15 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
+import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.KanvasGlyphRun
@@ -28,6 +35,8 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
+import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.TestFactory
 
 class GPUPreparedSurfaceTextNativeSmokeTest {
     @AfterTest
@@ -35,13 +44,244 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
         GPUBackendRuntimeFactory.dispose()
     }
 
+    @TestFactory
+    fun `prepared text partial paint alpha preserves independent source coverage encodings`(): Stream<DynamicTest> =
+        listOf(BlendMode.CLEAR, BlendMode.DST_IN, BlendMode.MODULATE).flatMap { blendMode ->
+            PartialAlphaClipContext.entries.map { context ->
+                DynamicTest.dynamicTest("${blendMode.name}/${context.name}") {
+                    val typeface = FontTypeface(
+                        GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+                        "Task 14 partial-alpha ${blendMode.name}/${context.name}",
+                    )
+                    val shaderColor = Color.fromRGBA(1f, 0f, 0f, 0.5f)
+                    val shader = Shader.LinearGradient(
+                        start = Point(0f, 0f),
+                        end = Point(40f, 0f),
+                        stops = listOf(
+                            GradientStop(0f, shaderColor),
+                            GradientStop(1f, shaderColor),
+                        ),
+                    )
+                    val paint = Paint.fill(Color.fromRGBA(1f, 1f, 1f, 0.6f)).copy(
+                        shader = shader,
+                        blendMode = blendMode,
+                    )
+                    val glyph = text(
+                        typeface,
+                        GPUPreparedTextTestFixtures.A8_GLYPH_ID,
+                        4,
+                        58,
+                        Color.WHITE,
+                        paint,
+                    ).copy(
+                        x = 4.5f,
+                        clip = when (context) {
+                            PartialAlphaClipContext.UNCLIPPED -> ClipStack.WideOpen
+                            PartialAlphaClipContext.SCISSOR -> ClipStack.DeviceRect(
+                                rect = Rect.fromLTRB(0f, 0f, 20f, 80f),
+                                antiAlias = false,
+                            )
+                        },
+                    )
+                    val destination = DisplayOp.DrawRect(
+                        rect = Rect.fromLTRB(0f, 0f, 40f, 80f),
+                        paint = Paint.fill(Color.WHITE).copy(antiAlias = false),
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.WideOpen,
+                    )
+
+                    val result = execute(
+                        operations = listOf(destination, glyph),
+                        width = 40,
+                        height = 80,
+                        output = GPUPreparedSurfaceRequestedOutput.ReadbackRgba,
+                    )
+
+                    val expected = expectedPartialAlphaBlend(
+                        blendMode = blendMode,
+                        glyphCoverage = 128f / 255f,
+                    )
+                    val actual = pixelAt(result.rgba, width = 40, x = 4, y = 58)
+                    val delta = GPUPreparedTextPixelOracle.maxChannelDelta(actual, expected)
+                    assertTrue(
+                        delta <= 1,
+                        "${blendMode.name}/${context.name} must apply partial paint alpha to S, " +
+                            "not fractional glyph coverage F; expected=${expected.toUnsignedList()} " +
+                            "actual=${actual.toUnsignedList()} delta=$delta",
+                    )
+                    println(
+                        "task14.partial-alpha ${blendMode.name}/${context.name} F=128/255 " +
+                            "expected=${expected.toUnsignedList()} actual=${actual.toUnsignedList()} delta=$delta",
+                    )
+                    if (context == PartialAlphaClipContext.SCISSOR) {
+                        assertTrue(
+                            deltaAt(
+                                result.rgba,
+                                width = 40,
+                                x = 24,
+                                y = 58,
+                                expected = byteArrayOf(
+                                    255.toByte(),
+                                    255.toByte(),
+                                    255.toByte(),
+                                    255.toByte(),
+                                ),
+                            ) <= 1,
+                            "SCISSOR must preserve the destination outside its bounds",
+                        )
+                    }
+                }
+            }
+        }.stream()
+
     @Test
-    fun `completion only text frame closes then a recreated runtime reads back`() {
+    fun `prepared text executes fractional analytic coverage before native blending`() {
+        val typeface = FontTypeface(
+            GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+            "Task 14 coverage-mask RED",
+        )
+        val clipped = text(
+            typeface,
+            GPUPreparedTextTestFixtures.A8_GLYPH_ID,
+            4,
+            58,
+            Color.WHITE,
+        ).copy(
+            clip = ClipStack.DeviceRect(
+                rect = Rect.fromLTRB(16.5f, 0f, 40f, 80f),
+                antiAlias = true,
+            ),
+        )
+
+        val result = execute(
+            operations = listOf(clipped),
+            width = 40,
+            height = 80,
+            output = GPUPreparedSurfaceRequestedOutput.ReadbackRgba,
+        )
+
+        assertTrue(
+            deltaAt(
+                result.rgba,
+                width = 40,
+                x = 16,
+                y = 58,
+                expected = byteArrayOf(
+                    188.toByte(),
+                    188.toByte(),
+                    188.toByte(),
+                    128.toByte(),
+                ),
+            ) <= 1,
+            "fractional clip edge must multiply glyph A8 coverage exactly once",
+        )
+        assertTrue(
+            deltaAt(
+                result.rgba,
+                width = 40,
+                x = 15,
+                y = 58,
+                expected = byteArrayOf(0, 0, 0, 0),
+            ) <= 1,
+            "coverage mask exterior must remain untouched",
+        )
+    }
+
+    @Test
+    fun `prepared text samples ordered complex coverage mask before native blending`() {
+        val typeface = FontTypeface(
+            GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+            "Task 14 ordered coverage-mask RED",
+        )
+        val clipped = text(
+            typeface,
+            GPUPreparedTextTestFixtures.A8_GLYPH_ID,
+            4,
+            58,
+            Color.WHITE,
+        ).copy(
+            clip = ClipStack.Complex(
+                listOf(
+                    ClipStackOp.RectOp(
+                        rect = Rect.fromLTRB(8f, 0f, 32f, 80f),
+                        op = ClipOp.INTERSECT,
+                        antiAlias = false,
+                    ),
+                    ClipStackOp.RectOp(
+                        rect = Rect.fromLTRB(14f, 0f, 18f, 80f),
+                        op = ClipOp.DIFFERENCE,
+                        antiAlias = false,
+                    ),
+                ),
+            ),
+        )
+
+        val result = execute(
+            operations = listOf(clipped),
+            width = 40,
+            height = 80,
+            output = GPUPreparedSurfaceRequestedOutput.ReadbackRgba,
+        )
+
+        assertTrue(
+            deltaAt(
+                result.rgba,
+                width = 40,
+                x = 10,
+                y = 58,
+                expected = byteArrayOf(
+                    255.toByte(),
+                    255.toByte(),
+                    255.toByte(),
+                    255.toByte(),
+                ),
+            ) <= 1,
+            "coverage-mask intersection interior must retain the glyph",
+        )
+        listOf(6, 15).forEach { x ->
+            assertTrue(
+                deltaAt(
+                    result.rgba,
+                    width = 40,
+                    x = x,
+                    y = 58,
+                    expected = byteArrayOf(0, 0, 0, 0),
+                ) <= 1,
+                "coverage-mask exterior/difference hole must remain untouched at x=$x",
+            )
+        }
+    }
+
+    @Test
+    fun `completion only coverage mask text closes then a recreated runtime reads back`() {
         val typeface = FontTypeface(
             GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
             "Task 13 completion-only",
         )
-        val operations = listOf(text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 4, 58, Color.WHITE))
+        val operations = listOf(
+            text(
+                typeface,
+                GPUPreparedTextTestFixtures.A8_GLYPH_ID,
+                4,
+                58,
+                Color.WHITE,
+            ).copy(
+                clip = ClipStack.Complex(
+                    listOf(
+                        ClipStackOp.RectOp(
+                            rect = Rect.fromLTRB(0f, 0f, 40f, 80f),
+                            op = ClipOp.INTERSECT,
+                            antiAlias = false,
+                        ),
+                        ClipStackOp.RectOp(
+                            rect = Rect.fromLTRB(35f, 0f, 38f, 80f),
+                            op = ClipOp.DIFFERENCE,
+                            antiAlias = false,
+                        ),
+                    ),
+                ),
+            ),
+        )
 
         val completionOnly = execute(
             operations,
@@ -374,4 +614,49 @@ class GPUPreparedSurfaceTextNativeSmokeTest {
             expected,
         )
     }
+
+    private fun pixelAt(rgba: ByteArray, width: Int, x: Int, y: Int): ByteArray {
+        val offset = (y * width + x) * 4
+        return rgba.copyOfRange(offset, offset + 4)
+    }
+
+    private fun expectedPartialAlphaBlend(
+        blendMode: BlendMode,
+        glyphCoverage: Float,
+    ): ByteArray {
+        val paintAlpha = 0.6f
+        val materialPremul = floatArrayOf(0.5f, 0f, 0f, 0.5f)
+        val source = FloatArray(4) { channel -> materialPremul[channel] * paintAlpha }
+        val destination = floatArrayOf(1f, 1f, 1f, 1f)
+        val output = when (blendMode) {
+            BlendMode.CLEAR ->
+                FloatArray(4) { channel -> destination[channel] * (1f - glyphCoverage) }
+            BlendMode.DST_IN ->
+                FloatArray(4) { channel ->
+                    destination[channel] * (1f - glyphCoverage * (1f - source[3]))
+                }
+            BlendMode.MODULATE ->
+                FloatArray(4) { channel ->
+                    destination[channel] * (1f - glyphCoverage * (1f - source[channel]))
+                }
+            else -> error("Unexpected partial-alpha blend $blendMode")
+        }
+        return ByteArray(4) { channel ->
+            val value = if (channel == 3) output[channel] else linearToSrgb(output[channel])
+            (value * 255f).roundToInt().coerceIn(0, 255).toByte()
+        }
+    }
+
+    private fun linearToSrgb(value: Float): Float {
+        val clamped = value.coerceIn(0f, 1f)
+        return if (clamped <= .0031308f) {
+            clamped * 12.92f
+        } else {
+            1.055f * clamped.pow(1f / 2.4f) - .055f
+        }
+    }
+
+    private fun ByteArray.toUnsignedList(): List<Int> = map { byte -> byte.toInt() and 0xff }
+
+    private enum class PartialAlphaClipContext { UNCLIPPED, SCISSOR }
 }

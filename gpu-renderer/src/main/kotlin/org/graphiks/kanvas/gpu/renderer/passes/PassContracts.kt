@@ -323,6 +323,10 @@ class GPUDrawPacket(
     internal var corePrimitivePreparedAuthority: GPUCorePrimitivePreparedPacketAuthority? = null
         private set
 
+    internal var coverageMaskProducerUniformSlabSeal:
+        GPUCoverageMaskProducerUniformSlabSeal? = null
+        private set
+
     internal var corePrimitiveClipStencilPreparedCandidate:
         GPUCorePrimitiveClipStencilPreparedCandidate? = null
         private set
@@ -358,8 +362,28 @@ class GPUDrawPacket(
                 producerSlot.renderPipelineKey == authority.renderPipelineKey &&
                 producerSlot.bindingLayoutHash == bindingLayoutHash
             ) { "Coverage-mask producer prepared authority must match its exact sealed producer slot" }
+            attachCoverageMaskProducerUniformSlabSeal(coverageSeal.producerUniformSlabSeal)
         }
         corePrimitivePreparedAuthority = authority
+        return this
+    }
+
+    internal fun attachCoverageMaskProducerUniformSlabSeal(
+        seal: GPUCoverageMaskProducerUniformSlabSeal,
+    ): GPUDrawPacket {
+        check(coverageMaskProducerUniformSlabSeal == null) {
+            "Coverage-mask producer uniform slab seal is already attached"
+        }
+        require(role == GPUDrawPacketRole.ClipProducer) {
+            "Only a CoverageMask ClipProducer may retain the common producer slab seal"
+        }
+        val producerSlot = seal.producerSlotFor(packetId)
+        require(producerSlot != null &&
+            producerSlot.commandId == commandIdValue &&
+            producerSlot.renderPipelineKey == renderPipelineKey &&
+            producerSlot.bindingLayoutHash == bindingLayoutHash
+        ) { "Coverage-mask producer packet must match its exact common producer slab slot" }
+        coverageMaskProducerUniformSlabSeal = seal
         return this
     }
 

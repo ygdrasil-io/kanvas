@@ -37,8 +37,9 @@ internal class GPUPreparedSurfaceTerminalException(
  * Process-wide owner of the shared mono-backend runtime.
  *
  * Both prepared and legacy Surface work is kept under this owner so a
- * before-entry refusal can continue through legacy rendering without allowing
- * another frame to overlap the shared runtime.
+ * an eligible before-entry refusal can continue through legacy rendering
+ * without allowing another frame to overlap the shared runtime. Prepared
+ * image and text refusals are terminal before this boundary.
  */
 private object GPUPreparedSurfaceRuntimeOwner {
     val lock = ReentrantLock(true)

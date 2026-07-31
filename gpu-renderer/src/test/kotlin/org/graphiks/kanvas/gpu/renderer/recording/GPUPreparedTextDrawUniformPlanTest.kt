@@ -46,7 +46,7 @@ class GPUPreparedTextDrawUniformPlanTest {
 
     @Test
     fun `public plan rejects nonzero bytes in trailing slice padding`() {
-        val bytes = ByteArray(256).also { it[48] = 1 }
+        val bytes = ByteArray(256).also { it[80] = 1 }
 
         assertFailsWith<IllegalArgumentException> {
             plan(bytes = bytes, offsets = listOf(0L))

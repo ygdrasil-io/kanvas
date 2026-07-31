@@ -27,6 +27,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextInstanceBufferP
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextMaterialUniformBufferPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterialTextureFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUPreparedTextureUploadLayout
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
 
@@ -100,7 +101,18 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
         plan: GPUPreparedTextRenderRunPlan,
         actualDeviceGeneration: GPUDeviceGenerationID,
         preparedR8Resources: GPUWgpu4kPreparedR8FrameResources,
+        coverageMaskViews: Map<GPUFrameTargetRef, GPUTextureView> = emptyMap(),
     ): GPUPreparedRenderRunMaterialization {
+        val requiredCoverageMasks = plan.bindings
+            .mapNotNull(GPUPreparedTextRenderBinding::coverageMaskResource)
+            .toSet()
+        if (coverageMaskViews.keys != requiredCoverageMasks) {
+            return GPUPreparedRenderRunMaterialization.Refused(
+                code = "invalid.native.prepared-text.coverage-mask-resources",
+                message = "Prepared TextA8 CoverageMask views must exactly match sealed resources.",
+                facts = mapOf("boundary" to "native"),
+            )
+        }
         val acquisitions = when (
             val result = sessionCache.acquireBatch(
                 plan.bindings.map(GPUPreparedTextRenderBinding::nativeProgram),
@@ -270,65 +282,98 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
                 ).track(created)
                 val atlas = atlasNative.getValue(binding.atlasResourcePlan)
                 val atlasGroup = createAtlasGroup(acquisition, atlas.view).track(created)
-                val commands = listOf(
-                    GPUPreparedNativeRenderCommand.SetPipeline(
-                        GPUPreparedNativeRenderPipelineOperand.fromPreparedTextAcquisition(
-                            acquisition,
-                            actualDeviceGeneration,
+                val coverageMaskGroup = binding.coverageMaskResource?.let { resource ->
+                    createCoverageMaskGroup(
+                        acquisition,
+                        binding.nativeProgram.coverageMaskTextureBinding,
+                        coverageMaskViews.getValue(resource),
+                    ).track(created)
+                }
+                val commands = buildList {
+                    add(
+                        GPUPreparedNativeRenderCommand.SetPipeline(
+                            GPUPreparedNativeRenderPipelineOperand.fromPreparedTextAcquisition(
+                                acquisition,
+                                actualDeviceGeneration,
+                            ),
                         ),
-                    ),
-                    GPUPreparedNativeRenderCommand.SetBindGroup(
-                        0,
-                        GPUPreparedNativeBindGroupOperand(
-                            drawGroup,
-                            actualDeviceGeneration,
-                            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    )
+                    add(
+                        GPUPreparedNativeRenderCommand.SetBindGroup(
+                            0,
+                            GPUPreparedNativeBindGroupOperand(
+                                drawGroup,
+                                actualDeviceGeneration,
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            ),
+                            dynamicOffsets = listOf(binding.drawUniformSlice.offsetBytes),
                         ),
-                        dynamicOffsets = listOf(binding.drawUniformSlice.offsetBytes),
-                    ),
-                    GPUPreparedNativeRenderCommand.SetBindGroup(
-                        1,
-                        GPUPreparedNativeBindGroupOperand(
-                            materialGroup,
-                            actualDeviceGeneration,
-                            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    )
+                    add(
+                        GPUPreparedNativeRenderCommand.SetBindGroup(
+                            1,
+                            GPUPreparedNativeBindGroupOperand(
+                                materialGroup,
+                                actualDeviceGeneration,
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            ),
+                            dynamicOffsets = if (binding.materialUniformBufferPlan == null) {
+                                emptyList()
+                            } else {
+                                listOf(binding.materialUniformOffsetBytes)
+                            },
                         ),
-                        dynamicOffsets = if (binding.materialUniformBufferPlan == null) {
-                            emptyList()
-                        } else {
-                            listOf(binding.materialUniformOffsetBytes)
-                        },
-                    ),
-                    GPUPreparedNativeRenderCommand.SetBindGroup(
-                        2,
-                        GPUPreparedNativeBindGroupOperand(
-                            atlasGroup,
-                            actualDeviceGeneration,
-                            GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    )
+                    add(
+                        GPUPreparedNativeRenderCommand.SetBindGroup(
+                            2,
+                            GPUPreparedNativeBindGroupOperand(
+                                atlasGroup,
+                                actualDeviceGeneration,
+                                GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                            ),
                         ),
-                    ),
-                    GPUPreparedNativeRenderCommand.SetVertexBuffer(
-                        slot = 0,
-                        buffer = instanceOperand,
-                        offset = 0L,
-                        size = requireNotNull(instanceOperand.byteCapacity),
-                        vertexStrideBytes = 64L,
-                    ),
-                    GPUPreparedNativeRenderCommand.SetScissor(
-                        packet.scissorBounds.left,
-                        packet.scissorBounds.top,
-                        packet.scissorBounds.width,
-                        packet.scissorBounds.height,
-                    ),
-                    GPUPreparedNativeRenderCommand.Draw(
-                        GPUPreparedNativeDrawCall.Draw(
-                            vertexCount = 6,
-                            instanceCount = binding.instanceCount,
-                            firstVertex = 0,
-                            firstInstance = binding.firstInstance,
+                    )
+                    if (coverageMaskGroup != null) {
+                        add(
+                            GPUPreparedNativeRenderCommand.SetBindGroup(
+                                3,
+                                GPUPreparedNativeBindGroupOperand(
+                                    coverageMaskGroup,
+                                    actualDeviceGeneration,
+                                    GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                                ),
+                            ),
+                        )
+                    }
+                    add(
+                        GPUPreparedNativeRenderCommand.SetVertexBuffer(
+                            slot = 0,
+                            buffer = instanceOperand,
+                            offset = 0L,
+                            size = requireNotNull(instanceOperand.byteCapacity),
+                            vertexStrideBytes = 64L,
                         ),
-                    ),
-                )
+                    )
+                    add(
+                        GPUPreparedNativeRenderCommand.SetScissor(
+                            packet.scissorBounds.left,
+                            packet.scissorBounds.top,
+                            packet.scissorBounds.width,
+                            packet.scissorBounds.height,
+                        ),
+                    )
+                    add(
+                        GPUPreparedNativeRenderCommand.Draw(
+                            GPUPreparedNativeDrawCall.Draw(
+                                vertexCount = 6,
+                                instanceCount = binding.instanceCount,
+                                firstVertex = 0,
+                                firstInstance = binding.firstInstance,
+                            ),
+                        ),
+                    )
+                }
                 GPUPreparedNativeScopeOperand.PreparedTextRenderRun(
                     sourceStepIndex = renderScopeKeys[index].sourceStepIndex,
                     commands = commands,
@@ -491,6 +536,20 @@ internal class GPUWgpu4kPreparedTextRenderRunMaterializer(
             entries = listOf(
                 BindGroupEntry(0u, atlasView),
                 BindGroupEntry(1u, acquisition.atlasSampler),
+            ),
+        ),
+    )
+
+    private fun createCoverageMaskGroup(
+        acquisition: GPUWgpu4kPreparedTextPipelineAcquisition,
+        binding: Int?,
+        maskView: GPUTextureView,
+    ): GPUBindGroup = device.createBindGroup(
+        BindGroupDescriptor(
+            label = "Kanvas.frame.preparedText.coverage-mask-group",
+            layout = requireNotNull(acquisition.coverageMaskBindGroupLayout),
+            entries = listOf(
+                BindGroupEntry(requireNotNull(binding).toUInt(), maskView),
             ),
         ),
     )

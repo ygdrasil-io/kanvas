@@ -1262,9 +1262,58 @@ private fun CanonicalHashSink.preparedTextBinding(value: GPUPreparedTextRenderBi
         string("sealCompositeSourceHash", seal.compositeSourceHash)
         string("sealCompositeAbiHash", seal.compositeAbiHash)
         string("sealCompositePipelineKey", seal.compositePipelineKey)
+        string(
+            "sealCompositeSourceCoverageEncoding",
+            seal.compositeSourceCoverageEncoding.name,
+        )
+        string("sealCompositeClipVariant", seal.clipPlan.variant.name)
+        string("sealCompositeClipIdentity", seal.clipPlan.executionPlanIdentity)
+        nullable("sealCompositeCoverageMaskResource", seal.coverageMaskResource) {
+            string("value", it.value)
+        }
+        when (val clipPlan = seal.clipPlan) {
+            is GPUPreparedTextClipPlan.Direct -> tag("sealCompositeDirectClip")
+            is GPUPreparedTextClipPlan.CoverageMask -> {
+                tag("sealCompositeCoverageMaskClip")
+                string("contentKey", clipPlan.contentKey)
+                string("orderingToken", clipPlan.orderingToken)
+            }
+            is GPUPreparedTextClipPlan.Analytic -> {
+                tag("sealCompositeAnalyticClip")
+                int("leftBits", clipPlan.left.toRawBits())
+                int("topBits", clipPlan.top.toRawBits())
+                int("rightBits", clipPlan.right.toRawBits())
+                int("bottomBits", clipPlan.bottom.toRawBits())
+                int("radiusXBits", clipPlan.radiusX.toRawBits())
+                int("radiusYBits", clipPlan.radiusY.toRawBits())
+            }
+        }
         string("sealCompositeVertexEntryPoint", seal.compositeVertexEntryPoint)
         string("sealCompositeFragmentEntryPoint", seal.compositeFragmentEntryPoint)
         preparedTextVertexLayout("sealCompositeVertexLayout", seal.compositeVertexLayout)
+    }
+    value.preflightSeal.colorGlyphClip?.let { seal ->
+        tag("GPUPreparedColorGlyphClipPreflightSeal")
+        string("sealColorGlyphClipSemanticIdentity", seal.semanticIdentity)
+        string("sealColorGlyphClipExecutionPlanIdentity", seal.executionPlanIdentity)
+        when (seal) {
+            is GPUPreparedColorGlyphClipPreflightSeal.NonMask -> {
+                tag("sealColorGlyphNonMaskClip")
+                nullable("sealColorGlyphAnalyticRect", seal.analyticRect) { facts ->
+                    int("leftBits", facts.left.toRawBits())
+                    int("topBits", facts.top.toRawBits())
+                    int("rightBits", facts.right.toRawBits())
+                    int("bottomBits", facts.bottom.toRawBits())
+                    nullable("scissor", facts.scissor) { scissor -> bounds("value", scissor) }
+                    bool("antiAlias", facts.antiAlias)
+                }
+            }
+            is GPUPreparedColorGlyphClipPreflightSeal.CoverageMask -> {
+                tag("sealColorGlyphCoverageMaskClip")
+                string("resource", seal.resource.value)
+                string("orderingToken", seal.orderingToken)
+            }
+        }
     }
 }
 
@@ -2024,7 +2073,20 @@ private fun GPUPreparedTextRenderBinding.stableDump(): String =
                 "${seal.vertexSourceLabel}/${seal.targetStateHash}/" +
                 (seal.scissorBoundsHash ?: "none")
         } ?: "none"}," +
-        "textA8Composite=${preflightSeal.textA8Composite?.stableDump() ?: "none"}}}"
+        "textA8Composite=${preflightSeal.textA8Composite?.stableDump() ?: "none"}," +
+        "colorGlyphClip=${preflightSeal.colorGlyphClip?.stableDump() ?: "none"}}}"
+
+private fun GPUPreparedColorGlyphClipPreflightSeal.stableDump(): String = when (this) {
+    is GPUPreparedColorGlyphClipPreflightSeal.NonMask ->
+        "non-mask:$semanticIdentity:$executionPlanIdentity:" +
+            (analyticRect?.let { facts ->
+                "${facts.left.toRawBits()},${facts.top.toRawBits()}," +
+                    "${facts.right.toRawBits()},${facts.bottom.toRawBits()}," +
+                    "${facts.scissor ?: "none"},${facts.antiAlias}"
+            } ?: "none")
+    is GPUPreparedColorGlyphClipPreflightSeal.CoverageMask ->
+        "coverage-mask:$semanticIdentity:$executionPlanIdentity:${resource.value}:$orderingToken"
+}
 
 private fun GPUPreparedTextRenderBinding.textA8CompositeStableDump(): String {
     val plan = drawUniformBufferPlan
@@ -2051,11 +2113,24 @@ private fun GPUPreparedTextCompositePreflightSeal.stableDump(): String =
         "slice=${drawUniformSlice.stableDump()}," +
         "composite={sourceHash=$compositeSourceHash,abiHash=$compositeAbiHash," +
         "pipelineKey=$compositePipelineKey,vertexEntry=$compositeVertexEntryPoint," +
+        "sourceCoverageEncoding=${compositeSourceCoverageEncoding.name}," +
+        "clipVariant=${clipPlan.variant.name}," +
+        "clipIdentity=${clipPlan.executionPlanIdentity}," +
+        "coverageMaskResource=${coverageMaskResource?.value.orEmpty()}," +
+        "clipFacts=${clipPlan.stableDump()}," +
         "fragmentEntry=$compositeFragmentEntryPoint," +
         "vertexLayout=${compositeVertexLayout.stableDump()}}}"
 
 private fun GPUPreparedTextDrawUniformSlice.stableDump(): String =
     "${packetId.value}@${offsetBytes}+${sizeBytes}/$contentHash"
+
+private fun GPUPreparedTextClipPlan.stableDump(): String = when (this) {
+    is GPUPreparedTextClipPlan.Direct -> "direct"
+    is GPUPreparedTextClipPlan.CoverageMask -> "coverage-mask:$contentKey:$orderingToken"
+    is GPUPreparedTextClipPlan.Analytic ->
+        "${left.toRawBits()},${top.toRawBits()},${right.toRawBits()}," +
+            "${bottom.toRawBits()},${radiusX.toRawBits()},${radiusY.toRawBits()}"
+}
 
 private fun org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout.stableDump():
     String =

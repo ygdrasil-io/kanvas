@@ -4,6 +4,8 @@ import java.util.concurrent.CompletionStage
 import java.util.concurrent.CompletionException
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.atomic.AtomicLong
+import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
@@ -29,6 +31,9 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
+import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.types.Matrix33
 
 internal data class GPUPreparedSurfaceExecutionRequest(
     val candidate: GPUPreparedSurfaceEligibility.Candidate,
@@ -71,6 +76,10 @@ internal data class GPUPreparedSurfaceExecutionEvidence(
     val distinctRetentionTickets: Int,
     val routeMarker: GPUPreparedSurfaceExecutionRouteMarker,
     val textCounters: GPUPreparedTextFrameCounters = GPUPreparedTextFrameCounters(),
+    val destinationCopies: Long = 0L,
+    val destinationReadTextCommandIds: Set<Int> = emptySet(),
+    val destinationReadEvidence: List<GPUPreparedSurfaceDestinationReadEvidence> =
+        emptyList(),
 )
 
 internal sealed interface GPUPreparedSurfaceExecutionResult {
@@ -93,6 +102,97 @@ internal sealed interface GPUPreparedSurfaceExecutionResult {
 internal fun interface GPUPreparedSurfaceExecutionPort {
     fun execute(request: GPUPreparedSurfaceExecutionRequest): GPUPreparedSurfaceExecutionResult
 }
+
+/** Pure proof for text-only no-op frames that need no backend or capability facts. */
+internal object GPUPreparedSurfacePreBackendNoOpGate {
+    fun classify(
+        request: GPUPreparedSurfaceExecutionRequest,
+    ): GPUPreparedSurfaceFrameBuildResult.NoOp? {
+        if (request.width <= 0 || request.height <= 0) return null
+        val acceptedTextOperationIndices = linkedSetOf<Int>()
+        val elidedTextOperationIndices = linkedSetOf<Int>()
+        val culledTextOperationIndices = linkedSetOf<Int>()
+        var stateEventCount = 0
+        request.candidate.operations.forEachIndexed { operationIndex, operation ->
+            when (operation) {
+                is DisplayOp.DrawText -> {
+                    acceptedTextOperationIndices += operationIndex
+                    if (operation.blob.glyphRuns.all { run -> run.glyphs.isEmpty() }) {
+                        elidedTextOperationIndices += operationIndex
+                    } else if (operation.hasConservativeTargetEmptyTextProof(
+                            request.width,
+                            request.height,
+                        )
+                    ) {
+                        culledTextOperationIndices += operationIndex
+                    } else {
+                        return null
+                    }
+                }
+                is DisplayOp.SetTransform,
+                is DisplayOp.SetClip,
+                is DisplayOp.Annotation,
+                -> stateEventCount++
+                else -> return null
+            }
+        }
+        if (acceptedTextOperationIndices.isEmpty() ||
+            acceptedTextOperationIndices !=
+            elidedTextOperationIndices + culledTextOperationIndices
+        ) return null
+        return GPUPreparedSurfaceFrameBuildResult.NoOp(
+            stateEventCount = stateEventCount,
+            textMetrics = GPUPreparedTextFrameMetrics(
+                glyphCount = 0,
+                uniqueMaskCount = 0,
+                instanceCount = 0,
+                a8InstanceCount = 0,
+                colorGlyphInstanceCount = 0,
+                pathStrokeDrawCount = 0,
+                subRunCount = 0,
+                pageCount = 0,
+                pageBytes = 0,
+                instanceBytes = 0,
+            ),
+            acceptedTextOperationIndices = acceptedTextOperationIndices.toSet(),
+            elidedTextOperationIndices = elidedTextOperationIndices.toSet(),
+            culledTextOperationIndices = culledTextOperationIndices.toSet(),
+        )
+    }
+}
+
+internal fun DisplayOp.DrawText.hasConservativeTargetEmptyTextProof(
+    width: Int,
+    height: Int,
+): Boolean {
+    if (blob.typeface == null) return false
+    if (blob.variationCoordinates.isNotEmpty() || !blob.fontSize.isFinite() || blob.fontSize <= 0f ||
+        !x.isFinite() || !y.isFinite() || transform != Matrix33.identity()
+    ) return false
+    if (paint.blendMode != BlendMode.SRC_OVER || paint.style != PaintStyle.FILL ||
+        paint.shader != null || paint.colorFilter != null || paint.maskFilter != null ||
+        paint.pathEffect != null || paint.imageFilter != null || paint.blender != null
+    ) return false
+    if (!clip.isExactTargetEmptyDeviceRect(width, height)) return false
+    return blob.glyphRuns.all { run ->
+        run.glyphs.isNotEmpty() && run.glyphs.size == run.positions.size &&
+            run.fontSize.isFinite() && run.fontSize > 0f &&
+            run.positions.all { position -> position.x.isFinite() && position.y.isFinite() }
+    }
+}
+
+private fun ClipStack.isExactTargetEmptyDeviceRect(width: Int, height: Int): Boolean {
+    val deviceRect = this as? ClipStack.DeviceRect ?: return false
+    val rect = deviceRect.rect
+    val integral = listOf(rect.left, rect.top, rect.right, rect.bottom).all { value ->
+        value.isFinite() && value % 1f == 0f
+    }
+    return !deviceRect.antiAlias && integral && (
+        rect.isEmpty || rect.right <= 0f || rect.bottom <= 0f ||
+            rect.left >= width.toFloat() || rect.top >= height.toFloat()
+        )
+}
+
 
 internal fun interface GPUPreparedSurfaceBackendPortFactory {
     fun open(): GPUPreparedSurfaceBackendPort?
@@ -151,6 +251,9 @@ internal class GPUPreparedSurfaceFrameExecutor(
     private val ordinal: AtomicLong = sharedOrdinal,
 ) : GPUPreparedSurfaceExecutionPort {
     override fun execute(request: GPUPreparedSurfaceExecutionRequest): GPUPreparedSurfaceExecutionResult {
+        GPUPreparedSurfacePreBackendNoOpGate.classify(request)?.let { noOp ->
+            return completeNoOp(request, noOp)
+        }
         val backend = try {
             backendFactory.open()
         } catch (_: Throwable) {
@@ -200,6 +303,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 primary = when (build) {
                     is GPUPreparedSurfaceFrameBuildResult.Refused ->
                         GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused(build.diagnostic)
+                    is GPUPreparedSurfaceFrameBuildResult.NoOp ->
+                        completeNoOp(request, build)
                     is GPUPreparedSurfaceFrameBuildResult.Ready -> {
                         val prepared = executePrepared(
                             request = request,
@@ -274,6 +379,74 @@ internal class GPUPreparedSurfaceFrameExecutor(
         return current ?: terminal(
             "invalid.surface.prepared.terminal-without-diagnostic",
             "Prepared Surface execution failed without a terminal diagnostic.",
+        )
+    }
+
+    private fun completeNoOp(
+        request: GPUPreparedSurfaceExecutionRequest,
+        build: GPUPreparedSurfaceFrameBuildResult.NoOp,
+    ): GPUPreparedSurfaceExecutionResult {
+        val rgba = when (request.output) {
+            GPUPreparedSurfaceRequestedOutput.CompletionOnly -> ByteArray(0)
+            GPUPreparedSurfaceRequestedOutput.ReadbackRgba -> try {
+                ByteArray(
+                    Math.toIntExact(
+                        Math.multiplyExact(
+                            Math.multiplyExact(request.width.toLong(), request.height.toLong()),
+                            4L,
+                        ),
+                    ),
+                )
+            } catch (failure: ArithmeticException) {
+                return terminal(
+                    "invalid.surface.prepared.readback-size",
+                    "Prepared Surface dimensions do not fit the RGBA readback contract.",
+                    mapOf(
+                        "width" to request.width.toString(),
+                        "height" to request.height.toString(),
+                        "failureClass" to failure.javaClass.name,
+                    ),
+                )
+            }
+        }
+        check(
+            build.acceptedTextOperationIndices ==
+                build.elidedTextOperationIndices + build.culledTextOperationIndices,
+        )
+        return GPUPreparedSurfaceExecutionResult.Succeeded(
+            rgba = rgba,
+            visualOperationCount = 0,
+            stateEventCount = build.stateEventCount,
+            evidence = GPUPreparedSurfaceExecutionEvidence(
+                targetCreations = 0,
+                targetCloses = 0,
+                frameCoordinatorCreations = 0,
+                encoders = 0,
+                commandBuffers = 0,
+                submits = 0,
+                readbackCopies = 0,
+                destinationSnapshotCreations = 0,
+                destinationReadbackSnapshots = 0,
+                renderPasses = 0,
+                draws = 0,
+                drawIndexed = 0,
+                pipelineBinds = 0,
+                activeNativePayloads = 0,
+                outputOwnedNativePayloads = 0,
+                quarantinedNativePayloads = 0,
+                retentionRegistrations = 0,
+                retentionCompletions = 0,
+                retentionQuarantines = 0,
+                distinctRetentionTickets = 0,
+                routeMarker = GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
+                textCounters = GPUPreparedTextFrameCounters(),
+            ),
+            outputKind = when (request.output) {
+                GPUPreparedSurfaceRequestedOutput.CompletionOnly ->
+                    GPUPreparedSurfaceOutputKind.CurrentFrameCompletionOnly
+                GPUPreparedSurfaceRequestedOutput.ReadbackRgba ->
+                    GPUPreparedSurfaceOutputKind.ReadbackRgba
+            },
         )
     }
 
@@ -422,6 +595,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 build.textMetrics,
                 build.textCommandIds,
                 build.pathStrokeCommandIds,
+                build.destinationReadTextCommandIds,
+                build.destinationReadEvidence,
                 beforeSubmit,
                 afterCompletion,
                 telemetryBefore,
@@ -505,6 +680,12 @@ internal class GPUPreparedSurfaceFrameExecutor(
                     },
                 ),
                 routeMarker = GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect,
+                destinationCopies = delta(
+                    pending.beforeSubmit.destinationCopies,
+                    pending.afterCompletion.destinationCopies,
+                ),
+                destinationReadTextCommandIds = pending.destinationReadTextCommandIds,
+                destinationReadEvidence = pending.destinationReadEvidence,
             )
             check(evidence.frameCoordinatorCreations == 1L)
             check(evidence.encoders == 1L)
@@ -514,7 +695,23 @@ internal class GPUPreparedSurfaceFrameExecutor(
                 evidence.readbackCopies ==
                     if (pending.outputKind == GPUPreparedSurfaceOutputKind.ReadbackRgba) 1L else 0L,
             )
-            check(evidence.destinationSnapshotCreations == 0L)
+            check(
+                evidence.destinationSnapshotCreations ==
+                    pending.destinationReadTextCommandIds.size.toLong(),
+            )
+            check(
+                evidence.destinationCopies ==
+                    pending.destinationReadTextCommandIds.size.toLong(),
+            )
+            check(
+                evidence.destinationReadEvidence
+                    .mapTo(linkedSetOf()) { route -> route.commandId } ==
+                    pending.destinationReadTextCommandIds,
+            )
+            check(
+                evidence.destinationReadEvidence.size.toLong() ==
+                    evidence.destinationCopies,
+            )
             check(evidence.destinationReadbackSnapshots == 0L)
             check(
                 pending.pathStrokeCommandIds.count { commandId ->
@@ -592,6 +789,8 @@ internal class GPUPreparedSurfaceFrameExecutor(
         val textMetrics: GPUPreparedTextFrameMetrics,
         val textCommandIds: Set<Int>,
         val pathStrokeCommandIds: Set<Int>,
+        val destinationReadTextCommandIds: Set<Int>,
+        val destinationReadEvidence: List<GPUPreparedSurfaceDestinationReadEvidence>,
         val beforeSubmit: GPUPreparedSceneNativeCounters,
         val afterCompletion: GPUPreparedSceneNativeCounters,
         val telemetryBefore: GPUBackendRuntimeTelemetry,

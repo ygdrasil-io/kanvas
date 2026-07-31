@@ -13,7 +13,6 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUUniformPayloadSlot
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
-import org.graphiks.kanvas.gpu.renderer.recording.CORE_PRIMITIVE_RENDER_PIPELINE_KEY
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 
@@ -36,7 +35,8 @@ internal class GPUCorePrimitiveCoverageMaskPreparedSlabAuthority(
             vertexByteSize > 0L && vertexByteSize % 4L == 0L &&
             indexByteSize > 0L && indexByteSize % 4L == 0L &&
             uniformByteSize == uniformSlabSeal.plan.totalBytes &&
-            uniformAlignmentBytes == uniformSlabSeal.plan.alignmentBytes
+            uniformAlignmentBytes == uniformSlabSeal.plan.alignmentBytes &&
+            uniformSlabSeal.hasCanonicalRenderPipelineKeys
         ) { "Prepared coverage-mask slabs require exact distinct generated resources" }
     }
 }
@@ -127,6 +127,46 @@ internal class GPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
     }
 }
 
+private fun hasExactCoverageMaskUniformSlice(
+    packetId: GPUDrawPacketID,
+    commandId: Int,
+    sourceOrder: Int,
+    uniformSlice: GPUCorePrimitiveCoverageMaskPreparedUniformSlice,
+    slabAuthority: GPUCorePrimitiveCoverageMaskPreparedSlabAuthority,
+    producer: Boolean,
+): Boolean {
+    val slabSeal = slabAuthority.uniformSlabSeal
+    val slot = if (producer) {
+        slabSeal.producerSlots.getOrNull(uniformSlice.slotIndex)
+    } else {
+        slabSeal.consumerSlots.getOrNull(
+            uniformSlice.slotIndex - slabSeal.producerSlots.size,
+        )
+    } ?: return false
+    val exactIdentity = when (slot) {
+        is GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal ->
+            slot.packetId == packetId && slot.commandId == commandId &&
+                slot.sourceOrder == sourceOrder
+        is GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal ->
+            slot.packetId == packetId && slot.commandId == commandId &&
+                slot.sourceOrder == sourceOrder
+        else -> false
+    }
+    val slabSlot = slabSeal.plan.slots.getOrNull(uniformSlice.slotIndex) ?: return false
+    val exactSlice = GPUCorePrimitiveCoverageMaskPreparedUniformSlice(
+        slabAuthority.uniformResource,
+        slabAuthority.uniformGeneration,
+        uniformSlice.slotIndex,
+        slabSlot.alignedOffset,
+        slabSlot.payloadBytes,
+        slabSlot.allocatedBytes,
+    )
+    val intervalEnd = uniformSlice.alignedOffset + uniformSlice.allocatedBytes
+    return exactIdentity && uniformSlice == exactSlice &&
+        intervalEnd >= uniformSlice.alignedOffset &&
+        intervalEnd <= slabAuthority.uniformByteSize
+}
+
 internal sealed interface GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal {
     data object Missing : GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal
     data object Empty : GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal
@@ -144,6 +184,54 @@ internal sealed interface GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal {
             GPUCorePrimitiveCoverageMaskPreparedDraw.Draw(),
         val commandAuthority: GPUCorePrimitiveCoverageMaskPreparedCommandAuthority? = null,
     ) : GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal
+
+    /** One render scope containing the exact ordered producer packet partition. */
+    class ProducerPartition internal constructor(
+        val sourceStepIndex: Int,
+        units: List<Producer>,
+    ) : GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal {
+        val units: List<Producer> = immutableList(units)
+
+        init {
+            val firstUnit = this.units.firstOrNull()
+            val routeProducerSourceOrders = firstUnit?.route?.producers
+                ?.map { producer -> producer.sourceOrder }
+                .orEmpty()
+            val routeProducerSourceOrderIndex = routeProducerSourceOrders.toSet()
+            require(sourceStepIndex >= 0 && this.units.size > 1 &&
+                routeProducerSourceOrderIndex.size == routeProducerSourceOrders.size &&
+                this.units.all { it.sourceStepIndex == sourceStepIndex } &&
+                this.units.all { unit ->
+                    hasExactCoverageMaskUniformSlice(
+                        unit.packetId,
+                        unit.commandId,
+                        unit.sourceOrder,
+                        unit.uniformSlice,
+                        unit.slabAuthority,
+                        producer = true,
+                    ) && unit.sourceOrder in routeProducerSourceOrderIndex &&
+                        unit.commandAuthority?.let { authority ->
+                        authority.packetId == unit.packetId &&
+                            authority.uniformSlice == unit.uniformSlice &&
+                            authority.geometrySlice == null && authority.draw == unit.draw
+                    } != false
+                } &&
+                this.units.map(Producer::packetId).distinct().size == this.units.size &&
+                this.units.map(Producer::sourceOrder).zipWithNext().all { (left, right) -> left < right } &&
+                this.units.map { it.uniformSlice.slotIndex }.zipWithNext().all { (left, right) -> left < right } &&
+                this.units.map(Producer::commandAuthority).let { authorities ->
+                    authorities.all { it == null } || authorities.all { it != null }
+                } &&
+                this.units.drop(1).all { unit ->
+                    unit.route === firstUnit?.route &&
+                        unit.slabAuthority === firstUnit?.slabAuthority &&
+                        unit.attachmentAuthority === firstUnit?.attachmentAuthority
+                }
+            ) {
+                "Coverage-mask producer partition requires one exact multi-packet source scope"
+            }
+        }
+    }
 
     class Consumer internal constructor(
         val sourceStepIndex: Int,
@@ -169,6 +257,73 @@ internal sealed interface GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal {
     ) : GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal {
         init { require(sceneTargetGeneration >= 0L) }
     }
+
+    /** One render scope containing the exact ordered consumer packet partition. */
+    class ConsumerPartition internal constructor(
+        val sourceStepIndex: Int,
+        units: List<Consumer>,
+    ) : GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal {
+        val units: List<Consumer> = immutableList(units)
+
+        init {
+            val firstUnit = this.units.firstOrNull()
+            val routeConsumerIdentities = firstUnit?.route?.consumers
+                ?.map { consumer ->
+                    Triple(consumer.packetId, consumer.commandId, consumer.sourceOrder)
+                }
+                .orEmpty()
+            val routeConsumerIdentityIndex = routeConsumerIdentities.toSet()
+            require(sourceStepIndex >= 0 && this.units.size > 1 &&
+                routeConsumerIdentityIndex.size == routeConsumerIdentities.size &&
+                this.units.all { it.sourceStepIndex == sourceStepIndex } &&
+                this.units.all { unit ->
+                    hasExactCoverageMaskUniformSlice(
+                        unit.packetId,
+                        unit.commandId,
+                        unit.sourceOrder,
+                        unit.uniformSlice,
+                        unit.slabAuthority,
+                        producer = false,
+                    ) && Triple(unit.packetId, unit.commandId, unit.sourceOrder) in
+                        routeConsumerIdentityIndex && unit.commandAuthority?.let { authority ->
+                        authority.packetId == unit.packetId &&
+                            authority.uniformSlice == unit.uniformSlice &&
+                            authority.geometrySlice == unit.geometrySlice &&
+                            authority.draw == unit.draw
+                    } != false
+                } &&
+                this.units.map(Consumer::packetId).distinct().size == this.units.size &&
+                this.units.map(Consumer::commandId).distinct().size == this.units.size &&
+                this.units.map(Consumer::sourceOrder).zipWithNext().all { (left, right) -> left < right } &&
+                this.units.map { it.uniformSlice.slotIndex }.zipWithNext().all { (left, right) -> left < right } &&
+                this.units.map(Consumer::commandAuthority).let { authorities ->
+                    authorities.all { it == null } || authorities.all { it != null }
+                } &&
+                this.units.dropLast(1).none(Consumer::isLastConsumer) &&
+                this.units.drop(1).all { unit ->
+                    unit.route === firstUnit?.route &&
+                        unit.slabAuthority === firstUnit?.slabAuthority &&
+                        unit.attachmentAuthority === firstUnit?.attachmentAuthority &&
+                        unit.sceneTarget == firstUnit?.sceneTarget &&
+                        unit.sceneTargetGeneration == firstUnit?.sceneTargetGeneration
+                }
+            ) {
+                "Coverage-mask consumer partition requires one exact multi-packet source scope"
+            }
+        }
+    }
+}
+
+internal fun GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.units(): List<
+    GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal
+    > = when (this) {
+    is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> listOf(this)
+    is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition -> units
+    is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> listOf(this)
+    is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition -> units
+    GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
+    GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
+    -> emptyList()
 }
 
 /**
@@ -188,6 +343,9 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
     val packetId = when (seal) {
         is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> seal.packetId
         is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> seal.packetId
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+        -> error("A coverage-mask command authority requires one packet unit")
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
         -> error("Unreachable coverage-mask scope seal")
@@ -195,6 +353,9 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
     val commandId = when (seal) {
         is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> seal.commandId
         is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> seal.commandId
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+        -> error("A coverage-mask command authority requires one packet unit")
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
         -> error("Unreachable coverage-mask scope seal")
@@ -202,6 +363,9 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
     val uniformSlice = when (seal) {
         is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> seal.uniformSlice
         is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> seal.uniformSlice
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+        -> error("A coverage-mask command authority requires one packet unit")
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
         -> error("Unreachable coverage-mask scope seal")
@@ -209,6 +373,9 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
     val slabs = when (seal) {
         is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> seal.slabAuthority
         is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> seal.slabAuthority
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+        -> error("A coverage-mask command authority requires one packet unit")
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
         -> error("Unreachable coverage-mask scope seal")
@@ -228,6 +395,9 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
             }
             slabs.uniformSlabSeal.consumerSlots[consumerIndex]
         }
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+        -> error("A coverage-mask command authority requires one packet unit")
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
         -> error("Unreachable coverage-mask scope seal")
@@ -270,9 +440,7 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
         is GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal -> slot.commandId
         else -> error("Unreachable coverage-mask uniform slot")
     } && packet.renderPipelineKey == renderPipelineKey &&
-        renderPipelineKey == structuralPipelineKey.stableRenderPipelineKey(
-            CORE_PRIMITIVE_RENDER_PIPELINE_KEY,
-        ) && packet.corePrimitivePreparedAuthority?.structuralPipelineKey == structuralPipelineKey &&
+        packet.corePrimitivePreparedAuthority?.structuralPipelineKey == structuralPipelineKey &&
         packet.bindingLayoutHash == bindingLayoutHash && packet.scissorBoundsHash == null
     ) { "Coverage-mask command authority differs from its exact packet and structural slot" }
     val consumer = seal is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
@@ -306,8 +474,11 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
         geometrySlice = (seal as?
             GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer)?.geometrySlice,
         draw = when (seal) {
-            is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> seal.draw
-            is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> seal.draw
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> seal.draw
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> seal.draw
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+        -> error("A coverage-mask command authority requires one packet unit")
             GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
             GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
             -> error("Unreachable coverage-mask scope seal")
@@ -346,18 +517,160 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
                 seal.draw,
                 authority,
             )
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+        -> error("A coverage-mask command authority requires one packet unit")
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
         -> error("Unreachable coverage-mask scope seal")
     }
 }
 
+/** Seals every unit of one already-authenticated multi-packet render scope. */
+internal fun sealGPUCorePrimitiveCoverageMaskPreparedPartitionCommandAuthority(
+    seal: GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal,
+    packets: List<GPUDrawPacket>,
+    stream: GPUPassCommandStream,
+    expectedPassId: String,
+    expectedLoadStoreLabel: String,
+): GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal {
+    val units = seal.units()
+    require(units.size > 1 && packets.map(GPUDrawPacket::packetId) == units.map { unit ->
+        when (unit) {
+            is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> unit.packetId
+            is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> unit.packetId
+            else -> error("Coverage-mask partition contains a non-unit seal")
+        }
+    }) { "Coverage-mask command partition must retain every packet in exact order" }
+    val begin = stream.commands.firstOrNull() as? GPUPassCommand.BeginRenderPass
+        ?: throw IllegalArgumentException("Coverage-mask partition stream must begin with BeginRenderPass")
+    val end = stream.commands.lastOrNull() as? GPUPassCommand.EndRenderPass
+        ?: throw IllegalArgumentException("Coverage-mask partition stream must end with EndRenderPass")
+    val packetIds = packets.map(GPUDrawPacket::packetId).toSet()
+    require(packetIds.size == packets.size) {
+        "Coverage-mask command partition requires unique packet identities"
+    }
+    val commandsByPacketId = linkedMapOf<GPUDrawPacketID, MutableList<GPUPassCommand>>()
+    stream.commands.drop(1).dropLast(1).forEach { command ->
+        require(command !is GPUPassCommand.BeginRenderPass &&
+            command !is GPUPassCommand.EndRenderPass
+        ) { "Coverage-mask partition stream contains a nested render-pass boundary" }
+        val sourcePacketId = requireNotNull(command.sourcePacketId) {
+            "Coverage-mask partition interior command is missing packet identity"
+        }
+        require(sourcePacketId in packetIds) {
+            "Coverage-mask partition stream contains a foreign packet command"
+        }
+        commandsByPacketId.getOrPut(sourcePacketId, ::mutableListOf).add(command)
+    }
+    require(commandsByPacketId.keys == packetIds) {
+        "Coverage-mask partition stream must retain commands for every exact packet"
+    }
+    val commonOperandBridges = mutableListOf<IndexedValue<
+        org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
+        >>()
+    val operandBridgesByPacketId = linkedMapOf<GPUDrawPacketID, MutableList<IndexedValue<
+        org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
+        >>>()
+    stream.operandBridge.forEachIndexed { index, bridge ->
+        val indexed = IndexedValue(index, bridge)
+        val packetId = bridge.packetId
+        if (packetId == null) {
+            commonOperandBridges += indexed
+        } else {
+            require(packetId in packetIds) {
+                "Coverage-mask partition stream contains a foreign packet operand bridge"
+            }
+            operandBridgesByPacketId.getOrPut(packetId, ::mutableListOf).add(indexed)
+        }
+    }
+    fun operandBridgesFor(packetId: GPUDrawPacketID) = buildList {
+        val packetBridges = operandBridgesByPacketId[packetId].orEmpty()
+        var commonIndex = 0
+        var packetIndex = 0
+        while (commonIndex < commonOperandBridges.size || packetIndex < packetBridges.size) {
+            val common = commonOperandBridges.getOrNull(commonIndex)
+            val packet = packetBridges.getOrNull(packetIndex)
+            if (packet == null || common != null && common.index < packet.index) {
+                add(requireNotNull(common).value)
+                commonIndex++
+            } else {
+                add(packet.value)
+                packetIndex++
+            }
+        }
+    }
+    val sealedUnits = units.zip(packets).map { (unit, packet) ->
+        val packetCommands = listOf(begin) + requireNotNull(commandsByPacketId[packet.packetId]) +
+            listOf(end)
+        val packetStream = GPUPassCommandStream(
+            streamId = "${stream.streamId}.packet.${packet.packetId.value}",
+            packetStreamId = stream.packetStreamId,
+            passId = expectedPassId,
+            commands = packetCommands,
+            operandBridge = operandBridgesFor(packet.packetId),
+            sourcePassIds = listOf(packet.passId),
+        )
+        sealGPUCorePrimitiveCoverageMaskPreparedCommandAuthority(
+            unit,
+            packet,
+            packetStream,
+            expectedPassId,
+            expectedLoadStoreLabel,
+        )
+    }
+    val sealed = when (seal) {
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition ->
+            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition(
+                seal.sourceStepIndex,
+                sealedUnits.map {
+                    it as? GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer
+                        ?: error("Coverage-mask producer partition changed unit kind")
+                },
+            )
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition ->
+            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition(
+                seal.sourceStepIndex,
+                sealedUnits.map {
+                    it as? GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
+                        ?: error("Coverage-mask consumer partition changed unit kind")
+                },
+            )
+        else -> error("Coverage-mask partition seal requires a multi-packet partition")
+    }
+    sealed.requireExactCoverageMaskPassCommandAuthority(stream)
+    return sealed
+}
+
 /** Refuses any post-preflight mutation of the exact coverage-mask typed command stream. */
 internal fun GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal
     .requireExactCoverageMaskPassCommandAuthority(stream: GPUPassCommandStream) {
+    if (this is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition ||
+        this is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition
+    ) {
+        val authorities = units().map { unit -> when (unit) {
+            is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> unit.commandAuthority
+            is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> unit.commandAuthority
+            else -> error("Coverage-mask partition contains a non-unit seal")
+        } ?: throw IllegalArgumentException("Coverage-mask partition command authority is not sealed") }
+        val expectedCommands = coverageMaskCommands(authorities.first()).dropLast(1) +
+            authorities.drop(1).flatMap { authority ->
+                coverageMaskCommands(authority).drop(1).dropLast(1)
+            } + coverageMaskCommands(authorities.last()).takeLast(1)
+        require(stream.passId == authorities.first().passId &&
+            stream.sourcePassIds == authorities
+                .flatMap(GPUCorePrimitiveCoverageMaskPreparedCommandAuthority::sourcePassIds)
+                .distinct() &&
+            stream.commands == expectedCommands
+        ) { "Coverage-mask partition command stream differs from its sealed ordered units" }
+        return
+    }
     val authority = when (this) {
         is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> commandAuthority
         is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> commandAuthority
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+        -> throw IllegalArgumentException("Coverage-mask partition command authority is not sealed")
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty -> return
         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing ->
             throw IllegalArgumentException("Coverage-mask command authority is missing")
@@ -370,7 +683,39 @@ private fun GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal
         stream: GPUPassCommandStream,
         authority: GPUCorePrimitiveCoverageMaskPreparedCommandAuthority,
     ) {
-    val expectedCommands = buildList {
+    val expectedCommands = coverageMaskCommands(authority)
+    val retainedSlice = when (this) {
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> uniformSlice
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> uniformSlice
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+        -> error("A coverage-mask command authority requires one packet unit")
+        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
+        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
+        -> error("Unreachable coverage-mask scope seal")
+    }
+    val retainedGeometry = (this as?
+        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer)?.geometrySlice
+    val retainedDraw = when (this) {
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> draw
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> draw
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+        -> error("A coverage-mask command authority requires one packet unit")
+        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
+        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
+        -> error("Unreachable coverage-mask scope seal")
+    }
+    require(stream.passId == authority.passId &&
+        stream.sourcePassIds == authority.sourcePassIds &&
+        stream.commands == expectedCommands && retainedSlice == authority.uniformSlice &&
+        retainedGeometry == authority.geometrySlice && retainedDraw == authority.draw
+    ) { "Coverage-mask typed command stream differs from its sealed authority" }
+}
+
+private fun coverageMaskCommands(
+    authority: GPUCorePrimitiveCoverageMaskPreparedCommandAuthority,
+): List<GPUPassCommand> = buildList {
         add(GPUPassCommand.BeginRenderPass(
             authority.targetStateHash,
             authority.loadStoreLabel,
@@ -394,28 +739,6 @@ private fun GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal
         add(GPUPassCommand.Draw(authority.vertexSourceLabel, authority.packetId))
         add(GPUPassCommand.EndRenderPass(authority.passId))
     }
-    val retainedSlice = when (this) {
-        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> uniformSlice
-        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> uniformSlice
-        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
-        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
-        -> error("Unreachable coverage-mask scope seal")
-    }
-    val retainedGeometry = (this as?
-        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer)?.geometrySlice
-    val retainedDraw = when (this) {
-        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> draw
-        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> draw
-        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
-        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
-        -> error("Unreachable coverage-mask scope seal")
-    }
-    require(stream.passId == authority.passId &&
-        stream.sourcePassIds == authority.sourcePassIds &&
-        stream.commands == expectedCommands && retainedSlice == authority.uniformSlice &&
-        retainedGeometry == authority.geometrySlice && retainedDraw == authority.draw
-    ) { "Coverage-mask typed command stream differs from its sealed authority" }
-}
 
 internal data class GPUCorePrimitiveCoverageMaskPreparedProducerLocation(
     val sourceStepIndex: Int,
@@ -452,16 +775,15 @@ internal sealed interface GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal {
         ): GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal {
             val view = viewsBySourceStepIndex[sourceStepIndex]
                 ?: return GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty
-            val expected = when (view) {
-                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> view.packetId
-                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> view.packetId
-                GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
-                GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
-                -> return GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing
-            }
-            return if (packetIds == listOf(expected)) view
+            val expected = view.units().map { unit -> when (unit) {
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> unit.packetId
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> unit.packetId
+                else -> error("Coverage-mask scope partition contains a non-unit seal")
+            } }
+            return if (packetIds == expected) view
             else GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing
         }
+
     }
 }
 
@@ -489,11 +811,15 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedFrameRoute(
                 location.sourceOrder == slot.sourceOrder &&
                 location.dependencyFromPreviousConsumerToken ==
                 slot.dependencyFromPreviousConsumerToken
-        } && (producers.map { it.sourceStepIndex } + consumers.map { it.sourceStepIndex })
-            .zipWithNext().all { (left, right) -> left < right } &&
+        } && producers.map { it.sourceStepIndex }.zipWithNext().all { (left, right) -> left <= right } &&
+        consumers.map { it.sourceStepIndex }.zipWithNext().all { (left, right) -> left <= right } &&
+        producers.lastOrNull()?.sourceStepIndex?.let { producerLast ->
+            consumers.firstOrNull()?.sourceStepIndex?.let { consumerFirst -> producerLast < consumerFirst }
+                ?: true
+        } != false &&
         sceneTargetGeneration >= 0L &&
         attachmentAuthority.resource.value == route.attachment.logicalReference &&
-        attachmentAuthority.resourceGeneration == route.attachment.resourceGeneration
+        route.attachment.resourceGeneration == 0L
     ) { "Prepared coverage-mask frame locations must exactly match the sealed pure route" }
     require(seal.producerPacketIds == producers.map { it.packetId } &&
         seal.consumerPacketIds == consumers.map { it.packetId }
@@ -510,8 +836,8 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedFrameRoute(
             )
         }
     val views = linkedMapOf<Int, GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal>()
-    producers.forEachIndexed { index, location ->
-        views[location.sourceStepIndex] = GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer(
+    val producerUnits = producers.mapIndexed { index, location ->
+        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer(
             location.sourceStepIndex,
             location.packetId,
             location.commandId,
@@ -522,8 +848,12 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedFrameRoute(
             uniformSlice(index),
         )
     }
-    consumers.forEachIndexed { index, location ->
-        views[location.sourceStepIndex] = GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer(
+    producerUnits.groupBy { unit -> unit.sourceStepIndex }.forEach { (sourceStepIndex, units) ->
+        views[sourceStepIndex] = units.singleOrNull() ?:
+            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition(sourceStepIndex, units)
+    }
+    val consumerUnits = consumers.mapIndexed { index, location ->
+        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer(
             location.sourceStepIndex,
             location.packetId,
             location.commandId,
@@ -538,6 +868,10 @@ internal fun sealGPUCorePrimitiveCoverageMaskPreparedFrameRoute(
             sceneTarget,
             sceneTargetGeneration,
         )
+    }
+    consumerUnits.groupBy { unit -> unit.sourceStepIndex }.forEach { (sourceStepIndex, units) ->
+        views[sourceStepIndex] = units.singleOrNull() ?:
+            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition(sourceStepIndex, units)
     }
     return GPUCorePrimitiveCoverageMaskPreparedFrameRouteSeal.Route(
         route,

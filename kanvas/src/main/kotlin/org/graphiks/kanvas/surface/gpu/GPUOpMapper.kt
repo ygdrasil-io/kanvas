@@ -95,6 +95,7 @@ internal data class GPUOpMapping(
     val stateEvents: List<GPUFramePathStateEvent>,
     val legacyDump: GPULegacyImmediatePathDump,
     val preparedRefusal: GPUPreparedOperationRefusal? = null,
+    val culledTextOperationIndices: Set<Int> = emptySet(),
 )
 
 data class GPUPreparedOperationRefusal(
@@ -115,6 +116,7 @@ internal object GPUOpMapper {
     ): GPUOpMapping {
         val visual = mutableListOf<GPUFramePathVisualCommand>()
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
+        val culledTextOperationIndices = linkedSetOf<Int>()
         val legacy = GPULegacyImmediatePathAdapter()
         var provenance = GPUFrameProvenance.None
 
@@ -149,6 +151,14 @@ internal object GPUOpMapper {
                                 facts = emptyMap(),
                             ),
                         )
+                    }
+                    if (operation.hasConservativeTargetEmptyTextProof(
+                            target.width,
+                            target.height,
+                        )
+                    ) {
+                        culledTextOperationIndices += operationIndex
+                        return@forEachIndexed
                     }
                     preparedTextInventory.strokePathsByOperationIndex[operationIndex]?.let {
                         strokePaths ->
@@ -214,27 +224,33 @@ internal object GPUOpMapper {
                     val subRuns = preparedTextInventory.subRunsByOperationIndex[operationIndex].orEmpty()
                     for (subRun in subRuns) {
                         val commandId = visual.size
-                        val lowered = subRun.toPreparedTextVisual(
-                            commandId = commandId,
-                            provenance = provenance,
-                            target = target,
-                            config = config,
-                            capabilities = capabilities,
-                            inventory = preparedTextInventory,
-                        ) ?: return GPUOpMapping(
-                            visualCommands = emptyList(),
-                            stateEvents = stateEvents.toList(),
-                            legacyDump = legacy.dump(),
-                            preparedRefusal = GPUPreparedOperationRefusal(
+                        when (
+                            val lowered = subRun.toPreparedTextVisual(
                                 commandId = commandId,
-                                operationIndex = operationIndex,
-                                code = "invalid.surface.prepared.text-command",
-                                facts = mapOf(
-                                    "subRunIndex" to subRun.subRunIndex.toString(),
+                                provenance = provenance,
+                                target = target,
+                                config = config,
+                                capabilities = capabilities,
+                                inventory = preparedTextInventory,
+                            )
+                        ) {
+                            GPUPreparedTextVisualLowering.Culled ->
+                                culledTextOperationIndices += operationIndex
+                            GPUPreparedTextVisualLowering.Invalid -> return GPUOpMapping(
+                                visualCommands = emptyList(),
+                                stateEvents = stateEvents.toList(),
+                                legacyDump = legacy.dump(),
+                                preparedRefusal = GPUPreparedOperationRefusal(
+                                    commandId = commandId,
+                                    operationIndex = operationIndex,
+                                    code = "invalid.surface.prepared.text-command",
+                                    facts = mapOf(
+                                        "subRunIndex" to subRun.subRunIndex.toString(),
+                                    ),
                                 ),
-                            ),
-                        )
-                        visual += lowered
+                            )
+                            is GPUPreparedTextVisualLowering.Ready -> visual += lowered.command
+                        }
                     }
                 }
                 is DisplayOp.DrawImage -> {
@@ -383,6 +399,7 @@ internal object GPUOpMapper {
             visualCommands = visual.toList(),
             stateEvents = stateEvents.toList(),
             legacyDump = legacy.dump(),
+            culledTextOperationIndices = culledTextOperationIndices.toSet(),
         )
     }
 
@@ -600,6 +617,12 @@ private fun NormalizedDrawCommand.FillPath.toPreparedStrokeFillPath():
     )
 }
 
+private sealed interface GPUPreparedTextVisualLowering {
+    data class Ready(val command: GPUFramePathVisualCommand) : GPUPreparedTextVisualLowering
+    data object Culled : GPUPreparedTextVisualLowering
+    data object Invalid : GPUPreparedTextVisualLowering
+}
+
 private fun GPUPreparedTextSubRun.toPreparedTextVisual(
     commandId: Int,
     provenance: GPUFrameProvenance,
@@ -607,7 +630,7 @@ private fun GPUPreparedTextSubRun.toPreparedTextVisual(
     config: RenderConfig,
     capabilities: GPUCapabilities,
     inventory: PreparedTextFrameInventory,
-): GPUFramePathVisualCommand? {
+): GPUPreparedTextVisualLowering {
     if (draw.operationIndex != operationIndex ||
         draw.material.materialKey != materialKey ||
         draw.blendPlan.canonicalIdentity() != blendPlanIdentity ||
@@ -617,31 +640,34 @@ private fun GPUPreparedTextSubRun.toPreparedTextVisual(
         representation == GPUPreparedTextRepresentation.A8_MASK && colorGlyphLayerPlan != null ||
         representation == GPUPreparedTextRepresentation.COLRV0 && colorGlyphLayerPlan == null
     ) {
-        return null
+        return GPUPreparedTextVisualLowering.Invalid
     }
     val page = pageIndex?.let { index ->
         inventory.pages.singleOrNull { candidate -> candidate.pageIndex == index }
-    } ?: return null
+    } ?: return GPUPreparedTextVisualLowering.Invalid
     if (page.artifactKey.generation != inventory.generation ||
         instances.any { instance -> instance.pageIndex != page.pageIndex }
     ) {
-        return null
+        return GPUPreparedTextVisualLowering.Invalid
     }
-    val bounds = instances.preparedTextBounds(target) ?: return null
+    val bounds = instances.preparedTextBounds(target) ?: return GPUPreparedTextVisualLowering.Invalid
     val clipFacts = draw.clip.toGPUClipFacts(target)
     val maxTextureDimension = capabilities.limits?.maxTextureDimension2D
         ?.coerceAtMost(Int.MAX_VALUE.toLong())
         ?.toInt()
         ?: maxOf(target.width, target.height)
     val clipCoverage = clipFacts.coverageRequest?.let { request ->
-        if (request.contentKey != draw.clipContentKey) return null
+        if (request.contentKey != draw.clipContentKey) return GPUPreparedTextVisualLowering.Invalid
         GPUClipCoveragePlanner.planForFrameRoute(request, config, maxTextureDimension)
     } ?: if (draw.clipContentKey == "prepared-text-clip:wide-open") {
         GPUClipCoveragePlan.NoClip
     } else {
-        return null
+        return GPUPreparedTextVisualLowering.Invalid
     }
-    if (clipCoverage is GPUClipCoveragePlan.Refused) return null
+    if (clipCoverage is GPUClipCoveragePlan.Refused) return GPUPreparedTextVisualLowering.Invalid
+    if (clipCoverage is GPUClipCoveragePlan.Scissor && clipCoverage.isTargetEmpty(target)) {
+        return GPUPreparedTextVisualLowering.Culled
+    }
     val clipExecution = clipCoverage.toExecutionPlan(capabilities, target)
     val artifactRef = GPUTextArtifactRef(
         artifactType = "PreparedTextA8AtlasPage",
@@ -686,7 +712,7 @@ private fun GPUPreparedTextSubRun.toPreparedTextVisual(
             frameProvenance = provenance,
         ),
     )
-    return GPUFramePathVisualCommand(
+    return GPUPreparedTextVisualLowering.Ready(GPUFramePathVisualCommand(
         normalized = normalized,
         targetSpaceBounds = bounds,
         geometryCoverage = GPUCoverageConsumption.ScalarCoverage,
@@ -695,7 +721,19 @@ private fun GPUPreparedTextSubRun.toPreparedTextVisual(
         blendPlan = draw.blendPlan,
         provenance = provenance,
         preparedText = this,
-    )
+    ))
+}
+
+private fun GPUClipCoveragePlan.Scissor.isTargetEmpty(target: GPUTargetFacts): Boolean {
+    val scalars = listOf(bounds.left, bounds.top, bounds.right, bounds.bottom)
+    if (scalars.any { value -> !value.isFinite() || value != value.toInt().toFloat() }) {
+        return false
+    }
+    val left = bounds.left.toInt().coerceIn(0, target.width)
+    val top = bounds.top.toInt().coerceIn(0, target.height)
+    val right = bounds.right.toInt().coerceIn(0, target.width)
+    val bottom = bounds.bottom.toInt().coerceIn(0, target.height)
+    return right <= left || bottom <= top
 }
 
 private fun GPUBlendMode.toPaintBlendMode(): BlendMode = when (this) {

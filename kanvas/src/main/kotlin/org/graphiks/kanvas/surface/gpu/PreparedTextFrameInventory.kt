@@ -182,6 +182,7 @@ class PreparedTextFrameInventory private constructor(
     sourceSubRunsByOperationIndex: Map<Int, List<GPUPreparedTextSubRun>>,
     sourceStrokePathsByOperationIndex: Map<Int, List<GPUPreparedTextStrokePath>>,
     sourceAcceptedTextOperationIndices: Set<Int>,
+    sourceElidedTextOperationIndices: Set<Int>,
     val metrics: GPUPreparedTextFrameMetrics,
     sourceMaskIdentityByGlyphUse: List<PreparedTextMaskIdentity>,
     val contentSha256: String,
@@ -206,6 +207,8 @@ class PreparedTextFrameInventory private constructor(
         )
     val acceptedTextOperationIndices: Set<Int> =
         Collections.unmodifiableSet(LinkedHashSet(sourceAcceptedTextOperationIndices))
+    val elidedTextOperationIndices: Set<Int> =
+        Collections.unmodifiableSet(LinkedHashSet(sourceElidedTextOperationIndices))
     val maskIdentityByGlyphUse: List<PreparedTextMaskIdentity> =
         Collections.unmodifiableList(ArrayList(sourceMaskIdentityByGlyphUse))
 
@@ -216,6 +219,7 @@ class PreparedTextFrameInventory private constructor(
             subRunsByOperationIndex: Map<Int, List<GPUPreparedTextSubRun>>,
             strokePathsByOperationIndex: Map<Int, List<GPUPreparedTextStrokePath>>,
             acceptedTextOperationIndices: Set<Int>,
+            elidedTextOperationIndices: Set<Int> = emptySet(),
             metrics: GPUPreparedTextFrameMetrics,
             maskIdentityByGlyphUse: List<PreparedTextMaskIdentity>,
             contentSha256: String,
@@ -225,6 +229,7 @@ class PreparedTextFrameInventory private constructor(
             sourceSubRunsByOperationIndex = subRunsByOperationIndex,
             sourceStrokePathsByOperationIndex = strokePathsByOperationIndex,
             sourceAcceptedTextOperationIndices = acceptedTextOperationIndices,
+            sourceElidedTextOperationIndices = elidedTextOperationIndices,
             metrics = metrics,
             sourceMaskIdentityByGlyphUse = maskIdentityByGlyphUse,
             contentSha256 = contentSha256,
@@ -520,11 +525,13 @@ object PreparedTextFrameInventoryBuilder {
         draws: List<GPUPreparedTextDraw>,
         generation: GPUTextArtifactGeneration,
         limits: PreparedTextFrameInventoryLimits,
+        elidedTextOperationIndices: Set<Int> = emptySet(),
     ): PreparedTextFrameInventoryResult = build(
         draws = draws,
         generation = generation,
         limits = limits,
         artifactResolver = PerFrameExactPreparedTextGlyphArtifactResolver(),
+        elidedTextOperationIndices = elidedTextOperationIndices,
     )
 
     internal fun build(
@@ -534,6 +541,7 @@ object PreparedTextFrameInventoryBuilder {
         artifactResolver: PreparedTextGlyphArtifactResolver,
         observer: PreparedTextFrameInventoryObserver =
             NoOpPreparedTextFrameInventoryObserver,
+        elidedTextOperationIndices: Set<Int> = emptySet(),
     ): PreparedTextFrameInventoryResult {
         val glyphCount = draws.sumOf { draw -> draw.glyphs.size.toLong() }
         if (glyphCount > limits.maxGlyphs.toLong()) {
@@ -558,6 +566,17 @@ object PreparedTextFrameInventoryBuilder {
             )
         }
         val operationIndexes = draws.map { draw -> draw.operationIndex }
+        if (
+            elidedTextOperationIndices.any { it < 0 } ||
+            operationIndexes.any(elidedTextOperationIndices::contains)
+        ) {
+            return refused(
+                code = GPUTextRefusalCodes.OWNERSHIP_INVALID,
+                operationIndex = operationIndexes.firstOrNull()
+                    ?: elidedTextOperationIndices.firstOrNull(),
+                facts = mapOf("reason" to "invalid-elided-operation-index"),
+            )
+        }
         if (operationIndexes.toSet().size != operationIndexes.size) {
             return refused(
                 code = GPUTextRefusalCodes.OWNERSHIP_INVALID,
@@ -966,12 +985,14 @@ object PreparedTextFrameInventoryBuilder {
             instanceBytes = instanceBytes.toInt(),
         )
         val packingNanoseconds = Math.subtractExact(System.nanoTime(), packingStartedAt)
+        val acceptedTextOperationIndices =
+            (operationIndexes + elidedTextOperationIndices).toCollection(linkedSetOf())
         val contentHash = inventoryHash(
             generation = generation,
             pages = pageArtifacts,
             subRuns = immutableSubRuns,
             strokePaths = strokePathsByOperation,
-            acceptedTextOperationIndices = operationIndexes.toSet(),
+            acceptedTextOperationIndices = acceptedTextOperationIndices,
             metrics = metrics,
             identities = maskIdentities,
         )
@@ -981,7 +1002,8 @@ object PreparedTextFrameInventoryBuilder {
                 pages = pageArtifacts,
                 subRunsByOperationIndex = immutableSubRuns,
                 strokePathsByOperationIndex = strokePathsByOperation,
-                acceptedTextOperationIndices = operationIndexes.toSet(),
+                acceptedTextOperationIndices = acceptedTextOperationIndices,
+                elidedTextOperationIndices = elidedTextOperationIndices,
                 metrics = metrics,
                 maskIdentityByGlyphUse = maskIdentities,
                 contentSha256 = contentHash,

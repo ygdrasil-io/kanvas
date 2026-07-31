@@ -56,6 +56,15 @@ object GPUPreparedMaterialProgramCompiler {
             is PreparedSourceResult.Refused ->
                 return refused(result.code, result.sourceKind, result.message)
         }
+        val preCoverageSourceAlpha = if (
+            descriptor is GPUMaterialDescriptor.SolidColor &&
+            descriptor.a == 1f &&
+            paintAlpha == 1f
+        ) {
+            GPUSourceAlphaClassification.ProvenOpaque
+        } else {
+            GPUSourceAlphaClassification.Translucent
+        }
         val finalReflection = when (
             val validation = validateFinalModule(prepared)
         ) {
@@ -102,6 +111,7 @@ object GPUPreparedMaterialProgramCompiler {
             uniformBytes = uniformSnapshot,
             sampledResources = resourceSnapshot,
             paintAlpha = paintAlpha,
+            preCoverageSourceAlpha = preCoverageSourceAlpha,
             capabilityClass = context.capabilityClass,
             targetFormatClass = context.targetFormatClass,
             dictionaryVersion = context.dictionaryVersion,
@@ -118,6 +128,7 @@ object GPUPreparedMaterialProgramCompiler {
                 sampledResources = resourceSnapshot,
                 paintAlpha = paintAlpha,
                 sourceKind = prepared.sourceKind,
+                preCoverageSourceAlpha = preCoverageSourceAlpha,
                 admission = admission,
             ),
         )

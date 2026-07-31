@@ -205,6 +205,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
     private val device: GPUDevice,
     private val queue: GPUQueue,
     private val canonicalSceneTargetView: GPUTextureView? = null,
+    private val onDestinationCopyEncoded: () -> Unit = {},
 ) : GPUFrameEncodingBackend, AutoCloseable {
     override val encodingMode: GPUFrameEncodingMode = GPUFrameEncodingMode.NativeOperandsRequired
 
@@ -510,7 +511,10 @@ internal class GPUWgpu4kFrameEncodingBackend(
             synchronized(this@GPUWgpu4kFrameEncodingBackend) {
                 when (copy.operationKind) {
                     GPUEncoderOperationKind.Copy -> resourceCopyCount += 1
-                    GPUEncoderOperationKind.CopyDestination -> destinationCopyCount += 1
+                    GPUEncoderOperationKind.CopyDestination -> {
+                        destinationCopyCount += 1
+                        onDestinationCopyEncoded()
+                    }
                     else -> error("Unsupported texture copy operation ${copy.operationKind}")
                 }
             }

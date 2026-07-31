@@ -460,6 +460,11 @@ class GPUPreparedSurfaceFrameBuilderTest {
                 )),
             ),
         )
+    }
+
+    @Test
+    fun `AA path promotion reports missing multisample color capability`() {
+        val nonPrimary = Color.fromArgb(a = 255, r = 40, g = 120, b = 208)
         val unsupportedAaPath = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(
             GPUPreparedSurfaceFrameBuilder.build(
                 request(listOf(
@@ -473,7 +478,7 @@ class GPUPreparedSurfaceFrameBuilderTest {
             ),
         )
         assertEquals(
-            "invalid.core_primitive.coverage_sample.stencil_aa_requires_multisample",
+            "unsupported.core_primitive.coverage_sample.color_capability",
             unsupportedAaPath.diagnostic.code.value,
         )
     }

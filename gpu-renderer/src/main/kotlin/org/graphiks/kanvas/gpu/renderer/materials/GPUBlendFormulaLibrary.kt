@@ -156,15 +156,15 @@ object GPUBlendFormulaLibrary {
     """.trimIndent()
 
     /** Applies the canonical coverage topology to variables named blended, dst, and coverage. */
-    fun coverageResultWgsl(coverageKind: GPUBlendCoverageKind): String = when (coverageKind) {
-        GPUBlendCoverageKind.Full -> "return blended;"
-        GPUBlendCoverageKind.Scalar -> "return dst + coverage * (blended - dst);"
-        GPUBlendCoverageKind.LCD -> """
-            let rgb = dst.rgb + coverage * (blended.rgb - dst.rgb);
-            let alphaCandidates = vec3f(dst.a) + coverage * vec3f(blended.a - dst.a);
-            return vec4f(rgb, max(max(alphaCandidates.r, alphaCandidates.g), alphaCandidates.b));
-        """.trimIndent()
-    }
+    fun coverageResultWgsl(coverageKind: GPUBlendCoverageKind): String = requireNotNull(
+        GPUBlendFormulaProgramLibrary.coverageResultWgsl(
+            when (coverageKind) {
+                GPUBlendCoverageKind.Full -> GPUSourceCoverageEncoding.None
+                GPUBlendCoverageKind.Scalar -> GPUSourceCoverageEncoding.ScalarCoverageInShader
+                GPUBlendCoverageKind.LCD -> GPUSourceCoverageEncoding.LCDCoverageInShader
+            },
+        ),
+    )
 
     /** Complete module used by parser/reflection/native validation without duplicating formula bodies. */
     fun assembleValidationModule(formula: GPUBlendFormula): String {

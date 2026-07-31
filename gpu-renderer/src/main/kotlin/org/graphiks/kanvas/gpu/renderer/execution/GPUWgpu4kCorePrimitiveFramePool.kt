@@ -81,8 +81,10 @@ internal data class GPUWgpu4kCorePrimitiveMsaaColorRequirement(
         require(width > 0 && height > 0) {
             "CorePrimitive MSAA color extent must be positive"
         }
-        require(format == GPUTextureFormat.RGBA8Unorm) {
-            "CorePrimitive MSAA color format must be RGBA8Unorm"
+        require(format == GPUTextureFormat.RGBA8Unorm ||
+            format == GPUTextureFormat.RGBA8UnormSrgb
+        ) {
+            "CorePrimitive MSAA color format must be RGBA8Unorm or RGBA8UnormSrgb"
         }
         require(sampleCount == 4) {
             "CorePrimitive B3.5c MSAA color attachment must use exactly four samples"
@@ -209,6 +211,8 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
         PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY,
     val clipDepthStencil: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement? = null,
     val coverageMask: GPUWgpu4kCorePrimitiveCoverageMaskRequirement? = null,
+    val coverageMaskConsumerBindGroupRequired: Boolean = coverageMask != null,
+    val analyticClipBindGroupRequired: Boolean = false,
     val sampleCount: Int = 1,
     val msaaColor: GPUWgpu4kCorePrimitiveMsaaColorRequirement? = null,
 ) {
@@ -230,6 +234,14 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolRequirements(
         }
         require(coverageMask == null || sampleCount == 1) {
             "CorePrimitive coverage-mask frame slots remain single-sample"
+        }
+        require(!coverageMaskConsumerBindGroupRequired || coverageMask != null) {
+            "Coverage-mask consumer bind groups require a pooled coverage-mask attachment"
+        }
+        require(!analyticClipBindGroupRequired ||
+            componentIdentity == PRODUCTION_CORE_PRIMITIVE_COMPONENT_IDENTITY
+        ) {
+            "The secondary analytic clip bind group requires the standard indexed path component"
         }
         require((sampleCount == 4) == (msaaColor != null)) {
             "The 4x frame slot requires exactly one pooled MSAA color attachment"
@@ -329,6 +341,7 @@ internal data class GPUWgpu4kCorePrimitiveFramePoolHandles(
     val coverageMask: GPUWgpu4kCorePrimitiveCoverageMaskHandles? = null,
     val sampleCount: Int = 1,
     val msaaColor: GPUWgpu4kCorePrimitiveMsaaColorHandles? = null,
+    internal val analyticClipBindGroupOrNull: GPUBindGroup? = null,
 )
 
 internal data class GPUWgpu4kCorePrimitiveMsaaColorHandles(
@@ -353,8 +366,13 @@ internal data class GPUWgpu4kCorePrimitiveCoverageMaskHandles(
     val requirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement,
     val texture: GPUTexture,
     val view: GPUTextureView,
-    val consumerBindGroup: GPUBindGroup,
-)
+    internal val consumerBindGroupOrNull: GPUBindGroup?,
+) {
+    val consumerBindGroup: GPUBindGroup
+        get() = requireNotNull(consumerBindGroupOrNull) {
+            "This coverage-mask slot was acquired without a Core consumer bind group"
+        }
+}
 
 internal sealed interface GPUWgpu4kCorePrimitiveFramePoolRefusal {
     data class DeviceGenerationMismatch(
@@ -507,6 +525,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             requirements.pathDepthStencil,
             requirements.clipDepthStencil,
             requirements.coverageMask,
+            requirements.coverageMaskConsumerBindGroupRequired,
+            requirements.analyticClipBindGroupRequired,
             requirements.msaaColor,
             requirements.componentIdentity,
         )
@@ -520,6 +540,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     requirements.pathDepthStencil,
                     requirements.clipDepthStencil,
                     requirements.coverageMask,
+                    requirements.coverageMaskConsumerBindGroupRequired,
+                    requirements.analyticClipBindGroupRequired,
                     requirements.msaaColor,
                     requirements.componentIdentity,
                 ))
@@ -530,6 +552,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 requirements.pathDepthStencil,
                 requirements.clipDepthStencil,
                 requirements.coverageMask,
+                requirements.coverageMaskConsumerBindGroupRequired,
+                requirements.analyticClipBindGroupRequired,
                 requirements.msaaColor,
                 requirements.componentIdentity,
             )?.let { refusal ->
@@ -569,6 +593,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     requirements.pathDepthStencil,
                     requirements.clipDepthStencil,
                     requirements.coverageMask,
+                    requirements.coverageMaskConsumerBindGroupRequired,
+                    requirements.analyticClipBindGroupRequired,
                     requirements.msaaColor,
                     requirements.componentIdentity,
                     requirements.sampleCount,
@@ -704,11 +730,15 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                     slot.handles.pathDepthStencil?.texture,
                     slot.handles.clipDepthStencil?.view,
                     slot.handles.clipDepthStencil?.texture,
-                    slot.handles.coverageMask?.consumerBindGroup,
+                    slot.handles.coverageMask?.consumerBindGroupOrNull,
                     slot.handles.uniformBuffer.takeIf { slot.handles.coverageMask != null },
                     slot.handles.coverageMask?.view,
                     slot.handles.coverageMask?.texture,
                     slot.handles.uniformBuffer,
+                    slot.handles.analyticClipBindGroupOrNull,
+                    slot.handles.uniformBuffer.takeIf {
+                        slot.handles.analyticClipBindGroupOrNull != null
+                    },
                     msaaColorView = slot.handles.msaaColor?.view,
                     msaaColorTexture = slot.handles.msaaColor?.texture,
                 )
@@ -748,6 +778,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
         clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement?,
         coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
+        coverageMaskConsumerBindGroupRequired: Boolean,
+        analyticClipBindGroupRequired: Boolean,
         msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
         sampleCount: Int,
@@ -763,6 +795,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         var coverageMaskTexture: GPUTexture? = null
         var coverageMaskView: GPUTextureView? = null
         var coverageMaskConsumerBindGroup: GPUBindGroup? = null
+        var analyticClipBindGroup: GPUBindGroup? = null
         var msaaColorTexture: GPUTexture? = null
         var msaaColorView: GPUTextureView? = null
         return try {
@@ -777,6 +810,14 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             }
             bindGroup = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup) {
                 factory.createBindGroup(componentIdentity, requireNotNull(uniform))
+            }
+            if (analyticClipBindGroupRequired) {
+                analyticClipBindGroup = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup) {
+                    factory.createBindGroup(
+                        PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY,
+                        requireNotNull(uniform),
+                    )
+                }
             }
             if (pathDepthStencilRequirement != null) {
                 pathDepthStencilTexture = allocate(
@@ -813,13 +854,15 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 ) {
                     factory.createCoverageMaskView(requireNotNull(coverageMaskTexture))
                 }
-                coverageMaskConsumerBindGroup = allocate(
-                    GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskConsumerBindGroup,
-                ) {
-                    factory.createCoverageMaskConsumerBindGroup(
-                        requireNotNull(uniform),
-                        requireNotNull(coverageMaskView),
-                    )
+                if (coverageMaskConsumerBindGroupRequired) {
+                    coverageMaskConsumerBindGroup = allocate(
+                        GPUWgpu4kCorePrimitiveFramePoolResource.CoverageMaskConsumerBindGroup,
+                    ) {
+                        factory.createCoverageMaskConsumerBindGroup(
+                            requireNotNull(uniform),
+                            requireNotNull(coverageMaskView),
+                        )
+                    }
                 }
             }
             if (msaaColorRequirement != null) {
@@ -863,7 +906,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                                 requirement,
                                 requireNotNull(coverageMaskTexture),
                                 requireNotNull(coverageMaskView),
-                                requireNotNull(coverageMaskConsumerBindGroup),
+                                coverageMaskConsumerBindGroup,
                             )
                         },
                         sampleCount,
@@ -874,6 +917,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                                 requireNotNull(msaaColorView),
                             )
                         },
+                        analyticClipBindGroup,
                     ),
                 ),
             )
@@ -892,6 +936,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 coverageMaskView,
                 coverageMaskTexture,
                 uniform.takeIf { bindGroup != null },
+                analyticClipBindGroup,
+                uniform.takeIf { analyticClipBindGroup != null },
                 msaaColorView = msaaColorView,
                 msaaColorTexture = msaaColorTexture,
             )
@@ -905,6 +951,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
         clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement?,
         coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
+        coverageMaskConsumerBindGroupRequired: Boolean,
+        analyticClipBindGroupRequired: Boolean,
         msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): GPUWgpu4kCorePrimitiveFramePoolRefusal? {
@@ -920,6 +968,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         var coverageMaskTexture: GPUTexture? = null
         var coverageMaskView: GPUTextureView? = null
         var coverageMaskConsumerBindGroup: GPUBindGroup? = null
+        var analyticClipBindGroup: GPUBindGroup? = null
         var msaaColorTexture: GPUTexture? = null
         var msaaColorView: GPUTextureView? = null
         val replacePathDepthStencil = pathDepthStencilRequirement != null &&
@@ -933,8 +982,18 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         val replaceBindGroup = capacities.uniformBytes > slot.capacities.uniformBytes ||
             oldHandles.componentIdentity != componentIdentity
         val replaceCoverageMaskConsumerBindGroup =
-            (oldHandles.coverageMask != null &&
-                capacities.uniformBytes > slot.capacities.uniformBytes) || replaceCoverageMask
+            coverageMaskConsumerBindGroupRequired &&
+                (
+                    oldHandles.coverageMask?.consumerBindGroupOrNull == null ||
+                        capacities.uniformBytes > slot.capacities.uniformBytes ||
+                        replaceCoverageMask
+                    )
+        val replaceAnalyticClipBindGroup =
+            analyticClipBindGroupRequired &&
+                (
+                    oldHandles.analyticClipBindGroupOrNull == null ||
+                        capacities.uniformBytes > slot.capacities.uniformBytes
+                    )
         return try {
             if (capacities.vertexBytes > slot.capacities.vertexBytes) {
                 vertex = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.VertexBuffer) {
@@ -954,6 +1013,14 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             if (replaceBindGroup) {
                 bindGroup = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup) {
                     factory.createBindGroup(componentIdentity, uniform ?: oldHandles.uniformBuffer)
+                }
+            }
+            if (replaceAnalyticClipBindGroup) {
+                analyticClipBindGroup = allocate(GPUWgpu4kCorePrimitiveFramePoolResource.BindGroup) {
+                    factory.createBindGroup(
+                        PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY,
+                        uniform ?: oldHandles.uniformBuffer,
+                    )
                 }
             }
             if (replacePathDepthStencil) {
@@ -1043,11 +1110,11 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                         requireNotNull(coverageMaskRequirement),
                         requireNotNull(coverageMaskTexture),
                         requireNotNull(coverageMaskView),
-                        requireNotNull(coverageMaskConsumerBindGroup),
+                        coverageMaskConsumerBindGroup,
                     )
                 } else if (replaceCoverageMaskConsumerBindGroup) {
                     requireNotNull(oldHandles.coverageMask).copy(
-                        consumerBindGroup = requireNotNull(coverageMaskConsumerBindGroup),
+                        consumerBindGroupOrNull = requireNotNull(coverageMaskConsumerBindGroup),
                     )
                 } else {
                     oldHandles.coverageMask
@@ -1062,6 +1129,7 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 } else {
                     oldHandles.msaaColor
                 },
+                analyticClipBindGroup ?: oldHandles.analyticClipBindGroupOrNull,
             )
             slot.handles = replacement
             slot.capacities = GPUWgpu4kCorePrimitiveFramePoolCapacities(
@@ -1078,13 +1146,17 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 oldHandles.pathDepthStencil?.texture.takeIf { replacePathDepthStencil },
                 oldHandles.clipDepthStencil?.view.takeIf { replaceClipDepthStencil },
                 oldHandles.clipDepthStencil?.texture.takeIf { replaceClipDepthStencil },
-                oldHandles.coverageMask?.consumerBindGroup.takeIf {
+                oldHandles.coverageMask?.consumerBindGroupOrNull.takeIf {
                     replaceCoverageMaskConsumerBindGroup
                 },
                 oldHandles.uniformBuffer.takeIf { replaceCoverageMaskConsumerBindGroup },
                 oldHandles.coverageMask?.view.takeIf { replaceCoverageMask },
                 oldHandles.coverageMask?.texture.takeIf { replaceCoverageMask },
                 oldHandles.uniformBuffer.takeIf { bindGroup != null },
+                oldHandles.analyticClipBindGroupOrNull.takeIf {
+                    replaceAnalyticClipBindGroup
+                },
+                oldHandles.uniformBuffer.takeIf { replaceAnalyticClipBindGroup },
                 msaaColorView = oldHandles.msaaColor?.view.takeIf { replaceMsaaColor },
                 msaaColorTexture = oldHandles.msaaColor?.texture.takeIf { replaceMsaaColor },
             )
@@ -1106,6 +1178,10 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 coverageMaskView,
                 coverageMaskTexture,
                 (uniform ?: oldHandles.uniformBuffer).takeIf { bindGroup != null },
+                analyticClipBindGroup,
+                (uniform ?: oldHandles.uniformBuffer).takeIf {
+                    analyticClipBindGroup != null
+                },
                 msaaColorView = msaaColorView,
                 msaaColorTexture = msaaColorTexture,
             )
@@ -1142,6 +1218,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         coverageMaskView: GPUTextureView? = null,
         coverageMaskTexture: GPUTexture? = null,
         bindGroupUniformBuffer: GPUBuffer? = null,
+        analyticClipBindGroup: GPUBindGroup? = null,
+        analyticClipBindGroupUniformBuffer: GPUBuffer? = null,
         msaaColorView: GPUTextureView? = null,
         msaaColorTexture: GPUTexture? = null,
     ) {
@@ -1159,6 +1237,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             coverageMaskView,
             coverageMaskTexture,
             bindGroupUniformBuffer,
+            analyticClipBindGroup,
+            analyticClipBindGroupUniformBuffer,
             msaaColorView,
             msaaColorTexture,
         )
@@ -1179,6 +1259,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         coverageMaskView: GPUTextureView? = null,
         coverageMaskTexture: GPUTexture? = null,
         bindGroupUniformBuffer: GPUBuffer? = null,
+        analyticClipBindGroup: GPUBindGroup? = null,
+        analyticClipBindGroupUniformBuffer: GPUBuffer? = null,
         msaaColorView: GPUTextureView? = null,
         msaaColorTexture: GPUTexture? = null,
     ) {
@@ -1218,6 +1300,13 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
             )
         }
         bindGroupClose?.let(pendingClose::add)
+        val analyticClipBindGroupClose = analyticClipBindGroup?.let { group ->
+            PendingCloseHandle(
+                handle = group,
+                dependentUniformBuffer = requireNotNull(analyticClipBindGroupUniformBuffer),
+            )
+        }
+        analyticClipBindGroupClose?.let(pendingClose::add)
         uniformBuffer?.let {
             val bindGroupPrerequisites = pendingClose.filter { pending ->
                 pending.dependentUniformBuffer === it
@@ -1286,12 +1375,17 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         pathRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
         clipRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement?,
         coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
+        coverageMaskConsumerBindGroupRequired: Boolean,
+        analyticClipBindGroupRequired: Boolean,
         msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): Boolean = this.componentIdentity == componentIdentity &&
         (pathRequirement == null || pathDepthStencil?.requirement == pathRequirement) &&
         (clipRequirement == null || clipDepthStencil?.requirement == clipRequirement) &&
         (coverageMaskRequirement == null || coverageMask?.requirement == coverageMaskRequirement) &&
+        (!coverageMaskConsumerBindGroupRequired ||
+            coverageMask?.consumerBindGroupOrNull != null) &&
+        (!analyticClipBindGroupRequired || analyticClipBindGroupOrNull != null) &&
         (msaaColorRequirement == null || msaaColor?.requirement == msaaColorRequirement)
 
     private fun selectAvailableSlot(
@@ -1300,13 +1394,15 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
         pathDepthStencilRequirement: GPUWgpu4kCorePrimitivePathDepthStencilRequirement?,
         clipDepthStencilRequirement: GPUWgpu4kCorePrimitiveClipDepthStencilRequirement?,
         coverageMaskRequirement: GPUWgpu4kCorePrimitiveCoverageMaskRequirement?,
+        coverageMaskConsumerBindGroupRequired: Boolean,
+        analyticClipBindGroupRequired: Boolean,
         msaaColorRequirement: GPUWgpu4kCorePrimitiveMsaaColorRequirement?,
         componentIdentity: GPUWgpu4kCorePrimitiveComponentIdentity,
     ): Slot? {
         fun Slot.hasCapacities() = capacities.contains(requiredCapacities)
         fun Slot.hasComponent() = handles.componentIdentity == componentIdentity
         if (pathDepthStencilRequirement == null && clipDepthStencilRequirement == null &&
-            coverageMaskRequirement == null
+            coverageMaskRequirement == null && !analyticClipBindGroupRequired
             && msaaColorRequirement == null
         ) {
             return available.firstOrNull { slot -> slot.hasCapacities() && slot.hasComponent() }
@@ -1319,6 +1415,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 pathDepthStencilRequirement,
                 clipDepthStencilRequirement,
                 coverageMaskRequirement,
+                coverageMaskConsumerBindGroupRequired,
+                analyticClipBindGroupRequired,
                 msaaColorRequirement,
                 componentIdentity,
             )
@@ -1327,6 +1425,8 @@ internal class GPUWgpu4kCorePrimitiveFramePool(
                 pathDepthStencilRequirement,
                 clipDepthStencilRequirement,
                 coverageMaskRequirement,
+                coverageMaskConsumerBindGroupRequired,
+                analyticClipBindGroupRequired,
                 msaaColorRequirement,
                 componentIdentity,
             )

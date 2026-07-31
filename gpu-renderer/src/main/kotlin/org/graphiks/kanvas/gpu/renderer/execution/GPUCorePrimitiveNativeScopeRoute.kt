@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveDirectNativeRoute
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
 
 /** One original draw command in the exact native execution order retained by pure preflight. */
 internal sealed interface GPUCorePrimitiveNativeScopeRouteUnit {
@@ -69,13 +70,74 @@ internal sealed interface GPUCorePrimitiveNativeScopeUniformCoverage {
     }
 }
 
+/**
+ * Closed, handle-free authority for the exact uniform slab shared by unified CorePrimitive runs.
+ *
+ * Indexed path routes own the canonical uniform32 slab directly. Direct routes retain the
+ * already-validated prepared-pass authority because analytic shape/clip programs own uniform80,
+ * uniform64, or uniform160 slabs rather than a [GPUCorePrimitiveUniformSlabSeal].
+ */
+internal sealed interface GPUCorePrimitiveNativeScopeUniformAuthority {
+    val plan: GPUUniformSlabPlan
+    val commandIds: List<Int>
+
+    fun packedBytesForUpload(): ByteArray
+
+    fun hasSameBackingAuthority(other: GPUCorePrimitiveNativeScopeUniformAuthority): Boolean
+
+    class Uniform32Slab(
+        val seal: GPUCorePrimitiveUniformSlabSeal,
+    ) : GPUCorePrimitiveNativeScopeUniformAuthority {
+        override val plan: GPUUniformSlabPlan
+            get() = seal.plan
+        override val commandIds: List<Int>
+            get() = seal.commandIds
+
+        override fun packedBytesForUpload(): ByteArray = seal.packedBytesForUpload()
+
+        override fun hasSameBackingAuthority(
+            other: GPUCorePrimitiveNativeScopeUniformAuthority,
+        ): Boolean = other is Uniform32Slab && other.seal === seal
+    }
+
+    class DirectPreparedPass(
+        val seal: GPUCorePrimitiveDirectPreparedPassSeal,
+    ) : GPUCorePrimitiveNativeScopeUniformAuthority {
+        override val plan: GPUUniformSlabPlan
+            get() = seal.uniformPlan
+        override val commandIds: List<Int>
+            get() = seal.commandIds
+
+        override fun packedBytesForUpload(): ByteArray = seal.packedUniformBytesForUpload()
+
+        override fun hasSameBackingAuthority(
+            other: GPUCorePrimitiveNativeScopeUniformAuthority,
+        ): Boolean = other is DirectPreparedPass && other.seal === seal
+    }
+
+    class PathPreparedPass(
+        val seal: GPUCorePrimitivePathStencilPreparedPassSeal,
+    ) : GPUCorePrimitiveNativeScopeUniformAuthority {
+        override val plan: GPUUniformSlabPlan
+            get() = seal.uniformPlan
+        override val commandIds: List<Int>
+            get() = seal.commandIds
+
+        override fun packedBytesForUpload(): ByteArray = seal.packedUniformBytesForUpload()
+
+        override fun hasSameBackingAuthority(
+            other: GPUCorePrimitiveNativeScopeUniformAuthority,
+        ): Boolean = other is PathPreparedPass && other.seal === seal
+    }
+}
+
 internal sealed interface GPUCorePrimitiveNativeScopeRouteSeal {
     data object Missing : GPUCorePrimitiveNativeScopeRouteSeal
     data object Empty : GPUCorePrimitiveNativeScopeRouteSeal
 
-    class Routes internal constructor(
+    class Routes private constructor(
         orderedUnits: List<GPUCorePrimitiveNativeScopeRouteUnit>,
-        val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+        val uniformAuthority: GPUCorePrimitiveNativeScopeUniformAuthority,
         val uniformCoverage: GPUCorePrimitiveNativeScopeUniformCoverage =
             GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope,
     ) : GPUCorePrimitiveNativeScopeRouteSeal {
@@ -84,6 +146,10 @@ internal sealed interface GPUCorePrimitiveNativeScopeRouteSeal {
         val flattenedPacketIds: List<GPUDrawPacketID> = immutableList(
             orderedUnits.flatMap(GPUCorePrimitiveNativeScopeRouteUnit::flattenedPacketIds),
         )
+        val uniformPlan: GPUUniformSlabPlan
+            get() = uniformAuthority.plan
+        val uniformCommandIds: List<Int>
+            get() = uniformAuthority.commandIds
 
         init {
             require(orderedUnits.isNotEmpty()) { "A unified native route seal must not be empty" }
@@ -96,13 +162,13 @@ internal sealed interface GPUCorePrimitiveNativeScopeRouteSeal {
             require(
                 when (uniformCoverage) {
                     GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope ->
-                        commandIds == uniformSlabSeal.commandIds
+                        commandIds == uniformAuthority.commandIds
                     is GPUCorePrimitiveNativeScopeUniformCoverage.ExactCommandRange -> {
                         val endIndex = uniformCoverage.startIndex +
                             uniformCoverage.commandCount
-                        endIndex <= uniformSlabSeal.commandIds.size &&
+                        endIndex <= uniformAuthority.commandIds.size &&
                             uniformCoverage.commandCount == commandIds.size &&
-                            uniformSlabSeal.commandIds.subList(
+                            uniformAuthority.commandIds.subList(
                                 uniformCoverage.startIndex,
                                 endIndex,
                             ) == commandIds
@@ -112,6 +178,57 @@ internal sealed interface GPUCorePrimitiveNativeScopeRouteSeal {
                 "Unified native route commands must match their declared shared-uniform coverage"
             }
         }
+
+        internal constructor(
+            orderedUnits: List<GPUCorePrimitiveNativeScopeRouteUnit>,
+            uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+            uniformCoverage: GPUCorePrimitiveNativeScopeUniformCoverage =
+                GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope,
+        ) : this(
+            orderedUnits,
+            GPUCorePrimitiveNativeScopeUniformAuthority.Uniform32Slab(uniformSlabSeal),
+            uniformCoverage,
+        )
+
+        internal constructor(
+            orderedUnits: List<GPUCorePrimitiveNativeScopeRouteUnit>,
+            directPreparedPassSeal: GPUCorePrimitiveDirectPreparedPassSeal,
+            uniformCoverage: GPUCorePrimitiveNativeScopeUniformCoverage =
+                GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope,
+        ) : this(
+            orderedUnits,
+            GPUCorePrimitiveNativeScopeUniformAuthority.DirectPreparedPass(
+                directPreparedPassSeal,
+            ),
+            uniformCoverage,
+        )
+
+        internal constructor(
+            orderedUnits: List<GPUCorePrimitiveNativeScopeRouteUnit>,
+            pathPreparedPassSeal: GPUCorePrimitivePathStencilPreparedPassSeal,
+            uniformCoverage: GPUCorePrimitiveNativeScopeUniformCoverage =
+                GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope,
+        ) : this(
+            orderedUnits,
+            GPUCorePrimitiveNativeScopeUniformAuthority.PathPreparedPass(
+                pathPreparedPassSeal,
+            ),
+            uniformCoverage,
+        )
+
+        internal fun withOrderedUnits(
+            orderedUnits: List<GPUCorePrimitiveNativeScopeRouteUnit>,
+        ): Routes = Routes(
+            orderedUnits,
+            uniformAuthority,
+            GPUCorePrimitiveNativeScopeUniformCoverage.ExactScope,
+        )
+
+        internal fun hasSameUniformAuthority(other: Routes): Boolean =
+            uniformAuthority.hasSameBackingAuthority(other.uniformAuthority)
+
+        internal fun packedUniformBytesForUpload(): ByteArray =
+            uniformAuthority.packedBytesForUpload()
     }
 }
 

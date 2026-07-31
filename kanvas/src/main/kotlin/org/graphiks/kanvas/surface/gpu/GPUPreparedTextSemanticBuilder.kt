@@ -41,11 +41,15 @@ internal object GPUPreparedTextSemanticBuilder {
         visualCommands: List<GPUFramePathVisualCommand>,
         inventory: PreparedTextFrameInventory,
         targetBounds: GPUPixelBounds,
+        culledTextOperationIndices: Set<Int> = emptySet(),
         gatherA8: (GPUPreparedTextA8PayloadInput) -> GPUDrawSemanticPayload.TextA8 =
             GPUPreparedTextPayloadGatherer()::gather,
     ): GPUPreparedTextSemanticGatherResult {
         val textVisuals = visualCommands.filter { visual -> visual.preparedText != null }
-        val expectedSubRuns = inventory.subRunsByOperationIndex.values.flatten()
+        val expectedSubRuns = inventory.subRunsByOperationIndex.flatMap {
+            (operationIndex, subRuns) ->
+            if (operationIndex in culledTextOperationIndices) emptyList() else subRuns
+        }
         if (textVisuals.mapNotNull(GPUFramePathVisualCommand::preparedText) != expectedSubRuns) {
             return GPUPreparedTextSemanticGatherResult.Refused(
                 code = "invalid.surface.prepared.text-command-bijection",

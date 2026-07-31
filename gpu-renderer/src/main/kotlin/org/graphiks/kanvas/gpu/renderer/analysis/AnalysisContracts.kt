@@ -1697,7 +1697,14 @@ class GPUFirstRoutePlanner(
             transform.type == GPUTransformType.Perspective -> "unsupported.transform.perspective"
             transform.type == GPUTransformType.Singular -> "unsupported.transform.singular"
             transform.type !in acceptedFillPathTransformTypes -> "unsupported.transform.class_downgrade"
-            clip.kind == GPUClipKind.ComplexStack -> "unsupported.clip.complex_stack"
+            clip.kind == GPUClipKind.ComplexStack &&
+                (
+                    clip.coveragePlan == null ||
+                        clip.coveragePlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan.Refused ||
+                        clip.executionPlan == null ||
+                        clip.executionPlan is org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan.Refused
+                    ) ->
+                "unsupported.clip.complex_stack"
             clip.kind !in acceptedClipKinds -> "unsupported.clip.analytic_unsupported"
             clip.kind == GPUClipKind.DeviceRect && !capabilities.hasFact(firstScissorCapabilityName) ->
                 "unsupported.clip.scissor_capability_missing"

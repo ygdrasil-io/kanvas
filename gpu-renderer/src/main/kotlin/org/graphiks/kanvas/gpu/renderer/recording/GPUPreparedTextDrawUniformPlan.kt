@@ -4,12 +4,107 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
+import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant
+
+sealed interface GPUPreparedTextClipPlan {
+    val variant: GPUPreparedTextClipVariant
+    val executionPlanIdentity: String
+
+    @ConsistentCopyVisibility
+    data class Direct internal constructor(
+        override val executionPlanIdentity: String,
+    ) : GPUPreparedTextClipPlan {
+        override val variant: GPUPreparedTextClipVariant = GPUPreparedTextClipVariant.None
+    }
+
+    @ConsistentCopyVisibility
+    data class CoverageMask internal constructor(
+        override val executionPlanIdentity: String,
+        val contentKey: String,
+        val orderingToken: String,
+    ) : GPUPreparedTextClipPlan {
+        override val variant: GPUPreparedTextClipVariant =
+            GPUPreparedTextClipVariant.CoverageMask
+
+        init {
+            require(
+                executionPlanIdentity.isNotBlank() && contentKey.isNotBlank() &&
+                    orderingToken.isNotBlank(),
+            )
+        }
+    }
+
+    @ConsistentCopyVisibility
+    data class Analytic internal constructor(
+        override val variant: GPUPreparedTextClipVariant,
+        override val executionPlanIdentity: String,
+        val left: Float,
+        val top: Float,
+        val right: Float,
+        val bottom: Float,
+        val radiusX: Float,
+        val radiusY: Float,
+    ) : GPUPreparedTextClipPlan {
+        init {
+            require(variant != GPUPreparedTextClipVariant.None)
+            require(listOf(left, top, right, bottom, radiusX, radiusY).all(Float::isFinite))
+            require(left < right && top < bottom && radiusX >= 0f && radiusY >= 0f)
+            require(executionPlanIdentity.isNotBlank())
+        }
+    }
+}
+
+internal fun preparedTextClipPlan(
+    executionPlan: GPUClipExecutionPlan,
+    targetBounds: GPUPixelBounds,
+): GPUPreparedTextClipPlan? {
+    if (executionPlan is GPUClipExecutionPlan.CoverageMask) {
+        return GPUPreparedTextClipPlan.CoverageMask(
+            executionPlanIdentity = executionPlan.canonicalIdentity(),
+            contentKey = executionPlan.contentKey,
+            orderingToken = executionPlan.orderingToken.value,
+        )
+    }
+    if (executionPlan !is GPUClipExecutionPlan.AnalyticCoverage) {
+        return GPUPreparedTextClipPlan.Direct(executionPlan.canonicalIdentity())
+    }
+    val authority = corePrimitiveAnalyticClipAuthority(executionPlan, targetBounds) as?
+        GPUCorePrimitiveAnalyticClipAuthority.Accepted ?: return null
+    val variant = when (authority.clipType) {
+        GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect ->
+            if (authority.antiAlias) {
+                GPUPreparedTextClipVariant.AnalyticRectAA
+            } else {
+                GPUPreparedTextClipVariant.AnalyticRectHard
+            }
+        GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect ->
+            if (authority.antiAlias) {
+                GPUPreparedTextClipVariant.AnalyticRRectAA
+            } else {
+                GPUPreparedTextClipVariant.AnalyticRRectHard
+            }
+        GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Path -> return null
+    }
+    return GPUPreparedTextClipPlan.Analytic(
+        variant = variant,
+        executionPlanIdentity = executionPlan.canonicalIdentity(),
+        left = authority.bounds[0],
+        top = authority.bounds[1],
+        right = authority.bounds[2],
+        bottom = authority.bounds[3],
+        radiusX = authority.packedRadii[0],
+        radiusY = authority.packedRadii[1],
+    )
+}
 
 data class GPUPreparedTextDrawUniformSlice(
     val packetId: GPUDrawPacketID,
@@ -100,6 +195,7 @@ class GPUPreparedTextDrawUniformBufferPlan(
 internal data class GPUPreparedTextDrawUniformInput(
     val packetId: GPUDrawPacketID,
     val semantic: GPUDrawSemanticPayload.TextA8,
+    val clipPlan: GPUPreparedTextClipPlan,
 )
 
 internal sealed interface GPUPreparedTextDrawUniformPlanResult {
@@ -202,6 +298,20 @@ internal fun buildPreparedTextDrawUniformBufferPlan(
         target.putFloat(affine.m11)
         target.putFloat(affine.m12)
         target.putFloat(0f)
+        when (val clipPlan = input.clipPlan) {
+            is GPUPreparedTextClipPlan.Direct -> repeat(8) { target.putFloat(0f) }
+            is GPUPreparedTextClipPlan.CoverageMask -> repeat(8) { target.putFloat(0f) }
+            is GPUPreparedTextClipPlan.Analytic -> {
+                target.putFloat(clipPlan.left)
+                target.putFloat(clipPlan.top)
+                target.putFloat(clipPlan.right)
+                target.putFloat(clipPlan.bottom)
+                target.putFloat(clipPlan.radiusX)
+                target.putFloat(clipPlan.radiusY)
+                target.putFloat(0f)
+                target.putFloat(0f)
+            }
+        }
         val logicalEnd = Math.addExact(
             offsetBytes,
             PREPARED_TEXT_DRAW_UNIFORM_LOGICAL_BYTES,
@@ -248,5 +358,5 @@ internal fun ByteArray.preparedTextSha256(): String =
             }
     }
 
-internal const val PREPARED_TEXT_DRAW_UNIFORM_LOGICAL_BYTES: Long = 48L
+internal const val PREPARED_TEXT_DRAW_UNIFORM_LOGICAL_BYTES: Long = 80L
 private const val PREPARED_TEXT_LOWER_HEX_DIGITS = "0123456789abcdef"

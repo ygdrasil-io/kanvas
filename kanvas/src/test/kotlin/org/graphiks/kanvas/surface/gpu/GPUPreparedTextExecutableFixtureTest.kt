@@ -26,6 +26,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolu
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPURuntimeEffectMaterialEvaluationInput
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPURuntimeEffectMaterialEvaluationResult
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.SimpleRTCPUOracle
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 import org.graphiks.kanvas.image.AlphaType
@@ -174,17 +175,18 @@ class GPUPreparedTextExecutableFixtureTest {
         )
         assertEquals(listOf(0.25f, 0.5f, 0.75f, 1f), listOf(cpu.r, cpu.g, cpu.b, cpu.a))
 
-        // Recorded once from this stable typed fixture at bab19ba944853 and
-        // hand-checked against the seven source-family WGSL implementations.
+        // Recorded once from this stable typed fixture after pre-coverage source alpha became
+        // an admitted material-key/ABI fact, then hand-checked against all seven WGSL families.
         // No expected identity below is derived by the compiler under test.
         val expectations = linkedMapOf(
             "solid" to MaterialExpectation(
                 sourceKind = GPUMaterialSourceKind.SolidColor,
+                preCoverageSourceAlpha = GPUSourceAlphaClassification.ProvenOpaque,
                 materialKey =
-                    "material:prepared:solidcolor:" +
-                        "a01b911399d528824a565d46ff8ca09f25ce4ced80a895520e53bc36c071a2d3",
+                        "material:prepared:solidcolor:" +
+                        "859e76254c9addedeecb848e604b5526a7dc951f5e215015a453fb919a1b4624",
                 abiHash =
-                    "sha256:4209fedb9e7929e15e81cfca6f687905adf4b6eaba254be2834ae0a8c4a5067a",
+                    "sha256:c59bf2f2d836f190defffad2fd669dae339af64cf663baa91289bc0ca17f0571",
                 wgslSha256 =
                     "4b1404cd4bf7aef896ae03b4f1ee152d8cf58938d0d1c30112147a72167df8cc",
                 fragmentHash =
@@ -198,11 +200,12 @@ class GPUPreparedTextExecutableFixtureTest {
             ),
             "linear" to MaterialExpectation(
                 sourceKind = GPUMaterialSourceKind.Gradient,
+                preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
-                    "material:prepared:gradient:" +
-                        "e200b4eabf9b40cfdd48c07e7c04fde8ec8ecad28d1691326f4926bcf4907147",
+                        "material:prepared:gradient:" +
+                        "5034a45377a53f7d5d25fc065a2af43cfea55ee4a5091a04459730d26996f00a",
                 abiHash =
-                    "sha256:e9daaaca18e41ba66d9343d005e957ff7b0fe72e8289b7ca03d009a1647e30b3",
+                    "sha256:bf29904216e4f377ccf22a722fda50d10ae0dd67ca47330b2ad9b76b1974e2b6",
                 wgslSha256 =
                     "3135797b82879597ea6bea1c3a583180ef37efc82d29fd16aaed5b5a9269cc77",
                 fragmentHash =
@@ -216,11 +219,12 @@ class GPUPreparedTextExecutableFixtureTest {
             ),
             "radial" to MaterialExpectation(
                 sourceKind = GPUMaterialSourceKind.Gradient,
+                preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
-                    "material:prepared:gradient:" +
-                        "55cec0715fdce8814fbd3179074c75a14f08b7ce38776361729a3acca5987589",
+                        "material:prepared:gradient:" +
+                        "2137563615ea35bd8c68ad2dc405747f122ffb36e026cab54f40ded9e7ef8e70",
                 abiHash =
-                    "sha256:902261618527aaca2db825e238280ef43ba8ed80a5f2f62b9e4e65eb6eb8ac33",
+                    "sha256:691c819fb208a1a470c5066bec35e33293b2ca03dad569c30a1c957ab5e4a71d",
                 wgslSha256 =
                     "c6d95da0614bad81bee5a9c51f93bb95f4f34a5b4584a26ae4380e1567f9624a",
                 fragmentHash =
@@ -234,11 +238,12 @@ class GPUPreparedTextExecutableFixtureTest {
             ),
             "sweep" to MaterialExpectation(
                 sourceKind = GPUMaterialSourceKind.Gradient,
+                preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
-                    "material:prepared:gradient:" +
-                        "42def2ea32f2be1e674584084b3170652633655c98faee12466ec4f60fbd7dfa",
+                        "material:prepared:gradient:" +
+                        "056f983255b7ebaf539a408ee923629a5ac2f3ed49543cc1bdbd0ae34108b784",
                 abiHash =
-                    "sha256:1e1b1f81d21b58dee29466bac8093b0ef2044cf9977b26753a0d49f8420cef6c",
+                    "sha256:955a43edd1d349593581f53aabf1fa30251e0b55777fa4a5bf313c2913f2814d",
                 wgslSha256 =
                     "4a85b68d2661aaf863faecb5263d46255007cd5f06ad2ff7cc81bfe4182d8596",
                 fragmentHash =
@@ -252,11 +257,12 @@ class GPUPreparedTextExecutableFixtureTest {
             ),
             "conical" to MaterialExpectation(
                 sourceKind = GPUMaterialSourceKind.Gradient,
+                preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
-                    "material:prepared:gradient:" +
-                        "7d73a591a0d7128bf48a9e1e41c59f85cfe5c94c88471550259fb14d2a546020",
+                        "material:prepared:gradient:" +
+                        "2b9af3753ff7981d2ef72db63e82a532cf047602a91e261e906029aa14d222dc",
                 abiHash =
-                    "sha256:d02f5a27ecced085ff612fe838138e23b70899c35491b298e172d58d3850c4f7",
+                    "sha256:9d44dfe5d5e5b5c4e329a2a6327b4f810cfb5c6888071cb17f4f9730328bb4b5",
                 wgslSha256 =
                     "3fcf60a17773dccfb1c8931875d13ec5a16f730b7f2ae8e897981c046e5f9038",
                 fragmentHash =
@@ -270,11 +276,12 @@ class GPUPreparedTextExecutableFixtureTest {
             ),
             "runtime" to MaterialExpectation(
                 sourceKind = GPUMaterialSourceKind.RuntimeEffect,
+                preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
-                    "material:prepared:runtimeeffect:" +
-                        "34ebfa0aeb4b4a66bf25ff89bb0814e794bf1700ee1d5972d8d51ce50fe52d9d",
+                        "material:prepared:runtimeeffect:" +
+                        "ef948366ff7d700840ccdff9d6724bd13f252a2f86a96bc2b2b33fdc0591aee4",
                 abiHash =
-                    "sha256:855924b7b1c316b2b7e0cd963237b66dcddc67795f6989bcdf5d44b129fb85f0",
+                    "sha256:e88659cf2efc31c62248e39512b3e11f49a87a88ada2b3c6327f293d6660f130",
                 wgslSha256 =
                     "0a1b50d95d53a2eae8dd6994b03dc25544a4cda1e67029b9c92281983bb8a2cb",
                 fragmentHash =
@@ -290,11 +297,12 @@ class GPUPreparedTextExecutableFixtureTest {
             ),
             "image" to MaterialExpectation(
                 sourceKind = GPUMaterialSourceKind.ImageShader,
+                preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
-                    "material:prepared:imageshader:" +
-                        "0672191788c0ea07e9722f221b92fd86a71dfd539cce4760bbc6a53697c6cd35",
+                        "material:prepared:imageshader:" +
+                        "82b4533c9f35fa91d7977be00c8d108c2938800a19758618217ec258bcc2d2a9",
                 abiHash =
-                    "sha256:e2f72911feeccb17401180ae1f67ea9b20a4c1af5b9da57717d44decf645396e",
+                    "sha256:175d68964f7527112224603ec02e7ee13751e9807c5dba7ebc6baced5919127b",
                 wgslSha256 =
                     "7337b56fac8b54a56df024cce5bedb65d9a871abaadf3c209c823375fc006683",
                 fragmentHash =
@@ -684,6 +692,11 @@ class GPUPreparedTextExecutableFixtureTest {
         expected: MaterialExpectation,
     ) {
         assertEquals(expected.sourceKind, program.sourceKind, label)
+        assertEquals(
+            expected.preCoverageSourceAlpha,
+            program.preCoverageSourceAlpha,
+            label,
+        )
         assertEquals(expected.materialKey, program.materialKey, label)
         assertEquals(expected.abiHash, program.abiHash, label)
         assertEquals(expected.wgslSha256, sha256(program.wgslSource), label)
@@ -759,6 +772,7 @@ class GPUPreparedTextExecutableFixtureTest {
 
     private data class MaterialExpectation(
         val sourceKind: GPUMaterialSourceKind,
+        val preCoverageSourceAlpha: GPUSourceAlphaClassification,
         val materialKey: String,
         val abiHash: String,
         val wgslSha256: String,

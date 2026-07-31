@@ -12,6 +12,10 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageMaskProducerUniformSlabSeal
+import org.graphiks.kanvas.gpu.renderer.passes.validateCoverageMaskProducerUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
@@ -20,6 +24,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPreparedImageClipAuthorityValidation
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.passes.fromBatchPlan
@@ -35,7 +40,12 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflight
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextClipPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphAnalyticRectClipFacts
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphClipPreflightSeal
+import org.graphiks.kanvas.gpu.renderer.recording.matchesPreparedColorGlyphClip
+import org.graphiks.kanvas.gpu.renderer.recording.matchesPreparedColorGlyphCoverageMaskProducer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.recording.preparedTextNativeBlendDomainRefusal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayout
@@ -49,6 +59,8 @@ import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESO
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryAllocation
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryResourceKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
@@ -301,6 +313,120 @@ internal class GPUPreparedSurfaceChainSeal(
     }
 }
 
+internal class GPUPreparedSurfaceCoverageMaskRunPlan(
+    val sourceScopeIndex: Int,
+    val renderStep: GPUFrameStep.RenderPassStep,
+    val slabSeal: GPUCoverageMaskProducerUniformSlabSeal,
+    val preparation: GPUResourcePreparationRequest,
+    val exactScopeKey: GPUPreparedNativeScopeKey,
+) {
+    init {
+        require(sourceScopeIndex >= 0 &&
+            renderStep.target == preparation.resource &&
+            preparation.role == GPUFrameResourceRole.ClipMask &&
+            preparation.usages == setOf(
+                GPUFrameResourceUsage.RenderAttachment,
+                GPUFrameResourceUsage.TextureBinding,
+            ) &&
+            preparation.lifetime == GPUFrameResourceLifetime.FrameLocal &&
+            exactScopeKey.sourceStepIndex == sourceScopeIndex &&
+            exactScopeKey.operationKind == GPUEncoderOperationKind.Render &&
+            renderStep.drawPackets.isNotEmpty() &&
+            renderStep.target == slabSeal.maskResource &&
+            renderStep.drawPackets.map(GPUDrawPacket::packetId) ==
+            slabSeal.producerPacketIds &&
+            validateCoverageMaskProducerUniformSlabSeal(renderStep.drawPackets, slabSeal) &&
+            renderStep.drawPackets.all { packet ->
+                packet.role == GPUDrawPacketRole.ClipProducer &&
+                    packet.coverageMaskProducerUniformSlabSeal === slabSeal
+            }
+        )
+    }
+}
+
+private data class GPUPreparedColorGlyphDestinationReadAuthority(
+    val copySourceStepIndex: Int,
+    val renderSourceStepIndex: Int,
+    val copyStep: GPUFrameStep.CopyDestinationStep,
+    val renderStep: GPUFrameStep.RenderPassStep,
+    val packet: GPUDrawPacket,
+    val semantic: GPUDrawSemanticPayload.ColorGlyph,
+    val binding: GPUPreparedTextRenderBinding,
+    val snapshotPreparation: GPUResourcePreparationRequest,
+    val blendPlan: GPUBlendPlan.ShaderBlendWithDstRead,
+    val clip: GPUPreparedColorGlyphDestinationClipAuthority,
+)
+
+internal sealed interface GPUPreparedColorGlyphDestinationClipAuthority {
+    val variant: GPUColorGlyphDestinationClipVariant
+
+    data class AnalyticRect(
+        val facts: GPUPreparedColorGlyphAnalyticRectClipFacts,
+    ) : GPUPreparedColorGlyphDestinationClipAuthority {
+        override val variant = GPUColorGlyphDestinationClipVariant.AnalyticRect
+    }
+
+    data class CoverageMask(
+        val seal: GPUPreparedColorGlyphClipPreflightSeal.CoverageMask,
+        val resource: GPUFrameTargetRef,
+        val producerSourceScopeIndex: Int,
+        val preparation: GPUResourcePreparationRequest,
+    ) : GPUPreparedColorGlyphDestinationClipAuthority {
+        override val variant = GPUColorGlyphDestinationClipVariant.CoverageMask
+    }
+}
+
+internal class GPUPreparedColorGlyphDestinationReadPlan(
+    val copySourceStepIndex: Int,
+    val renderSourceStepIndex: Int,
+    val copyStep: GPUFrameStep.CopyDestinationStep,
+    val renderStep: GPUFrameStep.RenderPassStep,
+    val packet: GPUDrawPacket,
+    val semantic: GPUDrawSemanticPayload.ColorGlyph,
+    val binding: GPUPreparedTextRenderBinding,
+    val snapshotPreparation: GPUResourcePreparationRequest,
+    val snapshotEvidence: GPUPreparedResourceEvidence,
+    val blendPlan: GPUBlendPlan.ShaderBlendWithDstRead,
+    val clip: GPUPreparedColorGlyphDestinationClipAuthority,
+    val coverageMaskEvidence: GPUPreparedResourceEvidence?,
+    val programSeal: GPUColorGlyphDestinationProgramSeal,
+    val exactCopyScopeKey: GPUPreparedNativeScopeKey,
+    val exactRenderScopeKey: GPUPreparedNativeScopeKey,
+) {
+    init {
+        require(
+            copySourceStepIndex < renderSourceStepIndex &&
+                copyStep.snapshot == snapshotPreparation.resource &&
+                snapshotEvidence.logicalResource == snapshotPreparation.resource &&
+                snapshotEvidence.role == GPUFrameResourceRole.DestinationSnapshot &&
+                exactCopyScopeKey.sourceStepIndex == copySourceStepIndex &&
+                exactCopyScopeKey.operationKind == GPUEncoderOperationKind.CopyDestination &&
+                exactRenderScopeKey.sourceStepIndex == renderSourceStepIndex &&
+                exactRenderScopeKey.operationKind == GPUEncoderOperationKind.Render &&
+                blendPlan.mode == GPUBlendMode.COLOR_DODGE &&
+                blendPlan.sourceCoverageEncoding ==
+                GPUSourceCoverageEncoding.ScalarCoverageInShader &&
+                programSeal.formulaId == blendPlan.formulaId &&
+                programSeal.sourceCoverageEncoding == blendPlan.sourceCoverageEncoding &&
+                programSeal.targetFormat == GPUColorFormat.RGBA8UnormSrgb &&
+                programSeal.clipVariant == clip.variant.stableLabel &&
+                when (clip) {
+                    is GPUPreparedColorGlyphDestinationClipAuthority.AnalyticRect ->
+                        coverageMaskEvidence == null
+                    is GPUPreparedColorGlyphDestinationClipAuthority.CoverageMask ->
+                        clip.producerSourceScopeIndex < copySourceStepIndex &&
+                            clip.preparation.resource == clip.resource &&
+                            coverageMaskEvidence?.logicalResource == clip.resource &&
+                            coverageMaskEvidence?.role == GPUFrameResourceRole.ClipMask
+                } &&
+                semantic.payloadRef.commandIdValue == packet.commandIdValue &&
+                binding.packetId == packet.packetId,
+        ) {
+            "Prepared ColorGlyph destination-read plan must retain one exact sealed copy/formula consumer."
+        }
+    }
+}
+
 internal class GPUPreparedSurfaceNativePreflightPlan(
     val frameId: GPUFrameID,
     val encoderPlanId: String,
@@ -313,12 +439,18 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
     imageFrames: List<GPUPreparedSurfaceImageFramePlan>,
     val textPlan: GPUPreparedTextRenderRunPlan?,
     val colorGlyphPlan: GPUPreparedColorGlyphRenderRunPlan?,
+    colorGlyphDestinationReads: List<GPUPreparedColorGlyphDestinationReadPlan>,
+    coverageMaskRuns: List<GPUPreparedSurfaceCoverageMaskRunPlan>,
     exactScopeKeys: List<GPUPreparedNativeScopeKey>,
     val generationSeal: GPUPreparedGenerationSeal,
 ) {
     val orderedRuns: List<GPUPreparedSurfaceNativeRunPlan> = immutableList(orderedRuns)
     val imageFrames: List<GPUPreparedSurfaceImageFramePlan> = immutableList(imageFrames)
     val exactScopeKeys: List<GPUPreparedNativeScopeKey> = immutableList(exactScopeKeys)
+    val coverageMaskRuns: List<GPUPreparedSurfaceCoverageMaskRunPlan> =
+        immutableList(coverageMaskRuns)
+    val colorGlyphDestinationReads: List<GPUPreparedColorGlyphDestinationReadPlan> =
+        immutableList(colorGlyphDestinationReads)
 
     init {
         require(encoderPlanId.isNotBlank() && contextIdentity.isNotBlank())
@@ -333,6 +465,20 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
         require(this.exactScopeKeys.map(GPUPreparedNativeScopeKey::sourceStepIndex)
             .distinct().size == this.exactScopeKeys.size
         ) { "Global mixed preflight scope identities must be unique" }
+        this.colorGlyphDestinationReads.forEach { read ->
+            val mask = read.clip as?
+                GPUPreparedColorGlyphDestinationClipAuthority.CoverageMask
+                ?: return@forEach
+            require(this.coverageMaskRuns.singleOrNull { run ->
+                    run.sourceScopeIndex == mask.producerSourceScopeIndex &&
+                    run.preparation === mask.preparation &&
+                    run.preparation.resource == mask.resource &&
+                    run.slabSeal.planCanonicalIdentity ==
+                    mask.seal.executionPlanIdentity
+            } != null) {
+                "ColorGlyph CoverageMask destination read lost its exact producer run authority"
+            }
+        }
         val expectedScopeKeysWithSharedUploads = buildList {
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.imageFrames.map { it.uploadScopeKey })
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.orderedRuns.map { run ->
@@ -343,6 +489,12 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
             })
             textPlan?.let { addAll(it.exactScopeKeys) }
             colorGlyphPlan?.let { addAll(it.exactScopeKeys) }
+            addAll(this@GPUPreparedSurfaceNativePreflightPlan.colorGlyphDestinationReads.map {
+                it.exactCopyScopeKey
+            })
+            addAll(this@GPUPreparedSurfaceNativePreflightPlan.coverageMaskRuns.map {
+                it.exactScopeKey
+            })
             readback?.let { add(it.exactScopeKey) }
             surfaceChain?.let { add(it.exactBlitScopeKey) }
         }
@@ -376,9 +528,11 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
             .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Core>()
             .map { run -> run.plan.routeSeal as GPUCorePrimitiveNativeScopeRouteSeal.Routes }
         if (coreRoutes.isNotEmpty()) {
-            require(coreRoutes.map { route -> route.uniformSlabSeal }.distinct().size == 1 &&
+            require(coreRoutes.all { route ->
+                route.hasSameUniformAuthority(coreRoutes.first())
+            } &&
                 coreRoutes.flatMap { route -> route.commandIds } ==
-                coreRoutes.first().uniformSlabSeal.commandIds
+                coreRoutes.first().uniformCommandIds
             ) {
                 "Prepared CorePrimitive runs must exactly partition one frame-global uniform slab"
             }
@@ -434,7 +588,14 @@ internal class GPUPreparedSurfaceNativePreflight(
         colorGlyphCanonicalAuthentication:
             GPUPreparedColorGlyphCanonicalPlanAuthentication,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
-        val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val allRenders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val renders = allRenders.filterNot { render ->
+            render.drawPackets.isNotEmpty() &&
+                render.drawPackets.all { packet ->
+                    packet.role == org.graphiks.kanvas.gpu.renderer.passes
+                        .GPUDrawPacketRole.ClipProducer
+                }
+        }
         val packets = renders.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
         preparedTextNativeBlendDomainRefusal(
             packets
@@ -477,16 +638,21 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "SampledImage, TextA8, and ColorGlyph runs.",
             )
         }
-        if (framePlan.steps.any {
-                it is GPUFrameStep.CopyDestinationStep ||
-                    it is GPUFrameStep.CopyAsDrawMaterializationStep
+        if (framePlan.steps.any { step ->
+                step is GPUFrameStep.CopyAsDrawMaterializationStep
             }
         ) {
             return refused(
                 "unsupported.prepared-surface.destination-copy",
-                "The direct mixed prepared route does not admit destination-copy scopes.",
+                "The prepared ColorGlyph destination-read route does not admit CopyAsDraw.",
             )
         }
+        authenticateColorGlyphDestinationReads(
+            framePlan = framePlan,
+            renders = renders,
+            context = context,
+            capabilities = capabilities,
+        ).second?.let { return it }
         if (framePlan.steps.any { step -> !step.isPreparedSurfaceStep() }) {
             return refused(
                 "unsupported.prepared-surface.encoder-shape",
@@ -615,6 +781,269 @@ internal class GPUPreparedSurfaceNativePreflight(
             imageUploads,
             shaderContract,
         )
+    }
+
+    private fun authenticateColorGlyphDestinationReads(
+        framePlan: GPUFramePlan,
+        renders: List<GPUFrameStep.RenderPassStep>,
+        context: GPUFramePreflightContext?,
+        capabilities: GPUCapabilities?,
+    ): Pair<
+        List<GPUPreparedColorGlyphDestinationReadAuthority>,
+        GPUPreparedSurfaceNativePreflightResult.Refused?,
+        > {
+        val indexedCopies = framePlan.steps.mapIndexedNotNull { index, step ->
+            when (step) {
+                is GPUFrameStep.CopyDestinationStep -> index to step
+                else -> null
+            }
+        }
+        val destinationPackets = renders.flatMap { render ->
+            render.drawPackets.filter { packet ->
+                packet.blendPlan?.destinationReadRequirement ==
+                    org.graphiks.kanvas.gpu.renderer.passes
+                        .GPUBlendDestinationReadRequirement.DestinationTextureRequired
+            }
+        }
+        if (indexedCopies.isEmpty() && destinationPackets.isEmpty()) {
+            return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to null
+        }
+        if (indexedCopies.size != destinationPackets.size ||
+            indexedCopies.isEmpty()
+        ) {
+            return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Every destination-reading ColorGlyph packet requires one exact copy scope.",
+            )
+        }
+        val preparations = framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val scenePreparation = preparations.singleOrNull { request ->
+            request.role == GPUFrameResourceRole.SceneTarget
+        }
+        val sceneDescriptor = scenePreparation?.descriptor as? GPUFrameTextureDescriptor
+        if (scenePreparation == null || sceneDescriptor == null) {
+            return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Prepared ColorGlyph destination reads require one exact scene texture.",
+            )
+        }
+        val renderEvidence = framePlan.steps.mapIndexedNotNull { index, step ->
+            when (step) {
+                is GPUFrameStep.RenderPassStep -> index to step
+                else -> null
+            }
+        }
+        val authorities = mutableListOf<GPUPreparedColorGlyphDestinationReadAuthority>()
+        val consumedPacketIds = mutableSetOf<GPUDrawPacketID>()
+        indexedCopies.forEach { (copyIndex, copy) ->
+            val consumer = copy.consumers.singleOrNull()
+                ?: return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared ColorGlyph destination copies require one exact consumer.",
+                )
+            val renderEntry = renderEvidence.singleOrNull { (_, render) ->
+                render.drawPackets.any { packet -> packet.packetId == consumer.packetId }
+            }
+                ?: return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared ColorGlyph destination copy lost its exact render consumer.",
+                )
+            val renderIndex = renderEntry.first
+            val render = renderEntry.second
+            val packet = render.drawPackets.single { candidate ->
+                candidate.packetId == consumer.packetId
+            }
+            val semantic = when (val payload = packet.semanticPayload) {
+                is GPUDrawSemanticPayload.ColorGlyph -> payload
+                else -> return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to
+                    refused(
+                        "unsupported.prepared-surface.destination-copy",
+                        "Only ColorGlyph packets may consume prepared-surface destination copies.",
+                    )
+            }
+            val blend = when (val plan = packet.blendPlan) {
+                is GPUBlendPlan.ShaderBlendWithDstRead -> plan
+                else -> return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to
+                    refused(
+                        "unsupported.prepared-surface.destination-copy",
+                        "Prepared ColorGlyph destination reads require one shader destination blend.",
+                    )
+            }
+            if (blend.mode != GPUBlendMode.COLOR_DODGE ||
+                blend.sourceCoverageEncoding !=
+                GPUSourceCoverageEncoding.ScalarCoverageInShader ||
+                blend.formulaId != "color_dodge@v1" ||
+                semantic.blendPlanIdentity != blend.canonicalIdentity()
+            ) {
+                return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared ColorGlyph destination reads require canonical scalar color_dodge@v1.",
+                )
+            }
+            val binding = render.preparedTextBindingsByPacketId[packet.packetId]
+            val clipAuthority = when (
+                val clipSeal = binding?.preflightSeal?.colorGlyphClip
+            ) {
+                is GPUPreparedColorGlyphClipPreflightSeal.NonMask -> if (
+                    clipSeal.matchesPreparedColorGlyphClip(packet)
+                ) {
+                    clipSeal.analyticRect?.let(
+                        GPUPreparedColorGlyphDestinationClipAuthority::AnalyticRect,
+                    )
+                } else {
+                    null
+                }
+                is GPUPreparedColorGlyphClipPreflightSeal.CoverageMask ->
+                    binding.coverageMaskResource?.takeIf {
+                        clipSeal.matchesPreparedColorGlyphClip(packet)
+                    }?.let { resource ->
+                    if (clipSeal.resource != resource) return@let null
+                    val producer = framePlan.steps.mapIndexedNotNull { index, step ->
+                        (step as? GPUFrameStep.RenderPassStep)
+                            ?.takeIf { candidate ->
+                                    candidate.target == resource &&
+                                    candidate.drawPackets.isNotEmpty() &&
+                                    candidate.drawPackets.all { producerPacket ->
+                                        clipSeal
+                                            .matchesPreparedColorGlyphCoverageMaskProducer(
+                                                producerPacket,
+                                            )
+                                    }
+                            }
+                            ?.let { index to it }
+                    }.singleOrNull() ?: return@let null
+                    val preparation = preparations.singleOrNull { request ->
+                        request.resource == resource &&
+                            request.role == GPUFrameResourceRole.ClipMask
+                    } ?: return@let null
+                    if (producer.first >= copyIndex) return@let null
+                    GPUPreparedColorGlyphDestinationClipAuthority.CoverageMask(
+                        clipSeal,
+                        resource,
+                        producer.first,
+                        preparation,
+                    )
+                }
+                null -> null
+            } ?: return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Prepared ColorGlyph destination reads require an analytic rectangle or shared CoverageMask.",
+            )
+            val snapshotPreparation = preparations.singleOrNull { request ->
+                request.resource == copy.snapshot
+            }
+            val snapshotDescriptor =
+                snapshotPreparation?.descriptor as? GPUFrameTextureDescriptor
+            val expectedTextureBytes = try {
+                Math.multiplyExact(
+                    Math.multiplyExact(copy.logicalBounds.width.toLong(), 4L),
+                    copy.logicalBounds.height.toLong(),
+                )
+            } catch (_: ArithmeticException) {
+                return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared ColorGlyph destination snapshot byte accounting overflowed.",
+                )
+            }
+            val minimumBytesPerRow = try {
+                Math.multiplyExact(copy.logicalBounds.width.toLong(), 4L)
+            } catch (_: ArithmeticException) {
+                return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared ColorGlyph destination snapshot row accounting overflowed.",
+                )
+            }
+            val copyAlignment = capabilities?.limits?.copyBytesPerRowAlignment
+            if (copyIndex >= renderIndex ||
+                !consumedPacketIds.add(packet.packetId) ||
+                consumer.commandId.value != packet.commandIdValue ||
+                consumer.groupingCommandId != packet.commandIdValue.toString() ||
+                consumer.renderTaskId !in render.sourceTaskIds ||
+                render.sourceTaskIds.singleOrNull() != consumer.renderTaskId ||
+                copy.source != scenePreparation.resource ||
+                copy.logicalBounds != sceneDescriptor.logicalBounds ||
+                copy.sourceKey.target.value != scenePreparation.resource.value ||
+                copy.sourceKey.deviceGeneration != framePlan.capabilitySeal.deviceGeneration ||
+                copy.sourceKey.targetGeneration != packet.resourceGeneration &&
+                copy.sourceKey.targetGeneration !=
+                PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION ||
+                context?.targetGeneration?.let { current ->
+                    copy.sourceKey.targetGeneration == current ||
+                        copy.sourceKey.targetGeneration ==
+                        PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
+                } == false ||
+                copy.sourceKey.format != sceneDescriptor.format ||
+                sceneDescriptor.format != GPUColorFormat.RGBA8UnormSrgb ||
+                copy.sourceKey.colorInterpretation != GPUColorInterpretation.LinearPremul ||
+                copy.sourceKey.sampleContinuation != null ||
+                copy.sourceKey.sourceIntermediate != null ||
+                snapshotPreparation == null ||
+                snapshotDescriptor?.logicalBounds != copy.logicalBounds ||
+                snapshotDescriptor.format != sceneDescriptor.format ||
+                snapshotDescriptor.sampleCount != 1 ||
+                snapshotPreparation.role != GPUFrameResourceRole.DestinationSnapshot ||
+                snapshotPreparation.usages != setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.TextureBinding,
+                ) ||
+                snapshotPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+                snapshotPreparation.byteSize != expectedTextureBytes ||
+                copy.copyLayout.bytesPerRow < minimumBytesPerRow ||
+                copy.copyLayout.rowsPerImage != copy.logicalBounds.height ||
+                copyAlignment?.let { alignment ->
+                    copy.copyLayout.bytesPerRow % alignment != 0L
+                } == true ||
+                render.target != scenePreparation.resource ||
+                render.samplePlan != GPUSamplePlan.SingleSampleFrame ||
+                binding == null ||
+                !binding.hasColorGlyphBufferPlan ||
+                (clipAuthority as? GPUPreparedColorGlyphDestinationClipAuthority.CoverageMask)
+                    ?.let { mask ->
+                        render.resourceUses.none { use ->
+                            use.resource == mask.resource &&
+                                use.role == GPUFrameResourceRole.ClipMask &&
+                                use.usage == GPUFrameResourceUsage.TextureBinding &&
+                                use.lifetime == GPUFrameResourceLifetime.FrameLocal &&
+                                !use.write
+                        }
+                    } == true ||
+                render.resourceUses.none { use ->
+                    use.resource == copy.snapshot &&
+                        use.role == GPUFrameResourceRole.DestinationSnapshot &&
+                        use.usage == GPUFrameResourceUsage.TextureBinding &&
+                        use.lifetime == GPUFrameResourceLifetime.FrameLocal &&
+                        !use.write
+                }
+            ) {
+                return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to refused(
+                    "unsupported.prepared-surface.destination-copy",
+                    "Prepared ColorGlyph copy, snapshot, formula consumer, and resource facts are not exact.",
+                )
+            }
+            authorities += GPUPreparedColorGlyphDestinationReadAuthority(
+                copySourceStepIndex = copyIndex,
+                renderSourceStepIndex = renderIndex,
+                copyStep = copy,
+                renderStep = render,
+                packet = packet,
+                semantic = semantic,
+                binding = binding,
+                snapshotPreparation = snapshotPreparation,
+                blendPlan = blend,
+                clip = clipAuthority,
+            )
+        }
+        if (consumedPacketIds != destinationPackets.map(GPUDrawPacket::packetId).toSet()) {
+            return emptyList<GPUPreparedColorGlyphDestinationReadAuthority>() to refused(
+                "unsupported.prepared-surface.destination-copy",
+                "Prepared ColorGlyph copy consumers do not exactly cover destination-reading packets.",
+            )
+        }
+        return authorities.sortedBy(
+            GPUPreparedColorGlyphDestinationReadAuthority::copySourceStepIndex,
+        ) to null
     }
 
     private fun validatePreparedTextAuthority(
@@ -1228,6 +1657,28 @@ internal class GPUPreparedSurfaceNativePreflight(
                 .forEach { plan ->
                     add(plan.memoryAllocation)
                 }
+            targetPreparations.values
+                .filter { request ->
+                    request.role == GPUFrameResourceRole.DestinationSnapshot
+                }
+                .forEach { request ->
+                    val descriptor = when (val value = request.descriptor) {
+                        is GPUFrameTextureDescriptor -> value
+                        else -> return refused(
+                            GPUPreparedTextPreflightRefusalCodes.OPERAND,
+                            "Prepared ColorGlyph destination snapshot must be a texture allocation.",
+                        )
+                    }
+                    add(
+                        GPUFrameMemoryAllocation(
+                            label = request.diagnosticLabel,
+                            category = GPUFrameMemoryCategory.DestinationSnapshot,
+                            bytes = request.byteSize,
+                            resourceKind = GPUFrameMemoryResourceKind.Texture2D,
+                            extent = descriptor.logicalBounds,
+                        ),
+                    )
+                }
         }
         val expectedTextAllocationsByLabel =
             expectedTextAllocations.associateBy(GPUFrameMemoryAllocation::label)
@@ -1375,6 +1826,19 @@ internal class GPUPreparedSurfaceNativePreflight(
                             ),
                         )
                     }
+                runBindings.mapNotNull(GPUPreparedTextRenderBinding::coverageMaskResource)
+                    .distinct()
+                    .forEach { resource ->
+                        add(
+                            GPUFrameResourceUse(
+                                resource,
+                                GPUFrameResourceRole.ClipMask,
+                                GPUFrameResourceUsage.TextureBinding,
+                                GPUFrameResourceLifetime.FrameLocal,
+                                write = false,
+                            ),
+                        )
+                    }
                 runBindings.filter(GPUPreparedTextRenderBinding::hasColorGlyphBufferPlan)
                     .map(GPUPreparedTextRenderBinding::colorGlyphBufferPlan)
                     .distinctBy { plan -> plan.planArtifactKey }
@@ -1452,8 +1916,16 @@ internal class GPUPreparedSurfaceNativePreflight(
                 .filter(GPUPreparedTextRenderBinding::hasTextA8Composite)
                 .map { binding -> binding.drawUniformBufferPlan.bufferRef }
                 .toSet()
-            if (render.resourceUses.filterNot { use -> use.resource in drawUniformRefs } !=
-                expectedUses.filterNot { use -> use.resource in drawUniformRefs }
+            val destinationSnapshotRefs = render.resourceUses
+                .filter { use -> use.role == GPUFrameResourceRole.DestinationSnapshot }
+                .map(GPUFrameResourceUse::resource)
+                .toSet()
+            val separatelyAuthenticatedRefs = drawUniformRefs + destinationSnapshotRefs
+            if (render.resourceUses.filterNot { use ->
+                    use.resource in separatelyAuthenticatedRefs
+                } != expectedUses.filterNot { use ->
+                    use.resource in separatelyAuthenticatedRefs
+                }
             ) {
                 return refused(
                     GPUPreparedTextPreflightRefusalCodes.OPERAND,
@@ -1571,9 +2043,16 @@ internal class GPUPreparedSurfaceNativePreflight(
                 "Prepared-text preflight requires one exact resource-preparation task.",
             )
         val uploads = framePlan.steps.filterIsInstance<GPUFrameStep.UploadResourceStep>()
-        val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val allRenders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+        val renders = allRenders.filterNot { render ->
+            render.drawPackets.isNotEmpty() &&
+                render.drawPackets.all { packet ->
+                    packet.role == org.graphiks.kanvas.gpu.renderer.passes
+                        .GPUDrawPacketRole.ClipProducer
+                }
+        }
         if (uploads.any { it.sourceTaskIds.size != 1 } ||
-            renders.any { it.sourceTaskIds.size != 1 }
+            allRenders.any { it.sourceTaskIds.size != 1 }
         ) {
             return refused(
                 GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
@@ -1600,6 +2079,37 @@ internal class GPUPreparedSurfaceNativePreflight(
             )
         }
 
+        val destinationCopies =
+            framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>()
+        if (destinationCopies.isNotEmpty()) {
+            val destinationTaskIds = destinationCopies
+                .flatMap(GPUFrameStep.CopyDestinationStep::sourceTaskIds)
+                .distinct()
+            val destinationTaskId = destinationTaskIds.singleOrNull()
+                ?: return refused(
+                    GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                    "Prepared ColorGlyph destination copies require one exact Task 5 owner.",
+                )
+            append(
+                prepareTaskId,
+                destinationTaskId,
+                "prepared-color-glyph-destination-resource-order",
+                "prepared.color-glyph.prepare-before-destination-snapshot",
+                "prepared-color-glyph.destination.prepare",
+            )
+            destinationCopies.flatMap(GPUFrameStep.CopyDestinationStep::consumers)
+                .map { consumer -> consumer.renderTaskId }
+                .distinct()
+                .forEach { renderTaskId ->
+                    append(
+                        destinationTaskId,
+                        renderTaskId,
+                        "prepared-color-glyph-destination-consumer-order",
+                        "prepared.color-glyph.destination-snapshot-before-consumer",
+                        "prepared-color-glyph.destination.consumer.$renderTaskId",
+                    )
+                }
+        }
         imageUploads.forEachIndexed { index, upload ->
             append(
                 prepareTaskId,
@@ -1625,6 +2135,22 @@ internal class GPUPreparedSurfaceNativePreflight(
                 "prepared-text-material-resource-order",
                 "prepared.text.material-prepare-before-upload",
                 "prepared-text.material-prepare.$index",
+            )
+        }
+        val coverageMaskProducerRenders = allRenders.filter { render ->
+            render.drawPackets.isNotEmpty() &&
+                render.drawPackets.all { packet ->
+                    packet.role == org.graphiks.kanvas.gpu.renderer.passes
+                        .GPUDrawPacketRole.ClipProducer
+                }
+        }
+        coverageMaskProducerRenders.forEachIndexed { index, producer ->
+            append(
+                prepareTaskId,
+                producer.sourceTaskIds.single(),
+                "prepared-surface-resource-order",
+                "prepared.surface.prepare-before-clip-producer",
+                "prepared-surface.clip-producer.$index",
             )
         }
         renders.forEachIndexed { index, render ->
@@ -1719,6 +2245,43 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "prepared-text.material-consumer.${expected.size}",
                 )
             }
+            textBindings.mapNotNull(GPUPreparedTextRenderBinding::coverageMaskResource)
+                .distinct()
+                .forEach { resource ->
+                    val producer = coverageMaskProducerRenders.singleOrNull { candidate ->
+                        candidate.target == resource &&
+                            candidate.resourceUses.any { use ->
+                                use.resource == resource &&
+                                    use.role == GPUFrameResourceRole.ClipMask &&
+                                    use.write
+                            }
+                    } ?: return refused(
+                        GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                        "Every prepared-text mask consumer requires one exact ClipProducer.",
+                    )
+                    val orderingToken = textBindings.asSequence()
+                        .filter { binding -> binding.coverageMaskResource == resource }
+                        .mapNotNull { binding ->
+                            val textA8 = binding.preflightSeal.textA8Composite?.clipPlan as?
+                                GPUPreparedTextClipPlan.CoverageMask
+                            val colorGlyph = binding.preflightSeal.colorGlyphClip as?
+                                GPUPreparedColorGlyphClipPreflightSeal.CoverageMask
+                            textA8?.orderingToken ?: colorGlyph?.orderingToken
+                        }
+                        .distinct()
+                        .singleOrNull()
+                        ?: return refused(
+                            GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
+                            "Prepared-text ClipProducer ordering seal is missing.",
+                        )
+                    append(
+                        producer.sourceTaskIds.single(),
+                        renderTaskId,
+                        "clip-producer-consumer",
+                        "preserve.core-primitive.clip.producer-before-consumer",
+                        orderingToken,
+                    )
+                }
         }
         renders.zipWithNext().forEachIndexed { index, (from, to) ->
             append(
@@ -1781,6 +2344,13 @@ internal class GPUPreparedSurfaceNativePreflight(
                     GPUPreparedColorGlyphCanonicalPlanAuthentication.Accepted
                 ).table
         val renders = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .filterNot { render ->
+                render.drawPackets.isNotEmpty() &&
+                    render.drawPackets.all { packet ->
+                        packet.role == org.graphiks.kanvas.gpu.renderer.passes
+                            .GPUDrawPacketRole.ClipProducer
+                    }
+            }
         val packets = renders.flatMap(GPUFrameStep.RenderPassStep::drawPackets)
         validatePreparedTextGenerationSeal(
             framePlan,
@@ -2109,6 +2679,72 @@ internal class GPUPreparedSurfaceNativePreflight(
                     canonicalPlanTable = colorGlyphCanonicalPlanTable,
                 )
             }
+        val destinationAuthorities = authenticateColorGlyphDestinationReads(
+            framePlan = framePlan,
+            renders = renders,
+            context = null,
+            capabilities = null,
+        ).let { (authorities, refusal) ->
+            if (refusal != null) return refusal
+            authorities
+        }
+        val colorGlyphDestinationReads = destinationAuthorities.map { authority ->
+            val programSeal = when (
+                val shader = buildColorGlyphDestinationReadShader(
+                    clipVariant = authority.clip.variant,
+                )
+            ) {
+                is GPUColorGlyphCompositeShaderResult.Ready ->
+                    shader.plan.destinationProgramSeal
+                is GPUColorGlyphCompositeShaderResult.Rejected -> null
+            } ?: return refused(
+                "invalid.prepared-surface.destination-program",
+                "Prepared ColorGlyph destination-read WGSL does not match the sealed ABI.",
+            )
+            val snapshotEvidence = evidenceByResource[authority.copyStep.snapshot]
+                ?: return refused(
+                    "invalid.prepared-surface.destination-copy-resource",
+                    "Prepared ColorGlyph destination snapshot has no exact resource evidence.",
+                )
+            GPUPreparedColorGlyphDestinationReadPlan(
+                copySourceStepIndex = authority.copySourceStepIndex,
+                renderSourceStepIndex = authority.renderSourceStepIndex,
+                copyStep = authority.copyStep,
+                renderStep = authority.renderStep,
+                packet = authority.packet,
+                semantic = authority.semantic,
+                binding = authority.binding,
+                snapshotPreparation = authority.snapshotPreparation,
+                snapshotEvidence = snapshotEvidence,
+                blendPlan = authority.blendPlan,
+                clip = authority.clip,
+                coverageMaskEvidence =
+                    (
+                        authority.clip as?
+                            GPUPreparedColorGlyphDestinationClipAuthority.CoverageMask
+                        )
+                        ?.resource
+                        ?.let { resource -> evidenceByResource[resource] }
+                        ?: if (
+                            authority.clip is
+                                GPUPreparedColorGlyphDestinationClipAuthority.CoverageMask
+                        ) {
+                            return refused(
+                                "invalid.prepared-surface.coverage-mask-resource",
+                                "ColorGlyph CoverageMask has no exact prepared resource evidence.",
+                            )
+                        } else {
+                            null
+                        },
+                programSeal = programSeal,
+                exactCopyScopeKey = exactScopeKeys.single { scope ->
+                    scope.sourceStepIndex == authority.copySourceStepIndex
+                },
+                exactRenderScopeKey = exactScopeKeys.single { scope ->
+                    scope.sourceStepIndex == authority.renderSourceStepIndex
+                },
+            )
+        }
         val sceneTarget = framePlan.steps
             .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
             .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
@@ -2156,6 +2792,37 @@ internal class GPUPreparedSurfaceNativePreflight(
                     },
                 )
             }
+        val coverageMaskRuns = framePlan.steps.mapIndexedNotNull { index, step ->
+            val render = step as? GPUFrameStep.RenderPassStep
+                ?: return@mapIndexedNotNull null
+            if (render.drawPackets.isEmpty() ||
+                render.drawPackets.any { packet ->
+                    packet.role != GPUDrawPacketRole.ClipProducer
+                }
+            ) {
+                return@mapIndexedNotNull null
+            }
+            val slabSeal = render.drawPackets.mapNotNull { packet ->
+                packet.coverageMaskProducerUniformSlabSeal
+            }.distinct().singleOrNull()
+                ?: return refused(
+                    "invalid.prepared-surface.coverage-mask-plan",
+                    "Prepared-surface ClipProducer lost its passive CoverageMask slab seal.",
+                )
+            GPUPreparedSurfaceCoverageMaskRunPlan(
+                sourceScopeIndex = index,
+                renderStep = render,
+                slabSeal = slabSeal,
+                preparation = preparationByResource[render.target]
+                    ?: return refused(
+                        "invalid.prepared-surface.coverage-mask-preparation",
+                        "Prepared-surface CoverageMask preparation is missing.",
+                    ),
+                exactScopeKey = exactScopeKeys.single { scope ->
+                    scope.sourceStepIndex == index
+                },
+            )
+        }
         return try {
             GPUPreparedSurfaceNativePreflightResult.Accepted(
                 GPUPreparedSurfaceNativePreflightPlan(
@@ -2170,6 +2837,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                     imageFrames = imageFrames,
                     textPlan = textPlan,
                     colorGlyphPlan = colorGlyphPlan,
+                    colorGlyphDestinationReads = colorGlyphDestinationReads,
+                    coverageMaskRuns = coverageMaskRuns,
                     exactScopeKeys = exactScopeKeys,
                     generationSeal = generationSeal,
                 ),
@@ -2547,18 +3216,6 @@ internal class GPUPreparedSurfaceNativePreflight(
             return refused(
                 "unsupported.prepared-surface.target-color",
                 "The mixed scene target must be single-sample RGBA8UnormSrgb with LinearPremul shader authority.",
-            )
-        }
-        if (renders.any { render ->
-                render.samplePlan.sampleCount > 1 &&
-                    render.drawPackets.any {
-                        it.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
-                    }
-            }
-        ) {
-            return refused(
-                "unsupported.native-core-primitive.srgb-msaa",
-                "CorePrimitive sRGB MSAA remains outside the prepared mixed route.",
             )
         }
         val readbacks = framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>()
@@ -2970,6 +3627,18 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
                     GPUPreparedNativeOperandOwnership.OutputOwnedReadback,
                 ),
             )
+            is GPUFrameStep.CopyDestinationStep -> listOf(
+                key(
+                    GPUPreparedNativeOperandRole.CopySource,
+                    GPUPreparedNativeOperandKind.Texture,
+                    labels[0],
+                ),
+                key(
+                    GPUPreparedNativeOperandRole.CopyDestination,
+                    GPUPreparedNativeOperandKind.Texture,
+                    labels[1],
+                ),
+            )
             is GPUFrameStep.SurfaceBlitRenderPassStep -> listOf(
                 key(
                     GPUPreparedNativeOperandRole.SurfaceSource,
@@ -3067,33 +3736,98 @@ internal object GPUPreparedSurfaceEncoderScopeAuthority {
         ) {
             if (render.drawPackets.size != 1) return emptyList()
             val packet = render.drawPackets.single()
-            return target + listOf(
+            return target + buildList {
+                add(
                 key(
                     GPUPreparedNativeOperandRole.RenderPipeline,
                     GPUPreparedNativeOperandKind.RenderPipeline,
                     "prepared-text:${packet.packetId.value}:pipeline",
                 ),
+                )
+                add(
                 key(
                     GPUPreparedNativeOperandRole.RenderBindGroup,
                     GPUPreparedNativeOperandKind.BindGroup,
                     "prepared-text:${packet.packetId.value}:draw-group",
                 ),
+                )
+                add(
                 key(
                     GPUPreparedNativeOperandRole.RenderBindGroup,
                     GPUPreparedNativeOperandKind.BindGroup,
                     "prepared-text:${packet.packetId.value}:material-group",
                 ),
+                )
+                add(
                 key(
                     GPUPreparedNativeOperandRole.RenderBindGroup,
                     GPUPreparedNativeOperandKind.BindGroup,
                     "prepared-text:${packet.packetId.value}:atlas-group",
                 ),
+                )
+                if (render.preparedTextBindingsByPacketId[packet.packetId]
+                        ?.coverageMaskResource != null
+                ) {
+                    add(
+                        key(
+                            GPUPreparedNativeOperandRole.RenderBindGroup,
+                            GPUPreparedNativeOperandKind.BindGroup,
+                            "prepared-text:${packet.packetId.value}:coverage-mask-group",
+                        ),
+                    )
+                }
+                add(
                 key(
                     GPUPreparedNativeOperandRole.RenderVertexBuffer,
                     GPUPreparedNativeOperandKind.Buffer,
                     "prepared-text:${packet.packetId.value}:instances",
                 ),
-            )
+                )
+            }
+        }
+        val coverageMask = scope.corePrimitiveCoverageMaskPreparedRouteSeal
+        val coverageUnits = coverageMask.units()
+        if (coverageUnits.isNotEmpty()) {
+            val isProducer = coverageUnits.all {
+                it is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer
+            }
+            val isConsumer = coverageUnits.all {
+                it is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
+            }
+            if (!isProducer && !isConsumer ||
+                coverageUnits.map { unit -> when (unit) {
+                    is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> unit.packetId
+                    is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> unit.packetId
+                    else -> error("Coverage-mask retained scope contains a non-unit seal")
+                } } != render.drawPackets.map(GPUDrawPacket::packetId)
+            ) return emptyList()
+            val pipelines = stream.operandBridge.filter {
+                it.operand.kind == org.graphiks.kanvas.gpu.renderer.resources
+                    .GPUMaterializedCommandOperandKind.RenderPipeline
+            }.mapNotNull(::bridgeKey)
+            val bindGroups = stream.operandBridge.filter {
+                it.operand.kind == org.graphiks.kanvas.gpu.renderer.resources
+                    .GPUMaterializedCommandOperandKind.BindGroup
+            }.mapNotNull(::bridgeKey)
+            if (pipelines.size != coverageUnits.size || bindGroups.size != coverageUnits.size) {
+                return emptyList()
+            }
+            if (isProducer) {
+                val ordered = stream.operandBridge.mapNotNull(::bridgeKey)
+                return if (ordered.size == coverageUnits.size * 2) target + ordered else emptyList()
+            }
+            val geometry = if (isProducer) emptyList() else {
+                val vertexIndex = render.resourceUses.indexOfFirst { it.role == GPUFrameResourceRole.VertexData }
+                val indexIndex = render.resourceUses.indexOfFirst { it.role == GPUFrameResourceRole.IndexData }
+                if (vertexIndex < 0 || indexIndex < 0) return emptyList()
+                listOf(
+                    key(GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                        GPUPreparedNativeOperandKind.Buffer, labels[vertexIndex + 1]),
+                    key(GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                        GPUPreparedNativeOperandKind.Buffer, labels[indexIndex + 1]),
+                )
+            }
+            return target + pipelines + geometry + bindGroups
         }
         val unified = scope.corePrimitiveNativeScopeRouteSeal as?
             GPUCorePrimitiveNativeScopeRouteSeal.Routes
@@ -3624,6 +4358,7 @@ private fun GPUFrameStep.isPreparedSurfaceStep(): Boolean = when (this) {
     is GPUFrameStep.PrepareResourcesStep,
     is GPUFrameStep.UploadResourceStep,
     is GPUFrameStep.RenderPassStep,
+    is GPUFrameStep.CopyDestinationStep,
     is GPUFrameStep.DependencyBarrierStep,
     is GPUFrameStep.ReadbackCopyStep,
     is GPUFrameStep.AcquireSurfaceOutput,
@@ -3637,6 +4372,7 @@ private fun GPUFrameStep.preparedSurfaceOperationKindOrNull(): GPUEncoderOperati
     when (this) {
         is GPUFrameStep.UploadResourceStep -> GPUEncoderOperationKind.Upload
         is GPUFrameStep.RenderPassStep -> GPUEncoderOperationKind.Render
+        is GPUFrameStep.CopyDestinationStep -> GPUEncoderOperationKind.CopyDestination
         is GPUFrameStep.ReadbackCopyStep -> GPUEncoderOperationKind.Readback
         is GPUFrameStep.SurfaceBlitRenderPassStep -> GPUEncoderOperationKind.SurfaceBlit
         else -> null

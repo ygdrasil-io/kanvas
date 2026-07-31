@@ -11,6 +11,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramComp
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramCache
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 
 class GPUPreparedTextCompositeProgramCacheTest {
     private val context = GPUMaterialLoweringContext(
@@ -60,14 +61,23 @@ class GPUPreparedTextCompositeProgramCacheTest {
                 blendPlanIdentity = "fixed-function:src",
             ),
         )
+        val otherCoverage = ready(
+            cache.getOrCompose(
+                material = material,
+                sourceCoverageEncoding = GPUSourceCoverageEncoding.Coverage,
+            ),
+        )
 
-        assertSame(baseline, ready(cache.getOrCompose(material)))
+        assertEquals(
+            GPUSourceCoverageEncoding.Coverage,
+            otherCoverage.sourceCoverageEncoding,
+        )
         assertEquals("fixed-function:src", otherBlend.blendPlanIdentity)
         assertEquals(2, cache.snapshot().residentEntryCount)
-        assertEquals(2, cache.snapshot().hitCount)
-        assertEquals(3, cache.snapshot().missCount)
-        assertEquals(1, cache.snapshot().evictionCount)
-        assertEquals(3, cache.snapshot().composeCount)
+        assertEquals(1, cache.snapshot().hitCount)
+        assertEquals(4, cache.snapshot().missCount)
+        assertEquals(2, cache.snapshot().evictionCount)
+        assertEquals(4, cache.snapshot().composeCount)
         assertEquals(cache.snapshot().composeCount, cache.snapshot().parseCount)
         assertEquals(cache.snapshot().composeCount, cache.snapshot().lowerCount)
         assertEquals(cache.snapshot().composeCount, cache.snapshot().reflectCount)

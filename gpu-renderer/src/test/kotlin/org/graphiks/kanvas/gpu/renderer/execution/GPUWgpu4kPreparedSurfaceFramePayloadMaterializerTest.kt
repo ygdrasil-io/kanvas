@@ -15,15 +15,36 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskConsumerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipOrderingToken
+import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotConsumerRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageBindingRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
@@ -375,6 +396,456 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             runCatching { registry.close() }
             runCatching { backend.close() }
             fixture.close()
+        }
+    }
+
+    @Test
+    fun `destination snapshot rollback retains only failed view and never recloses texture`() {
+        var injected = 0
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = destinationReadPreparedTextInputs(),
+            onDestinationSnapshotViewCreated = {
+                injected += 1
+                error("injected after destination snapshot view creation")
+            },
+        )
+        try {
+            fixture.native.failCloseOnce(DESTINATION_SNAPSHOT_VIEW_LABEL)
+
+            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.materialize(),
+            )
+
+            assertEquals(1, injected)
+            val texture = fixture.native.createdHandles(DESTINATION_SNAPSHOT_TEXTURE_LABEL)
+                .single()
+            val view = fixture.native.createdHandles(DESTINATION_SNAPSHOT_VIEW_LABEL)
+                .single()
+            assertEquals(1, fixture.native.closeAttempts(DESTINATION_SNAPSHOT_VIEW_LABEL))
+            assertEquals(1, fixture.native.closeAttempts(DESTINATION_SNAPSHOT_TEXTURE_LABEL))
+            assertEquals(1, fixture.native.closeCounts[view])
+            assertEquals(1, fixture.native.closeCounts[texture])
+            assertEquals(null, refused.retainedDraft)
+            assertEquals(null, refused.retainedCloseOwner)
+
+            val ledger = requireNotNull(refused.retainedPreRegistrationLedger)
+            assertEquals(listOf(view), ledger.pendingHandlesSnapshot())
+            assertTrue(ledger.closeRetainingFailures())
+            assertEquals(2, fixture.native.closeAttempts(DESTINATION_SNAPSHOT_VIEW_LABEL))
+            assertEquals(1, fixture.native.closeAttempts(DESTINATION_SNAPSHOT_TEXTURE_LABEL))
+            assertEquals(2, fixture.native.closeCounts[view])
+            assertEquals(1, fixture.native.closeCounts[texture])
+            assertEquals(
+                listOf(
+                    "close:$DESTINATION_SNAPSHOT_VIEW_LABEL",
+                    "close:$DESTINATION_SNAPSHOT_TEXTURE_LABEL",
+                    "close:$DESTINATION_SNAPSHOT_VIEW_LABEL",
+                ),
+                fixture.native.events.filter { event ->
+                    event == "close:$DESTINATION_SNAPSHOT_VIEW_LABEL" ||
+                        event == "close:$DESTINATION_SNAPSHOT_TEXTURE_LABEL"
+                },
+            )
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `destination snapshot completion retries failed view after bind group and texture once`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = destinationReadPreparedTextInputs(),
+        )
+        val backend = GPUWgpu4kFrameEncodingBackend(
+            deviceGeneration = fixture.input.generationSeal.deviceGeneration,
+            device = fixture.native.device,
+            queue = fixture.native.queue,
+            canonicalSceneTargetView = fixture.target.view,
+        )
+        val registry = GPURuntimeResourceAdapter()
+        val witness = GPUFrameCoreTestFixture.preparedFrame()
+        var ownership: GPUPreparedNativeFrameOwnership? = null
+        try {
+            val draft = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                fixture.materialize(),
+            ).draft
+            val payload = draft.payload
+            val snapshotTexture = payload.scopeOperands
+                .filterIsInstance<GPUPreparedNativeScopeOperand.Copy>()
+                .single()
+                .destination.texture
+            val snapshotView = fixture.native.createdHandles(DESTINATION_SNAPSHOT_VIEW_LABEL)
+                .single()
+            val bindGroup = fixture.native.createdHandles("Kanvas.frame.colorGlyph.bindGroup0")
+                .single()
+            assertEquals(
+                fixture.native.createdHandles(DESTINATION_SNAPSHOT_TEXTURE_LABEL).single(),
+                snapshotTexture,
+            )
+            assertTrue(listOf(bindGroup, snapshotView, snapshotTexture).all { handle ->
+                fixture.native.closeCounts[handle] == null
+            })
+
+            ownership = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+                registry.registerPreparedNativeFrameDraft(draft),
+            ).ownership
+            assertIs<GPUPreparedNativeFrameBindingResult.Ready>(
+                ownership.bindLateSurface(
+                    null,
+                    GPUPreparedNativeFrameLateSurfaceBinding.NotRequired,
+                ),
+            )
+            assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+                ownership.consume(payload.identity),
+            )
+            val encoder = backend.createCommandEncoder("color-glyph-destination-completion")
+            fixture.input.encoderPlan.scopes.zip(payload.scopeOperands)
+                .forEach { (scope, operand) ->
+                    encoder.encode(
+                        scope,
+                        witness,
+                        GPUFrameCoreTestFixture.sceneTarget(
+                            targetGeneration =
+                                fixture.input.generationSeal.targetGeneration,
+                        ),
+                        operand,
+                    )
+                }
+            backend.submit(encoder.finish())
+            assertTrue(listOf(bindGroup, snapshotView, snapshotTexture).all { handle ->
+                fixture.native.closeCounts[handle] == null
+            })
+            assertTrue(ownership.markSubmitted())
+            fixture.native.failCloseOnce(DESTINATION_SNAPSHOT_VIEW_LABEL)
+            val closeEventStart = fixture.native.events.size
+
+            assertFalse(ownership.releaseAfterCompletion())
+            val completionCloses = fixture.native.events.drop(closeEventStart)
+            val bindGroupClose = completionCloses.indexOf(
+                "close:Kanvas.frame.colorGlyph.bindGroup0",
+            )
+            val viewClose = completionCloses.indexOf(
+                "close:$DESTINATION_SNAPSHOT_VIEW_LABEL",
+            )
+            val textureClose = completionCloses.indexOf(
+                "close:$DESTINATION_SNAPSHOT_TEXTURE_LABEL",
+            )
+            assertTrue(bindGroupClose >= 0 && bindGroupClose < viewClose)
+            assertTrue(viewClose < textureClose)
+            assertEquals(1, fixture.native.closeCounts[bindGroup])
+            assertEquals(1, fixture.native.closeCounts[snapshotView])
+            assertEquals(1, fixture.native.closeCounts[snapshotTexture])
+
+            registry.close()
+            assertEquals(1, fixture.native.closeAttempts("Kanvas.frame.colorGlyph.bindGroup0"))
+            assertEquals(2, fixture.native.closeAttempts(DESTINATION_SNAPSHOT_VIEW_LABEL))
+            assertEquals(1, fixture.native.closeAttempts(DESTINATION_SNAPSHOT_TEXTURE_LABEL))
+            assertEquals(1, fixture.native.closeCounts[bindGroup])
+            assertEquals(2, fixture.native.closeCounts[snapshotView])
+            assertEquals(1, fixture.native.closeCounts[snapshotTexture])
+            assertFalse(ownership.releaseAfterCompletion())
+        } finally {
+            ownership?.rollback()
+            if (witness.claimForRollback()) witness.rollback.execute()
+            runCatching { registry.close() }
+            runCatching { backend.close() }
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `post-build destination authority mutation matrix refuses before every side effect`() {
+        val analytic = destinationReadPreparedTextInputs()
+        val coverageMask = destinationReadPreparedTextInputs(coverageMask = true)
+        val cases = listOf(
+            DestinationAuthorityMutation("consumer.groupingCommandId") { input ->
+                input.withDestinationCopyMutation { copy ->
+                    copy.rebuiltForDestinationMutation(
+                        consumers = copy.consumers.map { consumer ->
+                            consumer.copy(groupingCommandId = "forged-group")
+                        },
+                    )
+                }
+            },
+            DestinationAuthorityMutation("consumer.renderTaskId+dependency") { input ->
+                input.withCoherentDestinationRenderTaskMutation()
+            },
+            DestinationAuthorityMutation("consumer.packetId") { input ->
+                input.withDestinationCopyMutation { copy ->
+                    copy.rebuiltForDestinationMutation(
+                        consumers = copy.consumers.map { consumer ->
+                            consumer.copy(
+                                packetId = GPUDrawPacketID("${consumer.packetId.value}.forged"),
+                            )
+                        },
+                    )
+                }
+            },
+            DestinationAuthorityMutation("consumer.commandId") { input ->
+                input.withDestinationCopyMutation { copy ->
+                    copy.rebuiltForDestinationMutation(
+                        consumers = copy.consumers.map { consumer ->
+                            consumer.copy(
+                                commandId = GPUDrawCommandID(consumer.commandId.value + 1),
+                            )
+                        },
+                    )
+                }
+            },
+            DestinationAuthorityMutation("generation.seal") { input ->
+                input.copy(
+                    generationSeal = GPUPreparedGenerationSeal(
+                        deviceGeneration = input.generationSeal.deviceGeneration,
+                        targetGeneration = input.generationSeal.targetGeneration + 1L,
+                        resourceGenerations = input.generationSeal.resourceGenerations,
+                        capabilitySealHash = input.generationSeal.capabilitySealHash,
+                    ),
+                )
+            },
+            DestinationAuthorityMutation("snapshot.ref") { input ->
+                input.withDestinationCopyMutation { copy ->
+                    copy.rebuiltForDestinationMutation(
+                        snapshot = GPUFrameTextureRef("${copy.snapshot.value}.forged"),
+                    )
+                }
+            },
+            DestinationAuthorityMutation("snapshot.preparation") { input ->
+                input.withPreparationMutation(GPUFrameResourceRole.DestinationSnapshot) {
+                    request ->
+                    request.rebuiltForDestinationMutation(byteSize = request.byteSize + 4L)
+                }
+            },
+            DestinationAuthorityMutation("snapshot.evidence") { input ->
+                input.copy(
+                    resources = input.resources.rebuiltForDestinationMutation(
+                        ordinaryResources = input.resources.ordinaryResources.map { evidence ->
+                            if (evidence.role == GPUFrameResourceRole.DestinationSnapshot) {
+                                evidence.copy(role = GPUFrameResourceRole.ClipMask)
+                            } else {
+                                evidence
+                            }
+                        },
+                    ),
+                )
+            },
+            DestinationAuthorityMutation("snapshot.evidence-generation") { input ->
+                input.copy(
+                    resources = input.resources.rebuiltForDestinationMutation(
+                        ordinaryResources = input.resources.ordinaryResources.map { evidence ->
+                            if (evidence.role == GPUFrameResourceRole.DestinationSnapshot) {
+                                evidence.copy(
+                                    resourceGeneration = evidence.resourceGeneration + 1L,
+                                )
+                            } else {
+                                evidence
+                            }
+                        },
+                    ),
+                )
+            },
+            DestinationAuthorityMutation("formula") { input ->
+                input.withDestinationPacketMutation { packet ->
+                    packet.rebuiltForDestinationMutation(
+                        blendPlan = GPUBlendPlan.ShaderBlendWithDstRead(
+                            mode = GPUBlendMode.COLOR_DODGE,
+                            formulaId = "color_dodge@forged",
+                            sourceCoverageEncoding =
+                                GPUSourceCoverageEncoding.ScalarCoverageInShader,
+                        ),
+                    )
+                }
+            },
+            DestinationAuthorityMutation("program.pipelineSeal") { input ->
+                input.withDestinationPacketMutation { packet ->
+                    packet.rebuiltForDestinationMutation(
+                        renderPipelineKey = GPURenderPipelineKey(
+                            "${requireNotNull(packet.renderPipelineKey).value}.forged",
+                        ),
+                    )
+                }
+            },
+            DestinationAuthorityMutation("binding.layoutSeal") { input ->
+                input.withDestinationPacketMutation { packet ->
+                    packet.rebuiltForDestinationMutation(
+                        bindingLayoutHash = "${packet.bindingLayoutHash}.forged",
+                    )
+                }
+            },
+            DestinationAuthorityMutation("binding.preflightSeal") { input ->
+                input.withDestinationBindingMutation { binding ->
+                    binding.rebuiltForDestinationMutation(
+                        preflightSeal = binding.preflightSeal
+                            .rebuiltForDestinationMutation(
+                                blendPlanIdentity =
+                                    "${binding.preflightSeal.blendPlanIdentity}.forged",
+                            ),
+                    )
+                }
+            },
+            DestinationAuthorityMutation("binding.missing") { input ->
+                input.withMissingDestinationBinding()
+            },
+            DestinationAuthorityMutation("clip.executionIdentity") { input ->
+                input.withDestinationPacketMutation { packet ->
+                    val clip = packet.clipExecutionPlan as
+                        GPUClipExecutionPlan.AnalyticCoverage
+                    packet.rebuiltForDestinationMutation(
+                        clipExecutionPlan = GPUClipExecutionPlan.AnalyticCoverage(
+                            geometry = clip.geometry,
+                            scissor = clip.scissor,
+                            antiAlias = !clip.antiAlias,
+                        ),
+                    )
+                }
+            },
+            DestinationAuthorityMutation("clip.semanticIdentity") { input ->
+                input.withDestinationBindingMutation { binding ->
+                    val clip = binding.preflightSeal.colorGlyphClip as
+                        org.graphiks.kanvas.gpu.renderer.recording
+                            .GPUPreparedColorGlyphClipPreflightSeal.NonMask
+                    val forged = "${clip.semanticIdentity}.forged"
+                    binding.rebuiltForDestinationMutation(
+                        preflightSeal = binding.preflightSeal
+                            .rebuiltForDestinationMutation(
+                                clipIdentity = forged,
+                                colorGlyphClip = clip.copy(semanticIdentity = forged),
+                            ),
+                    )
+                }
+            },
+            DestinationAuthorityMutation("clip.analyticRectFacts.left") { input ->
+                input.withDestinationBindingMutation { binding ->
+                    val clip = binding.preflightSeal.colorGlyphClip as
+                        org.graphiks.kanvas.gpu.renderer.recording
+                            .GPUPreparedColorGlyphClipPreflightSeal.NonMask
+                    val facts = requireNotNull(clip.analyticRect)
+                    binding.rebuiltForDestinationMutation(
+                        preflightSeal = binding.preflightSeal
+                            .rebuiltForDestinationMutation(
+                                colorGlyphClip = clip.copy(
+                                    analyticRect = facts.copy(
+                                        left = facts.left + 1f,
+                                    ),
+                                ),
+                            ),
+                    )
+                }
+            },
+            DestinationAuthorityMutation("clip.analyticRectFacts.antiAlias") { input ->
+                input.withDestinationBindingMutation { binding ->
+                    val clip = binding.preflightSeal.colorGlyphClip as
+                        org.graphiks.kanvas.gpu.renderer.recording
+                            .GPUPreparedColorGlyphClipPreflightSeal.NonMask
+                    val facts = requireNotNull(clip.analyticRect)
+                    binding.rebuiltForDestinationMutation(
+                        preflightSeal = binding.preflightSeal
+                            .rebuiltForDestinationMutation(
+                                colorGlyphClip = clip.copy(
+                                    analyticRect = facts.copy(
+                                        antiAlias = !facts.antiAlias,
+                                    ),
+                                ),
+                            ),
+                    )
+                }
+            },
+            DestinationAuthorityMutation("mask.producer-resource", coverageMask = true) { input ->
+                input.withCoverageMaskProducerMutation { producer ->
+                    producer.rebuiltForDestinationMutation(
+                        target = GPUFrameTargetRef("${producer.target.value}.forged"),
+                    )
+                }
+            },
+            DestinationAuthorityMutation("mask.orderingToken", coverageMask = true) { input ->
+                input.withDestinationBindingMutation { binding ->
+                    val clip = binding.preflightSeal.colorGlyphClip as
+                        org.graphiks.kanvas.gpu.renderer.recording
+                            .GPUPreparedColorGlyphClipPreflightSeal.CoverageMask
+                    binding.rebuiltForDestinationMutation(
+                        preflightSeal = binding.preflightSeal
+                            .rebuiltForDestinationMutation(
+                                colorGlyphClip = clip.copy(
+                                    orderingToken = "${clip.orderingToken}.forged",
+                                ),
+                            ),
+                    )
+                }
+            },
+            DestinationAuthorityMutation("mask.preparation", coverageMask = true) { input ->
+                input.withPreparationMutation(GPUFrameResourceRole.ClipMask) { request ->
+                    request.rebuiltForDestinationMutation(
+                        role = GPUFrameResourceRole.DestinationSnapshot,
+                    )
+                }
+            },
+            DestinationAuthorityMutation(
+                "mask.evidence-generation",
+                coverageMask = true,
+            ) { input ->
+                input.copy(
+                    resources = input.resources.rebuiltForDestinationMutation(
+                        ordinaryResources = input.resources.ordinaryResources.map { evidence ->
+                            if (evidence.role == GPUFrameResourceRole.ClipMask) {
+                                evidence.copy(
+                                    resourceGeneration = evidence.resourceGeneration + 1L,
+                                )
+                            } else {
+                                evidence
+                            }
+                        },
+                    ),
+                )
+            },
+            DestinationAuthorityMutation("mask.producer-order", coverageMask = true) { input ->
+                input.withCoverageMaskProducerAfterDestinationCopy()
+            },
+            DestinationAuthorityMutation("mask.operand-order", coverageMask = true) { input ->
+                input.withCoverageMaskOperandOrderMutation()
+            },
+        )
+
+        cases.forEach { case ->
+            var cacheAcquires = 0
+            var targetBorrows = 0
+            val source = if (case.coverageMask) coverageMask else analytic
+            val mutated = case.mutate(source)
+            if (case.name.startsWith("clip.analyticRectFacts.") ||
+                case.name == "mask.orderingToken"
+            ) {
+                assertNotEquals(source.framePlan.stableHash(), mutated.framePlan.stableHash(), case.name)
+                assertNotEquals(source.framePlan.dumpLines(), mutated.framePlan.dumpLines(), case.name)
+            }
+            val fixture = fixture(
+                shape = PreparedSurfaceFixtureShape.ImageOnly,
+                inputOverride = mutated,
+                onCacheAcquire = { cacheAcquires += 1 },
+                onTargetBorrow = { targetBorrows += 1 },
+            )
+            try {
+                val nativeEventCount = fixture.native.events.size
+                val writeBufferCount = fixture.native.writeBufferCalls.size
+                val imageHandleCount = fixture.imageFactory.handleCreates
+                val lifecycle = fixture.targetLifecycle.snapshot()
+
+                val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                    fixture.materialize(),
+                    case.name,
+                )
+
+                assertEquals(0, cacheAcquires, case.name)
+                assertEquals(0, targetBorrows, case.name)
+                assertEquals(nativeEventCount, fixture.native.events.size, case.name)
+                assertEquals(writeBufferCount, fixture.native.writeBufferCalls.size, case.name)
+                assertEquals(imageHandleCount, fixture.imageFactory.handleCreates, case.name)
+                assertEquals(lifecycle, fixture.targetLifecycle.snapshot(), case.name)
+                assertEquals(null, refused.retainedDraft, case.name)
+                assertEquals(null, refused.retainedPreRegistrationLedger, case.name)
+                assertEquals(null, refused.retainedCloseOwner, case.name)
+            } finally {
+                fixture.close()
+            }
         }
     }
 
@@ -947,6 +1418,89 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
     }
 
     @Test
+    fun `unexpected text coverage mask bind group refuses before every native allocation`() {
+        val fixture = fixture(PreparedSurfaceFixtureShape.CoreImageText)
+        try {
+            val textStepIndex = fixture.input.framePlan.steps.indexOfFirst { step ->
+                step is GPUFrameStep.RenderPassStep &&
+                    step.drawPackets.all { packet ->
+                        packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+                    }
+            }
+            val originalScope = fixture.input.encoderPlan.scopes.single { scope ->
+                scope.sourceStepIndex == textStepIndex
+            }
+            val packetId = (fixture.input.framePlan.steps[textStepIndex] as
+                GPUFrameStep.RenderPassStep).drawPackets.single().packetId.value
+            val forgedMaskKey = GPUPreparedNativeOperandKey(
+                GPUPreparedNativeOperandRole.RenderBindGroup,
+                GPUPreparedNativeOperandKind.BindGroup,
+                gpuPreparedNativeBindingKey(
+                    "prepared-text:$packetId:coverage-mask-group",
+                ),
+            )
+            val mutatedScope = GPUCommandEncoderScopePlan(
+                sourceStepIndex = originalScope.sourceStepIndex,
+                operationKind = originalScope.operationKind,
+                scopeLabel = originalScope.scopeLabel,
+                sourceTaskIds = originalScope.sourceTaskIds,
+                sourcePacketIds = originalScope.sourcePacketIds,
+                facadeOperationClasses = originalScope.facadeOperationClasses,
+                targetGeneration = originalScope.targetGeneration,
+                resourceGenerationLabels = originalScope.resourceGenerationLabels,
+                passCommandStream = originalScope.passCommandStream,
+                corePrimitiveDirectNativeRouteSeal =
+                    originalScope.corePrimitiveDirectNativeRouteSeal,
+                corePrimitivePathStencilNativeRouteSeal =
+                    originalScope.corePrimitivePathStencilNativeRouteSeal,
+                corePrimitiveNativeScopeRouteSeal =
+                    originalScope.corePrimitiveNativeScopeRouteSeal,
+                corePrimitiveClipStencilPreparedRouteSeal =
+                    originalScope.corePrimitiveClipStencilPreparedRouteSeal,
+                corePrimitiveCoverageMaskPreparedRouteSeal =
+                    originalScope.corePrimitiveCoverageMaskPreparedRouteSeal,
+                targetResource = originalScope.targetResource,
+            ).attachNativeOperandKeys(
+                originalScope.nativeOperandKeys.dropLast(1) +
+                    forgedMaskKey +
+                    originalScope.nativeOperandKeys.last(),
+            )
+            val mutatedEncoder = GPUCommandEncoderPlan.ordered(
+                planId = fixture.input.encoderPlan.planId,
+                contextIdentity = fixture.input.encoderPlan.contextIdentity,
+                deviceGeneration = fixture.input.encoderPlan.deviceGeneration,
+                targetGeneration = fixture.input.encoderPlan.targetGeneration,
+                scopes = fixture.input.encoderPlan.scopes.map { scope ->
+                    if (scope === originalScope) mutatedScope else scope
+                },
+            )
+            val eventsBefore = fixture.native.events.toList()
+            val writesBefore = fixture.native.writeBufferCalls.toList()
+            val imageHandlesBefore = fixture.imageFactory.handleCreates
+
+            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.materializer.materializeReusable(
+                    fixture.input.framePlan,
+                    mutatedEncoder,
+                    fixture.input.resources,
+                    fixture.input.generationSeal,
+                ),
+            )
+
+            assertEquals("invalid.prepared-surface.encoder-plan", refused.code)
+            assertEquals(eventsBefore, fixture.native.events)
+            assertEquals(writesBefore, fixture.native.writeBufferCalls)
+            assertEquals(imageHandlesBefore, fixture.imageFactory.handleCreates)
+            assertEquals(Triple(1L, 0L, 0L), fixture.targetLifecycle.snapshot())
+            assertEquals(null, refused.retainedDraft)
+            assertEquals(null, refused.retainedPreRegistrationLedger)
+            assertEquals(null, refused.retainedCloseOwner)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun `permuted image bindings are refused before target borrow or native allocation`() {
         val fixture = fixture(PreparedSurfaceFixtureShape.ImageCoreImage)
         try {
@@ -1265,6 +1819,67 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
         }
     }
 
+    private fun destinationReadPreparedTextInputs(
+        coverageMask: Boolean = false,
+    ): CapturedPreparedSurfaceInputs {
+        val bounds = GPUPixelBounds(0, 0, 16, 16)
+        val clip = if (coverageMask) {
+            GPUClipExecutionPlan.CoverageMask(
+                contentKey = "clip:color-glyph-destination-mask",
+                bounds = bounds,
+                sampleCount = 1,
+                depthStencilRequired = false,
+                orderingToken = GPUClipOrderingToken(
+                    "clip-order:color-glyph-destination-mask",
+                ),
+                producers = listOf(
+                    GPUClipMaskProducerPlan(
+                        sourceOrder = 0,
+                        geometry = GPUClipExecutionGeometry.Rect(
+                            GPUBounds(0f, 0f, 16f, 16f),
+                        ),
+                        combine = GPUClipMaskCombine.Intersect,
+                        antiAlias = false,
+                    ),
+                    GPUClipMaskProducerPlan(
+                        sourceOrder = 1,
+                        geometry = GPUClipExecutionGeometry.Rect(
+                            GPUBounds(2f, 2f, 4f, 4f),
+                        ),
+                        combine = GPUClipMaskCombine.Difference,
+                        antiAlias = false,
+                    ),
+                ),
+                consumer = GPUClipMaskConsumerPlan(),
+            )
+        } else {
+            GPUClipExecutionPlan.AnalyticCoverage(
+                geometry = GPUClipExecutionGeometry.Rect(
+                    GPUBounds(0.25f, 0.5f, 15.75f, 15.5f),
+                ),
+                scissor = bounds,
+                antiAlias = true,
+            )
+        }
+        return capturedPreparedTextInputs(
+            commandIds = listOf(0),
+            textInstanceCounts = listOf(1),
+            colorGlyphCommandIds = setOf(0),
+            blendPlan = GPUBlendPlan.ShaderBlendWithDstRead(
+                mode = GPUBlendMode.COLOR_DODGE,
+                formulaId = "color_dodge@v1",
+                sourceCoverageEncoding =
+                    GPUSourceCoverageEncoding.ScalarCoverageInShader,
+            ),
+            colorGlyphClipExecutionPlan = clip,
+            colorGlyphClipIdentity = if (coverageMask) {
+                "clip-semantic:color-glyph-destination-mask"
+            } else {
+                "clip-semantic:color-glyph-destination-analytic"
+            },
+        )
+    }
+
     private fun fixture(
         shape: PreparedSurfaceFixtureShape,
         includeSurface: Boolean = false,
@@ -1274,6 +1889,9 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
         surfaceTargetGenerationDelta: Long = 0L,
         shaderSource: String = GPU_PREPARED_IMAGE_WGSL,
         inputOverride: CapturedPreparedSurfaceInputs? = null,
+        onCacheAcquire: () -> Unit = {},
+        onTargetBorrow: () -> Unit = {},
+        onDestinationSnapshotViewCreated: () -> Unit = {},
     ): Fixture {
         val input = inputOverride ?: capturedPreparedSurfaceInputs(
             shape = shape,
@@ -1343,6 +1961,9 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
                 }
             },
             corePrimitiveLimits = LIMITS,
+            onCacheAcquire = onCacheAcquire,
+            onTargetBorrow = onTargetBorrow,
+            onDestinationSnapshotViewCreated = onDestinationSnapshotViewCreated,
             preflight = GPUPreparedSurfaceNativePreflight(shaderSource),
         )
         return Fixture(
@@ -1359,6 +1980,12 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
             materializer,
         )
     }
+
+    private data class DestinationAuthorityMutation(
+        val name: String,
+        val coverageMask: Boolean = false,
+        val mutate: (CapturedPreparedSurfaceInputs) -> CapturedPreparedSurfaceInputs,
+    )
 
     private data class Fixture(
         val input: CapturedPreparedSurfaceInputs,
@@ -1504,6 +2131,10 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
         } as T
 
     private companion object {
+        const val DESTINATION_SNAPSHOT_TEXTURE_LABEL =
+            "Kanvas.frame.colorGlyph.destinationSnapshot"
+        const val DESTINATION_SNAPSHOT_VIEW_LABEL =
+            "Kanvas.frame.colorGlyph.destinationSnapshot-view"
         val LIMITS = GPULimits(
             maxTextureDimension2D = 8192,
             copyBytesPerRowAlignment = 256,
@@ -1513,6 +2144,482 @@ class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
         )
     }
 }
+
+private fun GPUFramePlan.rebuiltForDestinationMutation(
+    steps: List<GPUFrameStep> = this.steps,
+    dependencies:
+        List<org.graphiks.kanvas.gpu.renderer.recording.GPUTaskDependency> =
+        this.dependencies,
+): GPUFramePlan = GPUFramePlan(
+    frameId = frameId,
+    capabilitySeal = capabilitySeal,
+    recordingSeals = recordingSeals,
+    steps = steps,
+    memoryBudget = memoryBudget,
+    diagnostics = diagnostics,
+    dependencies = dependencies,
+    phaseOrder = phaseOrder,
+    elidedNoOpDraws = elidedNoOpDraws,
+    atomicallyRefused = atomicallyRefused,
+)
+
+private fun GPUFrameStep.CopyDestinationStep.rebuiltForDestinationMutation(
+    snapshot: GPUFrameTextureRef = this.snapshot,
+    consumers: List<GPUDestinationSnapshotConsumerRef> = this.consumers,
+): GPUFrameStep.CopyDestinationStep = GPUFrameStep.CopyDestinationStep(
+    source = source,
+    sourceKey = sourceKey,
+    snapshot = snapshot,
+    logicalBounds = logicalBounds,
+    copyLayout = copyLayout,
+    consumers = consumers,
+    sourceTaskIds = sourceTaskIds,
+)
+
+private fun GPUFrameStep.RenderPassStep.rebuiltForDestinationMutation(
+    target: GPUFrameTargetRef = this.target,
+    resourceUses:
+        List<org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse> =
+        this.resourceUses,
+    drawPackets: List<GPUDrawPacket> = this.drawPackets,
+    sourceTaskIds: List<GPUTaskID> = this.sourceTaskIds,
+    batches:
+        List<org.graphiks.kanvas.gpu.renderer.recording.GPUFrameRenderBatch> =
+        this.batches,
+    preparedTextBindingsByPacketId:
+        Map<
+            GPUDrawPacketID,
+            org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding,
+            > = this.preparedTextBindingsByPacketId,
+): GPUFrameStep.RenderPassStep = GPUFrameStep.RenderPassStep(
+    target = target,
+    loadStore = loadStore,
+    samplePlan = samplePlan,
+    resourceUses = resourceUses,
+    drawPackets = drawPackets,
+    sourceTaskIds = sourceTaskIds,
+    batches = batches,
+    sampleContinuation = sampleContinuation,
+    depthStencilLoadStore = depthStencilLoadStore,
+    preparedImageBindingsByPacketId = preparedImageBindingsByPacketId,
+    preparedTextBindingsByPacketId = preparedTextBindingsByPacketId,
+)
+
+private fun GPUDrawPacket.rebuiltForDestinationMutation(
+    blendPlan: GPUBlendPlan? = this.blendPlan,
+    renderPipelineKey: GPURenderPipelineKey? = this.renderPipelineKey,
+    bindingLayoutHash: String = this.bindingLayoutHash,
+    semanticPayload: GPUDrawSemanticPayload? = this.semanticPayload,
+    clipExecutionPlan: GPUClipExecutionPlan? = this.clipExecutionPlan,
+): GPUDrawPacket = GPUDrawPacket(
+    packetId = packetId,
+    commandIdValue = commandIdValue,
+    analysisRecordId = analysisRecordId,
+    passId = passId,
+    layerId = layerId,
+    bindingListId = bindingListId,
+    insertionReasonCode = insertionReasonCode,
+    sortKey = sortKey,
+    sortKeyPreimage = sortKeyPreimage,
+    renderStepId = renderStepId,
+    renderStepVersion = renderStepVersion,
+    role = role,
+    blendPlan = blendPlan,
+    renderPipelineKey = renderPipelineKey,
+    computePipelineKey = computePipelineKey,
+    bindingLayoutHash = bindingLayoutHash,
+    uniformSlot = uniformSlot,
+    resourceSlot = resourceSlot,
+    semanticPayload = semanticPayload,
+    vertexSourceLabel = vertexSourceLabel,
+    scissorBoundsHash = scissorBoundsHash,
+    targetStateHash = targetStateHash,
+    originalPaintOrder = originalPaintOrder,
+    resourceGeneration = resourceGeneration,
+    frameProvenance = frameProvenance,
+    clipCoveragePlan = clipCoveragePlan,
+    clipExecutionPlan = clipExecutionPlan,
+    diagnostics = diagnostics,
+    clipProducerAuthority = clipProducerAuthority,
+)
+
+private fun GPUFrameStep.RenderPassStep.withDestinationDrawPackets(
+    packets: List<GPUDrawPacket>,
+    sourceTaskIds: List<GPUTaskID> = this.sourceTaskIds,
+    preparedTextBindingsByPacketId:
+        Map<
+            GPUDrawPacketID,
+            org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding,
+            > = this.preparedTextBindingsByPacketId,
+): GPUFrameStep.RenderPassStep {
+    val packetById = packets.associateBy(GPUDrawPacket::packetId)
+    val rebuiltBatches = batches.map { batch ->
+        org.graphiks.kanvas.gpu.renderer.recording.GPUFrameRenderBatch(
+            batchId = batch.batchId,
+            kind = batch.kind,
+            packets = batch.packets.map { packet -> packetById.getValue(packet.packetId) },
+            sourceTaskIds = if (sourceTaskIds == this.sourceTaskIds) {
+                batch.sourceTaskIds
+            } else {
+                sourceTaskIds
+            },
+        )
+    }
+    return rebuiltForDestinationMutation(
+        drawPackets = packets,
+        sourceTaskIds = sourceTaskIds,
+        batches = rebuiltBatches,
+        preparedTextBindingsByPacketId = preparedTextBindingsByPacketId,
+    )
+}
+
+private fun CapturedPreparedSurfaceInputs.withDestinationCopyMutation(
+    transform: (GPUFrameStep.CopyDestinationStep) -> GPUFrameStep.CopyDestinationStep,
+): CapturedPreparedSurfaceInputs {
+    var mutations = 0
+    val updated = framePlan.steps.map { step ->
+        if (step is GPUFrameStep.CopyDestinationStep) {
+            mutations += 1
+            transform(step)
+        } else {
+            step
+        }
+    }
+    require(mutations == 1)
+    return copy(framePlan = framePlan.rebuiltForDestinationMutation(steps = updated))
+}
+
+private fun CapturedPreparedSurfaceInputs.withDestinationPacketMutation(
+    transform: (GPUDrawPacket) -> GPUDrawPacket,
+): CapturedPreparedSurfaceInputs {
+    var mutations = 0
+    val updated = framePlan.steps.map { step ->
+        if (step !is GPUFrameStep.RenderPassStep) {
+            step
+        } else {
+            val packets = step.drawPackets.map { packet ->
+                if (packet.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead) {
+                    mutations += 1
+                    transform(packet)
+                } else {
+                    packet
+                }
+            }
+            if (packets == step.drawPackets) step else step.withDestinationDrawPackets(packets)
+        }
+    }
+    require(mutations == 1)
+    return copy(framePlan = framePlan.rebuiltForDestinationMutation(steps = updated))
+}
+
+private fun CapturedPreparedSurfaceInputs.withDestinationBindingMutation(
+    transform:
+        (
+            org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding,
+        ) -> org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding,
+): CapturedPreparedSurfaceInputs {
+    var mutations = 0
+    val updated = framePlan.steps.map { step ->
+        if (step !is GPUFrameStep.RenderPassStep ||
+            step.drawPackets.none { it.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead }
+        ) {
+            step
+        } else {
+            val packet = step.drawPackets.single {
+                it.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead
+            }
+            val binding = step.preparedTextBindingsByPacketId.getValue(packet.packetId)
+            mutations += 1
+            step.rebuiltForDestinationMutation(
+                preparedTextBindingsByPacketId =
+                    step.preparedTextBindingsByPacketId +
+                        (packet.packetId to transform(binding)),
+            )
+        }
+    }
+    require(mutations == 1)
+    return copy(framePlan = framePlan.rebuiltForDestinationMutation(steps = updated))
+}
+
+private fun CapturedPreparedSurfaceInputs.withMissingDestinationBinding():
+    CapturedPreparedSurfaceInputs {
+    var mutations = 0
+    val updated = framePlan.steps.map { step ->
+        if (step !is GPUFrameStep.RenderPassStep ||
+            step.drawPackets.none { it.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead }
+        ) {
+            step
+        } else {
+            val packet = step.drawPackets.single {
+                it.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead
+            }
+            val semantic = packet.semanticPayload as GPUDrawSemanticPayload.ColorGlyph
+            val withoutMaterial = GPUDrawSemanticPayload.ColorGlyph(
+                payloadRef = semantic.payloadRef,
+                planArtifactKey = semantic.planArtifactKey,
+                atlasArtifactKey = semantic.atlasArtifactKey,
+                atlas = semantic.atlas,
+                atlasFormat = semantic.atlasFormat,
+                layers = semantic.layers,
+                vertexData = semantic.vertexData,
+                indexData = semantic.indexData,
+                uniformBytes = semantic.uniformBytes,
+                targetBounds = semantic.targetBounds,
+                scissorBounds = semantic.scissorBounds,
+                instances = semantic.instances,
+                material = null,
+                clipIdentity = semantic.clipIdentity,
+                blendPlanIdentity = semantic.blendPlanIdentity,
+                capabilitySnapshotHash = semantic.capabilitySnapshotHash,
+                frameProvenance = semantic.frameProvenance,
+                canonicalHash = semantic.canonicalHash,
+            )
+            val replaced = packet.rebuiltForDestinationMutation(
+                semanticPayload = withoutMaterial,
+            )
+            mutations += 1
+            step.withDestinationDrawPackets(
+                packets = listOf(replaced),
+                preparedTextBindingsByPacketId = emptyMap(),
+            )
+        }
+    }
+    require(mutations == 1)
+    return copy(framePlan = framePlan.rebuiltForDestinationMutation(steps = updated))
+}
+
+private fun CapturedPreparedSurfaceInputs.withCoherentDestinationRenderTaskMutation():
+    CapturedPreparedSurfaceInputs {
+    val copy = framePlan.steps.filterIsInstance<GPUFrameStep.CopyDestinationStep>().single()
+    val consumer = copy.consumers.single()
+    val originalTaskId = consumer.renderTaskId
+    val forgedTaskId = GPUTaskID("${originalTaskId.value}.forged")
+    var renderMutations = 0
+    val updatedSteps = framePlan.steps.map { step ->
+        when (step) {
+            is GPUFrameStep.CopyDestinationStep ->
+                step.rebuiltForDestinationMutation(
+                    consumers = step.consumers.map { reference ->
+                        reference.copy(renderTaskId = forgedTaskId)
+                    },
+                )
+            is GPUFrameStep.RenderPassStep ->
+                if (step.drawPackets.any { packet -> packet.packetId == consumer.packetId }) {
+                    renderMutations += 1
+                    step.withDestinationDrawPackets(
+                        packets = step.drawPackets,
+                        sourceTaskIds = listOf(forgedTaskId),
+                    )
+                } else {
+                    step
+                }
+            else -> step
+        }
+    }
+    require(renderMutations == 1)
+    val updatedDependencies = framePlan.dependencies.map { dependency ->
+        dependency.copy(
+            fromTaskId = if (dependency.fromTaskId == originalTaskId) {
+                forgedTaskId
+            } else {
+                dependency.fromTaskId
+            },
+            toTaskId = if (dependency.toTaskId == originalTaskId) {
+                forgedTaskId
+            } else {
+                dependency.toTaskId
+            },
+        )
+    }
+    return copy(
+        framePlan = framePlan.rebuiltForDestinationMutation(
+            steps = updatedSteps,
+            dependencies = updatedDependencies,
+        ),
+    )
+}
+
+private fun CapturedPreparedSurfaceInputs.withPreparationMutation(
+    role: GPUFrameResourceRole,
+    transform:
+        (
+            org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest,
+        ) -> org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest,
+): CapturedPreparedSurfaceInputs {
+    var mutations = 0
+    val updated = framePlan.steps.map { step ->
+        if (step !is GPUFrameStep.PrepareResourcesStep) {
+            step
+        } else {
+            GPUFrameStep.PrepareResourcesStep(
+                requests = step.requests.map { request ->
+                    if (request.role == role) {
+                        mutations += 1
+                        transform(request)
+                    } else {
+                        request
+                    }
+                },
+                sourceTaskIds = step.sourceTaskIds,
+            )
+        }
+    }
+    require(mutations == 1)
+    return copy(framePlan = framePlan.rebuiltForDestinationMutation(steps = updated))
+}
+
+private fun org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
+    .rebuiltForDestinationMutation(
+        role: GPUFrameResourceRole = this.role,
+        byteSize: Long = this.byteSize,
+    ): org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest =
+    org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest(
+        resource = resource,
+        descriptor = descriptor,
+        role = role,
+        usages = usages,
+        lifetime = lifetime,
+        byteSize = byteSize,
+        diagnosticLabel = diagnosticLabel,
+    )
+
+private fun GPUPreparedResourceSet.rebuiltForDestinationMutation(
+    ordinaryResources: List<GPUPreparedResourceEvidence> = this.ordinaryResources,
+): GPUPreparedResourceSet {
+    require(commandResourceLeases.isEmpty() && commandDiagnostics.isEmpty())
+    return GPUPreparedResourceSet(
+        ordinaryResources = ordinaryResources,
+        outputOwnedReadbacks = outputOwnedReadbacks,
+        commandTextureResources = commandTextureResources,
+        commandBufferResources = commandBufferResources,
+    )
+}
+
+private fun CapturedPreparedSurfaceInputs.withCoverageMaskProducerMutation(
+    transform: (GPUFrameStep.RenderPassStep) -> GPUFrameStep.RenderPassStep,
+): CapturedPreparedSurfaceInputs {
+    var mutations = 0
+    val updated = framePlan.steps.map { step ->
+        if (step is GPUFrameStep.RenderPassStep &&
+            step.drawPackets.all { packet ->
+                packet.role ==
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.ClipProducer
+            }
+        ) {
+            mutations += 1
+            transform(step)
+        } else {
+            step
+        }
+    }
+    require(mutations == 1)
+    return copy(framePlan = framePlan.rebuiltForDestinationMutation(steps = updated))
+}
+
+private fun CapturedPreparedSurfaceInputs.withCoverageMaskProducerAfterDestinationCopy():
+    CapturedPreparedSurfaceInputs {
+    val producerIndex = framePlan.steps.indexOfFirst { step ->
+        step is GPUFrameStep.RenderPassStep &&
+            step.drawPackets.all { packet ->
+                packet.role ==
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.ClipProducer
+            }
+    }
+    require(producerIndex >= 0)
+    val producer = framePlan.steps[producerIndex]
+    val withoutProducer = framePlan.steps.toMutableList().apply { removeAt(producerIndex) }
+    val copyIndex = withoutProducer.indexOfFirst { it is GPUFrameStep.CopyDestinationStep }
+    require(copyIndex >= 0)
+    withoutProducer.add(copyIndex + 1, producer)
+    return copy(
+        framePlan = framePlan.rebuiltForDestinationMutation(steps = withoutProducer),
+    )
+}
+
+private fun CapturedPreparedSurfaceInputs.withCoverageMaskOperandOrderMutation():
+    CapturedPreparedSurfaceInputs {
+    var mutations = 0
+    val updated = framePlan.steps.map { step ->
+        if (step !is GPUFrameStep.RenderPassStep ||
+            step.drawPackets.none { it.blendPlan is GPUBlendPlan.ShaderBlendWithDstRead }
+        ) {
+            step
+        } else {
+            val uses = step.resourceUses.toMutableList()
+            val maskIndex = uses.indexOfFirst { it.role == GPUFrameResourceRole.ClipMask }
+            require(maskIndex >= 0 && maskIndex + 1 < uses.size)
+            val next = uses[maskIndex + 1]
+            uses[maskIndex + 1] = uses[maskIndex]
+            uses[maskIndex] = next
+            mutations += 1
+            step.rebuiltForDestinationMutation(resourceUses = uses)
+        }
+    }
+    require(mutations == 1)
+    return copy(framePlan = framePlan.rebuiltForDestinationMutation(steps = updated))
+}
+
+private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
+    .rebuiltForDestinationMutation(
+        preflightSeal:
+            org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal =
+            this.preflightSeal,
+    ): org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding =
+    org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding(
+        packetId = packetId,
+        atlasResourcePlan = atlasResourcePlan,
+        instanceBufferPlan = instanceBufferPlan,
+        firstInstance = firstInstance,
+        instanceCount = instanceCount,
+        materialUniformBufferPlan = materialUniformBufferPlan,
+        materialUniformOffsetBytes = materialUniformOffsetBytes,
+        materialUniformSizeBytes = materialUniformSizeBytes,
+        materialSampledResourcePlans = materialSampledResourcePlans,
+        preflightSeal = preflightSeal,
+        coverageMaskResource = coverageMaskResource,
+        colorGlyphBufferPlanOrNull = colorGlyphBufferPlan,
+        colorGlyphBufferSliceOrNull = colorGlyphBufferSlice,
+    )
+
+private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal
+    .rebuiltForDestinationMutation(
+        blendPlanIdentity: String = this.blendPlanIdentity,
+        clipIdentity: String = this.clipIdentity,
+        colorGlyphClip:
+            org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphClipPreflightSeal? =
+            this.colorGlyphClip,
+    ): org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal =
+    org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPreflightSeal(
+        semanticCanonicalHash = semanticCanonicalHash,
+        atlasKey = atlasKey,
+        atlasWidth = atlasWidth,
+        atlasHeight = atlasHeight,
+        atlasRowBytes = atlasRowBytes,
+        atlasGeneration = atlasGeneration,
+        atlasContentHash = atlasContentHash,
+        pageIndex = pageIndex,
+        instanceStrideBytes = instanceStrideBytes,
+        firstInstance = firstInstance,
+        instanceCount = instanceCount,
+        instanceBufferByteSize = instanceBufferByteSize,
+        instanceBufferContentHash = instanceBufferContentHash,
+        materialUniformOffsetBytes = materialUniformOffsetBytes,
+        materialUniformSizeBytes = materialUniformSizeBytes,
+        materialKey = materialKey,
+        materialWgslSourceHash = materialWgslSourceHash,
+        materialEntryPoint = materialEntryPoint,
+        materialAbiHash = materialAbiHash,
+        materialUniformContentHash = materialUniformContentHash,
+        materialSampledResourceFacts = materialSampledResourceFacts,
+        targetBounds = targetBounds,
+        scissorBounds = scissorBounds,
+        clipIdentity = clipIdentity,
+        blendPlanIdentity = blendPlanIdentity,
+        capabilitySnapshotHash = capabilitySnapshotHash,
+        textA8Composite = textA8Composite,
+        colorGlyphClip = colorGlyphClip,
+        packetAuthority = packetAuthority,
+    )
 
 private fun org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphBufferPlan
     .rebuiltForMaterializerCanonicalityTest(

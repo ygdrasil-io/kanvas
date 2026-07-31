@@ -51,6 +51,7 @@ class GPUPreparedSceneNativeCountersTest {
             draws = 19L,
             drawIndexed = 23L,
             pipelineBinds = 29L,
+            destinationCopies = 61L,
         )
 
         val (encoders, commandBuffers, targetCreations) = counters
@@ -71,10 +72,11 @@ class GPUPreparedSceneNativeCountersTest {
         assertEquals(47L, counters.preparedImageFrameSamplerCreations)
         assertEquals(53L, counters.preparedImageFrameUniformBufferCreations)
         assertEquals(59L, counters.preparedImageFrameBindGroupCreations)
-        assertEquals(49, type.declaredMethods.count { it.name.matches(Regex("component\\d+")) })
-        assertEquals(49, type.declaredMethods.single { it.name == "copy" }.parameterCount)
+        assertEquals(61L, counters.destinationCopies)
+        assertEquals(50, type.declaredMethods.count { it.name.matches(Regex("component\\d+")) })
+        assertEquals(50, type.declaredMethods.single { it.name == "copy" }.parameterCount)
         assertEquals(
-            49,
+            50,
             type.declaredConstructors.filterNot { it.isSynthetic }.maxOf { it.parameterCount },
         )
     }

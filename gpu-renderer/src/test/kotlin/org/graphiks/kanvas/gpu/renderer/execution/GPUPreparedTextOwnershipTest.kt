@@ -30,6 +30,8 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgra
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextNativeProgramHandoff
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceCoverageEncoding
+import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
@@ -136,6 +138,8 @@ class GPUPreparedTextOwnershipTest {
                 String::class.java,
                 String::class.java,
                 GPUFixedFunctionBlendState::class.java,
+                GPUSourceCoverageEncoding::class.java,
+                GPUPreparedTextClipVariant::class.java,
                 GPUPreparedTextCompositionObserver::class.java,
             ),
             visibleAdmissionConstructors.single().parameterTypes.toList(),
@@ -147,6 +151,8 @@ class GPUPreparedTextOwnershipTest {
                 String::class.java,
                 String::class.java,
                 GPUFixedFunctionBlendState::class.java,
+                GPUSourceCoverageEncoding::class.java,
+                GPUPreparedTextClipVariant::class.java,
                 GPUPreparedTextCompositionObserver::class.java,
             ),
             visibleAdmissionApis.single().parameterTypes.toList(),

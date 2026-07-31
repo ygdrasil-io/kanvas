@@ -511,6 +511,28 @@ class GPURendererPackageBoundaryTest {
         assertContains(report, "execution semantic package import violation")
     }
 
+    @Test
+    fun `package boundary check rejects fully qualified execution semantic references`() {
+        val root = temporarySourceRoot()
+        root.writeSource(
+            relativePath = "org/graphiks/kanvas/gpu/renderer/execution/SemanticsLeak.kt",
+            text = """
+                package org.graphiks.kanvas.gpu.renderer.execution
+
+                class SemanticsLeak(
+                    val plan: org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan,
+                )
+            """.trimIndent(),
+        )
+
+        val violations = GPUPackageBoundaryCheck().findViolations(root)
+
+        assertContains(
+            violations.joinToString("\n"),
+            "execution semantic package reference violation",
+        )
+    }
+
     /** Keeps immutable artifact contracts independent from frame planning and native execution. */
     @Test
     fun `artifact foundation rejects late planning imports`() {

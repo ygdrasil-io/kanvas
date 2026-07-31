@@ -101,6 +101,24 @@ internal class GPUCorePrimitiveDirectPreparedPassSeal private constructor(
         get() = analyticClipUniformSealsSnapshot
     val analyticIntersectionUniformSeals: List<GPUCorePrimitiveAnalyticIntersectionUniformSeal>
         get() = analyticIntersectionUniformSealsSnapshot
+    val uniformPlan: org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
+        get() = when {
+            uniformSlabSeal != null -> uniformSlabSeal.plan
+            analyticShapeUniformSealsSnapshot.isNotEmpty() ->
+                analyticShapeUniformSealsSnapshot.first().plan
+            analyticClipUniformSealsSnapshot.isNotEmpty() ->
+                analyticClipUniformSealsSnapshot.first().plan
+            else -> analyticIntersectionUniformSealsSnapshot.first().plan
+        }
+    val commandIds: List<Int>
+        get() = when {
+            uniformSlabSeal != null -> uniformSlabSeal.commandIds
+            analyticShapeUniformSealsSnapshot.isNotEmpty() ->
+                analyticShapeUniformSealsSnapshot.map { it.commandId }
+            analyticClipUniformSealsSnapshot.isNotEmpty() ->
+                analyticClipUniformSealsSnapshot.map { it.commandId }
+            else -> analyticIntersectionUniformSealsSnapshot.map { it.commandId }
+        }
 
     init {
         require(listOf(

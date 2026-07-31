@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptTelemetrySink
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralEventKind
@@ -1126,7 +1127,10 @@ internal class GPUFrameExecutor(
             }
             if (key.target.value != sceneTarget.targetId ||
                 key.deviceGeneration != frame.generationSeal.deviceGeneration ||
-                key.targetGeneration != frame.generationSeal.targetGeneration ||
+                (
+                    key.targetGeneration != frame.generationSeal.targetGeneration &&
+                        key.targetGeneration != PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
+                    ) ||
                 key.colorFormat != sceneTarget.format ||
                 key.samplePlan != render.samplePlan ||
                 request.loadTransition != if (sequenceIndex == 0) {

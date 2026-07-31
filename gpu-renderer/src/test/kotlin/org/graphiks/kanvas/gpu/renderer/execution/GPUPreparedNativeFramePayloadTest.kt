@@ -15,7 +15,15 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadGatherer
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitivePayloadInput
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveSourceFamily
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 class GPUPreparedNativeFramePayloadTest {
     @Test
@@ -169,6 +177,151 @@ class GPUPreparedNativeFramePayloadTest {
                 commands = fullTargetCommands(fixture),
             )
         }
+    }
+
+    @Test
+    fun `full target indexed core layout accepts two exact ordered units`() {
+        val generation = GPUDeviceGenerationID(7)
+        fullTargetFixture(generation).use { fixture ->
+            val commands = fullTargetCommands(fixture) + listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(fixture.pipeline),
+                GPUPreparedNativeRenderCommand.SetBindGroup(
+                    0,
+                    fixture.bindGroup,
+                    listOf(512L),
+                ),
+                drawCommand(),
+            )
+
+            val render = fullTargetRender(
+                pass = GPUPreparedNativeRenderPassConfig(fixture.target),
+                commands = commands,
+            )
+
+            assertEquals(commands, render.commands)
+            assertEquals(
+                listOf(
+                    GPUPreparedNativeRenderCommandEvidence(
+                        commandIdValue = 0,
+                        draws = 0,
+                        drawIndexed = 1,
+                        bindGroups = 1,
+                    ),
+                    GPUPreparedNativeRenderCommandEvidence(
+                        commandIdValue = 1,
+                        draws = 0,
+                        drawIndexed = 1,
+                        bindGroups = 1,
+                    ),
+                ),
+                preparedNativeRenderCommandEvidence(render),
+            )
+            assertOperandIdentities(
+                listOf(
+                    fixture.target,
+                    fixture.pipeline,
+                    fixture.pipeline,
+                    fixture.vertex,
+                    fixture.index,
+                    fixture.bindGroup,
+                    fixture.bindGroup,
+                ),
+                render.operands,
+            )
+        }
+    }
+
+    @Test
+    fun `full target indexed core layout refuses second unit corruption`() {
+        val generation = GPUDeviceGenerationID(7)
+        fullTargetFixture(generation).use { fixture ->
+            val canonical = fullTargetCommands(fixture) + listOf(
+                GPUPreparedNativeRenderCommand.SetPipeline(fixture.pipeline),
+                GPUPreparedNativeRenderCommand.SetBindGroup(
+                    0,
+                    fixture.bindGroup,
+                    listOf(512L),
+                ),
+                drawCommand(),
+            )
+            val secondStart = 5
+            val cases = listOf(
+                "second-offset" to canonical.mapIndexed { index, command ->
+                    if (index == secondStart + 1) {
+                        GPUPreparedNativeRenderCommand.SetBindGroup(
+                            0,
+                            fixture.bindGroup,
+                            listOf(513L),
+                        )
+                    } else command
+                },
+                "second-draw-kind" to canonical.mapIndexed { index, command ->
+                    if (index == secondStart + 2) {
+                        GPUPreparedNativeRenderCommand.Draw(
+                            GPUPreparedNativeDrawCall.Draw(3),
+                        )
+                    } else command
+                },
+                "second-draw-geometry-range" to canonical.mapIndexed { index, command ->
+                    if (index == secondStart + 2) {
+                        val draw = assertIs<GPUPreparedNativeRenderCommand.DrawIndexed>(command)
+                        GPUPreparedNativeRenderCommand.DrawIndexed(
+                            draw.drawCall.copy(firstIndex = 64),
+                        )
+                    } else command
+                },
+                "second-pipeline-missing" to canonical.filterIndexed { index, _ ->
+                    index != secondStart
+                },
+                "second-bind-group-missing" to canonical.filterIndexed { index, _ ->
+                    index != secondStart + 1
+                },
+                "second-draw-missing" to canonical.filterIndexed { index, _ ->
+                    index != secondStart + 2
+                },
+                "second-order" to canonical.toMutableList().apply {
+                    val pipeline = removeAt(secondStart)
+                    add(secondStart + 1, pipeline)
+                },
+            )
+
+            cases.forEach { (label, commands) ->
+                assertFailsWith<IllegalArgumentException>(label) {
+                    fullTargetRender(
+                        pass = GPUPreparedNativeRenderPassConfig(fixture.target),
+                        commands = commands,
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `command order layout retains two draw units exactly`() {
+        val generation = GPUDeviceGenerationID(7)
+        val target = textureViewOperand("target", generation)
+        val pipeline = pipelineOperand("direct", generation)
+        val bindGroup = bindGroupOperand("direct", generation)
+        val commands = listOf(
+            GPUPreparedNativeRenderCommand.SetPipeline(pipeline),
+            GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroup),
+            GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
+            GPUPreparedNativeRenderCommand.SetPipeline(pipeline),
+            GPUPreparedNativeRenderCommand.SetBindGroup(0, bindGroup),
+            GPUPreparedNativeRenderCommand.Draw(GPUPreparedNativeDrawCall.Draw(3)),
+        )
+
+        val render = GPUPreparedNativeScopeOperand.Render(
+            sourceStepIndex = 2,
+            pass = GPUPreparedNativeRenderPassConfig(target),
+            commands = commands,
+        )
+
+        assertEquals(commands, render.commands)
+        assertOperandIdentities(
+            listOf(target, pipeline, bindGroup, pipeline, bindGroup),
+            render.operands,
+        )
     }
 
     @Test
@@ -1038,8 +1191,32 @@ class GPUPreparedNativeFramePayloadTest {
         sourceStepIndex = 2,
         pass = pass,
         commands = commands,
+        semanticPayloads = List(commands.count {
+            it is GPUPreparedNativeRenderCommand.DrawIndexed
+        }) { index -> fullTargetSemantic(index) },
         operandLayout = GPUPreparedNativeRenderOperandLayout.IndexedCorePrimitiveFullTarget,
     )
+
+    private fun fullTargetSemantic(commandId: Int): GPUDrawSemanticPayload.CorePrimitive =
+        GPUCorePrimitivePayloadGatherer().gatherSemantic(
+            GPUCorePrimitivePayloadInput(
+                commandIdValue = commandId,
+                sourceFamily = GPUCorePrimitiveSourceFamily.Path,
+                geometry = GPUCorePrimitiveGeometryInput.TriangulatedPath(
+                    vertices = listOf(0f, 0f, 1f, 0f, 0f, 1f),
+                    indices = listOf(0, 1, 2),
+                    sourceContourStarts = listOf(0),
+                    sourceVertexCount = 3,
+                    coverBounds = GPUPixelBounds(0, 0, 8, 8),
+                ),
+                premultipliedRgba = listOf(0.25f, 0.25f, 0.25f, 0.5f),
+                targetBounds = GPUPixelBounds(0, 0, 8, 8),
+                scissorBounds = GPUPixelBounds(0, 0, 8, 8),
+                clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+                blendPlanIdentity = "payload-test.src-over",
+                frameProvenance = GPUFrameProvenance.GmContent,
+            ),
+        )
 
     private fun <T> permutations(values: List<T>): List<List<T>> =
         if (values.isEmpty()) {

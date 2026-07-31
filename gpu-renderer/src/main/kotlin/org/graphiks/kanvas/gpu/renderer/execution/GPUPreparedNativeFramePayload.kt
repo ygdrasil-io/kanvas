@@ -309,6 +309,100 @@ internal interface GPUPreparedNativeFrameLeaseLifecycle {
     fun quarantineUncertain(): GPUPreparedNativeFrameLeaseTransition
 }
 
+/** Shared lifecycle for one payload borrowing multiple independent frame leases. */
+internal class GPUPreparedNativeCompositeFrameLeaseLifecycle(
+    lifecycles: List<GPUPreparedNativeFrameLeaseLifecycle>,
+) : GPUPreparedNativeFrameLeaseLifecycle {
+    private enum class State {
+        CheckedOut,
+        Submitted,
+        Terminal,
+    }
+
+    private val children = lifecycles.toList()
+    private val childStates = MutableList(children.size) { State.CheckedOut }
+    private var state = State.CheckedOut
+
+    init {
+        require(children.size > 1)
+    }
+
+    @Synchronized
+    override fun releaseBeforeSubmit(): GPUPreparedNativeFrameLeaseTransition =
+        transition(
+            expected = State.CheckedOut,
+            operation = GPUPreparedNativeFrameLeaseLifecycle::releaseBeforeSubmit,
+        )
+
+    @Synchronized
+    override fun markSubmitted(): GPUPreparedNativeFrameLeaseTransition {
+        if (state != State.CheckedOut) return invalidState()
+        children.forEachIndexed { index, child ->
+            val transition = child.markSubmitted()
+            if (transition is GPUPreparedNativeFrameLeaseTransition.Refused) {
+                quarantineNonTerminalChildren()
+                state = State.Terminal
+                return transition
+            }
+            childStates[index] = State.Submitted
+        }
+        state = State.Submitted
+        return GPUPreparedNativeFrameLeaseTransition.Applied
+    }
+
+    @Synchronized
+    override fun releaseAfterCompletion(): GPUPreparedNativeFrameLeaseTransition =
+        transition(
+            expected = State.Submitted,
+            operation = GPUPreparedNativeFrameLeaseLifecycle::releaseAfterCompletion,
+        )
+
+    @Synchronized
+    override fun quarantineUncertain(): GPUPreparedNativeFrameLeaseTransition {
+        if (state == State.Terminal) return invalidState()
+        val refusal = quarantineNonTerminalChildren()
+        state = State.Terminal
+        return refusal ?: GPUPreparedNativeFrameLeaseTransition.Applied
+    }
+
+    private inline fun transition(
+        expected: State,
+        operation: (GPUPreparedNativeFrameLeaseLifecycle) -> GPUPreparedNativeFrameLeaseTransition,
+    ): GPUPreparedNativeFrameLeaseTransition {
+        if (state != expected) return invalidState()
+        children.forEachIndexed { index, child ->
+            val transition = operation(child)
+            if (transition is GPUPreparedNativeFrameLeaseTransition.Refused) {
+                quarantineNonTerminalChildren()
+                state = State.Terminal
+                return transition
+            }
+            childStates[index] = State.Terminal
+        }
+        state = State.Terminal
+        return GPUPreparedNativeFrameLeaseTransition.Applied
+    }
+
+    private fun quarantineNonTerminalChildren():
+        GPUPreparedNativeFrameLeaseTransition.Refused? {
+        var refusal: GPUPreparedNativeFrameLeaseTransition.Refused? = null
+        children.forEachIndexed { index, child ->
+            if (childStates[index] == State.Terminal) return@forEachIndexed
+            val transition = child.quarantineUncertain()
+            if (transition is GPUPreparedNativeFrameLeaseTransition.Refused) {
+                if (refusal == null) refusal = transition
+            } else {
+                childStates[index] = State.Terminal
+            }
+        }
+        return refusal
+    }
+
+    private fun invalidState() = GPUPreparedNativeFrameLeaseTransition.Refused(
+        "invalid-composite-lease-state:${state.name}",
+    )
+}
+
 /**
  * Private typed native operand. It never enters PreparedGPUFrame, dumps, hashes, or telemetry.
  */
@@ -941,23 +1035,32 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                 }) {
                     "Full-target indexed CorePrimitive render layout forbids additional command types"
                 }
-                require(
-                    commands.size == 5 &&
-                        commands[0] is GPUPreparedNativeRenderCommand.SetPipeline &&
-                        commands[1] is GPUPreparedNativeRenderCommand.SetBindGroup &&
-                        commands[2] is GPUPreparedNativeRenderCommand.SetVertexBuffer &&
-                        commands[3] is GPUPreparedNativeRenderCommand.SetIndexBuffer &&
-                        commands[4] is GPUPreparedNativeRenderCommand.DrawIndexed,
-                ) {
-                    "Full-target indexed CorePrimitive render layout requires canonical command order"
+                val drawCount = commands.count { it is GPUPreparedNativeRenderCommand.DrawIndexed }
+                require(drawCount > 0 && commands.size == 2 + 3 * drawCount) {
+                    "Full-target indexed CorePrimitive render layout requires one shared geometry binding and one pipeline/bind/draw sequence per unit"
+                }
+                require(commands[0] is GPUPreparedNativeRenderCommand.SetPipeline &&
+                    commands[1] is GPUPreparedNativeRenderCommand.SetBindGroup &&
+                    commands[2] is GPUPreparedNativeRenderCommand.SetVertexBuffer &&
+                    commands[3] is GPUPreparedNativeRenderCommand.SetIndexBuffer &&
+                    commands[4] is GPUPreparedNativeRenderCommand.DrawIndexed &&
+                    (1 until drawCount).all { unitIndex ->
+                        val start = 5 + (unitIndex - 1) * 3
+                        commands[start] is GPUPreparedNativeRenderCommand.SetPipeline &&
+                            commands[start + 1] is GPUPreparedNativeRenderCommand.SetBindGroup &&
+                            commands[start + 2] is GPUPreparedNativeRenderCommand.DrawIndexed
+                    }
+                ) { "Full-target indexed CorePrimitive render layout requires canonical command order" }
+                require(semanticPayloads.size == drawCount) {
+                    "Full-target indexed CorePrimitive render layout requires one semantic payload per draw"
                 }
                 val pipelines = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>()
-                require(pipelines.size == 1) {
-                    "Full-target indexed CorePrimitive render layout requires exactly one SetPipeline command"
+                require(pipelines.size == drawCount) {
+                    "Full-target indexed CorePrimitive render layout requires one SetPipeline command per draw"
                 }
                 val bindGroups = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
-                require(bindGroups.size == 1) {
-                    "Full-target indexed CorePrimitive render layout requires exactly one SetBindGroup command"
+                require(bindGroups.size == drawCount) {
+                    "Full-target indexed CorePrimitive render layout requires one SetBindGroup command per draw"
                 }
                 val vertexBuffers = commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>()
                 require(vertexBuffers.size == 1) {
@@ -968,32 +1071,22 @@ internal sealed interface GPUPreparedNativeScopeOperand {
                     "Full-target indexed CorePrimitive render layout requires exactly one SetIndexBuffer command"
                 }
                 val draws = commands.filterIsInstance<GPUPreparedNativeRenderCommand.DrawIndexed>()
-                require(draws.size == 1) {
-                    "Full-target indexed CorePrimitive render layout requires exactly one DrawIndexed command"
+                require(draws.size == drawCount) {
+                    "Full-target indexed CorePrimitive render layout requires one exact DrawIndexed command per unit"
                 }
-                val pipeline = pipelines.single().pipeline
-                val uniformAlignmentBytes = requireNotNull(
-                    pipeline.coverageMaskConsumerUniformAlignmentBytes,
-                ) {
-                    "Full-target indexed CorePrimitive render layout requires exact coverage-mask consumer acquisition"
+                bindGroups.zip(pipelines).forEach { (bindGroup, pipelineCommand) ->
+                    val uniformAlignmentBytes = requireNotNull(
+                        pipelineCommand.pipeline.coverageMaskConsumerUniformAlignmentBytes,
+                    ) {
+                        "Full-target indexed CorePrimitive render layout requires exact coverage-mask consumer acquisition"
+                    }
+                    require(bindGroup.index == 0 && bindGroup.dynamicOffsets.size == 1 &&
+                        bindGroup.dynamicOffsets.single() % uniformAlignmentBytes == 0L
+                    ) { "Full-target indexed CorePrimitive render layout requires one aligned bind-group-zero offset per unit" }
                 }
-                val bindGroup = bindGroups.single()
-                require(bindGroup.index == 0) {
-                    "Full-target indexed CorePrimitive render layout requires bind group index zero"
-                }
-                require(bindGroup.dynamicOffsets.size == 1) {
-                    "Full-target indexed CorePrimitive render layout requires exactly one dynamic offset"
-                }
-                require(bindGroup.dynamicOffsets.single() % uniformAlignmentBytes == 0L) {
-                    "Full-target indexed CorePrimitive render layout requires an aligned dynamic offset"
-                }
-                val operands = listOf(
-                    pass.colorTarget,
-                    pipeline,
-                    vertexBuffers.single().buffer,
-                    indexBuffers.single().buffer,
-                    bindGroup.bindGroup,
-                )
+                val operands = listOf(pass.colorTarget) + pipelines.map { it.pipeline } +
+                    vertexBuffers.single().buffer + indexBuffers.single().buffer +
+                    bindGroups.map { it.bindGroup }
                 require(operands.all { it.ownership == GPUPreparedNativeOperandOwnership.Borrowed }) {
                     "Full-target indexed CorePrimitive pooled operands must all be borrowed"
                 }

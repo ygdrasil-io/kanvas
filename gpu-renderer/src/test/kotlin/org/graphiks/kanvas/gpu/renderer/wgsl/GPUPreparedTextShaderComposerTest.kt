@@ -17,6 +17,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgra
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
 import org.graphiks.kanvas.gpu.renderer.materials.preparedTextFinalModuleRefusal
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
@@ -59,7 +60,7 @@ class GPUPreparedTextShaderComposerTest {
                         sampleType = null,
                         viewDimension = null,
                         storageFormat = null,
-                        minBindingSize = 48,
+                        minBindingSize = 80,
                     ),
                 ),
                 report.bindings
@@ -142,18 +143,35 @@ class GPUPreparedTextShaderComposerTest {
     }
 
     @Test
-    fun `code ABI target format and blend plan are the only pipeline identity axes`() {
+    fun `code ABI target format blend plan and source coverage are the only pipeline identity axes`() {
         val solid = compile(solid())
         val image = compile(image(byteArrayOf(1, 2, 3, 4)))
         val baseline = compose(solid)
         val imageProgram = compose(image)
         val otherTarget = compose(solid, targetFormatClass = "rgba16float")
         val otherBlend = compose(solid, blendPlanIdentity = "fixed-function:src")
+        val otherCoverage = compose(
+            solid,
+            sourceCoverageEncoding = GPUSourceCoverageEncoding.Coverage,
+        )
+        val analyticClip = compose(
+            solid,
+            clipVariant = GPUPreparedTextClipVariant.AnalyticRectAA,
+        )
 
         assertNotEquals(baseline.sourceHash, imageProgram.sourceHash)
         assertNotEquals(baseline.pipelineKey, imageProgram.pipelineKey)
         assertNotEquals(baseline.pipelineKey, otherTarget.pipelineKey)
         assertNotEquals(baseline.pipelineKey, otherBlend.pipelineKey)
+        assertNotEquals(baseline.sourceHash, otherCoverage.sourceHash)
+        assertNotEquals(baseline.pipelineKey, otherCoverage.pipelineKey)
+        assertEquals(
+            GPUSourceCoverageEncoding.Coverage,
+            otherCoverage.sourceCoverageEncoding,
+        )
+        assertNotEquals(baseline.sourceHash, analyticClip.sourceHash)
+        assertNotEquals(baseline.pipelineKey, analyticClip.pipelineKey)
+        assertEquals(GPUPreparedTextClipVariant.AnalyticRectAA, analyticClip.clipVariant)
         assertEquals(baseline.sourceHash, otherTarget.sourceHash)
         assertEquals(baseline.abiHash, otherTarget.abiHash)
     }
@@ -237,7 +255,7 @@ class GPUPreparedTextShaderComposerTest {
         val drawLayout = report.layouts.single {
             it.structName == "PreparedTextDrawUniforms"
         }
-        assertEquals(3, drawLayout.members.size)
+        assertEquals(5, drawLayout.members.size)
         val mutations = buildList {
             add(
                 "struct.name" to report.withDrawLayoutMutation {
@@ -423,12 +441,17 @@ class GPUPreparedTextShaderComposerTest {
         material: GPUPreparedMaterialProgram,
         targetFormatClass: String = "rgba8unorm",
         blendPlanIdentity: String = "fixed-function:src-over:premul",
+        sourceCoverageEncoding: GPUSourceCoverageEncoding =
+            GPUSourceCoverageEncoding.ModulateRGBA,
+        clipVariant: GPUPreparedTextClipVariant = GPUPreparedTextClipVariant.None,
     ): GPUPreparedTextCompositeProgram =
         assertIs<GPUPreparedTextCompositeProgramResult.Ready>(
             GPUPreparedTextShaderComposer.compose(
                 material = material,
                 targetFormatClass = targetFormatClass,
                 blendPlanIdentity = blendPlanIdentity,
+                sourceCoverageEncoding = sourceCoverageEncoding,
+                clipVariant = clipVariant,
             ),
         ).program
 

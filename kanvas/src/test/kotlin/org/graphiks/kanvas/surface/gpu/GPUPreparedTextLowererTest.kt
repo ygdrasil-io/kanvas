@@ -25,6 +25,9 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramComp
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResult
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolution
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
@@ -93,6 +96,46 @@ class GPUPreparedTextLowererTest {
         assertEquals(expectedPlan.canonicalIdentity(), ready.draw.blendPlan.canonicalIdentity())
         assertEquals(target.colorFormat, ready.draw.targetColorFormat)
         assertEquals(capabilities.canonicalSnapshotHash(), ready.draw.capabilitySnapshotHash)
+    }
+
+    @Test
+    fun `prepared solid material authenticates pre coverage opacity before blend planning`() {
+        val opaqueSource = assertIs<GPUPreparedTextLowering.Ready>(
+            GPUPreparedTextLowerer.lower(
+                operation = validOperation().copy(
+                    paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC),
+                ),
+                operationIndex = 0,
+                target = target(),
+                capabilities = capabilities(),
+            ),
+        ).draw
+        val translucentSource = assertIs<GPUPreparedTextLowering.Ready>(
+            GPUPreparedTextLowerer.lower(
+                operation = validOperation().copy(
+                    paint = Paint.fill(Color.fromRGBA(1f, 0f, 0f, 0.5f))
+                        .copy(blendMode = BlendMode.SRC),
+                ),
+                operationIndex = 1,
+                target = target(),
+                capabilities = capabilities(),
+            ),
+        ).draw
+
+        assertEquals(
+            GPUSourceAlphaClassification.ProvenOpaque,
+            opaqueSource.material.preCoverageSourceAlpha,
+        )
+        assertEquals(
+            GPUSourceCoverageEncoding.ModulateRGBA,
+            assertIs<GPUBlendPlan.FixedFunctionBlend>(opaqueSource.blendPlan)
+                .sourceCoverageEncoding,
+        )
+        assertEquals(
+            GPUSourceAlphaClassification.Translucent,
+            translucentSource.material.preCoverageSourceAlpha,
+        )
+        assertIs<GPUBlendPlan.ShaderBlendWithDstRead>(translucentSource.blendPlan)
     }
 
     @Test

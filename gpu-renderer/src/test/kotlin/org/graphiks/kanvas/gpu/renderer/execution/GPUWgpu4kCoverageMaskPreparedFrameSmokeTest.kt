@@ -183,7 +183,7 @@ class GPUWgpu4kCoverageMaskPreparedFrameSmokeTest {
             assertEquals(0, counters.activeNativePayloads)
             assertEquals(0, counters.outputOwnedNativePayloads)
             assertEquals(0, counters.quarantinedNativePayloads)
-            assertEquals(7L, renderCounters.renderPasses)
+            assertEquals(4L, renderCounters.renderPasses)
             assertEquals(3L, renderCounters.draws)
             assertEquals(4L, renderCounters.drawIndexed)
             assertEquals(1L, renderCounters.coverageMaskTextureCreations)
@@ -207,11 +207,11 @@ class GPUWgpu4kCoverageMaskPreparedFrameSmokeTest {
     ): FrameEvidence {
         val framePlan = GPUFramePlanner.plan(taskList)
         val renderSteps = framePlan.steps.filterIsInstance<GPUFrameStep.RenderPassStep>()
-        assertEquals(
-            List(producerCount) { GPUDrawPacketRole.ClipProducer } +
-                List(2) { GPUDrawPacketRole.Shading },
-            renderSteps.map { step -> step.drawPackets.single().role },
-        )
+        assertEquals(2, renderSteps.size)
+        assertEquals(producerCount, renderSteps[0].drawPackets.size)
+        assertTrue(renderSteps[0].drawPackets.all { it.role == GPUDrawPacketRole.ClipProducer })
+        assertEquals(2, renderSteps[1].drawPackets.size)
+        assertTrue(renderSteps[1].drawPackets.all { it.role == GPUDrawPacketRole.Shading })
         assertEquals(1, framePlan.steps.filterIsInstance<GPUFrameStep.ReadbackCopyStep>().size)
 
         val nativeBefore = session.nativeCounters()
@@ -227,7 +227,7 @@ class GPUWgpu4kCoverageMaskPreparedFrameSmokeTest {
         )
         val nativeAfter = session.nativeCounters()
         val renderAfter = session.renderCounters()
-        val expectedPasses = producerCount + 2L
+        val expectedPasses = 2L
         assertEquals(1L, nativeAfter.encoders - nativeBefore.encoders)
         assertEquals(1L, nativeAfter.commandBuffers - nativeBefore.commandBuffers)
         assertEquals(1L, nativeAfter.submits - nativeBefore.submits)

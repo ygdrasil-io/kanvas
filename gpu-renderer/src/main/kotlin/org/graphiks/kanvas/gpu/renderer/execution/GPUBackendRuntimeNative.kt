@@ -1313,6 +1313,8 @@ private class WgpuBackendSession(
             GPUWgpu4kSurfaceBlitSessionCache(glfw.wgpuContext.device, preparedTarget),
         )
         val preparedImageNativeCounters = GPUPreparedImageNativeCounterRecorder()
+        val preparedSurfaceDestinationSnapshots =
+            GPUPreparedSurfaceDestinationSnapshotCounter()
         val preparedImageCache = setupTransaction.own(
             GPUWgpu4kPreparedImageSessionCache(
                 glfw.wgpuContext.device,
@@ -1332,6 +1334,7 @@ private class WgpuBackendSession(
             device = glfw.wgpuContext.device,
             queue = glfw.wgpuContext.device.queue,
             canonicalSceneTargetView = preparedTarget.view,
+            onDestinationCopyEncoded = telemetryRecorder::recordDestinationCopy,
         ))
         val mappingExecutor = Executors.newSingleThreadExecutor { task ->
             Thread(task, "kanvas-prepared-scene-readback").apply { isDaemon = true }
@@ -1461,6 +1464,8 @@ private class WgpuBackendSession(
                         surfaceBlitCache = surfaceBlitCache,
                         surfaceTargetResolver = surfaceTargetResolver,
                         corePrimitiveLimits = backendLimits,
+                        onDestinationSnapshotCreated =
+                            preparedSurfaceDestinationSnapshots::recordCreation,
                     )
                 val materializer = GPUWgpu4kFramePayloadMaterializerDispatcher(
                     device = glfw.wgpuContext.device,
@@ -1578,7 +1583,9 @@ private class WgpuBackendSession(
                     separableBlurInvariantReuses = separableBlur.invariantReuses,
                     separableBlurIntermediateCreations = separableBlur.intermediateCreations,
                     separableBlurIntermediateReuses = separableBlur.intermediateReuses,
-                    destinationSnapshotCreations = destinationCopy.snapshotCreations,
+                    destinationSnapshotCreations =
+                        destinationCopy.snapshotCreations +
+                            preparedSurfaceDestinationSnapshots.snapshot(),
                     destinationSnapshotReuses = destinationCopy.snapshotReuses,
                     colorGlyphInvariantCreations = colorGlyph.invariantCreations,
                     colorGlyphAtlasCreations = colorGlyph.atlasCreations,
@@ -1592,6 +1599,7 @@ private class WgpuBackendSession(
                     drawIndexed = encoding.drawIndexed,
                     pipelineBinds = encoding.pipelineBinds,
                     commandsByCommandId = encoding.commandsByCommandId,
+                    destinationCopies = encoding.destinationCopies,
                 ).withPreparedImageNativeCounters(preparedImage)
             },
         ).also { child ->

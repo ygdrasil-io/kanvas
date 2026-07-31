@@ -48,6 +48,7 @@ internal sealed interface GPUWgpu4kPreparedTextPipelineAcquisition {
     val drawBindGroupLayout: GPUBindGroupLayout
     val materialBindGroupLayout: GPUBindGroupLayout
     val atlasBindGroupLayout: GPUBindGroupLayout
+    val coverageMaskBindGroupLayout: GPUBindGroupLayout?
     val atlasSampler: GPUSampler
     val materialSamplersByResourceKey: Map<String, GPUSampler>
 }
@@ -57,6 +58,7 @@ private class IssuedGPUWgpu4kPreparedTextPipelineAcquisition(
     override val drawBindGroupLayout: GPUBindGroupLayout,
     override val materialBindGroupLayout: GPUBindGroupLayout,
     override val atlasBindGroupLayout: GPUBindGroupLayout,
+    override val coverageMaskBindGroupLayout: GPUBindGroupLayout?,
     override val atlasSampler: GPUSampler,
     materialSamplersByResourceKey: Map<String, GPUSampler>,
 ) : GPUWgpu4kPreparedTextPipelineAcquisition {
@@ -100,6 +102,7 @@ private class GPUWgpu4kPreparedTextCachedPipeline(
     val drawBindGroupLayout: GPUBindGroupLayout,
     val materialBindGroupLayout: GPUBindGroupLayout,
     val atlasBindGroupLayout: GPUBindGroupLayout,
+    val coverageMaskBindGroupLayout: GPUBindGroupLayout?,
     val pipelineLayout: GPUPipelineLayout,
     val pipeline: GPURenderPipeline,
     val atlasSampler: GPUSampler,
@@ -193,6 +196,8 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                     drawBindGroupLayout = cached.drawBindGroupLayout,
                     materialBindGroupLayout = cached.materialBindGroupLayout,
                     atlasBindGroupLayout = cached.atlasBindGroupLayout,
+                    coverageMaskBindGroupLayout =
+                        cached.coverageMaskBindGroupLayout,
                     atlasSampler = cached.atlasSampler,
                     materialSamplersByResourceKey =
                         samplerAliasesByPipelineKey[sameKeyPrograms.first().pipelineKey].orEmpty(),
@@ -275,7 +280,7 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                             buffer = BufferBindingLayout(
                                 type = GPUBufferBindingType.Uniform,
                                 hasDynamicOffset = true,
-                                minBindingSize = 48uL,
+                                minBindingSize = 80uL,
                             ),
                         ),
                     ),
@@ -343,6 +348,24 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                     ),
                 ),
             ).track(created)
+            val coverageMaskLayout = program.coverageMaskTextureBinding?.let { binding ->
+                device.createBindGroupLayout(
+                    BindGroupLayoutDescriptor(
+                        label = "Kanvas.session.preparedText.coverageMaskLayout",
+                        entries = listOf(
+                            BindGroupLayoutEntry(
+                                binding = binding.toUInt(),
+                                visibility = GPUShaderStage.Fragment,
+                                texture = TextureBindingLayout(
+                                    sampleType = GPUTextureSampleType.Float,
+                                    viewDimension = GPUTextureViewDimension.TwoD,
+                                    multisampled = false,
+                                ),
+                            ),
+                        ),
+                    ),
+                ).track(created)
+            }
             val shader = device.createShaderModule(
                 ShaderModuleDescriptor(
                     label = "Kanvas.session.preparedText.shader.${program.pipelineKey}",
@@ -352,7 +375,12 @@ internal class GPUWgpu4kPreparedTextSessionCache(
             val pipelineLayout = device.createPipelineLayout(
                 PipelineLayoutDescriptor(
                     label = "Kanvas.session.preparedText.pipelineLayout",
-                    bindGroupLayouts = listOf(drawLayout, materialLayout, atlasLayout),
+                    bindGroupLayouts = buildList {
+                        add(drawLayout)
+                        add(materialLayout)
+                        add(atlasLayout)
+                        coverageMaskLayout?.let(::add)
+                    },
                 ),
             ).track(created)
             val pipeline = device.createRenderPipeline(
@@ -422,6 +450,7 @@ internal class GPUWgpu4kPreparedTextSessionCache(
                 drawBindGroupLayout = drawLayout,
                 materialBindGroupLayout = materialLayout,
                 atlasBindGroupLayout = atlasLayout,
+                coverageMaskBindGroupLayout = coverageMaskLayout,
                 pipelineLayout = pipelineLayout,
                 pipeline = pipeline,
                 atlasSampler = atlasSampler,
@@ -540,6 +569,8 @@ private fun GPUPreparedTextNativeProgramHandoff.sameProgramAs(
     targetFormatClass == other.targetFormatClass &&
     blendPlanIdentity == other.blendPlanIdentity &&
     fixedFunctionBlendState == other.fixedFunctionBlendState &&
+    sourceCoverageEncoding == other.sourceCoverageEncoding &&
+    clipVariant == other.clipVariant &&
     drawUniformBinding == other.drawUniformBinding &&
     materialUniformBinding == other.materialUniformBinding &&
     materialSampledBindings == other.materialSampledBindings &&

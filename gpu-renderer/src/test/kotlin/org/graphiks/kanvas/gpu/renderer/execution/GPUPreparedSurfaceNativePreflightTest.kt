@@ -299,6 +299,49 @@ class GPUPreparedSurfaceNativePreflightTest {
     }
 
     @Test
+    fun `mixed Core image Text preflight retains the exact direct Core route seal`() {
+        val input = capturedPreparedSurfaceInputs(PreparedSurfaceFixtureShape.CoreImageText)
+
+        val accepted = assertIs<GPUPreparedSurfaceNativePreflightResult.Accepted>(
+            GPUPreparedSurfaceNativePreflight().validate(
+                input.framePlan,
+                input.encoderPlan,
+                input.resources,
+                input.shaderContract,
+                input.generationSeal,
+            ),
+        )
+        val coreRun = accepted.plan.orderedRuns
+            .filterIsInstance<GPUPreparedSurfaceNativeRunPlan.Core>()
+            .single()
+            .plan
+        val coreSeal = assertIs<GPUCorePrimitiveNativeScopeRouteSeal.Routes>(
+            coreRun.routeSeal,
+        )
+        val coreRender = input.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .single { render ->
+                render.drawPackets.all { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive
+                }
+            }
+
+        assertEquals(coreRender.drawPackets.map(GPUDrawPacket::packetId), coreSeal.flattenedPacketIds)
+        assertEquals(
+            listOf(GPUCorePrimitiveNativeScopeRouteUnit.Direct::class),
+            coreSeal.orderedUnits.map { unit -> unit::class },
+        )
+        assertSame(
+            input.encoderPlan.scopes
+                .single { scope ->
+                    scope.sourceStepIndex == input.framePlan.steps.indexOf(coreRender)
+                }
+                .corePrimitiveNativeScopeRouteSeal,
+            coreRun.routeSeal,
+        )
+    }
+
+    @Test
     fun `mixed encoder plan refuses substituted identity scope envelope labels and operand topology`() {
         val input = capturedPreparedSurfaceInputs(
             PreparedSurfaceFixtureShape.Mixed,
@@ -721,13 +764,17 @@ class GPUPreparedSurfaceNativePreflightTest {
                     it.role == GPUFrameResourceRole.PathDepthStencil
                 },
             )
-            val slab = (
-                coreRuns.first().plan.routeSeal as
-                    GPUCorePrimitiveNativeScopeRouteSeal.Routes
-                ).uniformSlabSeal
+            val slab = assertIs<GPUCorePrimitiveNativeScopeUniformAuthority.Uniform32Slab>(
+                (
+                    coreRuns.first().plan.routeSeal as
+                        GPUCorePrimitiveNativeScopeRouteSeal.Routes
+                    ).uniformAuthority,
+            ).seal
             assertTrue(coreRuns.all { run ->
-                (run.plan.routeSeal as GPUCorePrimitiveNativeScopeRouteSeal.Routes)
-                    .uniformSlabSeal === slab
+                assertIs<GPUCorePrimitiveNativeScopeUniformAuthority.Uniform32Slab>(
+                    (run.plan.routeSeal as GPUCorePrimitiveNativeScopeRouteSeal.Routes)
+                        .uniformAuthority,
+                ).seal === slab
             })
             assertEquals(
                 slab.commandIds,
@@ -1368,8 +1415,7 @@ internal fun preparedSurfacePreflightFixture(
             }
         }
     val target = GPUFrameTargetRef("target.prepared-surface")
-    val taskList = (
-        GPUPreparedSurfaceFrameTaskListBuilder().build(
+    val build = GPUPreparedSurfaceFrameTaskListBuilder().build(
             GPUPreparedSurfaceFrameRequest(
                 baseTaskList = base,
                 capabilities = capabilities,
@@ -1383,8 +1429,11 @@ internal fun preparedSurfacePreflightFixture(
                 },
                 targetFormat = GPUColorFormat.RGBA8UnormSrgb,
             ),
-        ) as GPUPreparedSurfaceFrameResult.Recorded
-        ).taskList
+        )
+    val taskList = assertIs<GPUPreparedSurfaceFrameResult.Recorded>(
+        build,
+        build.toString(),
+    ).taskList
     val framePlan = GPUFramePlanner.plan(taskList)
     val targetGeneration = taskList.tasks.filterIsInstance<GPUTask.Render>()
         .flatMap(GPUTask.Render::drawPackets)

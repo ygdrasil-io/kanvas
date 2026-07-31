@@ -1,5 +1,9 @@
 package org.graphiks.kanvas.gpu.renderer.execution
 
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
+
 import io.ygdrasil.webgpu.GPUTextureFormat
 import java.security.MessageDigest
 import kotlin.test.Test
@@ -90,6 +94,10 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlanner
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceLifetime
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreflightProvider
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreparationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreparationInput
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourcePreparationSession
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
@@ -101,6 +109,46 @@ import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 
 class GPUPreparedTextNativePreflightTest {
+    @Test
+    fun `destination read TextA8 refuses before provider preparation registry materializer or native`() {
+        val destinationRead = canonicalPreparedTextBlendPlan(GPUBlendMode.DARKEN)
+        assertIs<GPUBlendPlan.ShaderBlendWithDstRead>(destinationRead)
+        val fixture = preparedTextNativePreflightFixture(
+            textScissorBounds = GPUPixelBounds(4, 4, 12, 12),
+            textClipIdentity = "clip:device-rect:4,4,12,12:hard",
+        )
+            .withTextBlendPlan(destinationRead)
+        val probe = GPUPreparedTextNativeCreationProbe()
+        val resourceProbe = GPUPreparedTextResourcePreparationProbe()
+
+        val refused = assertIs<GPUFramePreflightResult.Refused>(probe.preflight(fixture))
+        val resourceRefused = assertIs<GPUFramePreflightResult.Refused>(
+            resourceProbe.preflight(fixture),
+        )
+        val nativeRefused = assertIs<GPUPreparedSurfaceNativePreflightResult.Refused>(
+            GPUPreparedSurfaceNativePreflight().validateFramePlan(fixture.framePlan),
+        )
+
+        assertEquals(
+            GPUPreparedTextCompositePreflightRefusalCodes.NATIVE_BLEND,
+            refused.diagnostic.code.value,
+        )
+        assertEquals(
+            GPUPreparedTextCompositePreflightRefusalCodes.NATIVE_BLEND,
+            resourceRefused.diagnostic.code.value,
+        )
+        assertEquals(
+            GPUPreparedTextCompositePreflightRefusalCodes.NATIVE_BLEND,
+            nativeRefused.code,
+        )
+        assertEquals(0, probe.nativePreparationEvents)
+        assertEquals(0, resourceProbe.beginFramePreparationCalls)
+        assertEquals(0, resourceProbe.prepareFrameResourceCalls)
+        assertEquals(0, probe.materializerInvocations)
+        assertEquals(0L, probe.nativePayloadRegistrations)
+        assertEquals(0, probe.totalCreations)
+    }
+
     @Test
     fun `uniform slab ranges compare in place with strict bounds`() {
         val slab = byteArrayOf(0x11, 0x22, 0x33, 0x44, 0x55)
@@ -901,7 +949,11 @@ class GPUPreparedTextNativePreflightTest {
             probe.preflight(fixture, runtimeContext),
         )
 
-        assertEquals("test.prepared-surface.boundary", refused.diagnostic.code.value)
+        assertEquals(
+            "test.prepared-surface.boundary",
+            refused.diagnostic.code.value,
+            refused.diagnostic.toString(),
+        )
         assertEquals(1, probe.materializerInvocations)
         assertEquals(1, probe.nativePreparationEvents)
     }
@@ -917,7 +969,11 @@ class GPUPreparedTextNativePreflightTest {
             probe.preflight(fixture),
         )
 
-        assertEquals("test.prepared-surface.boundary", refused.diagnostic.code.value)
+        assertEquals(
+            "test.prepared-surface.boundary",
+            refused.diagnostic.code.value,
+            "${refused.diagnostic.message} facts=${refused.diagnostic.facts}",
+        )
         assertEquals(1, probe.nativePreparationEvents)
         assertEquals(1, probe.materializerInvocations)
         assertEquals(0L, probe.nativePayloadRegistrations)
@@ -1737,7 +1793,51 @@ internal class GPUPreparedTextNativeCreationProbe {
             ).preflight(fixture.framePlan)
         } finally {
             adapter.close()
-        }
+    }
+}
+
+private class GPUPreparedTextResourcePreparationProbe {
+    private val provider = CountingFrameResourcePreflightProvider(
+        GPUConcreteResourceProvider(),
+    )
+
+    val beginFramePreparationCalls: Int
+        get() = provider.beginFramePreparationCalls
+    val prepareFrameResourceCalls: Int
+        get() = provider.prepareFrameResourceCalls
+
+    fun preflight(fixture: PreparedTextNativePreflightFixture): GPUFramePreflightResult =
+        GPUFramePreflighter(
+            context = fixture.context,
+            capabilities = fixture.capabilities,
+            resourceProvider = provider,
+            completionProvider = PreparedTextFailingCompletionProvider,
+            surfaceProvider = PreparedTextFailingSurfaceProvider,
+        ).preflight(fixture.framePlan)
+}
+
+private class CountingFrameResourcePreflightProvider(
+    private val delegate: GPUFrameResourcePreflightProvider,
+) : GPUFrameResourcePreflightProvider by delegate {
+    var beginFramePreparationCalls: Int = 0
+        private set
+    var prepareFrameResourceCalls: Int = 0
+        private set
+
+    override fun beginFramePreparation(
+        frameId: Long,
+        deviceGeneration: GPUDeviceGenerationID,
+    ): GPUFrameResourcePreparationSession {
+        beginFramePreparationCalls += 1
+        return delegate.beginFramePreparation(frameId, deviceGeneration)
+    }
+
+    override fun prepareFrameResource(
+        input: GPUFrameResourcePreparationInput,
+    ): GPUFrameResourcePreparationDecision {
+        prepareFrameResourceCalls += 1
+        return delegate.prepareFrameResource(input)
+    }
 }
 
 internal fun capturedPreparedTextInputs(
@@ -1747,6 +1847,9 @@ internal fun capturedPreparedTextInputs(
     coalescedColorGlyphScope: Boolean = false,
     colorGlyphPremultipliedRgba: FloatArray = floatArrayOf(0.5f, 0f, 0f, 0.5f),
     colorGlyphUseForeground: Boolean = false,
+    blendPlan: GPUBlendPlan? = null,
+    colorGlyphClipExecutionPlan: GPUClipExecutionPlan? = null,
+    colorGlyphClipIdentity: String = "clip:none",
 ): CapturedPreparedSurfaceInputs {
     val fixture = preparedTextNativePreflightFixture(
         commandIds = commandIds,
@@ -1755,6 +1858,9 @@ internal fun capturedPreparedTextInputs(
         coalescedColorGlyphScope = coalescedColorGlyphScope,
         colorGlyphPremultipliedRgba = colorGlyphPremultipliedRgba,
         colorGlyphUseForeground = colorGlyphUseForeground,
+        blendPlan = blendPlan,
+        colorGlyphClipExecutionPlan = colorGlyphClipExecutionPlan,
+        colorGlyphClipIdentity = colorGlyphClipIdentity,
     )
     val adapter = GPURuntimeResourceAdapter()
     val provider = GPUConcreteResourceProvider(leaseFactory = adapter)
@@ -1769,7 +1875,11 @@ internal fun capturedPreparedTextInputs(
             nativeBoundary = adapter.bindNativeFrameBoundary(provider, capture),
         ).preflight(fixture.framePlan)
         val refused = assertIs<GPUFramePreflightResult.Refused>(result)
-        assertEquals("test.prepared-surface.boundary", refused.diagnostic.code.value)
+        assertEquals(
+            "test.prepared-surface.boundary",
+            refused.diagnostic.code.value,
+            "${refused.diagnostic.message}; dependencies=${fixture.framePlan.dependencies}",
+        )
         CapturedPreparedSurfaceInputs(
             framePlan = requireNotNull(capture.capturedFramePlan),
             encoderPlan = requireNotNull(capture.capturedEncoderPlan),
@@ -2491,6 +2601,9 @@ private fun GPUDrawPacket.rebuilt(
     vertexSourceLabel: String = this.vertexSourceLabel,
     scissorBoundsHash: String? = this.scissorBoundsHash,
     targetStateHash: String = this.targetStateHash,
+    clipExecutionPlan: GPUClipExecutionPlan? = this.clipExecutionPlan,
+    clipCoveragePlan: GPUClipCoveragePlan? = this.clipCoveragePlan,
+    blendPlan: GPUBlendPlan? = this.blendPlan,
 ): GPUDrawPacket = GPUDrawPacket(
     packetId = packetId,
     commandIdValue = commandIdValue,
@@ -2640,6 +2753,28 @@ internal data class PreparedTextNativePreflightFixture(
     val context: GPUFramePreflightContext,
 )
 
+private fun PreparedTextNativePreflightFixture.withTextBlendPlan(
+    blendPlan: GPUBlendPlan,
+): PreparedTextNativePreflightFixture = copy(
+    framePlan = framePlan.rebuilt(
+        steps = framePlan.steps.map { step ->
+            if (step !is GPUFrameStep.RenderPassStep) {
+                step
+            } else {
+                step.rebuilt(
+                    drawPackets = step.drawPackets.map { packet ->
+                        if (packet.semanticPayload is GPUDrawSemanticPayload.TextA8) {
+                            packet.rebuilt(blendPlan = blendPlan)
+                        } else {
+                            packet
+                        }
+                    },
+                )
+            }
+        },
+    ),
+)
+
 internal fun preparedTextNativePreflightFixture(
     commandIds: List<Int> = listOf(0, 1),
     packetResourceGeneration: Long = GPUPreparedTextPreflightFixture.GENERATION.toLong(),
@@ -2656,6 +2791,10 @@ internal fun preparedTextNativePreflightFixture(
     blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
     blendState: GPUFixedFunctionBlendState = preparedTextBlendState(blendMode),
     blendPlan: GPUBlendPlan? = null,
+    colorGlyphClipExecutionPlan: GPUClipExecutionPlan? = null,
+    colorGlyphClipIdentity: String = "clip:none",
+    textScissorBounds: GPUPixelBounds? = null,
+    textClipIdentity: String = "clip:none",
     materialProgram:
         org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram =
         GPUPreparedTextPreflightFixture.baselineMaterialProgram(),
@@ -2700,7 +2839,27 @@ internal fun preparedTextNativePreflightFixture(
             } else {
                 "pass.prepared-text.$commandId"
             },
-        )
+        ).let { packet ->
+            if (commandId in exactColorGlyphCommandIds &&
+                colorGlyphClipExecutionPlan != null
+            ) {
+                packet.rebuilt(clipExecutionPlan = colorGlyphClipExecutionPlan)
+            } else if (commandId !in exactColorGlyphCommandIds && textScissorBounds != null) {
+                packet.rebuilt(
+                    clipCoveragePlan = GPUClipCoveragePlan.Scissor(
+                        GPUBounds(
+                            textScissorBounds.left.toFloat(),
+                            textScissorBounds.top.toFloat(),
+                            textScissorBounds.right.toFloat(),
+                            textScissorBounds.bottom.toFloat(),
+                        ),
+                    ),
+                    clipExecutionPlan = GPUClipExecutionPlan.ScissorOnly(textScissorBounds),
+                )
+            } else {
+                packet
+            }
+        }
     }
     val capabilitySeal = GPUFrameCapabilitySeal.capture(
         frameId,
@@ -2731,6 +2890,7 @@ internal fun preparedTextNativePreflightFixture(
                     colorGlyphUseForeground,
                     colorGlyphPaletteIndex,
                     materialProgram,
+                    colorGlyphClipIdentity,
                 )
             } else {
                 GPUPreparedTextPayloadGatherer().gather(
@@ -2752,8 +2912,8 @@ internal fun preparedTextNativePreflightFixture(
                                     m12 = 0f,
                                 ),
                         targetBounds = bounds,
-                        scissorBounds = bounds,
-                        clipIdentity = "clip:none",
+                        scissorBounds = textScissorBounds ?: bounds,
+                        clipIdentity = textClipIdentity,
                         blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
                         capabilitySnapshotHash = capabilities.canonicalSnapshotHash(),
                         frameProvenance = GPUFrameProvenance.GmContent,
@@ -2844,6 +3004,7 @@ internal fun preparedTextNativePreflightFixture(
     ).taskList
     val targetGeneration = taskList.tasks
         .filterIsInstance<GPUTask.Render>()
+        .filter { render -> render.target == target }
         .flatMap(GPUTask.Render::drawPackets)
         .first()
         .resourceGeneration
@@ -2908,6 +3069,7 @@ private fun preparedColorGlyphSemantic(
     materialProgram:
         org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram =
         GPUPreparedTextPreflightFixture.baselineMaterialProgram(),
+    clipIdentity: String = "clip:none",
 ): GPUDrawSemanticPayload.ColorGlyph {
     val generation = GPUTextArtifactGeneration(atlas.generation.toInt())
     val planKey = GPUTextArtifactKey(
@@ -2960,7 +3122,7 @@ private fun preparedColorGlyphSemantic(
             material = materialProgram,
             targetBounds = bounds,
             scissorBounds = bounds,
-            clipIdentity = "clip:none",
+            clipIdentity = clipIdentity,
             blendPlanIdentity = requireNotNull(packet.blendPlan).canonicalIdentity(),
             capabilitySnapshotHash = capabilities.canonicalSnapshotHash(),
             frameProvenance = GPUFrameProvenance.GmContent,
@@ -3017,8 +3179,10 @@ internal fun preparedTextPreflightPacket(
         blendPlan = blendPlan ?: GPUBlendPlan.FixedFunctionBlend(
             mode = blendMode,
             state = blendState,
-            sourceCoverageEncoding = GPUSourceCoverageEncoding.None,
+            sourceCoverageEncoding = GPUSourceCoverageEncoding.ModulateRGBA,
         ),
+        clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+        clipExecutionPlan = GPUClipExecutionPlan.NoClip,
         renderPipelineKey = GPURenderPipelineKey("pending.pipeline.prepared-text"),
         bindingLayoutHash = "pending.layout.prepared-text",
         vertexSourceLabel = "prepared-text-instance-quad",

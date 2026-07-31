@@ -6,6 +6,7 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.surface.Diagnostics
+import org.graphiks.kanvas.surface.DiagnosticFact
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.surface.RenderResult
@@ -40,7 +41,7 @@ internal object GPUPreparedSurfaceProductRouter {
             GPUPreparedSurfaceExecutionRequest(candidate, width, height),
         )) {
             is GPUPreparedSurfaceExecutionResult.BeforePreparedEntryRefused ->
-                if (candidate.operations.any(DisplayOp::isPreparedImageOperation)) {
+                if (candidate.operations.any(DisplayOp::hasTerminalPreparedFamily)) {
                     GPUPreparedSurfaceProductRoute.Terminal(execution.diagnostic)
                 } else {
                     GPUPreparedSurfaceProductRoute.Legacy(execution.diagnostic.code.value)
@@ -72,7 +73,40 @@ internal object GPUPreparedSurfaceProductRouter {
                 width = width,
                 height = height,
                 format = PixelFormat.RGBA8,
-                diagnostics = Diagnostics(),
+                diagnostics = Diagnostics().apply {
+                    execution.evidence.destinationReadEvidence
+                        .sortedBy(GPUPreparedSurfaceDestinationReadEvidence::commandId)
+                        .forEach { routeEvidence ->
+                            val operation = "DrawText:${routeEvidence.commandId}"
+                            degrade(
+                                code = "route:destination-read:$operation",
+                                operation = operation,
+                                reason = "gpu-copy-then-formula",
+                                facts = listOf(
+                                    DiagnosticFact(
+                                        "destination-read.source",
+                                        routeEvidence.sourceLabel,
+                                    ),
+                                    DiagnosticFact(
+                                        "destination-read.snapshot",
+                                        routeEvidence.snapshotLabel,
+                                    ),
+                                    DiagnosticFact(
+                                        "destination-read.mode",
+                                        routeEvidence.modeLabel,
+                                    ),
+                                    DiagnosticFact(
+                                        "clip.strategy",
+                                        routeEvidence.clipStrategy,
+                                    ),
+                                    DiagnosticFact(
+                                        "destination-read.action",
+                                        routeEvidence.action,
+                                    ),
+                                ),
+                            )
+                        }
+                },
                 stats = RenderStats(
                     opsDispatched = execution.visualOperationCount,
                     opsRefused = 0,
@@ -97,11 +131,12 @@ internal object GPUPreparedSurfaceProductRouter {
     )
 }
 
-private fun DisplayOp.isPreparedImageOperation(): Boolean = when (this) {
+private fun DisplayOp.hasTerminalPreparedFamily(): Boolean = when (this) {
     is DisplayOp.DrawImage,
     is DisplayOp.DrawImageNine,
     is DisplayOp.DrawImageLattice,
     is DisplayOp.DrawAtlas,
+    is DisplayOp.DrawText,
     -> true
     else -> false
 }

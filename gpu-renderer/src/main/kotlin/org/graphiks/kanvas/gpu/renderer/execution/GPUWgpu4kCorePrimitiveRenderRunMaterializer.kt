@@ -70,11 +70,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             return refusal
         }
 
-        val uniformSlabSeal = routes.first().uniformSlabSeal
         val frameRoutes = try {
-            GPUCorePrimitiveNativeScopeRouteSeal.Routes(
-                orderedUnits = routes.flatMap { route -> route.orderedUnits },
-                uniformSlabSeal = uniformSlabSeal,
+            routes.first().withOrderedUnits(
+                routes.flatMap { route -> route.orderedUnits },
             )
         } catch (_: IllegalArgumentException) {
             return refused(
@@ -119,7 +117,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 "Frame-global CorePrimitive slices differ from the sealed packet stream.",
             )
         }
-        val uniformPlan = uniformSlabSeal.plan
+        val uniformPlan = frameRoutes.uniformPlan
         if (uniformPlan.deviceGeneration != generationSeal.deviceGeneration.value ||
             uniformPlan.alignmentBytes != limits.minUniformBufferOffsetAlignment ||
             uniformPlan.totalBytes <= 0L ||
@@ -259,7 +257,7 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
             )
             uploadExact(
                 pooled.handles.uniformBuffer,
-                ArrayBuffer.of(uniformSlabSeal.packedBytesForUpload()),
+                ArrayBuffer.of(frameRoutes.packedUniformBytesForUpload()),
                 uniformPlan.totalBytes,
                 pooled.capacities.uniformBytes,
             )
@@ -442,9 +440,12 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 "Frame-global CorePrimitive runs must share one exact target.",
             )
         }
-        val uniformSlabSeal = routes.first().uniformSlabSeal
-        if (routes.any { route -> route.uniformSlabSeal !== uniformSlabSeal } ||
-            routes.flatMap { route -> route.commandIds } != uniformSlabSeal.commandIds ||
+        val uniformAuthorityRoute = routes.first()
+        if (routes.any { route ->
+                !route.hasSameUniformAuthority(uniformAuthorityRoute)
+            } ||
+            routes.flatMap { route -> route.commandIds } !=
+            uniformAuthorityRoute.uniformCommandIds ||
             routes.flatMap { route -> route.flattenedPacketIds } !=
             plans.flatMap { plan -> plan.packetIds }
         ) {
@@ -469,7 +470,9 @@ internal class GPUWgpu4kCorePrimitiveRenderRunMaterializer(
                 "Frame-global CorePrimitive packet and target-bound authorities must remain unique and exact.",
             )
         }
-        if (uniformSlabSeal.plan.deviceGeneration != generationSeal.deviceGeneration.value) {
+        if (uniformAuthorityRoute.uniformPlan.deviceGeneration !=
+            generationSeal.deviceGeneration.value
+        ) {
             return refused(
                 "stale.native-core-primitive.frame-global-generation",
                 "Frame-global CorePrimitive uniform authority does not match the sealed device generation.",

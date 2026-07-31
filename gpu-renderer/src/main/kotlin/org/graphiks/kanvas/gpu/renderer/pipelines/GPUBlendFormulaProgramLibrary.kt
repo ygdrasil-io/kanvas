@@ -1,5 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.pipelines
 
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceCoverageEncoding
+
 /**
  * Handle-free WGSL program authority for canonical premultiplied blend formulas.
  *
@@ -7,6 +9,20 @@ package org.graphiks.kanvas.gpu.renderer.pipelines
  * consume a prepared formula identity without depending on the materials domain package.
  */
 object GPUBlendFormulaProgramLibrary {
+    fun coverageResultWgsl(
+        sourceCoverageEncoding: GPUSourceCoverageEncoding,
+    ): String? = when (sourceCoverageEncoding) {
+        GPUSourceCoverageEncoding.None -> "return blended;"
+        GPUSourceCoverageEncoding.ScalarCoverageInShader ->
+            "return dst + coverage * (blended - dst);"
+        GPUSourceCoverageEncoding.LCDCoverageInShader -> """
+            let rgb = dst.rgb + coverage * (blended.rgb - dst.rgb);
+            let alphaCandidates = vec3f(dst.a) + coverage * vec3f(blended.a - dst.a);
+            return vec4f(rgb, max(max(alphaCandidates.r, alphaCandidates.g), alphaCandidates.b));
+        """.trimIndent()
+        else -> null
+    }
+
     fun selectedFullCoverageFunctionWgsl(
         modeLabel: String,
         formulaId: String,

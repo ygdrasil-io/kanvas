@@ -27,6 +27,16 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameGateTest {
     @Test
+    fun `DrawText enters prepared candidate`() {
+        assertIs<GPUPreparedSurfaceEligibility.Candidate>(
+            GPUPreparedSurfaceFrameGate.classify(
+                listOf(DisplayOp.DrawText(TextBlob(emptyList()), 0f, 0f, PAINT, MATRIX, CLIP)),
+                RenderConfig.DEFAULT,
+            ),
+        )
+    }
+
+    @Test
     fun `all display op variants have one exact whole frame classification`() {
         val fixtures = displayOpFixtures()
 
@@ -161,9 +171,7 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.DrawRRect(RRect(RECT, radius = 1f), PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawPath(path, PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImage(image, RECT, RECT, null, MATRIX, CLIP), visual),
-            Fixture(DisplayOp.DrawText(TextBlob(emptyList()), 0f, 0f, PAINT, MATRIX, CLIP), legacy(
-                "legacy.surface.prepared.family.text", LegacyDisplayOpFamily.Text,
-            )),
+            Fixture(DisplayOp.DrawText(TextBlob(emptyList()), 0f, 0f, PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.SetTransform(MATRIX), Expected.Legacy(
                 "legacy.surface.prepared.empty-frame", null, null,
             )),

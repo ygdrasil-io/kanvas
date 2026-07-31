@@ -4,16 +4,66 @@ import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.analysis.GPUColorGlyphRoutePlanner
 import org.graphiks.kanvas.gpu.renderer.execution.GPUColorGlyphCompositeShaderResult
 import org.graphiks.kanvas.gpu.renderer.execution.buildColorGlyphCompositeShader
+import org.graphiks.kanvas.gpu.renderer.execution.buildColorGlyphDestinationReadShader
+import org.graphiks.kanvas.gpu.renderer.execution.GPUColorGlyphDestinationClipVariant
+import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.payloads.GPU_COLOR_GLYPH_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.wgsl.COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.wgsl.colorGlyphCompositeWgsl
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class GPUColorGlyphCompositeShaderTest {
+
+    @Test
+    fun `destination read shader exposes the canonical reflected scalar program seal`() {
+        val ready = assertIs<GPUColorGlyphCompositeShaderResult.Ready>(
+            buildColorGlyphDestinationReadShader(),
+        )
+        val seal = assertNotNull(ready.plan.destinationProgramSeal)
+
+        assertEquals("color_dodge@v1", seal.formulaId)
+        assertEquals(
+            GPUSourceCoverageEncoding.ScalarCoverageInShader,
+            seal.sourceCoverageEncoding,
+        )
+        assertEquals("analytic-rect", seal.clipVariant)
+        assertEquals(GPUColorFormat.RGBA8UnormSrgb, seal.targetFormat)
+        assertEquals(listOf("fragment:fs_main", "vertex:vs_main"), seal.entryPoints)
+        assertEquals((0..4).map { binding -> 0 to binding }, seal.bindingSlots)
+        assertFailsWith<UnsupportedOperationException> {
+            (seal.entryPoints as MutableList<String>).add("fragment:forged")
+        }
+        assertFailsWith<UnsupportedOperationException> {
+            (seal.bindingSlots as MutableList<Pair<Int, Int>>).add(0 to 5)
+        }
+        assertTrue(seal.pipelineKey.endsWith(seal.wgslSha256))
+        assertTrue(
+            ready.plan.wgslSource.contains(
+                "return dst + coverage * (blended - dst);",
+            ),
+        )
+    }
+
+    @Test
+    fun `coverage mask destination shader seals a distinct texture binding ABI`() {
+        val ready = assertIs<GPUColorGlyphCompositeShaderResult.Ready>(
+            buildColorGlyphDestinationReadShader(
+                clipVariant = GPUColorGlyphDestinationClipVariant.CoverageMask,
+            ),
+        )
+        val seal = assertNotNull(ready.plan.destinationProgramSeal)
+
+        assertEquals("coverage-mask", seal.clipVariant)
+        assertTrue(seal.bindingLayoutKey.endsWith("texture2df4"))
+        assertTrue(ready.plan.wgslSource.contains("var clip_coverage_mask: texture_2d<f32>;"))
+        assertTrue(ready.plan.wgslSource.contains("let stored_sample = textureLoad("))
+    }
 
     @Test
     fun `builds a parser-backed validated COLRv0 composite shader`() {

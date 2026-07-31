@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.passes
 
 import java.security.MessageDigest
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipFillRule
@@ -16,10 +17,19 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveFillRule
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometry
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveGeometryMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUResourceBindingSlot
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
+
+internal const val CORE_PRIMITIVE_STRUCTURAL_PIPELINE_BASE_KEY =
+    "pipeline.core-primitive.structural-v1"
+internal const val CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_LAYOUT_KEY =
+    "layout.core-primitive.coverage-mask-producer.uniform64-v1"
+internal const val CORE_PRIMITIVE_COVERAGE_MASK_CONSUMER_LAYOUT_KEY =
+    "layout.core-primitive.coverage-mask-consumer.uniform64-texture2d-v1"
 
 internal fun GPUColorFormat.corePrimitiveStructuralColorFormat():
     GPUCorePrimitiveRenderPipelineStructuralKey.ColorFormat = when (this) {
@@ -90,7 +100,8 @@ internal data class GPUCorePrimitiveRenderPipelineStructuralKey(
             role == Role.CoverageMaskConsumer -> UniformLayout.CoverageMaskConsumerUniform64V1
             role == Role.Shading && shader == Shader.AnalyticShape ->
                 UniformLayout.AnalyticShapeUniform80V1
-            role == Role.Shading && clip is Clip.Analytic -> UniformLayout.AnalyticClipUniform64V1
+            (role == Role.Shading || role == Role.PathStencilCover) && clip is Clip.Analytic ->
+                UniformLayout.AnalyticClipUniform64V1
             role == Role.Shading && clip == Clip.AnalyticIntersection4 ->
                 UniformLayout.AnalyticClipUniform160V1
             else -> UniformLayout.DynamicUniform32V2
@@ -710,9 +721,11 @@ internal fun corePrimitivePathStencilRenderPipelineStructuralKey(
     }
     require(
         clipExecutionPlan == GPUClipExecutionPlan.NoClip ||
-            clipExecutionPlan is GPUClipExecutionPlan.ScissorOnly,
+            clipExecutionPlan is GPUClipExecutionPlan.ScissorOnly ||
+            (role == GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover &&
+                clipExecutionPlan is GPUClipExecutionPlan.AnalyticCoverage),
     ) {
-        "Path stencil structural authority currently accepts only no clip or dynamic scissor"
+        "Path stencil structural authority accepts analytic coverage only for its cover role"
     }
     val geometry = semantic.geometry as? GPUCorePrimitiveGeometry.TriangulatedPath
         ?: error("Path stencil structural authority requires triangulated path geometry")
@@ -740,7 +753,12 @@ internal fun corePrimitivePathStencilRenderPipelineStructuralKey(
             GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover ->
                 blendPlan.corePrimitiveStructuralBlend()
         },
-        clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None,
+        clip = when (role) {
+            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilProducer ->
+                GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None
+            GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover ->
+                clipExecutionPlan.corePrimitiveStructuralClip()
+        },
         colorFormat = colorFormat,
         depthStencil = pathStencilState(role, geometry.fillRule, geometry.inverseFill),
         sampleCount = sampleCount,
@@ -891,6 +909,27 @@ private fun GPUClipExecutionPlan.corePrimitiveStructuralClip():
 internal fun GPUClipExecutionPlan.isCorePrimitiveNoClipOrScissorExecution(): Boolean =
     this == GPUClipExecutionPlan.NoClip || this is GPUClipExecutionPlan.ScissorOnly
 
+/** Exact prepared path clip pairing projected without exposing clip-domain types to execution. */
+internal fun hasExactCorePrimitivePathClipPair(
+    producer: GPUDrawPacket,
+    cover: GPUDrawPacket,
+): Boolean = producer.clipExecutionPlan == cover.clipExecutionPlan ||
+    producer.clipExecutionPlan == GPUClipExecutionPlan.NoClip &&
+    cover.clipExecutionPlan is GPUClipExecutionPlan.AnalyticCoverage
+
+/** Passive distinction needed to select the already-sealed analytic uniform ABI. */
+internal fun hasAnalyticCorePrimitivePathClipPair(
+    producer: GPUDrawPacket,
+    cover: GPUDrawPacket,
+): Boolean = producer.clipExecutionPlan == GPUClipExecutionPlan.NoClip &&
+    cover.clipExecutionPlan is GPUClipExecutionPlan.AnalyticCoverage
+
+/** Closed path-stencil clip admission projected from the prepared packet. */
+internal fun GPUDrawPacket.hasSupportedCorePrimitivePathClip(): Boolean =
+    clipExecutionPlan?.isCorePrimitiveNoClipOrScissorExecution() == true ||
+        role == GPUDrawPacketRole.PathStencilCover &&
+        clipExecutionPlan is GPUClipExecutionPlan.AnalyticCoverage
+
 /** Builder-owned plan and bytes shared by every direct draw in one prepared pass. */
 internal class GPUCorePrimitiveUniformSlabSeal(
     val plan: GPUUniformSlabPlan,
@@ -959,12 +998,16 @@ internal data class GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal(
 /** O(1) builder authority for one exact prepared semantic object. */
 internal sealed class GPUCorePrimitivePreparedSemanticAuthority private constructor() {
     internal abstract fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean
+    internal abstract fun retainedSemantic(): GPUDrawSemanticPayload.CorePrimitive
 
     private class Exact(
         private val preparedSemanticReference: GPUDrawSemanticPayload.CorePrimitive,
     ) : GPUCorePrimitivePreparedSemanticAuthority() {
         override fun matches(semantic: GPUDrawSemanticPayload.CorePrimitive): Boolean =
             preparedSemanticReference === semantic
+
+        override fun retainedSemantic(): GPUDrawSemanticPayload.CorePrimitive =
+            preparedSemanticReference
     }
 
     internal companion object {
@@ -985,6 +1028,15 @@ internal data class GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal(
     val structuralPipelineKey: GPUCorePrimitiveRenderPipelineStructuralKey,
     val renderPipelineKey: GPURenderPipelineKey,
     val bindingLayoutHash: String,
+    val renderStepId: GPURenderStepID,
+    val renderStepVersion: Int,
+    val resourceGeneration: Long,
+    val resourceSlot: GPUResourceBindingSlot?,
+    val clipCoveragePlan: GPUClipCoveragePlan?,
+    val frameProvenance: GPUFrameProvenance,
+    val targetStateHash: String,
+    val vertexSourceLabel: String,
+    val scissorBoundsHash: String?,
 )
 
 internal fun corePrimitiveCoverageMaskConsumerDependencyToken(
@@ -995,57 +1047,67 @@ internal fun corePrimitiveCoverageMaskConsumerDependencyToken(
     return "prepared-core-primitive.coverage-mask.consumer.$sourceOrder.${packetId.value}"
 }
 
-/** Builder-owned uniform64 slab authority shared by one exact ordered coverage-mask route. */
-internal class GPUCorePrimitiveCoverageMaskUniformSlabSeal(
+/**
+ * Builder-owned producer-only uniform64 authority shared by every CoverageMask route.
+ *
+ * The plan may also contain consumer slots for a Core route. This authority deliberately owns
+ * only the ordered producer prefix while retaining the exact immutable packed upload once.
+ */
+internal class GPUCoverageMaskProducerUniformSlabSeal(
     val plan: GPUUniformSlabPlan,
     val contentKey: String,
     val planCanonicalIdentity: String,
     val maskResource: GPUFrameTargetRef,
     producerSlots: List<GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal>,
-    consumerSlots: List<GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal>,
     packedBytes: ByteArray,
+    val maskBounds: GPUPixelBounds,
+    val orderingToken: String,
 ) {
     val producerSlots: List<GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal> =
         immutableList(producerSlots)
-    val consumerSlots: List<GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal> =
-        immutableList(consumerSlots)
+    private val producerSlotsByPacketId = this.producerSlots.associateBy { it.packetId }
+    private val producerSlotsBySourceOrder = this.producerSlots.associateBy { it.sourceOrder }
     private val packedBytesSnapshot = packedBytes.copyOf()
+    private val canonicalRenderPipelineKeys =
+        this.producerSlots.map { it.structuralPipelineKey }
+            .distinct()
+            .associateWith { structuralKey ->
+                structuralKey.stableRenderPipelineKey(
+                    CORE_PRIMITIVE_STRUCTURAL_PIPELINE_BASE_KEY,
+                )
+            }
+
+    val hasCanonicalRenderPipelineKeys: Boolean
+        get() = producerSlots.all { slot ->
+            slot.renderPipelineKey == canonicalRenderPipelineKeys[slot.structuralPipelineKey]
+        }
 
     val producerSourceOrders: List<Int> get() = producerSlots.map { it.sourceOrder }
     val producerPacketIds: List<GPUDrawPacketID> get() = producerSlots.map { it.packetId }
-    val consumerCommandIds: List<Int> get() = consumerSlots.map { it.commandId }
-    val consumerPacketIds: List<GPUDrawPacketID> get() = consumerSlots.map { it.packetId }
 
     init {
         require(contentKey.isNotBlank() && planCanonicalIdentity.isNotBlank()) {
-            "Coverage-mask uniform slab requires exact plan identities"
+            "Coverage-mask producer uniform slab requires exact plan identities"
         }
-        require(producerSlots.isNotEmpty() && consumerSlots.size >= 2) {
-            "Coverage-mask uniform slab requires producers followed by at least two consumers"
+        require(!maskBounds.isEmpty && orderingToken.isNotBlank()) {
+            "Coverage-mask producer uniform slab requires passive bounds and ordering authority"
         }
-        require(producerSlots.map { it.slotIndex } == producerSlots.indices.toList() &&
-            consumerSlots.map { it.slotIndex } ==
-            consumerSlots.indices.map { it + producerSlots.size }
-        ) { "Coverage-mask uniform slots must retain exact producer-then-consumer order" }
-        require(producerSourceOrders.zipWithNext().all { (left, right) -> left < right } &&
-            consumerSlots.map { it.sourceOrder }.zipWithNext().all { (left, right) -> left < right }
-        ) { "Coverage-mask uniform slots require strict source order" }
-        require(consumerSlots.mapIndexed { index, slot ->
-                slot.dependencyFromPreviousConsumerToken == if (index == 0) {
-                    null
-                } else {
-                    corePrimitiveCoverageMaskConsumerDependencyToken(slot.packetId, slot.sourceOrder)
-                }
-            }.all { it }
-        ) { "Coverage-mask consumer slots require exact previous-consumer dependency tokens" }
-        require((producerPacketIds + consumerPacketIds).distinct().size ==
-            producerSlots.size + consumerSlots.size &&
-            consumerCommandIds.distinct().size == consumerSlots.size
-        ) { "Coverage-mask uniform slots require unique packet and consumer command identities" }
-        require(plan.slots.size == producerSlots.size + consumerSlots.size &&
+        require(producerSlots.isNotEmpty()) {
+            "Coverage-mask producer uniform slab requires at least one producer"
+        }
+        require(producerSlots.map { it.slotIndex } == producerSlots.indices.toList()) {
+            "Coverage-mask producer uniform slots must retain their exact prefix order"
+        }
+        require(producerSourceOrders.zipWithNext().all { (left, right) -> left < right }) {
+            "Coverage-mask producer uniform slots require strict source order"
+        }
+        require(producerPacketIds.distinct().size == producerSlots.size) {
+            "Coverage-mask producer uniform slots require unique packet identities"
+        }
+        require(plan.slots.size >= producerSlots.size &&
             plan.slots.all { it.payloadBytes == 64L } &&
             plan.totalBytes == packedBytesSnapshot.size.toLong()
-        ) { "Coverage-mask uniform slab requires exact uniform64 slots and packed bytes" }
+        ) { "Coverage-mask producer uniform slab requires exact uniform64 slots and packed bytes" }
     }
 
     fun hasExactPayload(slotIndex: Int, expected: ByteArray): Boolean {
@@ -1058,7 +1120,127 @@ internal class GPUCorePrimitiveCoverageMaskUniformSlabSeal(
         }
     }
 
+    fun producerSlotFor(
+        packetId: GPUDrawPacketID,
+    ): GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal? = producerSlotsByPacketId[packetId]
+
+    fun producerSlotForSourceOrder(
+        sourceOrder: Int,
+    ): GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal? =
+        producerSlotsBySourceOrder[sourceOrder]
+
+    fun hasZeroPadding(): Boolean {
+        var payloadEnd = 0
+        plan.slots.forEach { slot ->
+            val payloadStart = slot.alignedOffset.toInt()
+            if ((payloadEnd until payloadStart).any { packedBytesSnapshot[it].toInt() != 0 }) {
+                return false
+            }
+            payloadEnd = payloadStart + slot.payloadBytes.toInt()
+        }
+        return (payloadEnd until packedBytesSnapshot.size).all {
+            packedBytesSnapshot[it].toInt() == 0
+        }
+    }
+
+    /** Internal zero-copy borrow valid only for the immediate queue upload. */
+    fun packedBytesForUpload(): ByteArray = packedBytesSnapshot
+
     fun packedBytesSnapshot(): ByteArray = packedBytesSnapshot.copyOf()
+
+}
+
+/** Builder-owned complete Core route authority sharing the common producer slab snapshot. */
+internal class GPUCorePrimitiveCoverageMaskUniformSlabSeal(
+    val plan: GPUUniformSlabPlan,
+    val preparedRoute: GPUCorePrimitiveCoverageMaskPreparedRoute.Accepted,
+    val contentKey: String,
+    val planCanonicalIdentity: String,
+    val maskResource: GPUFrameTargetRef,
+    producerSlots: List<GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal>,
+    consumerSlots: List<GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal>,
+    packedBytes: ByteArray,
+    val maskBounds: GPUPixelBounds,
+    val orderingToken: String,
+) {
+    val producerUniformSlabSeal = GPUCoverageMaskProducerUniformSlabSeal(
+        plan = plan,
+        contentKey = contentKey,
+        planCanonicalIdentity = planCanonicalIdentity,
+        maskResource = maskResource,
+        producerSlots = producerSlots,
+        packedBytes = packedBytes,
+        maskBounds = maskBounds,
+        orderingToken = orderingToken,
+    )
+    val producerSlots: List<GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal>
+        get() = producerUniformSlabSeal.producerSlots
+    val consumerSlots: List<GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal> =
+        immutableList(consumerSlots)
+    private val consumerSlotsByPacketId = this.consumerSlots.associateBy { it.packetId }
+    private val canonicalConsumerRenderPipelineKeys = this.consumerSlots
+        .map { it.structuralPipelineKey }
+        .distinct()
+        .associateWith { structuralKey ->
+            structuralKey.stableRenderPipelineKey(CORE_PRIMITIVE_STRUCTURAL_PIPELINE_BASE_KEY)
+        }
+
+    val hasCanonicalRenderPipelineKeys: Boolean
+        get() = producerUniformSlabSeal.hasCanonicalRenderPipelineKeys &&
+            consumerSlots.all { slot ->
+                slot.renderPipelineKey == canonicalConsumerRenderPipelineKeys[slot.structuralPipelineKey]
+            }
+    val producerSourceOrders: List<Int> get() = producerUniformSlabSeal.producerSourceOrders
+    val producerPacketIds: List<GPUDrawPacketID> get() = producerUniformSlabSeal.producerPacketIds
+    val consumerCommandIds: List<Int> get() = consumerSlots.map { it.commandId }
+    val consumerPacketIds: List<GPUDrawPacketID> get() = consumerSlots.map { it.packetId }
+
+    init {
+        require(contentKey == preparedRoute.contentKey &&
+            planCanonicalIdentity == preparedRoute.planCanonicalIdentity &&
+            maskBounds == preparedRoute.bounds &&
+            orderingToken == preparedRoute.orderingToken.value &&
+            maskResource.value == preparedRoute.attachment.logicalReference
+        ) { "Coverage-mask uniform slab must retain its exact builder-sealed passive route" }
+        require(consumerSlots.size >= 2) {
+            "Coverage-mask Core uniform slab requires at least two consumers"
+        }
+        require(consumerSlots.map { it.slotIndex } ==
+            consumerSlots.indices.map { it + producerSlots.size }
+        ) { "Coverage-mask uniform slots must retain exact producer-then-consumer order" }
+        require(consumerSlots.map { it.sourceOrder }.zipWithNext().all { (left, right) ->
+            left < right
+        }) { "Coverage-mask consumer uniform slots require strict source order" }
+        require(consumerSlots.mapIndexed { index, slot ->
+            slot.dependencyFromPreviousConsumerToken == if (index == 0) null else
+                corePrimitiveCoverageMaskConsumerDependencyToken(slot.packetId, slot.sourceOrder)
+        }.all { it }) {
+            "Coverage-mask consumer slots require exact previous-consumer dependency tokens"
+        }
+        require((producerPacketIds + consumerPacketIds).distinct().size ==
+            producerSlots.size + consumerSlots.size &&
+            consumerCommandIds.distinct().size == consumerSlots.size &&
+            plan.slots.size == producerSlots.size + consumerSlots.size
+        ) { "Coverage-mask Core uniform slots require exact unique producer and consumer identities" }
+    }
+
+    fun hasExactPayload(slotIndex: Int, expected: ByteArray): Boolean =
+        producerUniformSlabSeal.hasExactPayload(slotIndex, expected)
+
+    fun producerSlotFor(packetId: GPUDrawPacketID):
+        GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal? =
+        producerUniformSlabSeal.producerSlotFor(packetId)
+
+    fun producerSlotForSourceOrder(sourceOrder: Int):
+        GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal? =
+        producerUniformSlabSeal.producerSlotForSourceOrder(sourceOrder)
+
+    fun consumerSlotFor(packetId: GPUDrawPacketID):
+        GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal? = consumerSlotsByPacketId[packetId]
+
+    fun hasZeroPadding(): Boolean = producerUniformSlabSeal.hasZeroPadding()
+    fun packedBytesForUpload(): ByteArray = producerUniformSlabSeal.packedBytesForUpload()
+    fun packedBytesSnapshot(): ByteArray = producerUniformSlabSeal.packedBytesSnapshot()
 }
 
 /** Immutable per-packet authority for the analytic Rect/RRect uniform80 slab. */
@@ -1194,6 +1376,20 @@ internal class GPUCorePrimitiveAnalyticClipUniformSeal(
 
     internal fun hasExactPayload(expected: ByteArray): Boolean =
         expected.size == 64 && payloadBytesSnapshot.contentEquals(expected)
+
+    internal fun hasExactPayloadAt(source: ByteArray, sourceOffset: Int): Boolean {
+        if (sourceOffset < 0 || sourceOffset > source.size - payloadBytesSnapshot.size) return false
+        return payloadBytesSnapshot.indices.all { index ->
+            source[sourceOffset + index] == payloadBytesSnapshot[index]
+        }
+    }
+
+    internal fun copyPayloadInto(destination: ByteArray, destinationOffset: Int) {
+        require(destinationOffset >= 0 &&
+            destinationOffset <= destination.size - payloadBytesSnapshot.size
+        ) { "Analytic clip uniform payload does not fit its pass-owned packed slab" }
+        payloadBytesSnapshot.copyInto(destination, destinationOffset)
+    }
 }
 
 /** One immutable, packet-local element retained by the uniform160 seal. */

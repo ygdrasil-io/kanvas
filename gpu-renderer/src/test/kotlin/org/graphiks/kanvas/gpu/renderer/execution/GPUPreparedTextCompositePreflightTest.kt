@@ -20,6 +20,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextBindingPrefligh
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflight
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightSeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextCompositePreflightRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextClipPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
@@ -30,6 +31,7 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexAttribute
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
+import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant
 
 class GPUPreparedTextCompositePreflightTest {
     @Test
@@ -48,6 +50,8 @@ class GPUPreparedTextCompositePreflightTest {
             abiHash = forgedAbiHash,
             targetFormatClass = original.targetFormatClass,
             blendPlanIdentity = original.blendPlanIdentity,
+            sourceCoverageEncoding = original.sourceCoverageEncoding,
+            clipVariant = original.clipVariant,
         )
         original.setPrivateField("wgslSource", forgedSource)
         original.setPrivateField("sourceHash", forgedSourceHash)
@@ -67,6 +71,9 @@ class GPUPreparedTextCompositePreflightTest {
             compositeSourceHash = forgedSourceHash,
             compositeAbiHash = forgedAbiHash,
             compositePipelineKey = forgedPipelineKey,
+            compositeSourceCoverageEncoding =
+                originalCompositeSeal.compositeSourceCoverageEncoding,
+            clipPlan = originalCompositeSeal.clipPlan,
             compositeVertexEntryPoint = originalCompositeSeal.compositeVertexEntryPoint,
             compositeFragmentEntryPoint = originalCompositeSeal.compositeFragmentEntryPoint,
             compositeVertexLayout = originalCompositeSeal.compositeVertexLayout,
@@ -394,6 +401,30 @@ private val compositeMutations = listOf(
         expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.DRAW_UNIFORM,
     ) { binding ->
         binding.drawUniformFloats().putFloat(16, 2f)
+    },
+    CompositeMutation(
+        name = "analytic clip uniform bits",
+        expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.DRAW_UNIFORM,
+    ) { binding ->
+        binding.drawUniformFloats().putFloat(48, 3.5f)
+    },
+    CompositeMutation(
+        name = "native clip structural variant",
+        expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.DRAW_UNIFORM,
+    ) { binding ->
+        binding.compositeProgram.setPrivateField(
+            "clipVariant",
+            GPUPreparedTextClipVariant.AnalyticRectAA,
+        )
+    },
+    CompositeMutation(
+        name = "sealed clip execution identity",
+        expectedCode = GPUPreparedTextCompositePreflightRefusalCodes.DRAW_UNIFORM,
+    ) { binding ->
+        requireNotNull(binding.preflightSeal.textA8Composite).setPrivateField(
+            "clipPlan",
+            GPUPreparedTextClipPlan.Direct("forged.clip.execution.identity"),
+        )
     },
     CompositeMutation(
         name = "composite ABI hash",

@@ -54,6 +54,7 @@ internal class GPUWgpu4kColorGlyphInvariantHandles(
     val pipeline: GPURenderPipeline,
     val sampler: GPUSampler,
     private val owned: GPUColorGlyphCachedHandleSet,
+    val destinationProgramSeal: GPUColorGlyphDestinationProgramSeal? = null,
 ) : AutoCloseable by owned
 
 /** Public-wgpu4k invariant cache owned by one prepared scene session. */
@@ -62,6 +63,8 @@ internal class GPUWgpu4kColorGlyphSessionCache(
 ) : AutoCloseable {
     private val preRegistrationHandles = GPUPreRegistrationNativeHandleLedger()
     private var invariants: GPUWgpu4kColorGlyphInvariantHandles? = null
+    private val destinationReadInvariants =
+        linkedMapOf<String, GPUWgpu4kColorGlyphInvariantHandles>()
     private var invariantCreations = 0L
     private var closed = false
 
@@ -76,12 +79,35 @@ internal class GPUWgpu4kColorGlyphSessionCache(
     }
 
     @Synchronized
+    fun acquireDestinationRead(
+        programSeal: GPUColorGlyphDestinationProgramSeal,
+    ): GPUWgpu4kColorGlyphInvariantHandles {
+        check(!closed) { "The ColorGlyph native invariant cache is closed" }
+        destinationReadInvariants[programSeal.pipelineKey]?.let { cached ->
+            check(cached.destinationProgramSeal == programSeal) {
+                "ColorGlyph destination-read cache key does not match the accepted program seal"
+            }
+            return cached
+        }
+        return createDestinationReadInvariants(programSeal).also {
+            destinationReadInvariants[programSeal.pipelineKey] = it
+            invariantCreations += 1L
+        }
+    }
+
+    @Synchronized
     fun counters(): GPUColorGlyphNativeCacheCounters =
         GPUColorGlyphNativeCacheCounters(invariantCreations = invariantCreations)
 
     @Synchronized
     override fun close() {
-        if (closed) return
+        if (closed &&
+            invariants == null &&
+            destinationReadInvariants.isEmpty() &&
+            preRegistrationHandles.pendingHandleCount == 0
+        ) {
+            return
+        }
         closed = true
         var firstFailure: Throwable? = null
         try {
@@ -89,6 +115,19 @@ internal class GPUWgpu4kColorGlyphSessionCache(
             invariants = null
         } catch (failure: Throwable) {
             firstFailure = failure
+        }
+        val destinationIterator = destinationReadInvariants.iterator()
+        while (destinationIterator.hasNext()) {
+            try {
+                destinationIterator.next().value.close()
+                destinationIterator.remove()
+            } catch (failure: Throwable) {
+                if (firstFailure == null) {
+                    firstFailure = failure
+                } else {
+                    firstFailure.addSuppressed(failure)
+                }
+            }
         }
         if (!preRegistrationHandles.closeRetainingFailures()) {
             val failure = IllegalStateException(
@@ -215,6 +254,163 @@ internal class GPUWgpu4kColorGlyphSessionCache(
                 pipeline,
                 sampler,
                 owned,
+            )
+        } catch (failure: Throwable) {
+            preRegistrationHandles.closeRetainingFailures()
+            throw failure
+        }
+    }
+
+    private fun createDestinationReadInvariants(
+        programSeal: GPUColorGlyphDestinationProgramSeal,
+    ): GPUWgpu4kColorGlyphInvariantHandles {
+        requireCleanSetupLedger()
+        return try {
+            val clipVariant = GPUColorGlyphDestinationClipVariant.entries.single {
+                variant -> variant.stableLabel == programSeal.clipVariant
+            }
+            val shaderPlan = when (
+                val result = buildColorGlyphDestinationReadShader(clipVariant = clipVariant)
+            ) {
+                is GPUColorGlyphCompositeShaderResult.Ready -> result.plan
+                is GPUColorGlyphCompositeShaderResult.Rejected -> error(
+                    "ColorGlyph destination-read parser-backed WGSL validation failed: " +
+                        "${result.reason}: ${result.message}",
+                )
+            }
+            check(shaderPlan.destinationProgramSeal == programSeal) {
+                "ColorGlyph destination-read WGSL, reflection, and pipeline key changed after preflight"
+            }
+            check(programSeal.targetFormat ==
+                org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat.RGBA8UnormSrgb
+            ) {
+                "ColorGlyph destination-read native cache supports only the sealed sRGB target"
+            }
+            val bindGroupLayout = device.createBindGroupLayout(
+                BindGroupLayoutDescriptor(
+                    label = "Kanvas.session.colorGlyph.destinationRead.bindGroupLayout0",
+                    entries = listOf(
+                        BindGroupLayoutEntry(
+                            binding = 0u,
+                            visibility = GPUShaderStage.Vertex or GPUShaderStage.Fragment,
+                            buffer = BufferBindingLayout(type = GPUBufferBindingType.Uniform),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 1u,
+                            visibility = GPUShaderStage.Fragment,
+                            texture = TextureBindingLayout(
+                                sampleType = GPUTextureSampleType.Float,
+                                viewDimension = GPUTextureViewDimension.TwoD,
+                                multisampled = false,
+                            ),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 2u,
+                            visibility = GPUShaderStage.Fragment,
+                            sampler = SamplerBindingLayout(
+                                type = GPUSamplerBindingType.Filtering,
+                            ),
+                        ),
+                        BindGroupLayoutEntry(
+                            binding = 3u,
+                            visibility = GPUShaderStage.Fragment,
+                            texture = TextureBindingLayout(
+                                sampleType = GPUTextureSampleType.Float,
+                                viewDimension = GPUTextureViewDimension.TwoD,
+                                multisampled = false,
+                            ),
+                        ),
+                        when (clipVariant) {
+                            GPUColorGlyphDestinationClipVariant.AnalyticRect ->
+                                BindGroupLayoutEntry(
+                                    binding = 4u,
+                                    visibility = GPUShaderStage.Fragment,
+                                    buffer = BufferBindingLayout(
+                                        type = GPUBufferBindingType.Uniform,
+                                    ),
+                                )
+                            GPUColorGlyphDestinationClipVariant.CoverageMask ->
+                                BindGroupLayoutEntry(
+                                    binding = 4u,
+                                    visibility = GPUShaderStage.Fragment,
+                                    texture = TextureBindingLayout(
+                                        sampleType = GPUTextureSampleType.Float,
+                                        viewDimension = GPUTextureViewDimension.TwoD,
+                                        multisampled = false,
+                                    ),
+                                )
+                        },
+                    ),
+                ),
+            ).tracked()
+            val shader = device.createShaderModule(
+                ShaderModuleDescriptor(
+                    label = "Kanvas.session.colorGlyph.destinationRead.shader",
+                    code = shaderPlan.wgslSource,
+                ),
+            ).tracked()
+            val pipelineLayout = device.createPipelineLayout(
+                PipelineLayoutDescriptor(
+                    label = "Kanvas.session.colorGlyph.destinationRead.pipelineLayout",
+                    bindGroupLayouts = listOf(bindGroupLayout),
+                ),
+            ).tracked()
+            val pipeline = device.createRenderPipeline(
+                RenderPipelineDescriptor(
+                    label = "Kanvas.session.colorGlyph.destinationRead.pipeline.colorDodge",
+                    layout = pipelineLayout,
+                    vertex = VertexState(
+                        module = shader,
+                        entryPoint = "vs_main",
+                        buffers = listOf(
+                            VertexBufferLayout(
+                                arrayStride = 16uL,
+                                attributes = listOf(
+                                    VertexAttribute(
+                                        shaderLocation = 0u,
+                                        offset = 0uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                                    VertexAttribute(
+                                        shaderLocation = 1u,
+                                        offset = 8uL,
+                                        format = GPUVertexFormat.Float32x2,
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                    primitive = PrimitiveState(),
+                    fragment = FragmentState(
+                        module = shader,
+                        entryPoint = "fs_main",
+                        targets = listOf(
+                            ColorTargetState(format = GPUTextureFormat.RGBA8UnormSrgb),
+                        ),
+                    ),
+                ),
+            ).tracked()
+            val sampler = device.createSampler(
+                SamplerDescriptor(
+                    addressModeU = GPUAddressMode.ClampToEdge,
+                    addressModeV = GPUAddressMode.ClampToEdge,
+                    magFilter = GPUFilterMode.Nearest,
+                    minFilter = GPUFilterMode.Nearest,
+                    label = "Kanvas.session.colorGlyph.destinationRead.nearestSampler",
+                ),
+            ).tracked()
+            val owned = GPUColorGlyphCachedHandleSet(
+                listOf(bindGroupLayout, shader, pipelineLayout, pipeline, sampler),
+            )
+            preRegistrationHandles.transferAll()
+            GPUWgpu4kColorGlyphInvariantHandles(
+                bindGroupLayout,
+                shader,
+                pipelineLayout,
+                pipeline,
+                sampler,
+                owned,
+                programSeal,
             )
         } catch (failure: Throwable) {
             preRegistrationHandles.closeRetainingFailures()

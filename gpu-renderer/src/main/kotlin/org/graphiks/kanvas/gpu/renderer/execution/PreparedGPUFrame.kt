@@ -155,7 +155,9 @@ class GPUCommandEncoderScopePlan internal constructor(
         val coverageMaskSeal = corePrimitiveCoverageMaskPreparedRouteSeal
         val coverageMaskSealed =
             coverageMaskSeal is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer ||
-                coverageMaskSeal is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
+                coverageMaskSeal is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ||
+                coverageMaskSeal is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition ||
+                coverageMaskSeal is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition
         require(listOf(pathSealed, clipStencilSealed, coverageMaskSealed).count { it } <= 1) {
             "Prepared CorePrimitive multi-pass native operand seals are mutually exclusive"
         }
@@ -173,7 +175,164 @@ class GPUCommandEncoderScopePlan internal constructor(
         ) {
             "A sealed stencil route requires exactly one borrowed depth/stencil texture-view operand, and other scopes forbid it"
         }
-        if (coverageMaskSealed) {
+        if (coverageMaskSealed && coverageMaskSeal.units().size > 1) {
+            val units = coverageMaskSeal.units()
+            val producers = units.filterIsInstance<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer>()
+            val consumers = units.filterIsInstance<GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer>()
+            require(producers.size == units.size || consumers.size == units.size) {
+                "Coverage-mask native operands require one homogeneous ordered partition"
+            }
+            val isProducer = producers.isNotEmpty()
+            val packetIds = units.map { unit -> when (unit) {
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> unit.packetId
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> unit.packetId
+                else -> error("Coverage-mask partition contains a non-unit seal")
+            } }
+            val sourceIndex = if (isProducer) producers.first().sourceStepIndex else consumers.first().sourceStepIndex
+            val slabs = if (isProducer) producers.first().slabAuthority else consumers.first().slabAuthority
+            val attachment = if (isProducer) producers.first().attachmentAuthority else consumers.first().attachmentAuthority
+            fun resourceLabel(resource: GPUFrameResourceRef, generation: Long) =
+                "${resource::class.simpleName}:${resource.value}@$generation"
+            val expectedResourceLabels = if (isProducer) {
+                listOf(
+                    resourceLabel(attachment.resource, attachment.resourceGeneration),
+                    resourceLabel(attachment.resource, attachment.resourceGeneration),
+                    resourceLabel(slabs.uniformResource, slabs.uniformGeneration),
+                )
+            } else {
+                val consumer = consumers.first()
+                listOf(
+                    resourceLabel(consumer.sceneTarget, consumer.sceneTargetGeneration),
+                    resourceLabel(slabs.vertexResource, slabs.vertexGeneration),
+                    resourceLabel(slabs.indexResource, slabs.indexGeneration),
+                    resourceLabel(slabs.uniformResource, slabs.uniformGeneration),
+                    resourceLabel(attachment.resource, attachment.resourceGeneration),
+                )
+            }
+            val expectedCommandLabels = buildList {
+                add("beginRenderPass")
+                packetIds.forEachIndexed { index, _ ->
+                    add("setRenderPipeline")
+                    add("setBindGroup")
+                    if (!isProducer) {
+                        add("setVertexBuffer")
+                        add("setIndexBuffer")
+                    }
+                    add("draw")
+                }
+                add("endRenderPass")
+            }
+            val expectedCommandPackets = buildList {
+                packetIds.forEachIndexed { index, packetId ->
+                    add(packetId); add(packetId)
+                    if (!isProducer) { add(packetId); add(packetId) }
+                    add(packetId)
+                }
+            }
+            require(sourceStepIndex == sourceIndex && sourcePacketIds == packetIds &&
+                resourceGenerationLabels == expectedResourceLabels
+            ) { "Coverage-mask native operands require the exact sealed partition and generations" }
+            require(facadeOperationClasses == expectedCommandLabels) {
+                "Coverage-mask partition facade command sequence was substituted"
+            }
+            val stream = requireNotNull(passCommandStream)
+            coverageMaskSeal.requireExactCoverageMaskPassCommandAuthority(stream)
+            require(stream.commandLabels == expectedCommandLabels && stream.sourcePacketIds == expectedCommandPackets) {
+                "Coverage-mask partition command provenance was substituted"
+            }
+            val expectedKeys = buildList {
+                add(GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderColorTarget,
+                    GPUPreparedNativeOperandKind.TextureView,
+                    gpuPreparedNativeBindingKey(expectedResourceLabels.first()),
+                ))
+                if (isProducer) {
+                    packetIds.forEach { packetId ->
+                        add(GPUPreparedNativeOperandKey(GPUPreparedNativeOperandRole.RenderPipeline,
+                            GPUPreparedNativeOperandKind.RenderPipeline,
+                            gpuPreparedNativeBindingKey("setRenderPipeline:setRenderPipeline.${packetId.value}")))
+                        add(GPUPreparedNativeOperandKey(GPUPreparedNativeOperandRole.RenderBindGroup,
+                            GPUPreparedNativeOperandKind.BindGroup,
+                            gpuPreparedNativeBindingKey("setBindGroup:setBindGroup.${packetId.value}")))
+                    }
+                } else packetIds.forEach { packetId -> add(GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderPipeline,
+                    GPUPreparedNativeOperandKind.RenderPipeline,
+                    gpuPreparedNativeBindingKey("setRenderPipeline:setRenderPipeline.${packetId.value}"),
+                )) }
+                if (!isProducer) {
+                    add(GPUPreparedNativeOperandKey(
+                        GPUPreparedNativeOperandRole.RenderVertexBuffer,
+                        GPUPreparedNativeOperandKind.Buffer,
+                        gpuPreparedNativeBindingKey(resourceLabel(slabs.vertexResource, slabs.vertexGeneration)),
+                    ))
+                    add(GPUPreparedNativeOperandKey(
+                        GPUPreparedNativeOperandRole.RenderIndexBuffer,
+                        GPUPreparedNativeOperandKind.Buffer,
+                        gpuPreparedNativeBindingKey(resourceLabel(slabs.indexResource, slabs.indexGeneration)),
+                    ))
+                }
+                if (!isProducer) packetIds.forEach { packetId -> add(GPUPreparedNativeOperandKey(
+                    GPUPreparedNativeOperandRole.RenderBindGroup,
+                    GPUPreparedNativeOperandKind.BindGroup,
+                    gpuPreparedNativeBindingKey("setBindGroup:setBindGroup.${packetId.value}"),
+                )) }
+            }
+            require(keys == expectedKeys &&
+                stream.operandBridge.size == packetIds.size * if (isProducer) 2 else 4
+            ) { "Coverage-mask partition native operand cardinality or ownership was substituted" }
+            data class ExpectedCoverageMaskBridge(
+                val packetId: GPUDrawPacketID,
+                val command: String,
+                val kind: org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind,
+                val descriptorHash: String,
+            )
+            val expectedBridgeFacts = buildList {
+                units.forEach { unit ->
+                    val packetId = when (unit) {
+                        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer -> unit.packetId
+                        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer -> unit.packetId
+                        else -> error("Coverage-mask partition contains a non-unit seal")
+                    }
+                    val slot = when (unit) {
+                        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer ->
+                            slabs.uniformSlabSeal.producerSlots[unit.uniformSlice.slotIndex]
+                        is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ->
+                            slabs.uniformSlabSeal.consumerSlots[unit.uniformSlice.slotIndex -
+                                slabs.uniformSlabSeal.producerSlots.size]
+                        else -> error("Coverage-mask partition contains a non-unit seal")
+                    }
+                    val pipeline = when (slot) {
+                        is org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal -> slot.renderPipelineKey.value
+                        is org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal -> slot.renderPipelineKey.value
+                        else -> error("Coverage-mask partition slot is invalid")
+                    }
+                    val binding = when (slot) {
+                        is org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskProducerUniformSlotSeal -> slot.bindingLayoutHash
+                        is org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveCoverageMaskConsumerUniformSlotSeal -> slot.bindingLayoutHash
+                        else -> error("Coverage-mask partition slot is invalid")
+                    }
+                    add(ExpectedCoverageMaskBridge(packetId, "setRenderPipeline",
+                        org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.RenderPipeline, pipeline))
+                    add(ExpectedCoverageMaskBridge(packetId, "setBindGroup",
+                        org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.BindGroup, binding))
+                    if (!isProducer) {
+                        add(ExpectedCoverageMaskBridge(packetId, "setVertexBuffer",
+                            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.VertexBuffer,
+                            "coverage-mask.${slabs.vertexResource.value}@${slabs.vertexGeneration}.vertices.${slabs.vertexByteSize}"))
+                        add(ExpectedCoverageMaskBridge(packetId, "setIndexBuffer",
+                            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind.IndexBuffer,
+                            "coverage-mask.${slabs.indexResource.value}@${slabs.indexGeneration}.indices.${slabs.indexByteSize}"))
+                    }
+                }
+            }
+            require(stream.operandBridge.zip(expectedBridgeFacts).all { (bridge, expected) ->
+                bridge.packetId == expected.packetId && bridge.commandLabel == expected.command &&
+                    bridge.operand.kind == expected.kind &&
+                    bridge.operand.label == "${expected.command}.${expected.packetId.value}" &&
+                    bridge.operand.descriptorHash == expected.descriptorHash
+            }) { "Coverage-mask partition bridge order or packet provenance was substituted" }
+        } else if (coverageMaskSealed) {
             val isProducer = coverageMaskSeal is
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Producer
             val packetId = when (coverageMaskSeal) {
@@ -181,6 +340,9 @@ class GPUCommandEncoderScopePlan internal constructor(
                     coverageMaskSeal.packetId
                 is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ->
                     coverageMaskSeal.packetId
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+                -> error("A singleton coverage-mask seal was expected")
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
                 -> error("Unreachable coverage-mask seal")
@@ -190,6 +352,9 @@ class GPUCommandEncoderScopePlan internal constructor(
                     coverageMaskSeal.sourceStepIndex
                 is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ->
                     coverageMaskSeal.sourceStepIndex
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+                -> error("A singleton coverage-mask seal was expected")
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
                 -> error("Unreachable coverage-mask seal")
@@ -199,6 +364,9 @@ class GPUCommandEncoderScopePlan internal constructor(
                     coverageMaskSeal.commandId
                 is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ->
                     coverageMaskSeal.commandId
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+                -> error("A singleton coverage-mask seal was expected")
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
                 -> error("Unreachable coverage-mask seal")
@@ -208,6 +376,9 @@ class GPUCommandEncoderScopePlan internal constructor(
                     coverageMaskSeal.slabAuthority
                 is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ->
                     coverageMaskSeal.slabAuthority
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+                -> error("A singleton coverage-mask seal was expected")
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
                 -> error("Unreachable coverage-mask seal")
@@ -217,6 +388,9 @@ class GPUCommandEncoderScopePlan internal constructor(
                     coverageMaskSeal.uniformSlice
                 is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ->
                     coverageMaskSeal.uniformSlice
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+                -> error("A singleton coverage-mask seal was expected")
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
                 -> error("Unreachable coverage-mask seal")
@@ -236,6 +410,9 @@ class GPUCommandEncoderScopePlan internal constructor(
                     }
                     slabs.uniformSlabSeal.consumerSlots[consumerIndex]
                 }
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+                -> error("A singleton coverage-mask seal was expected")
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
                 -> error("Unreachable coverage-mask seal")
@@ -256,6 +433,9 @@ class GPUCommandEncoderScopePlan internal constructor(
                     coverageMaskSeal.attachmentAuthority
                 is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ->
                     coverageMaskSeal.attachmentAuthority
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition,
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition,
+                -> error("A singleton coverage-mask seal was expected")
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
                 -> error("Unreachable coverage-mask seal")
@@ -1134,6 +1314,10 @@ internal class PreparedGPUFrame(
                     coverage.attachmentAuthority.resourceGeneration
                 is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ->
                     coverage.sceneTargetGeneration
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ProducerPartition ->
+                    coverage.units.first().attachmentAuthority.resourceGeneration
+                is GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition ->
+                    coverage.units.first().sceneTargetGeneration
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Empty,
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Missing,
                 -> generationSeal.targetGeneration
@@ -1713,7 +1897,9 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                         GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer
                 val coverageMaskConsumer =
                     scope.corePrimitiveCoverageMaskPreparedRouteSeal is
-                        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
+                        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ||
+                        scope.corePrimitiveCoverageMaskPreparedRouteSeal is
+                        GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition
                 if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
                     directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
                     clipStencilSealed || coverageMaskConsumer) {
@@ -1759,7 +1945,9 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassS
             GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
     val coverageMaskConsumer =
         scope.corePrimitiveCoverageMaskPreparedRouteSeal is
-            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer
+            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer ||
+            scope.corePrimitiveCoverageMaskPreparedRouteSeal is
+            GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition
     drawPackets.forEach { packet ->
         add(packet.packetId)
         if (!clipStencilProducer) add(packet.packetId)

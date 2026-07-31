@@ -2,6 +2,8 @@ package org.graphiks.kanvas.gpu.renderer.recording
 
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
@@ -152,6 +154,8 @@ internal class GPUColorGlyphPreparedTaskListBuilder(
             renderPipelineKey = COLOR_GLYPH_RENDER_PIPELINE_KEY,
             bindingLayoutHash = COLOR_GLYPH_BINDING_LAYOUT_HASH,
             uniformSlot = semantic.payloadRef.uniformSlot,
+            clipCoveragePlan = GPUClipCoveragePlan.NoClip,
+            clipExecutionPlan = GPUClipExecutionPlan.NoClip,
             vertexSourceLabel = COLOR_GLYPH_VERTEX_SOURCE_LABEL,
             scissorBoundsHash = colorGlyphScissorAuthority(semantic.scissorBounds),
             targetStateHash = COLOR_GLYPH_TARGET_STATE_HASH,

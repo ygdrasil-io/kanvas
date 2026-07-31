@@ -140,6 +140,14 @@ internal enum class GPUWgpu4kCorePrimitivePipelineProgram {
     PathStencilProducerEvenOdd,
     PathStencilCoverRegular,
     PathStencilCoverInverse,
+    PathStencilCoverAnalyticRectHardRegular,
+    PathStencilCoverAnalyticRectHardInverse,
+    PathStencilCoverAnalyticRectAARegular,
+    PathStencilCoverAnalyticRectAAInverse,
+    PathStencilCoverAnalyticRRectHardRegular,
+    PathStencilCoverAnalyticRRectHardInverse,
+    PathStencilCoverAnalyticRRectAARegular,
+    PathStencilCoverAnalyticRRectAAInverse,
     ClipStencilProducerWinding,
     ClipStencilProducerEvenOdd,
     ClipStencilConsumerRegular,
@@ -270,16 +278,29 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeProgramOrNull():
             else -> null
         }
         GPUCorePrimitiveRenderPipelineStructuralKey.Role.PathStencilCover -> when {
-            clip != GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None -> null
             shader != GPUCorePrimitiveRenderPipelineStructuralKey.Shader.PathStencil ||
                 topology != GPUCorePrimitiveRenderPipelineStructuralKey.Topology.DirectTriangleList ||
                 blend.nativePathCoverBlendProgramOrNull() == null -> null
             depthStencil.pathStencilStructuralProgramOrNull() ==
-                GPUCorePrimitivePathStencilStructuralProgram.CoverRegular ->
-                GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular
+                GPUCorePrimitivePathStencilStructuralProgram.CoverRegular -> when (clip) {
+                GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None ->
+                    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular
+                is GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic ->
+                    clip.nativeAnalyticPathCoverProgramOrNull(inverse = false).takeIf {
+                        blend.isCanonicalPremulSrcOver()
+                    }
+                else -> null
+            }
             depthStencil.pathStencilStructuralProgramOrNull() ==
-                GPUCorePrimitivePathStencilStructuralProgram.CoverInverse ->
-                GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse
+                GPUCorePrimitivePathStencilStructuralProgram.CoverInverse -> when (clip) {
+                GPUCorePrimitiveRenderPipelineStructuralKey.Clip.None ->
+                    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse
+                is GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic ->
+                    clip.nativeAnalyticPathCoverProgramOrNull(inverse = true).takeIf {
+                        blend.isCanonicalPremulSrcOver()
+                    }
+                else -> null
+            }
             else -> null
         }
         GPUCorePrimitiveRenderPipelineStructuralKey.Role.ClipStencilProducer -> when {
@@ -342,8 +363,11 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.nativeBlendProgramOrNull
         GPUWgpu4kCorePrimitiveBlendProgram.ColorWriteNone.takeIf {
             blend == GPUCorePrimitiveRenderPipelineStructuralKey.Blend.ColorWriteNone
         }
-    program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular ||
-        program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse ->
+    program.isAnalyticPathStencilCover() ->
+        GPUWgpu4kCorePrimitiveBlendProgram.PremulSrcOver.takeIf {
+            blend.isCanonicalPremulSrcOver()
+        }
+    program.isLegacyPathStencilCover() ->
         blend.nativePathCoverBlendProgramOrNull()
     program == GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRectIntersect ||
         program == GPUWgpu4kCorePrimitivePipelineProgram.CoverageMaskProducerRRectIntersect ->
@@ -410,14 +434,71 @@ private fun GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic.nativeAnal
     GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Path -> null
 }
 
+private fun GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic
+    .nativeAnalyticPathCoverProgramOrNull(
+        inverse: Boolean,
+    ): GPUWgpu4kCorePrimitivePipelineProgram? = when (geometry) {
+    GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect -> when {
+        antiAlias && inverse ->
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAAInverse
+        antiAlias ->
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAARegular
+        inverse ->
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardInverse
+        else ->
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardRegular
+    }
+    GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect -> when {
+        antiAlias && inverse ->
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAAInverse
+        antiAlias ->
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAARegular
+        inverse ->
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardInverse
+        else ->
+            GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardRegular
+    }
+    GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Path -> null
+}
+
 internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticClip(): Boolean = when (this) {
     GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectHard,
     GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRectAA,
     GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectHard,
     GPUWgpu4kCorePrimitivePipelineProgram.AnalyticClipRRectAA,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardRegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAARegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAAInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardRegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAARegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAAInverse,
     -> true
     else -> false
 }
+
+private fun GPUWgpu4kCorePrimitivePipelineProgram.isPathStencilCover(): Boolean = when (this) {
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardRegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAARegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAAInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardRegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAARegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAAInverse,
+    -> true
+    else -> false
+}
+
+private fun GPUWgpu4kCorePrimitivePipelineProgram.isLegacyPathStencilCover(): Boolean =
+    this == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular ||
+        this == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse
+
+private fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticPathStencilCover(): Boolean =
+    isPathStencilCover() && !isLegacyPathStencilCover()
 
 internal fun GPUWgpu4kCorePrimitivePipelineProgram.isAnalyticShape(): Boolean =
     this == GPUWgpu4kCorePrimitivePipelineProgram.AnalyticShapeSrcOver
@@ -470,8 +551,7 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
         GPUWgpu4kCorePrimitivePipelineProgram.DirectSrcOverWithPathDepthStencil ||
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerWinding ||
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilProducerEvenOdd ||
-        identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular ||
-        identity.program == GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse ||
+        identity.program.isPathStencilCover() ||
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerWinding ||
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerEvenOdd ||
         identity.program == GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRegular ||
@@ -489,6 +569,8 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
                 CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_VERTEX_ENTRY_POINT
             } else if (identity.program.isAnalyticShape()) {
                 CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT
+            } else if (identity.program.isAnalyticClip()) {
+                CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_VERTEX_ENTRY_POINT
             } else if (coverageMaskProducer) {
                 CORE_PRIMITIVE_COVERAGE_MASK_PRODUCER_NATIVE_VERTEX_ENTRY_POINT
             } else if (identity.program.isCoverageMaskConsumer()) {
@@ -522,6 +604,8 @@ internal fun corePrimitiveWgpu4kRenderPipelineDescriptor(
                 CORE_PRIMITIVE_CLIP_STENCIL_PRODUCER_NATIVE_FRAGMENT_ENTRY_POINT
             } else if (identity.program.isAnalyticShape()) {
                 CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_FRAGMENT_ENTRY_POINT
+            } else if (identity.program.isAnalyticClip()) {
+                CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_FRAGMENT_ENTRY_POINT
             } else if (identity.program.isCoverageMaskProducer()) {
                 identity.program.coverageMaskProducerFragmentEntryPoint()
             } else if (identity.program.isCoverageMaskConsumer()) {
@@ -562,10 +646,11 @@ internal fun isSupportedCorePrimitiveRenderPipelineIdentity(
     identity.cullMode == "none" && identity.hasCompatibleBlendProgram()
 
 private fun GPUWgpu4kCorePrimitiveRenderPipelineIdentity.hasCompatibleBlendProgram(): Boolean =
-    when (program) {
-        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,
-        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse,
-        -> blendProgram == GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp ||
+    when {
+        program.isAnalyticPathStencilCover() ->
+            blendProgram == GPUWgpu4kCorePrimitiveBlendProgram.PremulSrcOver
+        program.isLegacyPathStencilCover() ->
+            blendProgram == GPUWgpu4kCorePrimitiveBlendProgram.DestinationNoOp ||
             blendProgram.mode in setOf(
                 GPUBlendMode.CLEAR,
                 GPUBlendMode.SRC,
@@ -611,6 +696,14 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.supportsFourSamples(): Boolean
     GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilProducerEvenOdd,
     GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerRegular,
     GPUWgpu4kCorePrimitivePipelineProgram.ClipStencilConsumerInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardRegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAARegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAAInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardRegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardInverse,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAARegular,
+    GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAAInverse,
     -> true
     else -> false
 }
@@ -659,7 +752,12 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthSten
                 0xffu,
                 0u,
             )
-        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular ->
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverRegular,
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardRegular,
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAARegular,
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardRegular,
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAARegular,
+        ->
             NativeStencilState(
                 face(
                     compare = GPUCompareFunction.NotEqual,
@@ -674,7 +772,12 @@ private fun GPUWgpu4kCorePrimitivePipelineProgram.depthStencilState(): DepthSten
                 0xffu,
                 0xffu,
             )
-        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse ->
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverInverse,
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardInverse,
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAAInverse,
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardInverse,
+        GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAAInverse,
+        ->
             NativeStencilState(
                 face(
                     compare = GPUCompareFunction.Equal,

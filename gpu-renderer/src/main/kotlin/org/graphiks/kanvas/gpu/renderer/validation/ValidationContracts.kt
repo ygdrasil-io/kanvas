@@ -1541,6 +1541,7 @@ private data class GPUKotlinSource(
     val file: File,
     val packageName: String?,
     val imports: List<String>,
+    val qualifiedReferences: List<String>,
 ) {
     val relativePath: String = file.relativeTo(root).path.replace(File.separatorChar, '/')
 }
@@ -1560,6 +1561,17 @@ private fun File.kotlinSources(): List<GPUKotlinSource> {
                 imports = lines.mapNotNull { line ->
                     importRegex.find(line)?.groupValues?.get(1)?.substringBefore(" as ")
                 },
+                qualifiedReferences = lines
+                    .filterNot { line ->
+                        val trimmed = line.trimStart()
+                        trimmed.startsWith("package ") || trimmed.startsWith("import ")
+                    }
+                    .flatMap { line ->
+                        rendererQualifiedReferenceRegex.findAll(line)
+                            .map { match -> match.value }
+                            .toList()
+                    }
+                    .distinct(),
             )
         }
         .toList()
@@ -1594,29 +1606,42 @@ private fun GPUKotlinSource.dependencyRuleViolations(): List<String> {
     val sourcePackage = packageName ?: return emptyList()
     val sourceSegment = sourcePackage.rendererTopSegment() ?: return emptyList()
 
-    return imports.mapNotNull { imported ->
-        val targetSegment = imported.rendererTopSegment() ?: return@mapNotNull null
-        when {
+    val importViolations = imports.mapNotNull { imported ->
+        dependencyRuleViolation(sourceSegment, imported, "import")
+    }
+    val referenceViolations = qualifiedReferences.mapNotNull { referenced ->
+        dependencyRuleViolation(sourceSegment, referenced, "reference")
+    }
+    return (importViolations + referenceViolations).distinct()
+}
+
+private fun GPUKotlinSource.dependencyRuleViolation(
+    sourceSegment: String,
+    referenced: String,
+    kind: String,
+): String? {
+    val targetSegment = referenced.rendererTopSegment() ?: return null
+    val action = if (kind == "import") "imports" else "references"
+    return when {
             sourceSegment in foundationPackageSegments && targetSegment in latePlanningPackageSegments ->
-                "$relativePath: foundation package dependency violation: $sourceSegment imports $targetSegment"
+                "$relativePath: foundation package dependency violation: $sourceSegment $action $targetSegment"
 
             sourceSegment in domainPackageSegments && targetSegment == "execution" ->
-                "$relativePath: domain package dependency violation: $sourceSegment imports execution"
+                "$relativePath: domain package dependency violation: $sourceSegment $action execution"
 
             sourceSegment == "materials" &&
                 targetSegment == "resources" &&
-                imported.substringAfterLast('.') in concreteResourceTypes ->
-                "$relativePath: materials concrete resource import violation: $imported"
+                referenced.substringAfterLast('.') in concreteResourceTypes ->
+                "$relativePath: materials concrete resource $kind violation: $referenced"
 
             sourceSegment == "wgsl" && targetSegment in domainPackageSegments ->
-                "$relativePath: wgsl domain semantics import violation: $imported"
+                "$relativePath: wgsl domain semantics $kind violation: $referenced"
 
             sourceSegment == "execution" && targetSegment in semanticPackageSegments ->
-                "$relativePath: execution semantic package import violation: $imported"
+                "$relativePath: execution semantic package $kind violation: $referenced"
 
             else -> null
         }
-    }
 }
 
 /** Finds package-level import cycles among canonical renderer packages. */
@@ -1922,3 +1947,7 @@ private val firstRoutePromotionEvidenceCategories =
 private val packageRegex = Regex("""^\s*package\s+([A-Za-z0-9_.]+)""")
 
 private val importRegex = Regex("""^\s*import\s+([^\s]+)""")
+
+private val rendererQualifiedReferenceRegex = Regex(
+    """org\.graphiks\.kanvas\.gpu\.renderer(?:\.[A-Za-z_][A-Za-z0-9_]*)+""",
+)

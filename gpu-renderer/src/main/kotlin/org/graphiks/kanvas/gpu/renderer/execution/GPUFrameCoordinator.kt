@@ -359,6 +359,7 @@ class GPUPreparedSceneNativeCounters(
     val preparedImageFrameUniformBufferCreations: Long = 0L,
     val preparedImageFrameBindGroupCreations: Long = 0L,
     commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> = emptyMap(),
+    val destinationCopies: Long = 0L,
 ) {
     val commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> =
         immutableMap(commandsByCommandId)
@@ -415,6 +416,7 @@ class GPUPreparedSceneNativeCounters(
         preparedImageFrameBindGroupCreations: Long = this.preparedImageFrameBindGroupCreations,
         commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> =
             this.commandsByCommandId,
+        destinationCopies: Long = this.destinationCopies,
     ): GPUPreparedSceneNativeCounters = GPUPreparedSceneNativeCounters(
         encoders,
         commandBuffers,
@@ -465,6 +467,7 @@ class GPUPreparedSceneNativeCounters(
         preparedImageFrameUniformBufferCreations,
         preparedImageFrameBindGroupCreations,
         commandsByCommandId,
+        destinationCopies,
     )
 
     operator fun component1(): Long = encoders
@@ -517,6 +520,7 @@ class GPUPreparedSceneNativeCounters(
     operator fun component48(): Long = preparedImageFrameBindGroupCreations
     operator fun component49(): Map<Int, GPUPreparedNativeCommandEncodingCounters> =
         commandsByCommandId
+    operator fun component50(): Long = destinationCopies
 
     override fun equals(other: Any?): Boolean =
         this === other ||
@@ -584,6 +588,7 @@ class GPUPreparedSceneNativeCounters(
         preparedImageFrameUniformBufferCreations,
         preparedImageFrameBindGroupCreations,
         commandsByCommandId,
+        destinationCopies,
     )
 
     private companion object {
@@ -637,6 +642,7 @@ class GPUPreparedSceneNativeCounters(
             "preparedImageFrameUniformBufferCreations",
             "preparedImageFrameBindGroupCreations",
             "commandsByCommandId",
+            "destinationCopies",
         )
     }
 }

@@ -4,12 +4,15 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptorAssemblySession
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgramAdmission
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.SpiralRTDescriptor
 import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLReflectionProvider
@@ -56,6 +59,78 @@ class GPUPreparedMaterialProgramTest {
             compiler.compile(unregisteredRuntimeEffectDescriptor(), 1f, context),
         )
         assertEquals("unsupported.material.runtime_effect.descriptor", refused.code)
+    }
+
+    @Test
+    fun `only exact opaque solid and full paint alpha prove pre coverage opacity`() {
+        fun alpha(
+            descriptor: GPUMaterialDescriptor,
+            paintAlpha: Float = 1f,
+        ) = ready(descriptor, paintAlpha).preCoverageSourceAlpha
+
+        val opaqueSolid = solidDescriptor().copy(a = 1f)
+        assertEquals(GPUSourceAlphaClassification.ProvenOpaque, alpha(opaqueSolid))
+        assertEquals(
+            GPUSourceAlphaClassification.Translucent,
+            alpha(opaqueSolid.copy(a = 0.999f)),
+        )
+        assertEquals(
+            GPUSourceAlphaClassification.Translucent,
+            alpha(opaqueSolid, paintAlpha = 0.999f),
+        )
+
+        val opaqueGradient = linearGradientDescriptor().copy(
+            startA = 1f,
+            endA = 1f,
+            allStopColors = floatArrayOf(
+                1f, 0f, 0f, 1f,
+                0f, 0f, 1f, 1f,
+            ),
+        )
+        val opaqueImage = supportedImageShaderDescriptor(
+            pixels = byteArrayOf(255.toByte(), 255.toByte(), 255.toByte(), 255.toByte()),
+        ).copy(tintA = 1f)
+        val opaqueRuntime = registeredRuntimeEffectDescriptor(
+            GPURuntimeEffectUniformValue.Float4(1f, 1f, 1f, 1f),
+        )
+        val opaqueBlend = GPUMaterialDescriptor.BlendShader(
+            mode = "SRC_OVER",
+            dst = opaqueSolid,
+            src = opaqueSolid.copy(r = 0.75f),
+        )
+        listOf(opaqueGradient, opaqueImage, opaqueRuntime, opaqueBlend).forEach { descriptor ->
+            assertEquals(
+                GPUSourceAlphaClassification.Translucent,
+                alpha(descriptor),
+                descriptor.toString(),
+            )
+        }
+    }
+
+    @Test
+    fun `authenticated snapshots preserve opacity authority and classification substitution refuses`() {
+        val program = ready(solidDescriptor().copy(a = 1f), paintAlpha = 1f)
+        val snapshot = program.authenticatedSnapshot()
+
+        assertEquals(GPUSourceAlphaClassification.ProvenOpaque, snapshot.preCoverageSourceAlpha)
+        assertEquals(program.materialKey, snapshot.materialKey)
+        assertEquals(program.abiHash, snapshot.abiHash)
+
+        val admissionField = GPUPreparedMaterialProgram::class.java.getDeclaredField("admission")
+        admissionField.isAccessible = true
+        val admission = admissionField.get(program) as GPUPreparedMaterialProgramAdmission
+        assertFailsWith<IllegalArgumentException> {
+            GPUPreparedMaterialProgram.createAuthenticated(
+                wgslSource = program.wgslSource,
+                entryPoint = program.entryPoint,
+                uniformBytes = program.uniformBytes,
+                sampledResources = program.sampledResources,
+                paintAlpha = program.paintAlpha,
+                sourceKind = program.sourceKind,
+                preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
+                admission = admission,
+            )
+        }
     }
 
     @Test

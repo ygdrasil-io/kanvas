@@ -227,6 +227,25 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 assertEquals(case.expectedAlphaSource, blend.alpha.srcFactor, case.mode.name)
                 assertEquals(case.expectedAlphaDestination, blend.alpha.dstFactor, case.mode.name)
             }
+            listOf(regularCover(), inverseCover()).forEach { stencil ->
+                val analytic = pathKey(stencil, cover = true).copy(
+                    blend = fixedBlend(
+                        mode = case.mode,
+                        colorSource = case.colorSource,
+                        colorDestination = case.colorDestination,
+                        alphaSource = case.alphaSource,
+                        alphaDestination = case.alphaDestination,
+                    ),
+                    clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic(
+                        GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+                        antiAlias = true,
+                    ),
+                )
+                assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Refused>(
+                    mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(analytic),
+                    "analytic-${case.mode.name}",
+                )
+            }
         }
 
         assertEquals(cases.size * 2, identities.size)
@@ -267,6 +286,18 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
         }
 
         assertNotEquals(identities[0], identities[1])
+        listOf(regularCover(), inverseCover()).forEach { stencil ->
+            val analyticNoOp = pathKey(stencil, cover = true).copy(
+                blend = GPUCorePrimitiveRenderPipelineStructuralKey.Blend.NoOp(GPUBlendMode.DST),
+                clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic(
+                    GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+                    antiAlias = true,
+                ),
+            )
+            assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Refused>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(analyticNoOp),
+            )
+        }
     }
 
     @Test
@@ -404,7 +435,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
             GPUCorePrimitiveRenderPipelineStructuralKey.UniformLayout.AnalyticShapeUniform80V1,
             key.uniformLayout,
         )
-        assertEquals(21, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(29, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
         assertEquals(CORE_PRIMITIVE_ANALYTIC_SHAPE_NATIVE_VERTEX_ENTRY_POINT, descriptor.vertex.entryPoint)
         assertEquals(1, descriptor.vertex.buffers.size)
@@ -539,7 +570,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 mapped.componentIdentity,
             )
         }
-        assertEquals(21, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(29, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
     }
 
@@ -697,7 +728,7 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 assertEquals(GPUWgpu4kCorePrimitiveBindingPolicy.DynamicUniformRequired, mapped.componentIdentity.bindingPolicy)
             }
         }
-        assertEquals(21, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
+        assertEquals(29, GPUWgpu4kCorePrimitivePipelineProgram.entries.size)
         assertEquals(30, CORE_PRIMITIVE_SESSION_PIPELINE_CACHE_MAX_ENTRIES)
     }
 
@@ -838,6 +869,129 @@ class GPUWgpu4kCorePrimitivePipelineDescriptorTest {
                 mapped.componentIdentity.bindingLayoutIdentity,
             )
             assertNull(corePrimitiveWgpu4kRenderPipelineDescriptor(mapped.identity, shader, pipelineLayout).depthStencil)
+        }
+    }
+
+    @Test
+    fun `analytic path covers retain rect rrect aa and stencil polarity in closed programs`() {
+        data class Case(
+            val geometry: GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry,
+            val antiAlias: Boolean,
+            val inverse: Boolean,
+            val expected: GPUWgpu4kCorePrimitivePipelineProgram,
+        )
+
+        val cases = listOf(
+            Case(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+                false,
+                false,
+                GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardRegular,
+            ),
+            Case(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+                false,
+                true,
+                GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectHardInverse,
+            ),
+            Case(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+                true,
+                false,
+                GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAARegular,
+            ),
+            Case(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.Rect,
+                true,
+                true,
+                GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRectAAInverse,
+            ),
+            Case(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect,
+                false,
+                false,
+                GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardRegular,
+            ),
+            Case(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect,
+                false,
+                true,
+                GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectHardInverse,
+            ),
+            Case(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect,
+                true,
+                false,
+                GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAARegular,
+            ),
+            Case(
+                GPUCorePrimitiveRenderPipelineStructuralKey.ClipGeometry.RRect,
+                true,
+                true,
+                GPUWgpu4kCorePrimitivePipelineProgram.PathStencilCoverAnalyticRRectAAInverse,
+            ),
+        )
+
+        cases.forEach { case ->
+            val key = pathKey(
+                if (case.inverse) inverseCover() else regularCover(),
+                cover = true,
+            ).copy(
+                clip = GPUCorePrimitiveRenderPipelineStructuralKey.Clip.Analytic(
+                    case.geometry,
+                    case.antiAlias,
+                ),
+                sampleCount = 4,
+            )
+            val mapped = assertIs<GPUWgpu4kCorePrimitivePipelineMapping.Mapped>(
+                mapCorePrimitiveStructuralKeyToWgpu4kPipelineIdentity(key),
+            )
+            assertEquals(case.expected, mapped.identity.program)
+            assertEquals(PRODUCTION_CORE_PRIMITIVE_ANALYTIC_CLIP_COMPONENT_IDENTITY, mapped.componentIdentity)
+            val descriptor = corePrimitiveWgpu4kRenderPipelineDescriptor(
+                mapped.identity,
+                shader,
+                pipelineLayout,
+            )
+            assertEquals(
+                CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_VERTEX_ENTRY_POINT,
+                descriptor.vertex.entryPoint,
+            )
+            assertEquals(
+                CORE_PRIMITIVE_ANALYTIC_CLIP_NATIVE_FRAGMENT_ENTRY_POINT,
+                requireNotNull(descriptor.fragment).entryPoint,
+            )
+            assertDepthStencil(
+                descriptor,
+                front = if (case.inverse) {
+                    face(
+                        compare = GPUCompareFunction.Equal,
+                        fail = GPUStencilOperation.Zero,
+                        pass = GPUStencilOperation.Keep,
+                    )
+                } else {
+                    face(
+                        compare = GPUCompareFunction.NotEqual,
+                        depthFail = GPUStencilOperation.Zero,
+                        pass = GPUStencilOperation.Zero,
+                    )
+                },
+                back = if (case.inverse) {
+                    face(
+                        compare = GPUCompareFunction.Equal,
+                        fail = GPUStencilOperation.Zero,
+                        pass = GPUStencilOperation.Keep,
+                    )
+                } else {
+                    face(
+                        compare = GPUCompareFunction.NotEqual,
+                        depthFail = GPUStencilOperation.Zero,
+                        pass = GPUStencilOperation.Zero,
+                    )
+                },
+                readMask = 0xffu,
+                writeMask = 0xffu,
+            )
         }
     }
 

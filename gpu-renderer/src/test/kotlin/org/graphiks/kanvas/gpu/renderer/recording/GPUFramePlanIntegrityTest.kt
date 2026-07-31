@@ -22,6 +22,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureFormatSampleSuppo
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUTextureSampleCountSupport
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadMember
@@ -1350,7 +1352,16 @@ class GPUFramePlanIntegrityTest {
                 val drawUniformAssembly = assertIs<GPUPreparedTextDrawUniformPlanResult.Prepared>(
                     buildPreparedTextDrawUniformBufferPlan(
                         inputs = listOf(
-                            GPUPreparedTextDrawUniformInput(packet.packetId, semantic),
+                            GPUPreparedTextDrawUniformInput(
+                                packet.packetId,
+                                semantic,
+                                requireNotNull(
+                                    preparedTextClipPlan(
+                                        requireNotNull(packet.clipExecutionPlan),
+                                        semantic.targetBounds,
+                                    ),
+                                ),
+                            ),
                         ),
                         frameIdentity = "integrity-text",
                         alignmentBytes = textDrawUniformAlignmentBytes,
@@ -1379,6 +1390,14 @@ class GPUFramePlanIntegrityTest {
                     compositeSourceHash = compositeProgram.sourceHash,
                     compositeAbiHash = compositeProgram.abiHash,
                     compositePipelineKey = compositeProgram.pipelineKey,
+                    compositeSourceCoverageEncoding =
+                        compositeProgram.sourceCoverageEncoding,
+                    clipPlan = requireNotNull(
+                        preparedTextClipPlan(
+                            requireNotNull(packet.clipExecutionPlan),
+                            semantic.targetBounds,
+                        ),
+                    ),
                     compositeVertexEntryPoint = compositeProgram.vertexEntryPoint,
                     compositeFragmentEntryPoint = compositeProgram.fragmentEntryPoint,
                     compositeVertexLayout = compositeProgram.vertexLayout,
@@ -1626,6 +1645,16 @@ class GPUFramePlanIntegrityTest {
         targetStateHash = targetStateHash,
         originalPaintOrder = commandId,
         resourceGeneration = 1,
+        clipCoveragePlan = if (semanticPayload is GPUDrawSemanticPayload.TextA8) {
+            GPUClipCoveragePlan.NoClip
+        } else {
+            null
+        },
+        clipExecutionPlan = if (semanticPayload is GPUDrawSemanticPayload.TextA8) {
+            GPUClipExecutionPlan.NoClip
+        } else {
+            null
+        },
         diagnostics = diagnostics,
     )
 

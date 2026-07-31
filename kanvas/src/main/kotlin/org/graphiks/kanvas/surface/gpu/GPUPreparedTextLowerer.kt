@@ -442,25 +442,6 @@ object GPUPreparedTextLowerer {
         } else {
             GPUCoverageConsumption.ScalarCoverage
         }
-        val blendPlan = paint.blendMode.toGpuBlendFacts().canonicalBlendPlan(
-            coverage = coverage,
-            targetFormatClass = target.colorFormat,
-        )
-        if (blendPlan is GPUBlendPlan.UnsupportedBlend) {
-            return refused(
-                GPUTextRefusalCodes.BLEND_UNSUPPORTED,
-                operationIndex,
-                "Common blend authority refused ${blendPlan.diagnostic.code}: " +
-                    blendPlan.diagnostic.message,
-                facts = mapOf(
-                    "commonDiagnosticCode" to blendPlan.diagnostic.code,
-                    "commonDiagnosticMessage" to blendPlan.diagnostic.message,
-                    "blendMode" to paint.blendMode.name,
-                    "targetFormatClass" to target.colorFormat,
-                    "coverage" to coverage.name,
-                ),
-            )
-        }
         when (val maskFilter = paint.maskFilter) {
             null -> Unit
             is MaskFilter.Blur -> if (!maskFilter.sigma.isFinite() || maskFilter.sigma < 0f) {
@@ -510,6 +491,28 @@ object GPUPreparedTextLowerer {
                         "sourceKind" to result.sourceKind.name,
                     ),
                 )
+        }
+        val blendPlan = paint.blendMode.toGpuBlendFacts().copy(
+            sourceAlpha = material.preCoverageSourceAlpha,
+        ).canonicalBlendPlan(
+            coverage = coverage,
+            targetFormatClass = target.colorFormat,
+        )
+        if (blendPlan is GPUBlendPlan.UnsupportedBlend) {
+            return refused(
+                GPUTextRefusalCodes.BLEND_UNSUPPORTED,
+                operationIndex,
+                "Common blend authority refused ${blendPlan.diagnostic.code}: " +
+                    blendPlan.diagnostic.message,
+                facts = mapOf(
+                    "commonDiagnosticCode" to blendPlan.diagnostic.code,
+                    "commonDiagnosticMessage" to blendPlan.diagnostic.message,
+                    "blendMode" to paint.blendMode.name,
+                    "targetFormatClass" to target.colorFormat,
+                    "coverage" to coverage.name,
+                    "preCoverageSourceAlpha" to material.preCoverageSourceAlpha.name,
+                ),
+            )
         }
         val capabilitySnapshotHash = capabilities.canonicalSnapshotHash()
 

@@ -19,13 +19,23 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
 import org.graphiks.kanvas.gpu.renderer.wgsl.PreparedTextA8Shader
 
 internal object GPUPreparedTextCompositePreflightRefusalCodes {
-    const val NATIVE_BLEND = "invalid.preflight.text.blend"
+    const val NATIVE_BLEND = GPUPreparedTextNativeBlendDomain.REFUSAL_CODE
     const val COMPOSITE_SOURCE = "invalid.preflight.text.composite_source"
     const val COMPOSITE_ABI = "invalid.preflight.text.composite_abi"
     const val COMPOSITE_ADMISSION = "invalid.preflight.text.composite_admission"
     const val INSTANCE_VERTEX_ABI = "invalid.preflight.text.instance_vertex_abi"
     const val DRAW_UNIFORM = "invalid.preflight.text.draw_uniform"
     const val BINDING_LAYOUT = "invalid.preflight.text.composite_binding_layout"
+}
+
+/** Public, handle-free admission authority reusable before TextA8 resource preparation. */
+object GPUPreparedTextNativeBlendDomain {
+    const val REFUSAL_CODE = "invalid.preflight.text.blend"
+
+    fun refusalCodeOrNull(blendPlans: List<GPUBlendPlan?>): String? =
+        REFUSAL_CODE.takeIf {
+            blendPlans.any { blendPlan -> blendPlan !is GPUBlendPlan.FixedFunctionBlend }
+        }
 }
 
 /**
@@ -37,7 +47,7 @@ internal object GPUPreparedTextCompositePreflightRefusalCodes {
 internal fun preparedTextNativeBlendDomainRefusal(
     blendPlans: List<GPUBlendPlan?>,
 ): GPUPreparedTextCompositePreflightRefusal? =
-    if (blendPlans.any { blendPlan -> blendPlan !is GPUBlendPlan.FixedFunctionBlend }) {
+    if (GPUPreparedTextNativeBlendDomain.refusalCodeOrNull(blendPlans) != null) {
         GPUPreparedTextCompositePreflightRefusal(
             code = GPUPreparedTextCompositePreflightRefusalCodes.NATIVE_BLEND,
             message =
@@ -120,6 +130,20 @@ internal object GPUPreparedTextCompositePreflight {
         val fixedFunctionBlendState = (
             packet.blendPlan as? GPUBlendPlan.FixedFunctionBlend
             )?.state
+        val sourceCoverageEncoding = packet.blendPlan?.sourceCoverageEncoding
+            ?: org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding.None
+        val expectedClipPlan = packet.clipExecutionPlan?.let { executionPlan ->
+            preparedTextClipPlan(executionPlan, semantic.targetBounds)
+        } ?: return drawUniformRefusal(
+            "Prepared TextA8 clip plan could not be reconstructed from sealed packet authority.",
+        )
+        if (compositeSeal.clipPlan != expectedClipPlan ||
+            binding.compositeProgram.clipVariant != expectedClipPlan.variant
+        ) {
+            return drawUniformRefusal(
+                "Prepared TextA8 clip plan, structural variant, or execution identity changed.",
+            )
+        }
         validateInstanceVertex(
             binding,
             PreparedTextA8Shader.VertexLayout,
@@ -146,6 +170,8 @@ internal object GPUPreparedTextCompositePreflight {
             targetFormatClass = targetDescriptor.format.value,
             blendPlanIdentity = semantic.blendPlanIdentity,
             fixedFunctionBlendState = fixedFunctionBlendState,
+            sourceCoverageEncoding = sourceCoverageEncoding,
+            clipVariant = expectedClipPlan.variant,
             seal = compositeSeal,
         )?.let { return it }
         validateCompositeAdmission(
@@ -193,12 +219,19 @@ internal object GPUPreparedTextCompositePreflight {
         expectedFragment: GPUPreparedMaterialFragment,
         render: GPUFrameStep.RenderPassStep,
     ): GPUPreparedTextCompositePreflightRefusal? {
+        val coverageMaskVariant =
+            actual.clipVariant ==
+                org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant.CoverageMask
         if (actual.bindingPlan.drawUniformGroup != 0 ||
             actual.bindingPlan.drawUniformBinding != 0 ||
             actual.bindingPlan.atlasTextureGroup != 2 ||
             actual.bindingPlan.atlasTextureBinding != 0 ||
             actual.bindingPlan.atlasSamplerGroup != 2 ||
             actual.bindingPlan.atlasSamplerBinding != 1 ||
+            actual.bindingPlan.coverageMaskTextureGroup !=
+            3.takeIf { coverageMaskVariant } ||
+            actual.bindingPlan.coverageMaskTextureBinding !=
+            0.takeIf { coverageMaskVariant } ||
             !actual.bindingPlan.materialFragment.matches(expectedFragment)
         ) {
             return bindingLayoutRefusal(
@@ -216,12 +249,20 @@ internal object GPUPreparedTextCompositePreflight {
         val drawUniformIndexes = render.resourceUses.mapIndexedNotNull { index, use ->
             index.takeIf { use.resource == drawUniformRef }
         }
+        val coverageMaskUses = render.resourceUses.filter { use ->
+            use.role == GPUFrameResourceRole.ClipMask &&
+                use.usage ==
+                org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUsage.TextureBinding &&
+                !use.write
+        }
         val drawUniformIndex = drawUniformIndexes.singleOrNull()
         if (drawUniformRef == null ||
             drawUniformIndex == null ||
+            coverageMaskUses.size != (if (coverageMaskVariant) 1 else 0) ||
             render.resourceUses.take(drawUniformIndex).any { use ->
                 use.role != GPUFrameResourceRole.GlyphAtlas &&
-                    use.role != GPUFrameResourceRole.VertexData
+                    use.role != GPUFrameResourceRole.VertexData &&
+                    use.role != GPUFrameResourceRole.ClipMask
             } ||
             render.resourceUses.drop(drawUniformIndex + 1).any { use ->
                 use.role == GPUFrameResourceRole.GlyphAtlas ||
@@ -252,6 +293,9 @@ internal object GPUPreparedTextCompositePreflight {
         targetFormatClass: String,
         blendPlanIdentity: String,
         fixedFunctionBlendState: GPUFixedFunctionBlendState?,
+        sourceCoverageEncoding:
+            org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding,
+        clipVariant: org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant,
         seal: GPUPreparedTextCompositePreflightSeal,
     ): GPUPreparedTextCompositePreflightRefusal? {
         val expectedPipelineKey = GPUPreparedTextShaderComposer.pipelineKey(
@@ -259,11 +303,16 @@ internal object GPUPreparedTextCompositePreflight {
             abiHash = actual.abiHash,
             targetFormatClass = targetFormatClass,
             blendPlanIdentity = blendPlanIdentity,
+            sourceCoverageEncoding = sourceCoverageEncoding,
+            clipVariant = clipVariant,
         )
         if (actual.pipelineKey != expectedPipelineKey ||
             actual.targetFormatClass != targetFormatClass ||
             actual.blendPlanIdentity != blendPlanIdentity ||
             actual.fixedFunctionBlendState != fixedFunctionBlendState ||
+            actual.sourceCoverageEncoding != sourceCoverageEncoding ||
+            actual.clipVariant != clipVariant ||
+            seal.compositeSourceCoverageEncoding != actual.sourceCoverageEncoding ||
             seal.compositePipelineKey != actual.pipelineKey
         ) {
             return abiRefusal(
@@ -459,6 +508,19 @@ internal object GPUPreparedTextCompositePreflight {
                 affine[5],
                 0f.toRawBits(),
             )
+        } + when (val clipPlan = seal.clipPlan) {
+            is GPUPreparedTextClipPlan.Direct -> List(8) { 0f.toRawBits() }
+            is GPUPreparedTextClipPlan.CoverageMask -> List(8) { 0f.toRawBits() }
+            is GPUPreparedTextClipPlan.Analytic -> listOf(
+                clipPlan.left.toRawBits(),
+                clipPlan.top.toRawBits(),
+                clipPlan.right.toRawBits(),
+                clipPlan.bottom.toRawBits(),
+                clipPlan.radiusX.toRawBits(),
+                clipPlan.radiusY.toRawBits(),
+                0f.toRawBits(),
+                0f.toRawBits(),
+            )
         }
         val actualBits = ByteBuffer.wrap(bytes)
             .order(ByteOrder.LITTLE_ENDIAN)
@@ -468,7 +530,7 @@ internal object GPUPreparedTextCompositePreflight {
             }
         if (actualBits != expectedBits) {
             return drawUniformRefusal(
-                "Prepared TextA8 target, paintAlpha, or device-to-local bits changed.",
+                "Prepared TextA8 target, paintAlpha, affine, or analytic clip bits changed.",
             )
         }
         return null

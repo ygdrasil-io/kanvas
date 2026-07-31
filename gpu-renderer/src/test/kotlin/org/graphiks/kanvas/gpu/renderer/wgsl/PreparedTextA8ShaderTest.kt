@@ -12,6 +12,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgramResu
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgram
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextCompositeProgramResult
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedTextShaderComposer
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.wgsl.parser.Lowerer
 import org.graphiks.wgsl.parser.parseWgslResult
 
@@ -176,6 +177,36 @@ class PreparedTextA8ShaderTest {
     }
 
     @Test
+    fun `all four partial alpha encodings parse lower and retain reflected uniform80 ABI`() {
+        listOf(
+            GPUSourceCoverageEncoding.Coverage,
+            GPUSourceCoverageEncoding.ModulateRGBA,
+            GPUSourceCoverageEncoding.CoverageTimesOneMinusSourceAlpha,
+            GPUSourceCoverageEncoding.CoverageTimesOneMinusSourceRGBA,
+        ).forEach { encoding ->
+            val program = composedProgram(encoding)
+            val parsed = parseWgslResult(program.wgslSource)
+            assertTrue(parsed.isSuccess, "$encoding: ${parsed.errors.joinToString { it.message }}")
+            val report = Lowerer().lower(parsed.translationUnit)
+                .reflectWgslModule(sourceId = "prepared-text-partial-alpha-${encoding.name}")
+
+            assertEquals(encoding, program.sourceCoverageEncoding)
+            assertEquals(
+                listOf("vs_main" to "vertex", "fs_main" to "fragment"),
+                report.entryPoints.map { it.name to it.stage },
+                encoding.name,
+            )
+            val drawUniform = report.layouts.single {
+                it.structName == "PreparedTextDrawUniforms"
+            }
+            assertEquals(80, drawUniform.size, encoding.name)
+            assertEquals(5, drawUniform.members.size, encoding.name)
+            assertTrue(report.validation.success, encoding.name)
+            assertTrue(report.unsupportedFeatures.isEmpty(), encoding.name)
+        }
+    }
+
+    @Test
     fun `vertex stage converts device pixels to NDC and never double applies firstInstance`() {
         val source = composedProgram().wgslSource
         val vertex = source.substringBefore("@fragment")
@@ -189,7 +220,7 @@ class PreparedTextA8ShaderTest {
     }
 
     @Test
-    fun `fragment samples A8 once and applies coverage and paint alpha once to premul material`() {
+    fun `fragment constructs coverage alpha and prepared source independently exactly once`() {
         val source = composedProgram().wgslSource
         val fragment = source.substringAfter("@fragment")
 
@@ -199,7 +230,11 @@ class PreparedTextA8ShaderTest {
                 .findAll(fragment)
                 .count(),
         )
-        assertEquals(1, Regex("""\bcoverage\b""").findAll(fragment).count() - 1)
+        assertEquals(1, Regex("""\bglyphCoverage\b""").findAll(fragment).count() - 1)
+        assertEquals(1, Regex("""\bclipCoverage\b""").findAll(fragment).count() - 1)
+        assertEquals(1, Regex("""\bcoverageFactor\b""").findAll(fragment).count() - 1)
+        assertEquals(1, Regex("""\bpaintAlpha\b""").findAll(fragment).count() - 1)
+        assertEquals(1, Regex("""\bpreparedSource\b""").findAll(fragment).count() - 1)
         assertEquals(1, Regex("""\bmaterialPremul\b""").findAll(fragment).count() - 1)
         assertEquals(
             1,
@@ -212,17 +247,87 @@ class PreparedTextA8ShaderTest {
             1,
             Regex("""drawUniforms\.targetSizeAndPaintAlpha\.z""").findAll(fragment).count(),
         )
-        assertTrue("return materialPremul * modulation;" in fragment)
+        assertTrue("let coverageFactor = glyphCoverage * clipCoverage;" in fragment)
+        assertTrue(
+            "let paintAlpha = clamp(drawUniforms.targetSizeAndPaintAlpha.z, 0.0, 1.0);" in fragment,
+        )
+        assertTrue("let preparedSource = materialPremul * paintAlpha;" in fragment)
+        assertFalse(
+            fragment.lineSequence().single { "let coverageFactor =" in it }.contains("paintAlpha"),
+        )
+        assertTrue("return coverageFactor * preparedSource;" in fragment)
     }
 
-    private fun composedProgram(): GPUPreparedTextCompositeProgram {
+    @Test
+    fun `fixed blend source coverage encodings consume independent F and S formulas`() {
+        val fragments = mapOf(
+            GPUSourceCoverageEncoding.Coverage to
+                "return vec4<f32>(coverageFactor);",
+            GPUSourceCoverageEncoding.ModulateRGBA to
+                "return coverageFactor * preparedSource;",
+            GPUSourceCoverageEncoding.CoverageTimesOneMinusSourceAlpha to
+                "return vec4<f32>(coverageFactor * (1.0 - preparedSource.a));",
+            GPUSourceCoverageEncoding.CoverageTimesOneMinusSourceRGBA to
+                "return coverageFactor * (vec4<f32>(1.0) - preparedSource);",
+        )
+
+        fragments.forEach { (encoding, exactReturn) ->
+            val fragment = PreparedTextA8Shader.fragmentWgsl(encoding)
+            assertTrue("let coverageFactor = glyphCoverage * clipCoverage;" in fragment)
+            assertTrue(
+                "let paintAlpha = clamp(drawUniforms.targetSizeAndPaintAlpha.z, 0.0, 1.0);" in fragment,
+            )
+            assertTrue("let preparedSource = materialPremul * paintAlpha;" in fragment)
+            assertTrue(exactReturn in fragment, encoding.name)
+            assertEquals(
+                1,
+                fragments.values.count { candidate -> candidate in fragment },
+                encoding.name,
+            )
+        }
+        assertEquals(4, fragments.keys.map(PreparedTextA8Shader::fragmentWgsl).distinct().size)
+    }
+
+    @Test
+    fun `analytic clip multiplies glyph coverage exactly once before source coverage encoding`() {
+        val fragment = PreparedTextA8Shader.fragmentWgsl(
+            GPUSourceCoverageEncoding.ModulateRGBA,
+            GPUPreparedTextClipVariant.AnalyticRectAA,
+        )
+
+        assertTrue("let clipCoverage = prepared_text_rect_coverage(input.position.xy);" in fragment)
+        assertTrue("let coverageFactor = glyphCoverage * clipCoverage;" in fragment)
+        assertTrue(
+            fragment.indexOf("let coverageFactor = glyphCoverage * clipCoverage;") <
+                fragment.indexOf("return coverageFactor * preparedSource;"),
+        )
+        assertEquals(1, Regex("""\bglyphCoverage\b""").findAll(fragment).count() - 1)
+        assertEquals(1, Regex("""\bclipCoverage\b""").findAll(fragment).count() - 1)
+        assertFalse("clipVariant" in fragment)
+    }
+
+    private fun composedProgram(
+        sourceCoverageEncoding: GPUSourceCoverageEncoding =
+            GPUSourceCoverageEncoding.ModulateRGBA,
+    ): GPUPreparedTextCompositeProgram {
         val material = assertIs<GPUPreparedMaterialProgramResult.Ready>(
             GPUPreparedMaterialProgramCompiler.compile(
-                descriptor = GPUMaterialDescriptor.SolidColor(
-                    r = 0.25f,
-                    g = 0.5f,
-                    b = 0.75f,
-                    a = 0.8f,
+                descriptor = GPUMaterialDescriptor.LinearGradient(
+                    startX = 0f,
+                    startY = 0f,
+                    endX = 32f,
+                    endY = 8f,
+                    startR = 1f,
+                    startG = 0f,
+                    startB = 0f,
+                    startA = 0.25f,
+                    endR = 0f,
+                    endG = 0f,
+                    endB = 1f,
+                    endA = 0.75f,
+                    allStopPositions = floatArrayOf(0f, 1f),
+                    allStopColors =
+                        floatArrayOf(1f, 0f, 0f, 0.25f, 0f, 0f, 1f, 0.75f),
                 ),
                 paintAlpha = 0.6f,
                 context = GPUMaterialLoweringContext(
@@ -237,6 +342,7 @@ class PreparedTextA8ShaderTest {
                 material = material,
                 targetFormatClass = "rgba8unorm",
                 blendPlanIdentity = "fixed-function:src-over:premul",
+                sourceCoverageEncoding = sourceCoverageEncoding,
             ),
         ).program
     }

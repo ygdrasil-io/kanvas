@@ -7,19 +7,29 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.BOUNDED_CLIP_NATIVE
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUFirstSliceCapabilityName.SCISSOR_NATIVE
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
+import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceUse
+import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
@@ -28,6 +38,7 @@ import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.paint.TileMode
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
@@ -38,6 +49,363 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedSurfaceFrameBuilderTextTest {
+    @Test
+    fun `empty text is accepted and elided before typeface clip and blend work`() {
+        val operation = textOperation().copy(
+            blob = TextBlob(emptyList()),
+            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.DARKEN),
+            clip = orderedCoverageMaskClip(),
+        )
+
+        val prepared = assertIs<GPUPreparedTextFramePreparation.Ready>(
+            GPUPreparedTextFramePreparer.prepare(
+                operations = listOf(operation),
+                target = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities(),
+                generation = GPUTextArtifactGeneration(1),
+            ),
+        )
+
+        assertEquals(setOf(0), prepared.inventory.acceptedTextOperationIndices)
+        assertEquals(setOf(0), prepared.inventory.elidedTextOperationIndices)
+        assertTrue(prepared.mapping.visualCommands.isEmpty())
+        assertTrue(prepared.inventory.pages.isEmpty())
+        assertTrue(prepared.inventory.subRunsByOperationIndex.isEmpty())
+        assertTrue(prepared.inventory.strokePathsByOperationIndex.isEmpty())
+        assertEquals(0, prepared.inventory.metrics.glyphCount)
+        assertEquals(0, prepared.inventory.metrics.instanceCount)
+    }
+
+    @Test
+    fun `rect plus empty text builds only the core packet and no text resource`() {
+        val rect = DisplayOp.DrawRect(
+            Rect.fromLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(Color.WHITE),
+            Matrix33.identity(),
+            ClipStack.WideOpen,
+        )
+        val emptyText = textOperation().copy(
+            blob = TextBlob(emptyList()),
+            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.DARKEN),
+            clip = orderedCoverageMaskClip(),
+        )
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                preparedFrameRequest(
+                    operations = listOf(rect, emptyText),
+                    identity = "empty-text",
+                ),
+            ),
+        )
+        val packets = ready.taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+
+        assertEquals(1, packets.size)
+        assertIs<GPUDrawSemanticPayload.CorePrimitive>(packets.single().semanticPayload)
+        assertTrue(ready.taskList.tasks.none { it is GPUTask.DestinationSnapshots })
+    }
+
+    @Test
+    fun `opaque DST_IN text is elided before atlas binding and native allocation`() {
+        val rect = DisplayOp.DrawRect(
+            Rect.fromLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            ClipStack.WideOpen,
+        )
+        val noOpText = textOperation().copy(
+            paint = Paint.fill(Color.WHITE).copy(blendMode = BlendMode.DST_IN),
+        )
+        val prepared = assertIs<GPUPreparedTextFramePreparation.Ready>(
+            GPUPreparedTextFramePreparer.prepare(
+                operations = listOf(rect, noOpText),
+                target = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+                config = RenderConfig.DEFAULT,
+                capabilities = capabilities(),
+                generation = GPUTextArtifactGeneration(1),
+            ),
+        )
+
+        assertEquals(setOf(1), prepared.inventory.elidedTextOperationIndices)
+        assertTrue(prepared.inventory.pages.isEmpty())
+        assertTrue(prepared.inventory.subRunsByOperationIndex.isEmpty())
+        assertEquals(0, prepared.inventory.metrics.instanceCount)
+
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                preparedFrameRequest(
+                    operations = listOf(rect, noOpText),
+                    identity = "opaque-dst-in-text-noop",
+                ),
+            ),
+        )
+        val renders = ready.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val packets = renders.flatMap(GPUTask.Render::drawPackets)
+        val preparations = ready.taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
+            .flatMap(GPUTask.PrepareResources::requests)
+
+        assertEquals(1, packets.size)
+        assertIs<GPUDrawSemanticPayload.CorePrimitive>(packets.single().semanticPayload)
+        assertTrue(renders.all { render -> render.preparedTextBindingsByPacketId.isEmpty() })
+        assertTrue(preparations.none { request ->
+            request.role == GPUFrameResourceRole.GlyphAtlas ||
+                request.diagnosticLabel.startsWith("prepared-text.")
+        })
+        assertTrue(ready.taskList.tasks.none { it is GPUTask.DestinationSnapshots })
+    }
+
+    @Test
+    fun `target empty destination read text remains terminal before mapping`() {
+        val rect = DisplayOp.DrawRect(
+            Rect.fromLTRB(0f, 0f, 64f, 64f),
+            Paint.fill(Color.WHITE),
+            Matrix33.identity(),
+            ClipStack.WideOpen,
+        )
+        val culledText = textOperation().copy(
+            paint = Paint.fill(Color.BLACK).copy(blendMode = BlendMode.DARKEN),
+            clip = ClipStack.DeviceRect(
+                rect = Rect.fromLTRB(80f, 80f, 96f, 96f),
+                antiAlias = false,
+            ),
+        )
+
+        val build = GPUPreparedSurfaceFrameBuilder.build(
+                preparedFrameRequest(
+                    operations = listOf(rect, culledText),
+                    identity = "culled-text",
+                ),
+            )
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(build, build.toString())
+        assertEquals("invalid.preflight.text.blend", refused.diagnostic.code.value)
+    }
+
+    @Test
+    fun `prepared text AA device rect retains analytic coverage strategy`() {
+        val operation = textOperation().copy(
+            clip = ClipStack.DeviceRect(
+                rect = Rect.fromLTRB(16.5f, 0f, 40f, 64f),
+                antiAlias = true,
+            ),
+        )
+        val candidate = assertIs<GPUPreparedSurfaceEligibility.Candidate>(
+            GPUPreparedSurfaceFrameGate.classify(
+                operations = listOf(operation),
+                config = RenderConfig.DEFAULT,
+            ),
+        )
+        val prepared = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                GPUPreparedSurfaceFrameBuildRequest(
+                    candidate = candidate,
+                    targetFacts = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+                    targetBounds = GPUPixelBounds(0, 0, 64, 64),
+                    capabilities = capabilities(
+                        facts = listOf(
+                            GPUCapabilityFact(
+                                name = BOUNDED_CLIP_NATIVE,
+                                source = "test",
+                                value = "supported",
+                                affectsValidity = true,
+                                evidenceLabel = "test:$BOUNDED_CLIP_NATIVE",
+                            ),
+                        ),
+                    ),
+                    deviceGeneration = GPUDeviceGenerationID(1),
+                    target = GPUFrameTargetRef("prepared-text-coverage-mask-target"),
+                    recordingId = GPURecordingID("prepared-text-coverage-mask-recording"),
+                    frameId = GPUFrameID(18),
+                    readbackRequestId =
+                        GPUReadbackRequestID("prepared-text-coverage-mask-readback"),
+                ),
+            ),
+        )
+        val renders = prepared.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val textRender = renders.single { render ->
+            render.drawPackets.any { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+            }
+        }
+        val textPacket = textRender.drawPackets.single()
+        val binding = textRender.preparedTextBindingsByPacketId.getValue(textPacket.packetId)
+
+        assertIs<GPUClipExecutionPlan.AnalyticCoverage>(textPacket.clipExecutionPlan)
+        assertEquals(80L, binding.drawUniformBufferPlan.logicalSliceSizeBytes)
+        assertEquals(
+            GPUPreparedTextClipVariant.AnalyticRectAA,
+            binding.compositeProgram.clipVariant,
+        )
+        assertEquals(
+            GPUPreparedTextClipVariant.AnalyticRectAA,
+            requireNotNull(binding.preflightSeal.textA8Composite).clipPlan.variant,
+        )
+    }
+
+    @Test
+    fun `prepared text ordered complex clip emits one coverage mask producer and sampled consumer`() {
+        val operation = textOperation().copy(clip = orderedCoverageMaskClip())
+        val build = GPUPreparedSurfaceFrameBuilder.build(
+            preparedFrameRequest(
+                operations = listOf(operation),
+                identity = "prepared-text-coverage-mask",
+            ),
+        )
+        val prepared = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            build,
+            "CoverageMask TextA8 build=$build",
+        )
+        val renders = prepared.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val textRender = renders.single { render ->
+            render.drawPackets.any { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+            }
+        }
+        val textPacket = textRender.drawPackets.single()
+
+        assertIs<GPUClipExecutionPlan.CoverageMask>(textPacket.clipExecutionPlan)
+        assertTrue(
+            renders.any { render ->
+                render.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.ClipProducer }
+            },
+            "CoverageMask text must retain a producer render before its text consumer",
+        )
+        assertTrue(
+            textRender.resourceUses.any { use ->
+                use.role == GPUFrameResourceRole.ClipMask && !use.write
+            },
+            "CoverageMask text must sample the produced mask instead of widening to target scissor",
+        )
+    }
+
+    @Test
+    fun `core text core share one ordered coverage mask producer and resource`() {
+        val clip = orderedCoverageMaskClip()
+        val operations = listOf(
+            DisplayOp.DrawRect(
+                rect = Rect.fromLTRB(0f, 0f, 8f, 8f),
+                paint = Paint.fill(Color.RED).copy(antiAlias = false),
+                transform = Matrix33.identity(),
+                clip = clip,
+            ),
+            textOperation().copy(clip = clip),
+            DisplayOp.DrawRect(
+                rect = Rect.fromLTRB(32f, 32f, 40f, 40f),
+                paint = Paint.fill(Color.BLUE).copy(antiAlias = false),
+                transform = Matrix33.identity(),
+                clip = clip,
+            ),
+        )
+        val build = GPUPreparedSurfaceFrameBuilder.build(
+            preparedFrameRequest(
+                operations = operations,
+                identity = "prepared-core-text-core-coverage-mask",
+            ),
+        )
+        val prepared = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            build,
+            "Core/Text/Core shared CoverageMask build=$build",
+        )
+        val renders = prepared.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val producers = renders.filter { render ->
+            render.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.ClipProducer }
+        }
+        val consumers = renders.filter { render ->
+            render.drawPackets.any { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive ||
+                    packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+            }
+        }
+        val maskWrites = producers.flatMap(GPUTask.Render::resourceUses)
+            .filter { use -> use.role == GPUFrameResourceRole.ClipMask && use.write }
+        val maskReads = consumers.flatMap(GPUTask.Render::resourceUses)
+            .filter { use -> use.role == GPUFrameResourceRole.ClipMask && !use.write }
+
+        assertEquals(1, producers.size)
+        assertEquals(3, consumers.size)
+        assertEquals(listOf(0, 1, 2), consumers.map { render ->
+            render.drawPackets.single { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.CorePrimitive ||
+                    packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+            }.originalPaintOrder
+        })
+        assertEquals(1, maskWrites.map { use -> use.resource }.distinct().size)
+        assertEquals(
+            maskWrites.single().resource,
+            maskReads.map { use -> use.resource }.distinct().single(),
+        )
+    }
+
+    @Test
+    fun `two distinct text coverage masks retain two resources and original consumer order`() {
+        val firstClip = orderedCoverageMaskClip()
+        val secondClip = ClipStack.Complex(
+            listOf(
+                ClipStackOp.RectOp(
+                    rect = Rect.fromLTRB(4f, 4f, 52f, 52f),
+                    op = ClipOp.INTERSECT,
+                    antiAlias = false,
+                ),
+                ClipStackOp.RectOp(
+                    rect = Rect.fromLTRB(20f, 8f, 24f, 56f),
+                    op = ClipOp.DIFFERENCE,
+                    antiAlias = false,
+                ),
+            ),
+        )
+        val prepared = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            GPUPreparedSurfaceFrameBuilder.build(
+                preparedFrameRequest(
+                    operations = listOf(
+                        textOperation().copy(clip = secondClip),
+                        textOperation().copy(clip = firstClip),
+                    ),
+                    identity = "prepared-text-two-coverage-masks",
+                ),
+            ),
+        )
+        val renders = prepared.taskList.tasks.filterIsInstance<GPUTask.Render>()
+        val producers = renders.filter { render ->
+            render.drawPackets.any { packet -> packet.role == GPUDrawPacketRole.ClipProducer }
+        }
+        val consumers = renders.filter { render ->
+            render.drawPackets.any { packet ->
+                packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+            }
+        }
+        val writes = producers.flatMap(GPUTask.Render::resourceUses)
+            .filter { use -> use.role == GPUFrameResourceRole.ClipMask && use.write }
+        val reads = consumers.flatMap(GPUTask.Render::resourceUses)
+            .filter { use -> use.role == GPUFrameResourceRole.ClipMask && !use.write }
+
+        assertEquals(2, producers.size)
+        assertEquals(2, writes.map(GPUFrameResourceUse::resource).distinct().size)
+        assertEquals(2, reads.map(GPUFrameResourceUse::resource).distinct().size)
+        val bindings = consumers.map { render ->
+            val packet = render.drawPackets.single { candidate ->
+                candidate.semanticPayload is GPUDrawSemanticPayload.TextA8
+            }
+            render.preparedTextBindingsByPacketId.getValue(packet.packetId)
+        }
+        assertEquals(2, bindings.mapNotNull { it.coverageMaskResource }.distinct().size)
+        assertEquals(
+            1,
+            bindings.map { it.compositeProgram.pipelineKey }.distinct().size,
+            "concrete CoverageMask resource identity must not specialize the TextA8 pipeline",
+        )
+        assertEquals(
+            listOf(0, 1),
+            consumers.map { render ->
+                render.drawPackets.single { packet ->
+                    packet.semanticPayload is GPUDrawSemanticPayload.TextA8
+                }.originalPaintOrder
+            },
+            "consumer order must remain display-list order, never global mask-identity order",
+        )
+    }
+
     @Test
     fun `prepared text transports the exact compiled gradient program without descriptor reconstruction`() {
         val operation = textOperation().copy(
@@ -445,6 +813,61 @@ class GPUPreparedSurfaceFrameBuilderTextTest {
         transform = Matrix33.identity(),
         clip = ClipStack.WideOpen,
     )
+
+    private fun orderedCoverageMaskClip(): ClipStack.Complex = ClipStack.Complex(
+        listOf(
+            ClipStackOp.RectOp(
+                rect = Rect.fromLTRB(8f, 8f, 56f, 56f),
+                op = ClipOp.INTERSECT,
+                antiAlias = false,
+            ),
+            ClipStackOp.RectOp(
+                rect = Rect.fromLTRB(14f, 16f, 18f, 48f),
+                op = ClipOp.DIFFERENCE,
+                antiAlias = false,
+            ),
+        ),
+    )
+
+    private fun preparedFrameRequest(
+        operations: List<DisplayOp>,
+        identity: String,
+    ): GPUPreparedSurfaceFrameBuildRequest {
+        val candidate = assertIs<GPUPreparedSurfaceEligibility.Candidate>(
+            GPUPreparedSurfaceFrameGate.classify(
+                operations = operations,
+                config = RenderConfig.DEFAULT,
+            ),
+        )
+        return GPUPreparedSurfaceFrameBuildRequest(
+            candidate = candidate,
+            targetFacts = GPUTargetFacts(64, 64, "rgba8unorm-srgb"),
+            targetBounds = GPUPixelBounds(0, 0, 64, 64),
+            capabilities = capabilities(
+                facts = listOf(
+                    GPUCapabilityFact(
+                        name = BOUNDED_CLIP_NATIVE,
+                        source = "test",
+                        value = "supported",
+                        affectsValidity = true,
+                        evidenceLabel = "test:$BOUNDED_CLIP_NATIVE",
+                    ),
+                    GPUCapabilityFact(
+                        name = "first_slice.fill_rect.native",
+                        source = "test",
+                        value = "supported",
+                        affectsValidity = true,
+                        evidenceLabel = "test:first_slice.fill_rect.native",
+                    ),
+                ),
+            ),
+            deviceGeneration = GPUDeviceGenerationID(1),
+            target = GPUFrameTargetRef("$identity-target"),
+            recordingId = GPURecordingID("$identity-recording"),
+            frameId = GPUFrameID(18),
+            readbackRequestId = GPUReadbackRequestID("$identity-readback"),
+        )
+    }
 
     private fun colorTextOperation(fontSize: Float): DisplayOp.DrawText {
         val typeface = FontTypeface(

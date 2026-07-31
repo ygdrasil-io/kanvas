@@ -3,6 +3,7 @@ package org.graphiks.kanvas.gpu.renderer.materials.contracts
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.collections.CanonicalIdentityDigestEncoder
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport
 
 /**
@@ -97,6 +98,7 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
     private val sampledResourceCount: Int,
     sampledResourceFacts: List<String>,
     private val paintAlpha: Float,
+    private val preCoverageSourceAlpha: GPUSourceAlphaClassification,
     private val capabilityClass: String,
     private val targetFormatClass: String,
     private val dictionaryVersion: String,
@@ -121,6 +123,7 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
                 .text("dictionaryVersion", dictionaryVersion)
                 .text("uniformBytesHash", uniformBytesHash)
                 .floatBits("paintAlpha", paintAlpha)
+                .text("preCoverageSourceAlpha", preCoverageSourceAlpha.name)
                 .texts("keyFacts", keyFacts)
                 .texts("sampledResourceFacts", sampledResourceFacts)
                 .digestHex()
@@ -133,6 +136,7 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
         uniformBytes: List<Int>,
         sampledResources: List<GPUPreparedMaterialSampledResource>,
         paintAlpha: Float,
+        preCoverageSourceAlpha: GPUSourceAlphaClassification,
     ) {
         require(materialKey == materialKey()) {
             "Prepared material key must match its admitted program facts"
@@ -161,6 +165,9 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
         require(paintAlpha.toRawBits() == this.paintAlpha.toRawBits()) {
             "Prepared material paint alpha must match its admitted program facts"
         }
+        require(preCoverageSourceAlpha == this.preCoverageSourceAlpha) {
+            "Prepared material pre-coverage source alpha must match its admitted program facts"
+        }
     }
 
     fun programAbiHash(
@@ -174,6 +181,7 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
             .text("uniformLayout", uniformLayoutHash)
             .int("uniformByteCount", uniformByteCount)
             .int("sampledResourceCount", sampledResourceCount)
+            .text("preCoverageSourceAlpha", preCoverageSourceAlpha.name)
             .text("fragmentHash", fragmentHash)
             .text("fragmentAbiHash", fragmentAbiHash)
             .texts("registeredAbiFacts", registeredAbiFacts)
@@ -191,6 +199,7 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
             uniformBytes: List<Int>,
             sampledResources: List<GPUPreparedMaterialSampledResource>,
             paintAlpha: Float,
+            preCoverageSourceAlpha: GPUSourceAlphaClassification,
             capabilityClass: String,
             targetFormatClass: String,
             dictionaryVersion: String,
@@ -220,6 +229,7 @@ internal class GPUPreparedMaterialProgramAdmission private constructor(
                 sampledResourceCount = sampledResources.size,
                 sampledResourceFacts = sampledResources.identityFacts(),
                 paintAlpha = paintAlpha,
+                preCoverageSourceAlpha = preCoverageSourceAlpha,
                 capabilityClass = capabilityClass,
                 targetFormatClass = targetFormatClass,
                 dictionaryVersion = dictionaryVersion,

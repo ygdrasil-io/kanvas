@@ -4,6 +4,8 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextNativeBlendDomain
 import org.graphiks.kanvas.surface.RenderConfig
 
 /** Transactional result of the shared lower-all, inventory-once, map-once text preparation. */
@@ -30,9 +32,14 @@ internal object GPUPreparedTextFramePreparer {
         limits: PreparedTextFrameInventoryLimits = defaultLimits(target, capabilities),
     ): GPUPreparedTextFramePreparation {
         val preparedDraws = ArrayList<GPUPreparedTextDraw>()
+        val elidedTextOperationIndices = linkedSetOf<Int>()
         val loweringStartedAt = System.nanoTime()
         operations.forEachIndexed { operationIndex, operation ->
             if (operation !is DisplayOp.DrawText) return@forEachIndexed
+            if (operation.blob.glyphRuns.all { run -> run.glyphs.isEmpty() }) {
+                elidedTextOperationIndices += operationIndex
+                return@forEachIndexed
+            }
             when (
                 val lowered = GPUPreparedTextLowerer.lower(
                     operation = operation,
@@ -41,7 +48,13 @@ internal object GPUPreparedTextFramePreparer {
                     capabilities = capabilities,
                 )
             ) {
-                is GPUPreparedTextLowering.Ready -> preparedDraws += lowered.draw
+                is GPUPreparedTextLowering.Ready -> {
+                    if (lowered.draw.blendPlan is GPUBlendPlan.NoOp) {
+                        elidedTextOperationIndices += operationIndex
+                    } else {
+                        preparedDraws += lowered.draw
+                    }
+                }
                 is GPUPreparedTextLowering.Refused ->
                     return GPUPreparedTextFramePreparation.Refused(
                         GPUPreparedOperationRefusal(
@@ -59,6 +72,7 @@ internal object GPUPreparedTextFramePreparer {
                 draws = preparedDraws,
                 generation = generation,
                 limits = limits,
+                elidedTextOperationIndices = elidedTextOperationIndices,
             )
         ) {
             is PreparedTextFrameInventoryResult.Ready -> built
@@ -73,6 +87,25 @@ internal object GPUPreparedTextFramePreparer {
                 )
         }
         val inventory = inventoryResult.inventory
+        val refusedTextA8SubRun = inventory.subRunsByOperationIndex.values
+            .asSequence()
+            .flatten()
+            .firstOrNull { subRun ->
+                subRun.representation == GPUPreparedTextRepresentation.A8_MASK &&
+                    GPUPreparedTextNativeBlendDomain.refusalCodeOrNull(
+                        listOf(subRun.draw.blendPlan),
+                    ) != null
+            }
+        if (refusedTextA8SubRun != null) {
+            return GPUPreparedTextFramePreparation.Refused(
+                GPUPreparedOperationRefusal(
+                    commandId = refusedTextA8SubRun.operationIndex,
+                    operationIndex = refusedTextA8SubRun.operationIndex,
+                    code = GPUPreparedTextNativeBlendDomain.REFUSAL_CODE,
+                    facts = emptyMap(),
+                ),
+            )
+        }
         val mapping = GPUOpMapper.mapOperations(
             operations = operations,
             target = target,

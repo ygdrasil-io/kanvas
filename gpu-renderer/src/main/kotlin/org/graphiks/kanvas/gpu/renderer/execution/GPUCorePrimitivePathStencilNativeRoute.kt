@@ -4,8 +4,10 @@ import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveRenderPipelineStructuralKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveAnalyticClipUniformSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCorePrimitiveUniformSlabSeal
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlan
 
 /** Pure path stencil classification retained between preflight and native materialization. */
 internal sealed interface GPUCorePrimitivePathStencilNativeRoute {
@@ -212,12 +214,67 @@ internal data class GPUCorePrimitivePathStencilPreparedPairSeal(
         get() = GPUCorePrimitivePathStencilRoutePairKey(producerPacketId, coverPacketId)
 }
 
+/** Closed authority for the one uniform ABI shared by an indexed path pass. */
+internal sealed interface GPUCorePrimitivePathStencilUniformAuthority {
+    val plan: GPUUniformSlabPlan
+    val commandIds: List<Int>
+
+    fun packedBytesForUpload(): ByteArray
+
+    class Uniform32(
+        val seal: GPUCorePrimitiveUniformSlabSeal,
+    ) : GPUCorePrimitivePathStencilUniformAuthority {
+        override val plan: GPUUniformSlabPlan
+            get() = seal.plan
+        override val commandIds: List<Int>
+            get() = seal.commandIds
+
+        override fun packedBytesForUpload(): ByteArray = seal.packedBytesForUpload()
+    }
+
+    class AnalyticClip64(
+        seals: List<GPUCorePrimitiveAnalyticClipUniformSeal>,
+    ) : GPUCorePrimitivePathStencilUniformAuthority {
+        val seals: List<GPUCorePrimitiveAnalyticClipUniformSeal> = immutableList(seals)
+        override val plan: GPUUniformSlabPlan
+        override val commandIds: List<Int>
+        private val packedBytes: ByteArray
+
+        init {
+            require(this.seals.isNotEmpty()) {
+                "An analytic path pass requires at least one existing analytic clip seal"
+            }
+            plan = this.seals.first().plan
+            commandIds = immutableList(this.seals.map { seal -> seal.commandId })
+            require(plan.totalBytes <= Int.MAX_VALUE.toLong() &&
+                this.seals.size == plan.slots.size &&
+                this.seals.map { seal -> seal.slotIndex } == plan.slots.indices.toList() &&
+                this.seals.all { seal -> seal.plan === plan }
+            ) {
+                "Analytic path seals must retain one exact host-addressable ordered uniform64 plan"
+            }
+            packedBytes = ByteArray(plan.totalBytes.toInt())
+            this.seals.forEach { seal ->
+                seal.copyPayloadInto(packedBytes, seal.alignedOffset.toInt())
+            }
+        }
+
+        override fun packedBytesForUpload(): ByteArray = packedBytes
+    }
+}
+
 /** Builder-owned path authority shared by all producer/cover pairs in one prepared pass. */
-internal class GPUCorePrimitivePathStencilPreparedPassSeal(
+internal class GPUCorePrimitivePathStencilPreparedPassSeal private constructor(
     orderedPairs: List<GPUCorePrimitivePathStencilPreparedPairSeal>,
-    val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+    val uniformAuthority: GPUCorePrimitivePathStencilUniformAuthority,
 ) {
     val orderedPairs: List<GPUCorePrimitivePathStencilPreparedPairSeal> = immutableList(orderedPairs)
+    val uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal?
+        get() = (uniformAuthority as? GPUCorePrimitivePathStencilUniformAuthority.Uniform32)?.seal
+    val uniformPlan: GPUUniformSlabPlan
+        get() = uniformAuthority.plan
+    val commandIds: List<Int>
+        get() = uniformAuthority.commandIds
 
     init {
         require(orderedPairs.isNotEmpty()) { "A prepared path pass must retain at least one pair" }
@@ -230,11 +287,29 @@ internal class GPUCorePrimitivePathStencilPreparedPassSeal(
             "Prepared path pair uniform slot indices must be unique and strictly increasing"
         }
         require(orderedPairs.all { pair ->
-            uniformSlabSeal.commandIds.getOrNull(pair.uniformSlotIndex) == pair.commandIdValue
+            uniformAuthority.commandIds.getOrNull(pair.uniformSlotIndex) == pair.commandIdValue
         }) {
             "Every prepared path pair must address its exact command in the shared uniform slab"
         }
     }
+
+    constructor(
+        orderedPairs: List<GPUCorePrimitivePathStencilPreparedPairSeal>,
+        uniformSlabSeal: GPUCorePrimitiveUniformSlabSeal,
+    ) : this(
+        orderedPairs,
+        GPUCorePrimitivePathStencilUniformAuthority.Uniform32(uniformSlabSeal),
+    )
+
+    constructor(
+        orderedPairs: List<GPUCorePrimitivePathStencilPreparedPairSeal>,
+        analyticClipUniformSeals: List<GPUCorePrimitiveAnalyticClipUniformSeal>,
+    ) : this(
+        orderedPairs,
+        GPUCorePrimitivePathStencilUniformAuthority.AnalyticClip64(analyticClipUniformSeals),
+    )
+
+    fun packedUniformBytesForUpload(): ByteArray = uniformAuthority.packedBytesForUpload()
 }
 
 /** Frame-local ordered pair seal; packet identities are scoped by their render step. */

@@ -18,13 +18,16 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameTaskListBuilder
+import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotOperation
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -43,7 +46,34 @@ internal data class GPUPreparedSurfaceFrameBuildRequest(
     val includeReadback: Boolean = true,
 )
 
+/** Authenticated historical route facts carried from the exact prepared Task 5/8 graph. */
+internal data class GPUPreparedSurfaceDestinationReadEvidence(
+    val commandId: Int,
+    val sourceLabel: String,
+    val snapshotLabel: String,
+    val modeLabel: String,
+    val clipStrategy: String,
+    val action: String,
+) {
+    init {
+        require(commandId >= 0)
+        require(sourceLabel.isNotBlank())
+        require(snapshotLabel.isNotBlank())
+        require(modeLabel.isNotBlank())
+        require(clipStrategy == "direct" || clipStrategy == "alpha-mask")
+        require(action == "copy-then-formula")
+    }
+}
+
 internal sealed interface GPUPreparedSurfaceFrameBuildResult {
+    data class NoOp(
+        val stateEventCount: Int,
+        val textMetrics: GPUPreparedTextFrameMetrics,
+        val acceptedTextOperationIndices: Set<Int>,
+        val elidedTextOperationIndices: Set<Int>,
+        val culledTextOperationIndices: Set<Int>,
+    ) : GPUPreparedSurfaceFrameBuildResult
+
     data class Ready(
         val taskList: GPUTaskList,
         val readbackRequestId: GPUReadbackRequestID,
@@ -52,6 +82,9 @@ internal sealed interface GPUPreparedSurfaceFrameBuildResult {
         val textMetrics: GPUPreparedTextFrameMetrics,
         val textCommandIds: Set<Int>,
         val pathStrokeCommandIds: Set<Int>,
+        val destinationReadTextCommandIds: Set<Int> = emptySet(),
+        val destinationReadEvidence: List<GPUPreparedSurfaceDestinationReadEvidence> =
+            emptyList(),
     ) : GPUPreparedSurfaceFrameBuildResult
 
     data class Refused(val diagnostic: GPUDiagnostic) : GPUPreparedSurfaceFrameBuildResult
@@ -123,6 +156,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     visualCommands = preparedMapping.visualCommands,
                     inventory = textPreparation.inventory,
                     targetBounds = request.targetBounds,
+                    culledTextOperationIndices = mapping.culledTextOperationIndices,
                 )
             ) {
                 is GPUPreparedTextSemanticGatherResult.Gathered -> gathered.semanticsByCommandId
@@ -136,6 +170,50 @@ internal object GPUPreparedSurfaceFrameBuilder {
                             ).toMap(),
                         ),
                     )
+            }
+            if (preparedMapping.visualCommands.isEmpty()) {
+                val textOperationIndices = request.candidate.operations.withIndex()
+                    .filter { indexed -> indexed.value is DisplayOp.DrawText }
+                    .mapTo(linkedSetOf()) { indexed -> indexed.index }
+                val accountedTextOperationIndices = (
+                    textPreparation.inventory.elidedTextOperationIndices +
+                        mapping.culledTextOperationIndices
+                    ).toSet()
+                val hasOnlyTextAndStateOperations = request.candidate.operations.all { operation ->
+                    operation is DisplayOp.DrawText ||
+                        operation is DisplayOp.Annotation ||
+                        operation is DisplayOp.SetTransform ||
+                        operation is DisplayOp.SetClip
+                }
+                if (
+                    !hasOnlyTextAndStateOperations ||
+                    textOperationIndices.isEmpty() ||
+                    textPreparation.inventory.acceptedTextOperationIndices != textOperationIndices ||
+                    accountedTextOperationIndices != textOperationIndices ||
+                    textPreparation.inventory.elidedTextOperationIndices
+                        .any(mapping.culledTextOperationIndices::contains)
+                ) {
+                    return GPUPreparedSurfaceFrameBuildResult.Refused(
+                        diagnostic(
+                            code = "invalid.surface.prepared.empty-frame-accounting",
+                            message =
+                                "A prepared no-op frame requires every text operation to have exact elided or culled authority.",
+                        ),
+                    )
+                }
+                return GPUPreparedSurfaceFrameBuildResult.NoOp(
+                    stateEventCount = mapping.stateEvents.count { event ->
+                        event.kind == GPUFramePathStateKind.Transform ||
+                            event.kind == GPUFramePathStateKind.Clip ||
+                            event.kind == GPUFramePathStateKind.Annotation
+                    },
+                    textMetrics = textPreparation.metrics,
+                    acceptedTextOperationIndices =
+                        textPreparation.inventory.acceptedTextOperationIndices,
+                    elidedTextOperationIndices =
+                        textPreparation.inventory.elidedTextOperationIndices,
+                    culledTextOperationIndices = mapping.culledTextOperationIndices,
+                )
             }
             val recorder = GPURecorder(
                 recordingId = request.recordingId,
@@ -174,6 +252,8 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     validateEncodedPremulSrgbOutput(request, preparedMapping, semantics)?.let {
                         return GPUPreparedSurfaceFrameBuildResult.Refused(it)
                     }
+                    val destinationReadEvidence = prepared.taskList
+                        .authenticatedDestinationReadEvidence(semantics)
                     GPUPreparedSurfaceFrameBuildResult.Ready(
                         taskList = prepared.taskList,
                         readbackRequestId = request.readbackRequestId,
@@ -186,6 +266,11 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         textMetrics = textPreparation.metrics,
                         textCommandIds = preparedImages.textCommandIds,
                         pathStrokeCommandIds = preparedImages.pathStrokeCommandIds,
+                        destinationReadTextCommandIds = destinationReadEvidence
+                            .mapTo(linkedSetOf()) { evidence -> evidence.commandId },
+                        destinationReadEvidence = java.util.Collections.unmodifiableList(
+                            ArrayList(destinationReadEvidence),
+                        ),
                     )
                 }
                 is GPUPreparedSurfaceFrameResult.Refused ->
@@ -201,6 +286,40 @@ internal object GPUPreparedSurfaceFrameBuilder {
             )
         }
     }
+}
+
+private fun GPUTaskList.authenticatedDestinationReadEvidence(
+    semantics: Map<Int, GPUDrawSemanticPayload>,
+): List<GPUPreparedSurfaceDestinationReadEvidence> {
+    val rendersByTaskId = tasks.filterIsInstance<GPUTask.Render>()
+        .associateBy(GPUTask.Render::taskId)
+    return tasks.filterIsInstance<GPUTask.DestinationSnapshots>()
+        .flatMap { task -> task.payload.operations }
+        .map { operation ->
+            val copy = operation as? GPUDestinationSnapshotOperation.TextureCopy
+                ?: error("Prepared ColorGlyph destination evidence requires a texture copy")
+            val consumer = copy.consumers.single()
+            val commandId = consumer.commandId.value
+            require(semantics[commandId] is GPUDrawSemanticPayload.ColorGlyph)
+            val render = rendersByTaskId.getValue(consumer.renderTaskId)
+            val packet = render.drawPackets.single { candidate ->
+                candidate.packetId == consumer.packetId &&
+                    candidate.commandIdValue == commandId
+            }
+            val blend = packet.blendPlan as? GPUBlendPlan.ShaderBlendWithDstRead
+                ?: error("Prepared ColorGlyph destination evidence requires shader blending")
+            GPUPreparedSurfaceDestinationReadEvidence(
+                commandId = commandId,
+                sourceLabel = packet.vertexSourceLabel,
+                snapshotLabel = copy.snapshot.value,
+                modeLabel = blend.mode.gpuLabel,
+                clipStrategy = when (packet.clipExecutionPlan) {
+                    is GPUClipExecutionPlan.CoverageMask -> "alpha-mask"
+                    else -> "direct"
+                },
+                action = "copy-then-formula",
+            )
+        }
 }
 
 /**
@@ -255,6 +374,46 @@ private fun collectPreparedImageVisuals(
     operations: List<DisplayOp>,
     inventory: PreparedTextFrameInventory,
 ): PreparedImageVisuals {
+    val textOperationIndices = operations.withIndex()
+        .filter { indexed -> indexed.value is DisplayOp.DrawText }
+        .mapTo(linkedSetOf()) { indexed -> indexed.index }
+    if (
+        inventory.elidedTextOperationIndices.any { operationIndex ->
+            operationIndex !in textOperationIndices ||
+                inventory.subRunsByOperationIndex[operationIndex].orEmpty().isNotEmpty() ||
+                inventory.strokePathsByOperationIndex[operationIndex].orEmpty().isNotEmpty()
+        } ||
+        mapping.culledTextOperationIndices.any { operationIndex ->
+            operationIndex !in textOperationIndices ||
+                operationIndex in inventory.elidedTextOperationIndices ||
+                (
+                    inventory.subRunsByOperationIndex[operationIndex].orEmpty().isEmpty() &&
+                        inventory.strokePathsByOperationIndex[operationIndex].orEmpty().isEmpty()
+                )
+        }
+    ) {
+        return PreparedImageVisuals.Refused(
+            imageCommandSourceDiagnostic(
+                message = "Prepared text elision and culling must retain exact inventory ownership.",
+            ),
+        )
+    }
+    operations.forEachIndexed { operationIndex, operation ->
+        if (
+            operation is DisplayOp.DrawText &&
+            operationIndex !in inventory.elidedTextOperationIndices &&
+            operationIndex !in mapping.culledTextOperationIndices &&
+            inventory.subRunsByOperationIndex[operationIndex].orEmpty().isEmpty() &&
+            inventory.strokePathsByOperationIndex[operationIndex].orEmpty().isEmpty()
+        ) {
+            return PreparedImageVisuals.Refused(
+                imageCommandSourceDiagnostic(
+                    message = "A non-elided prepared text operation has no exact visual source.",
+                    facts = mapOf("operationIndex" to operationIndex.toString()),
+                ),
+            )
+        }
+    }
     val visualSources = operations.withIndex().flatMap { indexed ->
         val operationIndex = indexed.index
         when (val operation = indexed.value) {
@@ -277,6 +436,12 @@ private fun collectPreparedImageVisuals(
                     PreparedVisualSource.Image(operationIndex, operation.atlas)
                 }
             is DisplayOp.DrawText -> {
+                if (
+                    operationIndex in inventory.elidedTextOperationIndices ||
+                    operationIndex in mapping.culledTextOperationIndices
+                ) {
+                    return@flatMap emptyList()
+                }
                 val strokePaths = inventory.strokePathsByOperationIndex[operationIndex].orEmpty()
                 if (strokePaths.isNotEmpty()) {
                     strokePaths.map { PreparedVisualSource.TextStroke(operationIndex) }

@@ -11,18 +11,22 @@ import io.ygdrasil.webgpu.GPUBuffer
 import io.ygdrasil.webgpu.GPUDevice
 import io.ygdrasil.webgpu.GPUQueue
 import io.ygdrasil.webgpu.GPUTexture
+import io.ygdrasil.webgpu.GPUTextureView
 import io.ygdrasil.webgpu.GPUTextureAspect
 import io.ygdrasil.webgpu.GPUTextureFormat
 import io.ygdrasil.webgpu.GPUTextureUsage
 import io.ygdrasil.webgpu.GPUTextureViewDimension
 import io.ygdrasil.webgpu.TextureDescriptor
 import io.ygdrasil.webgpu.TextureViewDescriptor
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.Collections
 import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedColorGlyphBufferPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedTextRenderBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
@@ -206,6 +210,12 @@ private data class GPUWgpu4kPreparedColorGlyphBuffers(
     val uniform: GPUBuffer,
 )
 
+internal data class GPUWgpu4kColorGlyphDestinationReadInput(
+    val plan: GPUPreparedColorGlyphDestinationReadPlan,
+    val snapshotView: GPUTextureView,
+    val coverageMaskView: GPUTextureView? = null,
+)
+
 /**
  * Creates each generic R8 upload page exactly once for one frame. TextA8 and ColorGlyph borrow the
  * resulting views; the texture operands remain payload-owned until queue completion.
@@ -293,14 +303,45 @@ internal class GPUWgpu4kColorGlyphRenderRunMaterializer(
     private val device: GPUDevice,
     private val queue: GPUQueue,
     private val invariants: GPUWgpu4kColorGlyphInvariantHandles,
+    private val destinationReadInvariantsByPipelineKey:
+        Map<String, GPUWgpu4kColorGlyphInvariantHandles> = emptyMap(),
 ) {
     fun materializeAcceptedRun(
         plan: GPUPreparedColorGlyphRenderRunPlan,
         preparedR8Resources: GPUWgpu4kPreparedR8FrameResources,
         generation: GPUDeviceGenerationID,
+        destinationReadsByPacketId:
+            Map<GPUDrawPacketID, GPUWgpu4kColorGlyphDestinationReadInput> = emptyMap(),
+        authenticatedDestinationReadPacketIds: Set<GPUDrawPacketID> = emptySet(),
     ): GPUPreparedRenderRunMaterialization {
         val created = mutableListOf<AutoCloseable>()
         return try {
+            require(destinationReadsByPacketId.keys == authenticatedDestinationReadPacketIds) {
+                "ColorGlyph destination inputs must exactly cover authenticated packet IDs"
+            }
+            val packetsById = plan.renderRuns.flatMap { run ->
+                run.bindings.indices.map { index ->
+                    run.bindings[index].packetId to
+                        (run to index)
+                }
+            }.toMap()
+            require(destinationReadsByPacketId.all { (packetId, input) ->
+                val (run, index) = packetsById[packetId] ?: return@all false
+                input.plan.packet.packetId == packetId &&
+                    input.plan.packet.semanticPayload === run.packets[index] &&
+                    input.plan.semantic === run.packets[index] &&
+                input.plan.binding === run.bindings[index] &&
+                    input.plan.exactRenderScopeKey == run.exactScopeKey &&
+                    destinationReadInvariantsByPipelineKey[
+                        input.plan.programSeal.pipelineKey
+                    ]?.destinationProgramSeal == input.plan.programSeal &&
+                    (
+                        input.plan.clip is
+                            GPUPreparedColorGlyphDestinationClipAuthority.CoverageMask
+                        ) == (input.coverageMaskView != null)
+            }) {
+                "ColorGlyph destination inputs must retain exact packet, semantic, binding, and scope authority"
+            }
             val buffersByArtifactKey =
                 HashMap<GPUTextArtifactKey, GPUWgpu4kPreparedColorGlyphBuffers>()
             plan.canonicalBufferPlansByArtifactKey.forEach { (artifactKey, bufferPlan) ->
@@ -365,11 +406,49 @@ internal class GPUWgpu4kColorGlyphRenderRunMaterializer(
                     val buffers = buffersByArtifactKey.getValue(bufferPlan.planArtifactKey)
                     val atlas = preparedR8Resources.texturesByPlan[binding.atlasResourcePlan]
                         ?: error("Accepted ColorGlyph atlas has no frame-local R8 resource")
+                    val destinationRead = destinationReadsByPacketId[binding.packetId]
+                    val selectedInvariants = if (destinationRead == null) {
+                        invariants
+                    } else {
+                        requireNotNull(
+                            destinationReadInvariantsByPipelineKey[
+                                destinationRead.plan.programSeal.pipelineKey
+                            ],
+                        ) {
+                            "Accepted ColorGlyph destination read requires cached formula invariants"
+                        }
+                    }
+                    val clipUniform = destinationRead?.let { input ->
+                        val analytic = input.plan.clip as?
+                            GPUPreparedColorGlyphDestinationClipAuthority.AnalyticRect
+                            ?: return@let null
+                        val rect = analytic.facts
+                        val bytes = ByteBuffer.allocate(32).order(ByteOrder.LITTLE_ENDIAN).apply {
+                            putFloat(rect.left)
+                            putFloat(rect.top)
+                            putFloat(rect.right)
+                            putFloat(rect.bottom)
+                            putInt(if (rect.antiAlias) 1 else 0)
+                            putInt(0)
+                            putInt(0)
+                            putInt(0)
+                        }.array()
+                        device.createBuffer(
+                            BufferDescriptor(
+                                size = bytes.size.toULong(),
+                                usage = GPUBufferUsage.Uniform or GPUBufferUsage.CopyDst,
+                                label = "Kanvas.frame.colorGlyph.destinationRead.clipUniform",
+                            ),
+                        ).track(created).also { buffer ->
+                            queue.writeBuffer(buffer, 0uL, ArrayBuffer.of(bytes))
+                        }
+                    }
                     val bindGroup = device.createBindGroup(
                         BindGroupDescriptor(
                             label = "Kanvas.frame.colorGlyph.bindGroup0",
-                            layout = invariants.bindGroupLayout,
-                            entries = listOf(
+                            layout = selectedInvariants.bindGroupLayout,
+                            entries = buildList {
+                                add(
                                 BindGroupEntry(
                                     binding = 0u,
                                     resource = BufferBinding(
@@ -378,15 +457,51 @@ internal class GPUWgpu4kColorGlyphRenderRunMaterializer(
                                         size = slice.uniformSizeBytes.toULong(),
                                     ),
                                 ),
-                                BindGroupEntry(binding = 1u, resource = atlas.view),
-                                BindGroupEntry(binding = 2u, resource = invariants.sampler),
-                            ),
+                                )
+                                add(BindGroupEntry(binding = 1u, resource = atlas.view))
+                                add(
+                                    BindGroupEntry(
+                                        binding = 2u,
+                                        resource = selectedInvariants.sampler,
+                                    ),
+                                )
+                                destinationRead?.let { input ->
+                                    add(
+                                        BindGroupEntry(
+                                            binding = 3u,
+                                            resource = input.snapshotView,
+                                        ),
+                                    )
+                                    when (input.plan.clip) {
+                                        is GPUPreparedColorGlyphDestinationClipAuthority.AnalyticRect ->
+                                            add(
+                                                BindGroupEntry(
+                                                    binding = 4u,
+                                                    resource = BufferBinding(
+                                                        buffer = requireNotNull(clipUniform),
+                                                        offset = 0uL,
+                                                        size = 32uL,
+                                                    ),
+                                                ),
+                                            )
+                                        is GPUPreparedColorGlyphDestinationClipAuthority.CoverageMask ->
+                                            add(
+                                                BindGroupEntry(
+                                                    binding = 4u,
+                                                    resource = requireNotNull(
+                                                        input.coverageMaskView,
+                                                    ),
+                                                ),
+                                            )
+                                    }
+                                }
+                            },
                         ),
                     ).track(created)
                     listOf(
                         GPUPreparedNativeRenderCommand.SetPipeline(
                             GPUPreparedNativeRenderPipelineOperand(
-                                invariants.pipeline,
+                                selectedInvariants.pipeline,
                                 generation,
                                 GPUPreparedNativeOperandOwnership.Borrowed,
                             ),

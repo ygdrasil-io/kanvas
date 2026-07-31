@@ -18,13 +18,17 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.GradientStop
 import org.graphiks.kanvas.paint.Paint
+import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.PictureRecorder
 import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderResult
 import org.graphiks.kanvas.surface.Surface
 import org.graphiks.kanvas.text.Font
 import org.graphiks.kanvas.text.FontTypeface
+import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Matrix33
@@ -116,15 +120,15 @@ class GPUAllApiBlendSurfaceTest {
                         assumeTrue(session != null, "GPU backend unavailable in current environment")
                         val readbacksBefore = session!!.runtimeTelemetry.destinationReadbackSnapshots
                         val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
-                        val expectedRefusal = expectedPreparedImageRefusal(api, mode, context)
+                        val expectedRoute = expectedPreparedProductRoute(api, mode, context)
 
-                        if (expectedRefusal != null) {
+                        if (expectedRoute is ProductRouteExpectation.Terminal) {
                             val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                                 renderGpu(api, mode, context, decisions)
                             }
-                            assertEquals(expectedRefusal, terminal.diagnostic.code.value)
+                            assertEquals(expectedRoute.code, terminal.diagnostic.code.value)
                             assertEquals(
-                                listOf(GPUPreparedSurfaceRouteDecision.Terminal(expectedRefusal)),
+                                listOf(GPUPreparedSurfaceRouteDecision.Terminal(expectedRoute.code)),
                                 decisions,
                             )
                             assertEquals(
@@ -146,10 +150,14 @@ class GPUAllApiBlendSurfaceTest {
                                 },
                                 gpu.result.diagnostics.entries.toString(),
                             )
-                            if (isSupportedPreparedImageCase(api, mode, context)) {
-                                assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single())
-                            } else if (api.name in IMAGE_API_NAMES && context == BlendContext.SAVE_LAYER) {
-                                assertIs<GPUPreparedSurfaceRouteDecision.Legacy>(decisions.single())
+                            when (expectedRoute) {
+                                ProductRouteExpectation.Prepared ->
+                                    assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single())
+                                ProductRouteExpectation.Legacy ->
+                                    assertIs<GPUPreparedSurfaceRouteDecision.Legacy>(decisions.single())
+                                null -> Unit
+                                is ProductRouteExpectation.Terminal ->
+                                    error("terminal route returned pixels")
                             }
                             // Clear has no public BlendMode argument. Its repeated rows document that
                             // inventory exception, but they do not request the selected matrix mode.
@@ -176,6 +184,33 @@ class GPUAllApiBlendSurfaceTest {
                 }
             }
         }.stream()
+
+    @TestFactory
+    fun preparedTextPartialPaintAlphaCompanionMatrix(): Stream<DynamicTest> {
+        val api = partialAlphaPreparedTextCase()
+        return listOf(BlendMode.CLEAR, BlendMode.DST_IN, BlendMode.MODULATE).flatMap { mode ->
+            listOf(BlendContext.UNCLIPPED, BlendContext.SCISSOR).map { context ->
+                DynamicTest.dynamicTest("DrawText/partial-alpha/${mode.name}/${context.name}") {
+                    val session = GPUBackendRuntimeFactory.createOrNull()
+                    assumeTrue(session != null, "GPU backend unavailable in current environment")
+                    val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+
+                    val gpu = renderGpu(api, mode, context, decisions)
+                    val expected = blendWithCoverage(
+                        source = PARTIAL_ALPHA_EFFECTIVE_SOURCE,
+                        destination = DESTINATION,
+                        mode = mode,
+                        coverage = 1f,
+                    ).toRgbaBytes()
+
+                    assertPixelsNear(expected, gpu.pixels, tolerance = 1)
+                    assertEquals(0, gpu.result.diagnostics.fatalCount, gpu.result.diagnostics.entries.toString())
+                    assertEquals(0, gpu.result.stats.opsRefused, gpu.result.diagnostics.entries.toString())
+                    assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single())
+                }
+            }
+        }.stream()
+    }
 
     private fun renderGpu(
         api: BlendCase,
@@ -281,6 +316,9 @@ class GPUAllApiBlendSurfaceTest {
         val textPaint: (BlendMode) -> Paint = { mode ->
             Paint.fill(sourceLinearColor()).copy(antiAlias = false, blendMode = mode)
         }
+        val preparedTextPaint: (BlendMode) -> Paint = { mode ->
+            Paint.fill(SOURCE).copy(antiAlias = false, blendMode = mode)
+        }
         val triangle = Vertices(
             mode = VertexMode.TRIANGLES,
             positions = listOf(Point(6f, 6f), Point(26f, 6f), Point(16f, 26f)),
@@ -291,7 +329,8 @@ class GPUAllApiBlendSurfaceTest {
                 .readBytes(),
             fontName = "LiberationSans-Regular",
         )
-        val textBlob = Font(textTypeface, 24f).toTextBlob("I", 14f, 24f)
+        val preparedTextBlob = Font(textTypeface, 24f).toTextBlob("I", 14f, 8f)
+        val legacyTextBlob = Font(textTypeface, 24f).toTextBlob("I", 14f, 24f)
 
         return listOf(
             BlendCase("DrawRect", Point(16f, 16f), Point(7f, 16f), Point(12f, 16f)) { mode ->
@@ -313,9 +352,13 @@ class GPUAllApiBlendSurfaceTest {
                 Point(12f, 16f),
                 legacySaveLayerDraw = { mode -> drawImage(legacyImage, SOURCE_RECT, imagePaint(mode)) },
             ) { mode -> drawImage(image, SOURCE_RECT, imagePaint(mode)) },
-            BlendCase("DrawText", Point(17f, 14f), Point(17f, 10f), Point(17f, 12f)) { mode ->
-                drawText(textBlob, 0f, 0f, textPaint(mode))
-            },
+            BlendCase(
+                "DrawText",
+                Point(17f, 14f),
+                Point(17f, 10f),
+                Point(17f, 12f),
+                legacySaveLayerDraw = { mode -> drawText(legacyTextBlob, 0f, 0f, textPaint(mode)) },
+            ) { mode -> drawText(preparedTextBlob, 0f, 0f, preparedTextPaint(mode)) },
             BlendCase("DrawColor", Point(16f, 16f), Point(4f, 16f), Point(12f, 16f)) { mode ->
                 drawColor(SOURCE, mode)
             },
@@ -401,6 +444,47 @@ class GPUAllApiBlendSurfaceTest {
         )
     }
 
+    private fun partialAlphaPreparedTextCase(): BlendCase {
+        val typeface = FontTypeface(
+            GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+            fontName = "Task 14 partial-alpha companion",
+        )
+        val blob = TextBlob(
+            glyphRuns = listOf(
+                KanvasGlyphRun(
+                    glyphs = listOf(GPUPreparedTextTestFixtures.A8_GLYPH_ID.toUShort()),
+                    positions = listOf(Point(0f, 0f)),
+                    fontSize = 48f,
+                ),
+            ),
+            typeface = typeface,
+            fontSize = 48f,
+        )
+        val shaderColor = Color.fromRGBA(1f, 0f, 0f, 0.5f)
+        val shader = Shader.LinearGradient(
+            start = Point(0f, 0f),
+            end = Point(SURFACE_SIZE.toFloat(), 0f),
+            stops = listOf(
+                GradientStop(0f, shaderColor),
+                GradientStop(1f, shaderColor),
+            ),
+        )
+        return BlendCase(
+            name = "DrawTextPartialAlpha",
+            sample = Point(16f, 14f),
+        ) { mode ->
+            drawText(
+                blob = blob,
+                x = 4.5f,
+                y = 26f,
+                paint = Paint.fill(Color.fromRGBA(1f, 1f, 1f, 0.6f)).copy(
+                    shader = shader,
+                    blendMode = mode,
+                ),
+            )
+        }
+    }
+
     private fun Canvas.drawAtlasFixture(image: Image, mode: BlendMode) {
         drawAtlas(
             atlas = image,
@@ -439,13 +523,22 @@ class GPUAllApiBlendSurfaceTest {
             )
         }
 
-    private fun expectedPreparedImageRefusal(
+    private fun expectedPreparedProductRoute(
         api: BlendCase,
         mode: BlendMode,
         context: BlendContext,
-    ): String? {
-        if (api.name !in IMAGE_API_NAMES || context == BlendContext.SAVE_LAYER) return null
-        return when (api.name) {
+    ): ProductRouteExpectation? {
+        if (api.name == "DrawText") {
+            return when {
+                context == BlendContext.SAVE_LAYER -> ProductRouteExpectation.Legacy
+                mode == BlendMode.DST -> ProductRouteExpectation.Prepared
+                mode in PREPARED_TEXT_FIXED_FUNCTION_BLENDS -> ProductRouteExpectation.Prepared
+                else -> ProductRouteExpectation.Terminal(PREPARED_TEXT_BLEND_REFUSAL)
+            }
+        }
+        if (api.name !in IMAGE_API_NAMES) return null
+        if (context == BlendContext.SAVE_LAYER) return ProductRouteExpectation.Legacy
+        val refusal = when (api.name) {
             "DrawImage",
             "DrawImageNine",
             "DrawImageLattice",
@@ -462,19 +555,8 @@ class GPUAllApiBlendSurfaceTest {
             }
             else -> error("Unclassified prepared image API ${api.name}")
         }
+        return refusal?.let(ProductRouteExpectation::Terminal) ?: ProductRouteExpectation.Prepared
     }
-
-    private fun isSupportedPreparedImageCase(
-        api: BlendCase,
-        mode: BlendMode,
-        context: BlendContext,
-    ): Boolean =
-        api.name in IMAGE_API_NAMES &&
-            context in setOf(BlendContext.UNCLIPPED, BlendContext.SCISSOR) &&
-            when (api.name) {
-                "DrawAtlas" -> mode in PREPARED_ATLAS_SOURCE_BLENDS
-                else -> mode == BlendMode.SRC_OVER
-            }
 
     private fun sourceImage(): Image = Image.fromPixels(
         width = 4,
@@ -781,6 +863,12 @@ class GPUAllApiBlendSurfaceTest {
 
     private data class GpuPixel(val pixels: UByteArray, val result: RenderResult)
 
+    private sealed interface ProductRouteExpectation {
+        data object Prepared : ProductRouteExpectation
+        data class Terminal(val code: String) : ProductRouteExpectation
+        data object Legacy : ProductRouteExpectation
+    }
+
     private class SnapshotDisplayListBuffer(
         private val operations: List<org.graphiks.kanvas.canvas.DisplayOp>,
     ) : DisplayListBuffer {
@@ -803,11 +891,24 @@ class GPUAllApiBlendSurfaceTest {
         val ALPHA_MASK_EDGE = Point(12f, 16f)
         val SOURCE = Color.fromArgb(192, 208, 80, 32)
         val DESTINATION = Color.fromArgb(160, 40, 120, 208)
+        val PARTIAL_ALPHA_EFFECTIVE_SOURCE = Color.fromRGBA(1f, 0f, 0f, 0.3f)
         val ARTISTIC_MODES = BlendMode.entries.filter { it.ordinal >= BlendMode.MULTIPLY.ordinal }.toSet()
         val IMAGE_API_NAMES = setOf("DrawImage", "DrawImageNine", "DrawImageLattice", "DrawAtlas")
         val PREPARED_ATLAS_SOURCE_BLENDS =
             setOf(BlendMode.SRC, BlendMode.DST, BlendMode.SRC_OVER, BlendMode.PLUS, BlendMode.MODULATE)
+        val PREPARED_TEXT_FIXED_FUNCTION_BLENDS = setOf(
+            BlendMode.CLEAR,
+            BlendMode.SRC_OVER,
+            BlendMode.DST_OVER,
+            BlendMode.DST_IN,
+            BlendMode.DST_OUT,
+            BlendMode.SRC_ATOP,
+            BlendMode.XOR,
+            BlendMode.MODULATE,
+            BlendMode.SCREEN,
+        )
         const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
+        const val PREPARED_TEXT_BLEND_REFUSAL = "invalid.preflight.text.blend"
 
         @AfterAll
         @JvmStatic

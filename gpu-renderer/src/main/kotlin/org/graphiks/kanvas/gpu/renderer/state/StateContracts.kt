@@ -54,6 +54,23 @@ data class GPUAlphaPlan(
     val clamp: Boolean,
 )
 
+/** Handle-free source-alpha proof shared by material ABI and blend planning. */
+enum class GPUSourceAlphaClassification {
+    Translucent,
+    ProvenOpaque,
+}
+
+/** Passive fragment-output coverage encoding shared by planning and WGSL assembly. */
+enum class GPUSourceCoverageEncoding {
+    None,
+    Coverage,
+    ModulateRGBA,
+    CoverageTimesOneMinusSourceAlpha,
+    CoverageTimesOneMinusSourceRGBA,
+    ScalarCoverageInShader,
+    LCDCoverageInShader,
+}
+
 /** One independently configured color or alpha attachment blend component. */
 data class GPUFixedFunctionBlendComponent(
     val sourceFactor: String,

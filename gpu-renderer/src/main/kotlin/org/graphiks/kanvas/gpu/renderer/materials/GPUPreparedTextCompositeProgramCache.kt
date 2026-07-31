@@ -3,7 +3,9 @@ package org.graphiks.kanvas.gpu.renderer.materials
 import java.util.LinkedHashMap
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFragment
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.wgsl.PreparedTextA8Shader
+import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextClipVariant
 
 /**
  * Small recording-owned LRU for immutable, parser-authenticated TextA8 programs.
@@ -33,6 +35,8 @@ class GPUPreparedTextCompositeProgramCache(
         val targetFormatClass: String,
         val blendPlanIdentity: String,
         val fixedFunctionBlendState: GPUFixedFunctionBlendState?,
+        val sourceCoverageEncoding: GPUSourceCoverageEncoding,
+        val clipVariant: GPUPreparedTextClipVariant,
     )
 
     private val entries =
@@ -61,6 +65,9 @@ class GPUPreparedTextCompositeProgramCache(
         targetFormatClass: String = "rgba8unorm",
         blendPlanIdentity: String = "fixed-function:src-over",
         fixedFunctionBlendState: GPUFixedFunctionBlendState? = null,
+        sourceCoverageEncoding: GPUSourceCoverageEncoding =
+            GPUSourceCoverageEncoding.ModulateRGBA,
+        clipVariant: GPUPreparedTextClipVariant = GPUPreparedTextClipVariant.None,
     ): GPUPreparedTextCompositeProgramResult {
         val authenticated = runCatching { material.authenticatedSnapshot() }.getOrNull()
             ?: return composeObserved(
@@ -68,12 +75,16 @@ class GPUPreparedTextCompositeProgramCache(
                 targetFormatClass,
                 blendPlanIdentity,
                 fixedFunctionBlendState,
+                sourceCoverageEncoding,
+                clipVariant,
             )
         val key = structuralKey(
             authenticated.composableFragment,
             targetFormatClass,
             blendPlanIdentity,
             fixedFunctionBlendState,
+            sourceCoverageEncoding,
+            clipVariant,
         )
         entries[key]?.let { cached ->
             hitCount += 1
@@ -85,6 +96,8 @@ class GPUPreparedTextCompositeProgramCache(
             targetFormatClass,
             blendPlanIdentity,
             fixedFunctionBlendState,
+            sourceCoverageEncoding,
+            clipVariant,
         ).also { result ->
             if (result is GPUPreparedTextCompositeProgramResult.Ready) {
                 entries[key] = result.program
@@ -115,12 +128,16 @@ class GPUPreparedTextCompositeProgramCache(
         targetFormatClass: String,
         blendPlanIdentity: String,
         fixedFunctionBlendState: GPUFixedFunctionBlendState?,
+        sourceCoverageEncoding: GPUSourceCoverageEncoding,
+        clipVariant: GPUPreparedTextClipVariant,
     ): GPUPreparedTextCompositeProgramResult =
         GPUPreparedTextShaderComposer.composeObserved(
             material = material,
             targetFormatClass = targetFormatClass,
             blendPlanIdentity = blendPlanIdentity,
             fixedFunctionBlendState = fixedFunctionBlendState,
+            sourceCoverageEncoding = sourceCoverageEncoding,
+            clipVariant = clipVariant,
             observer = object : GPUPreparedTextCompositionObserver {
                 override fun onCompose() {
                     composeCount += 1
@@ -145,6 +162,8 @@ class GPUPreparedTextCompositeProgramCache(
         targetFormatClass: String,
         blendPlanIdentity: String,
         fixedFunctionBlendState: GPUFixedFunctionBlendState?,
+        sourceCoverageEncoding: GPUSourceCoverageEncoding,
+        clipVariant: GPUPreparedTextClipVariant,
     ): StructuralKey = StructuralKey(
         fragmentHash = fragment.fragmentHash,
         fragmentAbiHash = fragment.abiHash,
@@ -152,6 +171,8 @@ class GPUPreparedTextCompositeProgramCache(
         targetFormatClass = targetFormatClass,
         blendPlanIdentity = blendPlanIdentity,
         fixedFunctionBlendState = fixedFunctionBlendState,
+        sourceCoverageEncoding = sourceCoverageEncoding,
+        clipVariant = clipVariant,
     )
 
     private fun org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout

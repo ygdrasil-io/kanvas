@@ -2,6 +2,7 @@ package org.graphiks.kanvas.gpu.renderer.materials.contracts
 
 import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceAlphaClassification
 
 /**
  * Passive, handle-free snapshot of one sampled image binding admitted by the
@@ -73,6 +74,7 @@ class GPUPreparedMaterialProgram private constructor(
     sampledResources: List<GPUPreparedMaterialSampledResource>,
     val paintAlpha: Float,
     val sourceKind: GPUMaterialSourceKind,
+    val preCoverageSourceAlpha: GPUSourceAlphaClassification,
     val abiHash: String,
     private val admission: GPUPreparedMaterialProgramAdmission,
 ) {
@@ -121,6 +123,7 @@ class GPUPreparedMaterialProgram private constructor(
             sampledResources = sampledResources,
             paintAlpha = paintAlpha,
             sourceKind = sourceKind,
+            preCoverageSourceAlpha = preCoverageSourceAlpha,
             admission = admission,
             retainedFragment = composableFragment,
             retainedAbiHash = abiHash,
@@ -144,6 +147,8 @@ class GPUPreparedMaterialProgram private constructor(
 
     operator fun component9(): String = abiHash
 
+    operator fun component10(): GPUSourceAlphaClassification = preCoverageSourceAlpha
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is GPUPreparedMaterialProgram) return false
@@ -156,6 +161,7 @@ class GPUPreparedMaterialProgram private constructor(
             sampledResources == other.sampledResources &&
             paintAlpha.compareTo(other.paintAlpha) == 0 &&
             sourceKind == other.sourceKind &&
+            preCoverageSourceAlpha == other.preCoverageSourceAlpha &&
             abiHash == other.abiHash
     }
 
@@ -168,6 +174,7 @@ class GPUPreparedMaterialProgram private constructor(
         result = 31 * result + sampledResources.hashCode()
         result = 31 * result + paintAlpha.hashCode()
         result = 31 * result + sourceKind.hashCode()
+        result = 31 * result + preCoverageSourceAlpha.hashCode()
         result = 31 * result + abiHash.hashCode()
         return result
     }
@@ -182,6 +189,7 @@ class GPUPreparedMaterialProgram private constructor(
             "sampledResources=$sampledResources, " +
             "paintAlpha=$paintAlpha, " +
             "sourceKind=$sourceKind, " +
+            "preCoverageSourceAlpha=$preCoverageSourceAlpha, " +
             "abiHash=$abiHash)"
 
     companion object {
@@ -193,6 +201,7 @@ class GPUPreparedMaterialProgram private constructor(
             sampledResources: List<GPUPreparedMaterialSampledResource>,
             paintAlpha: Float,
             sourceKind: GPUMaterialSourceKind,
+            preCoverageSourceAlpha: GPUSourceAlphaClassification,
             admission: GPUPreparedMaterialProgramAdmission,
         ): GPUPreparedMaterialProgram =
             createAuthenticatedCore(
@@ -203,6 +212,7 @@ class GPUPreparedMaterialProgram private constructor(
                 sampledResources = sampledResources,
                 paintAlpha = paintAlpha,
                 sourceKind = sourceKind,
+                preCoverageSourceAlpha = preCoverageSourceAlpha,
                 admission = admission,
                 retainedFragment = null,
                 retainedAbiHash = null,
@@ -216,6 +226,7 @@ class GPUPreparedMaterialProgram private constructor(
             sampledResources: List<GPUPreparedMaterialSampledResource>,
             paintAlpha: Float,
             sourceKind: GPUMaterialSourceKind,
+            preCoverageSourceAlpha: GPUSourceAlphaClassification,
             admission: GPUPreparedMaterialProgramAdmission,
             retainedFragment: GPUPreparedMaterialFragment?,
             retainedAbiHash: String?,
@@ -228,6 +239,7 @@ class GPUPreparedMaterialProgram private constructor(
                 uniformBytes = uniformBytes,
                 sampledResources = sampledResources,
                 paintAlpha = paintAlpha,
+                preCoverageSourceAlpha = preCoverageSourceAlpha,
             )
             val authoritativeFragment = GPUPreparedMaterialFragment.createAuthenticated(
                 admission.fragmentAdmission,
@@ -265,6 +277,7 @@ class GPUPreparedMaterialProgram private constructor(
                 sampledResources = sampledResources,
                 paintAlpha = paintAlpha,
                 sourceKind = sourceKind,
+                preCoverageSourceAlpha = preCoverageSourceAlpha,
                 abiHash = abiHash,
                 admission = admission,
             )

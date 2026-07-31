@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.wgsl
 
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.state.GPUSourceCoverageEncoding
 
 data class GPUPreparedTextVertexAttribute(
     val location: Int,
@@ -49,6 +50,15 @@ data class GPUPreparedTextVertexResult(
     val localY: Float,
 )
 
+enum class GPUPreparedTextClipVariant {
+    None,
+    AnalyticRectHard,
+    AnalyticRectAA,
+    AnalyticRRectHard,
+    AnalyticRRectAA,
+    CoverageMask,
+}
+
 object PreparedTextA8Shader {
     val VertexLayout: GPUPreparedTextVertexLayout = GPUPreparedTextVertexLayout(
         arrayStrideBytes = 64L,
@@ -67,6 +77,8 @@ struct PreparedTextDrawUniforms {
     targetSizeAndPaintAlpha: vec4<f32>,
     deviceToLocalRow0: vec4<f32>,
     deviceToLocalRow1: vec4<f32>,
+    clipBounds: vec4<f32>,
+    clipRadiiAndPadding: vec4<f32>,
 }
 
 struct PreparedTextVertexInput {
@@ -121,19 +133,139 @@ ${PREPARED_TEXT_CORNER_INDICES.joinToString(",\n") { "        ${it}u" }},
 }
 """.trimIndent()
 
-    val fragmentWgsl: String = """
+    val fragmentWgsl: String
+        get() = fragmentWgsl(
+            GPUSourceCoverageEncoding.ModulateRGBA,
+            GPUPreparedTextClipVariant.None,
+        )
+
+    fun fragmentWgsl(
+        sourceCoverageEncoding: GPUSourceCoverageEncoding,
+        clipVariant: GPUPreparedTextClipVariant = GPUPreparedTextClipVariant.None,
+    ): String {
+        val encodedSource = when (sourceCoverageEncoding) {
+            GPUSourceCoverageEncoding.Coverage ->
+                "return vec4<f32>(coverageFactor);"
+            GPUSourceCoverageEncoding.ModulateRGBA ->
+                "return coverageFactor * preparedSource;"
+            GPUSourceCoverageEncoding.CoverageTimesOneMinusSourceAlpha ->
+                "return vec4<f32>(coverageFactor * (1.0 - preparedSource.a));"
+            GPUSourceCoverageEncoding.CoverageTimesOneMinusSourceRGBA ->
+                "return coverageFactor * (vec4<f32>(1.0) - preparedSource);"
+            else -> error(
+                "Prepared text does not admit source coverage encoding " +
+                    sourceCoverageEncoding.name,
+            )
+        }
+        val clipCoverageDeclarations = analyticClipDeclarations(clipVariant)
+        val clipCoverageExpression = when (clipVariant) {
+            GPUPreparedTextClipVariant.None -> "1.0"
+            GPUPreparedTextClipVariant.CoverageMask ->
+                "prepared_text_mask_coverage(input.position.xy)"
+            GPUPreparedTextClipVariant.AnalyticRectHard,
+            GPUPreparedTextClipVariant.AnalyticRectAA,
+            -> "prepared_text_rect_coverage(input.position.xy)"
+            GPUPreparedTextClipVariant.AnalyticRRectHard,
+            GPUPreparedTextClipVariant.AnalyticRRectAA,
+            -> "prepared_text_rrect_coverage(input.position.xy)"
+        }
+        return """
 @group(2) @binding(0) var textAtlas: texture_2d<f32>;
 @group(2) @binding(1) var textSampler: sampler;
+${if (clipVariant == GPUPreparedTextClipVariant.CoverageMask) {
+            """
+@group(3) @binding(0) var preparedTextCoverageMask: texture_2d<f32>;
+
+fn prepared_text_mask_coverage(position: vec2<f32>) -> f32 {
+    let storedSample = textureLoad(
+        preparedTextCoverageMask,
+        vec2<i32>(position),
+        0,
+    );
+    return storedSample[0];
+}
+""".trimIndent()
+        } else {
+            ""
+        }}
+
+$clipCoverageDeclarations
 
 @fragment
 fn fs_main(input: PreparedTextVertexOutput) -> @location(0) vec4<f32> {
     let materialPremul = kanvas_evaluate_material(input.localPosition);
-    let coverage = textureSample(textAtlas, textSampler, input.uv).r;
-    let modulation = clamp(drawUniforms.targetSizeAndPaintAlpha.z, 0.0, 1.0) *
-                     coverage;
-    return materialPremul * modulation;
+    let glyphCoverage = textureSample(textAtlas, textSampler, input.uv).r;
+    let clipCoverage = $clipCoverageExpression;
+    let coverageFactor = glyphCoverage * clipCoverage;
+    let paintAlpha = clamp(drawUniforms.targetSizeAndPaintAlpha.z, 0.0, 1.0);
+    let preparedSource = materialPremul * paintAlpha;
+    $encodedSource
 }
 """.trimIndent()
+    }
+
+    private fun analyticClipDeclarations(clipVariant: GPUPreparedTextClipVariant): String {
+        if (clipVariant == GPUPreparedTextClipVariant.None ||
+            clipVariant == GPUPreparedTextClipVariant.CoverageMask
+        ) return ""
+        val coverageBody = when (clipVariant) {
+            GPUPreparedTextClipVariant.AnalyticRectHard,
+            GPUPreparedTextClipVariant.AnalyticRRectHard,
+            -> "return select(0.0, 1.0, distance <= 0.0);"
+            GPUPreparedTextClipVariant.AnalyticRectAA,
+            GPUPreparedTextClipVariant.AnalyticRRectAA,
+            -> "return clamp(0.5 - distance, 0.0, 1.0);"
+            GPUPreparedTextClipVariant.None -> error("None has no analytic declarations")
+            GPUPreparedTextClipVariant.CoverageMask ->
+                error("CoverageMask has no analytic declarations")
+        }
+        val shapeFunction = when (clipVariant) {
+            GPUPreparedTextClipVariant.AnalyticRectHard,
+            GPUPreparedTextClipVariant.AnalyticRectAA,
+            -> """
+fn prepared_text_rect_coverage(position: vec2<f32>) -> f32 {
+    let center = (drawUniforms.clipBounds.xy + drawUniforms.clipBounds.zw) * 0.5;
+    let halfExtent = (drawUniforms.clipBounds.zw - drawUniforms.clipBounds.xy) * 0.5;
+    let q = abs(position - center) - halfExtent;
+    let distance = length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0);
+    return prepared_text_clip_coverage(distance);
+}
+""".trimIndent()
+            GPUPreparedTextClipVariant.AnalyticRRectHard,
+            GPUPreparedTextClipVariant.AnalyticRRectAA,
+            -> """
+fn prepared_text_rrect_coverage(position: vec2<f32>) -> f32 {
+    let center = (drawUniforms.clipBounds.xy + drawUniforms.clipBounds.zw) * 0.5;
+    let halfExtent = (drawUniforms.clipBounds.zw - drawUniforms.clipBounds.xy) * 0.5;
+    let radius = max(drawUniforms.clipRadiiAndPadding.xy, vec2<f32>(0.0001));
+    let outerQ = abs(position - center) - halfExtent;
+    let cornerQ = outerQ + radius;
+    let normalizedLength = length(cornerQ / radius);
+    let safeNormalizedLength = max(normalizedLength, 0.000001);
+    let implicitValue = normalizedLength - 1.0;
+    let implicitGradient = cornerQ / (radius * radius * safeNormalizedLength);
+    let cornerDistance = implicitValue / max(length(implicitGradient), 0.000001);
+    let stripDistance = max(outerQ.x, outerQ.y);
+    let distance = select(
+        stripDistance,
+        cornerDistance,
+        cornerQ.x > 0.0 && cornerQ.y > 0.0,
+    );
+    return prepared_text_clip_coverage(distance);
+}
+""".trimIndent()
+            GPUPreparedTextClipVariant.None -> error("None has no analytic declarations")
+            GPUPreparedTextClipVariant.CoverageMask ->
+                error("CoverageMask has no analytic declarations")
+        }
+        return """
+fn prepared_text_clip_coverage(distance: f32) -> f32 {
+    $coverageBody
+}
+
+$shapeFunction
+""".trimIndent()
+    }
 
     fun deviceToNdc(
         deviceX: Float,

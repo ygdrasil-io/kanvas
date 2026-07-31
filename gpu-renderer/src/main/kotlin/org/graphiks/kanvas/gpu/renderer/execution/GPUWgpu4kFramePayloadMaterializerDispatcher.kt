@@ -172,6 +172,14 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
     return when {
         hasDestinationCopy && distinct == listOf(GPUDrawSemanticPayload.SolidRect::class) ->
             GPUWgpu4kPreparedFramePayloadRoute.DestinationCopySolidRect
+        hasDestinationCopy &&
+            GPUDrawSemanticPayload.ColorGlyph::class in distinct &&
+            distinct.all { semanticClass ->
+                semanticClass == GPUDrawSemanticPayload.CorePrimitive::class ||
+                    semanticClass == GPUDrawSemanticPayload.SampledImage::class ||
+                    semanticClass == GPUDrawSemanticPayload.TextA8::class ||
+                    semanticClass == GPUDrawSemanticPayload.ColorGlyph::class
+            } -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
         hasDestinationCopy -> GPUWgpu4kPreparedFramePayloadRoute.Refused(
             "unsupported.native-frame-payload.destination-copy-semantic-shape",
             "A prepared destination-copy frame requires the supported solid-rectangle semantic shape.",
