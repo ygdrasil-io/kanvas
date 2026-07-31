@@ -90,8 +90,8 @@ data class GPUVertexLayoutPlan(
     /** Exact WebGPU format in the same order as [attributes]. */
     val attributeFormats: List<String> = Collections.unmodifiableList(attributes.map { attribute ->
         when (attribute) {
-            "position", "texcoord" -> "f32x2"
-            "color" -> "rgba8unorm-premul"
+            "position", "texcoord" -> "float32x2"
+            "color" -> "unorm8x4"
             else -> "unsupported"
         }
     })

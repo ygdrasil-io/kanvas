@@ -173,10 +173,10 @@ class GPUPreparedVerticesLowererTest {
             shaderLocations = mapOf("position" to 0, "color" to 1, "texcoord" to 2),
         )
         val expectedAttributeFormats = mapOf(
-            position to listOf("f32x2"),
-            positionUv to listOf("f32x2", "f32x2"),
-            positionColor to listOf("f32x2", "rgba8unorm-premul"),
-            positionColorUv to listOf("f32x2", "rgba8unorm-premul", "f32x2"),
+            position to listOf("float32x2"),
+            positionUv to listOf("float32x2", "float32x2"),
+            positionColor to listOf("float32x2", "unorm8x4"),
+            positionColorUv to listOf("float32x2", "unorm8x4", "float32x2"),
         )
         val noIndices: ByteArray? = null
         val triangleIndices = byteArrayOf(2, 0, 0, 0, 1, 0)
@@ -257,7 +257,7 @@ class GPUPreparedVerticesLowererTest {
         assertFailsWith<UnsupportedOperationException> {
             (formats as MutableList<String>).clear()
         }
-        assertEquals(listOf("f32x2"), formats)
+        assertEquals(listOf("float32x2"), formats)
     }
 
     @Test
