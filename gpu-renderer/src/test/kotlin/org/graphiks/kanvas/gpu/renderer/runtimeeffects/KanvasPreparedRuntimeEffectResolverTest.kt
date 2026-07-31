@@ -153,6 +153,41 @@ class KanvasPreparedRuntimeEffectResolverTest {
     }
 
     @Test
+    fun `route contract hash encodes exact prepared binding indices and ABIs`() {
+        val registered = descriptor.copy(childSlots = descriptorSlots())
+        val sourceColorContract = requireNotNull(registered.sourceColorContract)
+        val exact = childSlots()
+        val wrongBinding = exact.toMutableList().apply {
+            this[1] = this[1].copy(bindingIndex = 7)
+        }
+        val wrongAbi = exact.toMutableList().apply {
+            this[1] = this[1].copy(abiHash = "sha256:${"f".repeat(64)}")
+        }
+
+        val exactHash = preparedRuntimeEffectRouteContractHash(
+            descriptor = registered,
+            sourceColorContract = sourceColorContract,
+            childSlots = exact,
+        )
+        assertNotEquals(
+            exactHash,
+            preparedRuntimeEffectRouteContractHash(
+                descriptor = registered,
+                sourceColorContract = sourceColorContract,
+                childSlots = wrongBinding,
+            ),
+        )
+        assertNotEquals(
+            exactHash,
+            preparedRuntimeEffectRouteContractHash(
+                descriptor = registered,
+                sourceColorContract = sourceColorContract,
+                childSlots = wrongAbi,
+            ),
+        )
+    }
+
+    @Test
     fun `validator admits exact ordered child slots and refuses order role and ABI mismatch`() {
         val registered = descriptor.copy(childSlots = descriptorSlots())
         val exact = childSlots()

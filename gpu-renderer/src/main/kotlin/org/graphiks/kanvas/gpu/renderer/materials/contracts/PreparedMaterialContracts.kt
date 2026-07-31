@@ -76,6 +76,9 @@ data class GPUPreparedRuntimeEffectChildProgram internal constructor(
     val abiHash: String,
     val uniformBytes: List<Int>,
     val resourceFacts: List<String>,
+    val wgslSource: String,
+    val evaluationFunction: String,
+    internal val cpuProgram: GPUPreparedRuntimeEffectChildCpuProgram,
 ) {
     init {
         require(name.isNotBlank()) { "Prepared runtime-effect child name must not be blank" }
@@ -89,7 +92,36 @@ data class GPUPreparedRuntimeEffectChildProgram internal constructor(
         require(resourceFacts.all(String::isNotBlank)) {
             "Prepared runtime-effect child resource facts must not be blank"
         }
+        require(wgslSource.isNotBlank()) { "Prepared runtime-effect child WGSL must not be blank" }
+        require(evaluationFunction.isNotBlank()) {
+            "Prepared runtime-effect child evaluation function must not be blank"
+        }
     }
+}
+
+/** Immutable CPU semantic payload paired with one prepared child WGSL program. */
+internal sealed interface GPUPreparedRuntimeEffectChildCpuProgram {
+    data class Shader(
+        val materialKey: String,
+    ) : GPUPreparedRuntimeEffectChildCpuProgram
+
+    data class Matrix(
+        val values: List<Float>,
+    ) : GPUPreparedRuntimeEffectChildCpuProgram
+
+    data class BlendConstant(
+        val sourcePremul: List<Float>,
+        val modeLabel: String,
+    ) : GPUPreparedRuntimeEffectChildCpuProgram
+
+    data class Compose(
+        val inner: GPUPreparedRuntimeEffectChildCpuProgram,
+        val outer: GPUPreparedRuntimeEffectChildCpuProgram,
+    ) : GPUPreparedRuntimeEffectChildCpuProgram
+
+    data class ModeBlender(
+        val modeLabel: String,
+    ) : GPUPreparedRuntimeEffectChildCpuProgram
 }
 
 /**

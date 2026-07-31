@@ -20,6 +20,8 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTReflectionHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTUniformSchemaHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
+import org.graphiks.wgsl.parser.Lowerer
+import org.graphiks.wgsl.parser.parseWgslResult
 
 class GPUPreparedMaterialProgramChildrenTest {
     @Test
@@ -43,6 +45,157 @@ class GPUPreparedMaterialProgramChildrenTest {
         assertTrue(ready.childPrograms[2].uniformBytes.isEmpty())
         assertTrue(ready.childPrograms.all { child -> child.programKey.isNotBlank() })
         assertTrue(ready.childPrograms.all { child -> child.abiHash.startsWith("sha256:") })
+        ready.childPrograms.forEach(::assertChildFunctionIsParserProven)
+    }
+
+    @Test
+    fun `matrix child carries parser proven WGSL and matching CPU behavior into prepared source`() {
+        val ready = compileReady(
+            descriptor = descriptorWithSingleChild("filter", matrixChild()),
+            parent = parentProgram(
+                listOf(slot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter, 0)),
+            ),
+        )
+        val child = ready.childPrograms.single()
+
+        assertChildFunctionIsParserProven(child)
+        assertPreparedSourceContainsChildFunction(ready, child)
+        assertColorNear(
+            expected = listOf(0.2f, 0.3f, 0.4f, 0.5f),
+            actual = GPUPreparedRuntimeEffectChildProgramExecutor.evaluateColorFilter(
+                child,
+                listOf(0.2f, 0.3f, 0.4f, 0.5f),
+            ),
+        )
+    }
+
+    @Test
+    fun `blend child reuses executable premul semantics in CPU and parser proven WGSL`() {
+        val blend = GPURuntimeEffectChildDescriptor.ColorFilter(
+            GPUPreparedColorFilterChildDescriptor.Blend(
+                rgba = listOf(0.4f, 0.2f, 0.1f, 0.5f),
+                mode = GPUBlendMode.SRC_OVER,
+            ),
+        )
+        val ready = compileReady(
+            descriptor = descriptorWithSingleChild("filter", blend),
+            parent = parentProgram(
+                listOf(slot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter, 0)),
+            ),
+        )
+        val child = ready.childPrograms.single()
+
+        assertChildFunctionIsParserProven(child)
+        assertPreparedSourceContainsChildFunction(ready, child)
+        assertColorNear(
+            expected = listOf(0.25f, 0.2f, 0.2f, 0.75f),
+            actual = GPUPreparedRuntimeEffectChildProgramExecutor.evaluateColorFilter(
+                child,
+                listOf(0.1f, 0.2f, 0.3f, 0.5f),
+            ),
+        )
+    }
+
+    @Test
+    fun `compose child executes inner then outer in CPU and one parser proven WGSL program`() {
+        val inner = GPUPreparedColorFilterChildDescriptor.Matrix(
+            listOf(
+                2f, 0f, 0f, 0f, 0f,
+                0f, 1f, 0f, 0f, 0f,
+                0f, 0f, 1f, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f,
+            ),
+        )
+        val outer = GPUPreparedColorFilterChildDescriptor.Blend(
+            rgba = listOf(0.4f, 0.2f, 0.1f, 0.5f),
+            mode = GPUBlendMode.SRC_OVER,
+        )
+        val compose = GPURuntimeEffectChildDescriptor.ColorFilter(
+            GPUPreparedColorFilterChildDescriptor.Compose(outer = outer, inner = inner),
+        )
+        val ready = compileReady(
+            descriptor = descriptorWithSingleChild("filter", compose),
+            parent = parentProgram(
+                listOf(slot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter, 0)),
+            ),
+        )
+        val child = ready.childPrograms.single()
+
+        assertChildFunctionIsParserProven(child)
+        assertPreparedSourceContainsChildFunction(ready, child)
+        assertColorNear(
+            expected = listOf(0.3f, 0.2f, 0.2f, 0.75f),
+            actual = GPUPreparedRuntimeEffectChildProgramExecutor.evaluateColorFilter(
+                child,
+                listOf(0.1f, 0.2f, 0.3f, 0.5f),
+            ),
+        )
+    }
+
+    @Test
+    fun `mode blender child carries parser proven WGSL and matching CPU behavior`() {
+        val ready = compileReady(
+            descriptor = descriptorWithSingleChild("blender", modeChild()),
+            parent = parentProgram(
+                listOf(slot("blender", GPUPreparedRuntimeEffectChildRole.Blender, 0)),
+            ),
+        )
+        val child = ready.childPrograms.single()
+
+        assertChildFunctionIsParserProven(child)
+        assertPreparedSourceContainsChildFunction(ready, child)
+        assertColorNear(
+            expected = listOf(0.25f, 0.2f, 0.2f, 0.75f),
+            actual = GPUPreparedRuntimeEffectChildProgramExecutor.evaluateBlender(
+                child,
+                source = listOf(0.2f, 0.1f, 0.05f, 0.5f),
+                destination = listOf(0.1f, 0.2f, 0.3f, 0.5f),
+            ),
+        )
+    }
+
+    @Test
+    fun `multiple advanced blend children keep one collision free WGSL helper set`() {
+        fun advancedFilter(mode: GPUBlendMode) = GPURuntimeEffectChildDescriptor.ColorFilter(
+            GPUPreparedColorFilterChildDescriptor.Blend(
+                rgba = listOf(0.4f, 0.2f, 0.1f, 0.5f),
+                mode = mode,
+            ),
+        )
+        val descriptor = GPUMaterialDescriptor.RuntimeEffect.withChildDescriptors(
+            effectId = SimpleRTDescriptor.effectId.value,
+            uniforms = uniforms(),
+            childDescriptors = linkedMapOf(
+                "multiply" to advancedFilter(GPUBlendMode.MULTIPLY),
+                "hue" to advancedFilter(GPUBlendMode.HUE),
+                "screen" to GPURuntimeEffectChildDescriptor.Blender(
+                    GPUPreparedBlenderChildDescriptor.Mode(GPUBlendMode.SCREEN),
+                ),
+            ),
+        )
+        val ready = compileReady(
+            descriptor = descriptor,
+            parent = parentProgram(
+                listOf(
+                    slot("multiply", GPUPreparedRuntimeEffectChildRole.ColorFilter, 0),
+                    slot("hue", GPUPreparedRuntimeEffectChildRole.ColorFilter, 1),
+                    slot("screen", GPUPreparedRuntimeEffectChildRole.Blender, 2),
+                ),
+            ),
+        )
+
+        ready.childPrograms.forEach(::assertChildFunctionIsParserProven)
+        val parsed = parseWgslResult(ready.wgslSource)
+        assertTrue(parsed.isSuccess, parsed.errors.joinToString { it.message })
+        val lowered = Lowerer().lower(parsed.translationUnit)
+        assertEquals(1, lowered.functions.count { function ->
+            function.name == "kanvasBlendAdvancedPremul"
+        })
+        assertEquals(
+            ready.childPrograms.map { child -> child.evaluationFunction }.toSet(),
+            lowered.functions.map { function -> function.name }.toSet()
+                .intersect(ready.childPrograms.map { child -> child.evaluationFunction }.toSet()),
+        )
     }
 
     @Test
@@ -98,6 +251,60 @@ class GPUPreparedMaterialProgramChildrenTest {
         val refused = compileRefused(exactDescriptor(), parentProgram(slots))
 
         assertEquals("unsupported.material.runtime_effect.child_abi", refused.code)
+    }
+
+    @Test
+    fun `prepared runtime material refuses a child binding index mismatch`() {
+        val slots = exactSlots().toMutableList()
+        slots[1] = slots[1].copy(bindingIndex = 7)
+
+        val refused = compileRefused(exactDescriptor(), parentProgram(slots))
+
+        assertEquals("unsupported.material.runtime_effect.child_binding", refused.code)
+    }
+
+    @Test
+    fun `complete child schema validation wins over an earlier child program refusal`() {
+        val unavailableFilter = GPURuntimeEffectChildDescriptor.ColorFilter(
+            GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect(
+                GPUMaterialDescriptor.RuntimeEffect(
+                    effectId = SimpleRTDescriptor.effectId.value,
+                    uniforms = uniforms(),
+                ),
+            ),
+        )
+        val wrongRoleDescriptor = GPUMaterialDescriptor.RuntimeEffect.withChildDescriptors(
+            effectId = SimpleRTDescriptor.effectId.value,
+            uniforms = uniforms(),
+            childDescriptors = linkedMapOf(
+                "filter" to unavailableFilter,
+                "blender" to matrixChild(),
+            ),
+        )
+        val wrongAbiDescriptor = GPUMaterialDescriptor.RuntimeEffect.withChildDescriptors(
+            effectId = SimpleRTDescriptor.effectId.value,
+            uniforms = uniforms(),
+            childDescriptors = linkedMapOf(
+                "filter" to unavailableFilter,
+                "blender" to modeChild(),
+            ),
+        )
+        val exactSlots = listOf(
+            slot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter, 0),
+            slot("blender", GPUPreparedRuntimeEffectChildRole.Blender, 1),
+        )
+        val wrongAbiSlots = exactSlots.toMutableList().apply {
+            this[1] = this[1].copy(abiHash = "sha256:${"e".repeat(64)}")
+        }
+
+        assertEquals(
+            "unsupported.material.runtime_effect.child_role",
+            compileRefused(wrongRoleDescriptor, parentProgram(exactSlots)).code,
+        )
+        assertEquals(
+            "unsupported.material.runtime_effect.child_abi",
+            compileRefused(wrongAbiDescriptor, parentProgram(wrongAbiSlots)).code,
+        )
     }
 
     @Test
@@ -217,9 +424,9 @@ class GPUPreparedMaterialProgramChildrenTest {
             ),
         )
         val renamedSlots = listOf(
-            slot("renamed", GPUPreparedRuntimeEffectChildRole.Shader),
-            slot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter),
-            slot("blender", GPUPreparedRuntimeEffectChildRole.Blender),
+            slot("renamed", GPUPreparedRuntimeEffectChildRole.Shader, 0),
+            slot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter, 1),
+            slot("blender", GPUPreparedRuntimeEffectChildRole.Blender, 2),
         )
         val reorderedDescriptor = GPUMaterialDescriptor.RuntimeEffect.withChildDescriptors(
             effectId = SimpleRTDescriptor.effectId.value,
@@ -231,9 +438,9 @@ class GPUPreparedMaterialProgramChildrenTest {
             ),
         )
         val reorderedSlots = listOf(
-            slot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter),
-            slot("source", GPUPreparedRuntimeEffectChildRole.Shader),
-            slot("blender", GPUPreparedRuntimeEffectChildRole.Blender),
+            slot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter, 0),
+            slot("source", GPUPreparedRuntimeEffectChildRole.Shader, 1),
+            slot("blender", GPUPreparedRuntimeEffectChildRole.Blender, 2),
         )
 
         listOf(
@@ -333,20 +540,57 @@ class GPUPreparedMaterialProgramChildrenTest {
         )
 
     private fun exactSlots(): List<GPUPreparedRuntimeEffectChildSlot> = listOf(
-        slot("source", GPUPreparedRuntimeEffectChildRole.Shader),
-        slot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter),
-        slot("blender", GPUPreparedRuntimeEffectChildRole.Blender),
+        slot("source", GPUPreparedRuntimeEffectChildRole.Shader, 0),
+        slot("filter", GPUPreparedRuntimeEffectChildRole.ColorFilter, 1),
+        slot("blender", GPUPreparedRuntimeEffectChildRole.Blender, 2),
     )
 
     private fun slot(
         name: String,
         role: GPUPreparedRuntimeEffectChildRole,
+        bindingIndex: Int = 0,
     ): GPUPreparedRuntimeEffectChildSlot = GPUPreparedRuntimeEffectChildSlot(
         name = name,
         role = role,
-        bindingIndex = null,
+        bindingIndex = bindingIndex,
         abiHash = preparedRuntimeEffectChildAbiHash(role),
     )
+
+    private fun assertChildFunctionIsParserProven(
+        child: GPUPreparedRuntimeEffectChildProgram,
+    ) {
+        val parsed = parseWgslResult(child.wgslSource)
+        assertTrue(parsed.isSuccess, parsed.errors.joinToString { it.message })
+        val lowered = Lowerer().lower(parsed.translationUnit)
+        assertEquals(1, lowered.functions.count { function ->
+            function.name == child.evaluationFunction
+        })
+    }
+
+    private fun assertPreparedSourceContainsChildFunction(
+        program: GPUPreparedMaterialProgram,
+        child: GPUPreparedRuntimeEffectChildProgram,
+    ) {
+        val parsed = parseWgslResult(program.wgslSource)
+        assertTrue(parsed.isSuccess, parsed.errors.joinToString { it.message })
+        val lowered = Lowerer().lower(parsed.translationUnit)
+        assertEquals(1, lowered.functions.count { function ->
+            function.name == child.evaluationFunction
+        })
+    }
+
+    private fun assertColorNear(
+        expected: List<Float>,
+        actual: List<Float>,
+    ) {
+        assertEquals(4, actual.size)
+        expected.zip(actual).forEachIndexed { index, (expectedChannel, actualChannel) ->
+            assertTrue(
+                kotlin.math.abs(expectedChannel - actualChannel) <= 1e-6f,
+                "channel $index expected $expectedChannel but was $actualChannel",
+            )
+        }
+    }
 
     private fun parentProgram(
         slots: List<GPUPreparedRuntimeEffectChildSlot>,

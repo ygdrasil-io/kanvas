@@ -15,6 +15,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialF
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgramAdmission
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialSampledBinding
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialUniformBinding
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedRuntimeEffectChildCpuProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlanner
@@ -405,12 +406,23 @@ object GPUPreparedMaterialProgramCompiler {
         }
         val accepted = plan as GPUMaterialSourcePlan.Accepted
         val lowererKey = GPURuntimeEffectMaterialLowering.deriveMaterialKey(accepted, context)
+        val childDeclarations = mergePreparedRuntimeEffectWgsl(
+            childPrograms
+                .filter { child -> child.role != GPUPreparedRuntimeEffectChildRole.Shader }
+                .map { child -> child.wgslSource },
+        )
+        val executableSource = mergePreparedRuntimeEffectWgsl(
+            listOf(program.wgslSource, childDeclarations),
+        )
 
         return PreparedSourceResult.Ready(
             PreparedSource(
-                wgslSource = wrapMaterialSource(program.wgslSource, program.sourceFunction),
+                wgslSource = wrapMaterialSource(executableSource, program.sourceFunction),
                 entryPoint = FINAL_FRAGMENT_ENTRY_POINT,
-                composableDeclarationsWgsl = runtimeEffectComposableDeclarationsWgsl(program),
+                composableDeclarationsWgsl = runtimeEffectComposableDeclarationsWgsl(
+                    program = program,
+                    childDeclarations = childDeclarations,
+                ),
                 sourceFunction = MATERIAL_SOURCE_FUNCTION,
                 sourceColorContract = program.sourceColorContract.toPreparedSourceColorContract(),
                 uniformBytes = uniformBytes,
@@ -598,9 +610,13 @@ object GPUPreparedMaterialProgramCompiler {
                 message = "Prepared runtime-effect child order does not match registered slots",
             )
         }
-
-        val children = ArrayList<GPUPreparedRuntimeEffectChildProgram>(slots.size)
-        slots.forEach { slot ->
+        slots.forEachIndexed { index, slot ->
+            if (slot.bindingIndex != index) {
+                return RuntimeEffectChildCompilation.Refused(
+                    code = "unsupported.material.runtime_effect.child_binding",
+                    message = "Prepared runtime-effect child binding does not match slot ${slot.name}",
+                )
+            }
             val child = supplied.getValue(slot.name)
             val suppliedRole = child.role.toPreparedRole()
             if (suppliedRole != slot.role) {
@@ -616,6 +632,11 @@ object GPUPreparedMaterialProgramCompiler {
                     message = "Prepared runtime-effect child ABI does not match slot ${slot.name}",
                 )
             }
+        }
+
+        val children = ArrayList<GPUPreparedRuntimeEffectChildProgram>(slots.size)
+        slots.forEach { slot ->
+            val child = supplied.getValue(slot.name)
             val compiled = when (child) {
                 is GPURuntimeEffectChildDescriptor.Shader ->
                     compileShaderRuntimeChild(slot.name, child, context)
@@ -648,6 +669,11 @@ object GPUPreparedMaterialProgramCompiler {
             RuntimeEffectSingleChildCompilation.Refused(result.code)
         is GPUPreparedMaterialProgramResult.Ready -> {
             val program = result.program
+            val composable = program.composableFragment
+            val childSource = listOf(
+                composable.declarationsWgsl,
+                composable.evaluationFunctionWgsl,
+            ).joinToString("\n\n")
             RuntimeEffectSingleChildCompilation.Ready(
                 GPUPreparedRuntimeEffectChildProgram(
                     name = name,
@@ -665,6 +691,11 @@ object GPUPreparedMaterialProgramCompiler {
                             nested.resourceFacts.map { fact -> "child[$childIndex].$fact" }
                         },
                     ),
+                    wgslSource = childSource,
+                    evaluationFunction = composable.evaluationFunction,
+                    cpuProgram = GPUPreparedRuntimeEffectChildCpuProgram.Shader(
+                        materialKey = program.materialKey,
+                    ),
                 ),
             )
         }
@@ -676,74 +707,23 @@ object GPUPreparedMaterialProgramCompiler {
         context: GPUMaterialLoweringContext,
     ): RuntimeEffectSingleChildCompilation = when (filter) {
         is GPUPreparedColorFilterChildDescriptor.Matrix -> {
-            if (filter.values.size != 20 || filter.values.any { value -> !value.isFinite() }) {
-                RuntimeEffectSingleChildCompilation.Refused("invalid color-matrix payload")
-            } else {
-                val bytes = filter.values.toFloatByteArray()
-                val sourceHash = sha256Hex(COLOR_FILTER_MATRIX_CHILD_WGSL.encodeToByteArray())
-                RuntimeEffectSingleChildCompilation.Ready(
-                    GPUPreparedRuntimeEffectChildProgram(
-                        name = name,
-                        role = GPUPreparedRuntimeEffectChildRole.ColorFilter,
-                        programKey = CanonicalIdentityEncoder(
-                            "prepared-runtime-effect-matrix-child-v1",
-                        )
-                            .text(
-                                "sourceHash",
-                                sourceHash,
-                            )
-                            .bytes("uniformBytes", bytes)
-                            .digestIdentity(),
-                        abiHash = compiledRuntimeEffectChildAbiHash(
-                            role = GPUPreparedRuntimeEffectChildRole.ColorFilter,
-                            sourceHash = sourceHash,
-                            uniformByteCount = bytes.size,
-                        ),
-                        uniformBytes = immutableList(bytes.toUnsignedInts()),
-                        resourceFacts = emptyList(),
-                    ),
-                )
-            }
+            val program = GPUPreparedRuntimeEffectChildProgramAuthority.compileMatrix(
+                name = name,
+                values = filter.values,
+            ) ?: return RuntimeEffectSingleChildCompilation.Refused(
+                "invalid color-matrix payload",
+            )
+            RuntimeEffectSingleChildCompilation.Ready(program)
         }
         is GPUPreparedColorFilterChildDescriptor.Blend -> {
-            if (
-                filter.rgba.size != 4 ||
-                filter.rgba.any { value -> !value.isFinite() || value !in 0f..1f }
-            ) {
-                RuntimeEffectSingleChildCompilation.Refused("invalid blend color-filter payload")
-            } else {
-                val formula = runCatching {
-                    GPUBlendFormulaLibrary.selectedBlendFunctionWgsl(
-                        mode = filter.mode,
-                        functionName = "kanvasRuntimeColorFilterBlend",
-                    )
-                }.getOrNull()
-                    ?: return RuntimeEffectSingleChildCompilation.Refused(
-                        "canonical blend color-filter formula is unavailable",
-                    )
-                val bytes = filter.rgba.toFloatByteArray()
-                val sourceHash = sha256Hex(formula.encodeToByteArray())
-                RuntimeEffectSingleChildCompilation.Ready(
-                    GPUPreparedRuntimeEffectChildProgram(
-                        name = name,
-                        role = GPUPreparedRuntimeEffectChildRole.ColorFilter,
-                        programKey = CanonicalIdentityEncoder(
-                            "prepared-runtime-effect-blend-color-filter-child-v1",
-                        )
-                            .text("mode", filter.mode.gpuLabel)
-                            .text("sourceHash", sourceHash)
-                            .bytes("uniformBytes", bytes)
-                            .digestIdentity(),
-                        abiHash = compiledRuntimeEffectChildAbiHash(
-                            role = GPUPreparedRuntimeEffectChildRole.ColorFilter,
-                            sourceHash = sourceHash,
-                            uniformByteCount = bytes.size,
-                        ),
-                        uniformBytes = immutableList(bytes.toUnsignedInts()),
-                        resourceFacts = emptyList(),
-                    ),
-                )
-            }
+            val program = GPUPreparedRuntimeEffectChildProgramAuthority.compileBlendColorFilter(
+                name = name,
+                rgba = filter.rgba,
+                mode = filter.mode,
+            ) ?: return RuntimeEffectSingleChildCompilation.Refused(
+                "invalid or unavailable canonical blend color-filter program",
+            )
+            RuntimeEffectSingleChildCompilation.Ready(program)
         }
         is GPUPreparedColorFilterChildDescriptor.Compose -> {
             val inner = compileColorFilterRuntimeChild("$name.inner", filter.inner, context)
@@ -752,37 +732,14 @@ object GPUPreparedMaterialProgramCompiler {
             if (outer is RuntimeEffectSingleChildCompilation.Refused) return outer
             val innerChild = (inner as RuntimeEffectSingleChildCompilation.Ready).child
             val outerChild = (outer as RuntimeEffectSingleChildCompilation.Ready).child
-            RuntimeEffectSingleChildCompilation.Ready(
-                GPUPreparedRuntimeEffectChildProgram(
-                    name = name,
-                    role = GPUPreparedRuntimeEffectChildRole.ColorFilter,
-                    programKey = CanonicalIdentityEncoder(
-                        "prepared-runtime-effect-compose-color-filter-child-v1",
-                    )
-                        .text("inner", innerChild.programKey)
-                        .text("outer", outerChild.programKey)
-                        .digestIdentity(),
-                    abiHash = CanonicalIdentityEncoder(
-                        "prepared-runtime-effect-compose-color-filter-abi-v1",
-                    )
-                        .text(
-                            "invocationAbi",
-                            preparedRuntimeEffectChildAbiHash(
-                                GPUPreparedRuntimeEffectChildRole.ColorFilter,
-                            ),
-                        )
-                        .text("innerAbi", innerChild.abiHash)
-                        .text("outerAbi", outerChild.abiHash)
-                        .digestIdentity(),
-                    uniformBytes = immutableList(
-                        innerChild.uniformBytes + outerChild.uniformBytes,
-                    ),
-                    resourceFacts = immutableList(
-                        innerChild.resourceFacts.map { fact -> "inner.$fact" } +
-                            outerChild.resourceFacts.map { fact -> "outer.$fact" },
-                    ),
-                ),
+            val program = GPUPreparedRuntimeEffectChildProgramAuthority.composeColorFilters(
+                name = name,
+                inner = innerChild,
+                outer = outerChild,
+            ) ?: return RuntimeEffectSingleChildCompilation.Refused(
+                "canonical composed color-filter program is unavailable",
             )
+            RuntimeEffectSingleChildCompilation.Ready(program)
         }
         is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
             RuntimeEffectSingleChildCompilation.Refused(
@@ -795,35 +752,13 @@ object GPUPreparedMaterialProgramCompiler {
         blender: GPUPreparedBlenderChildDescriptor,
     ): RuntimeEffectSingleChildCompilation = when (blender) {
         is GPUPreparedBlenderChildDescriptor.Mode -> {
-            val formula = runCatching {
-                GPUBlendFormulaLibrary.selectedBlendFunctionWgsl(
-                    mode = blender.mode,
-                    functionName = "kanvasRuntimeChildBlend",
-                )
-            }.getOrNull()
-                ?: return RuntimeEffectSingleChildCompilation.Refused(
-                    "canonical mode blender formula is unavailable",
-                )
-            val sourceHash = sha256Hex(formula.encodeToByteArray())
-            RuntimeEffectSingleChildCompilation.Ready(
-                GPUPreparedRuntimeEffectChildProgram(
-                    name = name,
-                    role = GPUPreparedRuntimeEffectChildRole.Blender,
-                    programKey = CanonicalIdentityEncoder(
-                        "prepared-runtime-effect-mode-blender-child-v1",
-                    )
-                        .text("mode", blender.mode.gpuLabel)
-                        .text("sourceHash", sourceHash)
-                        .digestIdentity(),
-                    abiHash = compiledRuntimeEffectChildAbiHash(
-                        role = GPUPreparedRuntimeEffectChildRole.Blender,
-                        sourceHash = sourceHash,
-                        uniformByteCount = 0,
-                    ),
-                    uniformBytes = emptyList(),
-                    resourceFacts = emptyList(),
-                ),
+            val program = GPUPreparedRuntimeEffectChildProgramAuthority.compileModeBlender(
+                name = name,
+                mode = blender.mode,
+            ) ?: return RuntimeEffectSingleChildCompilation.Refused(
+                "canonical mode blender program is unavailable",
             )
+            RuntimeEffectSingleChildCompilation.Ready(program)
         }
         is GPUPreparedBlenderChildDescriptor.Arithmetic ->
             RuntimeEffectSingleChildCompilation.Refused(
@@ -1511,16 +1446,6 @@ private fun GPURuntimeEffectChildRole.toPreparedRole(): GPUPreparedRuntimeEffect
         GPURuntimeEffectChildRole.Blender -> GPUPreparedRuntimeEffectChildRole.Blender
     }
 
-private fun compiledRuntimeEffectChildAbiHash(
-    role: GPUPreparedRuntimeEffectChildRole,
-    sourceHash: String,
-    uniformByteCount: Int,
-): String = CanonicalIdentityEncoder("prepared-runtime-effect-child-program-abi-v1")
-    .text("invocationAbi", preparedRuntimeEffectChildAbiHash(role))
-    .text("sourceHash", sourceHash)
-    .int("uniformByteCount", uniformByteCount)
-    .digestIdentity()
-
 private enum class PreparedSourceColorContract {
     LinearStraightRgba,
     LinearPremultipliedRgba,
@@ -2027,13 +1952,18 @@ private fun imageComposableDeclarationsWgsl(): String = """
 
 private fun runtimeEffectComposableDeclarationsWgsl(
     program: GPUPreparedRuntimeEffectProgram,
-): String = """
-    ${program.wgslSource}
-
-    fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
-        return ${program.sourceFunction}(localPosition);
-    }
-""".trimIndent()
+    childDeclarations: String = "",
+): String = mergePreparedRuntimeEffectWgsl(
+    listOf(
+        program.wgslSource,
+        childDeclarations,
+        """
+            fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+                return ${program.sourceFunction}(localPosition);
+            }
+        """.trimIndent(),
+    ),
+)
 
 private fun materialEvaluationFunctionWgsl(
     sourceFunction: String,
@@ -2112,13 +2042,6 @@ private fun FloatArray.toByteArray(): ByteArray =
         forEach(::putFloat)
     }.array()
 
-private fun List<Float>.toFloatByteArray(): ByteArray =
-    ByteBuffer.allocate(size * Float.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN).apply {
-        forEach(::putFloat)
-    }.array()
-
-private fun ByteArray.toUnsignedInts(): List<Int> = map { byte -> byte.toInt() and 0xff }
-
 private fun exactRgbaByteCount(width: Int, height: Int): Long? {
     if (width <= 0 || height <= 0) return null
     return try {
@@ -2138,25 +2061,3 @@ private const val MATERIAL_EVALUATION_FUNCTION = "kanvas_evaluate_material"
 private const val IMAGE_UNIFORM_LAYOUT_HASH = "layout:prepared-material-image:v1"
 private val SUPPORTED_TILE_MODES = setOf("clamp", "repeat", "mirror", "decal")
 private val SUPPORTED_IMAGE_FILTERS = setOf("nearest", "linear")
-
-private const val COLOR_FILTER_MATRIX_CHILD_WGSL = """
-    fn kanvasRuntimeColorFilterMatrix(
-        color: vec4<f32>,
-        row0: vec4<f32>,
-        row1: vec4<f32>,
-        row2: vec4<f32>,
-        row3: vec4<f32>,
-        translate: vec4<f32>,
-    ) -> vec4<f32> {
-        return clamp(
-            vec4<f32>(
-                dot(row0, color),
-                dot(row1, color),
-                dot(row2, color),
-                dot(row3, color),
-            ) + translate,
-            vec4<f32>(0.0),
-            vec4<f32>(1.0),
-        );
-    }
-"""

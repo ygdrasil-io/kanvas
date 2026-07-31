@@ -336,6 +336,8 @@ private fun List<GPUPreparedRuntimeEffectChildProgram>.keyFacts(): List<String> 
             add("child[$index].role=${child.role.name}")
             add("child[$index].programKey=${child.programKey}")
             add("child[$index].abiHash=${child.abiHash}")
+            add("child[$index].wgslSourceHash=${sha256Hex(child.wgslSource.encodeToByteArray())}")
+            add("child[$index].evaluationFunction=${child.evaluationFunction}")
             add("child[$index].uniformBytesHash=${sha256Hex(child.uniformBytes.toUnsignedByteArray())}")
             child.resourceFacts.forEachIndexed { factIndex, fact ->
                 add("child[$index].resource[$factIndex]=$fact")

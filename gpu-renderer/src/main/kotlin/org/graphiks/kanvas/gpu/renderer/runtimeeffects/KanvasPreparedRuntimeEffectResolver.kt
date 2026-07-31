@@ -354,6 +354,7 @@ private fun descriptorProgramMismatch(
         program.routeContractHash != preparedRuntimeEffectRouteContractHash(
             descriptor = descriptor,
             sourceColorContract = registeredSourceColorContract,
+            childSlots = expectedChildSlots,
         )
     ) {
         return "Runtime-effect registered hashes do not match the descriptor"
@@ -472,8 +473,12 @@ private val GPUPreparedRuntimeEffectUniformType.requiredAlignmentBytes: Int
 internal fun preparedRuntimeEffectRouteContractHash(
     descriptor: GPURuntimeEffectDescriptor,
     sourceColorContract: GPUPreparedRuntimeEffectSourceColorContract,
+    childSlots: List<GPUPreparedRuntimeEffectChildSlot> =
+        requireNotNull(reflectedChildSlots(descriptor)) {
+            "Runtime-effect descriptor child slots do not define an exact prepared schema"
+        },
 ): String =
-    CanonicalIdentityEncoder("prepared-runtime-effect-route-v4")
+    CanonicalIdentityEncoder("prepared-runtime-effect-route-v5")
         .text("effectId", descriptor.id.value)
         .int("descriptorVersion", descriptor.version.value)
         .text("uniformSchemaHash", descriptor.uniformSchema.schemaHash)
@@ -482,7 +487,7 @@ internal fun preparedRuntimeEffectRouteContractHash(
         .text("sourceColorContract", sourceColorContract.name)
         .text("entryPoint", descriptor.wgslPlan.entryPoint)
         .text("reflectionHash", descriptor.wgslPlan.reflectionHash)
-        .texts("childSlots", descriptor.childSlots.descriptorChildSlotFacts())
+        .texts("childSlots", childSlots.preparedChildSlotFacts())
         .digestIdentity()
 
 internal fun preparedRuntimeEffectModuleContractHash(
@@ -542,11 +547,6 @@ private fun List<GPUPreparedRuntimeEffectChildSlot>.preparedChildSlotFacts(): Li
         "slot[$index]=${slot.name}:${slot.role.name}:${slot.bindingIndex}:${slot.abiHash}"
     }
 
-private fun List<GPURuntimeEffectChildSlotPlan>.descriptorChildSlotFacts(): List<String> =
-    mapIndexed { index, slot ->
-        "slot[$index]=${slot.slotName}:${slot.acceptedSourceKinds.sorted().joinToString("+")}:" +
-            "${slot.required}"
-    }
 
 private val DESCRIPTOR_FIELD = Regex("""^([^:]+):(.+)@(\d+):(\d+)$""")
 private val SHA256_IDENTITY = Regex("""^sha256:[0-9a-f]{64}$""")
