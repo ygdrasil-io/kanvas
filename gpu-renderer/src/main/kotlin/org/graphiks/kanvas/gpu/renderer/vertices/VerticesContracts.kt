@@ -87,6 +87,19 @@ data class GPUVertexLayoutPlan(
     val shaderLocations: Map<String, Int>,
 )
 
+/**
+ * Mutable-source input for the vertices packer; it is not a durable identity.
+ * The packer must snapshot its arrays before validation or publication.
+ */
+data class GPUPreparedVerticesArtifactInput(
+    val topology: GPUVertexMode,
+    val positions: FloatArray,
+    val colorsRgba8: ByteArray?,
+    val texCoords: FloatArray?,
+    val indices: IntArray?,
+    val provenance: String,
+)
+
 /** Vertex color plan. */
 data class GPUVertexColorPlan(
     val colorFormat: String,
@@ -1014,7 +1027,7 @@ private fun GPUVerticesRouteDecisionRequest.refusalCode(): String? =
         descriptor.sourceMutable -> "unsupported.vertices.key_nondeterministic"
         !descriptor.finitePositions -> "unsupported.vertices.positions_nonfinite"
         descriptor.primitiveMode == GPUVertexMode.TriangleFan -> "unsupported.vertices.triangle_fan_unprepared"
-        descriptor.primitiveMode !in acceptedTopologies -> "unsupported.vertices.topology"
+        descriptor.primitiveMode !in acceptedTopologies -> GPUPreparedVerticesRefusalCodes.Topology
         descriptor.vertexCount > maxVertexCount -> "unsupported.vertices.vertex_count_budget"
         (descriptor.indexCount ?: 0) > maxIndexCount -> "unsupported.vertices.index_count_budget"
         descriptor.positionFormat !in acceptedPositionFormats -> "unsupported.vertices.attribute_format"
@@ -1027,7 +1040,7 @@ private fun GPUVerticesRouteDecisionRequest.refusalCode(): String? =
             GPUBlendDestinationReadRequirement.DestinationTextureRequired ->
             "unsupported.vertices.primitive_blend_destination_read"
         descriptor.primitiveBlendMode != "none" && primitiveBlendPlan() == null ->
-            "unsupported.vertices.primitive_blender_unregistered"
+            GPUPreparedVerticesRefusalCodes.PrimitiveBlender
         adapterEvidenceLabel.isNullOrBlank() || wgslLayoutEvidenceLabel.isNullOrBlank() ->
             "unsupported.vertices.wgsl_abi_unvalidated"
         else -> null
@@ -1088,11 +1101,11 @@ private fun GPUVerticesBufferPlanRequest.refusalCode(
         routeDecision.routeKind != "GPUNative" || routeDecision.diagnostics.any { diagnostic -> diagnostic.terminal } ->
             "unsupported.vertices.route_decision_required"
         routeDecision.descriptor.indexCount != null && indexElementBytes == null ->
-            "unsupported.vertices.index_format"
+            GPUPreparedVerticesRefusalCodes.IndexFormat
         routeDecision.descriptor.indexCount != null && sourceIndexContentHash.isNullOrBlank() ->
             "unsupported.vertices.index_payload_missing"
         routeDecision.descriptor.indexCount != null && maxIndex >= routeDecision.descriptor.vertexCount ->
-            "unsupported.vertices.index_out_of_range"
+            GPUPreparedVerticesRefusalCodes.IndexOutOfRange
         !uploadBeforeDraw -> "unsupported.vertices.upload_unavailable"
         !availableUsageFlags.containsAll(requiredUsageFlags) -> "unsupported.vertices.upload_unavailable"
         vertexBytes > maxVertexBufferBytes || indexBytes > maxIndexBufferBytes ->
