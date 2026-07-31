@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.Collections
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBlendFacts
@@ -146,24 +147,35 @@ object GPUPreparedVerticesLowerer {
                 mapping.descriptor.effectId,
                 mapping.descriptor.descriptorVersion,
             )
-        } catch (_: RuntimeException) {
-            return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "runtime-resolver", "resolver_exception")
+        } catch (_: Exception) {
+            return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "runtime-resolver", "resolver_exception",
+                mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
+        } catch (_: LinkageError) {
+            return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "runtime-resolver", "resolver_linkage_failure",
+                mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
         }
         meshProgramAvailabilityRefusal(resolution)?.let { refusal ->
             return refused(refusal.code, operationIndex, "mesh-program", "runtime_effect_unavailable", refusal.facts)
         }
-        val material = when (val compiled = GPUPreparedMaterialProgramCompiler.compile(
+        val compilerResolver = guardedMemoizedResolver(
+            mapping.descriptor.effectId, mapping.descriptor.descriptorVersion, resolution, runtimeEffectResolver,
+        )
+        val material = try { when (val compiled = GPUPreparedMaterialProgramCompiler.compile(
             descriptor = mapping.descriptor,
             paintAlpha = mapping.paintAlpha,
-            context = materialContext(target, capabilities, frozenResolver(
-                mapping.descriptor.effectId, mapping.descriptor.descriptorVersion, resolution, runtimeEffectResolver,
-            )),
+            context = materialContext(target, capabilities, compilerResolver),
         )) {
             is GPUPreparedMaterialProgramResult.Ready -> compiled.program
             is GPUPreparedMaterialProgramResult.Refused -> return refused(
                 meshMaterialCode(compiled.code), operationIndex, "mesh-program", "compiler_refused",
                 mapOf("compilerCode" to compiled.code, "sourceKind" to compiled.sourceKind.name),
             )
+        } } catch (_: Exception) {
+            return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "runtime-resolver", "resolver_exception",
+                mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
+        } catch (_: LinkageError) {
+            return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "runtime-resolver", "resolver_linkage_failure",
+                mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
         }
         return lowerVertices(
             vertices = vertices,
@@ -430,16 +442,16 @@ private fun meshProgramAvailabilityRefusal(
 ): MeshProgramAvailabilityRefusal? = when (resolution) {
     is GPUPreparedRuntimeEffectResolution.Ready -> null
     is GPUPreparedRuntimeEffectResolution.DescriptorUnavailable ->
-        MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered)
+        MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered, mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
     is GPUPreparedRuntimeEffectResolution.ProgramUnavailable -> when (resolution.reason) {
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable ->
-            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable)
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable, mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslUnavailable ->
-            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable)
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable, mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation ->
-            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation)
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation, mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Abi ->
-            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramAbi)
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramAbi, mapOf("authority" to "GPUPreparedRuntimeEffectResolver"))
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Unknown ->
             MeshProgramAvailabilityRefusal(
                 GPUPreparedVerticesRefusalCodes.Material,
@@ -448,13 +460,16 @@ private fun meshProgramAvailabilityRefusal(
     }
 }
 
-private fun frozenResolver(
+private fun guardedMemoizedResolver(
     effectId: String,
     version: Int,
     resolution: GPUPreparedRuntimeEffectResolution,
     fallback: GPUPreparedRuntimeEffectResolver,
-): GPUPreparedRuntimeEffectResolver = GPUPreparedRuntimeEffectResolver { requestedId, requestedVersion ->
-    if (requestedId == effectId && requestedVersion == version) resolution else fallback.resolve(requestedId, requestedVersion)
+): GPUPreparedRuntimeEffectResolver {
+    val resolved = linkedMapOf(effectId to version to resolution)
+    return GPUPreparedRuntimeEffectResolver { requestedId, requestedVersion ->
+        resolved.getOrPut(requestedId to requestedVersion) { fallback.resolve(requestedId, requestedVersion) }
+    }
 }
 
 private fun refused(
@@ -566,7 +581,7 @@ private fun GPUClipCoveragePlan.snapshotForPreparedVertices(): GPUClipCoveragePl
     GPUClipCoveragePlan.NoClip -> GPUClipCoveragePlan.NoClip
     is GPUClipCoveragePlan.Scissor -> copy(bounds = bounds.copy())
     is GPUClipCoveragePlan.AnalyticIntersection -> GPUClipCoveragePlan.AnalyticIntersection(elements.toList())
-    is GPUClipCoveragePlan.Mask -> copy(elements = elements.toList())
+    is GPUClipCoveragePlan.Mask -> copy(elements = Collections.unmodifiableList(elements.toList()))
     is GPUClipCoveragePlan.Refused -> copy()
 }
 

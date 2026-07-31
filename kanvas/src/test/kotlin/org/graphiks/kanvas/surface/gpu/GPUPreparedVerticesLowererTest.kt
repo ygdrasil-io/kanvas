@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -216,6 +217,22 @@ class GPUPreparedVerticesLowererTest {
     }
 
     @Test
+    fun `published mask elements reject hostile mutation`() {
+        val path = Path().addRect(Rect.fromLTRB(0f, 0f, 2f, 2f))
+        val draw = lower(DisplayOp.DrawVertices(
+            vertices(), Paint.fill(Color.RED), Matrix33.identity(),
+            ClipStack.Complex(listOf(ClipStackOp.PathOp(path, ClipOp.INTERSECT))),
+        )).ready().draw
+        val mask = assertIs<GPUClipCoveragePlan.Mask>(draw.clipSnapshot.coveragePlan)
+        val original = mask.elements
+        @Suppress("UNCHECKED_CAST")
+        assertFailsWith<UnsupportedOperationException> {
+            (mask.elements as MutableList<Any?>).clear()
+        }
+        assertEquals(original, mask.elements)
+    }
+
+    @Test
     fun `transform overflow refuses rather than publishing nonfinite bounds`() {
         val refusal = lower(DisplayOp.DrawVertices(
             vertices(), Paint.fill(Color.RED), Matrix33.scale(Float.MAX_VALUE, Float.MAX_VALUE), ClipStack.WideOpen,
@@ -372,6 +389,22 @@ class GPUPreparedVerticesLowererTest {
         assertEquals(GPUPreparedVerticesRefusalCodes.Material, refusal.code)
         assertEquals("runtime-resolver", refusal.facts["stage"])
         assertEquals("resolver_exception", refusal.facts["reason"])
+    }
+
+    @Test
+    fun `resolver linkage failure and ABI reason keep terminal source authority`() {
+        val linkage = lower(meshOperation(program = registeredMeshProgram()),
+            GPUPreparedRuntimeEffectResolver { _, _ -> throw LinkageError("missing") }).refused()
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, linkage.code)
+        assertEquals("resolver_linkage_failure", linkage.facts["reason"])
+        assertEquals("GPUPreparedRuntimeEffectResolver", linkage.facts["authority"])
+
+        val abi = lower(meshOperation(program = registeredMeshProgram()),
+            GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
+                "abi", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Abi,
+            ) }).refused()
+        assertEquals(GPUPreparedVerticesRefusalCodes.MeshProgramAbi, abi.code)
+        assertEquals("GPUPreparedRuntimeEffectResolver", abi.facts["authority"])
     }
 
     @Test
