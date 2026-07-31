@@ -24,7 +24,6 @@ object GPUPreparedCompositeRefusalCodes {
         LAYER_UNBALANCED,
         LAYER_BOUNDS,
         LAYER_BUDGET,
-        LAYER_DESTINATION_READ,
         OPERATION,
         PAINT,
         CLIP,

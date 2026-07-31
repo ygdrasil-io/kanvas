@@ -97,11 +97,6 @@ class SaveLayerIsolatedTargetGateTest {
                 reason = "unsupported.layer.init_previous_unaccepted",
             ),
             refusalCase(
-                "backdrop",
-                saveRecord = saveRecord(backdropRequired = true),
-                reason = "unsupported.layer.backdrop_filter",
-            ),
-            refusalCase(
                 "filter-chain",
                 saveRecord = saveRecord(sourceFilterCount = 1),
                 reason = "unsupported.layer.filter_chain",
@@ -146,6 +141,22 @@ class SaveLayerIsolatedTargetGateTest {
                 plan.dumpLines(),
             )
         }
+    }
+
+    @Test
+    fun backdropLayerProducesLoadOpLoadAndBackdropCopy() {
+        val request = saveLayerRequest(
+            saveRecord = saveRecord(backdropRequired = true),
+        )
+        val plan = GPUSaveLayerIsolatedTargetPlanner().plan(request)
+
+        assertEquals(emptyList(), plan.diagnostics)
+        val execution = assertIs<GPULayerExecutionPlan.IsolatedTarget>(plan.layerPlan.execution)
+
+        assertEquals("load", execution.target.loadOp)
+        assertEquals("load", execution.initialization.loadPolicy)
+        assertEquals(true, execution.initialization.requiresBackdropCopy)
+        assertEquals("clear(transparent-black)", execution.initialization.clearPolicy)
     }
 }
 

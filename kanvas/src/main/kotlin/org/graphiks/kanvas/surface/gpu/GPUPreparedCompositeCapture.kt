@@ -459,13 +459,6 @@ internal object GPUPreparedCompositeCapturer {
             operation: DisplayOp.BeginLayer,
             operationIndex: Int,
         ): GPUPreparedCompositeScopeState {
-            if (operation.rec.backdrop != null) {
-                refuse(
-                    GPUPreparedCompositeRefusalCodes.LAYER_DESTINATION_READ,
-                    operationIndex,
-                    mapOf("reason" to "backdrop filter requires destination content"),
-                )
-            }
             return GPUPreparedCompositeScopeState(
                 bounds = operation.rec.bounds?.toSnapshot(
                     GPUPreparedCompositeRefusalCodes.LAYER_BOUNDS,
@@ -475,6 +468,7 @@ internal object GPUPreparedCompositeCapturer {
                 transform = operation.transform.toSnapshot(operationIndex),
                 clip = (operation.rec.compositeClip ?: ClipStack.WideOpen)
                     .toSnapshot(operationIndex),
+                backdropRequired = operation.rec.backdrop != null,
             )
         }
 
@@ -827,6 +821,7 @@ private fun GPUPreparedCompositeScopeState.identityFragment(): String = canonica
     paint?.identityFragment() ?: "no-paint",
     transform.identityFragment(),
     clip.identityFragment(),
+    backdropRequired.toString(),
 )
 
 private fun GPUPreparedCompositeScope.identityFragment(): String = canonicalHash(

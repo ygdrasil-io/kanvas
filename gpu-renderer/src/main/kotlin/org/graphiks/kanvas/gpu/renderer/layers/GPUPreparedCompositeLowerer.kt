@@ -14,7 +14,7 @@ object GPUPreparedCompositeLowerer {
 
             val state = scope.state ?: continue
 
-            val saveRecord = buildSaveRecord(scope)
+            val saveRecord = buildSaveRecord(scope, state)
             val bounds = buildBounds(state)
             val parentTargetLabel = scope.parentId?.value ?: "root-target"
 
@@ -49,7 +49,7 @@ object GPUPreparedCompositeLowerer {
         )
     }
 
-    private fun buildSaveRecord(scope: GPUPreparedCompositeScope): GPULayerSaveRecord {
+    private fun buildSaveRecord(scope: GPUPreparedCompositeScope, state: GPUPreparedCompositeScopeState): GPULayerSaveRecord {
         val childIds = scope.entries.mapNotNull { entry ->
             when (entry) {
                 is GPUPreparedCompositeEntry.Draw -> "draw:${entry.operationIndex}"
@@ -59,7 +59,7 @@ object GPUPreparedCompositeLowerer {
         return GPULayerSaveRecord(
             scopeId = GPULayerScopeID(scope.id.value),
             boundsLabel = "scope-bounds:${scope.id.value}",
-            backdropRequired = false,
+            backdropRequired = state.backdropRequired,
             parentScopeId = scope.parentId?.let { GPULayerScopeID(it.value) },
             childCommandIds = childIds,
         )
