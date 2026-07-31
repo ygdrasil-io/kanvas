@@ -3,22 +3,33 @@ package org.graphiks.kanvas.surface.gpu
 import java.util.ArrayDeque
 import java.util.Collections
 import java.util.IdentityHashMap
+import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptorAssemblySession
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedBlenderChildDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedColorFilterChildDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedEvidence
 import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedMaterialUnsupportedReason
+import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectChildDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
 import org.graphiks.kanvas.gpu.renderer.materials.GradientWgslShaderProvider
 import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.Blender
+import org.graphiks.kanvas.paint.BlenderChild
 import org.graphiks.kanvas.paint.ColorFilter
+import org.graphiks.kanvas.paint.ColorFilterChild
+import org.graphiks.kanvas.paint.MeshProgram
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PaintStyle
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.paint.ShaderChild
 import org.graphiks.kanvas.pipeline.UniformBlock
 import org.graphiks.kanvas.pipeline.UniformValue
 import org.graphiks.kanvas.types.a
@@ -31,6 +42,30 @@ data class GPUPreparedMaterialMapping(
     val descriptor: GPUMaterialDescriptor,
     val paintAlpha: Float,
 )
+
+/** Exact MeshProgram material mapping; final target blend remains a separate draw fact. */
+data class GPUPreparedMeshProgramMapping(
+    val descriptor: GPUMaterialDescriptor.RuntimeEffect,
+    val paintAlpha: Float,
+    val finalTargetBlendMode: GPUBlendMode? = null,
+)
+
+/** Typed, deterministic result used by later FP-06 lowering without exceptions or fallback. */
+sealed interface GPUPreparedMeshProgramMappingResult {
+    data class Ready(
+        val mapping: GPUPreparedMeshProgramMapping,
+    ) : GPUPreparedMeshProgramMappingResult
+
+    data class Refused(
+        val code: String,
+        val facts: Map<String, String>,
+    ) : GPUPreparedMeshProgramMappingResult
+}
+
+internal class GPUPreparedMeshProgramMappingRefusalException(
+    val code: String,
+    val facts: Map<String, String>,
+) : IllegalArgumentException("$code: $facts")
 
 /**
  * Prepared-mapping active traversal safety budget.
@@ -101,6 +136,304 @@ internal fun Paint.toPreparedMaterialMapping(
         descriptor = descriptor,
         paintAlpha = paintAlpha,
     )
+}
+
+/** Maps one valid MeshProgram or throws a typed refusal for success-oriented callers. */
+internal fun MeshProgram.toPreparedMeshProgramMapping(
+    paintAlpha: Float,
+    descriptorAssembly: GPUMaterialDescriptorAssemblySession =
+        GPUMaterialDescriptorAssemblySession(),
+): GPUPreparedMeshProgramMapping =
+    when (
+        val result = toPreparedMeshProgramMappingResult(
+            paintAlpha = paintAlpha,
+            descriptorAssembly = descriptorAssembly,
+        )
+    ) {
+        is GPUPreparedMeshProgramMappingResult.Ready -> result.mapping
+        is GPUPreparedMeshProgramMappingResult.Refused ->
+            throw GPUPreparedMeshProgramMappingRefusalException(result.code, result.facts)
+    }
+
+/** Fail-closed MeshProgram mapping used by FP-06 lowering before material compilation. */
+internal fun MeshProgram.toPreparedMeshProgramMappingResult(
+    paintAlpha: Float,
+    descriptorAssembly: GPUMaterialDescriptorAssemblySession =
+        GPUMaterialDescriptorAssemblySession(),
+    finalTargetBlendMode: GPUBlendMode? = null,
+): GPUPreparedMeshProgramMappingResult {
+    if (effect.id.isBlank()) {
+        return meshProgramRefused(
+            GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered,
+            "blank_effect_id",
+        )
+    }
+    if (!paintAlpha.isFinite() || paintAlpha < 0f || paintAlpha > 1f) {
+        return meshProgramRefused(
+            GPUPreparedVerticesRefusalCodes.Material,
+            "invalid_paint_alpha",
+            "paintAlpha" to paintAlpha.toString(),
+        )
+    }
+
+    val entries = children.entries.toList()
+    val seenNames = linkedSetOf<String>()
+    entries.forEach { entry ->
+        if (entry.name.isBlank()) {
+            return meshProgramRefused(
+                GPUPreparedVerticesRefusalCodes.MeshProgramChild,
+                "blank_child_name",
+            )
+        }
+        if (!seenNames.add(entry.name)) {
+            return meshProgramRefused(
+                GPUPreparedVerticesRefusalCodes.MeshProgramChild,
+                "duplicate_name",
+                "childName" to entry.name,
+            )
+        }
+    }
+
+    val childMapper = PreparedMeshProgramChildMapper(descriptorAssembly)
+    val mappedChildren = linkedMapOf<String, GPURuntimeEffectChildDescriptor>()
+    entries.forEach { entry ->
+        when (val mapped = childMapper.map(entry.child)) {
+            is PreparedMeshProgramChildMapping.Ready ->
+                mappedChildren[entry.name] = mapped.descriptor
+            is PreparedMeshProgramChildMapping.Refused ->
+                return meshProgramRefused(
+                    GPUPreparedVerticesRefusalCodes.MeshProgramChild,
+                    mapped.reason,
+                    "childName" to entry.name,
+                )
+        }
+    }
+
+    return GPUPreparedMeshProgramMappingResult.Ready(
+        GPUPreparedMeshProgramMapping(
+            descriptor = descriptorAssembly.runtimeEffectWithChildDescriptors(
+                effectId = effect.id,
+                descriptorVersion = 1,
+                uniforms = uniforms.toGPUUniformValues(),
+                childDescriptors = mappedChildren,
+            ),
+            paintAlpha = paintAlpha,
+            finalTargetBlendMode = finalTargetBlendMode,
+        ),
+    )
+}
+
+/** Retains `DrawMesh.blendMode ?: paint.blendMode` outside material identity. */
+internal fun DisplayOp.DrawMesh.toPreparedMeshProgramMappingResult(
+    descriptorAssembly: GPUMaterialDescriptorAssemblySession =
+        GPUMaterialDescriptorAssemblySession(),
+): GPUPreparedMeshProgramMappingResult {
+    val meshProgram = mesh.program ?: return meshProgramRefused(
+        GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered,
+        "missing_mesh_program",
+    )
+    return meshProgram.toPreparedMeshProgramMappingResult(
+        paintAlpha = paint.color.a,
+        descriptorAssembly = descriptorAssembly,
+        finalTargetBlendMode = (blendMode ?: paint.blendMode).toGpuBlendFacts().mode,
+    )
+}
+
+private fun meshProgramRefused(
+    code: String,
+    reason: String,
+    vararg facts: Pair<String, String>,
+): GPUPreparedMeshProgramMappingResult.Refused =
+    GPUPreparedMeshProgramMappingResult.Refused(
+        code = code,
+        facts = Collections.unmodifiableMap(
+            linkedMapOf("reason" to reason, *facts),
+        ),
+    )
+
+private sealed interface PreparedMeshProgramChildMapping {
+    data class Ready(
+        val descriptor: GPURuntimeEffectChildDescriptor,
+    ) : PreparedMeshProgramChildMapping
+
+    data class Refused(val reason: String) : PreparedMeshProgramChildMapping
+}
+
+private sealed interface PreparedMeshColorFilterMapping {
+    data class Ready(
+        val descriptor: GPUPreparedColorFilterChildDescriptor,
+    ) : PreparedMeshColorFilterMapping
+
+    data class Refused(val reason: String) : PreparedMeshColorFilterMapping
+}
+
+private class PreparedMeshProgramChildMapper(
+    private val descriptorAssembly: GPUMaterialDescriptorAssemblySession,
+) {
+    private val colorFilterActive =
+        Collections.newSetFromMap(IdentityHashMap<ColorFilter, Boolean>())
+
+    fun map(child: org.graphiks.kanvas.paint.MeshChild): PreparedMeshProgramChildMapping =
+        when (child) {
+            is ShaderChild -> mapShader(child.shader)
+            is ColorFilterChild -> when (val mapped = mapColorFilter(child.filter, depth = 2)) {
+                is PreparedMeshColorFilterMapping.Ready ->
+                    PreparedMeshProgramChildMapping.Ready(
+                        GPURuntimeEffectChildDescriptor.ColorFilter(mapped.descriptor),
+                    )
+                is PreparedMeshColorFilterMapping.Refused ->
+                    PreparedMeshProgramChildMapping.Refused(mapped.reason)
+            }
+            is BlenderChild -> mapBlender(child.blender)
+        }
+
+    private fun mapShader(shader: Shader): PreparedMeshProgramChildMapping {
+        val descriptor = shader.toPreparedMaterial(
+            colorFilterFingerprinter = PreparedColorFilterFingerprinter(),
+            descriptorAssembly = descriptorAssembly,
+        )
+        return if (descriptor.containsUnsupportedMaterial()) {
+            PreparedMeshProgramChildMapping.Refused("unsupported_shader")
+        } else {
+            PreparedMeshProgramChildMapping.Ready(
+                GPURuntimeEffectChildDescriptor.Shader(descriptor),
+            )
+        }
+    }
+
+    private fun mapBlender(blender: Blender): PreparedMeshProgramChildMapping =
+        when (blender) {
+            is Blender.Mode -> PreparedMeshProgramChildMapping.Ready(
+                GPURuntimeEffectChildDescriptor.Blender(
+                    GPUPreparedBlenderChildDescriptor.Mode(
+                        blender.mode.toGpuBlendFacts().mode,
+                    ),
+                ),
+            )
+            is Blender.Arithmetic ->
+                // No registered Kotlin/CPU + WGSL arithmetic authority exists yet.
+                PreparedMeshProgramChildMapping.Refused(
+                    "arithmetic_blender_unregistered",
+                )
+        }
+
+    private fun mapColorFilter(
+        filter: ColorFilter,
+        depth: Int,
+    ): PreparedMeshColorFilterMapping {
+        if (depth > PREPARED_MAPPING_MAX_ACTIVE_GRAPH_DEPTH) {
+            return PreparedMeshColorFilterMapping.Refused("child_graph_depth")
+        }
+        if (!colorFilterActive.add(filter)) {
+            return PreparedMeshColorFilterMapping.Refused("child_graph_cycle")
+        }
+        return try {
+            mapActiveColorFilter(filter, depth)
+        } finally {
+            colorFilterActive.remove(filter)
+        }
+    }
+
+    private fun mapActiveColorFilter(
+        filter: ColorFilter,
+        depth: Int,
+    ): PreparedMeshColorFilterMapping =
+        when (filter) {
+            is ColorFilter.Matrix -> {
+                val values = filter.values.toList()
+                if (values.size != 20 || values.any { !it.isFinite() }) {
+                    PreparedMeshColorFilterMapping.Refused("invalid_color_filter_matrix")
+                } else {
+                    PreparedMeshColorFilterMapping.Ready(
+                        GPUPreparedColorFilterChildDescriptor.Matrix(values),
+                    )
+                }
+            }
+            is ColorFilter.Blend -> PreparedMeshColorFilterMapping.Ready(
+                GPUPreparedColorFilterChildDescriptor.Blend(
+                    rgba = listOf(
+                        filter.color.r,
+                        filter.color.g,
+                        filter.color.b,
+                        filter.color.a,
+                    ),
+                    mode = filter.mode.toGpuBlendFacts().mode,
+                ),
+            )
+            is ColorFilter.Compose -> {
+                val outer = mapColorFilter(filter.outer, depth + 1)
+                if (outer is PreparedMeshColorFilterMapping.Refused) return outer
+                val inner = mapColorFilter(filter.inner, depth + 1)
+                if (inner is PreparedMeshColorFilterMapping.Refused) return inner
+                PreparedMeshColorFilterMapping.Ready(
+                    GPUPreparedColorFilterChildDescriptor.Compose(
+                        outer = (outer as PreparedMeshColorFilterMapping.Ready).descriptor,
+                        inner = (inner as PreparedMeshColorFilterMapping.Ready).descriptor,
+                    ),
+                )
+            }
+            is ColorFilter.RuntimeEffect -> mapRuntimeColorFilter(filter, depth)
+            is ColorFilter.Table,
+            is ColorFilter.Lighting,
+            ColorFilter.SRGBToLinear,
+            ColorFilter.LinearToSRGB,
+            is ColorFilter.HSLAMatrix,
+            is ColorFilter.Lerp,
+            ColorFilter.HighContrast,
+            ColorFilter.Luma,
+            ColorFilter.Overdraw,
+            -> PreparedMeshColorFilterMapping.Refused("unsupported_color_filter")
+        }
+
+    private fun mapRuntimeColorFilter(
+        filter: ColorFilter.RuntimeEffect,
+        depth: Int,
+    ): PreparedMeshColorFilterMapping {
+        if (filter.effect.id.isBlank()) {
+            return PreparedMeshColorFilterMapping.Refused("blank_registered_effect_id")
+        }
+        val mappedChildren = linkedMapOf<String, GPURuntimeEffectChildDescriptor>()
+        filter.children.entries.toList().forEach { (name, child) ->
+            if (name.isBlank()) {
+                return PreparedMeshColorFilterMapping.Refused("blank_child_name")
+            }
+            when (val mapped = mapColorFilter(child, depth + 1)) {
+                is PreparedMeshColorFilterMapping.Ready ->
+                    mappedChildren[name] =
+                        GPURuntimeEffectChildDescriptor.ColorFilter(mapped.descriptor)
+                is PreparedMeshColorFilterMapping.Refused -> return mapped
+            }
+        }
+        val effectDescriptor = descriptorAssembly.runtimeEffectWithChildDescriptors(
+            effectId = filter.effect.id,
+            descriptorVersion = 1,
+            uniforms = filter.uniforms.toGPUUniformValues(),
+            childDescriptors = mappedChildren,
+        )
+        return PreparedMeshColorFilterMapping.Ready(
+            GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect(
+                effectDescriptor,
+            ),
+        )
+    }
+}
+
+private fun GPUMaterialDescriptor.containsUnsupportedMaterial(): Boolean {
+    val pending = ArrayDeque<GPUMaterialDescriptor>()
+    pending.addLast(this)
+    while (pending.isNotEmpty()) {
+        when (val descriptor = pending.removeLast()) {
+            is GPUMaterialDescriptor.Unsupported -> return true
+            is GPUMaterialDescriptor.BlendShader -> {
+                pending.addLast(descriptor.dst)
+                pending.addLast(descriptor.src)
+            }
+            is GPUMaterialDescriptor.RuntimeEffect ->
+                descriptor.children.values.forEach(pending::addLast)
+            else -> Unit
+        }
+    }
+    return false
 }
 
 internal fun Paint.toMaterial(): GPUMaterialDescriptor =
