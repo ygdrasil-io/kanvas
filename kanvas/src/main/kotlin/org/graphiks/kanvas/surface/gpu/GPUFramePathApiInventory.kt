@@ -7,18 +7,28 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind
+import org.graphiks.kanvas.gpu.renderer.commands.GPUCommandSource
 import org.graphiks.kanvas.gpu.renderer.commands.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.commands.GPUDrawCommandID
 import org.graphiks.kanvas.gpu.renderer.commands.GPUFrameProvenance
+import org.graphiks.kanvas.gpu.renderer.commands.GPULayerFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUOrderingFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialFrameIdentityAuthority
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
+import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameRequest
 import org.graphiks.kanvas.gpu.renderer.recording.GPUCorePrimitivePreparedFrameResult
@@ -33,6 +43,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
+import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.surface.RenderConfig
@@ -138,19 +149,24 @@ object GPUFramePathApiInventory {
             capabilities = capabilities,
             deviceGeneration = deviceGeneration,
         )
-        visual.forEach { recorder.record(it.normalized) }
+        val preparedVerticesCommands = publishedVerticesInventory
+            ?.normalizedCommands(target, capabilities)
+            .orEmpty()
+        val normalizedCommands = (visual.map(GPUFramePathVisualCommand::normalized) +
+            preparedVerticesCommands).sortedBy { command -> command.commandId.value }
+        normalizedCommands.forEach(recorder::record)
         val recording = recorder.close()
         val framePlan = GPUFramePlanner.plan(recording.taskList)
         return GPUFramePathInventoryPlan(
             target = target,
             visualCommands = visual.toList(),
-            normalizedCommands = visual.map(GPUFramePathVisualCommand::normalized),
+            normalizedCommands = normalizedCommands,
             stateEvents = mapping.stateEvents,
-            telemetryInputs = visual.map { command ->
+            telemetryInputs = normalizedCommands.map { command ->
                 GPUFramePathTelemetryInput(
-                    commandId = command.normalized.commandId,
-                    paintOrder = command.normalized.ordering.paintOrder,
-                    provenance = command.provenance,
+                    commandId = command.commandId,
+                    paintOrder = command.ordering.paintOrder,
+                    provenance = command.source.frameProvenance,
                 )
             },
             recording = recording,
@@ -284,10 +300,31 @@ object GPUFramePathApiInventory {
         }.orEmpty()
         return GPUPreparedSurfaceSemanticBuilder.gather(
             visualCommands = inventory.visualCommands,
+            normalizedCommands = inventory.normalizedCommands,
             recording = inventory.recording,
             targetBounds = targetBounds,
             imageArtifactsByCommandId = imageArtifactsByCommandId,
             textSemanticsByCommandId = textSemantics,
+            verticesSemanticsByCommandId = inventory.preparedVerticesInventory?.let {
+                when (val gathered = GPUPreparedVerticesSemanticBuilder.gather(
+                    normalizedCommands = inventory.normalizedCommands,
+                    inventory = it,
+                    recording = inventory.recording,
+                    target = inventory.target,
+                    targetBounds = targetBounds,
+                )) {
+                    is GPUPreparedVerticesSemanticGatherResult.Gathered -> gathered.semanticsByCommandId
+                    is GPUPreparedVerticesSemanticGatherResult.Refused -> return GPUPreparedSurfaceSemanticGatherResult.Refused(
+                        GPUDiagnostic(
+                            code = GPUDiagnosticCode(gathered.code),
+                            domain = GPUDiagnosticDomain.Recording,
+                            severity = GPUDiagnosticSeverity.Error,
+                            message = gathered.message,
+                            facts = gathered.facts,
+                        ),
+                    )
+                }
+            }.orEmpty(),
             blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
         )
     }
@@ -304,4 +341,78 @@ object GPUFramePathApiInventory {
                 "operationIndex" to refusal.operationIndex.toString(),
             ),
         )
+}
+
+private fun PreparedVerticesFrameInventory.normalizedCommands(
+    target: GPUTargetFacts,
+    capabilities: GPUCapabilities,
+): List<NormalizedDrawCommand.DrawPreparedVertices> = mappedCommands.map { mapped ->
+    val command = commandsByOperationIndex.getValue(mapped.operationIndex)
+    val draw = command.draw
+    val matrix = draw.transform
+    val transformType = when {
+        matrix.persp0 != 0f || matrix.persp1 != 0f || matrix.persp2 != 1f -> GPUTransformType.Perspective
+        matrix.scaleX == 1f && matrix.scaleY == 1f && matrix.skewX == 0f && matrix.skewY == 0f &&
+            matrix.transX == 0f && matrix.transY == 0f -> GPUTransformType.Identity
+        matrix.scaleX == 1f && matrix.scaleY == 1f && matrix.skewX == 0f && matrix.skewY == 0f ->
+            GPUTransformType.Translate
+        matrix.skewX == 0f && matrix.skewY == 0f -> GPUTransformType.Scale
+        else -> GPUTransformType.Affine
+    }
+    val coverage = draw.clipSnapshot.coveragePlan
+    val clipKind = when (coverage) {
+        GPUClipCoveragePlan.NoClip -> GPUClipKind.WideOpen
+        is GPUClipCoveragePlan.Scissor -> GPUClipKind.DeviceRect
+        else -> GPUClipKind.ComplexStack
+    }
+    NormalizedDrawCommand.DrawPreparedVertices(
+        commandId = GPUDrawCommandID(mapped.commandId),
+        artifactKey = command.artifactKey,
+        topologyIdentity = command.artifact.topology.sourceLabel,
+        layoutIdentity = command.artifact.normalizedLayoutIdentity(),
+        materialIdentity = GPUPreparedMaterialFrameIdentityAuthority.identity(command.material).bucketKey,
+        transformBytes = listOf(
+            matrix.scaleX, matrix.skewX, matrix.transX,
+            matrix.skewY, matrix.scaleY, matrix.transY,
+            matrix.persp0, matrix.persp1, matrix.persp2,
+        ).map(Float::toRawBits),
+        transform = GPUTransformFacts(
+            type = transformType,
+            translateX = matrix.transX,
+            translateY = matrix.transY,
+            scaleX = matrix.scaleX,
+            scaleY = matrix.scaleY,
+            skewX = matrix.skewX,
+            skewY = matrix.skewY,
+        ),
+        clip = GPUClipFacts(
+            kind = clipKind,
+            bounds = draw.clipSnapshot.scissorBounds ?: draw.deviceBounds,
+            coveragePlan = coverage,
+        ),
+        layer = GPULayerFacts.root(target),
+        blend = draw.finalBlend,
+        preparedBlendPlan = draw.blendPlan,
+        bounds = draw.clippedBounds ?: draw.deviceBounds,
+        ordering = GPUOrderingFacts(
+            paintOrder = mapped.commandId,
+            dependsOnDestination = draw.blendPlan.destinationReadRequirement ==
+                GPUBlendDestinationReadRequirement.DestinationTextureRequired,
+            requiresBarrier = false,
+        ),
+        source = GPUCommandSource(
+            adapter = "kanvas-surface",
+            operation = when (draw.operationKind) {
+                GPUPreparedVerticesOperationKind.DrawVertices -> "drawVertices.prepared"
+                GPUPreparedVerticesOperationKind.DrawMesh -> "drawMesh.prepared"
+            },
+            frameProvenance = mapped.frameProvenance,
+        ),
+        clipIdentity = draw.clipSnapshot.identity,
+        clipCoverageIdentity = coverage.preparedVerticesSemanticIdentity(),
+        primitiveColorPresent = draw.primitiveColorPresent,
+        primitiveBlendIdentity = draw.primitiveBlendPlan?.plan?.canonicalIdentity(),
+        capabilitySnapshotHash = capabilities.canonicalSnapshotHash(),
+        drawProvenance = draw.provenance,
+    )
 }

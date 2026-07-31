@@ -127,6 +127,7 @@ internal object GPUOpMapper {
         val visual = mutableListOf<GPUFramePathVisualCommand>()
         val stateEvents = mutableListOf<GPUFramePathStateEvent>()
         val culledTextOperationIndices = linkedSetOf<Int>()
+        val preparedVerticesProvenance = linkedMapOf<Int, GPUFrameProvenance>()
         val legacy = GPULegacyImmediatePathAdapter()
         val preparedVerticesCommandIds = linkedMapOf<Int, Int>()
         var provenance = GPUFrameProvenance.None
@@ -426,6 +427,7 @@ internal object GPUOpMapper {
                             ),
                         )
                     preparedVerticesCommandIds[command.operationIndex] = nextCommandId()
+                    preparedVerticesProvenance[command.operationIndex] = provenance
                 }
                 else -> {
                     val paintOrder = nextCommandId()
@@ -449,7 +451,10 @@ internal object GPUOpMapper {
             }
         }
         val mappedVerticesInventory = when (
-            val binding = preparedVerticesInventory?.bindCommandIds(preparedVerticesCommandIds)
+            val binding = preparedVerticesInventory?.bindCommandIds(
+                preparedVerticesCommandIds,
+                preparedVerticesProvenance,
+            )
         ) {
             null -> null
             is PreparedVerticesCommandBindingResult.Ready -> binding.inventory

@@ -272,6 +272,22 @@ object GPUFirstRouteDecisionBuilder {
             ),
         )
 
+    /** Builds a recording-local prepared vertices route without materializing GPU resources. */
+    fun preparedVertices(
+        commandIdValue: Int,
+        artifactKey: String,
+    ): GPURouteDecision.Prepared =
+        GPURouteDecision.Prepared(
+            route = CPUPreparedGPURoute(
+                artifactKey = CPUPreparedGPUArtifactKey(artifactKey),
+                artifactType = "prepared-vertices-upload",
+                lifetimeClass = "recording-local",
+                budgetClass = "vertices-frame",
+                consumerKind = "prepared.vertices.semantic",
+                invalidationFacts = listOf("artifact-bytes", "layout", "topology", "material"),
+            ),
+        )
+
     /**
      * Builds a native DrawImageRect GPU route decision (future, when bitmap
      * WGSL is ready for first-slice promotion).

@@ -35,6 +35,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
@@ -324,9 +325,54 @@ class GPURecorder(
             is NormalizedDrawCommand.DrawTextRun -> planDrawTextRun(command)
             is NormalizedDrawCommand.FillPath -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.DrawImageRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
+            is NormalizedDrawCommand.DrawPreparedVertices -> planPreparedVertices(command)
             is NormalizedDrawCommand.ApplyFilter -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
             is NormalizedDrawCommand.DrawLayer -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
         }
+
+    private fun planPreparedVertices(
+        command: NormalizedDrawCommand.DrawPreparedVertices,
+    ): GPUFirstRoutePlan {
+        val commandId = command.commandId.value
+        val recordId = "analysis.draw_prepared_vertices.$commandId"
+        val renderStep = org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_RENDER_STEP_IDENTITY
+        val analysisRecord = GPUDrawAnalysisRecord(
+            recordId = recordId,
+            commandIdValue = commandId,
+            commandFamily = "DrawPreparedVertices",
+            boundsHash = command.bounds.recordingBoundsHash(),
+            routeDecisionLabel = "prepared.vertices.semantic",
+            materialKeyHash = command.materialIdentity,
+            renderStepCandidates = listOf(renderStep),
+            sortKey = SortKey(command.ordering.paintOrder.toLong()),
+            diagnostics = emptyList(),
+        )
+        return GPUFirstRoutePlan(
+            analysisRecord = analysisRecord,
+            analysisDecision = GPUDrawAnalysisDecision.Candidate(
+                recordId = recordId,
+                routeDecisionLabel = "prepared.vertices.semantic",
+                resourceDeclarations = listOf("vertices:${command.artifactKey}"),
+                renderStepCandidates = listOf(renderStep),
+            ),
+            routeDecision = GPUFirstRouteDecisionBuilder.preparedVertices(commandId, command.artifactKey),
+            pass = GPUFirstRoutePassBuilder.acceptedPreparedVertices(
+                commandIdValue = commandId,
+                analysisRecordId = recordId,
+                renderStepIdentity = renderStep,
+                sortKey = command.ordering.paintOrder.toLong(),
+                pipelineKey = GPURenderPipelineKey("pending.pipeline.prepared_vertices.${command.layer.target.colorFormat}"),
+                blendPlan = command.preparedBlendPlan,
+                boundsHash = command.bounds.recordingBoundsHash(),
+                scissorBoundsHash = command.clip.coveragePlan?.let { command.clipCoverageIdentity },
+                originalPaintOrder = command.ordering.paintOrder,
+                targetStateHash = command.recordingTargetStateHash(),
+                frameProvenance = command.source.frameProvenance,
+                clipCoveragePlan = command.clip.coveragePlan,
+                clipExecutionPlan = command.clip.executionPlan,
+            ),
+        )
+    }
 
     private fun planDrawTextRun(command: NormalizedDrawCommand.DrawTextRun): GPUFirstRoutePlan {
         if (command.colorGlyphPlans.isNotEmpty()) {

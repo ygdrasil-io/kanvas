@@ -95,6 +95,8 @@ enum class GPUDrawKind {
     DrawTextRun,
     /** Image draw command family with decoded pixel upload. */
     DrawImageRect,
+    /** Prepared DrawVertices/DrawMesh semantic command family. */
+    DrawPreparedVertices,
     /** Save-layer command family with offscreen target isolation and composite. */
     DrawLayer,
     /** Filter command family with GPU-native filter render node execution. */
@@ -3156,6 +3158,43 @@ sealed interface NormalizedDrawCommand {
         val stroke: Boolean = false,
     ) : NormalizedDrawCommand {
         override val drawKind: GPUDrawKind = GPUDrawKind.DrawImageRect
+    }
+
+    /**
+     * Handle-free normalized command for one already-lowered DrawVertices or DrawMesh operation.
+     * Upload offsets, cache facts, native resources, and shader assembly are deliberately absent.
+     */
+    class DrawPreparedVertices(
+        override val commandId: GPUDrawCommandID,
+        val artifactKey: String,
+        val topologyIdentity: String,
+        val layoutIdentity: String,
+        val materialIdentity: String,
+        transformBytes: List<Int>,
+        override val transform: GPUTransformFacts,
+        override val clip: GPUClipFacts,
+        override val layer: GPULayerFacts,
+        override val blend: GPUBlendFacts,
+        val preparedBlendPlan: GPUBlendPlan,
+        override val bounds: GPUBounds,
+        override val ordering: GPUOrderingFacts,
+        override val source: GPUCommandSource,
+        val clipIdentity: String,
+        val clipCoverageIdentity: String,
+        val primitiveColorPresent: Boolean,
+        val primitiveBlendIdentity: String?,
+        val capabilitySnapshotHash: String,
+        val drawProvenance: String,
+    ) : NormalizedDrawCommand {
+        val transformBytes: List<Int> = Collections.unmodifiableList(ArrayList(transformBytes))
+
+        init {
+            require(artifactKey.isNotBlank() && topologyIdentity.isNotBlank() &&
+                layoutIdentity.isNotBlank() && materialIdentity.isNotBlank())
+            require(this.transformBytes.size == 9)
+        }
+        override val drawKind: GPUDrawKind = GPUDrawKind.DrawPreparedVertices
+        override val material: GPUMaterialDescriptor? = null
     }
 
     /**

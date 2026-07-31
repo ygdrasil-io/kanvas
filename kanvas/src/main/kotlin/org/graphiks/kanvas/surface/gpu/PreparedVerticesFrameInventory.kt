@@ -6,6 +6,8 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialFrameIdentityAuthority
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 
 private const val WEBGPU_BUFFER_UPLOAD_ALIGNMENT = 4L
@@ -81,6 +83,7 @@ class PreparedVerticesMappedCommand internal constructor(
     val commandId: Int,
     val operationIndex: Int,
     val artifactKey: String,
+    val frameProvenance: GPUFrameProvenance = GPUFrameProvenance.None,
 ) {
     init {
         require(commandId >= 0 && operationIndex >= 0 && artifactKey.isNotBlank())
@@ -106,6 +109,7 @@ class PreparedVerticesFrameInventory internal constructor(
     indexUploadRanges: List<PreparedVerticesUploadRange>,
     elidedVerticesOperationIndices: List<Int>,
     mappedCommands: List<PreparedVerticesMappedCommand> = emptyList(),
+    val capabilitySnapshotHash: String,
     val metrics: PreparedVerticesFrameMetrics,
     val limitEvidence: PreparedVerticesFrameLimitEvidence,
 ) {
@@ -142,6 +146,9 @@ class PreparedVerticesFrameInventory internal constructor(
         Collections.unmodifiableList(indexUploadRanges.toList())
 
     init {
+        require(capabilitySnapshotHash.isNotBlank()) {
+            "Prepared vertices capability snapshot hash must not be blank"
+        }
         require(commandsByOperationIndex.keys == this.artifactKeyByOperationIndex.keys) {
             "Prepared vertices command and artifact ownership must match"
         }
@@ -155,6 +162,7 @@ class PreparedVerticesFrameInventory internal constructor(
 
     internal fun bindCommandIds(
         commandIdByOperationIndex: Map<Int, Int>,
+        frameProvenanceByOperationIndex: Map<Int, GPUFrameProvenance> = emptyMap(),
     ): PreparedVerticesCommandBindingResult {
         commands.firstOrNull { command ->
             command.operationIndex !in commandIdByOperationIndex
@@ -184,13 +192,15 @@ class PreparedVerticesFrameInventory internal constructor(
                 commandId = commandId,
                 operationIndex = command.operationIndex,
                 artifactKey = command.artifactKey,
+                frameProvenance = frameProvenanceByOperationIndex[command.operationIndex]
+                    ?: GPUFrameProvenance.None,
             )
         }
         return PreparedVerticesCommandBindingResult.Ready(
             PreparedVerticesFrameInventory(
                 commands, artifactsByKey, materialsByKey, artifactKeyByOperationIndex,
                 vertexUploadRanges, indexUploadRanges, elidedVerticesOperationOrder,
-                bindings, metrics, limitEvidence,
+                bindings, capabilitySnapshotHash, metrics, limitEvidence,
             ),
         )
     }
@@ -431,6 +441,7 @@ object PreparedVerticesFrameInventoryBuilder {
                 vertexUploadRanges = vertexRanges,
                 indexUploadRanges = indexRanges,
                 elidedVerticesOperationIndices = elided.map { it.operationIndex },
+                capabilitySnapshotHash = capabilities.canonicalSnapshotHash(),
                 metrics = PreparedVerticesFrameMetrics(
                     drawCount = commands.size,
                     uniqueArtifactCount = artifacts.size,

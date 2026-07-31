@@ -4331,9 +4331,14 @@ internal class GPUFramePreflighter(
                     diagnostic(
                         GPUPreparedTextPreflightRefusalCodes.PREPARED_TEXT_UNMATERIALIZED,
                         "Prepared color-glyph semantics have no executable native materialization route; " +
-                            "the sealed prepared-surface native boundary is required.",
+                        "the sealed prepared-surface native boundary is required.",
                     )
                 }
+            is GPUDrawSemanticPayload.Vertices ->
+                diagnostic(
+                    "unsupported.preflight.prepared_vertices_unmaterialized",
+                    "Prepared vertices semantics have no executable native materialization route.",
+                )
         }
     }
 

@@ -1,5 +1,6 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.util.Collections
 import kotlin.math.ceil
 import kotlin.math.floor
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
@@ -36,14 +37,23 @@ sealed interface GPUPreparedSurfaceSemanticGatherResult {
 internal object GPUPreparedSurfaceSemanticBuilder {
     fun gather(
         visualCommands: List<GPUFramePathVisualCommand>,
+        normalizedCommands: List<NormalizedDrawCommand> =
+            visualCommands.map(GPUFramePathVisualCommand::normalized),
         recording: GPURecording,
         targetBounds: GPUPixelBounds,
         imageArtifactsByCommandId: Map<Int, GPUPreparedImageUploadArtifact>,
         textSemanticsByCommandId: Map<Int, GPUDrawSemanticPayload> = emptyMap(),
+        verticesSemanticsByCommandId: Map<Int, GPUDrawSemanticPayload.Vertices> = emptyMap(),
         blendAuthorityPolicy: GPUCorePrimitiveBlendAuthorityPolicy =
             GPUCorePrimitiveBlendAuthorityPolicy.Required,
     ): GPUPreparedSurfaceSemanticGatherResult {
         val visualIds = visualCommands.map { visual -> visual.normalized.commandId.value }
+        val normalizedIds = normalizedCommands.map { command -> command.commandId.value }
+        val normalizedVisualIds = normalizedCommands.filterNot {
+            it is NormalizedDrawCommand.DrawPreparedVertices
+        }.map { command -> command.commandId.value }
+        val verticesIds = normalizedCommands.filterIsInstance<NormalizedDrawCommand.DrawPreparedVertices>()
+            .map { command -> command.commandId.value }.toSet()
         val imageVisuals = visualCommands.filter { visual ->
             visual.normalized is NormalizedDrawCommand.DrawImageRect
         }
@@ -55,16 +65,29 @@ internal object GPUPreparedSurfaceSemanticBuilder {
             .flatMap(GPUTask.Render::drawPackets)
             .groupBy(GPUDrawPacket::commandIdValue)
         val analysisByCommandId = recording.analysis.records.groupBy { it.commandIdValue }
-        val visualIdSet = visualIds.toSet()
+        val normalizedIdSet = normalizedIds.toSet()
         if (visualIds.distinct().size != visualIds.size ||
+            normalizedIds.distinct().size != normalizedIds.size ||
+            visualIds != normalizedVisualIds ||
+            visualIds.toSet().intersect(verticesIds).isNotEmpty() ||
+            visualIds.toSet() + verticesIds != normalizedIdSet ||
             imageArtifactsByCommandId.keys != imageIds ||
             textSemanticsByCommandId.keys != textIds ||
-            analysisByCommandId.keys != visualIdSet ||
-            packetsByCommandId.keys != visualIdSet ||
-            analysisByCommandId.size != visualIds.size ||
-            packetsByCommandId.size != visualIds.size ||
-            visualIds.any { commandId -> analysisByCommandId[commandId].orEmpty().size != 1 } ||
-            visualIds.any { commandId -> packetsByCommandId[commandId].orEmpty().size != 1 }
+            verticesSemanticsByCommandId.keys != verticesIds ||
+            textSemanticsByCommandId.any { (commandId, semantic) ->
+                semantic.payloadRef.commandIdValue != commandId ||
+                    semantic !is GPUDrawSemanticPayload.TextA8 &&
+                    semantic !is GPUDrawSemanticPayload.ColorGlyph
+            } ||
+            verticesSemanticsByCommandId.any { (commandId, semantic) ->
+                semantic.payloadRef.commandIdValue != commandId
+            } ||
+            analysisByCommandId.keys != normalizedIdSet ||
+            packetsByCommandId.keys != normalizedIdSet ||
+            analysisByCommandId.size != normalizedIds.size ||
+            packetsByCommandId.size != normalizedIds.size ||
+            normalizedIds.any { commandId -> analysisByCommandId[commandId].orEmpty().size != 1 } ||
+            normalizedIds.any { commandId -> packetsByCommandId[commandId].orEmpty().size != 1 }
         ) {
             return refused(
                 "invalid.surface.prepared.semantic-command-bijection",
@@ -72,12 +95,14 @@ internal object GPUPreparedSurfaceSemanticBuilder {
                     "must be bijective.",
                 mapOf(
                     "visualIds" to visualIds.joinToString(","),
+                    "normalizedIds" to normalizedIds.joinToString(","),
+                    "verticesIds" to verticesIds.sorted().joinToString(","),
                     "imageIds" to imageIds.sorted().joinToString(","),
                     "artifactIds" to imageArtifactsByCommandId.keys.sorted().joinToString(","),
-                    "analysisCounts" to visualIds.joinToString(",") { commandId ->
+                    "analysisCounts" to normalizedIds.joinToString(",") { commandId ->
                         "$commandId:${recording.analysis.records.count { it.commandIdValue == commandId }}"
                     },
-                    "packetCounts" to visualIds.joinToString(",") { commandId ->
+                    "packetCounts" to normalizedIds.joinToString(",") { commandId ->
                         "$commandId:${packetsByCommandId[commandId].orEmpty().size}"
                     },
                 ),
@@ -261,7 +286,26 @@ internal object GPUPreparedSurfaceSemanticBuilder {
             }
             result[commandId] = semantic
         }
-        return GPUPreparedSurfaceSemanticGatherResult.Gathered(result)
+        val ordered = linkedMapOf<Int, GPUDrawSemanticPayload>()
+        normalizedIds.forEach { commandId ->
+            ordered[commandId] = verticesSemanticsByCommandId[commandId]
+                ?: result[commandId]
+                ?: return refused(
+                    "invalid.surface.prepared.semantic-command-bijection",
+                    "Prepared-surface semantic IDs must exactly match normalized command IDs.",
+                    mapOf("commandId" to commandId.toString()),
+                )
+        }
+        if (ordered.any { (commandId, semantic) -> semantic.payloadRef.commandIdValue != commandId }) {
+            return refused(
+                "invalid.surface.prepared.semantic-command-bijection",
+                "Prepared-surface semantic payload identities must match their command keys.",
+                emptyMap(),
+            )
+        }
+        return GPUPreparedSurfaceSemanticGatherResult.Gathered(
+            Collections.unmodifiableMap(ordered),
+        )
     }
 }
 

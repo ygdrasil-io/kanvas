@@ -60,6 +60,7 @@ class GPUPreparedSurfaceSemanticBuilderTest {
         val refused = assertIs<GPUPreparedSurfaceSemanticGatherResult.Refused>(
             GPUPreparedSurfaceSemanticBuilder.gather(
                 visualCommands = duplicate,
+                normalizedCommands = fixture.visuals.map(GPUFramePathVisualCommand::normalized),
                 recording = fixture.recording,
                 targetBounds = bounds,
                 imageArtifactsByCommandId = mapOf(1 to fixture.artifact),
@@ -73,6 +74,24 @@ class GPUPreparedSurfaceSemanticBuilderTest {
                 "must be bijective.",
             refused.diagnostic.message,
         )
+    }
+
+    @Test
+    fun `visual order must exactly match the normalized non vertices order`() {
+        val fixture = mixedFixture()
+
+        val refused = assertIs<GPUPreparedSurfaceSemanticGatherResult.Refused>(
+            GPUPreparedSurfaceSemanticBuilder.gather(
+                visualCommands = fixture.visuals.reversed(),
+                normalizedCommands = fixture.visuals.map(GPUFramePathVisualCommand::normalized),
+                recording = fixture.recording,
+                targetBounds = bounds,
+                imageArtifactsByCommandId = mapOf(1 to fixture.artifact),
+                blendAuthorityPolicy = GPUCorePrimitiveBlendAuthorityPolicy.InventoryHarness,
+            ),
+        )
+
+        assertEquals("invalid.surface.prepared.semantic-command-bijection", refused.diagnostic.code.value)
     }
 
     @Test

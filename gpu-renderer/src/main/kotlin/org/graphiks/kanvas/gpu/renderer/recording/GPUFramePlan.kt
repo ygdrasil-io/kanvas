@@ -1473,6 +1473,22 @@ private fun CanonicalHashSink.semanticPayload(value: GPUDrawSemanticPayload) {
     nullable("resourceBlock", ref.resourceBlock) { block -> string("fingerprint", block.fingerprint.value) }
     when (value) {
         is GPUDrawSemanticPayload.SolidRect -> Unit
+        is GPUDrawSemanticPayload.Vertices -> {
+            string("canonicalHash", value.canonicalHash)
+            string("artifactKey", value.artifact.key)
+            string("topology", value.topologyIdentity.sourceLabel)
+            string("targetFormat", value.targetFormat)
+            string("clipIdentity", value.clipIdentity)
+            string("clipCoverageIdentity", value.clipCoverageIdentity)
+            nullableString("primitiveBlendIdentity", value.primitiveBlendIdentity)
+            string("finalBlendIdentity", value.finalBlendIdentity)
+            string("capabilitySnapshotHash", value.capabilitySnapshotHash)
+            string("drawProvenance", value.drawProvenance)
+            string("frameProvenance", value.frameProvenance.annotationValue)
+            bounds("targetBounds", value.targetBounds)
+            bounds("scissorBounds", value.scissorBounds)
+            list("transformBytes", value.transformBytes) { bits -> int("bits", bits) }
+        }
         is GPUDrawSemanticPayload.CorePrimitive -> {
             string("sourceFamily", value.sourceFamily.name)
             string("canonicalHash", value.canonicalHash)
@@ -2202,6 +2218,14 @@ private fun GPUDrawSemanticPayload.stableDump(): String {
         } ?: "none"}"
     return when (this) {
         is GPUDrawSemanticPayload.SolidRect -> "$common)"
+        is GPUDrawSemanticPayload.Vertices ->
+            "$common,preparedVerticesHash=$canonicalHash,artifact=${artifact.key}," +
+                "topology=${topologyIdentity.sourceLabel},transform=${transformBytes.joinToString(",")}," +
+                "target=$targetBounds,scissor=$scissorBounds,targetFormat=$targetFormat," +
+                "clip=$clipIdentity,coverage=$clipCoverageIdentity," +
+                "primitiveBlend=${primitiveBlendIdentity ?: "none"},finalBlend=$finalBlendIdentity," +
+                "capability=$capabilitySnapshotHash,drawProvenance=$drawProvenance," +
+                "frameProvenance=${frameProvenance.annotationValue})"
         is GPUDrawSemanticPayload.CorePrimitive ->
             "$common,corePrimitiveHash=$canonicalHash,family=${sourceFamily.name}," +
                 "geometry=${geometry.canonicalType},color=${premultipliedRgba.joinToString(",")}," +

@@ -1212,6 +1212,33 @@ sealed interface GPUDrawSemanticPayload {
             canonicalHash == snapshot.toInput().canonicalHash()
     }
 
+    /** Closed prepared vertices semantic with no native or cache state. */
+    class Vertices internal constructor(
+        private val snapshot: GPUPreparedVerticesPayloadSnapshot,
+    ) : GPUDrawSemanticPayload {
+        override val canonicalType: String = "Vertices"
+        override val payloadRef: GPUDrawPayloadRef = snapshot.payloadRef
+        val artifact = snapshot.artifact
+        val material = snapshot.material
+        val topologyIdentity: GPUPreparedVerticesTopologyIdentity = snapshot.topologyIdentity
+        val transformBytes: List<Int> = snapshot.transformBytes
+        val targetBounds = snapshot.targetBounds
+        val scissorBounds = snapshot.scissorBounds
+        val targetFormat = snapshot.targetFormat
+        val clipIdentity = snapshot.clipIdentity
+        val clipCoverageIdentity = snapshot.clipCoverageIdentity
+        val primitiveColorPresent = snapshot.primitiveColorPresent
+        val primitiveBlendIdentity = snapshot.primitiveBlendIdentity
+        val finalBlendIdentity = snapshot.finalBlendIdentity
+        val capabilitySnapshotHash = snapshot.capabilitySnapshotHash
+        val drawProvenance = snapshot.drawProvenance
+        val frameProvenance = snapshot.frameProvenance
+        val canonicalHash = snapshot.canonicalHash
+
+        fun hasCanonicalHashIntegrity(): Boolean =
+            canonicalHash == snapshot.canonicalHash()
+    }
+
     /** Exact immutable A8 atlas, instances, material, and frame facts for one prepared text sub-run. */
     class TextA8 internal constructor(
         payloadRef: GPUDrawPayloadRef,
