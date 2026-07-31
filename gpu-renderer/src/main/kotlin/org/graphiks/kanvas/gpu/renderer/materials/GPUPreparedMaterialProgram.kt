@@ -641,9 +641,16 @@ object GPUPreparedMaterialProgramCompiler {
                 is GPURuntimeEffectChildDescriptor.Shader ->
                     compileShaderRuntimeChild(slot.name, child, context)
                 is GPURuntimeEffectChildDescriptor.ColorFilter ->
-                    compileColorFilterRuntimeChild(slot.name, child.filter, context)
+                    compileColorFilterRuntimeChild(
+                        GPUPreparedRuntimeEffectChildPath.Root(slot.name),
+                        child.filter,
+                        context,
+                    )
                 is GPURuntimeEffectChildDescriptor.Blender ->
-                    compileBlenderRuntimeChild(slot.name, child.blender)
+                    compileBlenderRuntimeChild(
+                        GPUPreparedRuntimeEffectChildPath.Root(slot.name),
+                        child.blender,
+                    )
             }
             when (compiled) {
                 is RuntimeEffectSingleChildCompilation.Ready -> children += compiled.child
@@ -702,13 +709,13 @@ object GPUPreparedMaterialProgramCompiler {
     }
 
     private fun compileColorFilterRuntimeChild(
-        name: String,
+        path: GPUPreparedRuntimeEffectChildPath,
         filter: GPUPreparedColorFilterChildDescriptor,
         context: GPUMaterialLoweringContext,
     ): RuntimeEffectSingleChildCompilation = when (filter) {
         is GPUPreparedColorFilterChildDescriptor.Matrix -> {
             val program = GPUPreparedRuntimeEffectChildProgramAuthority.compileMatrix(
-                name = name,
+                path = path,
                 values = filter.values,
             ) ?: return RuntimeEffectSingleChildCompilation.Refused(
                 "invalid color-matrix payload",
@@ -717,7 +724,7 @@ object GPUPreparedMaterialProgramCompiler {
         }
         is GPUPreparedColorFilterChildDescriptor.Blend -> {
             val program = GPUPreparedRuntimeEffectChildProgramAuthority.compileBlendColorFilter(
-                name = name,
+                path = path,
                 rgba = filter.rgba,
                 mode = filter.mode,
             ) ?: return RuntimeEffectSingleChildCompilation.Refused(
@@ -726,14 +733,22 @@ object GPUPreparedMaterialProgramCompiler {
             RuntimeEffectSingleChildCompilation.Ready(program)
         }
         is GPUPreparedColorFilterChildDescriptor.Compose -> {
-            val inner = compileColorFilterRuntimeChild("$name.inner", filter.inner, context)
+            val inner = compileColorFilterRuntimeChild(
+                GPUPreparedRuntimeEffectChildPath.Inner(path),
+                filter.inner,
+                context,
+            )
             if (inner is RuntimeEffectSingleChildCompilation.Refused) return inner
-            val outer = compileColorFilterRuntimeChild("$name.outer", filter.outer, context)
+            val outer = compileColorFilterRuntimeChild(
+                GPUPreparedRuntimeEffectChildPath.Outer(path),
+                filter.outer,
+                context,
+            )
             if (outer is RuntimeEffectSingleChildCompilation.Refused) return outer
             val innerChild = (inner as RuntimeEffectSingleChildCompilation.Ready).child
             val outerChild = (outer as RuntimeEffectSingleChildCompilation.Ready).child
             val program = GPUPreparedRuntimeEffectChildProgramAuthority.composeColorFilters(
-                name = name,
+                path = path,
                 inner = innerChild,
                 outer = outerChild,
             ) ?: return RuntimeEffectSingleChildCompilation.Refused(
@@ -748,12 +763,12 @@ object GPUPreparedMaterialProgramCompiler {
     }
 
     private fun compileBlenderRuntimeChild(
-        name: String,
+        path: GPUPreparedRuntimeEffectChildPath,
         blender: GPUPreparedBlenderChildDescriptor,
     ): RuntimeEffectSingleChildCompilation = when (blender) {
         is GPUPreparedBlenderChildDescriptor.Mode -> {
             val program = GPUPreparedRuntimeEffectChildProgramAuthority.compileModeBlender(
-                name = name,
+                path = path,
                 mode = blender.mode,
             ) ?: return RuntimeEffectSingleChildCompilation.Refused(
                 "canonical mode blender program is unavailable",

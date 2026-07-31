@@ -133,6 +133,46 @@ class GPUPreparedMaterialProgramChildrenTest {
     }
 
     @Test
+    fun `structural child path identity remains stable across delimiter-like slot names`() {
+        val composeName = "filter|node=1"
+        val explicitNestedName = "$composeName.inner"
+        val matrix = matrixChild().filter
+        val descriptor = GPUMaterialDescriptor.RuntimeEffect.withChildDescriptors(
+            effectId = SimpleRTDescriptor.effectId.value,
+            uniforms = uniforms(),
+            childDescriptors = linkedMapOf(
+                explicitNestedName to GPURuntimeEffectChildDescriptor.ColorFilter(matrix),
+                composeName to GPURuntimeEffectChildDescriptor.ColorFilter(
+                    GPUPreparedColorFilterChildDescriptor.Compose(
+                        outer = matrix,
+                        inner = matrix,
+                    ),
+                ),
+            ),
+        )
+        val parent = parentProgram(
+            listOf(
+                slot(explicitNestedName, GPUPreparedRuntimeEffectChildRole.ColorFilter, 0),
+                slot(composeName, GPUPreparedRuntimeEffectChildRole.ColorFilter, 1),
+            ),
+        )
+
+        val first = compileReady(descriptor, parent)
+        val second = compileReady(descriptor, parent)
+        val firstFunctions = Lowerer().lower(parseWgslResult(first.wgslSource).translationUnit)
+            .functions.map { function -> function.name }
+            .filter { name -> name.startsWith("kanvas_color_filter_matrix_") }
+        val secondFunctions = Lowerer().lower(parseWgslResult(second.wgslSource).translationUnit)
+            .functions.map { function -> function.name }
+            .filter { name -> name.startsWith("kanvas_color_filter_matrix_") }
+
+        assertEquals(3, firstFunctions.size)
+        assertEquals(3, firstFunctions.toSet().size)
+        assertEquals(firstFunctions, secondFunctions)
+        assertTrue(first.childPrograms.first().evaluationFunction in firstFunctions)
+    }
+
+    @Test
     fun `mode blender child carries parser proven WGSL and matching CPU behavior`() {
         val ready = compileReady(
             descriptor = descriptorWithSingleChild("blender", modeChild()),
@@ -196,6 +236,54 @@ class GPUPreparedMaterialProgramChildrenTest {
             lowered.functions.map { function -> function.name }.toSet()
                 .intersect(ready.childPrograms.map { child -> child.evaluationFunction }.toSet()),
         )
+    }
+
+    @Test
+    fun `nonseparable CPU parity uses the WGSL epsilon below one e minus ten`() {
+        data class ParityCase(
+            val mode: GPUBlendMode,
+            val source: List<Float>,
+            val destination: List<Float>,
+            val expected: List<Float>,
+        )
+
+        // Hand-derived from the canonical WGSL f32 operation order, without production helpers.
+        val cases = listOf(
+            ParityCase(
+                mode = GPUBlendMode.HUE,
+                source = listOf(0f, 5e-11f, 1e-11f, 1f),
+                destination = listOf(0.2f, 0.4f, 0.6f, 1f),
+                expected = listOf(0.23959997f, 0.4396f, 0.27959996f, 1f),
+            ),
+            ParityCase(
+                mode = GPUBlendMode.SATURATION,
+                source = listOf(0.2f, 0.2001f, 0.2f, 1f),
+                destination = listOf(0.0005f, 0.0005000001f, 0.0005f, 1f),
+                expected = listOf(0.00046565692f, 0.0005238656f, 0.00046565692f, 1f),
+            ),
+        )
+
+        cases.forEach { parityCase ->
+            val child = compileReady(
+                descriptor = descriptorWithSingleChild(
+                    "blender",
+                    GPURuntimeEffectChildDescriptor.Blender(
+                        GPUPreparedBlenderChildDescriptor.Mode(parityCase.mode),
+                    ),
+                ),
+                parent = parentProgram(
+                    listOf(slot("blender", GPUPreparedRuntimeEffectChildRole.Blender, 0)),
+                ),
+            ).childPrograms.single()
+            val actual = GPUPreparedRuntimeEffectChildProgramExecutor.evaluateBlender(
+                program = child,
+                source = parityCase.source,
+                destination = parityCase.destination,
+            )
+
+            assertTrue(actual.all(Float::isFinite), "${parityCase.mode} produced $actual")
+            assertColorNear(parityCase.expected, actual)
+        }
     }
 
     @Test

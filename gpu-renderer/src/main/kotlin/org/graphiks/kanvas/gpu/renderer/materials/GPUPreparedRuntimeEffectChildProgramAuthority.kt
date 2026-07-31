@@ -15,17 +15,17 @@ import org.graphiks.kanvas.gpu.renderer.pipelines.GPUBlendFormulaProgramLibrary
 /** Canonical CPU plus parser-ready WGSL authority for prepared runtime-effect child programs. */
 internal object GPUPreparedRuntimeEffectChildProgramAuthority {
     fun compileMatrix(
-        name: String,
+        path: GPUPreparedRuntimeEffectChildPath,
         values: List<Float>,
     ): GPUPreparedRuntimeEffectChildProgram? {
         if (values.size != 20 || values.any { value -> !value.isFinite() }) return null
         val snapshot = immutableList(values)
         val bytes = snapshot.toFloatByteArray()
-        val functionName = childFunctionName("color_filter_matrix", name)
+        val functionName = childFunctionName("color_filter_matrix", path)
         val source = matrixWgsl(functionName, snapshot)
         val sourceHash = sha256Hex(source.encodeToByteArray())
         return GPUPreparedRuntimeEffectChildProgram(
-            name = name,
+            name = path.diagnosticName,
             role = GPUPreparedRuntimeEffectChildRole.ColorFilter,
             programKey = CanonicalIdentityEncoder(
                 "prepared-runtime-effect-matrix-child-v2",
@@ -47,15 +47,15 @@ internal object GPUPreparedRuntimeEffectChildProgramAuthority {
     }
 
     fun compileBlendColorFilter(
-        name: String,
+        path: GPUPreparedRuntimeEffectChildPath,
         rgba: List<Float>,
         mode: GPUBlendMode,
     ): GPUPreparedRuntimeEffectChildProgram? {
         if (rgba.size != 4 || rgba.any { value -> !value.isFinite() || value !in 0f..1f }) {
             return null
         }
-        val formulaFunction = childFunctionName("color_filter_blend_formula", name)
-        val evaluationFunction = childFunctionName("color_filter_blend", name)
+        val formulaFunction = childFunctionName("color_filter_blend_formula", path)
+        val evaluationFunction = childFunctionName("color_filter_blend", path)
         val formula = runCatching {
             GPUBlendFormulaLibrary.selectedBlendFunctionWgsl(mode, formulaFunction)
         }.getOrNull() ?: return null
@@ -73,7 +73,7 @@ internal object GPUPreparedRuntimeEffectChildProgramAuthority {
         val bytes = rgba.toFloatByteArray()
         val sourceHash = sha256Hex(source.encodeToByteArray())
         return GPUPreparedRuntimeEffectChildProgram(
-            name = name,
+            name = path.diagnosticName,
             role = GPUPreparedRuntimeEffectChildRole.ColorFilter,
             programKey = CanonicalIdentityEncoder(
                 "prepared-runtime-effect-blend-color-filter-child-v2",
@@ -99,7 +99,7 @@ internal object GPUPreparedRuntimeEffectChildProgramAuthority {
     }
 
     fun composeColorFilters(
-        name: String,
+        path: GPUPreparedRuntimeEffectChildPath,
         inner: GPUPreparedRuntimeEffectChildProgram,
         outer: GPUPreparedRuntimeEffectChildProgram,
     ): GPUPreparedRuntimeEffectChildProgram? {
@@ -110,7 +110,7 @@ internal object GPUPreparedRuntimeEffectChildProgramAuthority {
         ) {
             return null
         }
-        val evaluationFunction = childFunctionName("color_filter_compose", name)
+        val evaluationFunction = childFunctionName("color_filter_compose", path)
         val source = mergePreparedRuntimeEffectWgsl(
             listOf(
                 inner.wgslSource,
@@ -124,7 +124,7 @@ internal object GPUPreparedRuntimeEffectChildProgramAuthority {
         )
         val sourceHash = sha256Hex(source.encodeToByteArray())
         return GPUPreparedRuntimeEffectChildProgram(
-            name = name,
+            name = path.diagnosticName,
             role = GPUPreparedRuntimeEffectChildRole.ColorFilter,
             programKey = CanonicalIdentityEncoder(
                 "prepared-runtime-effect-compose-color-filter-child-v2",
@@ -153,16 +153,16 @@ internal object GPUPreparedRuntimeEffectChildProgramAuthority {
     }
 
     fun compileModeBlender(
-        name: String,
+        path: GPUPreparedRuntimeEffectChildPath,
         mode: GPUBlendMode,
     ): GPUPreparedRuntimeEffectChildProgram? {
-        val evaluationFunction = childFunctionName("blender_mode", name)
+        val evaluationFunction = childFunctionName("blender_mode", path)
         val source = runCatching {
             GPUBlendFormulaLibrary.selectedBlendFunctionWgsl(mode, evaluationFunction)
         }.getOrNull() ?: return null
         val sourceHash = sha256Hex(source.encodeToByteArray())
         return GPUPreparedRuntimeEffectChildProgram(
-            name = name,
+            name = path.diagnosticName,
             role = GPUPreparedRuntimeEffectChildRole.Blender,
             programKey = CanonicalIdentityEncoder(
                 "prepared-runtime-effect-mode-blender-child-v2",
@@ -181,6 +181,48 @@ internal object GPUPreparedRuntimeEffectChildProgramAuthority {
             evaluationFunction = evaluationFunction,
             cpuProgram = GPUPreparedRuntimeEffectChildCpuProgram.ModeBlender(mode.gpuLabel),
         )
+    }
+}
+
+/** Structurally framed location of one callable in a prepared child graph. */
+internal sealed interface GPUPreparedRuntimeEffectChildPath {
+    val diagnosticName: String
+
+    data class Root(
+        val slotName: String,
+    ) : GPUPreparedRuntimeEffectChildPath {
+        init {
+            require(slotName.isNotBlank()) { "Prepared runtime-effect child slot must not be blank" }
+        }
+
+        override val diagnosticName: String = slotName
+    }
+
+    data class Inner(
+        val parent: GPUPreparedRuntimeEffectChildPath,
+    ) : GPUPreparedRuntimeEffectChildPath {
+        override val diagnosticName: String = "${parent.diagnosticName}.inner"
+    }
+
+    data class Outer(
+        val parent: GPUPreparedRuntimeEffectChildPath,
+    ) : GPUPreparedRuntimeEffectChildPath {
+        override val diagnosticName: String = "${parent.diagnosticName}.outer"
+    }
+
+    fun identity(): String = when (this) {
+        is Root -> CanonicalIdentityEncoder("prepared-runtime-effect-child-path-v1")
+            .text("node", "root")
+            .text("slotName", slotName)
+            .digestIdentity()
+        is Inner -> CanonicalIdentityEncoder("prepared-runtime-effect-child-path-v1")
+            .text("node", "inner")
+            .text("parent", parent.identity())
+            .digestIdentity()
+        is Outer -> CanonicalIdentityEncoder("prepared-runtime-effect-child-path-v1")
+            .text("node", "outer")
+            .text("parent", parent.identity())
+            .digestIdentity()
     }
 }
 
@@ -276,8 +318,10 @@ internal fun compiledRuntimeEffectChildAbiHash(
     .int("uniformByteCount", uniformByteCount)
     .digestIdentity()
 
-private fun childFunctionName(kind: String, name: String): String =
-    "kanvas_${kind}_${sha256Hex(name.encodeToByteArray())}"
+private fun childFunctionName(
+    kind: String,
+    path: GPUPreparedRuntimeEffectChildPath,
+): String = "kanvas_${kind}_${path.identity().removePrefix("sha256:")}"
 
 private fun matrixWgsl(
     functionName: String,
@@ -475,8 +519,11 @@ private fun sat(color: List<Float>): Float = color.maxOrNull()!! - color.minOrNu
 private fun setSat(color: List<Float>, saturation: Float): List<Float> {
     val low = color.minOrNull()!!
     val high = color.maxOrNull()!!
-    if (high == low) return List(3) { 0f }
-    return List(3) { channel -> (color[channel] - low) * saturation / (high - low) }
+    val range = high - low
+    val scaled = List(3) { channel ->
+        (color[channel] - low) * saturation / max(range, 1.0e-10f)
+    }
+    return if (range > 0f) scaled else List(3) { 0f }
 }
 
 private fun setLum(color: List<Float>, luminosity: Float): List<Float> =
