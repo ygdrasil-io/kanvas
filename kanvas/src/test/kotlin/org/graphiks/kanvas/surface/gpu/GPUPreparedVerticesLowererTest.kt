@@ -19,6 +19,7 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolv
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.BlendMode
 import org.graphiks.kanvas.paint.MeshProgram
@@ -145,6 +146,53 @@ class GPUPreparedVerticesLowererTest {
             Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen,
         )).ready().draw
         assertEquals(3, strip.artifact.indexCount)
+    }
+
+    @Test
+    fun `closed public topology layout and index product preserves exact prepared artifacts`() {
+        val layouts = listOf(
+            Triple(null, null, 8),
+            Triple(null, listOf(Point(0f, 0f), Point(1f, 0f), Point(1f, 1f), Point(0f, 1f)), 16),
+            Triple(listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE), null, 12),
+            Triple(listOf(Color.RED, Color.GREEN, Color.BLUE, Color.WHITE), listOf(Point(0f, 0f), Point(1f, 0f), Point(1f, 1f), Point(0f, 1f)), 20),
+        )
+        VertexMode.entries.forEach { mode ->
+            layouts.forEach { (colors, uvs, stride) ->
+                listOf(false, true).forEach { indexed ->
+                    val indices = if (indexed) when (mode) {
+                        VertexMode.TRIANGLES -> listOf(0, 1, 2)
+                        VertexMode.TRIANGLE_STRIP, VertexMode.TRIANGLE_FAN -> listOf(0, 1, 2, 3)
+                    } else null
+                    val count = if (mode == VertexMode.TRIANGLES) 3 else 4
+                    val draw = lower(DisplayOp.DrawVertices(
+                        Vertices(mode, listOf(Point(0f, 0f), Point(2f, 0f), Point(2f, 2f), Point(0f, 2f)).take(count), uvs?.take(count), colors?.take(count), indices),
+                        Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen,
+                    )).ready().draw
+                    val artifact = draw.artifact
+                    assertEquals(when (mode) {
+                        VertexMode.TRIANGLES, VertexMode.TRIANGLE_FAN -> GPUVertexMode.Triangles
+                        VertexMode.TRIANGLE_STRIP -> GPUVertexMode.TriangleStrip
+                    }, artifact.topology)
+                    assertEquals(stride, artifact.layout.strideBytes)
+                    assertEquals(indexed || mode == VertexMode.TRIANGLE_FAN, artifact.indexFormat != null)
+                    if (indexed) assertEquals("uint16", artifact.indexFormat)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `skew rotation and reflection bounds conservatively enclose four transformed corners`() {
+        val cases = listOf(
+            Matrix33.makeAll(1f, 1f, 0f, 0f, 1f, 0f, 0f, 0f, 1f) to GPUBounds(0f, 0f, 4f, 2f),
+            Matrix33.makeAll(0f, -1f, 0f, 1f, 0f, 0f, 0f, 0f, 1f) to GPUBounds(-2f, 0f, 0f, 2f),
+            Matrix33.scale(-1f, 1f) to GPUBounds(-2f, 0f, 0f, 2f),
+        )
+        cases.forEach { (transform, expected) ->
+            assertEquals(expected, lower(DisplayOp.DrawVertices(
+                vertices(), Paint.fill(Color.RED), transform, ClipStack.WideOpen,
+            )).ready().draw.deviceBounds)
+        }
     }
 
     @Test
