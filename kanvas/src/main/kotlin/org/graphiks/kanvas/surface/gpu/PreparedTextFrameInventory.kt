@@ -49,6 +49,7 @@ import org.graphiks.kanvas.glyph.gpu.GPU_COLOR_GLYPH_COMPOSITE_MAX_LAYERS
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.PaintStyle
+import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.text.FontTypeface
 import org.graphiks.kanvas.text.PreparedTextOutline
@@ -1537,24 +1538,7 @@ private fun inventoryHash(
         strokePaths.forEach { (operationIndex, operationPaths) ->
             append("|stroke-operation:").append(operationIndex)
             operationPaths.forEach { strokePath ->
-                append("|stroke-path:").append(strokePath.glyphIndex)
-                val path = strokePath.path
-                path.verbs().forEach { verb -> append(':').append(verb.name) }
-                path.points().forEach { point ->
-                    append(':').append(point.x.toRawBits())
-                    append(':').append(point.y.toRawBits())
-                }
-                val paint = strokePath.draw.paint
-                append(":width=").append(paint.strokeWidth.toRawBits())
-                append(":cap=").append(paint.strokeCap.name)
-                append(":join=").append(paint.strokeJoin.name)
-                append(":miter=").append(paint.strokeMiter.toRawBits())
-                (paint.pathEffect as? org.graphiks.kanvas.paint.PathEffect.Dash)?.let { dash ->
-                    append(":dashPhase=").append(dash.phase.toRawBits())
-                    dash.intervals.forEach { interval ->
-                        append(':').append(interval.toRawBits())
-                    }
-                }
+                append("|stroke-path:").append(strokePath.exactInventoryIdentity())
             }
         }
         identities.forEach { identity ->
@@ -1565,6 +1549,95 @@ private fun inventoryHash(
         }
     },
 )
+
+private fun GPUPreparedTextStrokePath.exactInventoryIdentity(): String {
+    val encoder = GPUCanonicalIdentityEncoder("prepared-text-stroke-inventory:v1")
+    encoder.int("operationIndex", operationIndex)
+    encoder.int("glyphIndex", glyphIndex)
+
+    val exactPath = path
+    encoder.string("path.fillType", exactPath.fillType.name)
+    val verbs = exactPath.verbs()
+    encoder.int("path.verbCount", verbs.size)
+    verbs.forEachIndexed { index, verb ->
+        encoder.string("path.verb[$index]", verb.name)
+    }
+    val points = exactPath.points()
+    encoder.int("path.pointCount", points.size)
+    points.forEachIndexed { index, point ->
+        encoder.float("path.point[$index].x", point.x)
+        encoder.float("path.point[$index].y", point.y)
+    }
+
+    val transform = draw.transform
+    encoder.float("transform.scaleX", transform.scaleX)
+    encoder.float("transform.skewX", transform.skewX)
+    encoder.float("transform.transX", transform.transX)
+    encoder.float("transform.skewY", transform.skewY)
+    encoder.float("transform.scaleY", transform.scaleY)
+    encoder.float("transform.transY", transform.transY)
+    encoder.float("transform.persp0", transform.persp0)
+    encoder.float("transform.persp1", transform.persp1)
+    encoder.float("transform.persp2", transform.persp2)
+
+    encoder.string("clip.contentKey", draw.clipContentKey)
+
+    val material = draw.material
+    encoder.string("material.materialKey", material.materialKey)
+    encoder.string("material.abiHash", material.abiHash)
+    encoder.string("material.wgslSource", material.wgslSource)
+    encoder.string("material.entryPoint", material.entryPoint)
+    encoder.string("material.sourceKind", material.sourceKind.name)
+    encoder.float("material.paintAlpha", material.paintAlpha)
+    encoder.unsignedBytes("material.uniformBytes", material.uniformBytes)
+    encoder.int("material.sampledResourceCount", material.sampledResources.size)
+    material.sampledResources.forEachIndexed { index, resource ->
+        encoder.string("material.resource[$index].key", resource.resourceKey)
+        encoder.string("material.resource[$index].contentHash", resource.contentHash)
+        encoder.int("material.resource[$index].width", resource.width)
+        encoder.int("material.resource[$index].height", resource.height)
+        encoder.string(
+            "material.resource[$index].samplingFilterMode",
+            resource.samplingFilterMode,
+        )
+        encoder.boolean("material.resource[$index].alphaOnly", resource.alphaOnly)
+    }
+
+    encoder.string("blend.canonicalIdentity", draw.blendPlan.canonicalIdentity())
+    encoder.string("target.colorFormat", draw.targetColorFormat)
+    encoder.string("capabilities.snapshotHash", draw.capabilitySnapshotHash)
+
+    val paint = draw.paint
+    encoder.string("paint.style", paint.style.name)
+    encoder.float("paint.strokeWidth", paint.strokeWidth)
+    encoder.string("paint.strokeCap", paint.strokeCap.name)
+    encoder.string("paint.strokeJoin", paint.strokeJoin.name)
+    encoder.float("paint.strokeMiter", paint.strokeMiter)
+    encoder.boolean("paint.antiAlias", paint.antiAlias)
+    when (val pathEffect = paint.pathEffect) {
+        null -> encoder.string("paint.pathEffect.kind", "none")
+        is PathEffect.Dash -> {
+            encoder.string("paint.pathEffect.kind", "dash")
+            encoder.float("paint.pathEffect.dash.phase", pathEffect.phase)
+            encoder.int("paint.pathEffect.dash.intervalCount", pathEffect.intervals.size)
+            pathEffect.intervals.forEachIndexed { index, interval ->
+                encoder.float("paint.pathEffect.dash.interval[$index]", interval)
+            }
+        }
+        else -> error("Prepared text stroke inventory received an unadmitted path effect")
+    }
+    when (val maskFilter = paint.maskFilter) {
+        null -> encoder.string("paint.maskFilter.kind", "none")
+        is MaskFilter.Blur -> {
+            encoder.string("paint.maskFilter.kind", "blur")
+            encoder.string("paint.maskFilter.blur.style", maskFilter.style.name)
+            encoder.float("paint.maskFilter.blur.sigma", maskFilter.sigma)
+        }
+        else -> error("Prepared text stroke inventory received an unadmitted mask filter")
+    }
+
+    return encoder.finishSha256()
+}
 
 private fun refused(
     code: String,

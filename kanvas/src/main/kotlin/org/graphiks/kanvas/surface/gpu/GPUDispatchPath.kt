@@ -87,7 +87,18 @@ internal fun GPUBackendRenderRecorder.dispatchFillPath(
     val (strokeVertices, strokeContours) = if (cmd.stroke) {
         val cap = when (cmd.strokeCap) { "round" -> StrokeCap.ROUND; "square" -> StrokeCap.SQUARE; else -> StrokeCap.BUTT }
         val join = when (cmd.strokeJoin) { "round" -> StrokeJoin.ROUND; "bevel" -> StrokeJoin.BEVEL; else -> StrokeJoin.MITER }
-        val sg = strokeToFillGeometry(tessVertices, contourStarts, cmd.strokeWidth, dashArray = cmd.dashIntervals, dashPhase = cmd.dashPhase, capStyle = cap, joinStyle = join)
+        val sg = strokeToFillGeometry(
+            contourVertices = tessVertices,
+            contourStarts = contourStarts,
+            strokeWidth = cmd.strokeWidth,
+            dashArray = cmd.dashIntervals,
+            dashPhase = cmd.dashPhase,
+            capStyle = cap,
+            joinStyle = join,
+            miterLimit = cmd.strokeMiterLimit,
+            transform = cmd.transform,
+        )
+        check(sg.coordinateSpace == StrokeGeometryCoordinateSpace.DEVICE)
         Pair(sg.vertices, sg.contourStarts)
     } else {
         Pair(tessVertices, contourStarts)

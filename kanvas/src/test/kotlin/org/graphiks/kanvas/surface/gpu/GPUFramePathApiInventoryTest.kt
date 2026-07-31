@@ -1083,6 +1083,33 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `non text hairline semantic is one device pixel after uniform scale`() {
+        val path = Path().apply {
+            moveTo(4f, 8f)
+            lineTo(14f, 8f)
+        }
+        val semantic = semanticFor(
+            DisplayOp.DrawPath(
+                path,
+                Paint.stroke(Color.RED, 0f).copy(antiAlias = false),
+                Matrix33.scale(2f, 2f),
+                org.graphiks.kanvas.canvas.ClipStack.WideOpen,
+            ),
+        )
+        val geometry = assertIs<GPUCorePrimitiveGeometry.TriangulatedPath>(semantic.geometry)
+        val outlinePoints = geometry.vertices.chunked(2)
+            .filterNot { point -> point[0] == -1f && point[1] == -1f }
+        val xs = outlinePoints.map { point -> point[0] }
+        val ys = outlinePoints.map { point -> point[1] }
+
+        assertEquals(8f, xs.min(), 1e-6f)
+        assertEquals(28f, xs.max(), 1e-6f)
+        assertEquals(15.5f, ys.min(), 1e-6f)
+        assertEquals(16.5f, ys.max(), 1e-6f)
+        assertEquals(GPUPixelBounds(8, 15, 28, 17), geometry.coverBounds)
+    }
+
+    @Test
     fun `complex dashed round stroke refuses with stable exact lowering code`() {
         val inventory = GPUFramePathApiInventory.plan(
             listOf(DisplayOp.DrawPath(

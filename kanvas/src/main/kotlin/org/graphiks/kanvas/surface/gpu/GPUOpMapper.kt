@@ -562,7 +562,9 @@ private fun NormalizedDrawCommand.FillPath.toPreparedStrokeFillPath():
         capStyle = cap,
         joinStyle = join,
         miterLimit = strokeMiterLimit,
+        transform = transform,
     )
+    check(fill.coordinateSpace == StrokeGeometryCoordinateSpace.DEVICE)
     if (fill.vertices.isEmpty() || fill.vertices.any { vertex -> !vertex.isFinite() }) {
         return null
     }
@@ -571,22 +573,28 @@ private fun NormalizedDrawCommand.FillPath.toPreparedStrokeFillPath():
         .filter { start -> start in 0 until vertexCount }
         .distinct()
         .ifEmpty { listOf(0) }
-    val preparedPathKey = "prepared-text-stroke-${commandId.value}"
+    val preparedPathKey = preparedStrokeGeometryPathKey(
+        vertices = fill.vertices,
+        contourStarts = exactContourStarts,
+    )
     return copy(
         pathKey = preparedPathKey,
         pathDescriptor = pathDescriptor.copy(
             pathKey = preparedPathKey,
-            verbCount = exactContourStarts.size * 4,
+            verbCount = vertexCount + exactContourStarts.size,
             pointCount = vertexCount,
             fillRule = "winding",
             inverseFill = false,
             finiteProof = "all_finite",
+            transformClass = "identity",
             edgeCount = vertexCount,
         ),
         tessellatedVertices = fill.vertices,
         contourStarts = exactContourStarts,
         totalVertexCount = vertexCount,
         edgeCount = vertexCount,
+        transform = GPUTransformFacts.identity(),
+        bounds = computeBounds(fill.vertices),
         source = source.copy(operation = "drawText.stroke-path"),
         stroke = false,
     )

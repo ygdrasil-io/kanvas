@@ -11,17 +11,22 @@ import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.glyph.gpu.GPUTextRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.paint.BlendMode
+import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.PathEffect
 import org.graphiks.kanvas.paint.StrokeCap
 import org.graphiks.kanvas.paint.StrokeJoin
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.text.KanvasGlyphRun
 import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
+import org.graphiks.kanvas.types.Rect
 
 class GPUPreparedTextStrokeTest {
     @Test
@@ -198,9 +203,95 @@ class GPUPreparedTextStrokeTest {
         }
     }
 
-    private fun preparedPaths(paint: Paint): List<NormalizedDrawCommand.FillPath> {
+    @Test
+    fun `prepared stroke path key seals exact geometry and verb count seals every contour`() {
+        val style = Paint.stroke(Color.RED, 2f).copy(
+            strokeCap = StrokeCap.SQUARE,
+            strokeJoin = StrokeJoin.BEVEL,
+            pathEffect = PathEffect.Dash(floatArrayOf(4f, 2f), phase = 1f),
+        )
+        val first = preparedPaths(style)
+        val repeated = preparedPaths(style)
+        val wider = preparedPaths(style.copy(strokeWidth = 3f))
+        val scaled = preparedPaths(style, transform = Matrix33.scale(2f, 2f))
+
+        assertEquals(first.map { path -> path.pathKey }, repeated.map { path -> path.pathKey })
+        assertNotEquals(first.map { path -> path.pathKey }, wider.map { path -> path.pathKey })
+        first.zip(scaled).forEach { (local, device) ->
+            assertEquals(
+                local.tessellatedVertices.map { coordinate -> coordinate * 2f },
+                device.tessellatedVertices,
+            )
+            assertEquals(GPUTransformType.Identity, device.transform.type)
+            assertEquals("identity", device.pathDescriptor.transformClass)
+            assertEquals(computeBounds(device.tessellatedVertices), device.bounds)
+        }
+        first.forEach { path ->
+            val contourEnds = path.contourStarts.drop(1) + path.totalVertexCount
+            val contourSizes = path.contourStarts.zip(contourEnds) { start, end -> end - start }
+
+            assertTrue(contourSizes.any { size -> size != 3 })
+            assertEquals(
+                path.totalVertexCount + path.contourStarts.size,
+                path.pathDescriptor.verbCount,
+            )
+        }
+    }
+
+    @Test
+    fun `stroke inventory identity seals exact transform clip material blend and mask filter`() {
+        fun inventoryHash(
+            paint: Paint = Paint.stroke(Color.RED, 2f),
+            transform: Matrix33 = Matrix33.translate(1f, 2f),
+            clip: ClipStack = ClipStack.DeviceRect(
+                Rect.fromLTRB(1f, 2f, 40f, 50f),
+                antiAlias = false,
+            ),
+        ): String = assertIs<GPUPreparedTextFramePreparation.Ready>(
+            prepare(listOf(text(paint = paint, transform = transform, clip = clip))),
+        ).inventory.contentSha256
+
+        val transformOne = inventoryHash(transform = Matrix33.translate(1f, 2f))
+        val transformTwo = inventoryHash(transform = Matrix33.translate(1f, 3f))
+        val clipOne = inventoryHash()
+        val clipTwo = inventoryHash(
+            clip = ClipStack.DeviceRect(
+                Rect.fromLTRB(1f, 2f, 41f, 50f),
+                antiAlias = false,
+            ),
+        )
+        val red = inventoryHash(paint = Paint.stroke(Color.RED, 2f))
+        val blue = inventoryHash(paint = Paint.stroke(Color.BLUE, 2f))
+        val srcOver = inventoryHash(
+            paint = Paint.stroke(Color.RED, 2f).copy(blendMode = BlendMode.SRC_OVER),
+        )
+        val plus = inventoryHash(
+            paint = Paint.stroke(Color.RED, 2f).copy(blendMode = BlendMode.PLUS),
+        )
+        val sigmaOne = inventoryHash(
+            paint = Paint.stroke(Color.RED, 2f).copy(
+                maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma = 1f),
+            ),
+        )
+        val sigmaTwo = inventoryHash(
+            paint = Paint.stroke(Color.RED, 2f).copy(
+                maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma = 2f),
+            ),
+        )
+
+        assertNotEquals(transformOne, transformTwo, "exact transform")
+        assertNotEquals(clipOne, clipTwo, "exact clip")
+        assertNotEquals(red, blue, "material")
+        assertNotEquals(srcOver, plus, "blend")
+        assertNotEquals(sigmaOne, sigmaTwo, "mask filter")
+    }
+
+    private fun preparedPaths(
+        paint: Paint,
+        transform: Matrix33 = Matrix33.identity(),
+    ): List<NormalizedDrawCommand.FillPath> {
         val ready = assertIs<GPUPreparedTextFramePreparation.Ready>(
-            prepare(listOf(text(paint))),
+            prepare(listOf(text(paint, transform = transform))),
         )
         return ready.mapping.visualCommands.map { visual ->
             assertIs<NormalizedDrawCommand.FillPath>(visual.normalized)
@@ -228,7 +319,11 @@ class GPUPreparedTextStrokeTest {
             generation = GPUTextArtifactGeneration(12),
         )
 
-    private fun text(paint: Paint): DisplayOp.DrawText = DisplayOp.DrawText(
+    private fun text(
+        paint: Paint,
+        transform: Matrix33 = Matrix33.identity(),
+        clip: ClipStack = ClipStack.WideOpen,
+    ): DisplayOp.DrawText = DisplayOp.DrawText(
         blob = TextBlob(
             glyphRuns = listOf(
                 KanvasGlyphRun(
@@ -243,8 +338,8 @@ class GPUPreparedTextStrokeTest {
         x = 20f,
         y = 40f,
         paint = paint,
-        transform = Matrix33.identity(),
-        clip = ClipStack.WideOpen,
+        transform = transform,
+        clip = clip,
     )
 
     private data class StrokeStyle(

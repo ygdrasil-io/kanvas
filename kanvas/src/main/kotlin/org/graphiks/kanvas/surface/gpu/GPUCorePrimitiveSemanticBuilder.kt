@@ -463,7 +463,6 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
     val refusalCode = when {
         dashIntervals?.isNotEmpty() == true -> "unsupported.core_primitive.stroke.dash_exact_lowering"
         strokeCap == "round" -> "unsupported.core_primitive.stroke.round_cap_exact_lowering"
-        strokeWidth == 0f -> "unsupported.core_primitive.stroke.hairline_exact_lowering"
         !exactSingleSegment -> "unsupported.core_primitive.stroke.complex_exact_lowering"
         else -> null
     }
@@ -500,15 +499,20 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         dashPhase = dashPhase,
         capStyle = cap,
         joinStyle = join,
+        miterLimit = strokeMiterLimit,
+        transform = transform,
     )
-    val transformed = outline.vertices.chunked(2).map { pair -> transform.map(pair[0], pair[1]) }
+    check(outline.coordinateSpace == StrokeGeometryCoordinateSpace.DEVICE)
+    val devicePoints = outline.vertices.chunked(2).map { pair ->
+        pair[0] to pair[1]
+    }
     val transformedContourStarts = outline.contourStarts
-        .filter { it < transformed.size }
+        .filter { it < devicePoints.size }
         .distinct()
         .ifEmpty { listOf(0) }
     val edgeFan = PathTessellator().stencilEdgeFan(
         FlattenedPath(
-            points = transformed.map { (x, y) -> GPUPathPoint(x, y) },
+            points = devicePoints.map { (x, y) -> GPUPathPoint(x, y) },
             contourStarts = transformedContourStarts,
         ),
     )
@@ -517,7 +521,7 @@ private fun NormalizedDrawCommand.FillPath.strokeDeviceGeometry(
         indices = edgeFan.indices.toList(),
         sourceContourStarts = listOf(0),
         sourceVertexCount = 2,
-        coverBounds = bounds.toPixelCoverBounds(targetBounds),
+        coverBounds = devicePoints.toPixelCoverBounds(targetBounds),
         geometryMode = GPUCorePrimitiveGeometryMode.StrokeStencilEdgeFan,
         fillRule = GPUCorePrimitiveFillRule.Winding,
         inverseFill = false,
