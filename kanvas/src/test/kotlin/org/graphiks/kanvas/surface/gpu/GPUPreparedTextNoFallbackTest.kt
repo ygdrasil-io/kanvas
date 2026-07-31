@@ -24,15 +24,15 @@ import org.graphiks.kanvas.types.Rect
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPreparedTextNoFallbackTest {
     @Test
-    fun `legacy adapter exposes only composites and rejects text and vertices`() {
+    fun `legacy adapter exposes no families and rejects text and vertices`() {
         val adapter = GPULegacyImmediatePathAdapter()
 
         assertContentEquals(
-            listOf(LegacyDisplayOpFamily.Composites),
+            emptyList(),
             LegacyDisplayOpFamily.entries,
         )
         assertEquals(
-            setOf(LegacyDisplayOpFamily.Composites),
+            emptySet(),
             GPULegacyImmediatePathAdapter.allowedFamilies,
         )
         assertFalse(adapter.accepts(text()))

@@ -91,6 +91,12 @@ import org.graphiks.kanvas.gpu.renderer.resources.r8ArtifactIdentity
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeLowerer
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeLowering
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositePreflight
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScope
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeId
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreflightCapabilities
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
 
 data class GPUPreparedSurfaceFrameRequest(
@@ -2949,6 +2955,27 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 }
             }
         }
+    }
+
+    fun handleCompositeFrame(
+        scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
+        rootScopeId: GPUPreparedCompositeScopeId,
+        identity: String,
+        capabilities: GPUPreflightCapabilities,
+    ): GPUPreparedCompositeLowering {
+        val lowering = GPUPreparedCompositeLowerer.lower(
+            scopes = scopes,
+            rootScopeId = rootScopeId,
+            identity = identity,
+        )
+        if (lowering is GPUPreparedCompositeLowering.Refused) return lowering
+
+        lowering as GPUPreparedCompositeLowering.Ready
+        val plan = lowering.plan
+        val preflight = GPUPreparedCompositePreflight.preflight(plan, capabilities)
+        if (preflight is GPUPreparedCompositeLowering.Refused) return preflight
+
+        return preflight
     }
 
     private fun refused(code: String, message: String) =

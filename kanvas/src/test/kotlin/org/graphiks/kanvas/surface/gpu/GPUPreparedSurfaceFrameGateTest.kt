@@ -196,11 +196,11 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.SetClip(CLIP), Expected.Legacy(
                 "legacy.surface.prepared.empty-frame", null, null,
             )),
-            Fixture(DisplayOp.BeginLayer(null, null), legacy(
-                "legacy.surface.prepared.family.composites", LegacyDisplayOpFamily.Composites,
+            Fixture(DisplayOp.BeginLayer(null, null), Expected.Legacy(
+                "legacy.surface.prepared.empty-frame", null, null,
             )),
-            Fixture(DisplayOp.EndLayer, legacy(
-                "legacy.surface.prepared.family.composites", LegacyDisplayOpFamily.Composites,
+            Fixture(DisplayOp.EndLayer, Expected.Legacy(
+                "legacy.surface.prepared.empty-frame", null, null,
             )),
             Fixture(DisplayOp.DrawColor(Color.RED, BlendMode.SRC_OVER, MATRIX, CLIP), visual),
             Fixture(DisplayOp.Clear(Color.RED), visual),
@@ -209,9 +209,7 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.DrawDRRect(RRect(RECT, radius = 1f), RRect(INNER_RECT, radius = 1f), PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImageNine(image, INNER_RECT, RECT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawImageLattice(image, Lattice(emptyList(), emptyList()), RECT, null, MATRIX, CLIP), visual),
-            Fixture(DisplayOp.DrawPicture(Picture(RECT, emptyList()), null, MATRIX, CLIP), legacy(
-                "legacy.surface.prepared.family.composites", LegacyDisplayOpFamily.Composites,
-            )),
+            Fixture(DisplayOp.DrawPicture(Picture(RECT, emptyList()), null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawVertices(vertices, PAINT, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawMesh(Mesh(vertices, bounds = RECT), PAINT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawAtlas(image, emptyList(), emptyList(), null, BlendMode.SRC_OVER, null, MATRIX, CLIP), visual),

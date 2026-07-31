@@ -2,10 +2,14 @@ package org.graphiks.kanvas.surface.gpu
 
 import org.graphiks.kanvas.canvas.DisplayOp
 
-/** Drawing families deliberately left on the temporary immediate renderer after Slice 12A. */
-enum class LegacyDisplayOpFamily {
-    Composites,
-}
+/**
+ * Drawing families deliberately left on the temporary immediate renderer after Slice 12A.
+ *
+ * Both historical families (Vertices, Composites) have been migrated to the prepared
+ * frame route. No family remains on the legacy allowlist; the enum is retained for
+ * diagnostics until the adapter itself is retired.
+ */
+enum class LegacyDisplayOpFamily {}
 
 data class GPULegacyImmediatePathDump(
     val invocationCount: Int,
@@ -39,16 +43,9 @@ class GPULegacyImmediatePathAdapter {
     )
 
     companion object {
-        val allowedFamilies: Set<LegacyDisplayOpFamily> = setOf(
-            LegacyDisplayOpFamily.Composites,
-        )
+        val allowedFamilies: Set<LegacyDisplayOpFamily> = emptySet()
 
         fun familyOrNull(operation: DisplayOp): LegacyDisplayOpFamily? = when (operation) {
-            is DisplayOp.DrawPicture,
-            is DisplayOp.BeginLayer,
-            DisplayOp.EndLayer,
-            -> LegacyDisplayOpFamily.Composites
-
             is DisplayOp.DrawColor,
             is DisplayOp.Clear,
             is DisplayOp.DrawPoint,
@@ -64,6 +61,9 @@ class GPULegacyImmediatePathAdapter {
             is DisplayOp.DrawText,
             is DisplayOp.DrawVertices,
             is DisplayOp.DrawMesh,
+            is DisplayOp.DrawPicture,
+            is DisplayOp.BeginLayer,
+            DisplayOp.EndLayer,
             is DisplayOp.SetTransform,
             is DisplayOp.SetClip,
             is DisplayOp.Annotation,

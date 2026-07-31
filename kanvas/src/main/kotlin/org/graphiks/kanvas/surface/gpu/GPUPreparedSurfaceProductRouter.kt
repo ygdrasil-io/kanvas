@@ -140,5 +140,9 @@ private fun DisplayOp.hasTerminalPreparedFamily(): Boolean = when (this) {
     is DisplayOp.DrawVertices,
     is DisplayOp.DrawMesh,
     -> true
+    is DisplayOp.DrawPicture,
+    is DisplayOp.BeginLayer,
+    DisplayOp.EndLayer,
+    -> true
     else -> false
 }

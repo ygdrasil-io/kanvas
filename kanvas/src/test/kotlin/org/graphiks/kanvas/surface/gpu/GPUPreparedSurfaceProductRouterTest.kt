@@ -73,7 +73,7 @@ class GPUPreparedSurfaceProductRouterTest {
         )
 
         assertEquals(
-            "legacy.surface.prepared.family.composites",
+            "legacy.surface.prepared.empty-frame",
             assertIs<GPUPreparedSurfaceProductRoute.Legacy>(compositeRoute).code,
         )
         assertEquals("legacy.surface.prepared.pixel-format.bgra8", assertIs<GPUPreparedSurfaceProductRoute.Legacy>(bgraRoute).code)
