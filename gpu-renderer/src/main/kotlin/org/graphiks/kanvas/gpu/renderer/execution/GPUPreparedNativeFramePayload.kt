@@ -230,7 +230,7 @@ private fun preparedNativeRenderCommandEvidence(
     require(semanticIndex == semanticPayloads.size) {
         "Native render semantic payload has no matching encoded draw"
     }
-    return evidence
+    return immutableList(evidence)
 }
 
 /**

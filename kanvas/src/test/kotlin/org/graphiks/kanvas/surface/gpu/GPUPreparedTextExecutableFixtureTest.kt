@@ -5,6 +5,7 @@ import java.nio.ByteOrder
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -16,10 +17,15 @@ import org.graphiks.kanvas.glyph.A8GlyphMask
 import org.graphiks.kanvas.glyph.GlyphMaskKey
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
+import org.graphiks.kanvas.gpu.renderer.materials.GPUMaterialSourceKind
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialSampledBinding
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialUniformBinding
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolution
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPURuntimeEffectMaterialEvaluationInput
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.GPURuntimeEffectMaterialEvaluationResult
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.SimpleRTCPUOracle
+import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
@@ -130,7 +136,7 @@ class GPUPreparedTextExecutableFixtureTest {
         assertEquals(affine, scissored.draw.transform)
         assertEquals(scissor, scissored.draw.clip)
 
-        materials.forEach { (label, paint) ->
+        val programs = materials.mapValues { (label, paint) ->
             val lowered = lower(text(typeface, listOf(7), paint, affine, complexClip))
             val ready = assertIs<GPUPreparedTextLowering.Ready>(
                 lowered,
@@ -142,6 +148,7 @@ class GPUPreparedTextExecutableFixtureTest {
                 label,
             )
             assertTrue(ready.draw.material.materialKey.isNotBlank(), label)
+            ready.draw.material
         }
 
         val resolved = assertIs<GPUPreparedRuntimeEffectResolution.Ready>(
@@ -165,6 +172,146 @@ class GPUPreparedTextExecutableFixtureTest {
             ),
         )
         assertEquals(listOf(0.25f, 0.5f, 0.75f, 1f), listOf(cpu.r, cpu.g, cpu.b, cpu.a))
+
+        val expectations = linkedMapOf(
+            "solid" to MaterialExpectation(
+                GPUMaterialSourceKind.SolidColor,
+                "material:prepared:solidcolor:",
+                16,
+                0,
+            ),
+            "linear" to MaterialExpectation(
+                GPUMaterialSourceKind.Gradient,
+                "material:prepared:gradient:",
+                544,
+                0,
+            ),
+            "radial" to MaterialExpectation(
+                GPUMaterialSourceKind.Gradient,
+                "material:prepared:gradient:",
+                528,
+                0,
+            ),
+            "sweep" to MaterialExpectation(
+                GPUMaterialSourceKind.Gradient,
+                "material:prepared:gradient:",
+                544,
+                0,
+            ),
+            "conical" to MaterialExpectation(
+                GPUMaterialSourceKind.Gradient,
+                "material:prepared:gradient:",
+                560,
+                0,
+            ),
+            "runtime" to MaterialExpectation(
+                GPUMaterialSourceKind.RuntimeEffect,
+                "material:prepared:runtimeeffect:",
+                16,
+                0,
+            ),
+            "image" to MaterialExpectation(
+                GPUMaterialSourceKind.ImageShader,
+                "material:prepared:imageshader:",
+                32,
+                1,
+            ),
+        )
+        programs.forEach { (label, program) ->
+            assertMaterialProgram(label, program, expectations.getValue(label))
+        }
+        assertDistinctGradientPrograms(
+            listOf("linear", "radial", "sweep", "conical")
+                .associateWith(programs::getValue),
+        )
+
+        val runtimeProgram = programs.getValue("runtime")
+        assertTrue(runtimeProgram.wgslSource.startsWith(resolved.program.wgslSource))
+        assertTrue(
+            runtimeProgram.composableFragment.declarationsWgsl
+                .contains(resolved.program.wgslSource.trim()),
+        )
+        assertEquals("fs_main", runtimeProgram.entryPoint)
+        assertEquals("runtime.simple_rt", resolved.program.effectId)
+        assertEquals(1, resolved.program.descriptorVersion)
+        assertEquals(SimpleRTEntryPoint, resolved.program.sourceFunction)
+        assertEquals(16, resolved.program.uniformBlockSizeBytes)
+        val registeredField = resolved.program.uniformFields.single()
+        assertEquals("gColor", registeredField.name)
+        assertEquals(0, registeredField.offsetBytes)
+        assertEquals(16, registeredField.sizeBytes)
+        assertEquals(16, registeredField.alignmentBytes)
+        val registeredBinding = resolved.program.bindings.single()
+        assertEquals(1, registeredBinding.group)
+        assertEquals(0, registeredBinding.binding)
+        assertEquals("uniformBuffer", registeredBinding.resourceKind)
+        assertEquals(16, registeredBinding.minBindingSizeBytes)
+        val parsedRuntimeProgram = parseWgslResult(runtimeProgram.wgslSource)
+        assertTrue(
+            parsedRuntimeProgram.isSuccess,
+            parsedRuntimeProgram.errors.joinToString { error -> error.message },
+        )
+        assertEquals(
+            setOf("vs_main", "fs_main"),
+            Lowerer().lower(parsedRuntimeProgram.translationUnit).entryPoints
+                .map { entry -> entry.name }
+                .toSet(),
+        )
+        assertEquals(
+            listOf(
+                0x00, 0x00, 0x80, 0x3e,
+                0x00, 0x00, 0x00, 0x3f,
+                0x00, 0x00, 0x40, 0x3f,
+                0x00, 0x00, 0x80, 0x3f,
+            ),
+            runtimeProgram.uniformBytes,
+        )
+        assertEquals(
+            GPUPreparedMaterialUniformBinding(group = 1, binding = 0, minBindingSizeBytes = 16),
+            runtimeProgram.composableFragment.uniformBinding,
+        )
+        assertTrue(runtimeProgram.composableFragment.sampledBindings.isEmpty())
+
+        val imageProgram = programs.getValue("image")
+        assertEquals(
+            listOf(
+                GPUPreparedMaterialSampledBinding(
+                    resourceIndex = 0,
+                    textureGroup = 1,
+                    textureBinding = 1,
+                    samplerGroup = 1,
+                    samplerBinding = 2,
+                ),
+            ),
+            imageProgram.composableFragment.sampledBindings,
+        )
+        val sampledImage = imageProgram.sampledResources.single()
+        assertEquals(1, sampledImage.width)
+        assertEquals(1, sampledImage.height)
+        assertEquals("nearest", sampledImage.samplingFilterMode)
+        assertEquals(false, sampledImage.alphaOnly)
+        assertContentEquals(
+            byteArrayOf(42, 170.toByte(), 85, 255.toByte()),
+            sampledImage.rgba8Bytes(),
+        )
+        assertTrue(sampledImage.resourceKey.startsWith("sampled-material:"))
+
+        // Mutation check: replacing any admitted non-solid family by Solid must fail.
+        expectations.keys.filterNot { it == "solid" }.forEach { label ->
+            assertFailsWith<AssertionError>(label) {
+                assertMaterialProgram(
+                    label,
+                    programs.getValue("solid"),
+                    expectations.getValue(label),
+                )
+            }
+        }
+        assertFailsWith<AssertionError>("collapsing every gradient to linear must fail") {
+            assertDistinctGradientPrograms(
+                listOf("linear", "radial", "sweep", "conical")
+                    .associateWith { programs.getValue("linear") },
+            )
+        }
     }
 
     @Test
@@ -386,5 +533,51 @@ class GPUPreparedTextExecutableFixtureTest {
         maxSubRuns = 16,
         maxInstanceBytes = 4_096,
         maxTextureDimension2D = 32,
+    )
+
+    private fun assertMaterialProgram(
+        label: String,
+        program: GPUPreparedMaterialProgram,
+        expected: MaterialExpectation,
+    ) {
+        assertEquals(expected.sourceKind, program.sourceKind, label)
+        assertTrue(program.materialKey.startsWith(expected.materialKeyPrefix), label)
+        assertTrue(program.abiHash.matches(Regex("sha256:[0-9a-f]{64}")), label)
+        assertEquals("fs_main", program.entryPoint, label)
+        assertEquals(expected.uniformByteCount, program.uniformBytes.size, label)
+        assertEquals(expected.sampledResourceCount, program.sampledResources.size, label)
+        assertEquals(
+            expected.sampledResourceCount,
+            program.composableFragment.sampledBindings.size,
+            label,
+        )
+        assertEquals(
+            GPUPreparedMaterialUniformBinding(
+                group = 1,
+                binding = 0,
+                minBindingSizeBytes = expected.uniformByteCount,
+            ),
+            program.composableFragment.uniformBinding,
+            label,
+        )
+    }
+
+    private fun assertDistinctGradientPrograms(
+        programs: Map<String, GPUPreparedMaterialProgram>,
+    ) {
+        assertEquals(4, programs.values.map { it.materialKey }.distinct().size)
+        assertEquals(4, programs.values.map { it.wgslSource }.distinct().size)
+        assertEquals(
+            4,
+            programs.values.map { it.composableFragment.declarationsWgsl }.distinct().size,
+        )
+        assertEquals(4, programs.values.map { it.abiHash }.distinct().size)
+    }
+
+    private data class MaterialExpectation(
+        val sourceKind: GPUMaterialSourceKind,
+        val materialKeyPrefix: String,
+        val uniformByteCount: Int,
+        val sampledResourceCount: Int,
     )
 }

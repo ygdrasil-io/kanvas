@@ -369,6 +369,16 @@ class GPUWgpu4kPreparedTextRenderRunMaterializerTest {
         assertEquals(listOf(1, 1), encodedByCommand.values.map { evidence -> evidence.draws })
         assertEquals(listOf(0, 0), encodedByCommand.values.map { evidence -> evidence.drawIndexed })
         assertEquals(listOf(3, 3), encodedByCommand.values.map { evidence -> evidence.bindGroups })
+        ready.scopeOperands
+            .filterIsInstance<GPUPreparedNativeScopeOperand.PreparedTextRenderRun>()
+            .map(::preparedNativeRenderCommandEvidence)
+            .forEach { published ->
+                val snapshot = published.toList()
+                assertFailsWith<UnsupportedOperationException> {
+                    (published as MutableList<GPUPreparedNativeRenderCommandEvidence>).clear()
+                }
+                assertEquals(snapshot, published)
+            }
 
         ready.ownedResources.single().close()
         r8.ownedResources.close()

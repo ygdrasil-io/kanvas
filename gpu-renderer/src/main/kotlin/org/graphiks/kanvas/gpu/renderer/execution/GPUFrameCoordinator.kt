@@ -4,6 +4,7 @@ import java.util.Collections
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionStage
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner
@@ -308,7 +309,7 @@ internal fun interface GPUPreparedSceneCompatibilityValidator {
  * Handle-free native-work counters; no backend object escapes through this evidence surface.
  * [draws] counts non-indexed calls and [drawIndexed] counts indexed calls, without overlap.
  */
-data class GPUPreparedSceneNativeCounters(
+class GPUPreparedSceneNativeCounters(
     val encoders: Long = 0L,
     val commandBuffers: Long = 0L,
     val targetCreations: Long = 0L,
@@ -357,8 +358,288 @@ data class GPUPreparedSceneNativeCounters(
     val preparedImageFrameSamplerCreations: Long = 0L,
     val preparedImageFrameUniformBufferCreations: Long = 0L,
     val preparedImageFrameBindGroupCreations: Long = 0L,
-    val commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> = emptyMap(),
-)
+    commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> = emptyMap(),
+) {
+    val commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> =
+        immutableMap(commandsByCommandId)
+
+    fun copy(
+        encoders: Long = this.encoders,
+        commandBuffers: Long = this.commandBuffers,
+        targetCreations: Long = this.targetCreations,
+        targetCloses: Long = this.targetCloses,
+        targetNativeUses: Long = this.targetNativeUses,
+        submits: Long = this.submits,
+        readbackCopies: Long = this.readbackCopies,
+        activeNativePayloads: Int = this.activeNativePayloads,
+        outputOwnedNativePayloads: Int = this.outputOwnedNativePayloads,
+        quarantinedNativePayloads: Int = this.quarantinedNativePayloads,
+        retentionRegistrations: Long = this.retentionRegistrations,
+        retentionCompletions: Long = this.retentionCompletions,
+        retentionQuarantines: Long = this.retentionQuarantines,
+        frameCoordinatorCreations: Long = this.frameCoordinatorCreations,
+        nativePayloadRegistrations: Long = this.nativePayloadRegistrations,
+        distinctRetentionTickets: Int = this.distinctRetentionTickets,
+        solidRectInvariantCreations: Long = this.solidRectInvariantCreations,
+        solidRectInvariantReuses: Long = this.solidRectInvariantReuses,
+        solidRectInvariantInvalidations: Long = this.solidRectInvariantInvalidations,
+        corePrimitiveInvariantCreations: Long = this.corePrimitiveInvariantCreations,
+        corePrimitiveInvariantReuses: Long = this.corePrimitiveInvariantReuses,
+        corePrimitiveInvariantInvalidations: Long = this.corePrimitiveInvariantInvalidations,
+        registeredUniformInvariantCreations: Long = this.registeredUniformInvariantCreations,
+        registeredUniformInvariantReuses: Long = this.registeredUniformInvariantReuses,
+        separableBlurInvariantCreations: Long = this.separableBlurInvariantCreations,
+        separableBlurInvariantReuses: Long = this.separableBlurInvariantReuses,
+        separableBlurIntermediateCreations: Long = this.separableBlurIntermediateCreations,
+        separableBlurIntermediateReuses: Long = this.separableBlurIntermediateReuses,
+        destinationSnapshotCreations: Long = this.destinationSnapshotCreations,
+        destinationSnapshotReuses: Long = this.destinationSnapshotReuses,
+        colorGlyphInvariantCreations: Long = this.colorGlyphInvariantCreations,
+        colorGlyphAtlasCreations: Long = this.colorGlyphAtlasCreations,
+        colorGlyphAtlasUploads: Long = this.colorGlyphAtlasUploads,
+        colorGlyphAtlasReuses: Long = this.colorGlyphAtlasReuses,
+        colorGlyphAtlasInvalidations: Long = this.colorGlyphAtlasInvalidations,
+        colorGlyphCurrentAtlasBytes: Long = this.colorGlyphCurrentAtlasBytes,
+        colorGlyphPeakAtlasBytes: Long = this.colorGlyphPeakAtlasBytes,
+        renderPasses: Long = this.renderPasses,
+        draws: Long = this.draws,
+        drawIndexed: Long = this.drawIndexed,
+        pipelineBinds: Long = this.pipelineBinds,
+        preparedImagePipelineCreations: Long = this.preparedImagePipelineCreations,
+        preparedImagePipelineReuses: Long = this.preparedImagePipelineReuses,
+        preparedImageFrameTextureCreations: Long = this.preparedImageFrameTextureCreations,
+        preparedImageFrameTextureViewCreations: Long = this.preparedImageFrameTextureViewCreations,
+        preparedImageFrameSamplerCreations: Long = this.preparedImageFrameSamplerCreations,
+        preparedImageFrameUniformBufferCreations: Long =
+            this.preparedImageFrameUniformBufferCreations,
+        preparedImageFrameBindGroupCreations: Long = this.preparedImageFrameBindGroupCreations,
+        commandsByCommandId: Map<Int, GPUPreparedNativeCommandEncodingCounters> =
+            this.commandsByCommandId,
+    ): GPUPreparedSceneNativeCounters = GPUPreparedSceneNativeCounters(
+        encoders,
+        commandBuffers,
+        targetCreations,
+        targetCloses,
+        targetNativeUses,
+        submits,
+        readbackCopies,
+        activeNativePayloads,
+        outputOwnedNativePayloads,
+        quarantinedNativePayloads,
+        retentionRegistrations,
+        retentionCompletions,
+        retentionQuarantines,
+        frameCoordinatorCreations,
+        nativePayloadRegistrations,
+        distinctRetentionTickets,
+        solidRectInvariantCreations,
+        solidRectInvariantReuses,
+        solidRectInvariantInvalidations,
+        corePrimitiveInvariantCreations,
+        corePrimitiveInvariantReuses,
+        corePrimitiveInvariantInvalidations,
+        registeredUniformInvariantCreations,
+        registeredUniformInvariantReuses,
+        separableBlurInvariantCreations,
+        separableBlurInvariantReuses,
+        separableBlurIntermediateCreations,
+        separableBlurIntermediateReuses,
+        destinationSnapshotCreations,
+        destinationSnapshotReuses,
+        colorGlyphInvariantCreations,
+        colorGlyphAtlasCreations,
+        colorGlyphAtlasUploads,
+        colorGlyphAtlasReuses,
+        colorGlyphAtlasInvalidations,
+        colorGlyphCurrentAtlasBytes,
+        colorGlyphPeakAtlasBytes,
+        renderPasses,
+        draws,
+        drawIndexed,
+        pipelineBinds,
+        preparedImagePipelineCreations,
+        preparedImagePipelineReuses,
+        preparedImageFrameTextureCreations,
+        preparedImageFrameTextureViewCreations,
+        preparedImageFrameSamplerCreations,
+        preparedImageFrameUniformBufferCreations,
+        preparedImageFrameBindGroupCreations,
+        commandsByCommandId,
+    )
+
+    operator fun component1(): Long = encoders
+    operator fun component2(): Long = commandBuffers
+    operator fun component3(): Long = targetCreations
+    operator fun component4(): Long = targetCloses
+    operator fun component5(): Long = targetNativeUses
+    operator fun component6(): Long = submits
+    operator fun component7(): Long = readbackCopies
+    operator fun component8(): Int = activeNativePayloads
+    operator fun component9(): Int = outputOwnedNativePayloads
+    operator fun component10(): Int = quarantinedNativePayloads
+    operator fun component11(): Long = retentionRegistrations
+    operator fun component12(): Long = retentionCompletions
+    operator fun component13(): Long = retentionQuarantines
+    operator fun component14(): Long = frameCoordinatorCreations
+    operator fun component15(): Long = nativePayloadRegistrations
+    operator fun component16(): Int = distinctRetentionTickets
+    operator fun component17(): Long = solidRectInvariantCreations
+    operator fun component18(): Long = solidRectInvariantReuses
+    operator fun component19(): Long = solidRectInvariantInvalidations
+    operator fun component20(): Long = corePrimitiveInvariantCreations
+    operator fun component21(): Long = corePrimitiveInvariantReuses
+    operator fun component22(): Long = corePrimitiveInvariantInvalidations
+    operator fun component23(): Long = registeredUniformInvariantCreations
+    operator fun component24(): Long = registeredUniformInvariantReuses
+    operator fun component25(): Long = separableBlurInvariantCreations
+    operator fun component26(): Long = separableBlurInvariantReuses
+    operator fun component27(): Long = separableBlurIntermediateCreations
+    operator fun component28(): Long = separableBlurIntermediateReuses
+    operator fun component29(): Long = destinationSnapshotCreations
+    operator fun component30(): Long = destinationSnapshotReuses
+    operator fun component31(): Long = colorGlyphInvariantCreations
+    operator fun component32(): Long = colorGlyphAtlasCreations
+    operator fun component33(): Long = colorGlyphAtlasUploads
+    operator fun component34(): Long = colorGlyphAtlasReuses
+    operator fun component35(): Long = colorGlyphAtlasInvalidations
+    operator fun component36(): Long = colorGlyphCurrentAtlasBytes
+    operator fun component37(): Long = colorGlyphPeakAtlasBytes
+    operator fun component38(): Long = renderPasses
+    operator fun component39(): Long = draws
+    operator fun component40(): Long = drawIndexed
+    operator fun component41(): Long = pipelineBinds
+    operator fun component42(): Long = preparedImagePipelineCreations
+    operator fun component43(): Long = preparedImagePipelineReuses
+    operator fun component44(): Long = preparedImageFrameTextureCreations
+    operator fun component45(): Long = preparedImageFrameTextureViewCreations
+    operator fun component46(): Long = preparedImageFrameSamplerCreations
+    operator fun component47(): Long = preparedImageFrameUniformBufferCreations
+    operator fun component48(): Long = preparedImageFrameBindGroupCreations
+    operator fun component49(): Map<Int, GPUPreparedNativeCommandEncodingCounters> =
+        commandsByCommandId
+
+    override fun equals(other: Any?): Boolean =
+        this === other ||
+            other is GPUPreparedSceneNativeCounters &&
+            componentValues() == other.componentValues()
+
+    override fun hashCode(): Int =
+        componentValues().drop(1).fold(encoders.hashCode()) { result, value ->
+            31 * result + value.hashCode()
+        }
+
+    override fun toString(): String =
+        "GPUPreparedSceneNativeCounters(" +
+            FIELD_NAMES.zip(componentValues())
+                .joinToString { (name, value) -> "$name=$value" } +
+            ")"
+
+    private fun componentValues(): List<Any> = listOf(
+        encoders,
+        commandBuffers,
+        targetCreations,
+        targetCloses,
+        targetNativeUses,
+        submits,
+        readbackCopies,
+        activeNativePayloads,
+        outputOwnedNativePayloads,
+        quarantinedNativePayloads,
+        retentionRegistrations,
+        retentionCompletions,
+        retentionQuarantines,
+        frameCoordinatorCreations,
+        nativePayloadRegistrations,
+        distinctRetentionTickets,
+        solidRectInvariantCreations,
+        solidRectInvariantReuses,
+        solidRectInvariantInvalidations,
+        corePrimitiveInvariantCreations,
+        corePrimitiveInvariantReuses,
+        corePrimitiveInvariantInvalidations,
+        registeredUniformInvariantCreations,
+        registeredUniformInvariantReuses,
+        separableBlurInvariantCreations,
+        separableBlurInvariantReuses,
+        separableBlurIntermediateCreations,
+        separableBlurIntermediateReuses,
+        destinationSnapshotCreations,
+        destinationSnapshotReuses,
+        colorGlyphInvariantCreations,
+        colorGlyphAtlasCreations,
+        colorGlyphAtlasUploads,
+        colorGlyphAtlasReuses,
+        colorGlyphAtlasInvalidations,
+        colorGlyphCurrentAtlasBytes,
+        colorGlyphPeakAtlasBytes,
+        renderPasses,
+        draws,
+        drawIndexed,
+        pipelineBinds,
+        preparedImagePipelineCreations,
+        preparedImagePipelineReuses,
+        preparedImageFrameTextureCreations,
+        preparedImageFrameTextureViewCreations,
+        preparedImageFrameSamplerCreations,
+        preparedImageFrameUniformBufferCreations,
+        preparedImageFrameBindGroupCreations,
+        commandsByCommandId,
+    )
+
+    private companion object {
+        val FIELD_NAMES = listOf(
+            "encoders",
+            "commandBuffers",
+            "targetCreations",
+            "targetCloses",
+            "targetNativeUses",
+            "submits",
+            "readbackCopies",
+            "activeNativePayloads",
+            "outputOwnedNativePayloads",
+            "quarantinedNativePayloads",
+            "retentionRegistrations",
+            "retentionCompletions",
+            "retentionQuarantines",
+            "frameCoordinatorCreations",
+            "nativePayloadRegistrations",
+            "distinctRetentionTickets",
+            "solidRectInvariantCreations",
+            "solidRectInvariantReuses",
+            "solidRectInvariantInvalidations",
+            "corePrimitiveInvariantCreations",
+            "corePrimitiveInvariantReuses",
+            "corePrimitiveInvariantInvalidations",
+            "registeredUniformInvariantCreations",
+            "registeredUniformInvariantReuses",
+            "separableBlurInvariantCreations",
+            "separableBlurInvariantReuses",
+            "separableBlurIntermediateCreations",
+            "separableBlurIntermediateReuses",
+            "destinationSnapshotCreations",
+            "destinationSnapshotReuses",
+            "colorGlyphInvariantCreations",
+            "colorGlyphAtlasCreations",
+            "colorGlyphAtlasUploads",
+            "colorGlyphAtlasReuses",
+            "colorGlyphAtlasInvalidations",
+            "colorGlyphCurrentAtlasBytes",
+            "colorGlyphPeakAtlasBytes",
+            "renderPasses",
+            "draws",
+            "drawIndexed",
+            "pipelineBinds",
+            "preparedImagePipelineCreations",
+            "preparedImagePipelineReuses",
+            "preparedImageFrameTextureCreations",
+            "preparedImageFrameTextureViewCreations",
+            "preparedImageFrameSamplerCreations",
+            "preparedImageFrameUniformBufferCreations",
+            "preparedImageFrameBindGroupCreations",
+            "commandsByCommandId",
+        )
+    }
+}
 
 internal fun GPUPreparedSceneNativeCounters.withPreparedImageNativeCounters(
     counters: GPUPreparedImageNativeCounterSnapshot,

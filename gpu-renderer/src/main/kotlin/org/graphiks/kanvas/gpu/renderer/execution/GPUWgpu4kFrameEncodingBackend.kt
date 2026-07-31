@@ -20,6 +20,7 @@ import io.ygdrasil.webgpu.beginRenderPass
 import io.ygdrasil.webgpu.ArrayBuffer
 import java.util.concurrent.atomic.AtomicLong
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSceneTarget
 
 /** Frame encoder counters. [draws] and [drawIndexed] are disjoint native call counts. */
@@ -287,7 +288,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
         resourceCopies = resourceCopyCount,
         msaaResolves = msaaResolveCount,
         pipelineBinds = pipelineBindCount,
-        commandsByCommandId = commandsByCommandId.toMap(),
+        commandsByCommandId = immutableMap(commandsByCommandId),
     )
 
     override fun close() {

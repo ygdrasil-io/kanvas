@@ -382,6 +382,16 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
             assertEquals(1L, counters.solidRectInvariantCreations)
             assertEquals(1L, counters.solidRectInvariantReuses)
             assertEquals(0L, counters.solidRectInvariantInvalidations)
+            val commandSnapshot = counters.commandsByCommandId.toMap()
+            assertEquals(2, commandSnapshot.size)
+            assertEquals(listOf(1, 2), commandSnapshot.keys.toList())
+            assertFailsWith<UnsupportedOperationException> {
+                (
+                    counters.commandsByCommandId as
+                        MutableMap<Int, GPUPreparedNativeCommandEncodingCounters>
+                    ).clear()
+            }
+            assertEquals(commandSnapshot, counters.commandsByCommandId)
         } finally {
             session.close()
             GPUBackendRuntimeNativeFactory.dispose()

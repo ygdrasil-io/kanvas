@@ -2,9 +2,38 @@ package org.graphiks.kanvas.gpu.renderer.execution
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 
 class GPUPreparedSceneNativeCountersTest {
+    @Test
+    fun `public command evidence snapshots constructor and copy maps and rejects mutation`() {
+        val first = GPUPreparedNativeCommandEncodingCounters(draws = 1L, bindGroups = 2L)
+        val second = GPUPreparedNativeCommandEncodingCounters(drawIndexed = 3L, bindGroups = 4L)
+        val source = linkedMapOf(7 to first, 9 to second)
+        val counters = GPUPreparedSceneNativeCounters(commandsByCommandId = source)
+
+        source.clear()
+        assertEquals(linkedMapOf(7 to first, 9 to second), counters.commandsByCommandId)
+        assertEquals(listOf(7, 9), counters.commandsByCommandId.keys.toList())
+        assertFailsWith<UnsupportedOperationException> {
+            (counters.commandsByCommandId as MutableMap<Int, GPUPreparedNativeCommandEncodingCounters>)
+                .clear()
+        }
+        assertEquals(linkedMapOf(7 to first, 9 to second), counters.commandsByCommandId)
+
+        val copySource = linkedMapOf(11 to second, 13 to first)
+        val copied = counters.copy(commandsByCommandId = copySource)
+        copySource.clear()
+        assertEquals(linkedMapOf(11 to second, 13 to first), copied.commandsByCommandId)
+        assertEquals(listOf(11, 13), copied.commandsByCommandId.keys.toList())
+        assertFailsWith<UnsupportedOperationException> {
+            (copied.commandsByCommandId as MutableMap<Int, GPUPreparedNativeCommandEncodingCounters>)
+                .put(17, first)
+        }
+        assertEquals(linkedMapOf(11 to second, 13 to first), copied.commandsByCommandId)
+    }
+
     @Test
     fun `public counters preserve historical field order and append exact command evidence`() {
         val counters = GPUPreparedSceneNativeCounters(
