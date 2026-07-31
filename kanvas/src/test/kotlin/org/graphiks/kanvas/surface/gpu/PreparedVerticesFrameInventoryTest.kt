@@ -15,6 +15,7 @@ import org.graphiks.kanvas.gpu.renderer.capabilities.GPULimits
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.types.Color
@@ -188,7 +189,10 @@ class PreparedVerticesFrameInventoryTest {
 
         cases.forEach { (bindings, operationIndex, reason) ->
             val refusal = assertIs<PreparedVerticesCommandBindingResult.Refused>(
-                inventory.bindCommandIds(bindings),
+                inventory.bindCommandIds(
+                    bindings,
+                    bindings.values.associateWith { GPUFrameProvenance.None },
+                ),
                 reason,
             )
             assertEquals("invalid.surface.prepared.vertices-command-binding", refusal.code, reason)
@@ -196,6 +200,28 @@ class PreparedVerticesFrameInventoryTest {
             assertEquals("PreparedVerticesFrameInventory", refusal.facts["authority"], reason)
             assertEquals(reason, refusal.facts["reason"], reason)
             assertEquals(operationIndex.toString(), refusal.facts["operationIndex"], reason)
+        }
+    }
+
+    @Test
+    fun `command provenance keys must exactly cover bound command ids`() {
+        val inventory = buildReady(listOf(draw(4), draw(9, positions = points(2f))))
+        val bindings = mapOf(4 to 7, 9 to 11)
+        val cases = listOf(
+            mapOf(7 to GPUFrameProvenance.None) to "missing_command_provenance",
+            mapOf(
+                7 to GPUFrameProvenance.None,
+                11 to GPUFrameProvenance.None,
+                13 to GPUFrameProvenance.None,
+            ) to "unexpected_command_provenance",
+        )
+
+        cases.forEach { (provenance, reason) ->
+            val refusal = assertIs<PreparedVerticesCommandBindingResult.Refused>(
+                inventory.bindCommandIds(bindings, provenance),
+            )
+            assertEquals("invalid.surface.prepared.vertices-command-binding", refusal.code)
+            assertEquals(reason, refusal.facts["reason"])
         }
     }
 

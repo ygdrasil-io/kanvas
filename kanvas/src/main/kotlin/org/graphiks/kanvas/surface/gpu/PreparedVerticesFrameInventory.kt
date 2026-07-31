@@ -3,7 +3,8 @@ package org.graphiks.kanvas.surface.gpu
 import java.util.Collections
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialFrameIdentityAuthority
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameIdentityAuthority
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameSnapshot
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
@@ -69,7 +70,7 @@ class PreparedVerticesFrameCommand internal constructor(
     val artifactKey: String,
     val artifact: GPUPreparedVerticesUploadArtifact,
     val materialKey: String,
-    val material: GPUPreparedMaterialProgram,
+    val materialFrameSnapshot: GPUPreparedMaterialFrameSnapshot,
     val draw: GPUPreparedVerticesDraw,
 ) {
     init {
@@ -77,6 +78,9 @@ class PreparedVerticesFrameCommand internal constructor(
         require(artifactKey.isNotBlank())
         require(materialKey.isNotBlank())
     }
+
+    val material: GPUPreparedMaterialProgram
+        get() = materialFrameSnapshot.program
 }
 
 class PreparedVerticesMappedCommand internal constructor(
@@ -162,7 +166,7 @@ class PreparedVerticesFrameInventory internal constructor(
 
     internal fun bindCommandIds(
         commandIdByOperationIndex: Map<Int, Int>,
-        frameProvenanceByOperationIndex: Map<Int, GPUFrameProvenance> = emptyMap(),
+        frameProvenanceByCommandId: Map<Int, GPUFrameProvenance>,
     ): PreparedVerticesCommandBindingResult {
         commands.firstOrNull { command ->
             command.operationIndex !in commandIdByOperationIndex
@@ -175,7 +179,6 @@ class PreparedVerticesFrameInventory internal constructor(
             return bindingRefusal(operationIndex, "unexpected_operation_binding")
         }
         val operationIndexByCommandId = linkedMapOf<Int, Int>()
-        val bindings = ArrayList<PreparedVerticesMappedCommand>(commands.size)
         commands.forEach { command ->
             val commandId = commandIdByOperationIndex.getValue(command.operationIndex)
             if (commandId < 0) {
@@ -188,12 +191,33 @@ class PreparedVerticesFrameInventory internal constructor(
                     mapOf("commandId" to commandId.toString()),
                 )
             }
+        }
+        operationIndexByCommandId.keys.firstOrNull { commandId ->
+            commandId !in frameProvenanceByCommandId
+        }?.let { commandId ->
+            return bindingRefusal(
+                operationIndexByCommandId.getValue(commandId),
+                "missing_command_provenance",
+                mapOf("commandId" to commandId.toString()),
+            )
+        }
+        frameProvenanceByCommandId.keys.firstOrNull { commandId ->
+            commandId !in operationIndexByCommandId
+        }?.let { commandId ->
+            return bindingRefusal(
+                operationIndex = commands.firstOrNull()?.operationIndex ?: -1,
+                reason = "unexpected_command_provenance",
+                extraFacts = mapOf("commandId" to commandId.toString()),
+            )
+        }
+        val bindings = ArrayList<PreparedVerticesMappedCommand>(commands.size)
+        commands.forEach { command ->
+            val commandId = commandIdByOperationIndex.getValue(command.operationIndex)
             bindings += PreparedVerticesMappedCommand(
                 commandId = commandId,
                 operationIndex = command.operationIndex,
                 artifactKey = command.artifactKey,
-                frameProvenance = frameProvenanceByOperationIndex[command.operationIndex]
-                    ?: GPUFrameProvenance.None,
+                frameProvenance = frameProvenanceByCommandId.getValue(commandId),
             )
         }
         return PreparedVerticesCommandBindingResult.Ready(
@@ -266,8 +290,8 @@ object PreparedVerticesFrameInventoryBuilder {
         limits: PreparedVerticesFrameInventoryLimits,
         capabilities: GPUCapabilities,
         artifactKeySelector: (GPUPreparedVerticesUploadArtifact) -> String,
-        materialBucketKeySelector: (GPUPreparedMaterialProgram) -> String =
-            { material -> GPUPreparedMaterialFrameIdentityAuthority.identity(material).bucketKey },
+        materialBucketKeySelector: (GPUPreparedMaterialFrameSnapshot) -> String =
+            { snapshot -> snapshot.identity.bucketKey },
         materialBudgetSelector: (GPUPreparedMaterialProgram) -> Pair<Long, Int> =
             GPUPreparedMaterialProgram::frameMaterialBudget,
     ): PreparedVerticesFrameInventoryResult {
@@ -301,6 +325,7 @@ object PreparedVerticesFrameInventoryBuilder {
 
         val artifacts = linkedMapOf<String, GPUPreparedVerticesUploadArtifact>()
         val materials = linkedMapOf<String, GPUPreparedMaterialProgram>()
+        val materialSnapshots = linkedMapOf<String, GPUPreparedMaterialFrameSnapshot>()
         val commands = ArrayList<PreparedVerticesFrameCommand>(visibleDraws.size)
         val vertexRanges = ArrayList<PreparedVerticesUploadRange>()
         val indexRanges = ArrayList<PreparedVerticesUploadRange>()
@@ -379,11 +404,15 @@ object PreparedVerticesFrameInventoryBuilder {
                 indexOffset = nextIndexOffset
             }
 
-            val material = draw.material
-            val materialKey = materialBucketKeySelector(material)
-            val existingMaterial = materials[materialKey]
-            if (existingMaterial != null &&
-                !GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(existingMaterial, material)
+            val materialFrameSnapshot = GPUPreparedMaterialFrameIdentityAuthority.authenticate(draw.material)
+            val material = materialFrameSnapshot.program
+            val materialKey = materialBucketKeySelector(materialFrameSnapshot)
+            val existingMaterialSnapshot = materialSnapshots[materialKey]
+            if (existingMaterialSnapshot != null &&
+                !GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(
+                    existingMaterialSnapshot.program,
+                    material,
+                )
             ) {
                 return refused(
                     operationIndex,
@@ -392,7 +421,10 @@ object PreparedVerticesFrameInventoryBuilder {
                     GPUPreparedVerticesRefusalCodes.Material,
                 )
             }
-            if (existingMaterial == null) materials[materialKey] = material
+            if (existingMaterialSnapshot == null) {
+                materialSnapshots[materialKey] = materialFrameSnapshot
+                materials[materialKey] = material
+            }
 
             val (drawUniformBytes, drawRuntimeChildren) = materialBudgetSelector(material)
             if (drawUniformBytes < 0L || drawRuntimeChildren < 0) {
@@ -424,7 +456,7 @@ object PreparedVerticesFrameInventoryBuilder {
                 artifactKey = artifactKey,
                 artifact = canonicalArtifact,
                 materialKey = materialKey,
-                material = materials.getValue(materialKey),
+                materialFrameSnapshot = materialSnapshots.getValue(materialKey),
                 draw = draw,
             )
         }

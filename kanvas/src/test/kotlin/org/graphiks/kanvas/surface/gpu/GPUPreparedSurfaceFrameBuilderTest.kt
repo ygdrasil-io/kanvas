@@ -56,8 +56,30 @@ import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.PointMode
 import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.VertexMode
+import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameBuilderTest {
+    @Test
+    fun `prepared vertices semantic-only draw refuses at preflight without executable pass`() {
+        val base = request(listOf(rect()))
+        val result = GPUPreparedSurfaceFrameBuilder.build(
+            base.copy(
+                candidate = GPUPreparedSurfaceEligibility.Candidate(
+                    operations = listOf(vertices()),
+                    config = base.candidate.config,
+                    color = base.candidate.color,
+                ),
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(result)
+        assertEquals(
+            "unsupported.preflight.prepared_vertices_unmaterialized",
+            refused.diagnostic.code.value,
+        )
+    }
+
     @Test
     fun `core frame above text generation range remains valid when it contains no text`() {
         val result = GPUPreparedSurfaceFrameBuilder.build(
@@ -1113,6 +1135,16 @@ class GPUPreparedSurfaceFrameBuilderTest {
         Paint.fill(color).copy(antiAlias = false),
         Matrix33.identity(),
         ClipStack.WideOpen,
+    )
+
+    private fun vertices(): DisplayOp.DrawVertices = DisplayOp.DrawVertices(
+        vertices = Vertices(
+            mode = VertexMode.TRIANGLES,
+            positions = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f)),
+        ),
+        paint = Paint.fill(Color.RED),
+        transform = Matrix33.identity(),
+        clip = ClipStack.WideOpen,
     )
 
     private fun triangle(): Path = Path().apply {

@@ -100,7 +100,6 @@ internal object GPUPreparedSurfaceFrameBuilder {
         validateTargetBounds(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         validateTargetFormat(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         validateFrameIdentities(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
-
         return try {
             val hasPreparedText = request.candidate.operations.any { operation ->
                 operation is org.graphiks.kanvas.canvas.DisplayOp.DrawText
@@ -118,14 +117,13 @@ internal object GPUPreparedSurfaceFrameBuilder {
             } else {
                 0
             }
-            val textPreparation = GPUPreparedTextFramePreparer.prepare(
+            val textPreparation = GPUPreparedTextFramePreparer.prepareInventory(
                 operations = request.candidate.operations,
                 target = request.targetFacts,
-                config = request.candidate.config,
                 capabilities = request.capabilities,
                 generation = GPUTextArtifactGeneration(frameGeneration),
             )
-            if (textPreparation is GPUPreparedTextFramePreparation.Refused) {
+            if (textPreparation is GPUPreparedTextFrameInventoryPreparation.Refused) {
                 val refusal = textPreparation.refusal
                 return GPUPreparedSurfaceFrameBuildResult.Refused(
                     diagnostic(
@@ -139,8 +137,31 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     ),
                 )
             }
-            textPreparation as GPUPreparedTextFramePreparation.Ready
-            val mapping = textPreparation.mapping
+            textPreparation as GPUPreparedTextFrameInventoryPreparation.Ready
+            val verticesPreparation = GPUPreparedVerticesFramePreparer.prepare(
+                operations = request.candidate.operations,
+                target = request.targetFacts,
+                config = request.candidate.config,
+                capabilities = request.capabilities,
+                preparedTextInventory = textPreparation.inventory,
+            )
+            if (verticesPreparation is GPUPreparedVerticesFramePreparation.Refused) {
+                val refusal = verticesPreparation.refusal
+                return GPUPreparedSurfaceFrameBuildResult.Refused(
+                    diagnostic(
+                        code = refusal.code,
+                        message = "Prepared Surface operation could not be lowered.",
+                        facts = refusal.facts + mapOf(
+                            "boundary" to "surface",
+                            "commandId" to refusal.commandId.toString(),
+                            "operationIndex" to refusal.operationIndex.toString(),
+                        ),
+                    ),
+                )
+            }
+            verticesPreparation as GPUPreparedVerticesFramePreparation.Ready
+            val mapping = verticesPreparation.mapping
+            val verticesInventory = verticesPreparation.inventory
             val preparedImages = collectPreparedImageVisuals(
                 mapping = mapping,
                 operations = request.candidate.operations,
@@ -171,7 +192,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         ),
                     )
             }
-            if (preparedMapping.visualCommands.isEmpty()) {
+            if (preparedMapping.visualCommands.isEmpty() && verticesInventory.mappedCommands.isEmpty()) {
                 val textOperationIndices = request.candidate.operations.withIndex()
                     .filter { indexed -> indexed.value is DisplayOp.DrawText }
                     .mapTo(linkedSetOf()) { indexed -> indexed.index }
@@ -221,21 +242,43 @@ internal object GPUPreparedSurfaceFrameBuilder {
                 capabilities = request.capabilities,
                 deviceGeneration = request.deviceGeneration,
             )
-            preparedMapping.visualCommands.forEach { visual -> recorder.record(visual.normalized) }
+            val normalizedCommands = (
+                preparedMapping.visualCommands.map(GPUFramePathVisualCommand::normalized) +
+                    verticesInventory.normalizedCommands(request.targetFacts, request.capabilities)
+                ).sortedBy { command -> command.commandId.value }
+            normalizedCommands.forEach(recorder::record)
             val recording = recorder.close()
             recording.taskList.diagnostics.firstOrNull { diagnostic -> diagnostic.isTerminal }?.let {
                 return GPUPreparedSurfaceFrameBuildResult.Refused(it.atSurfaceBoundary())
             }
+            val verticesSemantics = when (val gathered = GPUPreparedVerticesSemanticBuilder.gather(
+                normalizedCommands = normalizedCommands,
+                inventory = verticesInventory,
+                recording = recording,
+                target = request.targetFacts,
+                targetBounds = request.targetBounds,
+            )) {
+                is GPUPreparedVerticesSemanticGatherResult.Gathered -> gathered.semanticsByCommandId
+                is GPUPreparedVerticesSemanticGatherResult.Refused ->
+                    return GPUPreparedSurfaceFrameBuildResult.Refused(
+                        diagnostic(gathered.code, gathered.message, gathered.facts),
+                    )
+            }
             val semantics = when (val gathered = GPUPreparedSurfaceSemanticBuilder.gather(
                 visualCommands = preparedMapping.visualCommands,
+                normalizedCommands = normalizedCommands,
                 recording = recording,
                 targetBounds = request.targetBounds,
                 imageArtifactsByCommandId = preparedImages.artifactsByCommandId,
                 textSemanticsByCommandId = preparedTextSemantics,
+                verticesSemanticsByCommandId = verticesSemantics,
             )) {
                 is GPUPreparedSurfaceSemanticGatherResult.Gathered -> gathered.semanticsByCommandId
                 is GPUPreparedSurfaceSemanticGatherResult.Refused ->
                     return GPUPreparedSurfaceFrameBuildResult.Refused(gathered.diagnostic)
+            }
+            preflightUnmaterializedPreparedVertices(recording, semantics)?.let { diagnostic ->
+                return GPUPreparedSurfaceFrameBuildResult.Refused(diagnostic)
             }
             when (val prepared = taskListBuilder.build(
                 GPUPreparedSurfaceFrameRequest(
@@ -739,6 +782,41 @@ private fun validateFrameIdentities(request: GPUPreparedSurfaceFrameBuildRequest
     } else {
         null
     }
+}
+
+/** Task 7 fail-closed preflight; Task 8 may replace this only with an authenticated native route. */
+private fun preflightUnmaterializedPreparedVertices(
+    recording: org.graphiks.kanvas.gpu.renderer.recording.GPURecording,
+    semanticsByCommandId: Map<Int, GPUDrawSemanticPayload>,
+): GPUDiagnostic? {
+    val semanticOnlyCommandIds = recording.semanticOnlyDraws.map { draw -> draw.packet.commandIdValue }
+    if (semanticOnlyCommandIds.isEmpty()) return null
+    val verticesCommandIds = semanticsByCommandId.mapNotNull { (commandId, semantic) ->
+        commandId.takeIf { semantic is GPUDrawSemanticPayload.Vertices }
+    }
+    if (
+        semanticOnlyCommandIds.distinct().size != semanticOnlyCommandIds.size ||
+        verticesCommandIds.distinct().size != verticesCommandIds.size ||
+        semanticOnlyCommandIds.toSet() != verticesCommandIds.toSet()
+    ) {
+        return diagnostic(
+            code = "invalid.surface.prepared.semantic-command-bijection",
+            message = "Semantic-only recording evidence and prepared vertices payloads must be bijective.",
+            facts = mapOf(
+                "semanticOnlyCommandIds" to semanticOnlyCommandIds.joinToString(","),
+                "verticesCommandIds" to verticesCommandIds.joinToString(","),
+            ),
+        )
+    }
+    return diagnostic(
+        code = "unsupported.preflight.prepared_vertices_unmaterialized",
+        message = "Prepared vertices semantics have no executable native materialization route.",
+        facts = mapOf(
+            "semanticOnlyCommandIds" to semanticOnlyCommandIds.joinToString(","),
+            "verticesCommandIds" to verticesCommandIds.joinToString(","),
+            "state" to "prepared_vertices_unmaterialized",
+        ),
+    )
 }
 
 private fun GPUCorePrimitiveSemanticGatherResult.Refused.toDiagnostic(): GPUDiagnostic = GPUDiagnostic(

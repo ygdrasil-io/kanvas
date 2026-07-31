@@ -1,14 +1,19 @@
 package org.graphiks.kanvas.surface.gpu
 
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
+import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -40,9 +45,31 @@ class GPUPreparedVerticesSemanticBuilderTest {
         assertEquals(listOf(0, 1, 2), inventory.recording.recordedCommands.map { it.commandId.value })
         assertEquals(listOf(0, 1, 2), inventory.recording.analysis.records.map { it.commandIdValue })
         assertEquals(
-            listOf(0, 1, 2),
+            listOf(0),
             inventory.recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
                 .flatMap(GPUTask.Render::drawPackets).map { it.commandIdValue },
+        )
+        val semanticOnlyDraws = inventory.recording.semanticOnlyDraws
+        assertEquals(listOf(1, 2), semanticOnlyDraws.map { it.packet.commandIdValue })
+        @Suppress("UNCHECKED_CAST")
+        assertTrue(
+            runCatching {
+                (semanticOnlyDraws as MutableList<org.graphiks.kanvas.gpu.renderer.recording.GPUSemanticOnlyDraw>)
+                    .clear()
+            }.isFailure,
+        )
+        semanticOnlyDraws.forEach { draw ->
+            assertEquals("prepared_vertices_unmaterialized", draw.stateLabel)
+            assertNull(draw.packet.renderPipelineKey)
+            assertNull(draw.packet.computePipelineKey)
+        }
+        assertTrue(inventory.recording.analysisDecisionDump.lines[1].startsWith("decision:discard:"))
+        assertTrue(inventory.recording.analysisDecisionDump.lines[2].startsWith("decision:discard:"))
+        assertEquals(
+            listOf(0, 1, 2),
+            inventory.recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets).map { it.commandIdValue } +
+                semanticOnlyDraws.map { it.packet.commandIdValue },
         )
 
         val gatherResult = GPUFramePathApiInventory.gatherPreparedSurfaceSemantics(
@@ -58,6 +85,16 @@ class GPUPreparedVerticesSemanticBuilderTest {
         assertIs<GPUDrawSemanticPayload.CorePrimitive>(gathered.semanticsByCommandId.getValue(0))
         val first = assertIs<GPUDrawSemanticPayload.Vertices>(gathered.semanticsByCommandId.getValue(1))
         val second = assertIs<GPUDrawSemanticPayload.Vertices>(gathered.semanticsByCommandId.getValue(2))
+        assertEquals(
+            assertIs<NormalizedDrawCommand.DrawPreparedVertices>(inventory.normalizedCommands[1]).materialIdentity,
+            first.materialIdentity,
+        )
+        val firstInventoryCommand = inventory.preparedVerticesInventory!!.mappedCommands
+            .first { mapped -> mapped.commandId == 1 }
+            .let { mapped ->
+                inventory.preparedVerticesInventory.commandsByOperationIndex.getValue(mapped.operationIndex)
+            }
+        assertSame(firstInventoryCommand.materialFrameSnapshot.program, first.material)
         assertEquals(first.artifact.key, second.artifact.key)
         assertNotEquals(first.material, second.material)
         assertNotEquals(first.transformBytes, second.transformBytes)
@@ -81,10 +118,39 @@ class GPUPreparedVerticesSemanticBuilderTest {
     }
 
     @Test
+    fun `prepared vertices recording source contains no Task 8 pass or pipeline anticipation`() {
+        val recordingSource = File(
+            "../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/recording/" +
+                "RecordingContracts.kt",
+        ).readText()
+        val passSource = File(
+            "../gpu-renderer/src/main/kotlin/org/graphiks/kanvas/gpu/renderer/passes/PassContracts.kt",
+        ).readText()
+
+        assertTrue("pending.pipeline.prepared_vertices" !in recordingSource)
+        assertTrue("acceptedPreparedVertices" !in passSource)
+        assertTrue("resourceDeclarations = listOf(\"vertices:" !in recordingSource)
+    }
+
+    @Test
     fun `missing duplicate reordered and type-confused vertices authorities refuse atomically`() {
         val inventory = plan(listOf(rect(), vertices(Color.RED), vertices(Color.BLUE)))
-        val verticesIds = assertNotNull(inventory.preparedVerticesInventory).artifactKeyByCommandId.keys
+        val prepared = assertNotNull(inventory.preparedVerticesInventory)
+        val verticesIds = prepared.artifactKeyByCommandId.keys
         assertEquals(setOf(1, 2), verticesIds)
+
+        val firstMapped = prepared.mappedCommands[0]
+        val secondMapped = prepared.mappedCommands[1]
+        fun mapped(
+            commandId: Int = secondMapped.commandId,
+            operationIndex: Int = secondMapped.operationIndex,
+            artifactKey: String = secondMapped.artifactKey,
+        ) = PreparedVerticesMappedCommand(
+            commandId,
+            operationIndex,
+            artifactKey,
+            secondMapped.frameProvenance,
+        )
 
         listOf(
             inventory.copy(normalizedCommands = inventory.normalizedCommands.dropLast(1)),
@@ -93,6 +159,26 @@ class GPUPreparedVerticesSemanticBuilderTest {
             inventory.copy(
                 preparedVerticesInventory = inventory.preparedVerticesInventory.testRebindCommandIds(
                     mapOf(1 to 0, 2 to 2),
+                ),
+            ),
+            inventory.copy(
+                preparedVerticesInventory = prepared.testWithMappedCommands(
+                    listOf(firstMapped, mapped(commandId = firstMapped.commandId)),
+                ),
+            ),
+            inventory.copy(
+                preparedVerticesInventory = prepared.testWithMappedCommands(
+                    listOf(firstMapped, mapped(operationIndex = firstMapped.operationIndex)),
+                ),
+            ),
+            inventory.copy(
+                preparedVerticesInventory = prepared.testWithMappedCommands(
+                    listOf(firstMapped, mapped(operationIndex = 999)),
+                ),
+            ),
+            inventory.copy(
+                preparedVerticesInventory = prepared.testWithMappedCommands(
+                    listOf(firstMapped, mapped(artifactKey = "forged.artifact")),
                 ),
             ),
         ).forEach { malformed ->
@@ -157,17 +243,59 @@ class GPUPreparedVerticesSemanticBuilderTest {
                 ),
             )),
         )
+        val packet = inventory.recording.semanticOnlyDraws.single().packet
+        val packetMutations = listOf(
+            packet.copyForTest(analysisRecordId = "forged.record"),
+            packet.copyForTest(passId = "forged.pass"),
+            packet.copyForTest(layerId = "forged.layer"),
+            packet.copyForTest(bindingListId = "forged.bindings"),
+            packet.copyForTest(insertionReasonCode = "forged.reason"),
+            packet.copyForTest(sortKey = 99L),
+            packet.copyForTest(sortKeyPreimage = "forged.sort"),
+            packet.copyForTest(
+                renderStepId = org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID("forged.step"),
+            ),
+            packet.copyForTest(renderStepVersion = 2),
+            packet.copyForTest(role = org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.Copy),
+            packet.copyForTest(blendPlan = null),
+            packet.copyForTest(bindingLayoutHash = "forged.layout"),
+            packet.copyForTest(vertexSourceLabel = "forged.vertex-source"),
+            packet.copyForTest(scissorBoundsHash = "forged.scissor"),
+            packet.copyForTest(targetStateHash = "forged.target-state"),
+            packet.copyForTest(originalPaintOrder = 99),
+            packet.copyForTest(resourceGeneration = 1L),
+            packet.copyForTest(
+                frameProvenance = org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance.HarnessBackground,
+            ),
+            packet.copyForTest(clipCoveragePlan = null),
+            packet.copyForTest(
+                diagnostics = listOf(
+                    org.graphiks.kanvas.gpu.renderer.passes.GPUPassDiagnostic(
+                        code = "forged.diagnostic",
+                        terminal = true,
+                    ),
+                ),
+            ),
+        )
         val malformed = recordMutations.map { changed ->
             inventory.copy(
                 recording = inventory.recording.copy(
                     analysis = inventory.recording.analysis.copy(records = listOf(changed)),
                 ),
             )
+        } + packetMutations.map { changedPacket ->
+            inventory.copy(recording = inventory.recording.withSemanticPacket(changedPacket))
         } + listOf(
+            inventory.copy(
+                recording = inventory.recording.copy(
+                    analysisDecisionDump = inventory.recording.analysisDecisionDump.copy(
+                        lines = listOf("decision:candidate:forged:prepared.vertices.semantic"),
+                    ),
+                ),
+            ),
             inventory.copy(target = inventory.target.copy(width = 33)),
             inventory.copy(target = inventory.target.copy(height = 25)),
             inventory.copy(target = inventory.target.copy(colorFormat = "bgra8unorm")),
-            inventory.copy(recording = inventory.recording.withForgedPacketTargetState()),
         )
 
         malformed.forEach { changed ->
@@ -214,79 +342,90 @@ class GPUPreparedVerticesSemanticBuilderTest {
 
     private fun PreparedVerticesFrameInventory.testRebindCommandIds(
         commandIdByOperationIndex: Map<Int, Int>,
-    ): PreparedVerticesFrameInventory? = when (val rebound = bindCommandIds(commandIdByOperationIndex)) {
+    ): PreparedVerticesFrameInventory? = when (val rebound = bindCommandIds(
+        commandIdByOperationIndex,
+        commandIdByOperationIndex.values.associateWith {
+            org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance.None
+        },
+    )) {
         is PreparedVerticesCommandBindingResult.Ready -> rebound.inventory
         is PreparedVerticesCommandBindingResult.Refused -> null
     }
 
-    private fun org.graphiks.kanvas.gpu.renderer.recording.GPURecording
-        .withForgedPacketTargetState(): org.graphiks.kanvas.gpu.renderer.recording.GPURecording {
-        val changedTasks = taskList.tasks.map { task ->
-            if (task !is GPUTask.Render) return@map task
-            val changedPackets = task.drawPackets.map { packet ->
-                org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket(
-                    packetId = packet.packetId,
-                    commandIdValue = packet.commandIdValue,
-                    analysisRecordId = packet.analysisRecordId,
-                    passId = packet.passId,
-                    layerId = packet.layerId,
-                    bindingListId = packet.bindingListId,
-                    insertionReasonCode = packet.insertionReasonCode,
-                    sortKey = packet.sortKey,
-                    sortKeyPreimage = packet.sortKeyPreimage,
-                    renderStepId = packet.renderStepId,
-                    renderStepVersion = packet.renderStepVersion,
-                    role = packet.role,
-                    blendPlan = packet.blendPlan,
-                    renderPipelineKey = packet.renderPipelineKey,
-                    computePipelineKey = packet.computePipelineKey,
-                    bindingLayoutHash = packet.bindingLayoutHash,
-                    uniformSlot = packet.uniformSlot,
-                    resourceSlot = packet.resourceSlot,
-                    semanticPayload = packet.semanticPayload,
-                    vertexSourceLabel = packet.vertexSourceLabel,
-                    scissorBoundsHash = packet.scissorBoundsHash,
-                    targetStateHash = "forged.target-state",
-                    originalPaintOrder = packet.originalPaintOrder,
-                    resourceGeneration = packet.resourceGeneration,
-                    frameProvenance = packet.frameProvenance,
-                    clipCoveragePlan = packet.clipCoveragePlan,
-                    clipExecutionPlan = packet.clipExecutionPlan,
-                    diagnostics = packet.diagnostics,
-                    clipProducerAuthority = packet.clipProducerAuthority,
-                )
-            }
-            GPUTask.Render(
-                taskId = task.taskId,
-                recordingId = task.recordingId,
-                phase = task.phase,
-                target = task.target,
-                loadStore = task.loadStore,
-                samplePlan = task.samplePlan,
-                resourceUses = task.resourceUses,
-                provisionalSegmentKey = task.provisionalSegmentKey,
-                drawPackets = changedPackets,
-                batchEligibilityByPacketId = task.batchEligibilityByPacketId,
-                sampleContinuationKey = task.sampleContinuationKey,
-                compositeMembership = task.compositeMembership,
-                depthStencilLoadStore = task.depthStencilLoadStore,
-                preparedImageBindingsByPacketId = task.preparedImageBindingsByPacketId,
-                preparedTextBindingsByPacketId = task.preparedTextBindingsByPacketId,
-            )
-        }
-        val changedTaskList = org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList(
-            frameId = taskList.frameId,
-            capabilitySeal = taskList.capabilitySeal,
-            recordingSeals = taskList.recordingSeals,
-            expectedReplayKeyHash = taskList.expectedReplayKeyHash,
-            tasks = changedTasks,
-            dependencies = taskList.dependencies,
-            phaseOrder = taskList.phaseOrder,
-            memoryBudget = taskList.memoryBudget,
-            diagnostics = taskList.diagnostics,
-        )
-        return copy(taskList = changedTaskList)
-    }
+    private fun PreparedVerticesFrameInventory.testWithMappedCommands(
+        mappedCommands: List<PreparedVerticesMappedCommand>,
+    ): PreparedVerticesFrameInventory = PreparedVerticesFrameInventory(
+        commands = commands,
+        artifactsByKey = artifactsByKey,
+        materialsByKey = materialsByKey,
+        artifactKeyByOperationIndex = artifactKeyByOperationIndex,
+        vertexUploadRanges = vertexUploadRanges,
+        indexUploadRanges = indexUploadRanges,
+        elidedVerticesOperationIndices = elidedVerticesOperationOrder,
+        mappedCommands = mappedCommands,
+        capabilitySnapshotHash = capabilitySnapshotHash,
+        metrics = metrics,
+        limitEvidence = limitEvidence,
+    )
+
+    private fun org.graphiks.kanvas.gpu.renderer.recording.GPURecording.withSemanticPacket(
+        packet: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket,
+    ): org.graphiks.kanvas.gpu.renderer.recording.GPURecording = copy(
+        semanticOnlyDrawEntries = listOf(semanticOnlyDraws.single().copy(packet = packet)),
+    )
+
+    private fun org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket.copyForTest(
+        analysisRecordId: String = this.analysisRecordId,
+        passId: String = this.passId,
+        layerId: String = this.layerId,
+        bindingListId: String = this.bindingListId,
+        insertionReasonCode: String = this.insertionReasonCode,
+        sortKey: Long = this.sortKey,
+        sortKeyPreimage: String = this.sortKeyPreimage,
+        renderStepId: org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID = this.renderStepId,
+        renderStepVersion: Int = this.renderStepVersion,
+        role: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole = this.role,
+        blendPlan: org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan? = this.blendPlan,
+        bindingLayoutHash: String = this.bindingLayoutHash,
+        vertexSourceLabel: String = this.vertexSourceLabel,
+        scissorBoundsHash: String? = this.scissorBoundsHash,
+        targetStateHash: String = this.targetStateHash,
+        originalPaintOrder: Int = this.originalPaintOrder,
+        resourceGeneration: Long = this.resourceGeneration,
+        frameProvenance: org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance = this.frameProvenance,
+        clipCoveragePlan: GPUClipCoveragePlan? = this.clipCoveragePlan,
+        diagnostics: List<org.graphiks.kanvas.gpu.renderer.passes.GPUPassDiagnostic> = this.diagnostics,
+    ) = org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket(
+        packetId = packetId,
+        commandIdValue = commandIdValue,
+        analysisRecordId = analysisRecordId,
+        passId = passId,
+        layerId = layerId,
+        bindingListId = bindingListId,
+        insertionReasonCode = insertionReasonCode,
+        sortKey = sortKey,
+        sortKeyPreimage = sortKeyPreimage,
+        renderStepId = renderStepId,
+        renderStepVersion = renderStepVersion,
+        role = role,
+        blendPlan = blendPlan,
+        renderPipelineKey = renderPipelineKey,
+        computePipelineKey = computePipelineKey,
+        bindingLayoutHash = bindingLayoutHash,
+        uniformSlot = uniformSlot,
+        resourceSlot = resourceSlot,
+        semanticPayload = semanticPayload,
+        vertexSourceLabel = vertexSourceLabel,
+        scissorBoundsHash = scissorBoundsHash,
+        targetStateHash = targetStateHash,
+        originalPaintOrder = originalPaintOrder,
+        resourceGeneration = resourceGeneration,
+        frameProvenance = frameProvenance,
+        clipCoveragePlan = clipCoveragePlan,
+        clipExecutionPlan = clipExecutionPlan,
+        diagnostics = diagnostics,
+        clipProducerAuthority = clipProducerAuthority,
+    )
 
     private fun plan(operations: List<DisplayOp>) = GPUFramePathApiInventory.plan(
         operations = operations,

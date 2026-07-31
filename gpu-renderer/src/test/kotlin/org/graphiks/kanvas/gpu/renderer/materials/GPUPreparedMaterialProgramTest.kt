@@ -15,6 +15,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedColorFilterChildDesc
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectChildDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgramAdmission
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameIdentityAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.state.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
@@ -43,9 +44,10 @@ class GPUPreparedMaterialProgramTest {
             ), 1f),
         )
         programs.forEach { program ->
-            val snapshot = program.authenticatedSnapshot()
+            val authenticated = GPUPreparedMaterialFrameIdentityAuthority.authenticate(program)
+            val snapshot = authenticated.program
             assertEquals(
-                GPUPreparedMaterialFrameIdentityAuthority.identity(program).bucketKey,
+                authenticated.identity.bucketKey,
                 GPUPreparedMaterialFrameIdentityAuthority.identity(snapshot).bucketKey,
             )
             assertTrue(GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(program, snapshot))
@@ -63,6 +65,18 @@ class GPUPreparedMaterialProgramTest {
                 programs[1], differentImageBytes,
             ),
         )
+    }
+
+    @Test
+    fun `material identity hot path uses typed fields without toString serialization`() {
+        val source = File(
+            "src/main/kotlin/org/graphiks/kanvas/gpu/renderer/materials/contracts/" +
+                "GPUPreparedMaterialFrameIdentity.kt",
+        ).readText()
+
+        assertTrue(".toString()" !in source)
+        assertTrue("Any::toString" !in source)
+        assertTrue("encodeToByteArray" !in source)
     }
 
     @Test

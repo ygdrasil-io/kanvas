@@ -426,8 +426,9 @@ internal object GPUOpMapper {
                                 facts = mapOf("authority" to "GPUOpMapper"),
                             ),
                         )
-                    preparedVerticesCommandIds[command.operationIndex] = nextCommandId()
-                    preparedVerticesProvenance[command.operationIndex] = provenance
+                    val commandId = nextCommandId()
+                    preparedVerticesCommandIds[command.operationIndex] = commandId
+                    preparedVerticesProvenance[commandId] = provenance
                 }
                 else -> {
                     val paintOrder = nextCommandId()

@@ -1,7 +1,11 @@
 package org.graphiks.kanvas.gpu.renderer.payloads
 
+import java.lang.reflect.Modifier
+import java.nio.Buffer
+import java.util.IdentityHashMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -117,6 +121,17 @@ class GPUPreparedVerticesPayloadTest {
     }
 
     @Test
+    fun `canonical strings preserve exact UTF16 code units without replacement`() {
+        val firstMalformed = input(drawProvenance = "draw:\uD800").ready()
+        val secondMalformed = input(drawProvenance = "draw:\uD801").ready()
+        val astralPair = input(drawProvenance = "draw:\uD83D\uDE00").ready()
+
+        assertNotEquals(firstMalformed.canonicalHash, secondMalformed.canonicalHash)
+        assertNotEquals(firstMalformed.canonicalHash, astralPair.canonicalHash)
+        assertNotEquals(secondMalformed.canonicalHash, astralPair.canonicalHash)
+    }
+
+    @Test
     fun `factory refuses malformed hash topology bounds identities and payload ref atomically`() {
         val malformed = listOf(
             "invalid.renderer.prepared.vertices-hash" to input(suppliedCanonicalHash = "sha256:${"0".repeat(64)}"),
@@ -161,18 +176,49 @@ class GPUPreparedVerticesPayloadTest {
     }
 
     @Test
-    fun `native offsets handles cache hits and material generations are not representable`() {
-        val forbidden = setOf(
-            "offset", "nativeHandle", "cacheHit", "deviceGeneration", "bufferGeneration",
-            "materialGeneration", "uploadRange",
+    fun `semantic object graph is recursively handle free`() {
+        val semantic = input(material = imageMaterial(byteArrayOf(1, 2, 3, 4))).ready()
+        val visited = IdentityHashMap<Any, Boolean>()
+        val forbiddenField = Regex(
+            "nativeHandle|cacheHit|deviceGeneration|bufferGeneration|materialGeneration|uploadRange",
+            RegexOption.IGNORE_CASE,
         )
-        val inputProperties = GPUPreparedVerticesPayloadInput::class.java.declaredFields
-            .map { it.name }.toSet()
-        val payloadProperties = GPUDrawSemanticPayload.Vertices::class.java.declaredFields
-            .map { it.name }.toSet()
 
-        assertTrue(inputProperties.intersect(forbidden).isEmpty(), inputProperties.toString())
-        assertTrue(payloadProperties.intersect(forbidden).isEmpty(), payloadProperties.toString())
+        fun visit(value: Any?, path: String) {
+            if (value == null || value is String || value is Number || value is Boolean || value is Enum<*>) return
+            if (visited.put(value, true) != null) return
+            assertFalse(value is AutoCloseable, "$path owns AutoCloseable ${value.javaClass.name}")
+            assertFalse(value is Buffer, "$path owns NIO buffer ${value.javaClass.name}")
+            val typeName = value.javaClass.name
+            assertFalse(
+                typeName.contains("wgpu", ignoreCase = true) ||
+                    typeName.contains("NativeHandle", ignoreCase = true) ||
+                    typeName.contains("CommandEncoder", ignoreCase = true) ||
+                    typeName.contains("PipelineCache", ignoreCase = true),
+                "$path contains backend type $typeName",
+            )
+            when (value) {
+                is ByteArray, is IntArray, is FloatArray, is LongArray -> return
+                is Array<*> -> value.forEachIndexed { index, child -> visit(child, "$path[$index]") }
+                is Iterable<*> -> value.forEachIndexed { index, child -> visit(child, "$path[$index]") }
+                is Map<*, *> -> value.forEach { (key, child) ->
+                    visit(key, "$path.key")
+                    visit(child, "$path[$key]")
+                }
+                else -> if (typeName.startsWith("org.graphiks.kanvas")) {
+                    value.javaClass.declaredFields
+                        .filterNot { field -> Modifier.isStatic(field.modifiers) }
+                        .forEach { field ->
+                            assertFalse(forbiddenField.containsMatchIn(field.name), "$path.${field.name}")
+                            field.isAccessible = true
+                            visit(field.get(value), "$path.${field.name}")
+                        }
+                }
+            }
+        }
+
+        visit(semantic, "semantic")
+        assertTrue(visited.size > 10, "recursive test must traverse the nested semantic graph")
     }
 
     @Test

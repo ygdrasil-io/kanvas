@@ -9,7 +9,7 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialFrameIdentityAuthority
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameIdentityAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.canonicalIdentity
@@ -52,15 +52,33 @@ internal object GPUPreparedVerticesSemanticBuilder {
         val inventoryIds = inventory.mappedCommands.map { it.commandId }
         val mappedByCommandId = inventory.mappedCommands.associateBy { it.commandId }
         val analysis = recording.analysis.records.groupBy { it.commandIdValue }
-        val packets = recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
-            .flatMap(GPUTask.Render::drawPackets).groupBy(GPUDrawPacket::commandIdValue)
+        val packets = (
+            recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets) +
+                recording.semanticOnlyDraws.map { draw -> draw.packet }
+            ).groupBy(GPUDrawPacket::commandIdValue)
+        val semanticOnlyDraws = recording.semanticOnlyDraws.groupBy { draw -> draw.packet.commandIdValue }
         val recordedIds = recording.recordedCommands.map { it.commandId.value }
+        val mappedOperationIds = inventory.mappedCommands.map { it.operationIndex }
+        val expectedArtifactKeysByCommandId = inventory.mappedCommands.associate { mapped ->
+            mapped.commandId to mapped.artifactKey
+        }
+        val mappedInventoryIsBijective =
+            inventoryIds.distinct().size == inventoryIds.size &&
+                mappedOperationIds.distinct().size == mappedOperationIds.size &&
+                mappedOperationIds.toSet() == inventory.commandsByOperationIndex.keys &&
+                inventory.artifactKeyByCommandId == expectedArtifactKeysByCommandId &&
+                inventory.mappedCommands.all { mapped ->
+                    inventory.commandsByOperationIndex[mapped.operationIndex]?.artifactKey == mapped.artifactKey
+                }
         if (normalizedIds.distinct().size != normalizedIds.size ||
             normalizedIds != recordedIds ||
-            normalizedIds != analysis.keys.toList() ||
-            normalizedIds != packets.keys.toList() ||
+            normalizedIds.toSet() != analysis.keys ||
+            normalizedIds.toSet() != packets.keys ||
+            recording.analysisDecisionDump.lines.size != normalizedIds.size ||
             normalizedIds.any { analysis[it].orEmpty().size != 1 || packets[it].orEmpty().size != 1 } ||
-            verticesIds != inventoryIds || mappedByCommandId.size != inventoryIds.size ||
+            verticesIds != inventoryIds || !mappedInventoryIsBijective ||
+            mappedByCommandId.size != inventoryIds.size ||
             verticesIds.toSet() != inventory.artifactKeyByCommandId.keys
         ) {
             return refused(
@@ -89,7 +107,7 @@ internal object GPUPreparedVerticesSemanticBuilder {
                     matrix.persp0, matrix.persp1, matrix.persp2,
                 ).map(Float::toRawBits)
             }
-            val materialIdentity = GPUPreparedMaterialFrameIdentityAuthority.identity(draw.material)
+            val materialIdentity = inventoryCommand.materialFrameSnapshot.identity
             val expectedTransformFacts = normalizedTransformFacts(draw.transform)
             val expectedClipKind = when (draw.clipSnapshot.coveragePlan) {
                 GPUClipCoveragePlan.NoClip -> org.graphiks.kanvas.gpu.renderer.commands.GPUClipKind.WideOpen
@@ -105,6 +123,8 @@ internal object GPUPreparedVerticesSemanticBuilder {
             val expectedBoundsHash = expectedBounds.preparedVerticesBoundsHash()
             val expectedTargetHash = "target.${target.colorFormat}.${target.width}x${target.height}"
             val expectedRecordId = "analysis.draw_prepared_vertices.${mapped.commandId}"
+            val expectedDecisionLine =
+                "decision:discard:$expectedRecordId:prepared_vertices_unmaterialized"
             val expectedScissorHash = draw.clipSnapshot.coveragePlan.preparedVerticesSemanticIdentity()
             if (normalized.artifactKey != inventoryCommand.artifactKey ||
                 normalized.artifactKey != draw.artifact.key ||
@@ -112,6 +132,10 @@ internal object GPUPreparedVerticesSemanticBuilder {
                 normalized.topologyIdentity != inventoryCommand.artifact.topology.sourceLabel ||
                 normalized.layoutIdentity != inventoryCommand.artifact.normalizedLayoutIdentity() ||
                 normalized.material !== null ||
+                !GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(
+                    inventoryCommand.material,
+                    draw.material,
+                ) ||
                 materialIdentity.bucketKey != normalized.materialIdentity ||
                 expectedTransform != normalized.transformBytes ||
                 normalized.transform != expectedTransformFacts ||
@@ -148,20 +172,24 @@ internal object GPUPreparedVerticesSemanticBuilder {
                 record.renderStepCandidates != listOf(PREPARED_VERTICES_RENDER_STEP_IDENTITY) ||
                 record.sortKey.value != normalized.ordering.paintOrder.toLong() ||
                 record.diagnostics.isNotEmpty() ||
+                recording.analysisDecisionDump.lines[normalizedIds.indexOf(mapped.commandId)] !=
+                    expectedDecisionLine ||
+                semanticOnlyDraws[mapped.commandId]?.singleOrNull()?.stateLabel !=
+                    "prepared_vertices_unmaterialized" ||
                 packet.packetId.value != "packet.${mapped.commandId}.0" ||
                 packet.analysisRecordId != expectedRecordId ||
-                packet.passId != "pass.prepared_vertices.${mapped.commandId}" ||
+                packet.passId != "semantic-only.prepared_vertices.${mapped.commandId}" ||
                 packet.layerId != "root" || packet.bindingListId != "bindings.${mapped.commandId}" ||
                 packet.insertionReasonCode != "paint-order" ||
                 packet.sortKey != normalized.ordering.paintOrder.toLong() ||
                 packet.sortKeyPreimage != "paint-order:${normalized.ordering.paintOrder}" ||
                 packet.renderStepId.value != PREPARED_VERTICES_RENDER_STEP_IDENTITY ||
-                packet.renderStepVersion != 1 || packet.role != GPUDrawPacketRole.Shading ||
+                packet.renderStepVersion != 1 || packet.role != GPUDrawPacketRole.Discard ||
                 packet.blendPlan != draw.blendPlan ||
-                packet.renderPipelineKey?.value != "pending.pipeline.prepared_vertices.${target.colorFormat}" ||
-                packet.computePipelineKey != null || packet.bindingLayoutHash != "preflight.pending" ||
+                packet.renderPipelineKey != null || packet.computePipelineKey != null ||
+                packet.bindingLayoutHash != "unmaterialized" ||
                 packet.uniformSlot != null || packet.resourceSlot != null || packet.semanticPayload != null ||
-                packet.vertexSourceLabel != "preflight.pending" ||
+                packet.vertexSourceLabel != "unmaterialized" ||
                 packet.scissorBoundsHash != expectedScissorHash ||
                 packet.targetStateHash != expectedTargetHash ||
                 packet.originalPaintOrder != normalized.ordering.paintOrder || packet.resourceGeneration != 0L ||
@@ -201,6 +229,7 @@ internal object GPUPreparedVerticesSemanticBuilder {
                     payloadRef = GPUDrawPayloadRef(mapped.commandId, PREPARED_VERTICES_RENDER_STEP_IDENTITY),
                     artifact = inventoryCommand.artifact,
                     material = inventoryCommand.material,
+                    materialFrameSnapshot = inventoryCommand.materialFrameSnapshot,
                     topologyIdentity = when (inventoryCommand.artifact.topology.sourceLabel) {
                         "Triangles" -> GPUPreparedVerticesTopologyIdentity.Triangles
                         "TriangleStrip" -> GPUPreparedVerticesTopologyIdentity.TriangleStrip

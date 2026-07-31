@@ -1400,40 +1400,6 @@ private fun List<GPUPassDiagnostic>.dumpLines(): List<String> =
 
 /** Builds first-route pass descriptors whose contents remain pre-materialization planning records. */
 object GPUFirstRoutePassBuilder {
-    /** Records one prepared vertices packet; resource materialization remains a later task. */
-    fun acceptedPreparedVertices(
-        commandIdValue: Int,
-        analysisRecordId: String,
-        renderStepIdentity: String,
-        sortKey: Long,
-        pipelineKey: GPURenderPipelineKey,
-        blendPlan: GPUBlendPlan,
-        boundsHash: String,
-        scissorBoundsHash: String?,
-        originalPaintOrder: Int,
-        targetStateHash: String,
-        frameProvenance: GPUFrameProvenance,
-        clipCoveragePlan: GPUClipCoveragePlan?,
-        clipExecutionPlan: GPUClipExecutionPlan?,
-    ): GPUDrawPass = acceptedTypedPass(
-        passId = "pass.prepared_vertices.$commandIdValue",
-        role = "prepared_vertices",
-        commandIdValue = commandIdValue,
-        analysisRecordId = analysisRecordId,
-        renderStepIdentity = renderStepIdentity,
-        sortKey = sortKey,
-        pipelineKey = pipelineKey,
-        blendPlan = blendPlan,
-        boundsHash = boundsHash,
-        scissorBoundsHash = scissorBoundsHash,
-        originalPaintOrder = originalPaintOrder,
-        targetStateHash = targetStateHash,
-        layerScopeId = "root",
-        frameProvenance = frameProvenance,
-        clipCoveragePlan = clipCoveragePlan,
-        clipExecutionPlan = clipExecutionPlan,
-    )
-
     /**
      * Builds an accepted FillRect pass with invocation identity but no concrete resource or binding slots.
      *

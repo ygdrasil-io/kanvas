@@ -24,7 +24,6 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
-import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialFrameIdentityAuthority
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUCoverageConsumption
@@ -195,6 +194,9 @@ object GPUFramePathApiInventory {
         targetBounds: GPUPixelBounds,
         readbackRequestId: GPUReadbackRequestID? = null,
     ): GPUCorePrimitivePreparedFrameResult {
+        preflightSemanticOnlyVertices(inventory, targetBounds)?.let { diagnostic ->
+            return GPUCorePrimitivePreparedFrameResult.Refused(diagnostic)
+        }
         val semantics = when (val gathered = gatherCorePrimitiveSemantics(inventory, targetBounds)) {
             is GPUCorePrimitiveSemanticGatherResult.Gathered -> gathered.semantics
             is GPUCorePrimitiveSemanticGatherResult.Refused -> return GPUCorePrimitivePreparedFrameResult.Refused(
@@ -231,6 +233,9 @@ object GPUFramePathApiInventory {
             return GPUPreparedSurfaceFrameResult.Refused(
                 preparedRefusalDiagnostic(refusal),
             )
+        }
+        preflightSemanticOnlyVertices(inventory, targetBounds)?.let { diagnostic ->
+            return GPUPreparedSurfaceFrameResult.Refused(diagnostic)
         }
         val artifacts = inventory.visualCommands.mapNotNull { visual ->
             visual.preparedImage?.artifact?.let { artifact ->
@@ -329,6 +334,51 @@ object GPUFramePathApiInventory {
         )
     }
 
+    private fun preflightSemanticOnlyVertices(
+        inventory: GPUFramePathInventoryPlan,
+        targetBounds: GPUPixelBounds,
+    ): GPUDiagnostic? {
+        val semanticOnlyCommandIds = inventory.recording.semanticOnlyDraws
+            .map { draw -> draw.packet.commandIdValue }
+        val verticesInventory = inventory.preparedVerticesInventory
+        val inventoryCommandIds = verticesInventory?.mappedCommands
+            ?.map { mapped -> mapped.commandId }
+            .orEmpty()
+        if (semanticOnlyCommandIds.isEmpty() && inventoryCommandIds.isEmpty()) return null
+        if (verticesInventory == null) return GPUDiagnostic(
+            code = GPUDiagnosticCode("invalid.surface.prepared.semantic-command-bijection"),
+            domain = GPUDiagnosticDomain.Recording,
+            severity = GPUDiagnosticSeverity.Error,
+            message = "Semantic-only vertices recording evidence requires its exact frame inventory.",
+        )
+        return when (val gathered = GPUPreparedVerticesSemanticBuilder.gather(
+            normalizedCommands = inventory.normalizedCommands,
+            inventory = verticesInventory,
+            recording = inventory.recording,
+            target = inventory.target,
+            targetBounds = targetBounds,
+        )) {
+            is GPUPreparedVerticesSemanticGatherResult.Refused -> GPUDiagnostic(
+                code = GPUDiagnosticCode(gathered.code),
+                domain = GPUDiagnosticDomain.Recording,
+                severity = GPUDiagnosticSeverity.Error,
+                message = gathered.message,
+                facts = gathered.facts,
+            )
+            is GPUPreparedVerticesSemanticGatherResult.Gathered -> GPUDiagnostic(
+                code = GPUDiagnosticCode("unsupported.preflight.prepared_vertices_unmaterialized"),
+                domain = GPUDiagnosticDomain.Recording,
+                severity = GPUDiagnosticSeverity.Error,
+                message = "Prepared vertices semantics have no executable native materialization route.",
+                facts = mapOf(
+                    "semanticOnlyCommandIds" to semanticOnlyCommandIds.joinToString(","),
+                    "verticesCommandIds" to gathered.semanticsByCommandId.keys.joinToString(","),
+                    "state" to "prepared_vertices_unmaterialized",
+                ),
+            )
+        }
+    }
+
     private fun preparedRefusalDiagnostic(refusal: GPUPreparedOperationRefusal): GPUDiagnostic =
         GPUDiagnostic(
             code = GPUDiagnosticCode(refusal.code),
@@ -343,7 +393,7 @@ object GPUFramePathApiInventory {
         )
 }
 
-private fun PreparedVerticesFrameInventory.normalizedCommands(
+internal fun PreparedVerticesFrameInventory.normalizedCommands(
     target: GPUTargetFacts,
     capabilities: GPUCapabilities,
 ): List<NormalizedDrawCommand.DrawPreparedVertices> = mappedCommands.map { mapped ->
@@ -370,7 +420,7 @@ private fun PreparedVerticesFrameInventory.normalizedCommands(
         artifactKey = command.artifactKey,
         topologyIdentity = command.artifact.topology.sourceLabel,
         layoutIdentity = command.artifact.normalizedLayoutIdentity(),
-        materialIdentity = GPUPreparedMaterialFrameIdentityAuthority.identity(command.material).bucketKey,
+        materialIdentity = command.materialFrameSnapshot.identity.bucketKey,
         transformBytes = listOf(
             matrix.scaleX, matrix.skewX, matrix.transX,
             matrix.skewY, matrix.scaleY, matrix.transY,

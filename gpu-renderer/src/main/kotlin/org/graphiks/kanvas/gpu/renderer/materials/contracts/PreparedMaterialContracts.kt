@@ -209,55 +209,6 @@ class GPUPreparedMaterialProgram private constructor(
             retainedAbiHash = abiHash,
         )
 
-    /** Exact passive identity for semantic payload hashing after authenticated snapshotting. */
-    @JvmSynthetic
-    internal fun preparedSemanticIdentity(): String {
-        val facts = buildList {
-            add(materialKey); add(wgslSource); add(entryPoint)
-            add(composableFragment.declarationsWgsl)
-            add(composableFragment.evaluationFunctionWgsl)
-            add(composableFragment.evaluationFunction)
-            composableFragment.uniformBinding?.let { binding ->
-                add("uniform:present")
-                add(binding.group.toString())
-                add(binding.binding.toString())
-                add(binding.minBindingSizeBytes.toString())
-            } ?: add("uniform:absent")
-            add("sampled-binding-count:${composableFragment.sampledBindings.size}")
-            composableFragment.sampledBindings.forEach { binding ->
-                add(binding.resourceIndex.toString())
-                add(binding.textureGroup.toString())
-                add(binding.textureBinding.toString())
-                add(binding.samplerGroup.toString())
-                add(binding.samplerBinding.toString())
-            }
-            add(composableFragment.colorContract.name)
-            add(composableFragment.coordinateContract.name)
-            add(composableFragment.fragmentHash); add(composableFragment.abiHash)
-            add(uniformBytes.joinToString(","))
-            add("sampled-resource-count:${sampledResources.size}")
-            sampledResources.forEach { resource ->
-                add(resource.identityFacts().joinToString("\u0000"))
-                add(resource.rgba8Bytes().joinToString(",") { byte ->
-                    (byte.toInt() and 0xff).toString()
-                })
-            }
-            add("child-program-count:${childPrograms.size}")
-            childPrograms.forEach { child ->
-                add(child.name); add(child.role.name); add(child.programKey); add(child.abiHash)
-                add(child.uniformBytes.joinToString(",")); add(child.resourceFacts.joinToString("\u0000"))
-                add(child.wgslSource); add(child.evaluationFunction)
-                addAll(child.cpuProgram.preparedSemanticFacts())
-            }
-            add(paintAlpha.toRawBits().toString()); add(sourceKind.name)
-            add(preCoverageSourceAlpha.name); add(abiHash)
-        }
-        val preimage = buildString {
-            facts.forEach { fact -> append(fact.length).append(':').append(fact) }
-        }
-        return "sha256:" + sha256Hex(preimage.encodeToByteArray())
-    }
-
     operator fun component1(): String = materialKey
 
     operator fun component2(): String = wgslSource
@@ -422,20 +373,6 @@ class GPUPreparedMaterialProgram private constructor(
             )
         }
     }
-}
-
-private fun GPUPreparedRuntimeEffectChildCpuProgram.preparedSemanticFacts(): List<String> = when (this) {
-    is GPUPreparedRuntimeEffectChildCpuProgram.Shader -> listOf("shader", materialKey)
-    is GPUPreparedRuntimeEffectChildCpuProgram.Matrix ->
-        listOf("matrix", values.size.toString()) +
-            values.map { value -> value.toRawBits().toString() }
-    is GPUPreparedRuntimeEffectChildCpuProgram.BlendConstant ->
-        listOf("blend-constant", modeLabel, sourcePremul.size.toString()) +
-            sourcePremul.map { value -> value.toRawBits().toString() }
-    is GPUPreparedRuntimeEffectChildCpuProgram.Compose ->
-        listOf("compose", "inner") + inner.preparedSemanticFacts() +
-            listOf("outer") + outer.preparedSemanticFacts()
-    is GPUPreparedRuntimeEffectChildCpuProgram.ModeBlender -> listOf("mode-blender", modeLabel)
 }
 
 private fun GPUPreparedRuntimeEffectChildProgram.deepSnapshot():

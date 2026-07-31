@@ -1,12 +1,12 @@
 package org.graphiks.kanvas.gpu.renderer.payloads
 
-import java.io.ByteArrayOutputStream
-import java.io.DataOutputStream
-import java.security.MessageDigest
 import java.util.Collections
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.collections.ExactUtf16CanonicalIdentityDigestEncoder
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameIdentityAuthority
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameSnapshot
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
@@ -23,6 +23,7 @@ data class GPUPreparedVerticesPayloadInput(
     val payloadRef: GPUDrawPayloadRef,
     val artifact: GPUPreparedVerticesUploadArtifact,
     val material: GPUPreparedMaterialProgram,
+    val materialFrameSnapshot: GPUPreparedMaterialFrameSnapshot? = null,
     val topologyIdentity: GPUPreparedVerticesTopologyIdentity,
     val transformBytes: List<Int>,
     val targetBounds: GPUPixelBounds,
@@ -60,8 +61,13 @@ internal class GPUPreparedVerticesPayloadSnapshot(
         renderStepIdentity = input.payloadRef.renderStepIdentity,
     )
     val artifact = input.artifact
-    val material = input.material.authenticatedSnapshot()
-    val materialIdentity = material.preparedSemanticIdentity()
+    val authenticatedMaterial = input.materialFrameSnapshot?.also { snapshot ->
+        require(GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(snapshot.program, input.material)) {
+            "Prepared vertices material must match the supplied authenticated frame snapshot"
+        }
+    } ?: GPUPreparedMaterialFrameIdentityAuthority.authenticate(input.material)
+    val material = authenticatedMaterial.program
+    val materialIdentity = authenticatedMaterial.identity.bucketKey
     val topologyIdentity = input.topologyIdentity
     val transformBytes = immutableList(input.transformBytes)
     val targetBounds = input.targetBounds.copy()
@@ -79,7 +85,9 @@ internal class GPUPreparedVerticesPayloadSnapshot(
 
     fun canonicalHash(): String {
         val layout = artifact.layout
-        val encoder = PreparedVerticesCanonicalEncoder("prepared-vertices-semantic-v1")
+        val encoder = ExactUtf16CanonicalIdentityDigestEncoder(
+            "prepared-vertices-semantic-v2-utf16-code-units",
+        )
             .int("payloadRef.commandIdValue", payloadRef.commandIdValue)
             .text("payloadRef.renderStepIdentity", payloadRef.renderStepIdentity)
             .text("artifact.key", artifact.key)
@@ -272,42 +280,4 @@ object GPUPreparedVerticesPayloadGatherer {
             "reason" to reason,
         ).apply { putAll(extra) },
     )
-}
-
-private class PreparedVerticesCanonicalEncoder(domain: String) {
-    private val bytes = ByteArrayOutputStream()
-    private val output = DataOutputStream(bytes)
-
-    init { text("domain", domain) }
-
-    fun text(name: String, value: String) = apply {
-        raw(name.encodeToByteArray()); raw(value.encodeToByteArray())
-    }
-
-    fun int(name: String, value: Int) = apply {
-        raw(name.encodeToByteArray()); output.writeInt(value)
-    }
-
-    fun boolean(name: String, value: Boolean) = apply {
-        raw(name.encodeToByteArray()); output.writeBoolean(value)
-    }
-
-    fun texts(name: String, values: List<String>) = apply {
-        raw(name.encodeToByteArray()); output.writeInt(values.size)
-        values.forEach { raw(it.encodeToByteArray()) }
-    }
-
-    fun bytes(name: String, values: ByteArray) = apply {
-        raw(name.encodeToByteArray()); raw(values)
-    }
-
-    fun digestIdentity(): String = "sha256:" + MessageDigest.getInstance("SHA-256")
-        .digest(bytes.toByteArray()).joinToString("") { byte ->
-            "%02x".format(byte.toInt() and 0xff)
-        }
-
-    private fun raw(value: ByteArray) {
-        output.writeInt(value.size)
-        output.write(value)
-    }
 }

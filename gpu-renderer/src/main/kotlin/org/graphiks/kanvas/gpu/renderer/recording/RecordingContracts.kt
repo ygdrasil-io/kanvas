@@ -29,13 +29,14 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
+import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleContinuationKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPURefusalScope
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
-import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryBudgetPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameMemoryCategory
@@ -172,7 +173,21 @@ data class GPURecording(
     val routeDiagnostics: List<String>,
     val featureAssumptions: List<String>,
     val recordedCommands: List<NormalizedDrawCommand> = emptyList(),
-)
+    private val semanticOnlyDrawEntries: List<GPUSemanticOnlyDraw> = emptyList(),
+) {
+    val semanticOnlyDraws: List<GPUSemanticOnlyDraw> = immutableList(semanticOnlyDrawEntries)
+}
+
+/** Closed handle-free draw evidence that deliberately has no executable pass or pipeline. */
+data class GPUSemanticOnlyDraw(
+    val packet: GPUDrawPacket,
+    val stateLabel: String,
+) {
+    init {
+        require(stateLabel == "prepared_vertices_unmaterialized")
+        require(packet.renderPipelineKey == null && packet.computePipelineKey == null)
+    }
+}
 
 /**
  * Dependency token between target-ordered recordings.
@@ -241,6 +256,27 @@ object GPURecordingOrder {
             )
         }
 }
+
+private sealed interface GPURecordedPlan {
+    val analysisRecord: GPUDrawAnalysisRecord
+    val analysisDecision: GPUDrawAnalysisDecision
+    val routeDecision: GPURouteDecision
+
+    data class Routed(val plan: GPUFirstRoutePlan) : GPURecordedPlan {
+        override val analysisRecord: GPUDrawAnalysisRecord get() = plan.analysisRecord
+        override val analysisDecision: GPUDrawAnalysisDecision get() = plan.analysisDecision
+        override val routeDecision: GPURouteDecision get() = plan.routeDecision
+    }
+
+    data class SemanticOnly(
+        override val analysisRecord: GPUDrawAnalysisRecord,
+        override val analysisDecision: GPUDrawAnalysisDecision.Discard,
+        override val routeDecision: GPURouteDecision,
+        val draw: GPUSemanticOnlyDraw,
+    ) : GPURecordedPlan
+}
+
+private fun routed(plan: GPUFirstRoutePlan): GPURecordedPlan = GPURecordedPlan.Routed(plan)
 
 /**
  * Recorder for already-normalized first-route commands.
@@ -312,27 +348,30 @@ class GPURecorder(
             routeDiagnostics = plans.map { plan -> plan.routeDiagnostic() },
             featureAssumptions = capabilities.featureAssumptions(),
             recordedCommands = commands.toList(),
+            semanticOnlyDrawEntries = plans.mapNotNull { plan ->
+                (plan as? GPURecordedPlan.SemanticOnly)?.draw
+            },
         )
 
         closedRecording = recording
         return recording
     }
 
-    private fun planCommand(command: NormalizedDrawCommand): GPUFirstRoutePlan =
+    private fun planCommand(command: NormalizedDrawCommand): GPURecordedPlan =
         when (command) {
-            is NormalizedDrawCommand.FillRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
-            is NormalizedDrawCommand.FillRRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
-            is NormalizedDrawCommand.DrawTextRun -> planDrawTextRun(command)
-            is NormalizedDrawCommand.FillPath -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
-            is NormalizedDrawCommand.DrawImageRect -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
+            is NormalizedDrawCommand.FillRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
+            is NormalizedDrawCommand.FillRRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
+            is NormalizedDrawCommand.DrawTextRun -> routed(planDrawTextRun(command))
+            is NormalizedDrawCommand.FillPath -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
+            is NormalizedDrawCommand.DrawImageRect -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
             is NormalizedDrawCommand.DrawPreparedVertices -> planPreparedVertices(command)
-            is NormalizedDrawCommand.ApplyFilter -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
-            is NormalizedDrawCommand.DrawLayer -> GPUFirstRoutePlanner(capabilities = capabilities).plan(command)
+            is NormalizedDrawCommand.ApplyFilter -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
+            is NormalizedDrawCommand.DrawLayer -> routed(GPUFirstRoutePlanner(capabilities = capabilities).plan(command))
         }
 
     private fun planPreparedVertices(
         command: NormalizedDrawCommand.DrawPreparedVertices,
-    ): GPUFirstRoutePlan {
+    ): GPURecordedPlan {
         val commandId = command.commandId.value
         val recordId = "analysis.draw_prepared_vertices.$commandId"
         val renderStep = org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_RENDER_STEP_IDENTITY
@@ -347,30 +386,40 @@ class GPURecorder(
             sortKey = SortKey(command.ordering.paintOrder.toLong()),
             diagnostics = emptyList(),
         )
-        return GPUFirstRoutePlan(
+        val packet = GPUDrawPacket(
+            packetId = GPUDrawPacketID("packet.$commandId.0"),
+            commandIdValue = commandId,
+            analysisRecordId = recordId,
+            passId = "semantic-only.prepared_vertices.$commandId",
+            layerId = "root",
+            bindingListId = "bindings.$commandId",
+            insertionReasonCode = "paint-order",
+            sortKey = command.ordering.paintOrder.toLong(),
+            sortKeyPreimage = "paint-order:${command.ordering.paintOrder}",
+            renderStepId = GPURenderStepID(renderStep),
+            renderStepVersion = 1,
+            role = GPUDrawPacketRole.Discard,
+            blendPlan = command.preparedBlendPlan,
+            renderPipelineKey = null,
+            computePipelineKey = null,
+            bindingLayoutHash = "unmaterialized",
+            vertexSourceLabel = "unmaterialized",
+            scissorBoundsHash = command.clip.coveragePlan?.let { command.clipCoverageIdentity },
+            targetStateHash = command.recordingTargetStateHash(),
+            originalPaintOrder = command.ordering.paintOrder,
+            resourceGeneration = 0L,
+            frameProvenance = command.source.frameProvenance,
+            clipCoveragePlan = command.clip.coveragePlan,
+            clipExecutionPlan = command.clip.executionPlan,
+        )
+        return GPURecordedPlan.SemanticOnly(
             analysisRecord = analysisRecord,
-            analysisDecision = GPUDrawAnalysisDecision.Candidate(
+            analysisDecision = GPUDrawAnalysisDecision.Discard(
                 recordId = recordId,
-                routeDecisionLabel = "prepared.vertices.semantic",
-                resourceDeclarations = listOf("vertices:${command.artifactKey}"),
-                renderStepCandidates = listOf(renderStep),
+                reasonCode = "prepared_vertices_unmaterialized",
             ),
             routeDecision = GPUFirstRouteDecisionBuilder.preparedVertices(commandId, command.artifactKey),
-            pass = GPUFirstRoutePassBuilder.acceptedPreparedVertices(
-                commandIdValue = commandId,
-                analysisRecordId = recordId,
-                renderStepIdentity = renderStep,
-                sortKey = command.ordering.paintOrder.toLong(),
-                pipelineKey = GPURenderPipelineKey("pending.pipeline.prepared_vertices.${command.layer.target.colorFormat}"),
-                blendPlan = command.preparedBlendPlan,
-                boundsHash = command.bounds.recordingBoundsHash(),
-                scissorBoundsHash = command.clip.coveragePlan?.let { command.clipCoverageIdentity },
-                originalPaintOrder = command.ordering.paintOrder,
-                targetStateHash = command.recordingTargetStateHash(),
-                frameProvenance = command.source.frameProvenance,
-                clipCoveragePlan = command.clip.coveragePlan,
-                clipExecutionPlan = command.clip.executionPlan,
-            ),
+            draw = GPUSemanticOnlyDraw(packet, "prepared_vertices_unmaterialized"),
         )
     }
 
@@ -1101,7 +1150,7 @@ fun GPURecordingCompatibilityKey.dump(): GPURecordingCompatibilityKeyDump =
         ),
     )
 
-private fun List<GPUFirstRoutePlan>.analysisDependencies(): List<GPUAnalysisDependency> =
+private fun List<GPURecordedPlan>.analysisDependencies(): List<GPUAnalysisDependency> =
     zipWithNext().mapIndexed { index, (from, to) ->
         GPUAnalysisDependency(
             fromRecordId = from.analysisRecord.recordId,
@@ -1114,7 +1163,7 @@ private fun List<GPUFirstRoutePlan>.analysisDependencies(): List<GPUAnalysisDepe
 
 private fun analysisDecisionDump(
     recordingId: GPURecordingID,
-    plans: List<GPUFirstRoutePlan>,
+    plans: List<GPURecordedPlan>,
 ): GPUAnalysisDecisionDump {
     val lines = plans.map { plan -> plan.analysisDecision.dumpLine() }
     return GPUAnalysisDecisionDump(
@@ -1143,9 +1192,9 @@ private fun taskList(
     deviceGeneration: GPUDeviceGenerationID,
     compatibilityKey: GPURecordingCompatibilityKey,
     capabilities: GPUCapabilities,
-    plans: List<GPUFirstRoutePlan>,
+    plans: List<GPURecordedPlan>,
 ): GPUTaskList {
-    val tasks = plans.map { plan -> plan.task(recordingId = recordingId) }
+    val tasks = plans.mapNotNull { plan -> plan.task(recordingId = recordingId) }
     val dependencies = tasks
         .zipWithNext()
         .mapIndexed { index, (from, to) ->
@@ -1186,6 +1235,12 @@ private fun taskList(
         diagnostics = tasks.filterIsInstance<GPUTask.Refused>().map { task -> task.diagnostic },
     )
 }
+
+private fun GPURecordedPlan.task(recordingId: GPURecordingID): GPUTask? =
+    when (this) {
+        is GPURecordedPlan.Routed -> plan.task(recordingId)
+        is GPURecordedPlan.SemanticOnly -> null
+    }
 
 private fun GPUFirstRoutePlan.task(recordingId: GPURecordingID): GPUTask =
     when (val decision = analysisDecision) {
@@ -1295,7 +1350,7 @@ private fun emptyFrameMemoryBudget(): GPUFrameMemoryBudgetPlan =
         diagnostic = null,
     )
 
-private fun GPUFirstRoutePlan.routeDiagnostic(): String =
+private fun GPURecordedPlan.routeDiagnostic(): String =
     when (val decision = routeDecision) {
         is GPURouteDecision.Native -> "route:${decision.route.consumerKind}"
         is GPURouteDecision.Prepared -> "route:${decision.route.consumerKind}"

@@ -1220,6 +1220,7 @@ sealed interface GPUDrawSemanticPayload {
         override val payloadRef: GPUDrawPayloadRef = snapshot.payloadRef
         val artifact = snapshot.artifact
         val material = snapshot.material
+        val materialIdentity = snapshot.materialIdentity
         val topologyIdentity: GPUPreparedVerticesTopologyIdentity = snapshot.topologyIdentity
         val transformBytes: List<Int> = snapshot.transformBytes
         val targetBounds = snapshot.targetBounds

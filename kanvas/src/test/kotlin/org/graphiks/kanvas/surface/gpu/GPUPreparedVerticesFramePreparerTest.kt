@@ -160,7 +160,10 @@ class GPUPreparedVerticesFramePreparerTest {
             operations = listOf(verticesOp(1f)), target = target(),
             config = RenderConfig.DEFAULT, capabilities = capabilities(), limits = limits(),
             mappingBoundary = GPUPreparedFrameMappingBoundary { _, _, _, _, _, inventory ->
-                when (val binding = inventory.bindCommandIds(mapOf(0 to -1))) {
+                when (val binding = inventory.bindCommandIds(
+                    mapOf(0 to -1),
+                    mapOf(-1 to org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance.None),
+                )) {
                     is PreparedVerticesCommandBindingResult.Ready -> error("invalid binding was accepted")
                     is PreparedVerticesCommandBindingResult.Refused -> GPUOpMapping(
                         visualCommands = emptyList(), stateEvents = emptyList(),

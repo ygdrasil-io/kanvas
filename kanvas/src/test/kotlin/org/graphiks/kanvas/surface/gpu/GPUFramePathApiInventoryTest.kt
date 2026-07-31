@@ -122,6 +122,60 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
+    fun `every native preparation seam refuses authenticated semantic-only vertices`() {
+        val capabilities = capabilitiesWith(FILL_RECT_CAPABILITY)
+        val vertices = DisplayOp.DrawVertices(
+            Vertices(
+                VertexMode.TRIANGLES,
+                listOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f)),
+            ),
+            Paint.fill(Color.RED),
+            Matrix33.identity(),
+            ClipStack.WideOpen,
+        )
+        val firstRect = DisplayOp.DrawRect(
+                    Rect.fromLTRB(1f, 1f, 4f, 4f),
+                    Paint.fill(Color.GREEN).copy(antiAlias = false),
+                    Matrix33.identity(),
+                    ClipStack.WideOpen,
+        )
+        val secondRect = DisplayOp.DrawRect(
+            Rect.fromLTRB(5f, 5f, 8f, 8f),
+            Paint.fill(Color.BLUE).copy(antiAlias = false),
+            Matrix33.identity(),
+            ClipStack.WideOpen,
+        )
+        listOf(
+            listOf(vertices),
+            listOf(firstRect, vertices),
+            listOf(firstRect, vertices, secondRect),
+        ).forEach { operations ->
+            val inventory = GPUFramePathApiInventory.plan(
+                operations, target(), RenderConfig.DEFAULT, capabilities,
+            )
+            assertEquals(1, inventory.recording.semanticOnlyDraws.size)
+
+            val coreRefusal = assertIs<GPUCorePrimitivePreparedFrameResult.Refused>(
+                GPUFramePathApiInventory.prepareNativeTaskList(
+                    inventory, capabilities, GPUPixelBounds(0, 0, 32, 32),
+                ),
+            )
+            val heterogeneousRefusal = assertIs<
+                org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult.Refused
+                >(
+                GPUFramePathApiInventory.preparePreparedNativeTaskList(
+                    inventory, capabilities, GPUPixelBounds(0, 0, 32, 32),
+                ),
+            )
+            assertEquals(
+                "unsupported.preflight.prepared_vertices_unmaterialized",
+                coreRefusal.diagnostic.code.value,
+            )
+            assertEquals(coreRefusal.diagnostic.code, heterogeneousRefusal.diagnostic.code)
+        }
+    }
+
+    @Test
     fun `global command slots authenticate expansions vertices and explicit elisions without holes`() {
         val image = org.graphiks.kanvas.image.Image.fromPixels(
             4, 4, ByteArray(4 * 4 * 4) { 0xff.toByte() },

@@ -61,8 +61,11 @@ internal object GPUPreparedSurfaceSemanticBuilder {
         val textIds = visualCommands.filter { visual -> visual.preparedText != null }
             .map { visual -> visual.normalized.commandId.value }
             .toSet()
-        val packetsByCommandId = recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
-            .flatMap(GPUTask.Render::drawPackets)
+        val packetsByCommandId = (
+            recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
+                .flatMap(GPUTask.Render::drawPackets) +
+                recording.semanticOnlyDraws.map { draw -> draw.packet }
+            )
             .groupBy(GPUDrawPacket::commandIdValue)
         val analysisByCommandId = recording.analysis.records.groupBy { it.commandIdValue }
         val normalizedIdSet = normalizedIds.toSet()
