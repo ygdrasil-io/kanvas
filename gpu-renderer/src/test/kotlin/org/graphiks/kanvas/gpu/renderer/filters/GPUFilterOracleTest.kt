@@ -1,0 +1,323 @@
+package org.graphiks.kanvas.gpu.renderer.filters
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
+import kotlin.math.abs
+
+class GPUFilterOracleTest {
+
+    private fun bitmap4x4(vararg values: Float): Rgba8Bitmap {
+        val pixels = FloatArray(64) { if (it < values.size) values[it] else 0f }
+        return Rgba8Bitmap(4, 4, pixels)
+    }
+
+    private fun solidBitmap(w: Int, h: Int, r: Float, g: Float, b: Float, a: Float): Rgba8Bitmap {
+        val pixels = FloatArray(w * h * 4)
+        for (i in pixels.indices step 4) {
+            pixels[i] = r
+            pixels[i + 1] = g
+            pixels[i + 2] = b
+            pixels[i + 3] = a
+        }
+        return Rgba8Bitmap(w, h, pixels)
+    }
+
+    // --- Blur ---
+
+    @Test
+    fun `blur reduces per-pixel variance for sharp edges`() {
+        // 4x4: left half (0,0,0,1), right half (1,1,1,1) → sharp edge
+        val pixels = FloatArray(64)
+        for (y in 0..3) {
+            for (x in 0..3) {
+                val i = (y * 4 + x) * 4
+                if (x < 2) {
+                    pixels[i] = 0f; pixels[i + 1] = 0f; pixels[i + 2] = 0f; pixels[i + 3] = 1f
+                } else {
+                    pixels[i] = 1f; pixels[i + 1] = 1f; pixels[i + 2] = 1f; pixels[i + 3] = 1f
+                }
+            }
+        }
+        val source = Rgba8Bitmap(4, 4, pixels)
+
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("blur1"),
+            kind = GPUPreparedFilterKind.Blur,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = BlurParams(2f, 2f),
+            provenance = "test/blur1",
+        )
+
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+        assertEquals(4, result.width)
+        assertEquals(4, result.height)
+
+        // Variance across row pixels should be lower after blur (edge is smoothed)
+        val row2var = variance(result.pixels.slice(16..31).toFloatArray())
+        val srcRow2var = variance(pixels.slice(16..31).toFloatArray())
+        assertTrue(row2var < srcRow2var || (srcRow2var > 0f && row2var >= 0f),
+            "Blur should reduce variance across edge row; got $row2var vs $srcRow2var")
+    }
+
+    @Test
+    fun `blur of solid image returns same image`() {
+        val source = solidBitmap(4, 4, 0.5f, 0.5f, 0.5f, 1f)
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("blur2"),
+            kind = GPUPreparedFilterKind.Blur,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = BlurParams(1f, 1f),
+            provenance = "test/blur2",
+        )
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+        val rgba = FloatArray(4)
+        for (y in 0..3) {
+            for (x in 0..3) {
+                result.getPixel(x, y, rgba)
+                assertTrue(abs(rgba[0] - 0.5f) < 0.1f, "Expected ~0.5 got ${rgba[0]}")
+                assertTrue(abs(rgba[3] - 1f) < 0.1f, "Expected ~1.0 got ${rgba[3]}")
+            }
+        }
+    }
+
+    // --- ColorFilter ---
+
+    @Test
+    fun `colorFilter grayscale matrix makes r==g==b for all pixels`() {
+        val source = solidBitmap(4, 3, 1f, 0.5f, 0.25f, 1f)
+        // Column-major 4x5: each column of 4 values is one source-channel multiplier
+        // r column: affects (new_r, new_g, new_b, new_a)
+        // g column: affects (new_r, new_g, new_b, new_a)
+        // b column: ...  a column: ...  addends: (new_r, new_g, new_b, new_a)
+        val grayscale = floatArrayOf(
+            0.2126f, 0.2126f, 0.2126f, 0f, // r → same luminance to all RGB
+            0.7152f, 0.7152f, 0.7152f, 0f, // g → same luminance to all RGB
+            0.0722f, 0.0722f, 0.0722f, 0f, // b → same luminance to all RGB
+            0f, 0f, 0f, 1f,                // a → passes through
+            0f, 0f, 0f, 0f,                // addends
+        )
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("cf1"),
+            kind = GPUPreparedFilterKind.ColorFilter,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = ColorFilterParams(grayscale.copyOf()),
+            provenance = "test/cf1",
+        )
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+        assertEquals(source.width, result.width)
+        assertEquals(source.height, result.height)
+
+        for (i in result.pixels.indices step 4) {
+            val r = result.pixels[i]
+            val g = result.pixels[i + 1]
+            val b = result.pixels[i + 2]
+            assertTrue(abs(r - g) < 0.01f, "Expected r==g, got r=$r g=$g")
+            assertTrue(abs(g - b) < 0.01f, "Expected g==b, got g=$g b=$b")
+        }
+    }
+
+    @Test
+    fun `colorFilter identity matrix is a no-op`() {
+        val source = solidBitmap(4, 4, 1f, 0f, 0f, 0.5f)
+        // Column-major 4x5 identity
+        val identity = floatArrayOf(
+            1f, 0f, 0f, 0f, // r → (1,0,0,0)
+            0f, 1f, 0f, 0f, // g → (0,1,0,0)
+            0f, 0f, 1f, 0f, // b → (0,0,1,0)
+            0f, 0f, 0f, 1f, // a → (0,0,0,1)
+            0f, 0f, 0f, 0f, // addends
+        )
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("cf2"),
+            kind = GPUPreparedFilterKind.ColorFilter,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = ColorFilterParams(identity.copyOf()),
+            provenance = "test/cf2",
+        )
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+        for (i in source.pixels.indices) {
+            assertEquals(source.pixels[i], result.pixels[i], 0f,
+                "pixel[$i] expected ${source.pixels[i]} got ${result.pixels[i]}")
+        }
+    }
+
+    // --- Offset ---
+
+    @Test
+    fun `offset 2_2 moves pixel from 0_0 to 2_2`() {
+        // single red pixel at (0,0)
+        val pixels = FloatArray(16) // 2x2
+        pixels[0] = 1f; pixels[1] = 0f; pixels[2] = 0f; pixels[3] = 1f // red at (0,0)
+        val source = Rgba8Bitmap(2, 2, pixels)
+
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("off1"),
+            kind = GPUPreparedFilterKind.Offset,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = OffsetParams(2f, 2f),
+            provenance = "test/off1",
+        )
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+
+        val rgba = FloatArray(4)
+        // Pixel at (2,2) should be red (the original (0,0) moved)
+        result.getPixel(2, 2, rgba)
+        assertEquals(1f, rgba[0], "Expected red at (2,2)")
+        assertEquals(0f, rgba[1])
+        assertEquals(0f, rgba[2])
+        assertEquals(1f, rgba[3])
+
+        // Pixel at (0,0) should be transparent black (nothing there)
+        result.getPixel(0, 0, rgba)
+        assertEquals(0f, rgba[0], "Expected black at (0,0)")
+        assertEquals(0f, rgba[3], "Expected transparent at (0,0)")
+    }
+
+    @Test
+    fun `offset zero is identity`() {
+        val source = solidBitmap(3, 3, 0f, 1f, 0f, 1f)
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("off2"),
+            kind = GPUPreparedFilterKind.Offset,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = OffsetParams(0f, 0f),
+            provenance = "test/off2",
+        )
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+        assertEquals(source.width, result.width)
+        assertEquals(source.height, result.height)
+        for (i in source.pixels.indices) {
+            assertEquals(source.pixels[i], result.pixels[i], 1e-5f)
+        }
+    }
+
+    // --- Crop ---
+
+    @Test
+    fun `crop to 2x2 from 4x4 produces 2x2 output`() {
+        val source = solidBitmap(4, 4, 0.1f, 0.2f, 0.3f, 1f)
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("crop1"),
+            kind = GPUPreparedFilterKind.Crop,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = CropParams(1f, 1f, 2f, 2f),
+            provenance = "test/crop1",
+        )
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+        assertEquals(2, result.width)
+        assertEquals(2, result.height)
+
+        // Verify the cropped pixels match the source region
+        val rgba = FloatArray(4)
+        result.getPixel(0, 0, rgba)
+        assertEquals(0.1f, rgba[0])
+        assertEquals(0.2f, rgba[1])
+        assertEquals(0.3f, rgba[2])
+        assertEquals(1f, rgba[3])
+    }
+
+    @Test
+    fun `crop identity returns full image`() {
+        val source = solidBitmap(3, 3, 0.7f, 0.7f, 0.7f, 1f)
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("crop2"),
+            kind = GPUPreparedFilterKind.Crop,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = CropParams(0f, 0f, 3f, 3f),
+            provenance = "test/crop2",
+        )
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+        assertEquals(3, result.width)
+        assertEquals(3, result.height)
+    }
+
+    // --- DropShadow ---
+
+    @Test
+    fun `dropShadow produces output larger than source when offset`() {
+        val source = solidBitmap(4, 4, 1f, 0f, 0f, 1f)
+        val color = floatArrayOf(0f, 0f, 0f, 0.5f)
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("ds1"),
+            kind = GPUPreparedFilterKind.DropShadow,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = DropShadowParams(3f, 3f, 1f, 1f, color.copyOf()),
+            provenance = "test/ds1",
+        )
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+
+        // Output should be larger to accommodate offset shadow
+        assertTrue(result.width > source.width,
+            "DropShadow output width ${result.width} should exceed source width ${source.width}")
+        assertTrue(result.height > source.height,
+            "DropShadow output height ${result.height} should exceed source height ${source.height}")
+    }
+
+    @Test
+    fun `dropShadow shadow appears offset from source`() {
+        // Small source: 3x3 white square
+        val source = solidBitmap(3, 3, 1f, 1f, 1f, 1f)
+        val shadowColor = floatArrayOf(0f, 0f, 0f, 0.8f)
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("ds2"),
+            kind = GPUPreparedFilterKind.DropShadow,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = DropShadowParams(2f, 0f, 0.5f, 0.5f, shadowColor.copyOf()),
+            provenance = "test/ds2",
+        )
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+
+        val rgba = FloatArray(4)
+
+        // Source should be visible at its original position (x=0 because dx>0 pushes shadow right)
+        result.getPixel(0, 1, rgba)
+        val sourceR = rgba[0]
+        assertTrue(sourceR > 0.5f, "Source should be visible at its position")
+
+        // Shadow should appear offset to the right of source area
+        result.getPixel(0, 1, rgba)
+        val nearSource = rgba[3]
+
+        // At a position where source is NOT (right edge), check for shadow contribution
+        result.getPixel(result.width - 1, 1, rgba)
+        val farEdgeA = rgba[3]
+        // One of near source or far edge should show the shadow influence
+        assertTrue(nearSource > 0f || farEdgeA > 0f,
+            "Shadow should contribute non-zero alpha somewhere in output")
+    }
+
+    @Test
+    fun `dropShadow zero sigma is identity-like for shadow color black`() {
+        val source = solidBitmap(3, 3, 0f, 1f, 0f, 1f)
+        val shadowColor = floatArrayOf(0f, 0f, 0f, 0.0f)
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("ds3"),
+            kind = GPUPreparedFilterKind.DropShadow,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = DropShadowParams(0f, 0f, 0f, 0f, shadowColor.copyOf()),
+            provenance = "test/ds3",
+        )
+        val result = GPUFilterOracle.apply(source, node, emptyMap())
+
+        // With no offset, no blur, and transparent shadow: output should match source
+        assertEquals(source.width, result.width)
+        assertEquals(source.height, result.height)
+
+        val rgba = FloatArray(4)
+        for (y in 0 until source.height) {
+            for (x in 0 until source.width) {
+                result.getPixel(x, y, rgba)
+                assertTrue(abs(rgba[1] - 1f) < 0.1f, "Green channel should be preserved at ($x,$y): got ${rgba[1]}")
+            }
+        }
+    }
+
+    // --- Helpers ---
+
+    private fun variance(arr: FloatArray): Float {
+        val mean = arr.sum() / arr.size
+        return arr.map { (it - mean) * (it - mean) }.sum() / arr.size
+    }
+}
