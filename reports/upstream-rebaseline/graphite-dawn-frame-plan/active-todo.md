@@ -1,6 +1,6 @@
 # Graphite/Dawn Frame Plan Active TODO
 
-Last updated: 2026-07-27
+Last updated: 2026-07-31
 
 This is the active, branch-specific backlog for
 `codex/graphite-dawn-frame-plan-design`. Items are processed strictly in the
@@ -285,10 +285,25 @@ Acceptance:
 
 ### FP-05 — Prepared text route
 
-Status: `pending`
+Status: `completed`
 
 Goal: migrate text and glyph Surface operations to the common prepared frame
 route.
+
+Resolution evidence:
+
+- `ce0ae1f75a53b53689ef85d7b47dd0d7eedae987` performs the atomic product
+  cutover: DrawText is prepared-or-terminal, `Text` is absent from the legacy
+  family/allowlist, and post-admission refusal never calls the legacy port;
+- A8 and COLRv0 use one immutable frame-local R8 upload authority with exact
+  upload-before-sample ordering, while stroke uses the common prepared path
+  authority and mask blur is applied before atlas packing;
+- native A8, COLRv0, blur, mixed-frame, completion/recreate, ownership and
+  one-LSB pixel evidence executed without skips on the Apple M2 Max adapter;
+- the final serial module aggregate passed 6,439/6,439 tests with zero
+  failure, error or skip;
+- exact scope, counters, refusals, cold-frame measurements and nonclaims are
+  recorded in `fp-05-prepared-text-route.md`.
 
 Acceptance:
 
