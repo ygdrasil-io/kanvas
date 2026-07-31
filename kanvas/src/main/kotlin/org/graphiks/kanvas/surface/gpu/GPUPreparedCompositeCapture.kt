@@ -433,10 +433,21 @@ internal object GPUPreparedCompositeCapturer {
                         ),
                     )
                 } else {
+                    val hasImageFilter = operation.paint.imageFilter != null
+                    val paintForSnapshot = if (hasImageFilter) {
+                        operation.paint.copy(imageFilter = null)
+                    } else {
+                        operation.paint
+                    }
+                    val scopeKind = if (hasImageFilter) {
+                        GPUPreparedCompositeScopeKind.FilterPictureSource
+                    } else {
+                        GPUPreparedCompositeScopeKind.PaintedPicture
+                    }
                     val scope = MutableCaptureScope(
                         id = nextScopeId(),
                         parentId = parentScope.id,
-                        sourceKind = GPUPreparedCompositeScopeKind.PaintedPicture,
+                        sourceKind = scopeKind,
                         provenance = currentProvenance("scope", operationIndex),
                         saveOperationIndex = operationIndex,
                         restoreOperationIndex = operationIndex,
@@ -445,7 +456,7 @@ internal object GPUPreparedCompositeCapturer {
                                 GPUPreparedCompositeRefusalCodes.OPERATION,
                                 operationIndex,
                             ),
-                            paint = operation.paint.toSnapshot(operationIndex),
+                            paint = paintForSnapshot.toSnapshot(operationIndex),
                             transform = operation.transform.toSnapshot(operationIndex),
                             clip = operation.clip.toSnapshot(operationIndex),
                         ),
