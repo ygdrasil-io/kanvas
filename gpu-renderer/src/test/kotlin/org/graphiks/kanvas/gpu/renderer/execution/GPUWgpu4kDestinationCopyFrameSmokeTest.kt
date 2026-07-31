@@ -16,7 +16,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCoverageKind
 import org.graphiks.kanvas.gpu.renderer.materials.BlendPremulColor
-import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCpuOracle
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendOracle
 import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact
@@ -1132,7 +1132,7 @@ class GPUWgpu4kDestinationCopyFrameSmokeTest {
     }
 
     private fun expectedAdvancedBlendPixels(mode: GPUBlendMode): ByteArray {
-        val blended = GPUBlendCpuOracle.blendAtFullCoverage(
+        val blended = GPUBlendOracle.blendAtFullCoverage(
             mode,
             BlendPremulColor(1f, 0f, 0f, 1f),
             BlendPremulColor(0f, 0f, 1f, 1f),
