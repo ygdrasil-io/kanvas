@@ -6,6 +6,10 @@ import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedClipSnapshot
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMaskFilterKind
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMaskFilterPlan
+import org.graphiks.kanvas.paint.MaskFilter
+import org.graphiks.kanvas.pipeline.BlurStyle
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
@@ -16,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNotEquals
 
 class GPUPreparedCompositeCaptureSemanticTest {
@@ -258,6 +263,42 @@ class GPUPreparedCompositeCaptureSemanticTest {
             assertIs<GPUPreparedCompositeCaptureResult.Ready>(withBackdrop).capture.identity,
             assertIs<GPUPreparedCompositeCaptureResult.Ready>(withoutBackdrop).capture.identity,
         )
+    }
+
+    @Test
+    fun `paint with mask blur is captured not refused`() {
+        val maskBlurPaint = black.copy(
+            maskFilter = MaskFilter.Blur(BlurStyle.NORMAL, sigma = 4f),
+        )
+        val rect = Rect.fromLTRB(0f, 0f, 10f, 10f)
+        val result = capture(
+            listOf(
+                DisplayOp.DrawRect(rect, maskBlurPaint, identity, open),
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedCompositeCaptureResult.Ready>(result)
+        val draw = assertIs<GPUPreparedOperationSnapshot.Draw>(
+            ready.capture.expandedOperations.single().snapshot,
+        )
+        val plan = assertNotNull(draw.maskFilterPlan)
+        assertEquals(GPUPreparedMaskFilterKind.Blur, plan.kind)
+    }
+
+    @Test
+    fun `paint with unsupported mask filter is refused`() {
+        val tableMaskPaint = black.copy(
+            maskFilter = MaskFilter.Table(table = ubyteArrayOf(0u, 128u, 255u)),
+        )
+        val rect = Rect.fromLTRB(0f, 0f, 10f, 10f)
+        val result = capture(
+            listOf(
+                DisplayOp.DrawRect(rect, tableMaskPaint, identity, open),
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(result)
+        assertEquals("unsupported.composite.paint", refused.code)
     }
 
     private fun readyIdentity(op: DisplayOp): String =

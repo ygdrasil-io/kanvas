@@ -5,6 +5,7 @@ import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
+import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedMaskFilterLowerer
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedClipSnapshot
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
@@ -12,6 +13,8 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScope
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeId
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeState
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMaskFilterLowering
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMaskFilterPlan
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMatrixSnapshot
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedPaintSnapshot
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedPaintStyle
@@ -123,6 +126,7 @@ sealed interface GPUPreparedOperationSnapshot {
         val paint: GPUPreparedPaintSnapshot,
         val transform: GPUPreparedMatrixSnapshot,
         val clip: GPUPreparedClipSnapshot,
+        val maskFilterPlan: GPUPreparedMaskFilterPlan? = null,
     ) : GPUPreparedOperationSnapshot {
         override fun identityFragment(): String = canonicalHash(
             "draw",
@@ -130,6 +134,7 @@ sealed interface GPUPreparedOperationSnapshot {
             provenance,
             geometry.identityFragment(),
             paint.identityFragment(),
+            maskFilterPlan?.identityFragment() ?: "no-mask-filter",
             transform.identityFragment(),
             clip.identityFragment(),
         )
@@ -491,6 +496,7 @@ internal object GPUPreparedCompositeCapturer {
                     paint = operation.paint.toSnapshot(operationIndex),
                     transform = operation.transform.toSnapshot(operationIndex),
                     clip = operation.clip.toSnapshot(operationIndex),
+                    maskFilterPlan = processMaskFilter(operation.paint, operationIndex),
                 )
 
                 is DisplayOp.DrawRRect -> GPUPreparedOperationSnapshot.Draw(
@@ -500,6 +506,7 @@ internal object GPUPreparedCompositeCapturer {
                     paint = operation.paint.toSnapshot(operationIndex),
                     transform = operation.transform.toSnapshot(operationIndex),
                     clip = operation.clip.toSnapshot(operationIndex),
+                    maskFilterPlan = processMaskFilter(operation.paint, operationIndex),
                 )
 
                 is DisplayOp.DrawPath -> GPUPreparedOperationSnapshot.Draw(
@@ -509,6 +516,7 @@ internal object GPUPreparedCompositeCapturer {
                     paint = operation.paint.toSnapshot(operationIndex),
                     transform = operation.transform.toSnapshot(operationIndex),
                     clip = operation.clip.toSnapshot(operationIndex),
+                    maskFilterPlan = processMaskFilter(operation.paint, operationIndex),
                 )
 
                 is DisplayOp.SetTransform -> GPUPreparedOperationSnapshot.SetTransform(
@@ -706,7 +714,7 @@ internal object GPUPreparedCompositeCapturer {
             }
 
         private fun Paint.toSnapshot(operationIndex: Int): GPUPreparedPaintSnapshot {
-            if (shader != null || colorFilter != null || maskFilter != null ||
+            if (shader != null || colorFilter != null ||
                 pathEffect != null || imageFilter != null || blender != null
             ) {
                 refuse(
@@ -744,6 +752,27 @@ internal object GPUPreparedCompositeCapturer {
                 strokeMiterBits = strokeMiter.toRawBits(),
                 antiAlias = antiAlias,
             )
+        }
+
+        private fun processMaskFilter(
+            paint: Paint,
+            operationIndex: Int,
+        ): GPUPreparedMaskFilterPlan? {
+            val rawMaskFilter = paint.maskFilter ?: return null
+            val normalized = rawMaskFilter.toNormalizedMaskFilter()
+                ?: refuse(
+                    GPUPreparedCompositeRefusalCodes.PAINT,
+                    operationIndex,
+                    mapOf("reason" to "unsupported mask filter type"),
+                )
+            return when (val lowering = GPUPreparedMaskFilterLowerer.lower(normalized)) {
+                is GPUPreparedMaskFilterLowering.Ready -> lowering.plan
+                is GPUPreparedMaskFilterLowering.Refused -> refuse(
+                    lowering.code,
+                    operationIndex,
+                    lowering.facts,
+                )
+            }
         }
 
         private fun refuse(
@@ -815,6 +844,12 @@ private fun GPUPreparedPaintSnapshot.identityFragment(): String = canonicalHash(
     antiAlias.toString(),
 )
 
+private fun GPUPreparedMaskFilterPlan.identityFragment(): String = canonicalHash(
+    "mask-filter-plan",
+    kind.name,
+    coverageFormat.name,
+    executionIdentity,
+)
 private fun GPUPreparedCompositeScopeState.identityFragment(): String = canonicalHash(
     "scope-state",
     bounds?.identityFragment() ?: "no-bounds",
