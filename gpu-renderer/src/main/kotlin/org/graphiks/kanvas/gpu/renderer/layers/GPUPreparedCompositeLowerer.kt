@@ -8,6 +8,7 @@ object GPUPreparedCompositeLowerer {
         identity: String,
     ): GPUPreparedCompositeLowering {
         val layerPlans = mutableListOf<GPULayerPlan>()
+        val gatePlans = mutableMapOf<String, GPUSaveLayerIsolatedTargetGatePlan>()
 
         for (scope in scopes.values) {
             if (scope.sourceKind != GPUPreparedCompositeScopeKind.SaveLayer) continue
@@ -36,6 +37,7 @@ object GPUPreparedCompositeLowerer {
             }
 
             layerPlans.add(gatePlan.layerPlan)
+            gatePlans[gatePlan.layerPlan.saveRecord.scopeId.value] = gatePlan
         }
 
         return GPUPreparedCompositeLowering.Ready(
@@ -45,6 +47,7 @@ object GPUPreparedCompositeLowerer {
                 layers = layerPlans,
                 normalizedFilters = emptyMap(),
                 identity = identity,
+                gatePlans = gatePlans,
             ),
         )
     }

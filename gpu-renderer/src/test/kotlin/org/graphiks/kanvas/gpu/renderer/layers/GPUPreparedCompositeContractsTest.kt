@@ -1,11 +1,15 @@
 package org.graphiks.kanvas.gpu.renderer.layers
 
+import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedCoverageFormat
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedFilterRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedFilterNodeId
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedFilterGraph
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedFilterInputRef
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedFilterRewriteProof
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedFilterNormalization
+import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedMaskFilterKind
+import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedMaskFilterLowering
+import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedMaskFilterPlan
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

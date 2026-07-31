@@ -40,7 +40,17 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.LayerCompositeWgsl
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTEntryPoint
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTSourceHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
-import org.graphiks.kanvas.gpu.renderer.layers.SaveLayerExecutor
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerBoundsPlan
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerSaveRecord
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerScopeID
+import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerIsolatedTargetPlanner
+import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerIsolatedTargetRequest
+import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerMaterializationResult
+import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerNativeExecutor
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.text.SDFGenerator
 import org.graphiks.kanvas.gpu.renderer.text.TextA8AtlasExecutor
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUDrawCallDescriptor
@@ -2058,19 +2068,13 @@ internal fun customRuntimeEffectWiringDiagnostics(): List<String> = listOf(
 )
 
 /**
- * KGPU-M25-004 / KGPU-M28-005/006: routes SaveLayer through the real [SaveLayerExecutor] (M18) and
- * references the [LayerCompositeSnippetSourceHash] composite snippet. M28 added the secondary
+ * KGPU-M25-004 / KGPU-M28-005/006: routes SaveLayer through the real [GPUSaveLayerNativeExecutor] (M18)
+ * and references the [LayerCompositeSnippetSourceHash] composite snippet. M28 added the secondary
  * offscreen target, so the composite runs against a real allocated target using the real
  * layer_composite snippet (child layer content is not yet sampled into it; childrenRendered=0).
  */
-internal fun saveLayerWiringDiagnostics(sceneId: String, width: Int, height: Int): List<String> = buildList {
-    val executor = SaveLayerExecutor()
-    val stats = executor.execute(scopeLabel = sceneId, width = width, height = height)
-    addAll(executor.dumpLines(stats))
-    add("saveLayer:compositeSnippetSourceHash=$LayerCompositeSnippetSourceHash")
-    add("saveLayer:compositeEntryPoint=$LayerCompositeEntryPoint")
-    add("saveLayer:secondaryTargetAllocated=true childContentSampled=false productActivation=true")
-}
+internal fun saveLayerWiringDiagnostics(sceneId: String, width: Int, height: Int): List<String> =
+    saveLayerWiringDiagnostics(fills = emptyList(), sceneId = sceneId, width = width, height = height)
 
 internal fun saveLayerWiringDiagnostics(fills: List<RectOnlyFillDraw>, sceneId: String, width: Int, height: Int): List<String> = buildList {
     val saveLayerFills = fills.filter { it.family == "save-layer" }
@@ -2079,13 +2083,76 @@ internal fun saveLayerWiringDiagnostics(fills: List<RectOnlyFillDraw>, sceneId: 
             saveLayerFills[index + 1].paintOrder else Int.MAX_VALUE
         fills.count { it.paintOrder > slFill.paintOrder && it.paintOrder < nextPaintOrder && it.family != "save-layer" }
     }.sum()
-    val executor = SaveLayerExecutor()
-    val executorStats = executor.execute(scopeLabel = sceneId, width = width, height = height)
-    val updatedStats = executorStats.copy(childrenRendered = childCount)
-    addAll(executor.dumpLines(updatedStats))
+    val result = materializeSaveLayerScene(sceneId, width, height, childCount)
+    addAll(result.dumpLines())
+    val targetAllocated = result.resourceDecision is GPUResourceMaterializationDecision.Materialized
+    add("savelayer:executor targetAllocated=$targetAllocated childrenRendered=$childCount " +
+        "compositeApplied=$targetAllocated adapterBacked=${result.adapterBacked} " +
+        "productActivation=${result.productActivation}")
     add("saveLayer:compositeSnippetSourceHash=$LayerCompositeSnippetSourceHash")
     add("saveLayer:compositeEntryPoint=$LayerCompositeEntryPoint")
     add("saveLayer:secondaryTargetAllocated=true childContentSampled=${childCount > 0} productActivation=true")
+}
+
+/** Materializes one saveLayer scene through the real planner, materialization request, and native executor. */
+private fun materializeSaveLayerScene(
+    sceneId: String,
+    width: Int,
+    height: Int,
+    childCount: Int,
+): GPUSaveLayerMaterializationResult {
+    val scopeId = GPULayerScopeID("layer:$sceneId")
+    val childCommandIds = if (childCount > 0) (1..childCount).map { "child:$it" } else emptyList()
+    val saveRecord = GPULayerSaveRecord(
+        scopeId = scopeId,
+        boundsLabel = "scene-bounds:$sceneId",
+        backdropRequired = false,
+        childCommandIds = childCommandIds,
+    )
+    val bounds = GPULayerBoundsPlan(
+        requestedBoundsLabel = "scene-bounds:$sceneId",
+        deviceBoundsLabel = "0,0,$width,$height",
+        conservative = false,
+        finite = true,
+        originX = 0,
+        originY = 0,
+        width = width,
+        height = height,
+    )
+    val gatePlan = GPUSaveLayerIsolatedTargetPlanner().plan(
+        GPUSaveLayerIsolatedTargetRequest(
+            saveRecord = saveRecord,
+            bounds = bounds,
+            parentTargetLabel = "root-target",
+        ),
+    )
+    val target = (gatePlan.layerPlan.execution as GPULayerExecutionPlan.IsolatedTarget).target
+    val generation = target.generationLabel.substringAfter(':').toLongOrNull() ?: 0L
+    val context = GPUTargetPreparationContext(
+        targetId = "target:$sceneId",
+        frameId = "scene:$sceneId",
+        deviceGeneration = 0L,
+        budgetClass = "default",
+    )
+    val request = GPUSaveLayerMaterializationRequest(
+        targetId = context.targetId,
+        gatePlan = gatePlan,
+        parentPassId = "parent-pass:$sceneId",
+        childPassId = "child-pass:$sceneId",
+        childTargetStateHash = "state:child:${target.targetDescriptorHash}",
+        parentTargetStateHash = "state:parent:${target.targetDescriptorHash}",
+        childLoadStoreLabel = "clear:store",
+        parentLoadStoreLabel = "load:store",
+        deviceGeneration = context.deviceGeneration,
+        expectedTargetGeneration = generation,
+        actualTargetGeneration = generation,
+        availableUsageLabels = target.usageLabels.toSet(),
+        allocationAvailable = true,
+        targetBudgetBytes = maxOf(target.byteEstimate, 16L * 1024L * 1024L),
+        actualFormatClass = target.formatClass,
+        actualSampleCount = target.sampleCount,
+    )
+    return GPUSaveLayerNativeExecutor().execute(request, context)
 }
 
 /**

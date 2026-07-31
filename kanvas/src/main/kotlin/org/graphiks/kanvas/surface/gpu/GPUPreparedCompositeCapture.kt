@@ -6,6 +6,8 @@ import org.graphiks.kanvas.geometry.FillType
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.geometry.PathVerb
 import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedMaskFilterLowerer
+import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedMaskFilterLowering
+import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedMaskFilterPlan
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedClipSnapshot
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeEntry
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
@@ -13,8 +15,6 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScope
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeId
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeState
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMaskFilterLowering
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMaskFilterPlan
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMatrixSnapshot
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedPaintSnapshot
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedPaintStyle

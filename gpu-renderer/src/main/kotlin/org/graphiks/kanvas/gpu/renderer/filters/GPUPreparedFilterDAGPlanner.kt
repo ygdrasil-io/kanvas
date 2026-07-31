@@ -1,7 +1,5 @@
 package org.graphiks.kanvas.gpu.renderer.filters
 
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
-
 object GPUPreparedFilterDAGPlanner {
 
     fun plan(normalization: GPUPreparedFilterNormalization): GPUFilterDAGPlan {
@@ -43,7 +41,7 @@ object GPUPreparedFilterDAGPlanner {
 
             nodeRoutes[node.id] = GPUFilterNodeRoute.Refused(
                 GPUFilterDiagnostic(
-                    code = GPUPreparedCompositeRefusalCodes.NATIVE_CAPABILITY,
+                    code = GPUPreparedFilterRefusalCodes.NATIVE_CAPABILITY,
                     nodeId = GPUFilterNodeID(node.id.value),
                     message = "Filter kind ${node.kind} not yet supported",
                     terminal = true,

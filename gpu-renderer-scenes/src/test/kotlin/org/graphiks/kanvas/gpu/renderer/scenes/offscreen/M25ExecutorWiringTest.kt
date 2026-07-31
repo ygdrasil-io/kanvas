@@ -95,7 +95,7 @@ class M25ExecutorWiringTest {
     }
 
     @Test
-    fun `KGPU-M25-004 save layer routes through SaveLayerExecutor`() {
+    fun `KGPU-M25-004 save layer routes through GPUSaveLayerNativeExecutor`() {
         val scene = GPURendererSceneRegistry.scenes.single { it.sceneId.value == "savelayer-isolated" }
         val drawPlan = prepareRectOnlyDrawPlan(
             sceneId = scene.sceneId.value,

@@ -138,11 +138,16 @@ class GPUPreparedCompositePlan(
     layers: List<GPULayerPlan>,
     normalizedFilters: Map<GPUPreparedCompositeScopeId, GPUPreparedFilterNormalization>,
     val identity: String,
+    gatePlans: Map<String, GPUSaveLayerIsolatedTargetGatePlan> = emptyMap(),
 ) {
     val layers: List<GPULayerPlan> =
         Collections.unmodifiableList(layers.toList())
     val normalizedFilters: Map<GPUPreparedCompositeScopeId, GPUPreparedFilterNormalization> =
         Collections.unmodifiableMap(LinkedHashMap(normalizedFilters))
+
+    /** Per-layer gate plans keyed by [GPULayerSaveRecord.scopeId] value. */
+    val gatePlans: Map<String, GPUSaveLayerIsolatedTargetGatePlan> =
+        Collections.unmodifiableMap(LinkedHashMap(gatePlans))
 }
 
 sealed interface GPUPreparedCompositeLowering {
@@ -154,39 +159,6 @@ sealed interface GPUPreparedCompositeLowering {
         val operationIndex: Int?,
         facts: Map<String, String>,
     ) : GPUPreparedCompositeLowering {
-        val facts: Map<String, String> =
-            Collections.unmodifiableMap(LinkedHashMap(facts))
-    }
-}
-
-enum class GPUPreparedMaskFilterKind {
-    Blur,
-    Shader,
-    Table,
-}
-
-enum class GPUPreparedCoverageFormat {
-    A8,
-}
-
-class GPUPreparedMaskFilterPlan(
-    val kind: GPUPreparedMaskFilterKind,
-    val coverageFormat: GPUPreparedCoverageFormat,
-    val executionIdentity: String,
-    tableEntries: List<Int> = emptyList(),
-) {
-    val tableEntries: List<Int> =
-        Collections.unmodifiableList(tableEntries.toList())
-}
-
-sealed interface GPUPreparedMaskFilterLowering {
-    data class Ready(val plan: GPUPreparedMaskFilterPlan) :
-        GPUPreparedMaskFilterLowering
-
-    class Refused(
-        val code: String,
-        facts: Map<String, String>,
-    ) : GPUPreparedMaskFilterLowering {
         val facts: Map<String, String> =
             Collections.unmodifiableMap(LinkedHashMap(facts))
     }
