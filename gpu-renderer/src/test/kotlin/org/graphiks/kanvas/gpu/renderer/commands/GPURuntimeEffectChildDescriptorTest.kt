@@ -3,8 +3,10 @@ package org.graphiks.kanvas.gpu.renderer.commands
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
 class GPURuntimeEffectChildDescriptorTest {
@@ -214,6 +216,86 @@ class GPURuntimeEffectChildDescriptorTest {
         assertFailsWith<IllegalStateException> { left.toString() }
     }
 
+    @Test
+    fun `registered runtime nesting shares the snapshot depth budget`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPURuntimeEffectChildDescriptor.Shader(rawRegisteredRuntimeChain(128))
+        }
+    }
+
+    @Test
+    fun `registered runtime nesting shares the equality depth budget`() {
+        val left = rawRegisteredRuntimeChain(128)
+        val right = rawRegisteredRuntimeChain(128)
+
+        assertFailsWith<IllegalStateException> { left == right }
+    }
+
+    @Test
+    fun `registered runtime nesting shares the hash depth budget`() {
+        assertFailsWith<IllegalStateException> {
+            rawRegisteredRuntimeChain(128).hashCode()
+        }
+    }
+
+    @Test
+    fun `registered runtime nesting shares the canonical depth budget`() {
+        assertFailsWith<IllegalStateException> {
+            rawRegisteredRuntimeChain(128).toString()
+        }
+    }
+
+    @Test
+    fun `unsupported traversal follows authoritative typed children through every role wrapper`() {
+        val unsupported = GPUMaterialDescriptor.Unsupported(
+            reason = GPUPreparedMaterialUnsupportedReason.NOISE_SHADER,
+            originalKind = GPUMaterialKind.ImageDraw,
+        )
+        val nestedEffect = GPUMaterialDescriptor.RuntimeEffect.withChildDescriptors(
+            effectId = "nested.unsupported",
+            childDescriptors = mapOf(
+                "shader" to GPURuntimeEffectChildDescriptor.Shader(
+                    GPUMaterialDescriptor.BlendShader(
+                        mode = "SRC_OVER",
+                        dst = GPUMaterialDescriptor.SolidColor(1f, 0f, 0f, 1f),
+                        src = unsupported,
+                    ),
+                ),
+            ),
+        )
+        val root = GPUMaterialDescriptor.RuntimeEffect.withChildDescriptors(
+            effectId = "root.typed",
+            childDescriptors = mapOf(
+                "filter" to GPURuntimeEffectChildDescriptor.ColorFilter(
+                    GPUPreparedColorFilterChildDescriptor.Compose(
+                        outer = GPUPreparedColorFilterChildDescriptor.Matrix(
+                            List(20) { it.toFloat() },
+                        ),
+                        inner =
+                            GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect(
+                                nestedEffect,
+                            ),
+                    ),
+                ),
+            ),
+        )
+
+        assertTrue(root.containsUnsupportedMaterial())
+        assertTrue(rawRegisteredRuntimeChain(128).containsUnsupportedMaterial())
+        assertFalse(
+            GPUMaterialDescriptor.RuntimeEffect.withChildDescriptors(
+                effectId = "clean.typed",
+                childDescriptors = mapOf(
+                    "filter" to GPURuntimeEffectChildDescriptor.ColorFilter(
+                        GPUPreparedColorFilterChildDescriptor.Matrix(
+                            List(20) { it.toFloat() },
+                        ),
+                    ),
+                ),
+            ).containsUnsupportedMaterial(),
+        )
+    }
+
     private fun runtime(
         children: Map<String, GPURuntimeEffectChildDescriptor>,
     ): GPUMaterialDescriptor.RuntimeEffect =
@@ -221,4 +303,33 @@ class GPURuntimeEffectChildDescriptorTest {
             effectId = "mesh.identity",
             childDescriptors = children,
         )
+
+    private fun rawRegisteredRuntimeChain(
+        depth: Int,
+    ): GPUMaterialDescriptor.RuntimeEffect {
+        val token = GPUMaterialDescriptorAssemblyToken()
+        var effect = GPUMaterialDescriptor.RuntimeEffect.assembledWithChildDescriptors(
+            effectId = "registered.leaf",
+            descriptorVersion = 1,
+            uniforms = emptyMap(),
+            childDescriptors = linkedMapOf(),
+            token = token,
+        )
+        repeat(depth) { index ->
+            effect = GPUMaterialDescriptor.RuntimeEffect.assembledWithChildDescriptors(
+                effectId = "registered.$index",
+                descriptorVersion = 1,
+                uniforms = emptyMap(),
+                childDescriptors = linkedMapOf(
+                    "input" to GPURuntimeEffectChildDescriptor.ColorFilter(
+                        GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect.fromSnapshot(
+                            effect,
+                        ),
+                    ),
+                ),
+                token = token,
+            )
+        }
+        return effect
+    }
 }

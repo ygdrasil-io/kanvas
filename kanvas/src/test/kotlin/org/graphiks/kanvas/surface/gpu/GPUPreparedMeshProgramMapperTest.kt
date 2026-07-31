@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertSame
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
@@ -333,6 +334,52 @@ class GPUPreparedMeshProgramMapperTest {
         )
         assertEquals(GPUPreparedVerticesRefusalCodes.MeshProgramChild, depth.code)
         assertEquals("child_graph_depth", depth.facts["reason"])
+    }
+
+    @Test
+    fun `shared compose dag near depth forty maps once and preserves shared prepared value`() {
+        var shared: ColorFilter = identityMatrixFilter()
+        repeat(38) {
+            shared = ColorFilter.Compose(shared, shared)
+        }
+
+        val mapping = assertIs<GPUPreparedMeshProgramMappingResult.Ready>(
+            program(MeshChildren.of("dag" to ColorFilterChild(shared)))
+                .toPreparedMeshProgramMappingResult(1f),
+        ).mapping
+
+        var prepared = filter(mapping.descriptor, "dag")
+        repeat(38) {
+            val compose = assertIs<GPUPreparedColorFilterChildDescriptor.Compose>(prepared)
+            assertSame(compose.outer, compose.inner)
+            prepared = compose.outer
+        }
+        assertIs<GPUPreparedColorFilterChildDescriptor.Matrix>(prepared)
+    }
+
+    @Test
+    fun `shallow memoized child cannot bypass the depth limit when reused deeper`() {
+        val shared = identityMatrixFilter()
+        var deep: ColorFilter = shared
+        repeat(63) {
+            deep = ColorFilter.Compose(identityMatrixFilter(), deep)
+        }
+        val program = program(
+            MeshChildren(
+                listOf(
+                    MeshChildren.Entry("shallow", ColorFilterChild(shared)),
+                    MeshChildren.Entry("deep", ColorFilterChild(deep)),
+                ),
+            ),
+        )
+
+        val refused = assertIs<GPUPreparedMeshProgramMappingResult.Refused>(
+            program.toPreparedMeshProgramMappingResult(1f),
+        )
+
+        assertEquals(GPUPreparedVerticesRefusalCodes.MeshProgramChild, refused.code)
+        assertEquals("child_graph_depth", refused.facts["reason"])
+        assertEquals("deep", refused.facts["childName"])
     }
 
     @Test

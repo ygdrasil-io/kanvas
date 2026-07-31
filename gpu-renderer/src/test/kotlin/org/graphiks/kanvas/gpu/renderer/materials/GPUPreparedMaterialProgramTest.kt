@@ -10,8 +10,12 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPUMaterialDescriptorAssemblySession
+import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedBlenderChildDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPUPreparedColorFilterChildDescriptor
+import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectChildDescriptor
 import org.graphiks.kanvas.gpu.renderer.commands.GPURuntimeEffectUniformValue
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgramAdmission
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.state.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.SpiralRTDescriptor
@@ -728,6 +732,42 @@ class GPUPreparedMaterialProgramTest {
             compiler.compile(descriptor, 1f, context),
         )
         assertEquals("unsupported.material.runtime_effect.children", refused.code)
+    }
+
+    @Test
+    fun `typed only runtime children refuse until the common compiler supports them`() {
+        val typedChildren = listOf(
+            GPURuntimeEffectChildDescriptor.ColorFilter(
+                GPUPreparedColorFilterChildDescriptor.Matrix(
+                    listOf(
+                        1f, 0f, 0f, 0f, 0f,
+                        0f, 1f, 0f, 0f, 0f,
+                        0f, 0f, 1f, 0f, 0f,
+                        0f, 0f, 0f, 1f, 0f,
+                    ),
+                ),
+            ),
+            GPURuntimeEffectChildDescriptor.Blender(
+                GPUPreparedBlenderChildDescriptor.Mode(GPUBlendMode.SRC_OVER),
+            ),
+        )
+
+        typedChildren.forEach { child ->
+            val descriptor = GPUMaterialDescriptor.RuntimeEffect.withChildDescriptors(
+                effectId = "runtime.simple_rt",
+                descriptorVersion = 1,
+                uniforms = mapOf(
+                    "gColor" to GPURuntimeEffectUniformValue.Float4(1f, 0f, 0f, 1f),
+                ),
+                childDescriptors = linkedMapOf("typed" to child),
+            )
+
+            val refused = assertIs<GPUPreparedMaterialProgramResult.Refused>(
+                compiler.compile(descriptor, 1f, context),
+            )
+
+            assertEquals("unsupported.material.runtime_effect.children", refused.code)
+        }
     }
 
     @Test

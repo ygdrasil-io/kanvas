@@ -370,7 +370,7 @@ object GPUPreparedMaterialProgramCompiler {
                 return runtimeEffectProgramRefusal(resolution.message)
             is GPUPreparedRuntimeEffectResolution.Ready -> resolution.program
         }
-        if (descriptor.children.isNotEmpty()) {
+        if (descriptor.childDescriptors.isNotEmpty()) {
             return runtimeEffectChildrenRefusal(
                 "Prepared runtime-effect children are not supported by this compiler",
             )

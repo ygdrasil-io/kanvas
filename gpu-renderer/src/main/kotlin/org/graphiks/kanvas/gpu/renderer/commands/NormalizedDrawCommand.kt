@@ -499,16 +499,14 @@ sealed interface GPUPreparedColorFilterChildDescriptor {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other !is Compose) return false
-            return valueEqualsWith(other, GPUMaterialDescriptor::equals)
+            return GPUMaterialDescriptorEquality().equalColorFilter(this, other)
         }
 
         override fun hashCode(): Int =
-            valueHashWith(GPUMaterialDescriptor::hashCode)
+            GPUMaterialDescriptorHasher().hashColorFilter(this)
 
         override fun toString(): String =
-            canonicalStringWith(
-                materialIdentity = { material -> material.toString() },
-            )
+            GPUMaterialDescriptorCanonicalizer().colorFilterText(this)
     }
 
     /** Registered runtime-effect color filter; Task 4 validates its registry ABI. */
@@ -528,11 +526,14 @@ sealed interface GPUPreparedColorFilterChildDescriptor {
             get() = effectSnapshot
 
         override fun equals(other: Any?): Boolean =
-            other is RegisteredRuntimeEffect && effectSnapshot == other.effectSnapshot
+            other is RegisteredRuntimeEffect &&
+                GPUMaterialDescriptorEquality().equalColorFilter(this, other)
 
-        override fun hashCode(): Int = effectSnapshot.hashCode()
+        override fun hashCode(): Int =
+            GPUMaterialDescriptorHasher().hashColorFilter(this)
 
-        override fun toString(): String = "RegisteredRuntimeEffect(effect=$effectSnapshot)"
+        override fun toString(): String =
+            GPUMaterialDescriptorCanonicalizer().colorFilterText(this)
 
         internal companion object {
             fun fromSnapshot(effect: GPUMaterialDescriptor.RuntimeEffect): RegisteredRuntimeEffect =
@@ -758,6 +759,9 @@ sealed interface GPUMaterialDescriptor {
         val childDescriptors: Map<String, GPURuntimeEffectChildDescriptor>
             get() = Collections.unmodifiableMap(LinkedHashMap(childDescriptorSnapshot))
 
+        internal val storedChildDescriptors: Map<String, GPURuntimeEffectChildDescriptor>
+            get() = childDescriptorSnapshot
+
         override val kind: GPUMaterialKind = GPUMaterialKind.RuntimeEffect
 
         fun copy(
@@ -806,7 +810,10 @@ sealed interface GPUMaterialDescriptor {
 
         internal fun valueEqualsWith(
             other: RuntimeEffect,
-            equalChild: (GPUMaterialDescriptor, GPUMaterialDescriptor) -> Boolean,
+            equalRuntimeChild: (
+                GPURuntimeEffectChildDescriptor,
+                GPURuntimeEffectChildDescriptor,
+            ) -> Boolean,
         ): Boolean =
             effectId == other.effectId &&
                 descriptorVersion == other.descriptorVersion &&
@@ -814,14 +821,15 @@ sealed interface GPUMaterialDescriptor {
                 orderedChildDescriptors == other.orderedChildDescriptors &&
                 childNamesEqual(other) &&
                 childDescriptorSnapshot.all { (name, child) ->
-                    child.valueEqualsWith(
+                    equalRuntimeChild(
+                        child,
                         other.childDescriptorSnapshot.getValue(name),
-                        equalChild,
                     )
                 }
 
         internal fun valueHashWith(
             hashChild: (GPUMaterialDescriptor) -> Int,
+            hashRuntimeChild: (GPURuntimeEffectChildDescriptor) -> Int,
         ): Int {
             var result = effectId.hashCode()
             result = 31 * result + descriptorVersion
@@ -829,7 +837,7 @@ sealed interface GPUMaterialDescriptor {
             if (orderedChildDescriptors) {
                 childDescriptorSnapshot.forEach { (name, child) ->
                     result = 31 * result + name.hashCode()
-                    result = 31 * result + child.valueHashWith(hashChild)
+                    result = 31 * result + hashRuntimeChild(child)
                 }
             } else {
                 result = 31 * result + childDescriptorSnapshot.entries.sumOf { (name, child) ->
@@ -843,9 +851,13 @@ sealed interface GPUMaterialDescriptor {
 
         internal fun canonicalTextWith(
             childIdentity: (GPUMaterialDescriptor) -> String,
+            runtimeChildIdentity: (GPURuntimeEffectChildDescriptor) -> String,
         ): String {
             val children = if (orderedChildDescriptors) {
-                childDescriptorSnapshot.canonicalTypedChildIdentityString(childIdentity)
+                childDescriptorSnapshot.entries.joinToString(prefix = "[", postfix = "]") {
+                    (name, child) ->
+                    "${name.canonicalValue()}=${runtimeChildIdentity(child)}"
+                }
             } else {
                 legacyStoredShaderChildren().canonicalLegacyChildIdentityString(childIdentity)
             }
@@ -858,7 +870,9 @@ sealed interface GPUMaterialDescriptor {
         }
 
         internal fun snapshotWith(
-            snapshotChild: (GPUMaterialDescriptor) -> GPUMaterialDescriptor,
+            snapshotRuntimeChild: (
+                GPURuntimeEffectChildDescriptor,
+            ) -> GPURuntimeEffectChildDescriptor,
         ): RuntimeEffect =
             RuntimeEffect(
                 effectId = effectId,
@@ -866,7 +880,7 @@ sealed interface GPUMaterialDescriptor {
                 uniformSnapshot = LinkedHashMap(uniformSnapshot),
                 childDescriptorSnapshot = LinkedHashMap(
                     childDescriptorSnapshot.mapValues { (_, child) ->
-                        child.snapshotWith(snapshotChild)
+                        snapshotRuntimeChild(child)
                     },
                 ),
                 orderedChildDescriptors = orderedChildDescriptors,
@@ -927,8 +941,8 @@ sealed interface GPUMaterialDescriptor {
                     effectId = effectId,
                     descriptorVersion = descriptorVersion,
                     uniformSnapshot = LinkedHashMap(uniforms),
-                    childDescriptorSnapshot = childDescriptors.snapshotTypedChildDescriptorMap(
-                        snapshotter::snapshot,
+                    childDescriptorSnapshot = snapshotter.snapshotRuntimeChildren(
+                        childDescriptors,
                     ),
                     orderedChildDescriptors = orderedChildDescriptors,
                     assemblyToken = null,
@@ -1155,6 +1169,9 @@ sealed interface GPUMaterialDescriptor {
         val evidence: GPUPreparedMaterialUnsupportedEvidence?
             get() = evidenceSnapshot?.deepSnapshot()
 
+        internal val storedSource: GPUMaterialDescriptor?
+            get() = sourceSnapshot
+
         override val kind: GPUMaterialKind = originalKind
 
         fun copy(
@@ -1351,10 +1368,7 @@ class GPUMaterialDescriptorAssemblySession {
         uniforms: Map<String, GPURuntimeEffectUniformValue> = emptyMap(),
         childDescriptors: Map<String, GPURuntimeEffectChildDescriptor> = emptyMap(),
     ): GPUMaterialDescriptor.RuntimeEffect {
-        val childSnapshots = LinkedHashMap<String, GPURuntimeEffectChildDescriptor>()
-        childDescriptors.forEach { (name, child) ->
-            childSnapshots[name] = child.snapshotWith(::snapshotForAssembly)
-        }
+        val childSnapshots = snapshotter.snapshotRuntimeChildren(childDescriptors)
         assembledDescriptorCount += 1
         assembledChildEdgeCount += childDescriptors.size
         return GPUMaterialDescriptor.RuntimeEffect.assembledWithChildDescriptors(
@@ -1472,62 +1486,252 @@ private fun Map<String, GPUMaterialDescriptor>.toShaderChildDescriptorMap():
     }
 }
 
-private fun Map<String, GPURuntimeEffectChildDescriptor>.snapshotTypedChildDescriptorMap(
-    snapshotMaterial: (GPUMaterialDescriptor) -> GPUMaterialDescriptor,
-): LinkedHashMap<String, GPURuntimeEffectChildDescriptor> =
-    LinkedHashMap<String, GPURuntimeEffectChildDescriptor>().also { result ->
-        forEach { (name, child) ->
-            result[name] = child.snapshotWith(snapshotMaterial)
+private class GPUMaterialDescriptorGraphValidator(
+    private val operation: String,
+    private val exception: (String) -> RuntimeException,
+) {
+    private val materialHeights = IdentityHashMap<GPUMaterialDescriptor, Int>()
+    private val runtimeChildHeights =
+        IdentityHashMap<GPURuntimeEffectChildDescriptor, Int>()
+    private val colorFilterHeights =
+        IdentityHashMap<GPUPreparedColorFilterChildDescriptor, Int>()
+    private val activeMaterials =
+        Collections.newSetFromMap(IdentityHashMap<GPUMaterialDescriptor, Boolean>())
+    private val activeRuntimeChildren =
+        Collections.newSetFromMap(
+            IdentityHashMap<GPURuntimeEffectChildDescriptor, Boolean>(),
+        )
+    private val activeColorFilters =
+        Collections.newSetFromMap(
+            IdentityHashMap<GPUPreparedColorFilterChildDescriptor, Boolean>(),
+        )
+
+    fun validateMaterial(descriptor: GPUMaterialDescriptor) {
+        materialHeight(descriptor, depth = 1)
+    }
+
+    fun validateRuntimeChildren(
+        children: Map<String, GPURuntimeEffectChildDescriptor>,
+    ) {
+        children.values.forEach { child -> runtimeChildHeight(child, depth = 2) }
+    }
+
+    fun validateColorFilter(filter: GPUPreparedColorFilterChildDescriptor) {
+        colorFilterHeight(filter, depth = 1)
+    }
+
+    private fun materialHeight(
+        descriptor: GPUMaterialDescriptor,
+        depth: Int,
+    ): Int {
+        ensureDepth(depth, height = 1)
+        materialHeights[descriptor]?.let { height ->
+            ensureDepth(depth, height)
+            return height
+        }
+        if (!activeMaterials.add(descriptor)) {
+            throw exception("runtime-effect $operation material cycle detected")
+        }
+        val height = try {
+            when (descriptor) {
+                is GPUMaterialDescriptor.RuntimeEffect ->
+                    1 + (descriptor.storedChildDescriptors.values.maxOfOrNull { child ->
+                        runtimeChildHeight(child, depth + 1)
+                    } ?: 0)
+                is GPUMaterialDescriptor.BlendShader ->
+                    1 + maxOf(
+                        materialHeight(descriptor.storedDst, depth + 1),
+                        materialHeight(descriptor.storedSrc, depth + 1),
+                    )
+                is GPUMaterialDescriptor.Unsupported ->
+                    1 + (descriptor.storedSource?.let { source ->
+                        materialHeight(source, depth + 1)
+                    } ?: 0)
+                else -> 1
+            }
+        } finally {
+            activeMaterials.remove(descriptor)
+        }
+        ensureDepth(depth, height)
+        materialHeights[descriptor] = height
+        return height
+    }
+
+    private fun runtimeChildHeight(
+        child: GPURuntimeEffectChildDescriptor,
+        depth: Int,
+    ): Int {
+        ensureDepth(depth, height = 1)
+        runtimeChildHeights[child]?.let { height ->
+            ensureDepth(depth, height)
+            return height
+        }
+        if (!activeRuntimeChildren.add(child)) {
+            throw exception("runtime-effect $operation child cycle detected")
+        }
+        val height = try {
+            when (child) {
+                is GPURuntimeEffectChildDescriptor.Shader ->
+                    materialHeight(child.storedMaterial, depth)
+                is GPURuntimeEffectChildDescriptor.ColorFilter ->
+                    colorFilterHeight(child.filter, depth)
+                is GPURuntimeEffectChildDescriptor.Blender -> 1
+            }
+        } finally {
+            activeRuntimeChildren.remove(child)
+        }
+        ensureDepth(depth, height)
+        runtimeChildHeights[child] = height
+        return height
+    }
+
+    private fun colorFilterHeight(
+        filter: GPUPreparedColorFilterChildDescriptor,
+        depth: Int,
+    ): Int {
+        ensureDepth(depth, height = 1)
+        colorFilterHeights[filter]?.let { height ->
+            ensureDepth(depth, height)
+            return height
+        }
+        if (!activeColorFilters.add(filter)) {
+            throw exception("runtime-effect $operation color-filter cycle detected")
+        }
+        val height = try {
+            when (filter) {
+                is GPUPreparedColorFilterChildDescriptor.Compose ->
+                    1 + maxOf(
+                        colorFilterHeight(filter.outer, depth + 1),
+                        colorFilterHeight(filter.inner, depth + 1),
+                    )
+                is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
+                    materialHeight(filter.storedEffect, depth)
+                else -> 1
+            }
+        } finally {
+            activeColorFilters.remove(filter)
+        }
+        ensureDepth(depth, height)
+        colorFilterHeights[filter] = height
+        return height
+    }
+
+    private fun ensureDepth(depth: Int, height: Int) {
+        if (depth > MAX_RUNTIME_EFFECT_CHILD_DESCRIPTOR_DEPTH ||
+            height > MAX_RUNTIME_EFFECT_CHILD_DESCRIPTOR_DEPTH - depth + 1
+        ) {
+            throw exception("runtime-effect $operation graph depth exceeded")
         }
     }
+}
 
-private fun GPURuntimeEffectChildDescriptor.snapshotWith(
-    snapshotMaterial: (GPUMaterialDescriptor) -> GPUMaterialDescriptor,
-    depth: Int = 1,
-): GPURuntimeEffectChildDescriptor =
-    when {
-        depth > MAX_RUNTIME_EFFECT_CHILD_DESCRIPTOR_DEPTH ->
-            throw IllegalArgumentException("runtime-effect child descriptor depth exceeded")
-        this is GPURuntimeEffectChildDescriptor.Shader ->
-            GPURuntimeEffectChildDescriptor.Shader.fromSnapshot(
-                snapshotMaterial(storedMaterial),
-            )
-        this is GPURuntimeEffectChildDescriptor.ColorFilter ->
-            GPURuntimeEffectChildDescriptor.ColorFilter(
-                filter.snapshotWith(snapshotMaterial, depth),
-            )
-        this is GPURuntimeEffectChildDescriptor.Blender ->
-            GPURuntimeEffectChildDescriptor.Blender(blender)
-        else -> error("closed runtime-effect child descriptor set changed")
+/**
+ * Returns whether this graph contains a terminal prepared-material refusal.
+ * Invalid depth or cycles are treated as unsupported so callers stay fail-closed.
+ */
+fun GPUMaterialDescriptor.containsUnsupportedMaterial(): Boolean =
+    try {
+        GPUMaterialDescriptorGraphValidator(
+            operation = "unsupported traversal",
+            exception = ::IllegalStateException,
+        ).validateMaterial(this)
+        GPUMaterialUnsupportedAnalyzer().containsMaterial(this)
+    } catch (_: RuntimeException) {
+        true
     }
 
-private fun GPUPreparedColorFilterChildDescriptor.snapshotWith(
-    snapshotMaterial: (GPUMaterialDescriptor) -> GPUMaterialDescriptor,
-    depth: Int,
-): GPUPreparedColorFilterChildDescriptor {
-    if (depth > MAX_RUNTIME_EFFECT_CHILD_DESCRIPTOR_DEPTH) {
-        throw IllegalArgumentException("runtime-effect child descriptor depth exceeded")
+private class GPUMaterialUnsupportedAnalyzer {
+    private val materialResults = IdentityHashMap<GPUMaterialDescriptor, Boolean>()
+    private val runtimeChildResults =
+        IdentityHashMap<GPURuntimeEffectChildDescriptor, Boolean>()
+    private val colorFilterResults =
+        IdentityHashMap<GPUPreparedColorFilterChildDescriptor, Boolean>()
+    private val activeMaterials =
+        Collections.newSetFromMap(IdentityHashMap<GPUMaterialDescriptor, Boolean>())
+    private val activeRuntimeChildren =
+        Collections.newSetFromMap(
+            IdentityHashMap<GPURuntimeEffectChildDescriptor, Boolean>(),
+        )
+    private val activeColorFilters =
+        Collections.newSetFromMap(
+            IdentityHashMap<GPUPreparedColorFilterChildDescriptor, Boolean>(),
+        )
+
+    fun containsMaterial(descriptor: GPUMaterialDescriptor): Boolean {
+        materialResults[descriptor]?.let { return it }
+        if (!activeMaterials.add(descriptor)) return true
+        val result = try {
+            when (descriptor) {
+                is GPUMaterialDescriptor.Unsupported -> true
+                is GPUMaterialDescriptor.BlendShader ->
+                    containsMaterial(descriptor.storedDst) ||
+                        containsMaterial(descriptor.storedSrc)
+                is GPUMaterialDescriptor.RuntimeEffect ->
+                    descriptor.storedChildDescriptors.values.any(::containsRuntimeChild)
+                else -> false
+            }
+        } finally {
+            activeMaterials.remove(descriptor)
+        }
+        materialResults[descriptor] = result
+        return result
     }
-    return when (this) {
-        is GPUPreparedColorFilterChildDescriptor.Matrix ->
-            GPUPreparedColorFilterChildDescriptor.Matrix(values)
-        is GPUPreparedColorFilterChildDescriptor.Blend ->
-            GPUPreparedColorFilterChildDescriptor.Blend(rgba, mode)
-        is GPUPreparedColorFilterChildDescriptor.Compose ->
-            GPUPreparedColorFilterChildDescriptor.Compose(
-                outer.snapshotWith(snapshotMaterial, depth + 1),
-                inner.snapshotWith(snapshotMaterial, depth + 1),
-            )
-        is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
-            GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect.fromSnapshot(
-                snapshotMaterial(storedEffect) as GPUMaterialDescriptor.RuntimeEffect,
-            )
+
+    private fun containsRuntimeChild(
+        child: GPURuntimeEffectChildDescriptor,
+    ): Boolean {
+        runtimeChildResults[child]?.let { return it }
+        if (!activeRuntimeChildren.add(child)) return true
+        val result = try {
+            when (child) {
+                is GPURuntimeEffectChildDescriptor.Shader ->
+                    containsMaterial(child.storedMaterial)
+                is GPURuntimeEffectChildDescriptor.ColorFilter ->
+                    containsColorFilter(child.filter)
+                is GPURuntimeEffectChildDescriptor.Blender -> false
+            }
+        } finally {
+            activeRuntimeChildren.remove(child)
+        }
+        runtimeChildResults[child] = result
+        return result
+    }
+
+    private fun containsColorFilter(
+        filter: GPUPreparedColorFilterChildDescriptor,
+    ): Boolean {
+        colorFilterResults[filter]?.let { return it }
+        if (!activeColorFilters.add(filter)) return true
+        val result = try {
+            when (filter) {
+                is GPUPreparedColorFilterChildDescriptor.Compose ->
+                    containsColorFilter(filter.outer) ||
+                        containsColorFilter(filter.inner)
+                is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
+                    containsMaterial(filter.storedEffect)
+                else -> false
+            }
+        } finally {
+            activeColorFilters.remove(filter)
+        }
+        colorFilterResults[filter] = result
+        return result
     }
 }
 
 private class GPUMaterialDescriptorSnapshotter {
     private val snapshots =
         IdentityHashMap<GPUMaterialDescriptor, GPUMaterialDescriptor>()
+    private val runtimeChildSnapshots =
+        IdentityHashMap<
+            GPURuntimeEffectChildDescriptor,
+            GPURuntimeEffectChildDescriptor,
+            >()
+    private val colorFilterSnapshots =
+        IdentityHashMap<
+            GPUPreparedColorFilterChildDescriptor,
+            GPUPreparedColorFilterChildDescriptor,
+            >()
     private val evidenceSnapshots =
         IdentityHashMap<
             GPUPreparedMaterialUnsupportedEvidence,
@@ -1539,6 +1743,24 @@ private class GPUMaterialDescriptorSnapshotter {
         private set
 
     fun snapshot(descriptor: GPUMaterialDescriptor): GPUMaterialDescriptor {
+        snapshotValidator().validateMaterial(descriptor)
+        return snapshotValidated(descriptor)
+    }
+
+    fun snapshotRuntimeChildren(
+        children: Map<String, GPURuntimeEffectChildDescriptor>,
+    ): LinkedHashMap<String, GPURuntimeEffectChildDescriptor> {
+        snapshotValidator().validateRuntimeChildren(children)
+        return LinkedHashMap<String, GPURuntimeEffectChildDescriptor>().also { result ->
+            children.forEach { (name, child) ->
+                result[name] = snapshotRuntimeChildValidated(child)
+            }
+        }
+    }
+
+    private fun snapshotValidated(
+        descriptor: GPUMaterialDescriptor,
+    ): GPUMaterialDescriptor {
         snapshots[descriptor]?.let { return it }
         snapshotCount += 1
         val result = when (descriptor) {
@@ -1562,13 +1784,56 @@ private class GPUMaterialDescriptorSnapshotter {
             is GPUMaterialDescriptor.ImageDraw ->
                 descriptor.copy(rgbaPixels = descriptor.rgbaPixels.copyOf())
             is GPUMaterialDescriptor.RuntimeEffect ->
-                descriptor.snapshotWith(::snapshot)
+                descriptor.snapshotWith(::snapshotRuntimeChildValidated)
             is GPUMaterialDescriptor.BlendShader ->
-                descriptor.snapshotWith(::snapshot)
+                descriptor.snapshotWith(::snapshotValidated)
             is GPUMaterialDescriptor.Unsupported ->
-                descriptor.snapshotWith(::snapshot, ::snapshotEvidence)
+                descriptor.snapshotWith(::snapshotValidated, ::snapshotEvidence)
         }
         snapshots[descriptor] = result
+        return result
+    }
+
+    private fun snapshotRuntimeChildValidated(
+        child: GPURuntimeEffectChildDescriptor,
+    ): GPURuntimeEffectChildDescriptor {
+        runtimeChildSnapshots[child]?.let { return it }
+        val result = when (child) {
+            is GPURuntimeEffectChildDescriptor.Shader ->
+                GPURuntimeEffectChildDescriptor.Shader.fromSnapshot(
+                    snapshotValidated(child.storedMaterial),
+                )
+            is GPURuntimeEffectChildDescriptor.ColorFilter ->
+                GPURuntimeEffectChildDescriptor.ColorFilter(
+                    snapshotColorFilterValidated(child.filter),
+                )
+            is GPURuntimeEffectChildDescriptor.Blender ->
+                GPURuntimeEffectChildDescriptor.Blender(child.blender)
+        }
+        runtimeChildSnapshots[child] = result
+        return result
+    }
+
+    private fun snapshotColorFilterValidated(
+        filter: GPUPreparedColorFilterChildDescriptor,
+    ): GPUPreparedColorFilterChildDescriptor {
+        colorFilterSnapshots[filter]?.let { return it }
+        val result = when (filter) {
+            is GPUPreparedColorFilterChildDescriptor.Matrix ->
+                GPUPreparedColorFilterChildDescriptor.Matrix(filter.values)
+            is GPUPreparedColorFilterChildDescriptor.Blend ->
+                GPUPreparedColorFilterChildDescriptor.Blend(filter.rgba, filter.mode)
+            is GPUPreparedColorFilterChildDescriptor.Compose ->
+                GPUPreparedColorFilterChildDescriptor.Compose(
+                    snapshotColorFilterValidated(filter.outer),
+                    snapshotColorFilterValidated(filter.inner),
+                )
+            is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
+                GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect.fromSnapshot(
+                    snapshotValidated(filter.storedEffect) as GPUMaterialDescriptor.RuntimeEffect,
+                )
+        }
+        colorFilterSnapshots[filter] = result
         return result
     }
 
@@ -1579,6 +1844,12 @@ private class GPUMaterialDescriptorSnapshotter {
         evidenceSnapshotCount += 1
         return evidence.deepSnapshot().also { evidenceSnapshots[evidence] = it }
     }
+
+    private fun snapshotValidator(): GPUMaterialDescriptorGraphValidator =
+        GPUMaterialDescriptorGraphValidator(
+            operation = "snapshot",
+            exception = ::IllegalArgumentException,
+        )
 }
 
 private class GPUMaterialDescriptorEquality {
@@ -1587,8 +1858,38 @@ private class GPUMaterialDescriptorEquality {
             GPUMaterialDescriptor,
             IdentityHashMap<GPUMaterialDescriptor, Boolean>,
             >()
+    private val runtimeChildResults =
+        IdentityHashMap<
+            GPURuntimeEffectChildDescriptor,
+            IdentityHashMap<GPURuntimeEffectChildDescriptor, Boolean>,
+            >()
+    private val colorFilterResults =
+        IdentityHashMap<
+            GPUPreparedColorFilterChildDescriptor,
+            IdentityHashMap<GPUPreparedColorFilterChildDescriptor, Boolean>,
+            >()
 
     fun equal(
+        left: GPUMaterialDescriptor,
+        right: GPUMaterialDescriptor,
+    ): Boolean {
+        val validator = equalityValidator()
+        validator.validateMaterial(left)
+        validator.validateMaterial(right)
+        return equalValidated(left, right)
+    }
+
+    fun equalColorFilter(
+        left: GPUPreparedColorFilterChildDescriptor,
+        right: GPUPreparedColorFilterChildDescriptor,
+    ): Boolean {
+        val validator = equalityValidator()
+        validator.validateColorFilter(left)
+        validator.validateColorFilter(right)
+        return equalColorFilterValidated(left, right)
+    }
+
+    private fun equalValidated(
         left: GPUMaterialDescriptor,
         right: GPUMaterialDescriptor,
     ): Boolean {
@@ -1629,24 +1930,95 @@ private class GPUMaterialDescriptorEquality {
                     left.rgbaPixels.contentEquals(right.rgbaPixels)
             left is GPUMaterialDescriptor.RuntimeEffect &&
                 right is GPUMaterialDescriptor.RuntimeEffect ->
-                left.valueEqualsWith(right, ::equal)
+                left.valueEqualsWith(
+                    right,
+                    ::equalRuntimeChildValidated,
+                )
             left is GPUMaterialDescriptor.BlendShader &&
                 right is GPUMaterialDescriptor.BlendShader ->
-                left.valueEqualsWith(right, ::equal)
+                left.valueEqualsWith(right, ::equalValidated)
             left is GPUMaterialDescriptor.Unsupported &&
                 right is GPUMaterialDescriptor.Unsupported ->
-                left.valueEqualsWith(right, ::equal)
+                left.valueEqualsWith(right, ::equalValidated)
             else -> false
         }
         results.getOrPut(left) { IdentityHashMap() }[right] = result
         return result
     }
+
+    private fun equalRuntimeChildValidated(
+        left: GPURuntimeEffectChildDescriptor,
+        right: GPURuntimeEffectChildDescriptor,
+    ): Boolean {
+        if (left === right) return true
+        runtimeChildResults[left]?.get(right)?.let { return it }
+        val result = when {
+            left is GPURuntimeEffectChildDescriptor.Shader &&
+                right is GPURuntimeEffectChildDescriptor.Shader ->
+                equalValidated(left.storedMaterial, right.storedMaterial)
+            left is GPURuntimeEffectChildDescriptor.ColorFilter &&
+                right is GPURuntimeEffectChildDescriptor.ColorFilter ->
+                equalColorFilterValidated(left.filter, right.filter)
+            left is GPURuntimeEffectChildDescriptor.Blender &&
+                right is GPURuntimeEffectChildDescriptor.Blender ->
+                left.blender == right.blender
+            else -> false
+        }
+        runtimeChildResults.getOrPut(left) { IdentityHashMap() }[right] = result
+        return result
+    }
+
+    private fun equalColorFilterValidated(
+        left: GPUPreparedColorFilterChildDescriptor,
+        right: GPUPreparedColorFilterChildDescriptor,
+    ): Boolean {
+        if (left === right) return true
+        colorFilterResults[left]?.get(right)?.let { return it }
+        val result = when {
+            left is GPUPreparedColorFilterChildDescriptor.Matrix &&
+                right is GPUPreparedColorFilterChildDescriptor.Matrix ->
+                left.values == right.values
+            left is GPUPreparedColorFilterChildDescriptor.Blend &&
+                right is GPUPreparedColorFilterChildDescriptor.Blend ->
+                left.rgba == right.rgba && left.mode == right.mode
+            left is GPUPreparedColorFilterChildDescriptor.Compose &&
+                right is GPUPreparedColorFilterChildDescriptor.Compose ->
+                equalColorFilterValidated(left.outer, right.outer) &&
+                    equalColorFilterValidated(left.inner, right.inner)
+            left is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect &&
+                right is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
+                equalValidated(left.storedEffect, right.storedEffect)
+            else -> false
+        }
+        colorFilterResults.getOrPut(left) { IdentityHashMap() }[right] = result
+        return result
+    }
+
+    private fun equalityValidator(): GPUMaterialDescriptorGraphValidator =
+        GPUMaterialDescriptorGraphValidator(
+            operation = "equality",
+            exception = ::IllegalStateException,
+        )
 }
 
 private class GPUMaterialDescriptorHasher {
     private val hashes = IdentityHashMap<GPUMaterialDescriptor, Int>()
+    private val runtimeChildHashes =
+        IdentityHashMap<GPURuntimeEffectChildDescriptor, Int>()
+    private val colorFilterHashes =
+        IdentityHashMap<GPUPreparedColorFilterChildDescriptor, Int>()
 
     fun hash(descriptor: GPUMaterialDescriptor): Int {
+        hashValidator().validateMaterial(descriptor)
+        return hashValidated(descriptor)
+    }
+
+    fun hashColorFilter(filter: GPUPreparedColorFilterChildDescriptor): Int {
+        hashValidator().validateColorFilter(filter)
+        return hashColorFilterValidated(filter)
+    }
+
+    private fun hashValidated(descriptor: GPUMaterialDescriptor): Int {
         hashes[descriptor]?.let { return it }
         val result = when (descriptor) {
             is GPUMaterialDescriptor.SolidColor -> descriptor.hashCode()
@@ -1686,15 +2058,58 @@ private class GPUMaterialDescriptorHasher {
                 31 * descriptor.copy(rgbaPixels = DEEP_COMPARE_EMPTY_BYTES).hashCode() +
                     descriptor.rgbaPixels.contentHashCode()
             is GPUMaterialDescriptor.RuntimeEffect ->
-                descriptor.valueHashWith(::hash)
+                descriptor.valueHashWith(
+                    ::hashValidated,
+                    ::hashRuntimeChildValidated,
+                )
             is GPUMaterialDescriptor.BlendShader ->
-                descriptor.valueHashWith(::hash)
+                descriptor.valueHashWith(::hashValidated)
             is GPUMaterialDescriptor.Unsupported ->
-                descriptor.valueHashWith(::hash)
+                descriptor.valueHashWith(::hashValidated)
         }
         hashes[descriptor] = result
         return result
     }
+
+    private fun hashRuntimeChildValidated(
+        child: GPURuntimeEffectChildDescriptor,
+    ): Int {
+        runtimeChildHashes[child]?.let { return it }
+        val result = when (child) {
+            is GPURuntimeEffectChildDescriptor.Shader ->
+                31 * child.role.hashCode() + hashValidated(child.storedMaterial)
+            is GPURuntimeEffectChildDescriptor.ColorFilter ->
+                31 * child.role.hashCode() + hashColorFilterValidated(child.filter)
+            is GPURuntimeEffectChildDescriptor.Blender ->
+                31 * child.role.hashCode() + child.blender.hashCode()
+        }
+        runtimeChildHashes[child] = result
+        return result
+    }
+
+    private fun hashColorFilterValidated(
+        filter: GPUPreparedColorFilterChildDescriptor,
+    ): Int {
+        colorFilterHashes[filter]?.let { return it }
+        val result = when (filter) {
+            is GPUPreparedColorFilterChildDescriptor.Matrix -> filter.values.hashCode()
+            is GPUPreparedColorFilterChildDescriptor.Blend ->
+                31 * filter.rgba.hashCode() + filter.mode.hashCode()
+            is GPUPreparedColorFilterChildDescriptor.Compose ->
+                31 * hashColorFilterValidated(filter.outer) +
+                    hashColorFilterValidated(filter.inner)
+            is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
+                hashValidated(filter.storedEffect)
+        }
+        colorFilterHashes[filter] = result
+        return result
+    }
+
+    private fun hashValidator(): GPUMaterialDescriptorGraphValidator =
+        GPUMaterialDescriptorGraphValidator(
+            operation = "hash",
+            exception = ::IllegalStateException,
+        )
 }
 
 private data class GPUMaterialDescriptorCanonicalForm(
@@ -1705,13 +2120,25 @@ private data class GPUMaterialDescriptorCanonicalForm(
 private class GPUMaterialDescriptorCanonicalizer {
     private val forms =
         IdentityHashMap<GPUMaterialDescriptor, GPUMaterialDescriptorCanonicalForm>()
+    private val runtimeChildIdentities =
+        IdentityHashMap<GPURuntimeEffectChildDescriptor, String>()
+    private val colorFilterIdentities =
+        IdentityHashMap<GPUPreparedColorFilterChildDescriptor, String>()
 
-    fun text(descriptor: GPUMaterialDescriptor): String = form(descriptor).text
+    fun text(descriptor: GPUMaterialDescriptor): String {
+        canonicalValidator().validateMaterial(descriptor)
+        return formValidated(descriptor).text
+    }
 
-    private fun identity(descriptor: GPUMaterialDescriptor): String =
-        form(descriptor).identity
+    fun colorFilterText(filter: GPUPreparedColorFilterChildDescriptor): String {
+        canonicalValidator().validateColorFilter(filter)
+        return colorFilterIdentityValidated(filter)
+    }
 
-    private fun form(
+    private fun identityValidated(descriptor: GPUMaterialDescriptor): String =
+        formValidated(descriptor).identity
+
+    private fun formValidated(
         descriptor: GPUMaterialDescriptor,
     ): GPUMaterialDescriptorCanonicalForm {
         forms[descriptor]?.let { return it }
@@ -1793,17 +2220,61 @@ private class GPUMaterialDescriptorCanonicalizer {
                     "${descriptor.tintA.canonicalValue()})" +
                     ")"
             is GPUMaterialDescriptor.RuntimeEffect ->
-                descriptor.canonicalTextWith(::identity)
+                descriptor.canonicalTextWith(
+                    ::identityValidated,
+                    ::runtimeChildIdentityValidated,
+                )
             is GPUMaterialDescriptor.BlendShader ->
-                descriptor.canonicalTextWith(::identity)
+                descriptor.canonicalTextWith(::identityValidated)
             is GPUMaterialDescriptor.Unsupported ->
-                descriptor.canonicalTextWith(::identity)
+                descriptor.canonicalTextWith(::identityValidated)
         }
         return GPUMaterialDescriptorCanonicalForm(
             text = text,
             identity = "sha256:${text.sha256Hex()}",
         ).also { forms[descriptor] = it }
     }
+
+    private fun runtimeChildIdentityValidated(
+        child: GPURuntimeEffectChildDescriptor,
+    ): String {
+        runtimeChildIdentities[child]?.let { return it }
+        val result = when (child) {
+            is GPURuntimeEffectChildDescriptor.Shader ->
+                "Shader(${identityValidated(child.storedMaterial)})"
+            is GPURuntimeEffectChildDescriptor.ColorFilter ->
+                "ColorFilter(${colorFilterIdentityValidated(child.filter)})"
+            is GPURuntimeEffectChildDescriptor.Blender ->
+                "Blender(${child.blender.canonicalString()})"
+        }
+        runtimeChildIdentities[child] = result
+        return result
+    }
+
+    private fun colorFilterIdentityValidated(
+        filter: GPUPreparedColorFilterChildDescriptor,
+    ): String {
+        colorFilterIdentities[filter]?.let { return it }
+        val result = when (filter) {
+            is GPUPreparedColorFilterChildDescriptor.Matrix ->
+                "Matrix(${filter.values.canonicalFloatList()})"
+            is GPUPreparedColorFilterChildDescriptor.Blend ->
+                "Blend(rgba=${filter.rgba.canonicalFloatList()},mode=${filter.mode.name})"
+            is GPUPreparedColorFilterChildDescriptor.Compose ->
+                "Compose(outer=${colorFilterIdentityValidated(filter.outer)}," +
+                    "inner=${colorFilterIdentityValidated(filter.inner)})"
+            is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
+                "RegisteredRuntimeEffect(${identityValidated(filter.storedEffect)})"
+        }
+        colorFilterIdentities[filter] = result
+        return result
+    }
+
+    private fun canonicalValidator(): GPUMaterialDescriptorGraphValidator =
+        GPUMaterialDescriptorGraphValidator(
+            operation = "canonical",
+            exception = ::IllegalStateException,
+        )
 }
 
 private fun FloatArray?.contentEqualsNullable(other: FloatArray?): Boolean =
@@ -1829,125 +2300,11 @@ private fun Map<String, GPURuntimeEffectUniformValue>.canonicalUniformString(): 
         "${name.canonicalValue()}=${getValue(name).canonicalString()}"
     }
 
-private fun Map<String, GPURuntimeEffectChildDescriptor>.canonicalTypedChildIdentityString(
-    materialIdentity: (GPUMaterialDescriptor) -> String,
-): String =
-    entries.joinToString(prefix = "[", postfix = "]") { (name, child) ->
-        "${name.canonicalValue()}=${child.canonicalStringWith(materialIdentity)}"
-    }
-
 private fun Map<String, GPUMaterialDescriptor>.canonicalLegacyChildIdentityString(
     materialIdentity: (GPUMaterialDescriptor) -> String,
 ): String =
     keys.sorted().joinToString(prefix = "{", postfix = "}") { name ->
         "${name.canonicalValue()}=${materialIdentity(getValue(name))}"
-    }
-
-private fun GPURuntimeEffectChildDescriptor.valueEqualsWith(
-    other: GPURuntimeEffectChildDescriptor,
-    equalMaterial: (GPUMaterialDescriptor, GPUMaterialDescriptor) -> Boolean,
-    depth: Int = 1,
-): Boolean =
-    when {
-        depth > MAX_RUNTIME_EFFECT_CHILD_DESCRIPTOR_DEPTH ->
-            throw IllegalStateException("runtime-effect child descriptor equality depth exceeded")
-        this is GPURuntimeEffectChildDescriptor.Shader &&
-            other is GPURuntimeEffectChildDescriptor.Shader ->
-            equalMaterial(storedMaterial, other.storedMaterial)
-        this is GPURuntimeEffectChildDescriptor.ColorFilter &&
-            other is GPURuntimeEffectChildDescriptor.ColorFilter ->
-            filter.valueEqualsWith(other.filter, equalMaterial, depth)
-        this is GPURuntimeEffectChildDescriptor.Blender &&
-            other is GPURuntimeEffectChildDescriptor.Blender ->
-            blender == other.blender
-        else -> false
-    }
-
-private fun GPUPreparedColorFilterChildDescriptor.valueEqualsWith(
-    other: GPUPreparedColorFilterChildDescriptor,
-    equalMaterial: (GPUMaterialDescriptor, GPUMaterialDescriptor) -> Boolean,
-    depth: Int = 1,
-): Boolean =
-    when {
-        depth > MAX_RUNTIME_EFFECT_CHILD_DESCRIPTOR_DEPTH ->
-            throw IllegalStateException("runtime-effect child descriptor equality depth exceeded")
-        this is GPUPreparedColorFilterChildDescriptor.Matrix &&
-            other is GPUPreparedColorFilterChildDescriptor.Matrix -> values == other.values
-        this is GPUPreparedColorFilterChildDescriptor.Blend &&
-            other is GPUPreparedColorFilterChildDescriptor.Blend ->
-            rgba == other.rgba && mode == other.mode
-        this is GPUPreparedColorFilterChildDescriptor.Compose &&
-            other is GPUPreparedColorFilterChildDescriptor.Compose ->
-            outer.valueEqualsWith(other.outer, equalMaterial, depth + 1) &&
-                inner.valueEqualsWith(other.inner, equalMaterial, depth + 1)
-        this is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect &&
-            other is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
-            equalMaterial(storedEffect, other.storedEffect)
-        else -> false
-    }
-
-private fun GPURuntimeEffectChildDescriptor.valueHashWith(
-    hashMaterial: (GPUMaterialDescriptor) -> Int,
-    depth: Int = 1,
-): Int =
-    if (depth > MAX_RUNTIME_EFFECT_CHILD_DESCRIPTOR_DEPTH) {
-        throw IllegalStateException("runtime-effect child descriptor hash depth exceeded")
-    } else when (this) {
-        is GPURuntimeEffectChildDescriptor.Shader ->
-            31 * role.hashCode() + hashMaterial(storedMaterial)
-        is GPURuntimeEffectChildDescriptor.ColorFilter ->
-            31 * role.hashCode() + filter.valueHashWith(hashMaterial, depth)
-        is GPURuntimeEffectChildDescriptor.Blender ->
-            31 * role.hashCode() + blender.hashCode()
-    }
-
-private fun GPUPreparedColorFilterChildDescriptor.valueHashWith(
-    hashMaterial: (GPUMaterialDescriptor) -> Int,
-    depth: Int = 1,
-): Int =
-    if (depth > MAX_RUNTIME_EFFECT_CHILD_DESCRIPTOR_DEPTH) {
-        throw IllegalStateException("runtime-effect child descriptor hash depth exceeded")
-    } else when (this) {
-        is GPUPreparedColorFilterChildDescriptor.Matrix -> values.hashCode()
-        is GPUPreparedColorFilterChildDescriptor.Blend -> 31 * rgba.hashCode() + mode.hashCode()
-        is GPUPreparedColorFilterChildDescriptor.Compose ->
-            31 * outer.valueHashWith(hashMaterial, depth + 1) +
-                inner.valueHashWith(hashMaterial, depth + 1)
-        is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
-            hashMaterial(storedEffect)
-    }
-
-private fun GPURuntimeEffectChildDescriptor.canonicalStringWith(
-    materialIdentity: (GPUMaterialDescriptor) -> String,
-    depth: Int = 1,
-): String =
-    if (depth > MAX_RUNTIME_EFFECT_CHILD_DESCRIPTOR_DEPTH) {
-        throw IllegalStateException("runtime-effect child descriptor canonical depth exceeded")
-    } else when (this) {
-        is GPURuntimeEffectChildDescriptor.Shader ->
-            "Shader(${materialIdentity(storedMaterial)})"
-        is GPURuntimeEffectChildDescriptor.ColorFilter ->
-            "ColorFilter(${filter.canonicalStringWith(materialIdentity, depth)})"
-        is GPURuntimeEffectChildDescriptor.Blender ->
-            "Blender(${blender.canonicalString()})"
-    }
-
-private fun GPUPreparedColorFilterChildDescriptor.canonicalStringWith(
-    materialIdentity: (GPUMaterialDescriptor) -> String,
-    depth: Int = 1,
-): String =
-    if (depth > MAX_RUNTIME_EFFECT_CHILD_DESCRIPTOR_DEPTH) {
-        throw IllegalStateException("runtime-effect child descriptor canonical depth exceeded")
-    } else when (this) {
-        is GPUPreparedColorFilterChildDescriptor.Matrix ->
-            "Matrix(${values.canonicalFloatList()})"
-        is GPUPreparedColorFilterChildDescriptor.Blend ->
-            "Blend(rgba=${rgba.canonicalFloatList()},mode=${mode.name})"
-        is GPUPreparedColorFilterChildDescriptor.Compose ->
-            "Compose(outer=${outer.canonicalStringWith(materialIdentity, depth + 1)}," +
-                "inner=${inner.canonicalStringWith(materialIdentity, depth + 1)})"
-        is GPUPreparedColorFilterChildDescriptor.RegisteredRuntimeEffect ->
-            "RegisteredRuntimeEffect(${materialIdentity(storedEffect)})"
     }
 
 private fun GPUPreparedBlenderChildDescriptor.canonicalString(): String =
