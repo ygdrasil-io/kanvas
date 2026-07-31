@@ -6,7 +6,7 @@ import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.materials.BlendPremulColor
 import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendBindingTopology
 import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCoverageKind
-import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendCpuOracle
+import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendOracle
 import org.graphiks.kanvas.gpu.renderer.materials.GPUBlendFormulaLibrary
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.wgsl.parser.parseWgslResult
@@ -94,18 +94,18 @@ class GPUBackendRuntimeNativeWgslValidationTest {
                         }
 
                         val expected = when (coverageKind) {
-                            GPUBlendCoverageKind.Full -> GPUBlendCpuOracle.blendAtFullCoverage(
+                            GPUBlendCoverageKind.Full -> GPUBlendOracle.blendAtFullCoverage(
                                 blendMode,
                                 source,
                                 destination,
                             )
-                            GPUBlendCoverageKind.Scalar -> GPUBlendCpuOracle.blend(
+                            GPUBlendCoverageKind.Scalar -> GPUBlendOracle.blend(
                                 blendMode,
                                 source,
                                 destination,
                                 validationCase.scalarCoverage,
                             )
-                            GPUBlendCoverageKind.LCD -> GPUBlendCpuOracle.blendLcd(
+                            GPUBlendCoverageKind.LCD -> GPUBlendOracle.blendLcd(
                                 blendMode,
                                 source,
                                 destination,

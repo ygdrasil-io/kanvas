@@ -6,7 +6,7 @@ import kotlin.math.min
 import kotlin.math.sqrt
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 
-internal data class BlendPremulColor(
+data class BlendPremulColor(
     val r: Float,
     val g: Float,
     val b: Float,
@@ -27,8 +27,7 @@ internal data class BlendPremulColor(
     fun toArray(): FloatArray = floatArrayOf(r, g, b, a)
 }
 
-/** Independent test-only premultiplied reference; it consumes no production formula identifiers or WGSL. */
-internal object GPUBlendCpuOracle {
+object GPUBlendOracle {
     fun blend(
         mode: GPUBlendMode,
         source: BlendPremulColor,
@@ -95,7 +94,7 @@ internal object GPUBlendCpuOracle {
         return BlendPremulColor(result[0], result[1], result[2], result[3])
     }
 
-    private fun interpolate(
+    fun interpolate(
         destination: BlendPremulColor,
         full: BlendPremulColor,
         coverageRgb: FloatArray,
@@ -113,7 +112,7 @@ internal object GPUBlendCpuOracle {
         )
     }
 
-    private fun advanced(
+    fun advanced(
         mode: GPUBlendMode,
         source: BlendPremulColor,
         destination: BlendPremulColor,
@@ -130,7 +129,7 @@ internal object GPUBlendCpuOracle {
         return floatArrayOf(rgb[0], rgb[1], rgb[2], source.a + destination.a * (1f - source.a))
     }
 
-    private fun blendColor(mode: GPUBlendMode, source: FloatArray, destination: FloatArray): FloatArray {
+    fun blendColor(mode: GPUBlendMode, source: FloatArray, destination: FloatArray): FloatArray {
         val separable = FloatArray(3) { channel ->
             val s = source[channel]
             val d = destination[channel]
@@ -163,10 +162,10 @@ internal object GPUBlendCpuOracle {
         }
     }
 
-    private fun unpremul(color: BlendPremulColor): FloatArray =
+    fun unpremul(color: BlendPremulColor): FloatArray =
         if (color.a == 0f) FloatArray(3) else floatArrayOf(color.r / color.a, color.g / color.a, color.b / color.a)
 
-    private fun softLight(backdrop: Float, source: Float): Float = if (source <= .5f) {
+    fun softLight(backdrop: Float, source: Float): Float = if (source <= .5f) {
         backdrop - (1f - 2f * source) * backdrop * (1f - backdrop)
     } else {
         val d = if (backdrop <= .25f) {
@@ -177,20 +176,20 @@ internal object GPUBlendCpuOracle {
         backdrop + (2f * source - 1f) * (d - backdrop)
     }
 
-    private fun lum(color: FloatArray): Float = .3f * color[0] + .59f * color[1] + .11f * color[2]
-    private fun sat(color: FloatArray): Float = color.maxOrNull()!! - color.minOrNull()!!
+    fun lum(color: FloatArray): Float = .3f * color[0] + .59f * color[1] + .11f * color[2]
+    fun sat(color: FloatArray): Float = color.maxOrNull()!! - color.minOrNull()!!
 
-    private fun setSat(color: FloatArray, saturation: Float): FloatArray {
+    fun setSat(color: FloatArray, saturation: Float): FloatArray {
         val low = color.minOrNull()!!
         val high = color.maxOrNull()!!
         if (high == low) return FloatArray(3)
         return FloatArray(3) { channel -> (color[channel] - low) * saturation / (high - low) }
     }
 
-    private fun setLum(color: FloatArray, luminosity: Float): FloatArray =
+    fun setLum(color: FloatArray, luminosity: Float): FloatArray =
         clipColor(FloatArray(3) { channel -> color[channel] + luminosity - lum(color) })
 
-    private fun clipColor(color: FloatArray): FloatArray {
+    fun clipColor(color: FloatArray): FloatArray {
         val luminosity = lum(color)
         val low = color.minOrNull()!!
         val high = color.maxOrNull()!!
@@ -208,7 +207,7 @@ internal object GPUBlendCpuOracle {
         return result
     }
 
-    private inline fun combine(
+    fun combine(
         source: FloatArray,
         destination: FloatArray,
         operation: (Float, Float) -> Float,

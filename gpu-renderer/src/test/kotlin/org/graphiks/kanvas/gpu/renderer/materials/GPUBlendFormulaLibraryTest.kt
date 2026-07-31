@@ -91,9 +91,9 @@ class GPUBlendFormulaLibraryTest {
 
         GPUBlendMode.entries.forEach { mode ->
             destinations.forEach { destination ->
-                val full = GPUBlendCpuOracle.blendAtFullCoverage(mode, source, destination)
+                val full = GPUBlendOracle.blendAtFullCoverage(mode, source, destination)
                 coverages.forEach { coverage ->
-                    val actual = GPUBlendCpuOracle.blend(mode, source, destination, coverage)
+                    val actual = GPUBlendOracle.blend(mode, source, destination, coverage)
                     val expected = BlendPremulColor(
                         destination.r + coverage * (full.r - destination.r),
                         destination.g + coverage * (full.g - destination.g),
@@ -113,8 +113,8 @@ class GPUBlendFormulaLibraryTest {
         val coverage = floatArrayOf(.15f, .55f, .9f)
 
         GPUBlendMode.entries.forEach { mode ->
-            val full = GPUBlendCpuOracle.blendAtFullCoverage(mode, source, destination)
-            val actual = GPUBlendCpuOracle.blendLcd(mode, source, destination, coverage)
+            val full = GPUBlendOracle.blendAtFullCoverage(mode, source, destination)
+            val actual = GPUBlendOracle.blendLcd(mode, source, destination, coverage)
             assertEquals(destination.r + coverage[0] * (full.r - destination.r), actual.r, 1e-6f, mode.name)
             assertEquals(destination.g + coverage[1] * (full.g - destination.g), actual.g, 1e-6f, mode.name)
             assertEquals(destination.b + coverage[2] * (full.b - destination.b), actual.b, 1e-6f, mode.name)
@@ -136,13 +136,13 @@ class GPUBlendFormulaLibraryTest {
         val transparentColor = BlendPremulColor(0f, 0f, 0f, 0f)
         val opaqueBlack = BlendPremulColor(0f, 0f, 0f, 1f)
         val opaqueWhite = BlendPremulColor(1f, 1f, 1f, 1f)
-        assertColorNear(opaqueBlack, GPUBlendCpuOracle.blendAtFullCoverage(GPUBlendMode.COLOR_DODGE, opaqueWhite, opaqueBlack), "dodge black")
-        assertColorNear(opaqueWhite, GPUBlendCpuOracle.blendAtFullCoverage(GPUBlendMode.COLOR_BURN, opaqueBlack, opaqueWhite), "burn white")
-        assertColorNear(opaqueWhite, GPUBlendCpuOracle.blendAtFullCoverage(GPUBlendMode.PLUS, opaqueWhite, opaqueWhite), "plus saturation")
-        assertColorNear(opaqueWhite, GPUBlendCpuOracle.blendAtFullCoverage(GPUBlendMode.HUE, transparentColor, opaqueWhite), "zero source alpha")
+        assertColorNear(opaqueBlack, GPUBlendOracle.blendAtFullCoverage(GPUBlendMode.COLOR_DODGE, opaqueWhite, opaqueBlack), "dodge black")
+        assertColorNear(opaqueWhite, GPUBlendOracle.blendAtFullCoverage(GPUBlendMode.COLOR_BURN, opaqueBlack, opaqueWhite), "burn white")
+        assertColorNear(opaqueWhite, GPUBlendOracle.blendAtFullCoverage(GPUBlendMode.PLUS, opaqueWhite, opaqueWhite), "plus saturation")
+        assertColorNear(opaqueWhite, GPUBlendOracle.blendAtFullCoverage(GPUBlendMode.HUE, transparentColor, opaqueWhite), "zero source alpha")
 
         listOf(GPUBlendMode.HUE, GPUBlendMode.SATURATION, GPUBlendMode.COLOR, GPUBlendMode.LUMINOSITY).forEach { mode ->
-            val result = GPUBlendCpuOracle.blendAtFullCoverage(
+            val result = GPUBlendOracle.blendAtFullCoverage(
                 mode,
                 BlendPremulColor(.5f, .05f, .2f, .5f),
                 BlendPremulColor(.1f, .7f, .3f, 1f),
