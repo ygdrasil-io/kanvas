@@ -79,7 +79,7 @@ class KanvasPreparedRuntimeEffectResolver internal constructor(
             is GPUPreparedRuntimeEffectProgramValidation.Invalid ->
                 GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
                     validation.message,
-                    GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation,
+                    validation.reason.toProgramUnavailableReason(),
                 )
         }
     }
@@ -171,8 +171,21 @@ internal data class RuntimeEffectProgramKey(
 internal sealed interface GPUPreparedRuntimeEffectProgramValidation {
     data object Valid : GPUPreparedRuntimeEffectProgramValidation
     data class Unavailable(val message: String) : GPUPreparedRuntimeEffectProgramValidation
-    data class Invalid(val message: String) : GPUPreparedRuntimeEffectProgramValidation
+    data class Invalid(
+        val message: String,
+        val reason: InvalidReason = InvalidReason.Unknown,
+    ) : GPUPreparedRuntimeEffectProgramValidation
 }
+
+internal enum class InvalidReason { CpuOracle, WgslValidation, Abi, Unknown }
+
+private fun InvalidReason.toProgramUnavailableReason():
+    GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason = when (this) {
+        InvalidReason.CpuOracle -> GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable
+        InvalidReason.WgslValidation -> GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation
+        InvalidReason.Abi -> GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Abi
+        InvalidReason.Unknown -> GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Unknown
+    }
 
 /** Parser/reflection gate used only by the module-owned executable authority. */
 internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
@@ -184,7 +197,7 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
         cpuOracle: GPURuntimeEffectCPUOracle,
     ): GPUPreparedRuntimeEffectProgramValidation {
         descriptorProgramMismatch(program, descriptor)?.let { message ->
-            return GPUPreparedRuntimeEffectProgramValidation.Invalid(message)
+            return GPUPreparedRuntimeEffectProgramValidation.Invalid(message, InvalidReason.Abi)
         }
         val expectedSourceHash = wgslSourceContentHash(program.wgslSource)
         val expectedWgslModuleHash = wgslModuleContentHash(
@@ -194,6 +207,7 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
         if (program.sourceHash != expectedSourceHash) {
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                 "Runtime-effect source hash is not derived from WGSL content",
+                InvalidReason.WgslValidation,
             )
         }
         val expectedModuleHash = preparedRuntimeEffectModuleContractHash(
@@ -207,20 +221,23 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
         ) {
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                 "Runtime-effect module hash is not derived from WGSL content",
+                InvalidReason.WgslValidation,
             )
         }
         val oracle = runCatching { cpuOracle.evaluate() }.getOrElse { failure ->
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                 "Runtime-effect CPU behavior failed: ${failure::class.simpleName.orEmpty()}",
+                InvalidReason.CpuOracle,
             )
         }
         if (oracle.effectId != descriptor.id) {
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                 "Runtime-effect CPU behavior does not match the descriptor",
+                InvalidReason.CpuOracle,
             )
         }
         validateMaterialCPUBehavior(descriptor, cpuOracle)?.let { message ->
-            return GPUPreparedRuntimeEffectProgramValidation.Invalid(message)
+            return GPUPreparedRuntimeEffectProgramValidation.Invalid(message, InvalidReason.CpuOracle)
         }
 
         val (lowered, report) = try {
@@ -230,6 +247,7 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
                 return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                     "Runtime-effect WGSL parser diagnostics: " +
                         parsed.errors.joinToString { it.message },
+                    InvalidReason.WgslValidation,
                 )
             }
             val lowered = Lowerer().lower(parsed.translationUnit)
@@ -246,16 +264,18 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                 "Runtime-effect WGSL parser/reflection failed: " +
                     failure::class.simpleName.orEmpty(),
+                InvalidReason.WgslValidation,
             )
         }
 
         if (!lowered.hasMaterialColorFunctionSignature(program.sourceFunction)) {
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                 "Runtime-effect WGSL does not prove its registered source function signature",
+                InvalidReason.WgslValidation,
             )
         }
         reflectedAbiMismatch(program, descriptor, report)?.let { message ->
-            return GPUPreparedRuntimeEffectProgramValidation.Invalid(message)
+            return GPUPreparedRuntimeEffectProgramValidation.Invalid(message, InvalidReason.Abi)
         }
         val reflectedHash = report.reflectionFactsHash()
         val reflectedContractHash = preparedRuntimeEffectReflectionContractHash(
@@ -268,6 +288,7 @@ internal class KanvasPreparedRuntimeEffectProgramValidator internal constructor(
         ) {
             return GPUPreparedRuntimeEffectProgramValidation.Invalid(
                 "Runtime-effect reflection hash is not derived from reflected ABI facts",
+                InvalidReason.Abi,
             )
         }
         return GPUPreparedRuntimeEffectProgramValidation.Valid

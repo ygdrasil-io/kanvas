@@ -141,18 +141,23 @@ object GPUPreparedVerticesLowerer {
                 mapped.code, operationIndex, "mesh-program", mapped.facts["reason"] ?: "mapping_refused", mapped.facts,
             )
         }
-        meshProgramAvailabilityRefusal(
+        val resolution = try {
             runtimeEffectResolver.resolve(
                 mapping.descriptor.effectId,
                 mapping.descriptor.descriptorVersion,
-            ),
-        )?.let { code ->
-            return refused(code, operationIndex, "mesh-program", "runtime_effect_unavailable")
+            )
+        } catch (_: RuntimeException) {
+            return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "runtime-resolver", "resolver_exception")
+        }
+        meshProgramAvailabilityRefusal(resolution)?.let { refusal ->
+            return refused(refusal.code, operationIndex, "mesh-program", "runtime_effect_unavailable", refusal.facts)
         }
         val material = when (val compiled = GPUPreparedMaterialProgramCompiler.compile(
             descriptor = mapping.descriptor,
             paintAlpha = mapping.paintAlpha,
-            context = materialContext(target, capabilities, runtimeEffectResolver),
+            context = materialContext(target, capabilities, frozenResolver(
+                mapping.descriptor.effectId, mapping.descriptor.descriptorVersion, resolution, runtimeEffectResolver,
+            )),
         )) {
             is GPUPreparedMaterialProgramResult.Ready -> compiled.program
             is GPUPreparedMaterialProgramResult.Refused -> return refused(
@@ -241,7 +246,12 @@ object GPUPreparedVerticesLowerer {
         } else {
             null
         }
-        val blendPlan = finalBlend.copy(sourceAlpha = resolvedMaterial.preCoverageSourceAlpha)
+        val finalSourceAlpha = if (vertices.colors != null) {
+            GPUSourceAlphaClassification.Translucent
+        } else {
+            resolvedMaterial.preCoverageSourceAlpha
+        }
+        val blendPlan = finalBlend.copy(sourceAlpha = finalSourceAlpha)
             .canonicalBlendPlan(
                 coverage = GPUCoverageConsumption.FullOrScissor,
                 targetFormatClass = target.colorFormat,
@@ -250,8 +260,10 @@ object GPUPreparedVerticesLowerer {
             GPUPreparedVerticesRefusalCodes.Material, operationIndex, "blend", "blend_unsupported",
             mapOf("commonDiagnosticCode" to blendPlan.diagnostic.code),
         )
-        val deviceBounds = packed.sourceBounds.transformConservatively(transform)
-        val clippedBounds = deviceBounds.intersect(preparedClip.scissorBounds) ?: deviceBounds
+        val deviceBounds = packed.sourceBounds.transformConservatively(transform) ?: return refused(
+            GPUPreparedVerticesRefusalCodes.Transform, operationIndex, "transform", "bounds_overflow",
+        )
+        val clippedBounds = deviceBounds.intersect(preparedClip.scissorBounds)
         return GPUPreparedVerticesLowering.Ready(
             GPUPreparedVerticesDraw.create(
                 artifact = packed.artifact,
@@ -260,11 +272,12 @@ object GPUPreparedVerticesLowerer {
                 transform = transform,
                 clip = clip,
                 clipSnapshot = preparedClip,
-                finalBlend = finalBlend.copy(sourceAlpha = resolvedMaterial.preCoverageSourceAlpha),
+                finalBlend = finalBlend.copy(sourceAlpha = finalSourceAlpha),
                 blendPlan = blendPlan,
                 sourceBounds = packed.sourceBounds,
                 deviceBounds = deviceBounds,
                 clippedBounds = clippedBounds,
+                culledByClip = preparedClip.scissorBounds != null && clippedBounds == null,
                 meshBounds = meshBounds,
                 operationIndex = operationIndex,
                 provenance = provenance,
@@ -410,22 +423,38 @@ internal fun meshMaterialCode(compilerCode: String): String = when {
     else -> GPUPreparedVerticesRefusalCodes.Material
 }
 
+private data class MeshProgramAvailabilityRefusal(val code: String, val facts: Map<String, String> = emptyMap())
+
 private fun meshProgramAvailabilityRefusal(
     resolution: GPUPreparedRuntimeEffectResolution,
-): String? = when (resolution) {
+): MeshProgramAvailabilityRefusal? = when (resolution) {
     is GPUPreparedRuntimeEffectResolution.Ready -> null
     is GPUPreparedRuntimeEffectResolution.DescriptorUnavailable ->
-        GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered
+        MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered)
     is GPUPreparedRuntimeEffectResolution.ProgramUnavailable -> when (resolution.reason) {
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable ->
-            GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable)
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslUnavailable ->
-            GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable)
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation ->
-            GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation)
+        GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Abi ->
+            MeshProgramAvailabilityRefusal(GPUPreparedVerticesRefusalCodes.MeshProgramAbi)
         GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Unknown ->
-            GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable
+            MeshProgramAvailabilityRefusal(
+                GPUPreparedVerticesRefusalCodes.Material,
+                mapOf("runtimeReason" to resolution.reason.name),
+            )
     }
+}
+
+private fun frozenResolver(
+    effectId: String,
+    version: Int,
+    resolution: GPUPreparedRuntimeEffectResolution,
+    fallback: GPUPreparedRuntimeEffectResolver,
+): GPUPreparedRuntimeEffectResolver = GPUPreparedRuntimeEffectResolver { requestedId, requestedVersion ->
+    if (requestedId == effectId && requestedVersion == version) resolution else fallback.resolve(requestedId, requestedVersion)
 }
 
 private fun refused(
@@ -502,34 +531,43 @@ private fun prepareClip(
     }
     if (plan is GPUClipCoveragePlan.Refused) {
         return PreparedVerticesClipResult.Refused(
-            plan.code, "coverage_refused", mapOf("clipCode" to plan.code),
+            GPUPreparedVerticesRefusalCodes.Material, "coverage_refused", mapOf("clipCode" to plan.code),
         )
     }
     val identity = when (snapshot) {
         org.graphiks.kanvas.canvas.ClipStack.WideOpen -> "prepared-vertices-clip:wide-open"
-        is org.graphiks.kanvas.canvas.ClipStack.DeviceRect -> "prepared-vertices-clip:device-rect"
+        is org.graphiks.kanvas.canvas.ClipStack.DeviceRect -> "prepared-vertices-clip:${request.contentKey}"
         is org.graphiks.kanvas.canvas.ClipStack.Complex -> "prepared-vertices-clip:${request.contentKey}"
     }
     return PreparedVerticesClipResult.Ready(
         GPUPreparedVerticesClipSnapshot(
             identity = identity,
-            coveragePlan = plan,
+            coveragePlan = plan.snapshotForPreparedVertices(),
             scissorBounds = (plan as? GPUClipCoveragePlan.Scissor)?.bounds,
         ),
     )
 }
 
 private fun org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesFloatBounds
-    .transformConservatively(transform: Matrix33): GPUBounds {
+    .transformConservatively(transform: Matrix33): GPUBounds? {
     val corners = listOf(
         org.graphiks.kanvas.types.Point(left, top),
         org.graphiks.kanvas.types.Point(right, top),
         org.graphiks.kanvas.types.Point(right, bottom),
         org.graphiks.kanvas.types.Point(left, bottom),
     ).map(transform::times)
+    if (corners.any { !it.x.isFinite() || !it.y.isFinite() }) return null
     return GPUBounds(
         corners.minOf { it.x }, corners.minOf { it.y }, corners.maxOf { it.x }, corners.maxOf { it.y },
     )
+}
+
+private fun GPUClipCoveragePlan.snapshotForPreparedVertices(): GPUClipCoveragePlan = when (this) {
+    GPUClipCoveragePlan.NoClip -> GPUClipCoveragePlan.NoClip
+    is GPUClipCoveragePlan.Scissor -> copy(bounds = bounds.copy())
+    is GPUClipCoveragePlan.AnalyticIntersection -> GPUClipCoveragePlan.AnalyticIntersection(elements.toList())
+    is GPUClipCoveragePlan.Mask -> copy(elements = elements.toList())
+    is GPUClipCoveragePlan.Refused -> copy()
 }
 
 private fun GPUBounds.intersect(other: GPUBounds?): GPUBounds? {

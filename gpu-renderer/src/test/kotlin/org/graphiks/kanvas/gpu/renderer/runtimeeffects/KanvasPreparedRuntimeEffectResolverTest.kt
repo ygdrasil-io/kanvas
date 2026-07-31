@@ -247,7 +247,10 @@ class KanvasPreparedRuntimeEffectResolverTest {
         )
 
         assertIs<GPUPreparedRuntimeEffectProgramValidation.Unavailable>(unavailable)
-        assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(parseFailure)
+        assertEquals(
+            InvalidReason.WgslValidation,
+            assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(parseFailure).reason,
+        )
     }
 
     @Test
@@ -270,8 +273,28 @@ class KanvasPreparedRuntimeEffectResolverTest {
             cpuOracle = SimpleRTCPUOracle,
         )
 
-        assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(entryMismatch)
-        assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(reflectionMismatch)
+        assertEquals(
+            InvalidReason.Abi,
+            assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(entryMismatch).reason,
+        )
+        assertEquals(
+            InvalidReason.WgslValidation,
+            assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(reflectionMismatch).reason,
+        )
+    }
+
+    @Test
+    fun `CPU oracle failure has a closed CPU validation reason`() {
+        val validation = KanvasPreparedRuntimeEffectProgramValidator().validate(
+            program = simpleProgram(), descriptor = descriptor,
+            cpuOracle = object : GPURuntimeEffectCPUOracle {
+                override fun evaluate(): GPURuntimeEffectOracleResult = error("hostile CPU")
+            },
+        )
+        assertEquals(
+            InvalidReason.CpuOracle,
+            assertIs<GPUPreparedRuntimeEffectProgramValidation.Invalid>(validation).reason,
+        )
     }
 
     @Test

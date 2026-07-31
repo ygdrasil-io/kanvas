@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -15,6 +16,7 @@ import org.graphiks.kanvas.gpu.renderer.clips.GPUBounds
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolution
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectResolver
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceAlphaClassification
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.paint.BlendMode
@@ -136,6 +138,12 @@ class GPUPreparedVerticesLowererTest {
             )), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen,
         )).ready().draw
         assertEquals(6, fan.artifact.indexCount)
+
+        val strip = lower(DisplayOp.DrawVertices(
+            Vertices(VertexMode.TRIANGLE_STRIP, vertices().positions, indices = listOf(0, 1, 2)),
+            Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen,
+        )).ready().draw
+        assertEquals(3, strip.artifact.indexCount)
     }
 
     @Test
@@ -172,8 +180,49 @@ class GPUPreparedVerticesLowererTest {
 
         assertEquals(GPUBounds(5f, 7f, 7f, 9f), draw.deviceBounds)
         assertEquals(GPUBounds(5f, 7f, 7f, 9f), draw.clippedBounds)
-        assertEquals("prepared-vertices-clip:device-rect", draw.clipSnapshot.identity)
+        assertTrue(draw.clipSnapshot.identity.contains("gpu-clip-coverage-v1"))
         assertIs<GPUClipCoveragePlan.Scissor>(draw.clipSnapshot.coveragePlan)
+    }
+
+    @Test
+    fun `different device clips have distinct identities and an empty scissor intersection remains explicit`() {
+        val first = lower(DisplayOp.DrawVertices(
+            vertices(), Paint.fill(Color.RED), Matrix33.identity(),
+            ClipStack.DeviceRect(Rect.fromLTRB(10f, 10f, 20f, 20f), antiAlias = false),
+        )).ready().draw
+        val second = lower(DisplayOp.DrawVertices(
+            vertices(), Paint.fill(Color.RED), Matrix33.identity(),
+            ClipStack.DeviceRect(Rect.fromLTRB(11f, 10f, 20f, 20f), antiAlias = true),
+        )).ready().draw
+
+        assertNotEquals(first.clipSnapshot.identity, second.clipSnapshot.identity)
+        assertEquals<GPUBounds?>(null, first.clippedBounds)
+        assertTrue(first.culledByClip)
+    }
+
+    @Test
+    fun `clip authority refusal remains in the closed FP06 refusal space`() {
+        val refusal = GPUPreparedVerticesLowerer.lower(
+            DisplayOp.DrawVertices(
+                vertices(), Paint.fill(Color.RED), Matrix33.identity(),
+                ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 2f, 2f), antiAlias = false),
+            ),
+            7,
+            target(),
+            capabilities(maxTextureDimension = 1),
+        ).refused()
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, refusal.code)
+        assertEquals("unsupported.clip.texture_limit", refusal.facts["clipCode"])
+    }
+
+    @Test
+    fun `transform overflow refuses rather than publishing nonfinite bounds`() {
+        val refusal = lower(DisplayOp.DrawVertices(
+            vertices(), Paint.fill(Color.RED), Matrix33.scale(Float.MAX_VALUE, Float.MAX_VALUE), ClipStack.WideOpen,
+        )).refused()
+
+        assertEquals(GPUPreparedVerticesRefusalCodes.Transform, refusal.code)
+        assertEquals("bounds_overflow", refusal.facts["reason"])
     }
 
     @Test
@@ -230,7 +279,16 @@ class GPUPreparedVerticesLowererTest {
                 .order(java.nio.ByteOrder.LITTLE_ENDIAN).getFloat(12),
         )
         assertEquals(GPUBlendMode.SRC_OVER, draw.primitiveBlendPlan?.plan?.mode)
+        assertEquals(GPUSourceAlphaClassification.Translucent, draw.finalBlend.sourceAlpha)
         assertEquals(1, draw.paintAlphaApplicationCount)
+    }
+
+    @Test
+    fun `opaque solid vertices retain opaque target source alpha without vertex colors`() {
+        val draw = lower(DisplayOp.DrawVertices(
+            vertices(), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen,
+        )).ready().draw
+        assertEquals(GPUSourceAlphaClassification.ProvenOpaque, draw.finalBlend.sourceAlpha)
     }
 
     @Test
@@ -282,6 +340,38 @@ class GPUPreparedVerticesLowererTest {
             assertEquals("mesh-program", result.facts["stage"])
             assertEquals("runtime_effect_unavailable", result.facts["reason"])
         }
+    }
+
+    @Test
+    fun `runtime unknown is generic material and resolver is called once then frozen`() {
+        var calls = 0
+        val resolver = GPUPreparedRuntimeEffectResolver { effectId, version ->
+            calls++
+            if (calls == 1) org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver()
+                .resolve(effectId, version)
+            else GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
+                "changed", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Unknown,
+            )
+        }
+        val draw = lower(meshOperation(program = registeredMeshProgram()), resolver).ready().draw
+        assertEquals(1, calls)
+        assertEquals(GPUPreparedVerticesOperationKind.DrawMesh, draw.operationKind)
+
+        val unknown = lower(meshOperation(program = registeredMeshProgram()),
+            GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable(
+                "unknown", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Unknown,
+            ) }).refused()
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, unknown.code)
+        assertEquals("Unknown", unknown.facts["runtimeReason"])
+    }
+
+    @Test
+    fun `resolver exception is terminal typed refusal`() {
+        val refusal = lower(meshOperation(program = registeredMeshProgram()),
+            GPUPreparedRuntimeEffectResolver { _, _ -> throw IllegalStateException("boom") }).refused()
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, refusal.code)
+        assertEquals("runtime-resolver", refusal.facts["stage"])
+        assertEquals("resolver_exception", refusal.facts["reason"])
     }
 
     @Test
@@ -357,10 +447,10 @@ class GPUPreparedVerticesLowererTest {
 
     private fun target() = GPUTargetFacts(64, 64, "rgba8unorm-srgb")
 
-    private fun capabilities(): GPUCapabilities = GPUCapabilities(
+    private fun capabilities(maxTextureDimension: Int = 8192): GPUCapabilities = GPUCapabilities(
         implementation = GPUImplementationIdentity("wgpu4k", "test", "adapter", "device"),
         facts = emptyList(), snapshotId = "fp06-vertices",
-        limits = GPULimits(8192, 256, 256, maxBufferSize = 1L shl 30, maxDynamicUniformBuffersPerPipelineLayout = 1),
+        limits = GPULimits(maxTextureDimension.toLong(), 256, 256, maxBufferSize = 1L shl 30, maxDynamicUniformBuffersPerPipelineLayout = 1),
     )
 }
 

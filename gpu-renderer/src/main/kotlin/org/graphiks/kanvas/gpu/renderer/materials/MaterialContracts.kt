@@ -333,6 +333,7 @@ sealed interface GPUPreparedRuntimeEffectResolution {
         CpuUnavailable,
         WgslUnavailable,
         WgslValidation,
+        Abi,
         Unknown,
     }
 
