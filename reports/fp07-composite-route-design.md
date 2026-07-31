@@ -10,12 +10,12 @@ FP-07 migrates composite operations (`DrawPicture`, `BeginLayer`, `EndLayer`) fr
 
 ### Architecture Philosophy
 
-Inspired by Skia Graphite's backend architecture, FP-07 does **not** create a dedicated "composite pass." Instead:
+FP-07 does **not** create a dedicated "composite pass." Instead:
 
-- Each `saveLayer` creates a scratch offscreen texture (like Graphite's scratch Device)
+- Each `saveLayer` creates a scratch offscreen texture (analogous to Graphite's scratch Device pattern)
 - Child content is rendered into the scratch texture via existing draw routes
 - The result is sampled back as a textured quad in the parent with the appropriate blend mode
-- Filters are decomposed into scratch textures per materialization boundary (the `GPUPreparedFilterNormalizer` already marks these boundaries)
+- The filter DAG planner is a **Kanvas-native implementation** — it does not mirror Skia's `skif`/`FilterResult` engine (which relies on `SkSpecialImage` + generic DAG decomposition in Skia core). This is intentional: Kanvas owns its filter materialization boundaries (already marked by `GPUPreparedFilterNormalizer`) and maps them to WebGPU-native render/compute routes directly, without a `FilterResult`-style intermediate representation.
 
 ### What Exists (pre-FP-07 scaffolding)
 
@@ -30,6 +30,11 @@ Inspired by Skia Graphite's backend architecture, FP-07 does **not** create a de
 | Blend formula library (WGSL) | `GPUBlendFormulaLibrary.kt` (221 lines) | Complete |
 | Pass commands (23 types) | `PassContracts.kt` (1922 lines) | Complete |
 | Product router + frame gate | `GPUPreparedSurfaceProductRouter.kt`, `GPUPreparedSurfaceFrameGate.kt` | Complete |
+| SaveLayer materializer | `ValidatingSaveLayerMaterializer` (class in `LayerContracts.kt`, l.459) | Complete |
+| Pass builder (layer) | `GPUFirstRoutePassBuilder` (object in `PassContracts.kt`, l.1402), with `acceptedDrawLayer`/`refusedDrawLayer` | Complete |
+| SaveLayer executor skeleton | `SaveLayerExecutor.kt` (37 lines, bridge stub) | Exists, to be replaced |
+| Blend CPU oracle (test) | `GPUBlendCpuOracle` (exists in test sources) | Exists, to be promoted |
+| Text composite preflight | `GPUPreparedTextCompositePreflight.kt` | Exists (text-specific) |
 
 ### What Must Be Built
 
@@ -76,7 +81,7 @@ lower(capture):
 
 ### D — CPU Blend Oracles
 
-**File:** `gpu-renderer/src/main/kotlin/.../materials/GPUBlendOracle.kt` (~400 lines)
+**File:** Promotes and extends the existing test-side `GPUBlendCpuOracle` into `gpu-renderer/src/main/kotlin/.../materials/GPUBlendOracle.kt` (~400 lines). No new parallel oracle — the test oracle becomes the single source of truth.
 
 Independent module with no dependency on the lowering pipeline. Reference implementations for all 29 `GPUBlendMode` values.
 
@@ -135,9 +140,11 @@ Depends on Cycle 1 (needs `GPUPreparedCompositeLowerer` and oracles for testing)
 
 ### B — SaveLayer Native Materialization
 
+**Replaces:** `SaveLayerExecutor.kt` (37-line skeleton). The new `GPUSaveLayerNativeExecutor` absorbs its bridge role.
+
 **New file:** `gpu-renderer/src/main/kotlin/.../layers/GPUSaveLayerNativeExecutor.kt` (~200 lines)
 
-Bridges the `ValidatingSaveLayerMaterializer` (which produces resource decisions and command streams) with the actual GPU execution pipeline.
+Bridges the `ValidatingSaveLayerMaterializer` (which produces resource decisions and command streams) with the actual GPU execution pipeline. This cycle limits itself to **execution only** — the task list builder integration (ordering, `handleSaveLayer()`) is deferred to Cycle 4 (J).
 
 **Algorithm:**
 ```
@@ -158,8 +165,7 @@ execute(scope, plan):
 ```
 
 **Modifications to existing files:**
-- `GPUPreparedSurfaceFrameTaskListBuilder.kt` — add `handleSaveLayer()` method that inserts `PrepareLayerTarget`, `RenderLayerChildren`, `CompositeLayer` tasks in the correct order
-- `GPUFirstRoutePassBuilder.kt` — connect existing `acceptedDrawLayer()` / `refusedDrawLayer()` to the composite pipeline
+- `PassContracts.kt` — connect existing `GPUFirstRoutePassBuilder.acceptedDrawLayer()` / `refusedDrawLayer()` (l.1801/1901) to the composite pipeline
 
 **Tests:** `GPUSaveLayerNativeExecutorTest.kt` — verify that a saveLayer with a solid fill child produces a sampled texture in the parent, matching the CPU oracle.
 
@@ -216,28 +222,30 @@ Depends on Cycles 1+2.
 
 ### F — Backdrop Filter
 
-**Scope:** Remove the `LAYER_DESTINATION_READ` refusal from the capture pipeline and implement backdrop texture read + filter.
+**Scope:** Remove the `LAYER_DESTINATION_READ` refusal from the capture pipeline and implement backdrop texture read + filter. **Semantics must match Skia**: the backdrop initializes the layer's offscreen *before* children are drawn, not composited after.
 
-**Algorithm:**
+**Algorithm (corrected to match Skia semantics):**
 ```
 processBackdropLayer(scope, plan):
-  1. Before rendering children:
-     a. Copy current parent render target → backdropTexture
-     b. If scope has backdrop filter(s):
-        - Apply filter DAG to backdropTexture → filteredBackdrop
-  2. Render children into offscreen target (normal saveLayer path)
-  3. CompositeLayer with both source (children) and destination (filteredBackdrop):
-     a. Bind both textures in the composite shader
-     b. Apply the saveLayer paint's blend mode between source and filteredBackdrop
+  1. Copy current parent render target → backdropTexture
+  2. If scope has backdrop filter(s):
+     a. Apply filter DAG to backdropTexture → filteredBackdrop
+  3. Initialize the layer's offscreen target with filteredBackdrop
+     (LoadOp.Load with filteredBackdrop, NOT LoadOp.Clear)
+  4. Render children on top of the initialized offscreen
+  5. CompositeLayer: sample the offscreen (backdrop+children) into parent
+     with the saveLayer paint's blend mode (typically srcOver)
 ```
+
+This mirrors `SkCanvas::internalDrawDeviceWithFilter` (`SkCanvas.cpp:700`): the parent is snap-filtered, drawn into the child device *first*, then children paint over it, then the result is drawn back with the layer paint.
 
 **Modifications:**
 - `GPUPreparedCompositeCapture.kt` — remove `LAYER_DESTINATION_READ` refusal; capture backdrop filters as filter descriptors on the scope
-- `LayerContracts.kt` — extend `GPULayerBackdropPlan` to carry the backdrop texture label and filter references
+- `LayerContracts.kt` — extend `GPULayerBackdropPlan` to carry the backdrop texture label, filter references, and LoadOp.Load initialization
 - `GPUBlendPlanning.kt` — `LayerCompositeBlend` must accept an optional backdrop texture binding
 - `GPUPreparedCompositeLowerer.kt` — produce backdrop plans for scopes with backdrop filters
 
-**Tests:** `GPUBackdropFilterTest.kt` — verify backdrop blur produces correct sampling in parent.
+**Tests:** `GPUBackdropFilterTest.kt` — verify backdrop blur initializes the offscreen before children; children render on top of blurred backdrop.
 
 ### G — Mask Filter Route
 
@@ -292,25 +300,25 @@ processPicture(picture):
 
 ## Integration Points
 
-### Frame Gate Override (across all cycles)
+### Frame Gate Override (gated by all cycles including Cycle 4)
 
-Once all composite operations are handled by the prepared route:
+Once all composite operations are handled end-to-end by the prepared route (task list builder included):
 - `GPUPreparedSurfaceFrameGate.kt` — remove `DrawPicture`, `BeginLayer`, `EndLayer` from legacy classification
 - `GPUPreparedSurfaceProductRouter.kt` — add Composite family to `hasTerminalPreparedFamily()`
 - `GPULegacyImmediatePathAdapter.kt` — remove `LegacyDisplayOpFamily.Composites`
 
-This is the atomic cutover, gated by all Cycle 1-3 deliverables passing their tests.
+The atomic cutover is gated by **all Cycle 1-4 deliverables** passing their tests. The task list builder integration (Cycle 4) is required for end-to-end execution; the frame gate cannot be flipped before it.
 
-### Task List Builder Integration (J — deferred to Cycle 4)
+### Task List Builder Integration (J — Cycle 4)
 
-The `GPUPreparedSurfaceFrameTaskListBuilder` must be extended to handle:
+The `GPUPreparedSurfaceFrameTaskListBuilder` (currently 3849 lines) must be extended to handle:
 - Layer target creation (texture allocation)
 - Child rendering (recursive draw dispatch)
 - Layer compositing (textured quad with blend)
 - Filter intermediate rendering (per-node render passes)
 - Ordering guarantees: children before composite-back, filter nodes in topological order
 
-This is deferred to a separate Cycle 4 because it depends on all materialization primitives being stable.
+**Risk note:** This file is a monolith. Cycle 4 should extract layer-related logic into a dedicated `GPULayerTaskListBuilder` rather than further inflating the existing builder. The extraction is scoped to Cycle 4, not earlier.
 
 ---
 
@@ -333,14 +341,15 @@ This is deferred to a separate Cycle 4 because it depends on all materialization
 
 | File | Cycles | Changes |
 |---|---|---|
-| `GPUPreparedCompositeCapture.kt` | 3F, 3G, 3H | Remove backdrop refusal, mask filter capture, FilterPictureSource |
-| `LayerContracts.kt` | 3F | Extend GPULayerBackdropPlan |
-| `GPUBlendPlanning.kt` | 3F | Backdrop binding in LayerCompositeBlend |
-| `GPUPreparedSurfaceFrameTaskListBuilder.kt` | 2B | handleSaveLayer, layer task ordering |
-| `GPUFirstRoutePassBuilder.kt` | 2B | Connect acceptedDrawLayer/refusedDrawLayer |
-| `GPUPreparedSurfaceFrameGate.kt` | Integration | Remove Composites from legacy |
-| `GPUPreparedSurfaceProductRouter.kt` | Integration | Add Composites to hasTerminalPreparedFamily |
-| `GPULegacyImmediatePathAdapter.kt` | Integration | Remove Composites family |
+| `GPUPreparedCompositeCapture.kt` (kanvas surface) | 3F, 3G, 3H | Remove backdrop refusal, mask filter capture, FilterPictureSource |
+| `LayerContracts.kt` (gpu-renderer) | 3F | Extend `GPULayerBackdropPlan`; `ValidatingSaveLayerMaterializer` (l.459) unchanged |
+| `GPUBlendPlanning.kt` (gpu-renderer) | 3F | Backdrop binding in `LayerCompositeBlend` |
+| `PassContracts.kt` (gpu-renderer) | 2B | Connect `GPUFirstRoutePassBuilder.acceptedDrawLayer`/`refusedDrawLayer` (l.1801/1901) |
+| `SaveLayerExecutor.kt` (gpu-renderer) | 2B | **Replaced** by `GPUSaveLayerNativeExecutor` |
+| `GPUPreparedSurfaceFrameGate.kt` (kanvas surface) | Integration | Remove Composites from legacy |
+| `GPUPreparedSurfaceProductRouter.kt` (kanvas surface) | Integration | Add Composites to `hasTerminalPreparedFamily()` |
+| `GPULegacyImmediatePathAdapter.kt` (kanvas surface) | Integration | Remove Composites family |
+| `GPUPreparedSurfaceFrameTaskListBuilder.kt` (kanvas surface) | Cycle 4 (J) | Extracted layer logic into `GPULayerTaskListBuilder`; 3849-line monolith risk |
 
 ### Test Files (all new)
 
@@ -366,3 +375,7 @@ This is deferred to a separate Cycle 4 because it depends on all materialization
 - `DrawAtlas` migration (not a composite operation)
 - Performance optimization of layer target reuse (deferred to FP-09)
 - Shader-based mask filters (Shader, Table) — only Blur in initial scope
+- **Layer edge anti-aliasing** — Skia draws layers via `EdgeAAQuad` with AA flags from paint; Kanvas uses a single-sample textured quad without edge AA. Rotated/transformed layers may show aliased edges. Documented gap, not a regression.
+- **Texture pooling and approx-fit** — Graphite uses `ScratchResourceManager` (pool by read-count) and `SkBackingFit::kApprox` (texture ≥ exact size) for efficient reuse. Kanvas uses exact-size allocations and defers pooling to FP-09. The `GPUPreparedCompositePreflight` budget checks are a correctness safeguard, not a performance optimization — the two are orthogonal.
+- **`GPUBlendCpuOracle` deduplication** — the existing test-side oracle must be promoted (not duplicated) as the single `GPUBlendOracle` for both test and production use.
+- **`GPUPreparedTextCompositePreflight` naming collision** — the new `GPUPreparedCompositePreflight` (general composite) is distinct from the existing text-specific preflight. Names are intentional but close; use package separation (`layers/` vs `text/`) to disambiguate.
