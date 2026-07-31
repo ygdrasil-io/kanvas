@@ -36,7 +36,7 @@ object GPUPreparedVerticesRefusalCoverage {
     val classifications: Map<String, GPUPreparedVerticesRefusalClassification> =
         Collections.unmodifiableMap(linkedMapOf(
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.Topology to c(GPUPreparedVerticesRefusalDisposition.Reserved, "GPUPreparedVerticesPacker", "public VertexMode is closed"),
-            org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.PositionCount to c(GPUPreparedVerticesRefusalDisposition.Reserved, "GPUPreparedVerticesPacker", "topology validation precedes public position count"),
+            org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.PositionCount to c(GPUPreparedVerticesRefusalDisposition.Delegated, "GPUPreparedVerticesPacker", "empty or odd public position payload"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.AttributeCount to c(GPUPreparedVerticesRefusalDisposition.Delegated, "GPUPreparedVerticesPacker", "public attributes"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.NonFinite to c(GPUPreparedVerticesRefusalDisposition.Delegated, "GPUPreparedVerticesPacker", "public positions and uvs"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.IndexOutOfRange to c(GPUPreparedVerticesRefusalDisposition.Delegated, "GPUPreparedVerticesPacker", "public indices"),
@@ -46,7 +46,7 @@ object GPUPreparedVerticesRefusalCoverage {
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.ColorConversion to c(GPUPreparedVerticesRefusalDisposition.Reserved, "GPUColorConversionPlan", "no vertex color-space authority"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.PrimitiveBlender to c(GPUPreparedVerticesRefusalDisposition.Reserved, "GPUBlendPlanner", "fixed SrcOver primitive request is admitted"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.Material to c(GPUPreparedVerticesRefusalDisposition.Direct, "GPUPreparedMaterialProgramCompiler", "paint material"),
-            org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.Budget to c(GPUPreparedVerticesRefusalDisposition.Reserved, "GPUPreparedVerticesPacker", "lowerer limits are not caller-configurable"),
+            org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.Budget to c(GPUPreparedVerticesRefusalDisposition.Delegated, "GPUPreparedVerticesPacker", "fixed public packing ceiling"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.MeshBounds to c(GPUPreparedVerticesRefusalDisposition.Direct, "GPUPreparedVerticesLowerer", "mesh bounds"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered to c(GPUPreparedVerticesRefusalDisposition.Direct, "KanvasPreparedRuntimeEffectResolver", "descriptor registry"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable to c(GPUPreparedVerticesRefusalDisposition.Direct, "KanvasPreparedRuntimeEffectResolver", "cpu authority"),
