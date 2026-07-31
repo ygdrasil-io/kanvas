@@ -49,6 +49,8 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerIsolatedTargetRequest
 import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerMaterializationRequest
 import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerMaterializationResult
 import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerNativeExecutor
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceDiagnostic
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.text.SDFGenerator
@@ -2126,7 +2128,37 @@ private fun materializeSaveLayerScene(
             parentTargetLabel = "root-target",
         ),
     )
-    val target = (gatePlan.layerPlan.execution as GPULayerExecutionPlan.IsolatedTarget).target
+    val execution = gatePlan.layerPlan.execution as? GPULayerExecutionPlan.IsolatedTarget
+        ?: return GPUSaveLayerMaterializationResult(
+            resourceDecision = GPUResourceMaterializationDecision.Refused(
+                diagnostic = GPUResourceDiagnostic(
+                    code = gatePlan.diagnostics.firstOrNull { it.terminal }?.code
+                        ?: "unsupported.layer.materialization_route",
+                    resourceLabel = "layer:$sceneId",
+                    message = "saveLayer scene $sceneId has no isolated-target execution plan.",
+                    terminal = true,
+                    facts = emptyMap(),
+                ),
+                targetId = "target:$sceneId",
+                taskIds = emptyList(),
+                resourcePlanLabels = emptyList(),
+                diagnostics = emptyList(),
+            ),
+            commandStream = GPUPassCommandStream(
+                streamId = "savelayer-command-stream:refused:$sceneId",
+                packetStreamId = "savelayer-packet-stream:refused:$sceneId",
+                passId = "parent-pass:$sceneId",
+                commands = emptyList(),
+                operandBridge = emptyList(),
+            ),
+            scopeLabel = "layer:$sceneId",
+            targetLabel = "layer-target:$sceneId",
+            parentTargetLabel = "root-target",
+            clearPolicy = "none",
+            childrenLabel = "none",
+            compositeRoute = "none",
+        )
+    val target = execution.target
     val generation = target.generationLabel.substringAfter(':').toLongOrNull() ?: 0L
     val context = GPUTargetPreparationContext(
         targetId = "target:$sceneId",

@@ -96,6 +96,7 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeLowerer
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeLowering
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositePlan
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositePreflight
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScope
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeId
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreflightCapabilities
@@ -2985,6 +2986,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             scopes = scopes,
             rootScopeId = rootScopeId,
             identity = identity,
+            deviceGeneration = context.deviceGeneration,
         )
         if (lowering is GPUPreparedCompositeLowering.Refused) {
             return GPUPreparedSaveLayerFrameHandling.Refused(
@@ -3009,7 +3011,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         for (layer in compositePlan.layers) {
             val layerGatePlan = compositePlan.gatePlans[layer.saveRecord.scopeId.value]
                 ?: return GPUPreparedSaveLayerFrameHandling.Refused(
-                    code = "unsupported.composite.layer_gate_missing",
+                    code = GPUPreparedCompositeRefusalCodes.LAYER_GATE_MISSING,
                     operationIndex = null,
                     facts = mapOf("scopeId" to layer.saveRecord.scopeId.value),
                 )

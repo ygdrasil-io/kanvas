@@ -17,6 +17,7 @@ object GPUPreparedCompositeRefusalCodes {
     const val NATIVE_ALIAS = "unsupported.composite.native.alias"
     const val NATIVE_CAPABILITY = "unsupported.composite.native.capability"
     const val PREFLIGHT = "unsupported.composite.preflight"
+    const val LAYER_GATE_MISSING = "unsupported.composite.layer_gate_missing"
 
     val ALL: Set<String> = setOf(
         PICTURE_CYCLE,
@@ -30,5 +31,6 @@ object GPUPreparedCompositeRefusalCodes {
         NATIVE_ALIAS,
         NATIVE_CAPABILITY,
         PREFLIGHT,
+        LAYER_GATE_MISSING,
     )
 }

@@ -115,6 +115,78 @@ class GPUPreparedSaveLayerFrameHandlingTest {
         assertTrue(refused.facts.containsKey("scopeId"))
     }
 
+    @Test
+    fun `nested saveLayers materialize innermost first`() {
+        val outerId = GPUPreparedCompositeScopeId("layer_outer")
+        val innerId = GPUPreparedCompositeScopeId("layer_inner")
+        val outer = saveLayerScope(
+            id = outerId,
+            bounds = rectSnapshot(0f, 0f, 128f, 96f),
+            parentId = rootScopeId,
+            saveOperationIndex = 0,
+        )
+        val inner = saveLayerScope(
+            id = innerId,
+            bounds = rectSnapshot(0f, 0f, 64f, 48f),
+            parentId = outerId,
+            saveOperationIndex = 1,
+        )
+        val scopes = mapOf(
+            rootScopeId to rootScope(entries = listOf(GPUPreparedCompositeEntry.Scope(outerId))),
+            outerId to outer,
+            innerId to inner,
+        )
+
+        val handling = builder().handleSaveLayer(
+            scopes = scopes,
+            rootScopeId = rootScopeId,
+            identity = "test-nested",
+            capabilities = defaultCapabilities(),
+            context = defaultContext(),
+        )
+
+        val ready = assertIs<GPUPreparedSaveLayerFrameHandling.Ready>(handling)
+        assertEquals(2, ready.results.size)
+        val compositeSources = ready.commands
+            .filterIsInstance<GPUPassCommand.CompositeLayer>()
+            .map(GPUPassCommand.CompositeLayer::sourceLabel)
+        assertEquals(
+            listOf("layer-target:layer_inner", "layer-target:layer_outer"),
+            compositeSources,
+            "inner layer must composite before its parent",
+        )
+    }
+
+    @Test
+    fun `device generation is threaded into gate and materialization evidence`() {
+        val layerId = GPUPreparedCompositeScopeId("layer_1")
+        val layer = saveLayerScope(layerId, rectSnapshot(0f, 0f, 64f, 48f))
+        val scopes = mapOf(
+            rootScopeId to rootScope(entries = listOf(GPUPreparedCompositeEntry.Scope(layerId))),
+            layerId to layer,
+        )
+
+        val handling = builder().handleSaveLayer(
+            scopes = scopes,
+            rootScopeId = rootScopeId,
+            identity = "test-generation",
+            capabilities = defaultCapabilities(),
+            context = GPUTargetPreparationContext(
+                targetId = "target:test",
+                frameId = "frame:test",
+                deviceGeneration = 7L,
+                budgetClass = "default",
+            ),
+        )
+
+        val ready = assertIs<GPUPreparedSaveLayerFrameHandling.Ready>(handling)
+        val gatePlan = ready.plan.gatePlans.getValue("layer_1")
+        val target = (gatePlan.layerPlan.execution as
+            org.graphiks.kanvas.gpu.renderer.layers.GPULayerExecutionPlan.IsolatedTarget).target
+        assertEquals("target-generation:7", target.generationLabel)
+        assertEquals(1, ready.results.size)
+    }
+
     private fun builder() = GPUPreparedSurfaceFrameTaskListBuilder()
 
     private fun defaultCapabilities() =
@@ -146,11 +218,13 @@ class GPUPreparedSaveLayerFrameHandlingTest {
         private fun saveLayerScope(
             id: GPUPreparedCompositeScopeId,
             bounds: GPUPreparedRectSnapshot,
+            parentId: GPUPreparedCompositeScopeId = rootScopeId,
+            saveOperationIndex: Int? = 0,
         ): GPUPreparedCompositeScope = GPUPreparedCompositeScope(
             id = id,
-            parentId = rootScopeId,
-            saveOperationIndex = 0,
-            restoreOperationIndex = 1,
+            parentId = parentId,
+            saveOperationIndex = saveOperationIndex,
+            restoreOperationIndex = if (saveOperationIndex == null) null else saveOperationIndex + 1,
             entries = listOf(GPUPreparedCompositeEntry.Draw(0)),
             sourceKind = GPUPreparedCompositeScopeKind.SaveLayer,
             provenance = "layer[0]",
