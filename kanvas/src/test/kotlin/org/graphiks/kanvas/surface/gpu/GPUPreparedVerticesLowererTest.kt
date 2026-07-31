@@ -303,6 +303,38 @@ class GPUPreparedVerticesLowererTest {
     }
 
     @Test
+    fun `every nonreserved refusal code has one executable public lowerer case`() {
+        val child = MeshProgram(effect("runtime.simple_rt"), UniformBlock { float4("gColor", 1f, 0f, 0f, 1f) },
+            MeshChildren.of("blend" to BlenderChild(Blender.Arithmetic(0f, 0f, 0f, 0f))))
+        val cases: Map<String, () -> GPUPreparedVerticesLowering.Refused> = mapOf(
+            GPUPreparedVerticesRefusalCodes.AttributeCount to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, vertices().positions, texCoords = listOf(Point.ZERO)), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)).refused() },
+            GPUPreparedVerticesRefusalCodes.NonFinite to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, listOf(Point(Float.NaN, 0f), Point(1f, 0f), Point(0f, 1f))), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)).refused() },
+            GPUPreparedVerticesRefusalCodes.IndexOutOfRange to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, vertices().positions, indices = listOf(0, 1, 9)), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)).refused() },
+            GPUPreparedVerticesRefusalCodes.IndexFormat to { lower(DisplayOp.DrawVertices(Vertices(VertexMode.TRIANGLES, List(65538) { Point(it.toFloat(), 0f) }, indices = listOf(65537, 0, 1)), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.WideOpen)).refused() },
+            GPUPreparedVerticesRefusalCodes.Transform to { lower(DisplayOp.DrawVertices(vertices(), Paint.fill(Color.RED), Matrix33.makeAll(1f,0f,0f,0f,1f,0f,.1f,0f,1f), ClipStack.WideOpen)).refused() },
+            GPUPreparedVerticesRefusalCodes.Material to { lower(DisplayOp.DrawVertices(vertices(), Paint.fill(Color.RED).copy(shader = hostileShader()), Matrix33.identity(), ClipStack.WideOpen)).refused() },
+            GPUPreparedVerticesRefusalCodes.MeshBounds to { lower(meshOperation(program = registeredMeshProgram()).copy(mesh = Mesh(vertices(), registeredMeshProgram(), Rect(Float.NaN,0f,1f,1f)))).refused() },
+            GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered to { lower(meshOperation(program = MeshProgram(effect("missing")))).refused() },
+            GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("cpu", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.CpuUnavailable) }).refused() },
+            GPUPreparedVerticesRefusalCodes.MeshProgramWgslUnavailable to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("wgsl", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslUnavailable) }).refused() },
+            GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("wgsl", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation) }).refused() },
+            GPUPreparedVerticesRefusalCodes.MeshProgramAbi to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("abi", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.Abi) }).refused() },
+            GPUPreparedVerticesRefusalCodes.MeshProgramChild to { lower(meshOperation(program = child)).refused() },
+        )
+        val reserved = GPUPreparedVerticesRefusalCoverage.classifications
+            .filterValues { it.disposition == GPUPreparedVerticesRefusalDisposition.Reserved }
+        assertEquals(GPUPreparedVerticesRefusalCodes.ALL, (cases.keys + reserved.keys).toSet())
+        cases.forEach { (code, execute) ->
+            val refusal = execute()
+            assertEquals(code, refusal.code)
+            assertEquals(7, refusal.operationIndex)
+            assertTrue(refusal.facts["authority"].orEmpty().isNotBlank())
+            assertTrue(refusal.facts["reason"].orEmpty().isNotBlank())
+        }
+        reserved.values.forEach { assertTrue(it.reason.isNotBlank() && it.authority.isNotBlank()) }
+    }
+
+    @Test
     fun `compiler refusal mapping is closed and unknown remains generic material`() {
         assertEquals(
             GPUPreparedVerticesRefusalCodes.MeshProgramAbi,
