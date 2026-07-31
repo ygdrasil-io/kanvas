@@ -15,6 +15,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURect
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantNonFinite
+import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantSingular
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTarget
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendOffscreenTexture
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRawUniformDraw
@@ -218,9 +220,18 @@ internal fun NormalizedDrawCommand.toMaskBlurRequest(
 }
 
 internal fun NormalizedDrawCommand.maskBlurPreflightRefusalReasonOrNull(): String? {
-    val rrect = this as? NormalizedDrawCommand.FillRRect ?: return null
-    val blur = rrect.maskFilter as? NormalizedMaskFilter.Blur ?: return null
-    return if (blur.sigma != 0f) rrect.nonUniformRadiiRefusalReasonOrNull() else null
+    return when (this) {
+        is NormalizedDrawCommand.FillPath -> when {
+            transform.isAffineDeterminantNonFinite() -> "unsupported.transform.non_finite"
+            transform.isAffineDeterminantSingular() -> "unsupported.transform.affine_singular"
+            else -> null
+        }
+        is NormalizedDrawCommand.FillRRect -> {
+            val blur = maskFilter as? NormalizedMaskFilter.Blur ?: return null
+            if (blur.sigma != 0f) nonUniformRadiiRefusalReasonOrNull() else null
+        }
+        else -> null
+    }
 }
 
 internal fun NormalizedDrawCommand.toLocalMaskCommand(plan: MaskBlurPlan.Ready): NormalizedDrawCommand {
@@ -261,7 +272,9 @@ private fun NormalizedDrawCommand.FillPath.toLocalMaskPathCommand(
     white: GPUMaterialDescriptor.SolidColor,
 ): NormalizedDrawCommand.FillPath {
     if (transform.type == GPUTransformType.Perspective ||
-        transform.type == GPUTransformType.Singular
+        transform.type == GPUTransformType.Singular ||
+        transform.isAffineDeterminantNonFinite() ||
+        transform.isAffineDeterminantSingular()
     ) {
         return copy(
             clip = localClip,
@@ -318,10 +331,10 @@ private fun NormalizedDrawCommand.FillPath.toLocalMaskPathCommand(
         .distinct()
         .ifEmpty { listOf(0) }
     val geometryForBounds = if (antiAlias) offsetForAA(localVertices) else localVertices
-    val localBounds = if (geometryForBounds.isEmpty()) {
-        bounds.toLocal(plan.deviceBounds, plan.scale)
-    } else {
-        computeBounds(geometryForBounds)
+    val localBounds = when {
+        !stroke && pathDescriptor.inverseFill -> localClip.bounds
+        geometryForBounds.isEmpty() -> bounds.toLocal(plan.deviceBounds, plan.scale)
+        else -> computeBounds(geometryForBounds)
     }
     return copy(
         pathDescriptor = pathDescriptor.copy(

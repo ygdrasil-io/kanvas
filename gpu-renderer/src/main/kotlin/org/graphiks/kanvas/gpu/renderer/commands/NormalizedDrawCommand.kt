@@ -332,6 +332,19 @@ data class GPUTransformFacts(
     }
 }
 
+private fun GPUTransformFacts.affineDeterminant(): Float =
+    scaleX * scaleY - skewX * skewY
+
+/** Returns whether a captured Scale/Affine determinant is non-finite. */
+fun GPUTransformFacts.isAffineDeterminantNonFinite(): Boolean =
+    type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) &&
+        !affineDeterminant().isFinite()
+
+/** Returns whether a captured Scale/Affine determinant is exactly singular. */
+fun GPUTransformFacts.isAffineDeterminantSingular(): Boolean =
+    type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) &&
+        affineDeterminant() == 0f
+
 /** Captured clip facts owned by commands; complex stacks remain explicit refusal inputs for this slice. */
 data class GPUClipFacts(
     val kind: GPUClipKind,

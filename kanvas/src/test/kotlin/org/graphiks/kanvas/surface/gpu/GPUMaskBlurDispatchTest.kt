@@ -41,6 +41,7 @@ import org.graphiks.kanvas.gpu.renderer.filters.NormalizedMaskFilter
 import org.graphiks.kanvas.gpu.renderer.state.GPUFixedFunctionBlendState
 import org.graphiks.kanvas.surface.Diagnostics
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.types.Matrix33
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -360,6 +361,213 @@ class GPUMaskBlurDispatchTest {
         )
     }
 
+    @Test
+    fun `inverse fill blur keeps the complete mask domain outside its contour`() {
+        val deviceDomain = GPUBounds(8f, 8f, 56f, 56f)
+        val base = transformedPathCommand(
+            strokeWidth = null,
+            transform = GPUTransformFacts.scale(2f, 2f),
+            deviceBounds = deviceDomain,
+            vertices = listOf(
+                10f, 10f,
+                20f, 10f,
+                10f, 20f,
+            ),
+        )
+        val command = base.copy(
+            pathDescriptor = base.pathDescriptor.copy(inverseFill = true),
+            clip = GPUClipFacts.deviceRect(deviceDomain),
+            maskFilter = NormalizedMaskFilter.Blur(
+                NormalizedBlurStyle.NORMAL,
+                sigma = 24f,
+            ),
+        )
+        val plan = MaskBlurPlanner.plan(
+            command.toMaskBlurRequest(64, 64, 4096, RenderConfig.DEFAULT),
+        )
+        assertTrue(plan is MaskBlurPlan.Ready)
+        plan as MaskBlurPlan.Ready
+        assertEquals(deviceDomain, plan.deviceBounds)
+        assertEquals(0.5f, plan.scale)
+        assertEquals(24, plan.localWidth)
+        assertEquals(24, plan.localHeight)
+
+        val local = command.toLocalMaskCommand(plan)
+        assertTrue(local is NormalizedDrawCommand.FillPath)
+        local as NormalizedDrawCommand.FillPath
+        assertTrue(local.pathDescriptor.inverseFill)
+        assertFloatListEquals(
+            listOf(
+                6f, 6f,
+                16f, 6f,
+                6f, 16f,
+            ),
+            local.tessellatedVertices,
+        )
+        assertBoundsEquals(GPUBounds(0f, 0f, 24f, 24f), local.bounds)
+
+        val target = CapturingMaskBlurTarget()
+        val diagnostics = Diagnostics()
+        val result = target.renderMaskBlurCommand(
+            "scene",
+            command,
+            plan,
+            GPUClearColor(0.0, 0.0, 0.0, 0.0),
+            mutableListOf(),
+            diagnostics,
+            "rgba8unorm",
+        )
+
+        assertTrue(result.rendered)
+        assertEquals(0, diagnostics.fatalCount)
+        assertEquals(listOf(0, 0, 24, 24), target.maskScissor)
+    }
+
+    @Test
+    fun `zero scale determinant fill blur refuses before mask reconstruction`() {
+        val transform = Matrix33.scale(0f, 1f).toGPUTransformFacts()
+        assertEquals(GPUTransformType.Affine, transform.type)
+
+        assertAffineDeterminantBlurRefused(
+            command = transformedPathCommand(
+                strokeWidth = null,
+                transform = transform,
+                deviceBounds = GPUBounds(0f, 10f, 0f, 20f),
+                vertices = listOf(
+                    10f, 10f,
+                    20f, 10f,
+                    10f, 20f,
+                ),
+            ),
+            expectedReason = "unsupported.transform.affine_singular",
+        )
+    }
+
+    @Test
+    fun `zero affine determinant stroke blur refuses before mask reconstruction`() {
+        val transform = Matrix33.makeAll(
+            1f, 2f, 0f,
+            0.5f, 1f, 0f,
+        ).toGPUTransformFacts()
+        assertEquals(GPUTransformType.Affine, transform.type)
+
+        assertAffineDeterminantBlurRefused(
+            command = transformedPathCommand(
+                strokeWidth = 4f,
+                transform = transform,
+                deviceBounds = GPUBounds(28f, 14f, 42f, 21f),
+            ),
+            expectedReason = "unsupported.transform.affine_singular",
+        )
+    }
+
+    @Test
+    fun `non finite affine determinant blur keeps the canonical refusal`() {
+        val transform = Matrix33.makeAll(
+            Float.MAX_VALUE, Float.MAX_VALUE, 0f,
+            Float.MAX_VALUE, Float.MAX_VALUE, 0f,
+        ).toGPUTransformFacts()
+        assertEquals(GPUTransformType.Affine, transform.type)
+
+        assertAffineDeterminantBlurRefused(
+            command = transformedPathCommand(
+                strokeWidth = null,
+                transform = transform,
+                deviceBounds = GPUBounds(0f, 0f, 64f, 64f),
+                vertices = listOf(
+                    0f, 0f,
+                    1f, 0f,
+                    0f, 1f,
+                ),
+            ),
+            expectedReason = "unsupported.transform.non_finite",
+        )
+    }
+
+    @Test
+    fun `one ulp nonzero affine determinant remains admitted`() {
+        val transform = Matrix33.makeAll(
+            1f, 1f, 0f,
+            1f, 1.0000001f, 0f,
+        ).toGPUTransformFacts()
+        assertEquals(GPUTransformType.Affine, transform.type)
+        val command = transformedPathCommand(
+            strokeWidth = null,
+            transform = transform,
+            deviceBounds = GPUBounds(20f, 20f, 30f, 30.000002f),
+            vertices = listOf(
+                10f, 10f,
+                20f, 10f,
+                10f, 20f,
+            ),
+        )
+        val plan = readyPlan(NormalizedBlurStyle.NORMAL)
+
+        assertNull(command.maskBlurPreflightRefusalReasonOrNull())
+        val local = command.toLocalMaskCommand(plan)
+        assertTrue(local is NormalizedDrawCommand.FillPath)
+        local as NormalizedDrawCommand.FillPath
+        assertEquals(GPUTransformType.Identity, local.transform.type)
+
+        val target = CapturingMaskBlurTarget()
+        val diagnostics = Diagnostics()
+        val result = target.renderMaskBlurCommand(
+            "scene",
+            command,
+            plan,
+            GPUClearColor(0.0, 0.0, 0.0, 0.0),
+            mutableListOf(),
+            diagnostics,
+            "rgba8unorm",
+        )
+
+        assertTrue(result.rendered)
+        assertEquals(0, diagnostics.fatalCount)
+        assertEquals(listOf("mask", "blur-h", "blur-v", "style", "scene"), target.passKinds)
+    }
+
+    @Test
+    fun `explicit singular and perspective tags keep their stable blur refusals`() {
+        listOf(
+            GPUTransformFacts.singular() to "unsupported_transform:Singular",
+            GPUTransformFacts.perspective() to "unsupported_transform:Perspective",
+        ).forEach { (transform, expectedReason) ->
+            val command = transformedPathCommand(
+                strokeWidth = null,
+                transform = transform,
+                deviceBounds = GPUBounds(0f, 0f, 64f, 64f),
+                vertices = listOf(
+                    0f, 0f,
+                    1f, 0f,
+                    0f, 1f,
+                ),
+            )
+            val plan = readyPlan(NormalizedBlurStyle.NORMAL)
+            assertNull(command.maskBlurPreflightRefusalReasonOrNull())
+            val local = command.toLocalMaskCommand(plan)
+            assertEquals(transform, local.transform)
+
+            val target = CapturingMaskBlurTarget()
+            val diagnostics = Diagnostics()
+            val dispatched = mutableListOf<String>()
+            val result = target.renderMaskBlurCommand(
+                "scene",
+                command,
+                plan,
+                GPUClearColor(0.0, 0.0, 0.0, 0.0),
+                dispatched,
+                diagnostics,
+                "rgba8unorm",
+            )
+
+            assertFalse(result.rendered)
+            assertEquals(expectedReason, diagnostics.entries.single().reason)
+            assertTrue(dispatched.isEmpty())
+            assertTrue(target.passKinds.isEmpty())
+            assertNull(target.maskTriangleData)
+        }
+    }
+
     private fun solidRectCommand(): NormalizedDrawCommand.FillRect {
         val target = GPUTargetFacts(width = 64, height = 64, colorFormat = "rgba8unorm")
         val bounds = GPUBounds(10f, 10f, 30f, 30f)
@@ -526,6 +734,41 @@ class GPUMaskBlurDispatchTest {
         assertEquals(0, diagnostics.fatalCount)
         assertPointSetEquals(expectedVertices, target.maskOutlinePoints())
         assertEquals(expectedScissor, target.maskScissor)
+    }
+
+    private fun assertAffineDeterminantBlurRefused(
+        command: NormalizedDrawCommand.FillPath,
+        expectedReason: String,
+    ) {
+        val plan = readyPlan(NormalizedBlurStyle.NORMAL)
+
+        assertEquals(expectedReason, command.maskBlurPreflightRefusalReasonOrNull())
+        val local = command.toLocalMaskCommand(plan)
+        assertTrue(local is NormalizedDrawCommand.FillPath)
+        local as NormalizedDrawCommand.FillPath
+        assertEquals(command.transform, local.transform)
+        assertEquals(command.stroke, local.stroke)
+        assertFloatListEquals(command.tessellatedVertices, local.tessellatedVertices)
+
+        val target = CapturingMaskBlurTarget()
+        val diagnostics = Diagnostics()
+        val dispatched = mutableListOf<String>()
+        val result = target.renderMaskBlurCommand(
+            "scene",
+            command,
+            plan,
+            GPUClearColor(0.0, 0.0, 0.0, 0.0),
+            dispatched,
+            diagnostics,
+            "rgba8unorm",
+        )
+
+        assertFalse(result.rendered)
+        assertEquals(expectedReason, diagnostics.entries.single().reason)
+        assertTrue(dispatched.isEmpty())
+        assertTrue(target.createdTextures.isEmpty())
+        assertTrue(target.passKinds.isEmpty())
+        assertNull(target.maskTriangleData)
     }
 
     private fun assertFloatListEquals(

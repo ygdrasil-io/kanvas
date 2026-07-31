@@ -16,6 +16,8 @@ import org.graphiks.kanvas.gpu.renderer.commands.GPURRectNormalizer
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTransformType
 import org.graphiks.kanvas.gpu.renderer.commands.NormalizedDrawCommand
+import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantNonFinite
+import org.graphiks.kanvas.gpu.renderer.commands.isAffineDeterminantSingular
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipCoveragePlan
 import org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionPlan
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -2196,14 +2198,6 @@ private fun GPUTransformFacts.hasNonFiniteFacts(): Boolean =
     !translateX.isFinite() || !translateY.isFinite() ||
         !scaleX.isFinite() || !scaleY.isFinite() ||
         !skewX.isFinite() || !skewY.isFinite()
-
-private fun GPUTransformFacts.affineDeterminant(): Float = scaleX * scaleY - skewX * skewY
-
-private fun GPUTransformFacts.isAffineDeterminantNonFinite(): Boolean =
-    type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) && !affineDeterminant().isFinite()
-
-private fun GPUTransformFacts.isAffineDeterminantSingular(): Boolean =
-    type in setOf(GPUTransformType.Scale, GPUTransformType.Affine) && affineDeterminant() == 0f
 
 private fun GPUTransformFacts.isNonAxisAlignedAffine(): Boolean =
     type == GPUTransformType.Affine && (skewX != 0f || skewY != 0f)
