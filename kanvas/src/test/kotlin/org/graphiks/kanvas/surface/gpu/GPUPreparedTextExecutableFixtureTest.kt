@@ -2,6 +2,7 @@ package org.graphiks.kanvas.surface.gpu
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -173,48 +174,138 @@ class GPUPreparedTextExecutableFixtureTest {
         )
         assertEquals(listOf(0.25f, 0.5f, 0.75f, 1f), listOf(cpu.r, cpu.g, cpu.b, cpu.a))
 
+        // Recorded once from this stable typed fixture at bab19ba944853 and
+        // hand-checked against the seven source-family WGSL implementations.
+        // No expected identity below is derived by the compiler under test.
         val expectations = linkedMapOf(
             "solid" to MaterialExpectation(
-                GPUMaterialSourceKind.SolidColor,
-                "material:prepared:solidcolor:",
-                16,
-                0,
+                sourceKind = GPUMaterialSourceKind.SolidColor,
+                materialKey =
+                    "material:prepared:solidcolor:" +
+                        "a01b911399d528824a565d46ff8ca09f25ce4ced80a895520e53bc36c071a2d3",
+                abiHash =
+                    "sha256:4209fedb9e7929e15e81cfca6f687905adf4b6eaba254be2834ae0a8c4a5067a",
+                wgslSha256 =
+                    "4b1404cd4bf7aef896ae03b4f1ee152d8cf58938d0d1c30112147a72167df8cc",
+                fragmentHash =
+                    "a53fc090f5294e03d7e6f78af14a7d6298b70daf5199ab075103374110c256f3",
+                fragmentAbiHash =
+                    "sha256:cebaa20716f6f1f9629b499bb2d2246e734ef50fac556676491d75ef6059b563",
+                finalSourceMarker = "fn solid_source(uv: vec2<f32>) -> vec4<f32> {",
+                composableSourceMarker = "return solidMaterial.color;",
+                uniformByteCount = 16,
+                sampledResourceCount = 0,
             ),
             "linear" to MaterialExpectation(
-                GPUMaterialSourceKind.Gradient,
-                "material:prepared:gradient:",
-                544,
-                0,
+                sourceKind = GPUMaterialSourceKind.Gradient,
+                materialKey =
+                    "material:prepared:gradient:" +
+                        "e200b4eabf9b40cfdd48c07e7c04fde8ec8ecad28d1691326f4926bcf4907147",
+                abiHash =
+                    "sha256:e9daaaca18e41ba66d9343d005e957ff7b0fe72e8289b7ca03d009a1647e30b3",
+                wgslSha256 =
+                    "3135797b82879597ea6bea1c3a583180ef37efc82d29fd16aaed5b5a9269cc77",
+                fragmentHash =
+                    "cad682f065b1247bfe8f7cfd234ab424ac54a28779ca0be6a691aebccf94bcfe",
+                fragmentAbiHash =
+                    "sha256:082ec8a902a93d4e99874345f38a3c2b8a066179fddbdb91e0bd7112f0057b7c",
+                finalSourceMarker = "let lenSq = dot(dir, dir);",
+                composableSourceMarker = "let lenSq = dot(dir, dir);",
+                uniformByteCount = 544,
+                sampledResourceCount = 0,
             ),
             "radial" to MaterialExpectation(
-                GPUMaterialSourceKind.Gradient,
-                "material:prepared:gradient:",
-                528,
-                0,
+                sourceKind = GPUMaterialSourceKind.Gradient,
+                materialKey =
+                    "material:prepared:gradient:" +
+                        "55cec0715fdce8814fbd3179074c75a14f08b7ce38776361729a3acca5987589",
+                abiHash =
+                    "sha256:902261618527aaca2db825e238280ef43ba8ed80a5f2f62b9e4e65eb6eb8ac33",
+                wgslSha256 =
+                    "c6d95da0614bad81bee5a9c51f93bb95f4f34a5b4584a26ae4380e1567f9624a",
+                fragmentHash =
+                    "db6ed7c4edb048b3a5b492ffaff942473fed9744f6405f86385c7d2c0966514d",
+                fragmentAbiHash =
+                    "sha256:9d69f9696464ce0fb4192d210b800d2dd8b35bc2f15d2cc4ad58f169975c4d02",
+                finalSourceMarker = "t_raw = length(d) / gradient.radius;",
+                composableSourceMarker = "t_raw = length(d) / gradient.radius;",
+                uniformByteCount = 528,
+                sampledResourceCount = 0,
             ),
             "sweep" to MaterialExpectation(
-                GPUMaterialSourceKind.Gradient,
-                "material:prepared:gradient:",
-                544,
-                0,
+                sourceKind = GPUMaterialSourceKind.Gradient,
+                materialKey =
+                    "material:prepared:gradient:" +
+                        "42def2ea32f2be1e674584084b3170652633655c98faee12466ec4f60fbd7dfa",
+                abiHash =
+                    "sha256:1e1b1f81d21b58dee29466bac8093b0ef2044cf9977b26753a0d49f8420cef6c",
+                wgslSha256 =
+                    "4a85b68d2661aaf863faecb5263d46255007cd5f06ad2ff7cc81bfe4182d8596",
+                fragmentHash =
+                    "1d7a8717541cc0942aecc7cd77c083a2b47f81c66c1e322e640c0f5d6d76a96e",
+                fragmentAbiHash =
+                    "sha256:19fe58b296b486e7fec11c509dfd216c16c681e4b9cbdea83178237debfe2fe4",
+                finalSourceMarker = "const TWO_PI: f32 = 6.2831853071795864;",
+                composableSourceMarker = "const TWO_PI: f32 = 6.2831853071795864;",
+                uniformByteCount = 544,
+                sampledResourceCount = 0,
             ),
             "conical" to MaterialExpectation(
-                GPUMaterialSourceKind.Gradient,
-                "material:prepared:gradient:",
-                560,
-                0,
+                sourceKind = GPUMaterialSourceKind.Gradient,
+                materialKey =
+                    "material:prepared:gradient:" +
+                        "7d73a591a0d7128bf48a9e1e41c59f85cfe5c94c88471550259fb14d2a546020",
+                abiHash =
+                    "sha256:d02f5a27ecced085ff612fe838138e23b70899c35491b298e172d58d3850c4f7",
+                wgslSha256 =
+                    "3fcf60a17773dccfb1c8931875d13ec5a16f730b7f2ae8e897981c046e5f9038",
+                fragmentHash =
+                    "88a0a418c7d217b7c1f569f05db80b870d0c6dc2d0097bbaed26548bab8cfccd",
+                fragmentAbiHash =
+                    "sha256:745951cb48eeb6d7b53ad164534408826518e2febb28a7106deae4213891e159",
+                finalSourceMarker = "let A = dx*dx + dy*dy - dr*dr;",
+                composableSourceMarker = "let A = dx*dx + dy*dy - dr*dr;",
+                uniformByteCount = 560,
+                sampledResourceCount = 0,
             ),
             "runtime" to MaterialExpectation(
-                GPUMaterialSourceKind.RuntimeEffect,
-                "material:prepared:runtimeeffect:",
-                16,
-                0,
+                sourceKind = GPUMaterialSourceKind.RuntimeEffect,
+                materialKey =
+                    "material:prepared:runtimeeffect:" +
+                        "34ebfa0aeb4b4a66bf25ff89bb0814e794bf1700ee1d5972d8d51ce50fe52d9d",
+                abiHash =
+                    "sha256:855924b7b1c316b2b7e0cd963237b66dcddc67795f6989bcdf5d44b129fb85f0",
+                wgslSha256 =
+                    "0a1b50d95d53a2eae8dd6994b03dc25544a4cda1e67029b9c92281983bb8a2cb",
+                fragmentHash =
+                    "93dd5750f4ab7734859633ef5f28554e2406402b8fc6dc1d00aa8934e78265c6",
+                fragmentAbiHash =
+                    "sha256:f4f9dae638b5b3503cd71ce47fc9a192d2785955a0e398e2158723d76c79e0ac",
+                finalSourceMarker =
+                    "fn simple_rt_source(uv: vec2<f32>) -> vec4<f32> {",
+                composableSourceMarker =
+                    "fn simple_rt_source(uv: vec2<f32>) -> vec4<f32> {",
+                uniformByteCount = 16,
+                sampledResourceCount = 0,
             ),
             "image" to MaterialExpectation(
-                GPUMaterialSourceKind.ImageShader,
-                "material:prepared:imageshader:",
-                32,
-                1,
+                sourceKind = GPUMaterialSourceKind.ImageShader,
+                materialKey =
+                    "material:prepared:imageshader:" +
+                        "0672191788c0ea07e9722f221b92fd86a71dfd539cce4760bbc6a53697c6cd35",
+                abiHash =
+                    "sha256:e2f72911feeccb17401180ae1f67ea9b20a4c1af5b9da57717d44decf645396e",
+                wgslSha256 =
+                    "7337b56fac8b54a56df024cce5bedb65d9a871abaadf3c209c823375fc006683",
+                fragmentHash =
+                    "6adabce4713b8ade386e0b44991f3ec97b6d8b14901e96d94f293291a8a4e9eb",
+                fragmentAbiHash =
+                    "sha256:f7a304a6cd238e398d6bfe45e437dd9fe4a0466c9d86e18558310ca11825d507",
+                finalSourceMarker = "let sampled = bitmap_shader_clamp(input.uv);",
+                composableSourceMarker =
+                    "let sampled = bitmap_shader_clamp(localPosition);",
+                uniformByteCount = 32,
+                sampledResourceCount = 1,
             ),
         )
         programs.forEach { (label, program) ->
@@ -234,8 +325,25 @@ class GPUPreparedTextExecutableFixtureTest {
         assertEquals("fs_main", runtimeProgram.entryPoint)
         assertEquals("runtime.simple_rt", resolved.program.effectId)
         assertEquals(1, resolved.program.descriptorVersion)
-        assertEquals(SimpleRTEntryPoint, resolved.program.sourceFunction)
+        assertEquals("simple_rt_source", SimpleRTEntryPoint)
+        assertEquals("simple_rt_source", resolved.program.sourceFunction)
         assertEquals(16, resolved.program.uniformBlockSizeBytes)
+        val runtimeFinalInvocation = """
+            @fragment
+            fn fs_main(input: PreparedMaterialVertexOutput) -> @location(0) vec4<f32> {
+                return simple_rt_source(input.uv);
+            }
+        """.trimIndent()
+        val runtimeComposableInvocation = """
+            fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {
+                return simple_rt_source(localPosition);
+            }
+        """.trimIndent()
+        assertRuntimeInvocation(runtimeProgram.wgslSource, runtimeFinalInvocation)
+        assertRuntimeInvocation(
+            runtimeProgram.composableFragment.declarationsWgsl,
+            runtimeComposableInvocation,
+        )
         val registeredField = resolved.program.uniformFields.single()
         assertEquals("gColor", registeredField.name)
         assertEquals(0, registeredField.offsetBytes)
@@ -271,6 +379,22 @@ class GPUPreparedTextExecutableFixtureTest {
             runtimeProgram.composableFragment.uniformBinding,
         )
         assertTrue(runtimeProgram.composableFragment.sampledBindings.isEmpty())
+        val runtimeWithoutInvocation = runtimeProgram.wgslSource.replace(
+            "return simple_rt_source(input.uv);",
+            "return vec4<f32>(0.0);",
+        )
+        assertNotEquals(runtimeProgram.wgslSource, runtimeWithoutInvocation)
+        assertTrue(runtimeWithoutInvocation.startsWith(resolved.program.wgslSource))
+        val parsedRuntimeWithoutInvocation = parseWgslResult(runtimeWithoutInvocation)
+        assertTrue(
+            parsedRuntimeWithoutInvocation.isSuccess,
+            parsedRuntimeWithoutInvocation.errors.joinToString { error -> error.message },
+        )
+        assertFailsWith<AssertionError>(
+            "registered SimpleRT source without its final invocation must fail",
+        ) {
+            assertRuntimeInvocation(runtimeWithoutInvocation, runtimeFinalInvocation)
+        }
 
         val imageProgram = programs.getValue("image")
         assertEquals(
@@ -311,6 +435,25 @@ class GPUPreparedTextExecutableFixtureTest {
                 listOf("linear", "radial", "sweep", "conical")
                     .associateWith { programs.getValue("linear") },
             )
+        }
+        assertFailsWith<AssertionError>("exchanging linear and sweep must fail") {
+            assertMaterialProgram(
+                "linear",
+                programs.getValue("sweep"),
+                expectations.getValue("linear"),
+            )
+        }
+        assertFailsWith<AssertionError>("four distinct but rotated gradients must fail") {
+            val rotated = linkedMapOf(
+                "linear" to programs.getValue("sweep"),
+                "radial" to programs.getValue("conical"),
+                "sweep" to programs.getValue("linear"),
+                "conical" to programs.getValue("radial"),
+            )
+            assertDistinctGradientPrograms(rotated)
+            rotated.forEach { (label, program) ->
+                assertMaterialProgram(label, program, expectations.getValue(label))
+            }
         }
     }
 
@@ -541,8 +684,31 @@ class GPUPreparedTextExecutableFixtureTest {
         expected: MaterialExpectation,
     ) {
         assertEquals(expected.sourceKind, program.sourceKind, label)
-        assertTrue(program.materialKey.startsWith(expected.materialKeyPrefix), label)
-        assertTrue(program.abiHash.matches(Regex("sha256:[0-9a-f]{64}")), label)
+        assertEquals(expected.materialKey, program.materialKey, label)
+        assertEquals(expected.abiHash, program.abiHash, label)
+        assertEquals(expected.wgslSha256, sha256(program.wgslSource), label)
+        assertEquals(
+            expected.fragmentHash,
+            program.composableFragment.fragmentHash,
+            label,
+        )
+        assertEquals(
+            expected.fragmentAbiHash,
+            program.composableFragment.abiHash,
+            label,
+        )
+        assertTrue(program.wgslSource.contains(expected.finalSourceMarker), label)
+        assertTrue(
+            program.composableFragment.declarationsWgsl
+                .contains(expected.composableSourceMarker),
+            label,
+        )
+        assertTrue(
+            program.composableFragment.declarationsWgsl.contains(
+                "fn kanvas_material_source(localPosition: vec2<f32>) -> vec4<f32> {",
+            ),
+            label,
+        )
         assertEquals("fs_main", program.entryPoint, label)
         assertEquals(expected.uniformByteCount, program.uniformBytes.size, label)
         assertEquals(expected.sampledResourceCount, program.sampledResources.size, label)
@@ -562,6 +728,23 @@ class GPUPreparedTextExecutableFixtureTest {
         )
     }
 
+    private fun assertRuntimeInvocation(source: String, exactCallSite: String) {
+        val normalizedSource = source.lineSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .joinToString("\n")
+        val normalizedCallSite = exactCallSite.lineSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .joinToString("\n")
+        assertTrue(normalizedSource.contains(normalizedCallSite))
+    }
+
+    private fun sha256(source: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(source.encodeToByteArray())
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+
     private fun assertDistinctGradientPrograms(
         programs: Map<String, GPUPreparedMaterialProgram>,
     ) {
@@ -576,7 +759,13 @@ class GPUPreparedTextExecutableFixtureTest {
 
     private data class MaterialExpectation(
         val sourceKind: GPUMaterialSourceKind,
-        val materialKeyPrefix: String,
+        val materialKey: String,
+        val abiHash: String,
+        val wgslSha256: String,
+        val fragmentHash: String,
+        val fragmentAbiHash: String,
+        val finalSourceMarker: String,
+        val composableSourceMarker: String,
         val uniformByteCount: Int,
         val sampledResourceCount: Int,
     )
