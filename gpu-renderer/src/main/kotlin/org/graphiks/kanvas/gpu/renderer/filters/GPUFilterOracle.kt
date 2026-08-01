@@ -205,10 +205,8 @@ object GPUFilterOracle {
         val newH = source.height + kotlin.math.abs(idy)
         val dst = Rgba8Bitmap(newW, newH, FloatArray(newW * newH * 4))
 
-        val offsetX = maxOf(0, idx)
-        val offsetY = maxOf(0, idy)
-        val srcX = maxOf(0, -idx)
-        val srcY = maxOf(0, -idy)
+        val offsetX = kotlin.math.abs(idx)
+        val offsetY = kotlin.math.abs(idy)
 
         for (y in 0 until source.height) {
             for (x in 0 until source.width) {
@@ -280,13 +278,11 @@ object GPUFilterOracle {
         val dyInt = dy.toInt()
         val srcLeft = maxOf(0, -dxInt)
         val srcTop = maxOf(0, -dyInt)
-        val shadowLeft = maxOf(0, dxInt)
-        val shadowTop = maxOf(0, dyInt)
+        val shadowLeft = minOf(0, dxInt)
+        val shadowTop = minOf(0, dyInt)
 
-        val outW = maxOf(source.width + (if (dxInt > 0) dxInt else 0),
-            offsetShadow.width + (if (dxInt < 0) -dxInt else 0))
-        val outH = maxOf(source.height + (if (dyInt > 0) dyInt else 0),
-            offsetShadow.height + (if (dyInt < 0) -dyInt else 0))
+        val outW = source.width + kotlin.math.abs(dxInt)
+        val outH = source.height + kotlin.math.abs(dyInt)
 
         val dst = Rgba8Bitmap(outW, outH, FloatArray(outW * outH * 4))
         val rgba = FloatArray(4)
@@ -296,7 +292,7 @@ object GPUFilterOracle {
             for (x in 0 until offsetShadow.width) {
                 val ox = shadowLeft + x
                 val oy = shadowTop + y
-                if (ox < outW && oy < outH) {
+                if (ox >= 0 && oy >= 0 && ox < outW && oy < outH) {
                     offsetShadow.getPixel(x, y, rgba)
                     val dp = (oy * outW + ox) * 4
                     dst.pixels[dp] = rgba[0]

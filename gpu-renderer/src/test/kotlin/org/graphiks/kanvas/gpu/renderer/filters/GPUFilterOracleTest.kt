@@ -196,6 +196,56 @@ class GPUFilterOracleTest {
     }
 
     @Test
+    fun `negative offset shifts content left`() {
+        val source = Rgba8Bitmap(3, 1, floatArrayOf(
+            1f, 0f, 0f, 1f,
+            0f, 1f, 0f, 1f,
+            0f, 0f, 1f, 1f,
+        ))
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("off-neg-x"),
+            kind = GPUPreparedFilterKind.Offset,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = OffsetParams(dx = -1f, dy = 0f),
+            provenance = "test/off-neg-x",
+        )
+        val out = GPUFilterOracle.apply(source, node, emptyMap())
+        assertEquals(4, out.width)                       // W + |dx|
+        val rgba = FloatArray(4)
+        out.getPixel(0, 0, rgba)
+        assertEquals(0f, rgba[0], 1e-4f)                 // empty column on the left
+        out.getPixel(1, 0, rgba)
+        assertEquals(1f, rgba[0], 1e-4f)                 // first source pixel shifted to x=1
+        out.getPixel(4 - 1, 0, rgba)
+        assertEquals(0f, rgba[0], 1e-4f)                 // last source pixel beyond canvas end
+    }
+
+    @Test
+    fun `negative offset shifts content up`() {
+        val source = Rgba8Bitmap(1, 3, floatArrayOf(
+            1f, 0f, 0f, 1f,
+            0f, 1f, 0f, 1f,
+            0f, 0f, 1f, 1f,
+        ))
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("off-neg-y"),
+            kind = GPUPreparedFilterKind.Offset,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = OffsetParams(dx = 0f, dy = -1f),
+            provenance = "test/off-neg-y",
+        )
+        val out = GPUFilterOracle.apply(source, node, emptyMap())
+        assertEquals(4, out.height)                      // H + |dy|
+        val rgba = FloatArray(4)
+        out.getPixel(0, 0, rgba)
+        assertEquals(0f, rgba[0], 1e-4f)                 // empty row on the top
+        out.getPixel(0, 1, rgba)
+        assertEquals(1f, rgba[0], 1e-4f)                 // first source pixel shifted to y=1
+        out.getPixel(0, 4 - 1, rgba)
+        assertEquals(0f, rgba[0], 1e-4f)                 // last source pixel beyond canvas end
+    }
+
+    @Test
     fun `offset zero is identity`() {
         val source = solidBitmap(3, 3, 0f, 1f, 0f, 1f)
         val node = GPUPreparedFilterNode(
@@ -332,6 +382,40 @@ class GPUFilterOracleTest {
                 assertTrue(abs(rgba[1] - 1f) < 0.1f, "Green channel should be preserved at ($x,$y): got ${rgba[1]}")
             }
         }
+    }
+
+    @Test
+    fun `dropShadow with negative dx places shadow left of source`() {
+        val source = Rgba8Bitmap(3, 1, floatArrayOf(
+            1f, 0f, 0f, 1f,
+            0f, 1f, 0f, 1f,
+            0f, 0f, 1f, 1f,
+        ))
+        val shadowColor = floatArrayOf(0f, 0f, 0f, 0.8f)
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("ds-neg"),
+            kind = GPUPreparedFilterKind.DropShadow,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = DropShadowParams(-1f, 0f, 0f, 0f, shadowColor.copyOf()),
+            provenance = "test/ds-neg",
+        )
+        val out = GPUFilterOracle.apply(source, node, emptyMap())
+
+        // Union of source [0,3) and shadow shifted by -1 ([-1,2)) is [-1,3) -> width 4
+        assertEquals(4, out.width)
+        assertEquals(1, out.height)
+
+        val rgba = FloatArray(4)
+        // Shadow color visible at x=0, left of the source
+        out.getPixel(0, 0, rgba)
+        assertEquals(0f, rgba[0], 1e-4f)
+        assertEquals(0f, rgba[1], 1e-4f)
+        assertEquals(0f, rgba[2], 1e-4f)
+        assertEquals(0.8f, rgba[3], 1e-4f)
+        // Source starts at x=1
+        out.getPixel(1, 0, rgba)
+        assertEquals(1f, rgba[0], 1e-4f)
+        assertEquals(1f, rgba[3], 1e-4f)
     }
 
     // --- Helpers ---
