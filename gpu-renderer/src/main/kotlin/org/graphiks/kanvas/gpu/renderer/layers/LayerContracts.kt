@@ -45,6 +45,8 @@ data class GPULayerSaveRecord(
     val initWithPrevious: Boolean = false,
     val sourceFilterCount: Int = 0,
     val restoreBlendMode: String = "srcOver",
+    val alpha: Float = 1f,
+    val clipLabel: String? = null,
     val cpuFallbackRequested: Boolean = false,
     val preserveLCDText: Boolean = false,
     val f16Requested: Boolean = false,
@@ -974,6 +976,8 @@ private fun GPUSaveLayerMaterializationRequest.layerCommands(): List<GPUPassComm
             blendPlan = compositeBlendPlan(execution.composite.blendModeLabel, target.formatClass),
             routeLabel = execution.composite.compositeRoute,
             tokenLabel = token,
+            alpha = gatePlan.layerPlan.saveRecord.alpha,
+            clipLabel = gatePlan.layerPlan.saveRecord.clipLabel,
         ),
         GPUPassCommand.EndRenderPass(passId = parentPassId),
     )

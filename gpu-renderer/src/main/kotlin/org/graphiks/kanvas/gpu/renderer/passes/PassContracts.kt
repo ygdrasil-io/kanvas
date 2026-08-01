@@ -813,6 +813,8 @@ sealed interface GPUPassCommand {
         val blendPlan: GPUBlendPlan,
         val routeLabel: String,
         val tokenLabel: String,
+        val alpha: Float = 1f,
+        val clipLabel: String? = null,
     ) : GPUPassCommand {
         override val commandLabel: String get() = "compositeLayer"
         override val sourcePacketId: GPUDrawPacketID? get() = null

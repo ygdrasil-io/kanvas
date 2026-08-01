@@ -30,5 +30,14 @@ enum class GPUBlendMode(val gpuLabel: String) {
     HUE("hue"),
     SATURATION("saturation"),
     COLOR("color"),
-    LUMINOSITY("luminosity"),
+    LUMINOSITY("luminosity");
+
+    /**
+     * Camel-case restore label accepted by the saveLayer restore-blend gate
+     * (e.g. [SRC_OVER] -> "srcOver", [COLOR_DODGE] -> "colorDodge").
+     */
+    val restoreLabel: String
+        get() = gpuLabel.split('_').mapIndexed { index, part ->
+            if (index == 0) part else part.replaceFirstChar { it.uppercase() }
+        }.joinToString("")
 }

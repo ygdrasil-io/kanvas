@@ -8,8 +8,13 @@ import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeState
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMatrixSnapshot
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedPaintSnapshot
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedPaintStyle
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedRectSnapshot
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedStrokeCap
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedStrokeJoin
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreflightCapabilities
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import kotlin.test.Test
@@ -187,6 +192,96 @@ class GPUPreparedSaveLayerFrameHandlingTest {
         assertEquals(1, ready.results.size)
     }
 
+    @Test
+    fun `translucent alpha saveLayer produces composite layer command with layer alpha`() {
+        val layerId = GPUPreparedCompositeScopeId("layer_1")
+        val layer = saveLayerScope(
+            id = layerId,
+            bounds = rectSnapshot(0f, 0f, 64f, 48f),
+            paint = translucentPaintSnapshot(),
+        )
+        val scopes = mapOf(
+            rootScopeId to rootScope(entries = listOf(GPUPreparedCompositeEntry.Scope(layerId))),
+            layerId to layer,
+        )
+
+        val handling = builder().handleSaveLayer(
+            scopes = scopes,
+            rootScopeId = rootScopeId,
+            identity = "test-alpha",
+            capabilities = defaultCapabilities(),
+            context = defaultContext(),
+        )
+
+        val ready = assertIs<GPUPreparedSaveLayerFrameHandling.Ready>(handling)
+        val composite = ready.commands
+            .filterIsInstance<GPUPassCommand.CompositeLayer>()
+            .single()
+        assertEquals(128f / 255f, composite.alpha)
+    }
+
+    @Test
+    fun `device rect clip saveLayer produces composite layer command carrying the clip label`() {
+        val layerId = GPUPreparedCompositeScopeId("layer_1")
+        val clip = GPUPreparedClipSnapshot.DeviceRect(
+            rect = rectSnapshot(4f, 5f, 60f, 40f),
+            antiAlias = false,
+        )
+        val layer = saveLayerScope(
+            id = layerId,
+            bounds = rectSnapshot(0f, 0f, 64f, 48f),
+            clip = clip,
+        )
+        val scopes = mapOf(
+            rootScopeId to rootScope(entries = listOf(GPUPreparedCompositeEntry.Scope(layerId))),
+            layerId to layer,
+        )
+
+        val handling = builder().handleSaveLayer(
+            scopes = scopes,
+            rootScopeId = rootScopeId,
+            identity = "test-clip",
+            capabilities = defaultCapabilities(),
+            context = defaultContext(),
+        )
+
+        val ready = assertIs<GPUPreparedSaveLayerFrameHandling.Ready>(handling)
+        val composite = ready.commands
+            .filterIsInstance<GPUPassCommand.CompositeLayer>()
+            .single()
+        assertEquals(
+            "device-rect:l=${clip.rect.leftBits},t=${clip.rect.topBits},r=${clip.rect.rightBits}," +
+                "b=${clip.rect.bottomBits},aa=${clip.antiAlias}",
+            composite.clipLabel,
+        )
+    }
+
+    @Test
+    fun `non-srcOver blend saveLayer is refused by the restore blend gate`() {
+        val layerId = GPUPreparedCompositeScopeId("layer_1")
+        val layer = saveLayerScope(
+            id = layerId,
+            bounds = rectSnapshot(0f, 0f, 64f, 48f),
+            paint = modulatePaintSnapshot(),
+        )
+        val scopes = mapOf(
+            rootScopeId to rootScope(entries = listOf(GPUPreparedCompositeEntry.Scope(layerId))),
+            layerId to layer,
+        )
+
+        val handling = builder().handleSaveLayer(
+            scopes = scopes,
+            rootScopeId = rootScopeId,
+            identity = "test-modulate",
+            capabilities = defaultCapabilities(),
+            context = defaultContext(),
+        )
+
+        val refused = assertIs<GPUPreparedSaveLayerFrameHandling.Refused>(handling)
+        assertEquals("unsupported.layer.restore_blend", refused.code)
+        assertTrue(refused.facts.containsKey("scopeId"))
+    }
+
     private fun builder() = GPUPreparedSurfaceFrameTaskListBuilder()
 
     private fun defaultCapabilities() =
@@ -220,6 +315,8 @@ class GPUPreparedSaveLayerFrameHandlingTest {
             bounds: GPUPreparedRectSnapshot,
             parentId: GPUPreparedCompositeScopeId = rootScopeId,
             saveOperationIndex: Int? = 0,
+            paint: GPUPreparedPaintSnapshot? = null,
+            clip: GPUPreparedClipSnapshot = GPUPreparedClipSnapshot.WideOpen,
         ): GPUPreparedCompositeScope = GPUPreparedCompositeScope(
             id = id,
             parentId = parentId,
@@ -228,18 +325,41 @@ class GPUPreparedSaveLayerFrameHandlingTest {
             entries = listOf(GPUPreparedCompositeEntry.Draw(0)),
             sourceKind = GPUPreparedCompositeScopeKind.SaveLayer,
             provenance = "layer[0]",
-            state = scopeState(bounds = bounds),
+            state = scopeState(bounds = bounds, paint = paint, clip = clip),
         )
 
         private fun scopeState(
             bounds: GPUPreparedRectSnapshot? = null,
             transform: GPUPreparedMatrixSnapshot = identityMatrix(),
             clip: GPUPreparedClipSnapshot = GPUPreparedClipSnapshot.WideOpen,
+            paint: GPUPreparedPaintSnapshot? = null,
         ): GPUPreparedCompositeScopeState = GPUPreparedCompositeScopeState(
             bounds = bounds,
-            paint = null,
+            paint = paint,
             transform = transform,
             clip = clip,
+        )
+
+        private fun translucentPaintSnapshot(): GPUPreparedPaintSnapshot = paintSnapshot(
+            colorArgb = 128u shl 24,
+        )
+
+        private fun modulatePaintSnapshot(): GPUPreparedPaintSnapshot = paintSnapshot(
+            blendMode = GPUBlendMode.MODULATE,
+        )
+
+        private fun paintSnapshot(
+            colorArgb: UInt = 0xFFFFFFFFu,
+            blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
+        ): GPUPreparedPaintSnapshot = GPUPreparedPaintSnapshot(
+            colorArgb = colorArgb,
+            blendMode = blendMode,
+            style = GPUPreparedPaintStyle.Fill,
+            strokeWidthBits = 0f.toRawBits(),
+            strokeCap = GPUPreparedStrokeCap.Butt,
+            strokeJoin = GPUPreparedStrokeJoin.Miter,
+            strokeMiterBits = 4f.toRawBits(),
+            antiAlias = false,
         )
 
         private fun rectSnapshot(

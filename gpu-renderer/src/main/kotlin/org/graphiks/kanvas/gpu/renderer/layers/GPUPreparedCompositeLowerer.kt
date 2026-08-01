@@ -80,8 +80,26 @@ object GPUPreparedCompositeLowerer {
             backdropRequired = state.backdropRequired,
             parentScopeId = scope.parentId?.let { GPULayerScopeID(it.value) },
             childCommandIds = childIds,
+            restoreBlendMode = state.paint?.blendMode?.restoreLabel ?: "srcOver",
+            alpha = state.paint.layerAlpha(),
+            clipLabel = state.clip.clipLabel(),
         )
     }
+
+    /** Layer opacity derived from the captured paint color alpha byte. */
+    private fun GPUPreparedPaintSnapshot?.layerAlpha(): Float =
+        this?.let { paint ->
+            ((paint.colorArgb shr 24) and 0xFFu).toFloat() / 255f
+        } ?: 1f
+
+    /** Faithful lossless label for an accepted clip snapshot. */
+    private fun GPUPreparedClipSnapshot.clipLabel(): String? =
+        when (this) {
+            GPUPreparedClipSnapshot.WideOpen -> null
+            is GPUPreparedClipSnapshot.DeviceRect ->
+                "device-rect:l=${rect.leftBits},t=${rect.topBits},r=${rect.rightBits}," +
+                    "b=${rect.bottomBits},aa=$antiAlias"
+        }
 
     private fun buildBounds(state: GPUPreparedCompositeScopeState): GPULayerBoundsPlan {
         val bounds = state.bounds

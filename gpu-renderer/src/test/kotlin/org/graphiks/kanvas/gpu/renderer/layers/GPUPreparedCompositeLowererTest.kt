@@ -164,6 +164,153 @@ class GPUPreparedCompositeLowererTest {
     }
 
     @Test
+    fun `translucent layer paint alpha is threaded into the save record`() {
+        val layerId = GPUPreparedCompositeScopeId("layer_1")
+        val layer = GPUPreparedCompositeScope(
+            id = layerId,
+            parentId = rootScopeId,
+            saveOperationIndex = 0,
+            restoreOperationIndex = 1,
+            entries = listOf(GPUPreparedCompositeEntry.Draw(0)),
+            sourceKind = GPUPreparedCompositeScopeKind.SaveLayer,
+            provenance = "layer[0]",
+            state = scopeState(
+                bounds = rectSnapshot(0f, 0f, 64f, 48f),
+                paint = paintSnapshot(colorArgb = 128u shl 24),
+            ),
+        )
+        val scopes = mapOf(
+            rootScopeId to rootScope(entries = listOf(GPUPreparedCompositeEntry.Scope(layerId))),
+            layerId to layer,
+        )
+
+        val ready = assertIs<GPUPreparedCompositeLowering.Ready>(
+            GPUPreparedCompositeLowerer.lower(scopes, rootScopeId, identity = "test-alpha"),
+        )
+        val saveRecord = ready.plan.layers.single().saveRecord
+        assertEquals(128f / 255f, saveRecord.alpha)
+    }
+
+    @Test
+    fun `device rect clip is threaded into the save record clip label`() {
+        val layerId = GPUPreparedCompositeScopeId("layer_1")
+        val clip = GPUPreparedClipSnapshot.DeviceRect(
+            rect = rectSnapshot(0f, 0f, 32f, 24f),
+            antiAlias = true,
+        )
+        val layer = GPUPreparedCompositeScope(
+            id = layerId,
+            parentId = rootScopeId,
+            saveOperationIndex = 0,
+            restoreOperationIndex = 1,
+            entries = listOf(GPUPreparedCompositeEntry.Draw(0)),
+            sourceKind = GPUPreparedCompositeScopeKind.SaveLayer,
+            provenance = "layer[0]",
+            state = scopeState(
+                bounds = rectSnapshot(0f, 0f, 64f, 48f),
+                clip = clip,
+            ),
+        )
+        val scopes = mapOf(
+            rootScopeId to rootScope(entries = listOf(GPUPreparedCompositeEntry.Scope(layerId))),
+            layerId to layer,
+        )
+
+        val ready = assertIs<GPUPreparedCompositeLowering.Ready>(
+            GPUPreparedCompositeLowerer.lower(scopes, rootScopeId, identity = "test-clip"),
+        )
+        val saveRecord = ready.plan.layers.single().saveRecord
+        assertEquals(
+            "device-rect:l=${clip.rect.leftBits},t=${clip.rect.topBits},r=${clip.rect.rightBits}," +
+                "b=${clip.rect.bottomBits},aa=${clip.antiAlias}",
+            saveRecord.clipLabel,
+        )
+    }
+
+    @Test
+    fun `wide open clip yields null clip label and opaque default alpha`() {
+        val layerId = GPUPreparedCompositeScopeId("layer_1")
+        val layer = GPUPreparedCompositeScope(
+            id = layerId,
+            parentId = rootScopeId,
+            saveOperationIndex = 0,
+            restoreOperationIndex = 1,
+            entries = listOf(GPUPreparedCompositeEntry.Draw(0)),
+            sourceKind = GPUPreparedCompositeScopeKind.SaveLayer,
+            provenance = "layer[0]",
+            state = scopeState(bounds = rectSnapshot(0f, 0f, 64f, 48f)),
+        )
+        val scopes = mapOf(
+            rootScopeId to rootScope(entries = listOf(GPUPreparedCompositeEntry.Scope(layerId))),
+            layerId to layer,
+        )
+
+        val ready = assertIs<GPUPreparedCompositeLowering.Ready>(
+            GPUPreparedCompositeLowerer.lower(scopes, rootScopeId, identity = "test-wide-open"),
+        )
+        val saveRecord = ready.plan.layers.single().saveRecord
+        assertEquals(null, saveRecord.clipLabel)
+        assertEquals(1f, saveRecord.alpha)
+        assertEquals("srcOver", saveRecord.restoreBlendMode)
+    }
+
+    @Test
+    fun `srcOver blend paint threads the restore blend label`() {
+        val layerId = GPUPreparedCompositeScopeId("layer_1")
+        val layer = GPUPreparedCompositeScope(
+            id = layerId,
+            parentId = rootScopeId,
+            saveOperationIndex = 0,
+            restoreOperationIndex = 1,
+            entries = listOf(GPUPreparedCompositeEntry.Draw(0)),
+            sourceKind = GPUPreparedCompositeScopeKind.SaveLayer,
+            provenance = "layer[0]",
+            state = scopeState(
+                bounds = rectSnapshot(0f, 0f, 64f, 48f),
+                paint = paintSnapshot(blendMode = GPUBlendMode.SRC_OVER),
+            ),
+        )
+        val scopes = mapOf(
+            rootScopeId to rootScope(entries = listOf(GPUPreparedCompositeEntry.Scope(layerId))),
+            layerId to layer,
+        )
+
+        val ready = assertIs<GPUPreparedCompositeLowering.Ready>(
+            GPUPreparedCompositeLowerer.lower(scopes, rootScopeId, identity = "test-srcover"),
+        )
+        val saveRecord = ready.plan.layers.single().saveRecord
+        assertEquals("srcOver", saveRecord.restoreBlendMode)
+    }
+
+    @Test
+    fun `non-srcOver blend paint is refused by the restore blend gate`() {
+        val layerId = GPUPreparedCompositeScopeId("layer_1")
+        val layer = GPUPreparedCompositeScope(
+            id = layerId,
+            parentId = rootScopeId,
+            saveOperationIndex = 5,
+            restoreOperationIndex = 6,
+            entries = listOf(GPUPreparedCompositeEntry.Draw(0)),
+            sourceKind = GPUPreparedCompositeScopeKind.SaveLayer,
+            provenance = "layer[0]",
+            state = scopeState(
+                bounds = rectSnapshot(0f, 0f, 64f, 48f),
+                paint = paintSnapshot(blendMode = GPUBlendMode.MODULATE),
+            ),
+        )
+        val scopes = mapOf(
+            rootScopeId to rootScope(entries = listOf(GPUPreparedCompositeEntry.Scope(layerId))),
+            layerId to layer,
+        )
+
+        val result = GPUPreparedCompositeLowerer.lower(scopes, rootScopeId, identity = "test-modulate")
+
+        val refused = assertIs<GPUPreparedCompositeLowering.Refused>(result)
+        assertEquals("unsupported.layer.restore_blend", refused.code)
+        assertEquals(5, refused.operationIndex)
+    }
+
+    @Test
     fun `FilterPictureSource scope is skipped`() {
         val filterId = GPUPreparedCompositeScopeId("filter_1")
         val filter = GPUPreparedCompositeScope(
@@ -225,6 +372,20 @@ class GPUPreparedCompositeLowererTest {
             topBits = top.toRawBits(),
             rightBits = right.toRawBits(),
             bottomBits = bottom.toRawBits(),
+        )
+
+        private fun paintSnapshot(
+            colorArgb: UInt = 0xFFFFFFFFu,
+            blendMode: GPUBlendMode = GPUBlendMode.SRC_OVER,
+        ): GPUPreparedPaintSnapshot = GPUPreparedPaintSnapshot(
+            colorArgb = colorArgb,
+            blendMode = blendMode,
+            style = GPUPreparedPaintStyle.Fill,
+            strokeWidthBits = 0f.toRawBits(),
+            strokeCap = GPUPreparedStrokeCap.Butt,
+            strokeJoin = GPUPreparedStrokeJoin.Miter,
+            strokeMiterBits = 4f.toRawBits(),
+            antiAlias = false,
         )
 
         private fun identityMatrix(): GPUPreparedMatrixSnapshot = GPUPreparedMatrixSnapshot(

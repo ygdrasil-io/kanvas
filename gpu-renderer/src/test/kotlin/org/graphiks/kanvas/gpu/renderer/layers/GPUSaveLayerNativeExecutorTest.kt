@@ -92,6 +92,48 @@ class GPUSaveLayerNativeExecutorTest {
     }
 
     @Test
+    fun `executor threads layer alpha and clip label into the composite layer command`() {
+        val gatePlan = buildMinimalGatePlan(
+            alpha = 128f / 255f,
+            clipLabel = "device-rect:l=0,t=0,r=1107296256,b=1102053376,aa=true",
+        )
+        val request = GPUSaveLayerMaterializationRequest(
+            targetId = "test-target",
+            gatePlan = gatePlan,
+            parentPassId = "parent-pass",
+            childPassId = "child-pass",
+            childTargetStateHash = "child-hash",
+            parentTargetStateHash = "parent-hash",
+            childLoadStoreLabel = "store",
+            parentLoadStoreLabel = "load",
+            deviceGeneration = 0L,
+            expectedTargetGeneration = 0L,
+            actualTargetGeneration = 0L,
+            availableUsageLabels = setOf("render_attachment", "texture_binding"),
+            allocationAvailable = true,
+            targetBudgetBytes = 1024 * 1024,
+            actualFormatClass = "rgba8unorm",
+            actualSampleCount = 1,
+        )
+        val context = GPUTargetPreparationContext(
+            targetId = "test-target",
+            frameId = "test-frame",
+            deviceGeneration = 0L,
+            budgetClass = "default",
+        )
+        val executor = GPUSaveLayerNativeExecutor()
+        val result = executor.execute(request, context)
+
+        assertNotNull(result)
+        assertIs<GPUResourceMaterializationDecision.Materialized>(result.resourceDecision)
+        val composite = result.commandStream.commands
+            .filterIsInstance<GPUPassCommand.CompositeLayer>()
+            .single()
+        assertEquals(128f / 255f, composite.alpha)
+        assertEquals("device-rect:l=0,t=0,r=1107296256,b=1102053376,aa=true", composite.clipLabel)
+    }
+
+    @Test
     fun `executor produces refused decision for stale generation`() {
         val gatePlan = buildMinimalGatePlan()
         val request = GPUSaveLayerMaterializationRequest(
@@ -127,12 +169,19 @@ class GPUSaveLayerNativeExecutorTest {
     }
 }
 
-private fun buildMinimalGatePlan(): GPUSaveLayerIsolatedTargetGatePlan {
+private fun buildMinimalGatePlan(
+    alpha: Float = 1f,
+    clipLabel: String? = null,
+    restoreBlendMode: String = "srcOver",
+): GPUSaveLayerIsolatedTargetGatePlan {
     val saveRecord = GPULayerSaveRecord(
         scopeId = GPULayerScopeID("layer:test"),
         boundsLabel = "test-local",
         childCommandIds = listOf("draw-test"),
         backdropRequired = false,
+        alpha = alpha,
+        clipLabel = clipLabel,
+        restoreBlendMode = restoreBlendMode,
     )
     val bounds = GPULayerBoundsPlan(
         requestedBoundsLabel = "test-local",
