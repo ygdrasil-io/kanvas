@@ -5,6 +5,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesShaderProgram
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesShaderResult
+import org.graphiks.kanvas.gpu.renderer.artifacts.PreparedVerticesShaderAssembler
 import org.graphiks.kanvas.gpu.renderer.materials.stubPreparedMaterialProgram
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesLayoutAuthority
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes

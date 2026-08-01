@@ -1,4 +1,4 @@
-package org.graphiks.kanvas.gpu.renderer.wgsl
+package org.graphiks.kanvas.gpu.renderer.artifacts
 
 import org.graphiks.kanvas.gpu.renderer.materials.CanonicalIdentityEncoder
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedMaterialProgram
@@ -8,6 +8,11 @@ import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesLayoutAuthor
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexLayoutPlan
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
+import org.graphiks.kanvas.gpu.renderer.wgsl.WgslBindingReflection
+import org.graphiks.kanvas.gpu.renderer.wgsl.WgslLayoutReflection
+import org.graphiks.kanvas.gpu.renderer.wgsl.WgslReflectionReport
+import org.graphiks.kanvas.gpu.renderer.wgsl.hasMaterialColorFunctionSignature
+import org.graphiks.kanvas.gpu.renderer.wgsl.reflectionFactsHash
 import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLReflectionProvider
 import org.graphiks.kanvas.gpu.renderer.wgsl.validation.KanvasWGSLValidator
 import org.graphiks.kanvas.gpu.renderer.wgsl.validation.WGSLReflectionProvider
