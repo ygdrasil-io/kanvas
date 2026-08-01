@@ -1,6 +1,7 @@
 package org.graphiks.kanvas.gpu.renderer.telemetry
 
 import java.util.Collections
+import org.graphiks.kanvas.gpu.renderer.vertices.PREPARED_VERTICES_BATCH_NONCLAIM_LINE
 
 /** Stable identity shared by every fact emitted for one frame submission attempt. */
 @JvmInline
@@ -917,3 +918,66 @@ private fun Set<String>.stableFieldList(): String =
     } else {
         sorted().joinToString(",")
     }
+
+/**
+ * Closed deterministic counters for one prepared-vertices batching pass.
+ *
+ * Counter names are data, never caller-provided strings; byte counters use the "bytes" unit
+ * and all other counters use "count". The materializer observes its own materialization and
+ * folds the observed facts into this closed set.
+ */
+enum class GPUPreparedVerticesBatchingCounter(val label: String, val unit: String) {
+    DrawCount("prepared-vertices.draw.count", "count"),
+    UniqueArtifacts("prepared-vertices.unique-artifacts", "count"),
+    VertexBytes("prepared-vertices.vertex-bytes", "bytes"),
+    IndexBytes("prepared-vertices.index-bytes", "bytes"),
+    FanExpansion("prepared-vertices.fan-expansion", "count"),
+    BufferCreations("prepared-vertices.buffer-creations", "count"),
+    UploadCount("prepared-vertices.upload.count", "count"),
+    UploadBytes("prepared-vertices.upload-bytes", "bytes"),
+    PackedSubranges("prepared-vertices.packed-subranges", "count"),
+    PipelineCreations("prepared-vertices.pipeline-creations", "count"),
+    PipelineReuses("prepared-vertices.pipeline-reuses", "count"),
+    LayoutCreations("prepared-vertices.layout-creations", "count"),
+    LayoutReuses("prepared-vertices.layout-reuses", "count"),
+    CompatibleBatches("prepared-vertices.compatible-batches", "count"),
+    DrawCalls("prepared-vertices.draw-calls", "count"),
+    DrawIndexedCalls("prepared-vertices.draw-indexed-calls", "count"),
+    EncoderScopes("prepared-vertices.encoder-scopes", "count"),
+    QueueSubmits("prepared-vertices.queue-submits", "count"),
+    Readbacks("prepared-vertices.readbacks", "count"),
+}
+
+/**
+ * Immutable deterministic counter snapshot for one prepared-vertices batching pass.
+ *
+ * The snapshot carries no object identity: counter lookups are enum-keyed longs and dump
+ * lines are byte-stable for equal passes. Absent counters read as zero so every pass emits
+ * the full closed counter set.
+ */
+class GPUPreparedVerticesBatchingCounters private constructor(
+    values: Map<GPUPreparedVerticesBatchingCounter, Long>,
+) {
+    private val values: Map<GPUPreparedVerticesBatchingCounter, Long> =
+        Collections.unmodifiableMap(LinkedHashMap(values))
+
+    /** Returns the folded value for one closed counter, zero when the pass never observed it. */
+    fun counter(counter: GPUPreparedVerticesBatchingCounter): Long = values[counter] ?: 0L
+
+    /** Emits stable `counter:label:scope:value:unit` lines plus the vertices non-claim line. */
+    fun dumpLines(): List<String> =
+        GPUPreparedVerticesBatchingCounter.entries.map { counter ->
+            "counter:${counter.label}:prepared-vertices.batching:${counter(counter)}:${counter.unit}"
+        } + PREPARED_VERTICES_BATCH_NONCLAIM_LINE
+
+    /** Factory helpers for prepared-vertices batching counter snapshots. */
+    companion object {
+        /** Creates one immutable snapshot; every folded value must be non-negative. */
+        fun of(entries: Map<GPUPreparedVerticesBatchingCounter, Long>): GPUPreparedVerticesBatchingCounters {
+            require(entries.values.all { value -> value >= 0L }) {
+                "Prepared-vertices batching counters must never fold negative values"
+            }
+            return GPUPreparedVerticesBatchingCounters(entries)
+        }
+    }
+}

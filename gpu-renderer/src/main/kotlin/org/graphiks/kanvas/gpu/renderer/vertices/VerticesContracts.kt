@@ -1426,3 +1426,52 @@ private fun verticesStableHash(parts: List<String>): String {
         .take(8)
         .joinToString("") { byte -> "%02x".format(byte) }
 }
+
+/**
+ * Closed compatibility axes required before two adjacent prepared-vertices draws may batch.
+ *
+ * Every axis is a deterministic identity derived from immutable artifacts, draw facts, or
+ * shader programs; two adjacent draws batch only when every axis matches and no barrier
+ * kind fires. The execution-side planner reports the exact failing axis as its split reason.
+ */
+val GPU_PREPARED_VERTICES_BATCH_COMPATIBILITY_AXES: List<String> = listOf(
+    "pipeline",
+    "layout",
+    "topology",
+    "material-abi",
+    "target-format",
+    "index-format",
+    "blend",
+    "clip",
+)
+
+/**
+ * Closed barrier kinds that must split an adjacency even when every compatibility axis matches.
+ *
+ * Barriers exist for clip change, destination read, layer boundary, filter/composite
+ * boundary, sampled-resource upload, incompatible blend, and explicit command order. The
+ * prepared-vertices route derives the destination-read, filter/composite, and
+ * sampled-resource scopes as constants because those materializers are separate seams; the
+ * kinds remain normative so the contract cannot silently lose a barrier.
+ */
+val GPU_PREPARED_VERTICES_BATCH_BARRIER_KINDS: List<String> = listOf(
+    "clip-change",
+    "destination-read",
+    "layer-boundary",
+    "filter-composite-boundary",
+    "sampled-resource-upload",
+    "incompatible-blend",
+    "explicit-command-order",
+)
+
+/**
+ * Non-claim line for the FP-06 prepared-vertices batching pass.
+ *
+ * Batching is materialized for compatible adjacent draws, but cross-layer batching,
+ * destination-read batching, and sampled-material batching remain unclaimed and the route
+ * does not claim performance readiness.
+ */
+const val PREPARED_VERTICES_BATCH_NONCLAIM_LINE: String =
+    "vertices:nonclaim preparedBatching=true crossLayerBatching=false " +
+        "destinationReadBatching=false sampledMaterialBatching=false " +
+        "performanceReady=false productActivation=true"
