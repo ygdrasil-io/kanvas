@@ -214,10 +214,13 @@ class GPUFilterOracleTest {
         val rgba = FloatArray(4)
         out.getPixel(0, 0, rgba)
         assertEquals(0f, rgba[0], 1e-4f)                 // empty column on the left
+        assertEquals(0f, rgba[1], 1e-4f)
+        assertEquals(0f, rgba[2], 1e-4f)
+        assertEquals(0f, rgba[3], 1e-4f)
         out.getPixel(1, 0, rgba)
         assertEquals(1f, rgba[0], 1e-4f)                 // first source pixel shifted to x=1
         out.getPixel(4 - 1, 0, rgba)
-        assertEquals(0f, rgba[0], 1e-4f)                 // last source pixel beyond canvas end
+        assertEquals(0f, rgba[0], 1e-4f)                 // blue pixel lands exactly on the last column (nothing clipped)
     }
 
     @Test
@@ -239,10 +242,13 @@ class GPUFilterOracleTest {
         val rgba = FloatArray(4)
         out.getPixel(0, 0, rgba)
         assertEquals(0f, rgba[0], 1e-4f)                 // empty row on the top
+        assertEquals(0f, rgba[1], 1e-4f)
+        assertEquals(0f, rgba[2], 1e-4f)
+        assertEquals(0f, rgba[3], 1e-4f)
         out.getPixel(0, 1, rgba)
         assertEquals(1f, rgba[0], 1e-4f)                 // first source pixel shifted to y=1
         out.getPixel(0, 4 - 1, rgba)
-        assertEquals(0f, rgba[0], 1e-4f)                 // last source pixel beyond canvas end
+        assertEquals(0f, rgba[0], 1e-4f)                 // blue pixel lands exactly on the last row (nothing clipped)
     }
 
     @Test
