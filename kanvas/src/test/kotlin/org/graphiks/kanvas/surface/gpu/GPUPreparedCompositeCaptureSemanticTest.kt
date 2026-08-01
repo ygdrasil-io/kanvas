@@ -351,8 +351,11 @@ class GPUPreparedCompositeCaptureSemanticTest {
         )
     }
 
+    // FP-06 boundary: vertices inside composite scopes (layer or picture) are not promoted to
+    // prepared vertices — the capturer refuses them via the generic OPERATION code until a
+    // dedicated vertices-in-composite scope lands. Do not relax without that scope.
     @Test
-    fun `vertices inside picture composite stay refused`() {
+    fun `vertices inside layer and picture composites stay refused`() {
         val triangle = Vertices(
             mode = VertexMode.TRIANGLES,
             positions = listOf(Point(0f, 0f), Point(10f, 0f), Point(10f, 10f)),
