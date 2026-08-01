@@ -82,6 +82,24 @@ class GPUFilterOracleTest {
         }
     }
 
+    @Test
+    fun `decal blur does not crash and yields transparent borders`() {
+        val source = solidBitmap(3, 3, 1f, 1f, 1f, 1f)
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("decal-blur"),
+            kind = GPUPreparedFilterKind.Blur,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = BlurParams(sigmaX = 2f, sigmaY = 2f, tileMode = GPUTileMode.Decal),
+            provenance = "test/decal-blur",
+        )
+        val out = GPUFilterOracle.apply(source, node, emptyMap())
+        val rgba = FloatArray(4)
+        out.getPixel(0, 0, rgba)
+        assertTrue(rgba[3] < 0.9f, "Decal border must fade to transparent; got alpha=${rgba[3]}")
+        out.getPixel(1, 1, rgba)
+        assertTrue(rgba[3] > 0f, "Decal center keeps coverage; got alpha=${rgba[3]}")
+    }
+
     // --- ColorFilter ---
 
     @Test

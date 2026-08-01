@@ -97,7 +97,7 @@ object GPUFilterOracle {
                 for (x in 0 until source.width) {
                     var r = 0f; var g = 0f; var b = 0f; var a = 0f
                     for (k in kernel.indices) {
-                        val sx = clampCoord(x + k - radius, 0, source.width - 1, tileMode)
+                        val sx = clampCoordOrNull(x + k - radius, 0, source.width - 1, tileMode) ?: continue
                         val idx = (y * source.width + sx) * 4
                         val w = kernel[k]
                         r += source.pixels[idx] * w
@@ -117,7 +117,7 @@ object GPUFilterOracle {
                 for (x in 0 until source.width) {
                     var r = 0f; var g = 0f; var b = 0f; var a = 0f
                     for (k in kernel.indices) {
-                        val sy = clampCoord(y + k - radius, 0, source.height - 1, tileMode)
+                        val sy = clampCoordOrNull(y + k - radius, 0, source.height - 1, tileMode) ?: continue
                         val idx = (sy * source.width + x) * 4
                         val w = kernel[k]
                         r += source.pixels[idx] * w
@@ -136,7 +136,14 @@ object GPUFilterOracle {
         return dst
     }
 
-    private fun clampCoord(v: Int, lo: Int, hi: Int, tileMode: GPUTileMode): Int = when (tileMode) {
+    /**
+     * Maps a sample coordinate into [lo, hi] per [tileMode]. Returns null when the
+     * coordinate falls outside the source for [GPUTileMode.Decal] — the caller skips
+     * the tap, so out-of-bounds pixels contribute nothing (transparent outside the
+     * source). Skipped taps are intentionally NOT renormalized: Decal borders fade
+     * out as the kernel loses weight.
+     */
+    private fun clampCoordOrNull(v: Int, lo: Int, hi: Int, tileMode: GPUTileMode): Int? = when (tileMode) {
         GPUTileMode.Clamp -> v.coerceIn(lo, hi)
         GPUTileMode.Repeat -> {
             val range = hi - lo + 1
@@ -144,12 +151,14 @@ object GPUFilterOracle {
         }
         GPUTileMode.Mirror -> {
             val range = hi - lo + 1
-            if (range <= 1) return lo
-            val period = 2 * range - 2
-            val t = ((v - lo) % period + period) % period
-            lo + if (t < range) t else period - t
+            if (range <= 1) lo
+            else {
+                val period = 2 * range - 2
+                val t = ((v - lo) % period + period) % period
+                lo + if (t < range) t else period - t
+            }
         }
-        GPUTileMode.Decal -> if (v in lo..hi) v else Int.MIN_VALUE // will be clamped in getPixel
+        GPUTileMode.Decal -> if (v in lo..hi) v else null
     }
 
     private fun gaussianKernel(sigma: Float): FloatArray {
