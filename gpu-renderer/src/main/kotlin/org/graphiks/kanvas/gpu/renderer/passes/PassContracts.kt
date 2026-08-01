@@ -810,6 +810,7 @@ sealed interface GPUPassCommand {
         val sourceLabel: String,
         val parentTargetLabel: String,
         val blendModeLabel: String,
+        val blendPlan: GPUBlendPlan,
         val routeLabel: String,
         val tokenLabel: String,
     ) : GPUPassCommand {
@@ -915,6 +916,42 @@ data class GPUPassCommandOperandBridge(
                 operand = binding.operand,
             )
     }
+}
+
+/**
+ * Derives the canonical composite blend plan for a layer-composite command from its
+ * blend-mode label and target format.
+ *
+ * Composite commands carry a real [GPUBlendPlan] (never a placeholder); the
+ * `blendModeLabel` string remains on the command as dump evidence. An unrecognized
+ * label yields a [GPUBlendPlan.NoOp] with the reason captured, matching the
+ * contract-style stable fallback used by the planner.
+ */
+internal fun compositeBlendPlan(
+    blendModeLabel: String,
+    formatClass: String,
+): GPUBlendPlan {
+    val normalized = blendModeLabel.replace('-', '_').replace(' ', '_').lowercase()
+    val mode = GPUBlendMode.entries.firstOrNull { candidate ->
+        candidate.gpuLabel == normalized ||
+            candidate.gpuLabel.replace("_", "") == normalized.replace("_", "")
+    } ?: return GPUBlendPlan.NoOp(
+        GPUBlendMode.SRC_OVER,
+        "unrecognized composite blend label: $blendModeLabel",
+    )
+    return GPUBlendPlanner().plan(
+        GPUBlendSpecializationRequest(
+            mode = mode,
+            coverage = GPUCoverageConsumption.FullOrScissor,
+            sourceAlpha = GPUSourceAlphaClassification.Translucent,
+            target = GPUTargetBlendFacts(
+                formatClass = formatClass,
+                clampsNormalizedColorWrites = formatClass.endsWith("unorm"),
+                premultipliedAlpha = true,
+            ),
+            samplePlan = GPUSamplePlan.SingleSampleFrame,
+        ),
+    )
 }
 
 /**

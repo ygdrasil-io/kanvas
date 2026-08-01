@@ -1,9 +1,13 @@
 package org.graphiks.kanvas.gpu.renderer.layers
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 
@@ -42,6 +46,49 @@ class GPUSaveLayerNativeExecutorTest {
         assertNotNull(result)
         assertFalse(result.adapterBacked)
         assertIs<GPUResourceMaterializationDecision.Materialized>(result.resourceDecision)
+    }
+
+    @Test
+    fun `executor threads a real blend plan into the composite layer command`() {
+        val gatePlan = buildMinimalGatePlan()
+        val request = GPUSaveLayerMaterializationRequest(
+            targetId = "test-target",
+            gatePlan = gatePlan,
+            parentPassId = "parent-pass",
+            childPassId = "child-pass",
+            childTargetStateHash = "child-hash",
+            parentTargetStateHash = "parent-hash",
+            childLoadStoreLabel = "store",
+            parentLoadStoreLabel = "load",
+            deviceGeneration = 0L,
+            expectedTargetGeneration = 0L,
+            actualTargetGeneration = 0L,
+            availableUsageLabels = setOf("render_attachment", "texture_binding"),
+            allocationAvailable = true,
+            targetBudgetBytes = 1024 * 1024,
+            actualFormatClass = "rgba8unorm",
+            actualSampleCount = 1,
+        )
+        val context = GPUTargetPreparationContext(
+            targetId = "test-target",
+            frameId = "test-frame",
+            deviceGeneration = 0L,
+            budgetClass = "default",
+        )
+        val executor = GPUSaveLayerNativeExecutor()
+        val result = executor.execute(request, context)
+
+        assertNotNull(result)
+        assertIs<GPUResourceMaterializationDecision.Materialized>(result.resourceDecision)
+        val composite = result.commandStream.commands
+            .filterIsInstance<GPUPassCommand.CompositeLayer>()
+            .single()
+        assertFalse(
+            composite.blendPlan is GPUBlendPlan.NoOp,
+            "layer blend must be real, not a NoOp placeholder",
+        )
+        assertEquals(GPUBlendMode.SRC_OVER, composite.blendPlan.mode)
+        assertEquals("src_over", composite.blendPlan.mode.gpuLabel)
     }
 
     @Test

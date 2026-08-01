@@ -4,6 +4,7 @@ import java.security.MessageDigest
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.passes.compositeBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.dumpLines
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandBinding
 import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
@@ -970,6 +971,7 @@ private fun GPUSaveLayerMaterializationRequest.layerCommands(): List<GPUPassComm
             sourceLabel = execution.composite.sourcePlan.sourceLabel,
             parentTargetLabel = execution.composite.parentTargetLabel,
             blendModeLabel = execution.composite.blendModeLabel,
+            blendPlan = compositeBlendPlan(execution.composite.blendModeLabel, target.formatClass),
             routeLabel = execution.composite.compositeRoute,
             tokenLabel = token,
         ),
