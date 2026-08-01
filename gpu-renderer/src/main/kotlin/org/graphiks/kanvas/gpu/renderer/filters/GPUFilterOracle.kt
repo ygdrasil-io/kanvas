@@ -169,6 +169,11 @@ object GPUFilterOracle {
 
     // --- ColorFilter ---
 
+    /**
+     * Applies a 4x5 color matrix in row-major layout: output row 0 = R' uses matrix[0..3]·rgba + matrix[4],
+     * row 1 = G' uses matrix[5..9], row 2 = B' uses matrix[10..14], row 3 = A' uses matrix[15..19].
+     * Convention matches ColorMatrixSnippet WGSL and GPUPreparedFilterNormalizer.composeColorMatrices.
+     */
     private fun applyColorFilter(source: Rgba8Bitmap, matrix: FloatArray): Rgba8Bitmap {
         require(matrix.size == 20) { "ColorFilter matrix must have 20 entries" }
         val dst = Rgba8Bitmap(source.width, source.height, FloatArray(source.width * source.height * 4))
