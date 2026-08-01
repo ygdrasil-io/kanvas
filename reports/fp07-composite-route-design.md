@@ -1,6 +1,3 @@
----
----
-
 # Objectif & Portée
 
 ### Objectif
@@ -24,7 +21,7 @@ Cette version corrige le plan initial (`reports/fp07-composite-route-plan.md`) s
 - Pooling / réutilisation de textures + `approx-fit` (le vrai modèle de scalabilité Graphite) — différé à FP-09 ; on alloue aux dimensions **exactes**.
 - Anti-aliasing des bords de layer (Graphite utilise `EdgeAAQuad` ; ici quad texturé single-sample) — gap de fidélité documenté.
 - Runtime-effects WGSL dynamiques (FP-10).
-- Découpage du monolithe `GPUPreparedSurfaceFrameTaskListBuilder` (3849 lignes) — noté en risque de dette.
+- Découpage du monolithe `GPUPreparedSurfaceFrameTaskListBuilder` (4285 lignes) — noté en risque de dette.
 
 # Contrats réels (Task 0)
 
@@ -64,35 +61,12 @@ data class GPULayerBackdropPlan(val sourceLabel: String, val readBoundsLabel: St
 
 Le plan raisonnait au niveau « scope/paint/bounds bruts » ; les contrats réels travaillent au niveau `GPULayerSaveRecord + passId + hashes + générations + budget`. Une **couche de traduction capture→saveRecord→request** doit être conçue explicitement (elle est absente du plan initial).
 
-#### À relever également avant écriture
+#### Contrats vérifiés (Task 0 résolu)
 
 ```kotlin
-// gpu-renderer/.../layers/LayerContracts.kt
-fun plan(request: GPUSaveLayerIsolatedTargetRequest): GPUSaveLayerIsolatedTargetGatePlan
-// refusal: gatePlan.diagnostics.firstOrNull { it.terminal }?.code   (NO .refused field)
-// acceptance: gatePlan.layerPlan  (type GPULayerPlan)
-
-fun materialize(
-    request: GPUSaveLayerMaterializationRequest,
-    context: GPUTargetPreparationContext,   // 2nd arg MANDATORY
-): GPUSaveLayerMaterializationResult         // require(!adapterBacked)
-
-// kanvas/.../surface/gpu/GPUPreparedCompositeCapture.kt:253
-fun capture(operations: List<DisplayOp>, limits: GPUPreparedCompositeCaptureLimits): GPUPreparedCompositeCaptureResult
-// Ready(GPUPreparedCompositeCapture(rootScopeId, scopes, expandedOperations, identity)) | Refused(code, operationIndex, facts)
-
-// gpu-renderer/.../recording/GPUPreparedSurfaceFrameTaskListBuilder.kt (ported handleSaveLayer)
-fun handleSaveLayer(
-    scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
-    rootScopeId: GPUPreparedCompositeScopeId,
-    identity: String,
-    capabilities: GPUPreflightCapabilities,
-    context: GPUTargetPreparationContext,
-    targetBudgetBytes: Long = DEFAULT_SAVE_LAYER_FRAME_BUDGET_BYTES,
-): GPUPreparedSaveLayerFrameHandling   // Ready(plan, results, commands) | Refused(code, operationIndex, facts)
+// Toutes les signatures ci-dessus sont vérifiées sur la base FP-06 (40a873560)
+// et la fondation fp-07 validée — voir reports/fp07-composite-route-plan.md, section Context.
 ```
-
-Signatures vérifiées sur la base FP-06 (40a873560) et la fondation fp-07 validée — voir reports/fp07-composite-route-plan.md, section Context.
 
 # Design & Corrections
 
@@ -111,6 +85,7 @@ Signatures vérifiées sur la base FP-06 (40a873560) et la fondation fp-07 valid
 
 ```mermaid
 graph TD
+    Builder[GPUPreparedSurfaceFrameBuilder.build] --> Capture[GPUPreparedCompositeCapture]
     Capture[GPUPreparedCompositeCapture] --> Translate[Traduction capture -> GPULayerSaveRecord]
     Translate --> Lowerer[GPUPreparedCompositeLowerer]
     Lowerer --> Planner[GPUSaveLayerIsolatedTargetPlanner.plan request]
@@ -150,7 +125,7 @@ Un saveLayer accepté est matérialisé en flux de commandes GPU via les contrat
 
 - `GPUSaveLayerNativeExecutor` : construit un `GPUSaveLayerMaterializationRequest` complet (tous champs requis + `init`) et appelle `ValidatingSaveLayerMaterializer().materialize(request, context)` (2 arguments) ; garantit `adapterBacked=false`.
 - Connexion de `GPUFirstRoutePassBuilder.acceptedDrawLayer()` dans `PassContracts.kt` (rôle `Composite`, commande `CompositeLayer` avec blend réel, pas de placeholder `parentTargetLabel=""`).
-- `GPUPreparedFilterDAGPlanner.plan(normalization)` : routes par nœud (`NativeRender`/`FoldedMaterial`/`Elided`), textures intermédiaires, ordre d'exécution.
+- `GPUPreparedFilterDAGPlanner.plan(normalization)` : routes par nœud (`NativeRender`/`FoldedMaterial`/`Refused`), textures intermédiaires, ordre d'exécution.
 - `GPUPreparedCompositePreflight.preflight(plan, capabilities)` : refus stable si dépassement `maxTextureSize`/`maxColorAttachments` via `GPUPreparedCompositeRefusalCodes.PREFLIGHT`.
 
 ###   Step 4: Phase 3 — Levée des refus capture
@@ -159,6 +134,7 @@ Les captures backdrop, mask-filter et picture filter-source ne sont plus refusé
 - Backdrop : suppression du refus `LAYER_DESTINATION_READ` dans `GPUPreparedCompositeCapture.kt`, extraction du descripteur de backdrop, sémantique `LoadOp.Load` (backdrop initialise l'offscreen avant les enfants — conforme Skia), réutilisation du `GPULayerBackdropPlan` existant.
 - Mask-filter : `GPUPreparedMaskFilterLowerer` (Blur → coverage A8, sinon refus `NATIVE_CAPABILITY`), suppression du refus `PAINT` pour maskFilter, rattachement du plan au draw capturé.
 - Picture filter-source : création d'un scope `FilterPictureSource` dans `processPicture()` au lieu du refus `PAINT`.
+- La frontière FP-06 `unsupported.picture.nested_vertices` (vertices dans un scope picture composite) reste refusée et est préservée — voir plan Task 3.
 
 ###   Step 5: Phase 4 — Intégration frame-route + cutover
 DrawPicture/BeginLayer/EndLayer sont effectivement routés via la frame préparée, réalisant l'objectif de migration (absent du plan initial).
@@ -166,4 +142,4 @@ DrawPicture/BeginLayer/EndLayer sont effectivement routés via la frame prépar�
 - Ajout de `handleSaveLayer` dans `GPUPreparedSurfaceFrameTaskListBuilder.kt` : branchement lowerer → préflight → executor → `GPUFirstRoutePassBuilder`, insertion des commandes `PrepareLayerTarget`/`RenderLayerChildren`/`CompositeLayer` dans l'ordonnancement.
 - Cutover du `GPUPreparedSurfaceFrameGate.kt` / `GPULegacyImmediatePathAdapter.kt` : bascule de `DrawPicture/BeginLayer/EndLayer` de `Legacy`/`Composites` vers la route préparée.
 - Le cutover n'est activé que sous condition « tous les tests des phases 1-3 verts » (résout l'incohérence de séquencement 2B↔J/cutover).
-- Note de risque : ajout dans le monolithe de 3849 lignes sans découpage (dette assumée, extraction reportée).
+- Note de risque : ajout dans le monolithe de 4285 lignes sans découpage (dette assumée, extraction reportée).
