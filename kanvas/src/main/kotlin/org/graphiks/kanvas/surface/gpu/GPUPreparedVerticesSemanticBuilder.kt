@@ -186,6 +186,9 @@ internal object GPUPreparedVerticesSemanticBuilder {
                 record.renderStepCandidates != listOf(PREPARED_VERTICES_RENDER_STEP_IDENTITY) ||
                 record.sortKey.value != normalized.ordering.paintOrder.toLong() ||
                 record.diagnostics.isNotEmpty() ||
+                record.corePrimitiveRectRouteAuthority != null ||
+                record.corePrimitiveRectGeometryAuthority != null ||
+                record.corePrimitiveRRectGeometryAuthority != null ||
                 decisionLineByCommandId.getValue(mapped.commandId) != expectedDecisionLine ||
                 semanticOnlyDraw.stateLabel != "prepared_vertices_unmaterialized" ||
                 !packet.exactlyMatchesPreparedVerticesSemanticPacket(semanticOnlyDraw.packet) ||
@@ -208,7 +211,8 @@ internal object GPUPreparedVerticesSemanticBuilder {
                 packet.originalPaintOrder != normalized.ordering.paintOrder || packet.resourceGeneration != 0L ||
                 packet.frameProvenance != mapped.frameProvenance ||
                 packet.clipCoveragePlan != draw.clipSnapshot.coveragePlan ||
-                packet.clipExecutionPlan != null || packet.diagnostics.isNotEmpty()
+                packet.clipExecutionPlan != null || packet.diagnostics.isNotEmpty() ||
+                packet.clipProducerAuthority != null
             ) {
                 return refusedAuthority(
                     mapped.commandId,

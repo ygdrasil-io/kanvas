@@ -811,7 +811,7 @@ object GPUFramePlanner {
                 is GPUTask.SemanticOnly -> steps += GPUFrameStep.RefusedLeafDrawStep(
                     commandId = task.commandId,
                     diagnostic = diagnostic(
-                        "unsupported.preflight.prepared_vertices_unmaterialized",
+                        PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE,
                         "Prepared vertices semantics have no executable native materialization route.",
                     ),
                     sourceTaskIds = listOf(task.taskId),

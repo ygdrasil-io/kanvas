@@ -22,6 +22,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.surface.RenderConfig
@@ -29,6 +30,7 @@ import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
 import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.RRect
 import org.graphiks.kanvas.types.VertexMode
 import org.graphiks.kanvas.types.Vertices
 
@@ -143,6 +145,24 @@ class GPUPreparedVerticesSemanticBuilderTest {
     }
 
     @Test
+    fun `prepared vertices unmaterialized preflight code has one shared production authority`() {
+        val productionRoots = listOf(
+            File("../gpu-renderer/src/main/kotlin"),
+            File("src/main/kotlin"),
+        )
+        val literal = "unsupported.preflight.prepared_vertices_unmaterialized"
+        val occurrences = productionRoots.flatMap { root ->
+            root.walkTopDown().filter { file -> file.isFile && file.extension == "kt" }.toList()
+        }.sumOf { file -> Regex(Regex.escape(literal)).findAll(file.readText()).count() }
+
+        assertEquals(
+            literal,
+            PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE,
+        )
+        assertEquals(1, occurrences)
+    }
+
+    @Test
     fun `missing duplicate reordered and type-confused vertices authorities refuse atomically`() {
         val inventory = plan(listOf(rect(), vertices(Color.RED), vertices(Color.BLUE)))
         val prepared = assertNotNull(inventory.preparedVerticesInventory)
@@ -252,8 +272,26 @@ class GPUPreparedVerticesSemanticBuilderTest {
                 semanticOnlyDrawEntries = inventory.recording.semanticOnlyDraws.reversed(),
             ),
         )
+        val reorderedTasks = inventory.copy(
+            recording = inventory.recording.copy(
+                taskList = inventory.recording.taskList.testWithTasks(
+                    inventory.recording.taskList.tasks.reversed(),
+                ),
+            ),
+        )
+        val prepared = assertNotNull(inventory.preparedVerticesInventory)
+        val reorderedMappedCommands = inventory.copy(
+            preparedVerticesInventory = prepared.testWithMappedCommands(
+                prepared.mappedCommands.reversed(),
+            ),
+        )
 
-        listOf(reorderedAnalysis, reorderedSemanticOnly).forEach { malformed ->
+        listOf(
+            reorderedAnalysis,
+            reorderedSemanticOnly,
+            reorderedTasks,
+            reorderedMappedCommands,
+        ).forEach { malformed ->
             val refused = assertIs<GPUPreparedSurfaceSemanticGatherResult.Refused>(
                 GPUFramePathApiInventory.gatherPreparedSurfaceSemantics(
                     inventory = malformed,
@@ -401,6 +439,77 @@ class GPUPreparedVerticesSemanticBuilderTest {
         }
     }
 
+    @Test
+    fun `foreign core and clip producer authorities refuse before semantic publication`() {
+        val inventory = plan(listOf(vertices(Color.RED)))
+        val record = inventory.recording.analysis.records.single()
+        val rectRecord = plan(listOf(rect())).recording.analysis.records.single()
+        val rrectRecord = plan(listOf(rrect())).recording.analysis.records.single()
+        val recordMutations = listOf(
+            record.copy(
+                corePrimitiveRectRouteAuthority = assertNotNull(
+                    rectRecord.corePrimitiveRectRouteAuthority,
+                ),
+            ),
+            record.copy(
+                corePrimitiveRectGeometryAuthority = assertNotNull(
+                    rectRecord.corePrimitiveRectGeometryAuthority,
+                ),
+            ),
+            record.copy(
+                corePrimitiveRRectGeometryAuthority = assertNotNull(
+                    rrectRecord.corePrimitiveRRectGeometryAuthority,
+                ),
+            ),
+        )
+        recordMutations.forEach { changedRecord ->
+            val refused = assertIs<GPUPreparedSurfaceSemanticGatherResult.Refused>(
+                GPUFramePathApiInventory.gatherPreparedSurfaceSemantics(
+                    inventory = inventory.copy(
+                        recording = inventory.recording.copy(
+                            analysis = inventory.recording.analysis.copy(
+                                records = listOf(changedRecord),
+                            ),
+                        ),
+                    ),
+                    targetBounds = BOUNDS,
+                    imageArtifactsByCommandId = emptyMap(),
+                ),
+            )
+            assertEquals(
+                "invalid.surface.prepared.vertices-semantic-authority",
+                refused.diagnostic.code.value,
+            )
+        }
+
+        val packet = inventory.recording.semanticOnlyDraws.single().packet
+        val authority = org.graphiks.kanvas.gpu.renderer.passes.GPUClipProducerAuthority.Mask(
+            org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskProducerPlan(
+                sourceOrder = 0,
+                geometry = org.graphiks.kanvas.gpu.renderer.clips.GPUClipExecutionGeometry.Rect(
+                    org.graphiks.kanvas.gpu.renderer.clips.GPUBounds(0f, 0f, 1f, 1f),
+                ),
+                combine = org.graphiks.kanvas.gpu.renderer.clips.GPUClipMaskCombine.Intersect,
+                antiAlias = true,
+            ),
+        )
+        val authorityField = packet.javaClass.getDeclaredField("clipProducerAuthority")
+        authorityField.isAccessible = true
+        authorityField.set(packet, authority)
+
+        val refused = assertIs<GPUPreparedSurfaceSemanticGatherResult.Refused>(
+            GPUFramePathApiInventory.gatherPreparedSurfaceSemantics(
+                inventory = inventory,
+                targetBounds = BOUNDS,
+                imageArtifactsByCommandId = emptyMap(),
+            ),
+        )
+        assertEquals(
+            "invalid.surface.prepared.vertices-semantic-authority",
+            refused.diagnostic.code.value,
+        )
+    }
+
     private fun NormalizedDrawCommand.DrawPreparedVertices.withAuthorities(
         topologyIdentity: String = this.topologyIdentity,
         layoutIdentity: String = this.layoutIdentity,
@@ -463,6 +572,20 @@ class GPUPreparedVerticesSemanticBuilderTest {
         packet: org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket,
     ): org.graphiks.kanvas.gpu.renderer.recording.GPURecording = copy(
         semanticOnlyDrawEntries = listOf(semanticOnlyDraws.single().copy(packet = packet)),
+    )
+
+    private fun org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList.testWithTasks(
+        tasks: List<GPUTask>,
+    ) = org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList(
+        frameId = frameId,
+        capabilitySeal = capabilitySeal,
+        recordingSeals = recordingSeals,
+        expectedReplayKeyHash = expectedReplayKeyHash,
+        tasks = tasks,
+        dependencies = dependencies,
+        phaseOrder = phaseOrder,
+        memoryBudget = memoryBudget,
+        diagnostics = diagnostics,
     )
 
     private fun org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket.copyForTest(
@@ -538,6 +661,13 @@ class GPUPreparedVerticesSemanticBuilderTest {
 
     private fun rect() = DisplayOp.DrawRect(
         Rect.fromLTRB(1f, 1f, 7f, 7f),
+        Paint.fill(Color.GREEN).copy(antiAlias = false),
+        Matrix33.identity(),
+        ClipStack.WideOpen,
+    )
+
+    private fun rrect() = DisplayOp.DrawRRect(
+        RRect(Rect.fromLTRB(1f, 1f, 7f, 7f), radius = 1f),
         Paint.fill(Color.GREEN).copy(antiAlias = false),
         Matrix33.identity(),
         ClipStack.WideOpen,

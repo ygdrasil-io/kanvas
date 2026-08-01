@@ -60,6 +60,7 @@ import org.graphiks.kanvas.gpu.renderer.payloads.REGISTERED_UNIFORM_RECT_RENDER_
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUSolidPayloadGatherer
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameCapabilitySeal
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackLayoutPlanner
 import org.graphiks.kanvas.gpu.renderer.recording.COLOR_GLYPH_PACKET_PASS_AUTHORITY_CODE
@@ -154,7 +155,7 @@ internal class GPUFramePreflighter(
         framePlan.steps.filterIsInstance<GPUFrameStep.RefusedLeafDrawStep>()
             .firstOrNull { step ->
                 step.diagnostic.code.value ==
-                    "unsupported.preflight.prepared_vertices_unmaterialized"
+                    PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE
             }
             ?.let { step -> return GPUFramePreflightResult.Refused(step.diagnostic) }
         if (nativeBoundary != null && nativeBoundary.resourceProvider !== resourceProvider) {
@@ -4342,7 +4343,7 @@ internal class GPUFramePreflighter(
                 }
             is GPUDrawSemanticPayload.Vertices ->
                 diagnostic(
-                    "unsupported.preflight.prepared_vertices_unmaterialized",
+                    PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE,
                     "Prepared vertices semantics have no executable native materialization route.",
                 )
         }

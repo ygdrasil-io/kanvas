@@ -43,6 +43,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecording
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.canonicalSnapshotHash
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.glyph.gpu.GPUTextArtifactGeneration
 import org.graphiks.kanvas.surface.RenderConfig
@@ -366,7 +367,9 @@ object GPUFramePathApiInventory {
                 facts = gathered.facts,
             )
             is GPUPreparedVerticesSemanticGatherResult.Gathered -> GPUDiagnostic(
-                code = GPUDiagnosticCode("unsupported.preflight.prepared_vertices_unmaterialized"),
+                code = GPUDiagnosticCode(
+                    PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE,
+                ),
                 domain = GPUDiagnosticDomain.Recording,
                 severity = GPUDiagnosticSeverity.Error,
                 message = "Prepared vertices semantics have no executable native materialization route.",

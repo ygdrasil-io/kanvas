@@ -64,6 +64,9 @@ import org.graphiks.kanvas.gpu.renderer.text.GPUTextDiagnosticCodes
 import org.graphiks.kanvas.gpu.renderer.text.GPUTextRouteDecision
 import org.graphiks.kanvas.gpu.renderer.intermediates.GPUIntermediateIdentity
 
+const val PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE: String =
+    "unsupported.preflight.prepared_vertices_unmaterialized"
+
 /** Stable recording identifier. */
 @JvmInline
 value class GPURecordingID(val value: String) {

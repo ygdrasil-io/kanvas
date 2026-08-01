@@ -25,6 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
+import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -809,7 +810,7 @@ private fun preflightUnmaterializedPreparedVertices(
         )
     }
     return diagnostic(
-        code = "unsupported.preflight.prepared_vertices_unmaterialized",
+        code = PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE,
         message = "Prepared vertices semantics have no executable native materialization route.",
         facts = mapOf(
             "semanticOnlyCommandIds" to semanticOnlyCommandIds.joinToString(","),
