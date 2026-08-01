@@ -16,7 +16,8 @@ class SaveLayerIsolatedTargetGateTest {
     }
 
     @Test
-    fun boundedTransparentLayerProducesIsolatedTargetEvidenceDump() {        val plan = GPUSaveLayerIsolatedTargetPlanner().plan(saveLayerRequest())
+    fun boundedTransparentLayerProducesIsolatedTargetEvidenceDump() {
+        val plan = GPUSaveLayerIsolatedTargetPlanner().plan(saveLayerRequest())
 
         assertEquals("gpu-renderer.savelayer.isolated-target", plan.evidenceRow)
         assertEquals("GPUNative", plan.routeKind)
