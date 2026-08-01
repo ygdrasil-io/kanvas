@@ -329,7 +329,7 @@ class GPUPreparedVerticesLowererTest {
     }
 
     @Test
-    fun `clip authority refusal remains in the closed FP06 refusal space`() {
+    fun `clip authority refusal keeps the clip planner stable code`() {
         val refusal = GPUPreparedVerticesLowerer.lower(
             DisplayOp.DrawVertices(
                 vertices(), Paint.fill(Color.RED), Matrix33.identity(),
@@ -339,8 +339,43 @@ class GPUPreparedVerticesLowererTest {
             target(),
             capabilities(maxTextureDimension = 1),
         ).refused()
-        assertEquals(GPUPreparedVerticesRefusalCodes.Material, refusal.code)
-        assertEquals("unsupported.clip.texture_limit", refusal.facts["clipCode"])
+        assertEquals("unsupported.clip.texture_limit", refusal.code)
+        assertEquals("coverage_refused", refusal.facts["reason"])
+        assertEquals("GPUClipCoveragePlanner", refusal.facts["authority"])
+    }
+
+    @Test
+    fun `perspective clip capture refuses with the clip boundary code`() {
+        val refusal = GPUPreparedVerticesLowerer.lower(
+            DisplayOp.DrawVertices(
+                vertices(), Paint.fill(Color.RED), Matrix33.identity(),
+                ClipStack.Complex(listOf(
+                    ClipStackOp.PathOp(
+                        Path().addRect(Rect.fromLTRB(0f, 0f, 2f, 2f)),
+                        ClipOp.INTERSECT,
+                        antiAlias = true,
+                        perspectiveCaptureRefusal = true,
+                    ),
+                )),
+            ),
+            7,
+            target(),
+            capabilities(maxTextureDimension = 1024),
+        ).refused()
+        assertEquals(GPUPreparedVerticesRefusalCodes.ClipCoverage, refusal.code)
+        assertEquals("perspective_capture_refusal", refusal.facts["reason"])
+    }
+
+    @Test
+    fun `mesh without override blend derives the final blend from the snapshotted paint`() {
+        val draw = lower(meshOperation(
+            paintBlend = BlendMode.MULTIPLY,
+            overrideBlend = null,
+            program = null,
+        )).ready().draw
+
+        assertEquals(GPUBlendMode.MULTIPLY, draw.finalBlend.mode)
+        assertEquals(1, draw.paintAlphaApplicationCount)
     }
 
     @Test

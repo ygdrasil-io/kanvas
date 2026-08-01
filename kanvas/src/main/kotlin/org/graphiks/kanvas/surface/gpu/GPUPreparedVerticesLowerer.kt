@@ -91,7 +91,7 @@ object GPUPreparedVerticesLowerer {
                 mapOf("exception" to "IllegalArgumentException"),
             )
             val clip = snapshotClip(operation.clip) ?: return refused(
-                GPUPreparedVerticesRefusalCodes.Material, operationIndex, "clip-snapshot", "snapshot_exception",
+                GPUPreparedVerticesRefusalCodes.ClipCoverage, operationIndex, "clip-snapshot", "snapshot_exception",
                 mapOf("exception" to "IllegalArgumentException"),
             )
             return lowerVertices(
@@ -105,7 +105,7 @@ object GPUPreparedVerticesLowerer {
             capabilities = capabilities,
             provenance = "drawVertices",
             meshBounds = null,
-            finalBlend = operation.paint.blendMode.toGpuBlendFacts(),
+            finalBlend = paint.blendMode.toGpuBlendFacts(),
             )
         }
         if (operation is DisplayOp.DrawMesh) {
@@ -134,17 +134,22 @@ object GPUPreparedVerticesLowerer {
         val bounds = operation.mesh.bounds.copy()
         val transform = operation.transform.snapshotForPreparedVertices()
         val clip = snapshotClip(operation.clip) ?: return refused(
-            GPUPreparedVerticesRefusalCodes.Material, operationIndex, "clip-snapshot", "snapshot_exception",
+            GPUPreparedVerticesRefusalCodes.ClipCoverage, operationIndex, "clip-snapshot", "snapshot_exception",
             mapOf("exception" to "IllegalArgumentException"),
         )
-        val finalBlend = (operation.blendMode ?: operation.paint.blendMode).toGpuBlendFacts()
         val program = operation.mesh.program
         if (program == null) {
             // This is the exact public Canvas.drawMesh normalization, kept as one route.
+            // The paint IS the material source here, so it is snapshotted once and
+            // every fact (blend, alpha) is derived from that snapshot.
+            val paint = snapshotPaint(operation.paint) ?: return refused(
+                GPUPreparedVerticesRefusalCodes.Material, operationIndex, "paint-snapshot", "snapshot_exception",
+                mapOf("exception" to "IllegalArgumentException"),
+            )
+            val resolvedBlendMode = operation.blendMode ?: paint.blendMode
             return lowerVertices(
                 vertices = vertices,
-                paint = snapshotPaint(operation.paint.copy(blendMode = operation.blendMode ?: operation.paint.blendMode))
-                    ?: return refused(GPUPreparedVerticesRefusalCodes.Material, operationIndex, "paint-snapshot", "snapshot_exception", mapOf("exception" to "IllegalArgumentException")),
+                paint = paint.copy(blendMode = resolvedBlendMode),
                 transform = transform,
                 clip = clip,
                 operationKind = GPUPreparedVerticesOperationKind.DrawVertices,
@@ -153,9 +158,20 @@ object GPUPreparedVerticesLowerer {
                 capabilities = capabilities,
                 provenance = "drawMesh:no-program",
                 meshBounds = null,
-                finalBlend = finalBlend,
+                finalBlend = resolvedBlendMode.toGpuBlendFacts(),
             )
         }
+        // The MeshProgram material replaces the paint entirely: the paint
+        // contributes only its color alpha and blend mode, and its shader must
+        // never be visited (it is unused; a hostile shader in the paint is not
+        // part of the mesh program). Color and BlendMode are immutable value
+        // fields, so this shader-free paint is the single source for alpha and
+        // blend.
+        val programPaint = org.graphiks.kanvas.paint.Paint(
+            color = operation.paint.color,
+            blendMode = operation.paint.blendMode,
+        )
+        val finalBlend = (operation.blendMode ?: programPaint.blendMode).toGpuBlendFacts()
         if (listOf(bounds.left, bounds.top, bounds.right, bounds.bottom).any { !it.isFinite() } ||
             bounds.right < bounds.left || bounds.bottom < bounds.top
         ) {
@@ -167,7 +183,7 @@ object GPUPreparedVerticesLowerer {
             )
         }
         val mapping = when (val mapped = program.toPreparedMeshProgramMappingResult(
-            paintAlpha = operation.paint.color.a,
+            paintAlpha = programPaint.color.a,
             finalTargetBlendMode = finalBlend.mode,
         )) {
             is GPUPreparedMeshProgramMappingResult.Ready -> mapped.mapping
@@ -219,10 +235,7 @@ object GPUPreparedVerticesLowerer {
         }
         return lowerVertices(
             vertices = vertices,
-            paint = org.graphiks.kanvas.paint.Paint(
-                color = operation.paint.color,
-                blendMode = operation.paint.blendMode,
-            ),
+            paint = programPaint,
             transform = transform,
             clip = clip,
             operationKind = GPUPreparedVerticesOperationKind.DrawMesh,
@@ -610,19 +623,19 @@ private fun prepareClip(
         source.snapshotForPreparedText()
     } catch (_: IllegalArgumentException) {
         return PreparedVerticesClipResult.Refused(
-            GPUPreparedVerticesRefusalCodes.Material, "snapshot_exception", emptyMap(),
+            GPUPreparedVerticesRefusalCodes.ClipCoverage, "snapshot_exception", emptyMap(),
         )
     }
     if (snapshot.perspectiveCaptureRefusal) {
         return PreparedVerticesClipResult.Refused(
-            GPUPreparedVerticesRefusalCodes.Transform, "perspective_capture_refusal", emptyMap(),
+            GPUPreparedVerticesRefusalCodes.ClipCoverage, "perspective_capture_refusal", emptyMap(),
         )
     }
     val facts = try {
         snapshot.toGPUClipFacts(target)
     } catch (_: IllegalArgumentException) {
         return PreparedVerticesClipResult.Refused(
-            GPUPreparedVerticesRefusalCodes.Material, "clip_mapping_exception", emptyMap(),
+            GPUPreparedVerticesRefusalCodes.ClipCoverage, "clip_mapping_exception", emptyMap(),
         )
     }
     val request = facts.coverageRequest
@@ -641,12 +654,12 @@ private fun prepareClip(
         GPUClipCoveragePlanner.planForFrameRoute(request, RenderConfig.DEFAULT, maxTextureDimension)
     } catch (_: IllegalArgumentException) {
         return PreparedVerticesClipResult.Refused(
-            GPUPreparedVerticesRefusalCodes.Material, "clip_planning_exception", emptyMap(),
+            GPUPreparedVerticesRefusalCodes.ClipCoverage, "clip_planning_exception", emptyMap(),
         )
     }
     if (plan is GPUClipCoveragePlan.Refused) {
         return PreparedVerticesClipResult.Refused(
-            GPUPreparedVerticesRefusalCodes.Material, "coverage_refused", mapOf("clipCode" to plan.code),
+            plan.code, "coverage_refused", mapOf("authority" to "GPUClipCoveragePlanner"),
         )
     }
     if (plan is GPUClipCoveragePlan.Mask) {

@@ -524,12 +524,12 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `text atlas renders prepared while textured vertices stay terminal before legacy`() {
         requireWebGpu()
-        val clip = ClipStack.Complex(
-            listOf(
-                ClipStackOp.RectOp(Rect(1f, 1f, 31f, 31f), ClipOp.INTERSECT, antiAlias = true),
-                ClipStackOp.RectOp(Rect(14f, 14f, 18f, 18f), ClipOp.DIFFERENCE, antiAlias = true),
-            ),
-        )
+        // Non-AA device rect: the prepared vertices route refuses AA-mask and
+        // analytic-intersection clips with unsupported.vertices.clip_coverage
+        // before lowering, so an integer-scissor clip keeps the
+        // textured-vertices material refusal reachable while the text draw still
+        // renders prepared.
+        val clip = ClipStack.DeviceRect(Rect(1f, 1f, 31f, 31f), antiAlias = false)
         val typeface = FontTypeface(
             javaClass.classLoader
                 .getResourceAsStream("fonts/liberation/LiberationSans-Regular.ttf")!!
@@ -1031,9 +1031,11 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `textured vertices retain explicit transform and material refusals`() {
         requireWebGpu()
-        val clip = ClipStack.Complex(
-            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
-        )
+        // Non-AA device rect: the prepared vertices route refuses AA-mask and
+        // analytic-intersection clips with unsupported.vertices.clip_coverage
+        // before lowering, so an integer-scissor clip keeps the transform and
+        // material refusals reachable.
+        val clip = ClipStack.DeviceRect(Rect(1f, 1f, 15f, 15f), antiAlias = false)
         val triangle = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f))
         val uvs = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f))
         val paint = Paint.fill(Color.WHITE).copy(shader = Shader.Image(bgraBluePixel()))
@@ -1112,9 +1114,11 @@ class GPUClipCoverageSurfaceTest {
     @Test
     fun `textured vertices with invalid indices retain their index refusal`() {
         requireWebGpu()
-        val clip = ClipStack.Complex(
-            listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
-        )
+        // Non-AA device rect: the prepared vertices route refuses AA-mask and
+        // analytic-intersection clips with unsupported.vertices.clip_coverage
+        // before packing, so an integer-scissor clip keeps the index refusal
+        // reachable.
+        val clip = ClipStack.DeviceRect(Rect(1f, 1f, 15f, 15f), antiAlias = false)
         val vertices = Vertices(
             VertexMode.TRIANGLES,
             positions = listOf(Point(1f, 1f), Point(8f, 1f), Point(1f, 8f)),

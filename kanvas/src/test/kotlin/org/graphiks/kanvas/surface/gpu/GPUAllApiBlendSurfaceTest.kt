@@ -550,11 +550,15 @@ class GPUAllApiBlendSurfaceTest {
         if (api.name in VERTICES_API_NAMES) {
             return when {
                 context == BlendContext.SAVE_LAYER -> ProductRouteExpectation.LegacyRefused
+                // The prepared vertices route refuses AA-mask clips at lowering
+                // (unsupported.vertices.clip_coverage), before any blend or
+                // destination-read decision, so the clip refusal wins for every
+                // ALPHA_MASK case.
+                context == BlendContext.ALPHA_MASK ->
+                    ProductRouteExpectation.Terminal(PREPARED_VERTICES_ALPHA_MASK_REFUSAL)
                 mode == BlendMode.DST -> ProductRouteExpectation.Prepared
                 mode.requiresDestinationRead() ->
                     ProductRouteExpectation.Terminal(PREPARED_VERTICES_DST_READ_REFUSAL)
-                context == BlendContext.ALPHA_MASK ->
-                    ProductRouteExpectation.Terminal(PREPARED_VERTICES_ALPHA_MASK_REFUSAL)
                 else -> ProductRouteExpectation.Prepared
             }
         }
@@ -918,7 +922,8 @@ class GPUAllApiBlendSurfaceTest {
         val ARTISTIC_MODES = BlendMode.entries.filter { it.ordinal >= BlendMode.MULTIPLY.ordinal }.toSet()
         val IMAGE_API_NAMES = setOf("DrawImage", "DrawImageNine", "DrawImageLattice", "DrawAtlas")
         val VERTICES_API_NAMES = setOf("DrawVertices", "DrawMesh(program=null)")
-        const val PREPARED_VERTICES_ALPHA_MASK_REFUSAL = "invalid.preflight.dump_unsafe_identity"
+        const val PREPARED_VERTICES_ALPHA_MASK_REFUSAL =
+            org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.ClipCoverage
         const val PREPARED_VERTICES_DST_READ_REFUSAL = "invalid.frame_plan.destination_read_unbound"
         val PREPARED_ATLAS_SOURCE_BLENDS =
             setOf(BlendMode.SRC, BlendMode.DST, BlendMode.SRC_OVER, BlendMode.PLUS, BlendMode.MODULATE)

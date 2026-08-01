@@ -257,7 +257,7 @@ rtk proxy ./gradlew :font:core:test :font:glyph:test :font:gpu-api:test \
   :font:test :gpu-renderer:test :kanvas:test --no-parallel
 ```
 
-- `:kanvas:test` 3,209/3,209 green.
+- `:kanvas:test` 3,210/3,210 green.
 - `:gpu-renderer:test` 3,182 tests with the single pre-existing baseline
   failure `GPURendererPackageBoundaryTest > gpu renderer production source
   satisfies package boundary rules` — exactly the 20 historical package
