@@ -366,6 +366,23 @@ unsupported primitive blenders, unsupported texcoord/material coordinate
 semantics, excessive buffer budgets, and missing WGSL ABI evidence must refuse
 with stable reasons.
 
+FP-06 closure (2026-07-31): `DrawVertices` and `DrawMesh` execute through the
+common prepared WebGPU frame route or refuse terminally, and the legacy
+`Vertices` family is removed from `LegacyDisplayOpFamily`, its allowlist, and
+its legacy diagnostic. Accepted rows cover `Triangles`/`TriangleStrip` with
+`TriangleFan` canonicalization, position-only/position+color/position+UV/
+position+color+UV layouts at locations 0/1/2, premultiplied RGBA8 colors,
+UVs, `uint16` indices (native-verified; `uint32` capability-gated with native
+evidence pending), solid and gradient materials, registered
+`MeshProgram` runtime effects, and fixed-function `SRC_OVER`/`SRC`/`SRC_IN`/
+`PLUS` final blends, with wide-open, scissor, and affine-transform clips
+(mask and analytic-intersection clip plans refuse by design at the lowerer
+with `unsupported.vertices.clip_coverage`).
+Native one-LSB pixel evidence (Apple M2 Max, wgpu4k), the upload-before-draw
+graph, ownership counters, and the exact refusal matrix are recorded in
+`reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-06-prepared-vertices-mesh-route.md`
+and mirrored in `26-draw-vertices-mesh-pipeline.md`.
+
 ## Stable Refusal Taxonomy
 
 Families must reuse route-policy reason codes where possible and add specific
@@ -397,11 +414,31 @@ Examples:
 - `unsupported.stroke.cap`
 - `unsupported.stroke.dash_complex`
 - `unsupported.vertices.topology`
+- `unsupported.vertices.position_count`
+- `unsupported.vertices.attribute_count`
+- `unsupported.vertices.non_finite`
 - `unsupported.vertices.index_out_of_range`
+- `unsupported.vertices.index_format`
 - `unsupported.vertices.attribute_layout`
+- `unsupported.vertices.transform`
 - `unsupported.vertices.color_conversion_unvalidated`
 - `unsupported.vertices.primitive_blender_unregistered`
+- `unsupported.vertices.material`
+- `unsupported.vertices.budget`
 - `unsupported.vertices.buffer_budget_exceeded`
+- `unsupported.vertices.clip_coverage`
+- `unsupported.mesh.bounds`
+- `unsupported.mesh.program_unregistered`
+- `unsupported.mesh.program_cpu_not_available`
+- `unsupported.mesh.program_wgsl_not_available`
+- `unsupported.mesh.program_wgsl_validation`
+- `unsupported.mesh.program_abi`
+- `unsupported.mesh.program_child`
+- `unsupported.mesh.program_resource`
+- `unsupported.mesh.budget`
+- `unsupported.prepared-vertices.sampled-material`
+- `unsupported.picture.nested_vertices`
+- `stale.prepared-surface.vertices-generation`
 - `unsupported.clip.stack_difference_path`
 - `unsupported.clip.stack_too_deep`
 - `unsupported.clip.operation`

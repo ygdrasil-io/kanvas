@@ -315,10 +315,31 @@ Acceptance:
 
 ### FP-06 — Prepared vertices and mesh route
 
-Status: `pending`
+Status: `completed`
 
 Goal: migrate vertices and mesh Surface operations to the common prepared
 frame route.
+
+Resolution evidence:
+
+- `2ecd951ecb9285521e1c04f134aec6d58e85318c` performs the atomic product
+  cutover: DrawVertices and DrawMesh are prepared-or-terminal, `Vertices` is
+  absent from the legacy family/allowlist, and post-admission refusal never
+  calls the legacy port;
+- topology canonicalization (Triangles/TriangleStrip native, fan to triangle
+  list), premultiplied RGBA8 colors, UVs, uint16 indices (uint32
+  capability-gated, native evidence pending), solid and gradient materials,
+  and registered MeshProgram effects use one immutable frame-local
+  vertex/index upload authority with exact upload-before-draw ordering;
+- native vertices, mesh-program, mixed-frame, batching-telemetry, ownership
+  and one-LSB pixel evidence executed without skips on the Apple M2 Max
+  adapter; the seven-case end-to-end refusal matrix is terminal and
+  allocation-free;
+- the final serial module aggregate passed :kanvas:test 3,210/3,210 and
+  :gpu-renderer:test 3,182 tests with only the historical package-boundary
+  baseline (exactly 20 cycles, 0 rule violations);
+- exact scope, counters, refusals, upload graph, ownership and nonclaims are
+  recorded in `fp-06-prepared-vertices-mesh-route.md`.
 
 Acceptance:
 

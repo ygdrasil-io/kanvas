@@ -831,6 +831,56 @@ It must not claim support for:
 
 Those routes require later evidence against this spec.
 
+## FP-06 Closure Evidence (2026-07-31)
+
+The first product slice of this spec is implemented and closed by FP-06
+(accepting head `2ecd951ec`, report
+`reports/upstream-rebaseline/graphite-dawn-frame-plan/fp-06-prepared-vertices-mesh-route.md`).
+`DrawVertices` and `DrawMesh` now execute through the common prepared WebGPU
+frame route or refuse terminally; the legacy `Vertices` family is removed from
+`LegacyDisplayOpFamily`, its allowlist, and its legacy diagnostic. The
+remaining legacy family is `Composites` (FP-07).
+
+Accepted product rows:
+
+| Area | Accepted rows |
+|---|---|
+| Topology | `Triangles` and `TriangleStrip` native draws; `TriangleFan` canonicalized to a triangle list |
+| Vertex layouts | position-only, position+color, position+UV, position+color+UV at WGSL locations 0/1/2 |
+| Colors | Premultiplied RGBA8 (`Unorm8x4`), interpolated raw by the vertex stage, sRGB-decoded per the `rgba8unorm-srgb` LinearPremul attachment model |
+| Texcoords | UV attributes become material-local coordinates |
+| Indices | `uint16` native-verified; `uint32` implemented end-to-end but capability-gated (no producer emits the `vertices.uint32_index` fact yet, so native uint32 evidence is pending); out-of-range and overflow refuse; 4-byte `COPY_BUFFER_ALIGNMENT` enforced |
+| Materials | Solid, position-local gradient, and registered `MeshProgram` runtime effects with exact uniform ABI |
+| Final blend | Fixed-function `SRC_OVER`, `SRC`, `SRC_IN`, `PLUS`; SRC_OVER-style primitive blending when vertex colors exist |
+| Clip/transform | Wide-open, hard scissor, and affine transforms; left/top edge rule pinned |
+
+Implemented stable refusal codes include the stable reason-code examples in
+this spec plus
+`unsupported.vertices.position_count`, `unsupported.vertices.attribute_count`,
+`unsupported.vertices.non_finite`, `unsupported.vertices.transform`,
+`unsupported.vertices.material`, `unsupported.vertices.budget`,
+`unsupported.vertices.clip_coverage`,
+`unsupported.mesh.bounds`, `unsupported.mesh.program_unregistered`,
+`unsupported.mesh.program_cpu_not_available`,
+`unsupported.mesh.program_wgsl_not_available`,
+`unsupported.mesh.program_wgsl_validation`, `unsupported.mesh.program_abi`,
+`unsupported.mesh.program_child`, `unsupported.mesh.program_resource`,
+`unsupported.mesh.budget`, `unsupported.prepared-vertices.sampled-material`,
+and `stale.prepared-surface.vertices-generation`. Every refusal is terminal
+and allocation-free; preflight refusals assert zero target borrow, allocation,
+write, and submit.
+
+Boundary notes: sampled image paints refuse on the product surface
+(`unsupported.vertices.material` at lowering,
+`unsupported.prepared-vertices.sampled-material` at the native
+materializer/preflight); mask and analytic-intersection clip plans refuse by
+design at the lowerer with `unsupported.vertices.clip_coverage` before the
+semantic is built, so a vertices draw with an AA-mask or analytic clip can
+never silently degrade to an unclipped full-target draw; destination-read
+blends refuse; vertices inside pictures/composites refuse with
+`unsupported.picture.nested_vertices` (FP-07). The `GPUMeshDescriptor`
+generalization and `GPUComputeMeshPreparation` route remain future targets.
+
 ## Non-Goals
 
 - Do not port Graphite `VerticesRenderStep`, `DrawWriter`,
