@@ -2,7 +2,6 @@ package org.graphiks.kanvas.gpu.renderer.filters
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlin.math.abs
 
@@ -83,7 +82,7 @@ class GPUFilterOracleTest {
     }
 
     @Test
-    fun `decal blur does not crash and yields transparent borders`() {
+    fun `decal blur fades borders to transparent without sampling out of bounds`() {
         val source = solidBitmap(3, 3, 1f, 1f, 1f, 1f)
         val node = GPUPreparedFilterNode(
             id = GPUPreparedFilterNodeId("decal-blur"),
@@ -95,6 +94,7 @@ class GPUFilterOracleTest {
         val out = GPUFilterOracle.apply(source, node, emptyMap())
         val rgba = FloatArray(4)
         out.getPixel(0, 0, rgba)
+        // pre-fix border alpha wraps to ~1.0 via in-bounds index wrap; fixed code yields ~0.25-0.36
         assertTrue(rgba[3] < 0.9f, "Decal border must fade to transparent; got alpha=${rgba[3]}")
         out.getPixel(1, 1, rgba)
         assertTrue(rgba[3] > 0f, "Decal center keeps coverage; got alpha=${rgba[3]}")
