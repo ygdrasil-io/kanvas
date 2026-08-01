@@ -75,8 +75,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUMaterialTextureFrameResourc
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8FrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUR8ArtifactIdentity
-import org.graphiks.kanvas.gpu.renderer.vertices.GPUVerticesFrameResourcePlan
-import org.graphiks.kanvas.gpu.renderer.vertices.PREPARED_VERTICES_BUFFER_ALIGNMENT
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUVerticesFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.artifacts.PREPARED_VERTICES_BUFFER_ALIGNMENT
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPayload
 import org.graphiks.kanvas.gpu.renderer.resources.GPUUniformSlabPlanner
@@ -85,8 +85,8 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUTextureCopyLayout
 import org.graphiks.kanvas.gpu.renderer.resources.buildImageFrameResourcePlanFromBindings
 import org.graphiks.kanvas.gpu.renderer.resources.buildMaterialTextureFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.buildR8FrameResourcePlan
-import org.graphiks.kanvas.gpu.renderer.vertices.buildVerticesFrameResourcePlan
-import org.graphiks.kanvas.gpu.renderer.vertices.buildVerticesStagingLayout
+import org.graphiks.kanvas.gpu.renderer.artifacts.buildVerticesFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.artifacts.buildVerticesStagingLayout
 import org.graphiks.kanvas.gpu.renderer.resources.r8ArtifactIdentity
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan

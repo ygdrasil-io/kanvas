@@ -1,7 +1,6 @@
-package org.graphiks.kanvas.gpu.renderer.vertices
+package org.graphiks.kanvas.gpu.renderer.artifacts
 
 import java.security.MessageDigest
-import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUIndexBufferPlan
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexBufferPlan

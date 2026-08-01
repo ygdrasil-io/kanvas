@@ -9,13 +9,13 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesCanonicalizationIdentity
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUVerticesFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.artifacts.buildVerticesFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.artifacts.buildVerticesStagingLayout
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUIndexBufferPlan
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesLayoutAuthority
-import org.graphiks.kanvas.gpu.renderer.vertices.GPUVerticesFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexBufferPlan
 import org.graphiks.kanvas.gpu.renderer.vertices.GPUVertexMode
-import org.graphiks.kanvas.gpu.renderer.vertices.buildVerticesFrameResourcePlan
-import org.graphiks.kanvas.gpu.renderer.vertices.buildVerticesStagingLayout
 
 class GPUVerticesFrameResourcePlanTest {
     @Test

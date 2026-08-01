@@ -8,7 +8,12 @@ import java.util.IdentityHashMap
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilities
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedImageUploadArtifact
 import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedR8UploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesShaderProgram
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesShaderResult
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtifact
+import org.graphiks.kanvas.gpu.renderer.artifacts.PreparedVerticesShaderAssembler
 import org.graphiks.kanvas.gpu.renderer.collections.immutableList
+import org.graphiks.kanvas.gpu.renderer.collections.immutableMap
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorFormat
 import org.graphiks.kanvas.gpu.renderer.color.GPUColorInterpretation
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
@@ -55,6 +60,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskDependency
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskUseToken
+import org.graphiks.kanvas.gpu.renderer.recording.GPUUploadDestinationKind
 import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_FRAME_LATE_BOUND_RESOURCE_GENERATION
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferRef
@@ -79,9 +85,14 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUResourcePreparationRequest
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseCacheResult
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceLeaseKind
 import org.graphiks.kanvas.gpu.renderer.resources.GPU_PREPARED_IMAGE_UNIFORM_ALLOCATION_SIZE_BYTES
+import org.graphiks.kanvas.gpu.renderer.resources.GPUUploadLayout
 import org.graphiks.kanvas.gpu.renderer.resources.preparedImageDescriptorHash
 import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUVerticesFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.artifacts.GPUVerticesStagingRange
+import org.graphiks.kanvas.gpu.renderer.artifacts.buildVerticesFrameResourcePlan
+import org.graphiks.kanvas.gpu.renderer.artifacts.buildVerticesStagingLayout
 
 /**
  * Sole canonical authority for the prepared-text preflight refusal surface.
@@ -122,6 +133,35 @@ internal object GPUPreparedTextPreflightRefusalCodes {
     const val COPY_ALIGNMENT = "unsupported.preflight.text.copy_alignment"
 }
 
+/**
+ * Sole canonical authority for the prepared-vertices preflight refusal surface.
+ *
+ * Tests consume these constants instead of maintaining a parallel string
+ * table. Shader and layout boundaries reuse the canonical refusal code
+ * carried by the Task 8 WGSL assembler result where the assembler already
+ * names the same boundary.
+ */
+internal object GPUPreparedVerticesPreflightRefusalCodes {
+    const val SEMANTIC = "invalid.prepared-surface.vertices-semantic"
+    const val IDENTITY = "invalid.prepared-surface.vertices-identity"
+    const val HASH = "invalid.prepared-surface.vertices-hash"
+    const val ARTIFACT = "invalid.prepared-surface.vertices-artifact"
+    const val TOPOLOGY = "unsupported.prepared-surface.vertices-topology"
+    const val INDEX_FORMAT = "unsupported.prepared-surface.vertices-index-format"
+    const val TRANSFORM = "invalid.prepared-surface.vertices-transform"
+    const val BOUNDS = "invalid.prepared-surface.vertices-bounds"
+    const val MATERIAL_ABI = "invalid.prepared-surface.vertices-material-abi"
+    const val UPLOAD_MISSING = "invalid.prepared-surface.vertices-upload-missing"
+    const val UPLOAD_DUPLICATE = "invalid.prepared-surface.vertices-upload-duplicate"
+    const val UPLOAD_ORDER = "invalid.prepared-surface.vertices-upload-order"
+    const val UPLOAD_LAYOUT = "invalid.prepared-surface.vertices-upload-layout"
+    const val USAGE = "invalid.prepared-surface.vertices-usage"
+    const val GENERATION = "stale.prepared-surface.vertices-generation"
+    const val DEPENDENCY = "invalid.prepared-surface.vertices-dependency"
+    const val BUDGET = "unsupported.prepared-surface.vertices-budget"
+    const val TARGET = "invalid.prepared-surface.vertices-target"
+}
+
 private data class GPUPreparedSurfaceArtifactByteEvidence(
     val tightRgba8Bytes: ByteArray,
     val contentHash: String,
@@ -160,6 +200,78 @@ internal sealed interface GPUPreparedSurfaceNativeRunPlan {
 
     data class Image(val plan: GPUPreparedSurfaceImageRenderRunPlan) :
         GPUPreparedSurfaceNativeRunPlan
+
+    data class Vertices(val plan: GPUPreparedVerticesRenderRunPlan) :
+        GPUPreparedSurfaceNativeRunPlan
+}
+
+/**
+ * Exact per-draw native facts derived from one prepared-vertices artifact.
+ *
+ * The materializer consumes these to issue one `draw` or `drawIndexed` call
+ * with the exact vertex/index counts and formats; the preflight derives them
+ * solely from immutable artifacts and their sealed frame resource plans.
+ */
+internal data class GPUPreparedVerticesDrawFacts(
+    val packetId: GPUDrawPacketID,
+    val artifactKey: String,
+    val vertexCount: Int,
+    val indexCount: Int?,
+    val indexFormat: String?,
+    val vertexByteCount: Long,
+    val indexByteCount: Long?,
+)
+
+internal class GPUPreparedVerticesRenderRunPlan(
+    val sourceScopeIndex: Int,
+    val renderStep: GPUFrameStep.RenderPassStep,
+    packets: List<GPUDrawSemanticPayload.Vertices>,
+    resourcePlans: List<GPUVerticesFrameResourcePlan>,
+    drawFacts: List<GPUPreparedVerticesDrawFacts>,
+    shaderProgramByPacketId: Map<GPUDrawPacketID, GPUPreparedVerticesShaderProgram>,
+    val exactScopeKey: GPUPreparedNativeScopeKey,
+) {
+    val packets: List<GPUDrawSemanticPayload.Vertices> = immutableList(packets)
+    val resourcePlans: List<GPUVerticesFrameResourcePlan> = immutableList(resourcePlans)
+    val drawFacts: List<GPUPreparedVerticesDrawFacts> = immutableList(drawFacts)
+    val shaderProgramByPacketId: Map<GPUDrawPacketID, GPUPreparedVerticesShaderProgram> =
+        immutableMap(shaderProgramByPacketId)
+
+    init {
+        require(sourceScopeIndex >= 0 &&
+            exactScopeKey.sourceStepIndex == sourceScopeIndex &&
+            exactScopeKey.operationKind == GPUEncoderOperationKind.Render &&
+            exactScopeKey.operandKeys.isNotEmpty()
+        ) {
+            "A prepared-vertices run must retain one exact render-only scope"
+        }
+        require(this.packets.isNotEmpty() &&
+            renderStep.drawPackets.mapNotNull(GPUDrawPacket::semanticPayload) == this.packets &&
+            this.drawFacts.map(GPUPreparedVerticesDrawFacts::packetId) ==
+            renderStep.drawPackets.map(GPUDrawPacket::packetId) &&
+            this.shaderProgramByPacketId.keys ==
+            this.drawFacts.map(GPUPreparedVerticesDrawFacts::packetId).toSet() &&
+            this.resourcePlans.map(GPUVerticesFrameResourcePlan::artifactKey)
+                .distinct().size == this.resourcePlans.size &&
+            this.packets.map { packet -> packet.artifact.key }.toSet() ==
+            this.resourcePlans.map(GPUVerticesFrameResourcePlan::artifactKey).toSet() &&
+            this.drawFacts.map(GPUPreparedVerticesDrawFacts::artifactKey) ==
+            this.packets.map { packet -> packet.artifact.key } &&
+            this.drawFacts.zip(this.packets).all { (fact, packet) ->
+                fact.vertexCount == packet.artifact.vertexCount &&
+                    fact.indexCount == packet.artifact.indexCount &&
+                    fact.indexFormat == packet.artifact.indexFormat &&
+                    fact.vertexByteCount ==
+                    this.resourcePlans.single { plan -> plan.artifactKey == fact.artifactKey }
+                        .vertexBuffer.byteCount &&
+                    fact.indexByteCount ==
+                    this.resourcePlans.single { plan -> plan.artifactKey == fact.artifactKey }
+                        .indexBuffer?.byteCount
+            }
+        ) {
+            "A prepared-vertices render run must retain exact packets, artifacts, and draw facts"
+        }
+    }
 }
 
 internal class GPUPreparedSurfaceImageFramePlan(
@@ -485,6 +597,7 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
                 when (run) {
                     is GPUPreparedSurfaceNativeRunPlan.Core -> run.plan.exactScopeKey
                     is GPUPreparedSurfaceNativeRunPlan.Image -> run.plan.exactScopeKey
+                    is GPUPreparedSurfaceNativeRunPlan.Vertices -> run.plan.exactScopeKey
                 }
             })
             textPlan?.let { addAll(it.exactScopeKeys) }
@@ -623,7 +736,8 @@ internal class GPUPreparedSurfaceNativePreflight(
                 it != "CorePrimitive" &&
                     it != "SampledImage" &&
                     it != "TextA8" &&
-                    it != "ColorGlyph"
+                    it != "ColorGlyph" &&
+                    it != "Vertices"
             } ||
             renders.any { render ->
                 render.drawPackets
@@ -635,7 +749,7 @@ internal class GPUPreparedSurfaceNativePreflight(
             return refused(
                 "unsupported.prepared-surface.semantic-shape",
                 "The prepared surface route accepts only homogeneous ordered CorePrimitive, " +
-                    "SampledImage, TextA8, and ColorGlyph runs.",
+                    "SampledImage, TextA8, ColorGlyph, and Vertices runs.",
             )
         }
         if (framePlan.steps.any { step ->
@@ -739,6 +853,7 @@ internal class GPUPreparedSurfaceNativePreflight(
             capabilities,
             colorGlyphCanonicalAuthentication,
         )?.let { return it }
+        validatePreparedVerticesAuthority(framePlan, context)?.let { return it }
 
         val imagePackets = packets.mapNotNull { packet ->
             (packet.semanticPayload as? GPUDrawSemanticPayload.SampledImage)?.let {
@@ -2015,7 +2130,7 @@ internal class GPUPreparedSurfaceNativePreflight(
             )
         }
 
-        validatePreparedTextDependencies(framePlan)?.let { return it }
+        validatePreparedSurfaceDependencies(framePlan)?.let { return it }
         textPackets.zip(bindings).firstOrNull { (evidence, binding) ->
             !evidence.semantic.hasPreparedTextCanonicalIntegrity() ||
                 binding.preflightSeal.semanticCanonicalHash !=
@@ -2030,7 +2145,460 @@ internal class GPUPreparedSurfaceNativePreflight(
         return null
     }
 
-    private fun validatePreparedTextDependencies(
+    /**
+     * Pure handle-free admission for every prepared-vertices packet in the frame.
+     *
+     * The semantic gatherer already proved most artifact facts; this authority
+     * re-verifies exactly what crosses the native seam: packet identity, canonical
+     * hash, immutable upload bytes, canonical layout/topology, transform, bounds,
+     * material frame identity, the Task 8 shader ABI, upload steps and ranges,
+     * resource usages and generations, the upload-before-use graph, budgets, and
+     * target compatibility. Refusals are terminal before any native call.
+     */
+    private fun validatePreparedVerticesAuthority(
+        framePlan: GPUFramePlan,
+        context: GPUFramePreflightContext?,
+    ): GPUPreparedSurfaceNativePreflightResult.Refused? {
+        val verticesEvidence = framePlan.steps.withIndex()
+            .mapNotNull { (index, step) ->
+                (step as? GPUFrameStep.RenderPassStep)?.let { index to it }
+            }
+            .flatMap { (renderIndex, render) ->
+                render.drawPackets.mapNotNull { packet ->
+                    (packet.semanticPayload as? GPUDrawSemanticPayload.Vertices)?.let { semantic ->
+                        PreparedVerticesPacketEvidence(renderIndex, render, packet, semantic)
+                    }
+                }
+            }
+        if (verticesEvidence.isEmpty()) return null
+
+        verticesEvidence.firstOrNull { evidence ->
+            val packet = evidence.packet
+            val semantic = evidence.semantic
+            semantic.payloadRef.commandIdValue != packet.commandIdValue ||
+                semantic.payloadRef.renderStepIdentity != packet.renderStepId.value
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.SEMANTIC,
+                "Prepared-vertices packet and semantic identities changed after recording.",
+            )
+        }
+        verticesEvidence.firstOrNull { evidence ->
+            val semantic = evidence.semantic
+            semantic.clipIdentity.isBlank() ||
+                semantic.clipCoverageIdentity.isBlank() ||
+                semantic.finalBlendIdentity.isBlank() ||
+                semantic.primitiveColorPresent != (semantic.primitiveBlendIdentity != null) ||
+                semantic.primitiveBlendIdentity?.isBlank() == true
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.IDENTITY,
+                "Prepared-vertices clip, coverage, blend, and primitive-color identities must be exact.",
+            )
+        }
+        verticesEvidence.firstOrNull { evidence ->
+            val artifact = evidence.semantic.artifact
+            artifact.indexCount != null &&
+                artifact.indexFormat !in setOf("uint16", "uint32")
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.INDEX_FORMAT,
+                "Prepared-vertices index format must be uint16 or uint32.",
+            )
+        }
+        verticesEvidence.firstOrNull { evidence ->
+            !evidence.semantic.artifact.hasExactPreparedVerticesByteIntegrity()
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.ARTIFACT,
+                "Prepared-vertices artifact bytes, counts, and content hashes must be exact.",
+            )
+        }
+        verticesEvidence.firstOrNull { evidence ->
+            val semantic = evidence.semantic
+            val artifact = semantic.artifact
+            semantic.topologyIdentity.sourceLabel != artifact.topology.sourceLabel
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.TOPOLOGY,
+                "Prepared-vertices semantic and artifact topologies must agree.",
+            )
+        }
+        verticesEvidence.firstOrNull { evidence ->
+            val transform = evidence.semantic.transformBytes.map(Float::fromBits)
+            transform.size != 9 ||
+                transform.any { !it.isFinite() } ||
+                transform[6] != 0f || transform[7] != 0f || transform[8] != 1f ||
+                !(transform[0] * transform[4] - transform[1] * transform[3]).isFinite() ||
+                transform[0] * transform[4] - transform[1] * transform[3] == 0f
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.TRANSFORM,
+                "Prepared-vertices transform must be finite, affine, and invertible.",
+            )
+        }
+        verticesEvidence.firstOrNull { evidence ->
+            val semantic = evidence.semantic
+            semantic.targetBounds.isEmpty ||
+                semantic.scissorBounds.isEmpty ||
+                semantic.scissorBounds.left < semantic.targetBounds.left ||
+                semantic.scissorBounds.top < semantic.targetBounds.top ||
+                semantic.scissorBounds.right > semantic.targetBounds.right ||
+                semantic.scissorBounds.bottom > semantic.targetBounds.bottom
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.BOUNDS,
+                "Prepared-vertices target and scissor bounds must be exact and contained.",
+            )
+        }
+        verticesEvidence.firstOrNull { evidence ->
+            val material = evidence.semantic.material
+            material.abiHash.isBlank() ||
+                !material.abiHash.matches(PREPARED_VERTICES_ABI_HASH_PATTERN) ||
+                material.materialKey.isBlank() ||
+                evidence.semantic.materialIdentity.isBlank()
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.MATERIAL_ABI,
+                "Prepared-vertices material key and ABI facts must remain canonical.",
+            )
+        }
+        val refusedVerticesShader = verticesEvidence.firstNotNullOfOrNull { evidence ->
+            val semantic = evidence.semantic
+            when (
+                val result = PreparedVerticesShaderAssembler.assemble(
+                    layout = semantic.artifact.layout,
+                    topology = semantic.artifact.topology,
+                    material = semantic.material,
+                    hasPrimitiveColor = semantic.primitiveColorPresent,
+                )
+            ) {
+                is GPUPreparedVerticesShaderResult.Ready -> null
+                is GPUPreparedVerticesShaderResult.Refused -> result
+            }
+        }
+        refusedVerticesShader?.let { result ->
+            return refused(
+                result.code,
+                "Prepared-vertices WGSL assembly refused before native preflight: " +
+                    result.message,
+            )
+        }
+
+        val deviceGeneration = framePlan.capabilitySeal.deviceGeneration.value
+        val plans = try {
+            verticesEvidence.map { evidence -> evidence.semantic.artifact }
+                .distinctBy { artifact -> artifact.key }
+                .sortedBy { artifact -> artifact.key }
+                .map { artifact -> buildVerticesFrameResourcePlan(artifact, deviceGeneration) }
+        } catch (_: IllegalArgumentException) {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.ARTIFACT,
+                "Prepared-vertices resource planning rejected an artifact.",
+            )
+        } catch (_: ArithmeticException) {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.ARTIFACT,
+                "Prepared-vertices resource planning overflowed.",
+            )
+        }
+        val stagingLayout = try {
+            buildVerticesStagingLayout(plans)
+        } catch (_: IllegalArgumentException) {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.UPLOAD_LAYOUT,
+                "Prepared-vertices staging ranges are not exact.",
+            )
+        } catch (_: ArithmeticException) {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.UPLOAD_LAYOUT,
+                "Prepared-vertices staging byte accounting overflowed.",
+            )
+        }
+        val stagingRef = preparedVerticesStagingRef(framePlan.frameId)
+        val uploadSteps = framePlan.steps.filterIsInstance<GPUFrameStep.UploadResourceStep>()
+        val uploadMatches = try {
+            plans.map { plan ->
+                val vertexRange = stagingLayout.ranges.singleOrNull { range ->
+                    range.artifactKey == plan.artifactKey && range.bufferKind == "vertex"
+                } ?: throw IllegalArgumentException(
+                    "Prepared-vertices vertex staging range is missing",
+                )
+                val indexRange = plan.indexBuffer?.let { index ->
+                    stagingLayout.ranges.singleOrNull { range ->
+                        range.artifactKey == plan.artifactKey && range.bufferKind == "index"
+                    } ?: throw IllegalArgumentException(
+                        "Prepared-vertices index staging range is missing",
+                    )
+                }
+                PreparedVerticesUploadMatch(
+                    artifactKey = plan.artifactKey,
+                    plan = plan,
+                    vertexSteps = uploadSteps.filter { step ->
+                        step.destinationKind == GPUUploadDestinationKind.Buffer &&
+                            step.staging == stagingRef &&
+                            step.destination == preparedVerticesVertexBufferRef(
+                                framePlan.frameId,
+                                plan.artifactKey,
+                            )
+                    },
+                    indexSteps = uploadSteps.filter { step ->
+                        step.destinationKind == GPUUploadDestinationKind.Buffer &&
+                            step.staging == stagingRef &&
+                            step.destination == preparedVerticesIndexBufferRef(
+                                framePlan.frameId,
+                                plan.artifactKey,
+                            )
+                    },
+                    vertexRange = vertexRange,
+                    indexRange = indexRange,
+                )
+            }
+        } catch (failure: IllegalArgumentException) {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.UPLOAD_LAYOUT,
+                "Prepared-vertices upload range derivation failed " +
+                    "(${failure::class.simpleName}): ${failure.message ?: "unknown"}",
+            )
+        } catch (_: ArithmeticException) {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.UPLOAD_LAYOUT,
+                "Prepared-vertices upload range accounting overflowed.",
+            )
+        }
+        uploadMatches.firstOrNull { match ->
+            match.vertexSteps.isEmpty() ||
+                (match.plan.indexBuffer != null && match.indexSteps.isEmpty()) ||
+                (match.plan.indexBuffer == null && match.indexSteps.isNotEmpty())
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.UPLOAD_MISSING,
+                "Every prepared-vertices artifact requires its exact vertex and index upload steps.",
+            )
+        }
+        uploadMatches.firstOrNull { match ->
+            match.vertexSteps.size != 1 ||
+                if (match.plan.indexBuffer != null) {
+                    match.indexSteps.size != 1
+                } else {
+                    match.indexSteps.isNotEmpty()
+                }
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.UPLOAD_DUPLICATE,
+                "One prepared-vertices artifact range must be claimed by exactly one upload step.",
+            )
+        }
+        uploadMatches.firstOrNull { match ->
+            val consumerRenderIndex = verticesEvidence
+                .filter { evidence -> evidence.semantic.artifact.key == match.artifactKey }
+                .minOf { evidence -> evidence.renderIndex }
+            framePlan.steps.indexOf(match.vertexSteps.single()) >= consumerRenderIndex ||
+                (match.indexRange != null &&
+                    framePlan.steps.indexOf(match.indexSteps.single()) >= consumerRenderIndex)
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.UPLOAD_ORDER,
+                "A prepared-vertices upload must never appear after its first consuming draw.",
+            )
+        }
+        uploadMatches.firstOrNull { match ->
+            !match.vertexSteps.single().matchesPreparedVerticesUploadRange(match.vertexRange) ||
+                (match.indexRange != null &&
+                    !match.indexSteps.single().matchesPreparedVerticesUploadRange(
+                        match.indexRange,
+                    ))
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.UPLOAD_LAYOUT,
+                "Prepared-vertices upload layouts must exactly match the sealed staging ranges.",
+            )
+        }
+        val preparations = framePlan.steps
+            .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+            .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        val stagingPreparation = preparations.singleOrNull { request ->
+            request.resource == stagingRef
+        }
+        if (stagingPreparation == null ||
+            stagingPreparation.role != GPUFrameResourceRole.UploadStaging ||
+            stagingPreparation.usages != setOf(GPUFrameResourceUsage.CopySource) ||
+            stagingPreparation.lifetime != GPUFrameResourceLifetime.FrameLocal ||
+            stagingPreparation.byteSize != stagingLayout.totalBytes ||
+            (stagingPreparation.descriptor as? GPUFrameBufferDescriptor)?.byteSize !=
+            stagingLayout.totalBytes
+        ) {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.USAGE,
+                "The prepared-vertices staging buffer must retain its exact upload ownership.",
+            )
+        }
+        uploadMatches.firstOrNull { match ->
+            val plan = match.plan
+            val vertexPreparation = preparations.singleOrNull { request ->
+                request.resource == preparedVerticesVertexBufferRef(
+                    framePlan.frameId,
+                    plan.artifactKey,
+                )
+            }
+            val indexPreparation = plan.indexBuffer?.let { index ->
+                preparations.singleOrNull { request ->
+                    request.resource == preparedVerticesIndexBufferRef(
+                        framePlan.frameId,
+                        plan.artifactKey,
+                    )
+                }
+            }
+            !vertexPreparation.matchesPreparedVerticesBufferPlan(
+                role = GPUFrameResourceRole.VertexData,
+                usages = setOf(
+                    GPUFrameResourceUsage.CopyDestination,
+                    GPUFrameResourceUsage.Vertex,
+                ),
+                byteCount = plan.vertexBuffer.byteCount,
+            ) ||
+                (
+                    plan.indexBuffer != null &&
+                        !indexPreparation.matchesPreparedVerticesBufferPlan(
+                            role = GPUFrameResourceRole.IndexData,
+                            usages = setOf(
+                                GPUFrameResourceUsage.CopyDestination,
+                                GPUFrameResourceUsage.Index,
+                            ),
+                            byteCount = plan.indexBuffer.byteCount,
+                        )
+                    )
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.USAGE,
+                "Prepared-vertices vertex and index buffers must retain exact copy-destination usages.",
+            )
+        }
+        context?.let { current ->
+            val verticesRefs = buildList {
+                add(stagingRef)
+                plans.forEach { plan ->
+                    add(
+                        preparedVerticesVertexBufferRef(framePlan.frameId, plan.artifactKey),
+                    )
+                    if (plan.indexBuffer != null) {
+                        add(
+                            preparedVerticesIndexBufferRef(framePlan.frameId, plan.artifactKey),
+                        )
+                    }
+                }
+            }
+            if (verticesRefs.any { ref -> current.resourceGenerations[ref] == null }) {
+                return refused(
+                    GPUPreparedVerticesPreflightRefusalCodes.GENERATION,
+                    "Every prepared-vertices resource requires exact current generation evidence.",
+                )
+            }
+        }
+        validatePreparedSurfaceDependencies(framePlan)?.let { return it }
+
+        val expectedVerticesAllocations = buildList {
+            add(
+                GPUFrameMemoryAllocation(
+                    label = "prepared-vertices.staging",
+                    category = GPUFrameMemoryCategory.ReusableScratch,
+                    bytes = stagingLayout.totalBytes,
+                    resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                    extent = null,
+                ),
+            )
+            plans.forEach { plan ->
+                add(
+                    GPUFrameMemoryAllocation(
+                        label = "prepared-vertices.vertex.${plan.artifactKey}",
+                        category = GPUFrameMemoryCategory.ReusableScratch,
+                        bytes = plan.vertexBuffer.byteCount,
+                        resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                        extent = null,
+                    ),
+                )
+                plan.indexBuffer?.let { index ->
+                    add(
+                        GPUFrameMemoryAllocation(
+                            label = "prepared-vertices.index.${plan.artifactKey}",
+                            category = GPUFrameMemoryCategory.ReusableScratch,
+                            bytes = index.byteCount,
+                            resourceKind = GPUFrameMemoryResourceKind.Buffer,
+                            extent = null,
+                        ),
+                    )
+                }
+            }
+        }
+        val expectedVerticesAllocationsByLabel =
+            expectedVerticesAllocations.associateBy(GPUFrameMemoryAllocation::label)
+        val actualVerticesAllocations = framePlan.memoryBudget.allocations.filter { allocation ->
+            allocation.label.startsWith("prepared-vertices.")
+        }
+        val actualVerticesAllocationsByLabel =
+            actualVerticesAllocations.associateBy(GPUFrameMemoryAllocation::label)
+        var aggregateUploadBytes = 0L
+        plans.forEach { plan ->
+            aggregateUploadBytes = try {
+                Math.addExact(aggregateUploadBytes, plan.totalByteCount)
+            } catch (_: ArithmeticException) {
+                return refused(
+                    GPUPreparedVerticesPreflightRefusalCodes.BUDGET,
+                    "Prepared-vertices aggregate upload byte accounting overflowed.",
+                )
+            }
+        }
+        if (expectedVerticesAllocations.size != expectedVerticesAllocationsByLabel.size ||
+            actualVerticesAllocations.size != actualVerticesAllocationsByLabel.size ||
+            actualVerticesAllocationsByLabel != expectedVerticesAllocationsByLabel ||
+            aggregateUploadBytes !=
+            actualVerticesAllocations
+                .filter { allocation -> allocation.label != "prepared-vertices.staging" }
+                .sumOf { allocation -> allocation.bytes } ||
+            framePlan.memoryBudget.diagnostic != null
+        ) {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.BUDGET,
+                "Prepared-vertices allocations and aggregate frame memory budget must be exact.",
+            )
+        }
+        val sceneFormat = (
+            framePlan.steps
+                .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+                .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+                .singleOrNull { request -> request.role == GPUFrameResourceRole.SceneTarget }
+                ?.descriptor as? GPUFrameTextureDescriptor
+            )?.format
+        if (sceneFormat == null ||
+            verticesEvidence.any { evidence ->
+                evidence.semantic.targetFormat != sceneFormat.value
+            }
+        ) {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.TARGET,
+                "Prepared-vertices target format must match the scene target format.",
+            )
+        }
+        verticesEvidence.firstOrNull { evidence ->
+            !evidence.semantic.hasCanonicalHashIntegrity()
+        }?.let {
+            return refused(
+                GPUPreparedVerticesPreflightRefusalCodes.HASH,
+                "Prepared-vertices semantic canonical hash changed after recording.",
+            )
+        }
+        return null
+    }
+
+    /**
+     * Exact ordered producer-consumer graph for every prepared-surface semantic
+     * family (image, text, material, vertices, clip, destination, readback).
+     *
+     * The vertices edges mirror the recording builder: every artifact upload
+     * precedes its consuming render through the sealed upload token, and every
+     * sampled material upload precedes the vertices draw that samples it.
+     */
+    private fun validatePreparedSurfaceDependencies(
         framePlan: GPUFramePlan,
     ): GPUPreparedSurfaceNativePreflightResult.Refused? {
         val prepareTaskId = framePlan.steps
@@ -2135,6 +2703,37 @@ internal class GPUPreparedSurfaceNativePreflight(
                 "prepared-text-material-resource-order",
                 "prepared.text.material-prepare-before-upload",
                 "prepared-text.material-prepare.$index",
+            )
+        }
+        val verticesUploads = uploads.filter { upload ->
+            upload.staging == preparedVerticesStagingRef(framePlan.frameId)
+        }
+        val verticesPlanByArtifactKey = preparedVerticesPlansByArtifactKey(framePlan)
+        val verticesVertexUploadByArtifactKey = verticesUploads
+            .filter { upload -> upload.destination.value.contains("prepared-vertices.vertex") }
+            .associateBy { upload ->
+                preparedVerticesArtifactKeyOfUpload(upload)
+            }
+        val verticesIndexUploadByArtifactKey = verticesUploads
+            .filter { upload -> upload.destination.value.contains("prepared-vertices.index") }
+            .associateBy { upload ->
+                preparedVerticesArtifactKeyOfUpload(upload)
+            }
+        val orderedVerticesUploads = buildList {
+            verticesPlanByArtifactKey.keys.sorted().forEach { artifactKey ->
+                verticesVertexUploadByArtifactKey[artifactKey]?.let(::add)
+            }
+            verticesPlanByArtifactKey.keys.sorted().forEach { artifactKey ->
+                verticesIndexUploadByArtifactKey[artifactKey]?.let(::add)
+            }
+        }
+        orderedVerticesUploads.forEachIndexed { index, upload ->
+            append(
+                prepareTaskId,
+                upload.sourceTaskIds.single(),
+                "prepared-vertices-resource-order",
+                "prepared.vertices.prepare-before-upload",
+                "prepared-vertices.prepare.$index",
             )
         }
         val coverageMaskProducerRenders = allRenders.filter { render ->
@@ -2245,6 +2844,63 @@ internal class GPUPreparedSurfaceNativePreflight(
                     "prepared-text.material-consumer.${expected.size}",
                 )
             }
+            val verticesArtifactKeys = render.drawPackets.mapNotNull { packet ->
+                (packet.semanticPayload as? GPUDrawSemanticPayload.Vertices)?.artifact?.key
+            }.distinct()
+            verticesArtifactKeys.forEach { artifactKey ->
+                val plan = verticesPlanByArtifactKey[artifactKey]
+                    ?: return refused(
+                        GPUPreparedVerticesPreflightRefusalCodes.DEPENDENCY,
+                        "Every prepared-vertices consumer requires one exact artifact plan.",
+                    )
+                val vertexUpload = verticesVertexUploadByArtifactKey[artifactKey]
+                    ?: return refused(
+                        GPUPreparedVerticesPreflightRefusalCodes.DEPENDENCY,
+                        "Every prepared-vertices consumer requires one exact vertex upload producer.",
+                    )
+                append(
+                    vertexUpload.sourceTaskIds.single(),
+                    renderTaskId,
+                    "prepared-vertices-resource-order",
+                    "prepared.vertices.upload-before-consumer",
+                    plan.uploadBeforeUseToken,
+                )
+                verticesIndexUploadByArtifactKey[artifactKey]?.let { indexUpload ->
+                    append(
+                        indexUpload.sourceTaskIds.single(),
+                        renderTaskId,
+                        "prepared-vertices-resource-order",
+                        "prepared.vertices.upload-before-consumer",
+                        plan.uploadBeforeUseToken,
+                    )
+                }
+            }
+            val verticesMaterialProducerTaskIds = render.drawPackets
+                .flatMap { packet ->
+                    (packet.semanticPayload as? GPUDrawSemanticPayload.Vertices)
+                        ?.material
+                        ?.sampledResources
+                        .orEmpty()
+                }
+                .map { resource ->
+                    materialUploads.singleOrNull { upload ->
+                        upload.materialResourcePlan?.resourceKey == resource.resourceKey
+                    }?.sourceTaskIds?.singleOrNull()
+                        ?: return refused(
+                            GPUPreparedVerticesPreflightRefusalCodes.DEPENDENCY,
+                            "Every sampled vertices material consumer requires one exact upload producer.",
+                        )
+                }
+                .distinct()
+            verticesMaterialProducerTaskIds.forEach { uploadTaskId ->
+                append(
+                    uploadTaskId,
+                    renderTaskId,
+                    "prepared-vertices-material-resource-order",
+                    "prepared.vertices.material-upload-before-consumer",
+                    "prepared-vertices.material-consumer.${expected.size}",
+                )
+            }
             textBindings.mapNotNull(GPUPreparedTextRenderBinding::coverageMaskResource)
                 .distinct()
                 .forEach { resource ->
@@ -2313,13 +2969,37 @@ internal class GPUPreparedSurfaceNativePreflight(
             )
         }
         if (framePlan.dependencies != expected) {
+            val hasVertices = framePlan.steps
+                .filterIsInstance<GPUFrameStep.RenderPassStep>()
+                .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+                .any { packet -> packet.semanticPayload is GPUDrawSemanticPayload.Vertices }
             return refused(
-                GPUPreparedTextPreflightRefusalCodes.DEPENDENCY,
-                "Prepared-text dependencies must be one exact ordered producer-consumer graph.",
+                if (hasVertices) {
+                    GPUPreparedVerticesPreflightRefusalCodes.DEPENDENCY
+                } else {
+                    GPUPreparedTextPreflightRefusalCodes.DEPENDENCY
+                },
+                "Prepared-surface dependencies must be one exact ordered producer-consumer graph.",
             )
         }
         return null
     }
+
+    private data class PreparedVerticesPacketEvidence(
+        val renderIndex: Int,
+        val render: GPUFrameStep.RenderPassStep,
+        val packet: GPUDrawPacket,
+        val semantic: GPUDrawSemanticPayload.Vertices,
+    )
+
+    private data class PreparedVerticesUploadMatch(
+        val artifactKey: String,
+        val plan: GPUVerticesFrameResourcePlan,
+        val vertexSteps: List<GPUFrameStep.UploadResourceStep>,
+        val indexSteps: List<GPUFrameStep.UploadResourceStep>,
+        val vertexRange: GPUVerticesStagingRange,
+        val indexRange: GPUVerticesStagingRange?,
+    )
 
     fun validate(
         framePlan: GPUFramePlan,
@@ -2535,6 +3215,86 @@ internal class GPUPreparedSurfaceNativePreflight(
                         },
                     ),
                 )
+            } else if (render.drawPackets.all {
+                    it.semanticPayload is GPUDrawSemanticPayload.Vertices
+                }
+            ) {
+                val verticesRun = try {
+                    val runPackets = render.drawPackets.map { packet ->
+                        packet.semanticPayload as GPUDrawSemanticPayload.Vertices
+                    }
+                    val deviceGeneration = framePlan.capabilitySeal.deviceGeneration.value
+                    val runArtifacts = runPackets.map(GPUDrawSemanticPayload.Vertices::artifact)
+                        .distinctBy { artifact -> artifact.key }
+                        .sortedBy { artifact -> artifact.key }
+                    val runPlans = runArtifacts.map { artifact ->
+                        buildVerticesFrameResourcePlan(artifact, deviceGeneration)
+                    }
+                    val drawFacts = render.drawPackets.map { packet ->
+                        val semantic = packet.semanticPayload as GPUDrawSemanticPayload.Vertices
+                        val plan = runPlans.singleOrNull { plan ->
+                            plan.artifactKey == semantic.artifact.key
+                        } ?: throw IllegalArgumentException(
+                            "Prepared-vertices run artifact plan is missing",
+                        )
+                        GPUPreparedVerticesDrawFacts(
+                            packetId = packet.packetId,
+                            artifactKey = semantic.artifact.key,
+                            vertexCount = semantic.artifact.vertexCount,
+                            indexCount = semantic.artifact.indexCount,
+                            indexFormat = semantic.artifact.indexFormat,
+                            vertexByteCount = plan.vertexBuffer.byteCount,
+                            indexByteCount = plan.indexBuffer?.byteCount,
+                        )
+                    }
+                    val shaderProgramByPacketId = render.drawPackets.associate { packet ->
+                        val semantic = packet.semanticPayload as GPUDrawSemanticPayload.Vertices
+                        when (
+                            val result = PreparedVerticesShaderAssembler.assemble(
+                                layout = semantic.artifact.layout,
+                                topology = semantic.artifact.topology,
+                                material = semantic.material,
+                                hasPrimitiveColor = semantic.primitiveColorPresent,
+                            )
+                        ) {
+                            is GPUPreparedVerticesShaderResult.Ready ->
+                                packet.packetId to result.program
+                            is GPUPreparedVerticesShaderResult.Refused ->
+                                return refused(
+                                    result.code,
+                                    "Prepared-vertices WGSL assembly refused before native materialization.",
+                                )
+                        }
+                    }
+                    val exactScopeKey = exactScopeKeys.singleOrNull { scope ->
+                        scope.sourceStepIndex == sourceStepIndex
+                    } ?: throw IllegalArgumentException(
+                        "Prepared-vertices run scope is missing",
+                    )
+                    GPUPreparedSurfaceNativeRunPlan.Vertices(
+                        GPUPreparedVerticesRenderRunPlan(
+                            sourceScopeIndex = sourceStepIndex,
+                            renderStep = render,
+                            packets = runPackets,
+                            resourcePlans = runPlans,
+                            drawFacts = drawFacts,
+                            shaderProgramByPacketId = shaderProgramByPacketId,
+                            exactScopeKey = exactScopeKey,
+                        ),
+                    )
+                } catch (failure: IllegalArgumentException) {
+                    return refused(
+                        GPUPreparedVerticesPreflightRefusalCodes.ARTIFACT,
+                        "Prepared-vertices run plan construction failed " +
+                            "(${failure::class.simpleName}): ${failure.message ?: "unknown"}",
+                    )
+                } catch (_: ArithmeticException) {
+                    return refused(
+                        GPUPreparedVerticesPreflightRefusalCodes.ARTIFACT,
+                        "Prepared-vertices run plan byte accounting overflowed.",
+                    )
+                }
+                orderedRuns += verticesRun
             }
         }
         if (imageFrames.isNotEmpty()) {
@@ -4409,6 +5169,105 @@ private fun refused(
     message: String,
     facts: Map<String, String> = emptyMap(),
 ) = GPUPreparedSurfaceNativePreflightResult.Refused(code, message, facts)
+
+/** Exact recording-builder staging ref for the shared frame vertices staging buffer. */
+private fun preparedVerticesStagingRef(frameId: GPUFrameID): GPUFrameBufferRef =
+    GPUFrameBufferRef("buffer.prepared-vertices.staging.${frameId.value}")
+
+/** Exact recording-builder vertex buffer ref for one prepared-vertices artifact. */
+private fun preparedVerticesVertexBufferRef(
+    frameId: GPUFrameID,
+    artifactKey: String,
+): GPUFrameBufferRef =
+    GPUFrameBufferRef("buffer.prepared-vertices.vertex.${frameId.value}.$artifactKey")
+
+/** Exact recording-builder index buffer ref for one prepared-vertices artifact. */
+private fun preparedVerticesIndexBufferRef(
+    frameId: GPUFrameID,
+    artifactKey: String,
+): GPUFrameBufferRef =
+    GPUFrameBufferRef("buffer.prepared-vertices.index.${frameId.value}.$artifactKey")
+
+/** Re-verifies exactly what crosses the native seam: counts, bytes, and content hashes. */
+private fun GPUPreparedVerticesUploadArtifact.hasExactPreparedVerticesByteIntegrity(): Boolean {
+    val vertexBytes = vertexBytesForUpload()
+    val strideBytes = layout.strideBytes
+    val vertexBytesMatch = try {
+        Math.multiplyExact(vertexCount, strideBytes) == vertexBytes.size
+    } catch (_: ArithmeticException) {
+        false
+    }
+    if (!vertexBytesMatch || preparedSurfaceSha256(vertexBytes) != vertexContentHash) {
+        return false
+    }
+    val indexBytes = indexBytesForUpload()
+    if (indexBytes == null) {
+        return indexCount == null && indexFormat == null
+    }
+    if (indexCount == null ||
+        indexFormat !in setOf("uint16", "uint32")
+    ) {
+        return false
+    }
+    val elementBytes = if (indexFormat == "uint16") 2 else 4
+    val indexBytesMatch = try {
+        Math.multiplyExact(indexCount, elementBytes) == indexBytes.size
+    } catch (_: ArithmeticException) {
+        false
+    }
+    return indexBytesMatch && indexContentHash != null &&
+        preparedSurfaceSha256(indexBytes) == indexContentHash
+}
+
+/** One vertices upload step must exactly match one derived staging range. */
+private fun GPUFrameStep.UploadResourceStep.matchesPreparedVerticesUploadRange(
+    range: GPUVerticesStagingRange,
+): Boolean =
+    layout == GPUUploadLayout(
+        sourceOffsetBytes = range.offsetBytes,
+        bytesPerRow = range.byteCount,
+        rowsPerImage = 1,
+        byteSize = range.byteCount,
+    )
+
+/** One vertices buffer preparation must retain its exact frame-local ownership. */
+private fun GPUResourcePreparationRequest?.matchesPreparedVerticesBufferPlan(
+    role: GPUFrameResourceRole,
+    usages: Set<GPUFrameResourceUsage>,
+    byteCount: Long,
+): Boolean =
+    this != null &&
+        this.role == role &&
+        this.usages == usages &&
+        this.lifetime == GPUFrameResourceLifetime.FrameLocal &&
+        this.byteSize == byteCount &&
+        (this.descriptor as? GPUFrameBufferDescriptor)?.byteSize == byteCount
+
+/** Frame-global artifact plans derived deterministically from every vertices packet. */
+private fun preparedVerticesPlansByArtifactKey(
+    framePlan: GPUFramePlan,
+): Map<String, GPUVerticesFrameResourcePlan> {
+    val deviceGeneration = framePlan.capabilitySeal.deviceGeneration.value
+    return framePlan.steps
+        .filterIsInstance<GPUFrameStep.RenderPassStep>()
+        .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+        .mapNotNull { packet ->
+            (packet.semanticPayload as? GPUDrawSemanticPayload.Vertices)?.artifact
+        }
+        .distinctBy { artifact -> artifact.key }
+        .sortedBy { artifact -> artifact.key }
+        .associate { artifact ->
+            artifact.key to buildVerticesFrameResourcePlan(artifact, deviceGeneration)
+        }
+}
+
+/** Recovers the artifact key from the exact recording-builder destination ref. */
+private fun preparedVerticesArtifactKeyOfUpload(upload: GPUFrameStep.UploadResourceStep): String {
+    val segments = upload.destination.value.split('.')
+    return segments.last()
+}
+
+private val PREPARED_VERTICES_ABI_HASH_PATTERN = Regex("sha256:[0-9a-f]{64}")
 
 private inline fun <T> List<T>.anyIndexed(predicate: (Int, T) -> Boolean): Boolean {
     forEachIndexed { index, value ->
