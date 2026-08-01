@@ -64,8 +64,32 @@ Le plan raisonnait au niveau « scope/paint/bounds bruts » ; les contrats réel
 #### Contrats vérifiés (Task 0 résolu)
 
 ```kotlin
-// Toutes les signatures ci-dessus sont vérifiées sur la base FP-06 (40a873560)
+// Toutes les signatures ci-dessous sont vérifiées sur la base FP-06 (40a873560)
 // et la fondation fp-07 validée — voir reports/fp07-composite-route-plan.md, section Context.
+
+// gpu-renderer/.../layers/LayerContracts.kt
+fun plan(request: GPUSaveLayerIsolatedTargetRequest): GPUSaveLayerIsolatedTargetGatePlan
+// refusal: gatePlan.diagnostics.firstOrNull { it.terminal }?.code   (NO .refused field)
+// acceptance: gatePlan.layerPlan  (type GPULayerPlan)
+
+fun materialize(
+    request: GPUSaveLayerMaterializationRequest,
+    context: GPUTargetPreparationContext,   // 2nd arg MANDATORY
+): GPUSaveLayerMaterializationResult         // require(!adapterBacked)
+
+// kanvas/.../surface/gpu/GPUPreparedCompositeCapture.kt:253
+fun capture(operations: List<DisplayOp>, limits: GPUPreparedCompositeCaptureLimits): GPUPreparedCompositeCaptureResult
+// Ready(GPUPreparedCompositeCapture(rootScopeId, scopes, expandedOperations, identity)) | Refused(code, operationIndex, facts)
+
+// gpu-renderer/.../recording/GPUPreparedSurfaceFrameTaskListBuilder.kt (ported handleSaveLayer)
+fun handleSaveLayer(
+    scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
+    rootScopeId: GPUPreparedCompositeScopeId,
+    identity: String,
+    capabilities: GPUPreflightCapabilities,
+    context: GPUTargetPreparationContext,
+    targetBudgetBytes: Long = DEFAULT_SAVE_LAYER_FRAME_BUDGET_BYTES,
+): GPUPreparedSaveLayerFrameHandling   // Ready(plan, results, commands) | Refused(code, operationIndex, facts)
 ```
 
 # Design & Corrections
