@@ -44,8 +44,9 @@ object GPUPreparedCompositeLowerer {
         }
 
         // Render order: innermost layers first (their targets must exist before a parent
-        // composites them), siblings in save order. Insertion order alone would emit the
-        // parent's CompositeLayer before the child target is ever rendered.
+        // composites them), then siblings by lexicographic scopeId for a deterministic
+        // tie-break. Insertion order alone would emit the parent's CompositeLayer before
+        // the child target is ever rendered.
         val depthByScopeValue = scopesByValue.mapValues { (value, scope) ->
             scopeDepth(scope, scopesByValue)
         }

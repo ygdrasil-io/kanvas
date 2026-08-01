@@ -1101,6 +1101,8 @@ class GPUTaskList(
     )
     val compositeCommands: List<GPUPassCommand> = immutableList(compositeCommands)
 
+    // TODO(Task 8/9): compositeCommands is scheduling evidence only until the executor consumes it; nothing renders it yet.
+
     init {
         require(expectedReplayKeyHash.isNotBlank()) {
             "GPUTaskList.expectedReplayKeyHash must not be blank"

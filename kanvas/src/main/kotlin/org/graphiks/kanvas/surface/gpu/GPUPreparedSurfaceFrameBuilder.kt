@@ -115,6 +115,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
             // records BeginLayer/EndLayer into the legacy dump and flat-renders layer
             // children), so a composite frame must either materialize through the real
             // saveLayer pipeline or refuse terminally — never silently fall back.
+            // TODO(Task 8/9): for composite-only frames the flat child render must be elided when composite commands are scheduled; mixed composite+visual frames need explicit topology handling.
             val compositeHandling = if (hasCompositeOps) {
                 prepareCompositeFrameHandling(
                     operations = request.candidate.operations,
@@ -133,7 +134,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         facts = compositeHandling.facts + mapOf(
                             "boundary" to "surface.composite",
                             "operationIndex" to
-                                compositeHandling.operationIndex.toString(),
+                                (compositeHandling.operationIndex?.toString() ?: "unknown"),
                         ),
                     ),
                 )
@@ -457,7 +458,7 @@ private fun prepareCompositeFrameHandling(
         identity = ready.capture.identity,
         capabilities = GPUPreflightCapabilities(
             maxTextureSize = (capabilities.limits?.maxTextureDimension2D ?: 4096L).toInt(),
-            maxColorAttachments = 8,
+            maxColorAttachments = DEFAULT_MAX_COLOR_ATTACHMENTS,
         ),
         context = context,
     )
@@ -475,6 +476,9 @@ private fun contextFor(request: GPUPreparedSurfaceFrameBuildRequest): GPUTargetP
         deviceGeneration = request.deviceGeneration.value,
         budgetClass = "default",
     )
+
+/** WebGPU minimum for color attachments; the saveLayer preflight runs with this floor. */
+private const val DEFAULT_MAX_COLOR_ATTACHMENTS = 8
 
 private sealed interface PreparedImageVisuals {
     data class Ready(
