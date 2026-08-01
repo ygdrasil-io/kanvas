@@ -12,6 +12,17 @@ import org.graphiks.kanvas.gpu.renderer.state.GPUFrameProvenance
 
 const val PREPARED_VERTICES_RENDER_STEP_IDENTITY: String = "vertices.draw.prepared"
 
+/** Exact packet identities accepted by the prepared-vertices native route. */
+internal val PREPARED_VERTICES_RENDER_PIPELINE_KEY =
+    org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey(
+        "pipeline.prepared-vertices.rgba8unorm.src-over",
+    )
+
+internal const val PREPARED_VERTICES_BINDING_LAYOUT_HASH =
+    "layout.prepared-vertices.group0.draw-material"
+
+internal const val PREPARED_VERTICES_VERTEX_SOURCE_LABEL = "prepared-vertices"
+
 /** Closed canonical topologies admitted into prepared vertices semantics. */
 enum class GPUPreparedVerticesTopologyIdentity(val sourceLabel: String) {
     Triangles("Triangles"),

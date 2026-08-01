@@ -2,12 +2,20 @@ package org.graphiks.kanvas.gpu.renderer.passes
 
 import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
 
-private fun List<GPUPassCommandOperandBridge>.requiresBindGroup(packetId: GPUDrawPacketID): Boolean {
-    val packetCommandLabels = asSequence()
+/** Number of bind-group commands the bridge emits for one packet (one per bound group). */
+private fun List<GPUPassCommandOperandBridge>.bindGroupCommandCount(packetId: GPUDrawPacketID): Int {
+    val packetBridges = asSequence()
         .filter { bridge -> bridge.packetId == packetId }
-        .map(GPUPassCommandOperandBridge::commandLabel)
-        .toSet()
-    return "setRenderPipeline" !in packetCommandLabels || "setBindGroup" in packetCommandLabels
+        .toList()
+    val pipelinePresent = packetBridges.any { bridge -> bridge.commandLabel == "setRenderPipeline" }
+    val boundGroups = packetBridges.count { bridge -> bridge.commandLabel == "setBindGroup" }
+    return if (boundGroups > 0) {
+        boundGroups
+    } else if (!pipelinePresent) {
+        1
+    } else {
+        0
+    }
 }
 
 /**
@@ -82,7 +90,7 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
                         packetId = packet.packetId,
                     ),
                 )
-                if (effectiveOperandBridge.requiresBindGroup(packet.packetId)) {
+                repeat(effectiveOperandBridge.bindGroupCommandCount(packet.packetId)) {
                     add(
                         GPUPassCommand.SetBindGroup(
                             bindingLayoutHash = packet.bindingLayoutHash,
@@ -202,7 +210,7 @@ fun GPUPassCommandStream.Companion.fromBatchPlan(
                 "Packet ${packet.packetId.value} cannot be lowered from batch plan without renderPipelineKey"
             }
             add(GPUPassCommand.SetRenderPipeline(renderPipelineKey, packet.packetId))
-            if (effectiveOperandBridge.requiresBindGroup(packet.packetId)) {
+            repeat(effectiveOperandBridge.bindGroupCommandCount(packet.packetId)) {
                 add(
                     GPUPassCommand.SetBindGroup(
                         bindingLayoutHash = packet.bindingLayoutHash,

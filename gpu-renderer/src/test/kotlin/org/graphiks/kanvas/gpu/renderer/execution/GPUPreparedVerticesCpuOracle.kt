@@ -1,35 +1,18 @@
-package org.graphiks.kanvas.surface.gpu
+package org.graphiks.kanvas.gpu.renderer.execution
 
 import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
- * Per-channel comparison of two RGBA8 buffers produced for the same declared
- * pixel size.
- *
- * [maxChannelDelta] is the maximum unsigned per-channel difference,
- * [differingChannels] is the count of channels that differ at all, and
- * [comparedChannels] is the total number of channels compared. Two renders
- * that differ by at most one LSB per channel ([matchesWithinOneLsb]) are
- * treated as equivalent, which is the tolerance a physical f32 UNORM store
- * allows around the declared double→f32→UNORM quantization.
- */
-data class GPUPreparedVerticesPixelDelta(
-    val maxChannelDelta: Int,
-    val differingChannels: Int,
-    val comparedChannels: Int,
-) {
-    val matchesWithinOneLsb: Boolean
-        get() = maxChannelDelta <= 1
-}
-
-/**
  * Independent CPU pixel oracle for prepared-vertices semantics.
  *
- * This oracle interprets only the public geometry/material semantics captured
- * by [GPUPreparedVerticesTestFixture]. It intentionally imports no production
- * packer, shader, or materializer type.
+ * NOTE: This file mirrors the FP-06 Task 13 oracle kept in the kanvas TEST sources
+ * (`org.graphiks.kanvas.surface.gpu.GPUPreparedVerticesCpuOracle` plus the fixture
+ * types and factory fixtures). gpu-renderer tests cannot depend on the kanvas test
+ * classpath (module dependency direction), so the oracle and its fixture contract are
+ * duplicated here with identical semantics. Any change to the kanvas oracle must be
+ * mirrored here, and vice versa.
  *
  * ### Geometry
  *
@@ -44,12 +27,8 @@ data class GPUPreparedVerticesPixelDelta(
  * 3. A fragment at device pixel-centre `(px + 0.5, py + 0.5)` is covered by a
  *    triangle when all three edge functions are non-negative after the
  *    triangle is oriented counter-clockwise. Edge inclusion follows the
- *    fixed-function left/top rule: a sample exactly on an edge is covered
- *    only when the directed edge is a top edge (horizontal, interior below,
- *    i.e. traversed leftward) or a left edge (interior to the right of the
- *    directed edge, i.e. traversed upward: `y1 < y0`), so a pixel on a
- *    shared edge is claimed by exactly one triangle. Degenerate (zero-area)
- *    triangles cover nothing.
+ *    fixed-function left/top rule. Degenerate (zero-area) triangles cover
+ *    nothing.
  * 4. Barycentric weights are computed in double precision from the oriented
  *    edge functions, then attributes (vertex colour, uv) are interpolated
  *    linearly in device space — perspective-free because the transform is
@@ -78,48 +57,40 @@ data class GPUPreparedVerticesPixelDelta(
  *    result is `paintAlpha`). The fragment multiplies it by the DECODED
  *    primitive colour: `source = materialResult * decodedPrimitive`.
  * 7. When an image is present, the texture is sRGB-encoded and WebGPU
- *    decodes sRGB→linear BEFORE filtering, so
- *    [GPUPreparedVerticesFilterMode.NEAREST] (`floor(u*width)`) or
- *    [GPUPreparedVerticesFilterMode.LINEAR] (texel-centre bilinear, clamped)
- *    operate on DECODED texel values (for LINEAR each of the four texels is
- *    decoded before the weighted average). The vertex-colour primitive blend
- *    modulates the sampled texel:
- *    `primitive = decodedVertexColour * decodedTexel` (component-wise
+ *    decodes sRGB→linear BEFORE filtering, so NEAREST (`floor(u*width)`) or
+ *    LINEAR (texel-centre bilinear, clamped) operate on DECODED texel values
+ *    (for LINEAR each of the four texels is decoded before the weighted
+ *    average). The vertex-colour primitive blend modulates the sampled
+ *    texel: `primitive = decodedVertexColour * decodedTexel` (component-wise
  *    premultiplied, linear).
  * 8. The source is composited into the running LINEAR premultiplied frame
- *    with the declared [GPUPreparedVerticesBlendMode] — all blend math runs
- *    in linear space because the sRGB attachment blends in linear. Overlapping
- *    triangles within one draw composite in canonical paint order.
- * 9. The optional [GPUPreparedVerticesRectClip] rejects any device sample
- *    outside `[left, right) x [top, bottom)` before shading.
+ *    with the declared blend mode — all blend math runs in linear space
+ *    because the sRGB attachment blends in linear. Overlapping triangles
+ *    within one draw composite in canonical paint order.
+ * 9. The optional rect clip rejects any device sample outside its bounds
+ *    before shading.
  *
  * ### Quantization rule (declared)
  *
  * Edge tests and barycentric weights run in IEEE-754 double precision.
  * Attribute interpolation runs in double precision on the stored
- * sRGB-encoded premultiplied values (exactly what the WebGPU vertex stage
- * interpolates), then the interpolated attributes are rounded through a
- * 32-bit float width before the sRGB decode. The shaded source rounds
- * through a 32-bit float width before blending, and after final blending the
- * channel value is clamped to [0,1], rounded through a 32-bit float width,
- * ENCODED linear→sRGB (RGB channels only; alpha stores linear), and
- * quantized to 8-bit UNORM with round-half-up. A physical f32 sRGB pipeline
- * may differ from this declared path by at most one LSB, which is exactly the
- * tolerance encoded by [GPUPreparedVerticesPixelDelta.matchesWithinOneLsb].
+ * sRGB-encoded premultiplied values, then the interpolated attributes are
+ * rounded through a 32-bit float width and the RGB channels DECODED to
+ * linear. The shaded source rounds through a 32-bit float width before
+ * blending, and after final blending the channel value is clamped to [0,1],
+ * rounded through a 32-bit float width, ENCODED linear→sRGB (RGB channels
+ * only; alpha stores linear, never encoded), and quantized to 8-bit UNORM
+ * with round-half-up. A physical f32 sRGB pipeline may differ from this
+ * declared path by at most one LSB, which is exactly the tolerance encoded
+ * by [GPUPreparedVerticesPixelDelta].
  */
 object GPUPreparedVerticesCpuOracle {
 
-    /**
-     * Renders one fixture at its declared pixel size into a fresh
-     * premultiplied sRGB-encoded RGBA8 buffer.
-     */
+    /** Renders one fixture at its declared pixel size into a fresh RGBA8 buffer. */
     fun renderVertices(fixture: GPUPreparedVerticesTestFixture): ByteArray =
         renderVertices(listOf(fixture))
 
-    /**
-     * Renders a list of fixtures (paint order) into one shared frame of the
-     * declared pixel size. All fixtures must share the same pixel size.
-     */
+    /** Renders a list of fixtures (paint order) into one shared frame. */
     fun renderVertices(fixtures: List<GPUPreparedVerticesTestFixture>): ByteArray {
         require(fixtures.isNotEmpty()) { "At least one fixture is required" }
         val width = fixtures.first().pixelWidth
@@ -232,14 +203,6 @@ object GPUPreparedVerticesCpuOracle {
         }
     }
 
-    /**
-     * Returns the source colour for [triangle] at the device sample ([sx],
-     * [sy]), or null when the sample is outside the triangle. The returned
-     * source is premultiplied in the stored sRGB-encoded space, with paint
-     * alpha applied exactly once through the material result (the fixture
-     * scope models the material as opaque white, so the material result is
-     * `paintAlpha`).
-     */
     private fun shade(
         triangle: DeviceTriangle,
         sx: Double,
@@ -275,14 +238,6 @@ object GPUPreparedVerticesCpuOracle {
         val e2 = (cx - bx) * (sy - by) - (cy - by) * (sx - bx)
         val e3 = (ax - cx) * (sy - cy) - (ay - cy) * (sx - cx)
 
-        // Standard left/top edge rule: a sample exactly on an edge is covered
-        // only when the directed edge is a top edge (horizontal with the
-        // interior below, i.e. traversed leftward) or a left edge (the
-        // interior lies to the right of the directed edge, i.e. the edge is
-        // traversed upward in framebuffer coordinates: y1 < y0). Fixed-
-        // function rasterizers (D3D/Metal/Vulkan left-top) claim a shared-
-        // edge pixel for exactly one triangle, and this rule reproduces that
-        // behaviour.
         val leftTopAb = by < ay || (by == ay && bx < ax)
         val leftTopBc = cy < by || (cy == by && cx < bx)
         val leftTopCa = ay < cy || (ay == cy && ax < cx)
@@ -302,8 +257,6 @@ object GPUPreparedVerticesCpuOracle {
         var blue = 1.0
         var alpha = 1.0
         if (colors != null) {
-            // The WebGPU vertex stage interpolates the stored premultiplied
-            // sRGB-encoded bytes RAW — no decode. The oracle reproduces that.
             red = lambdaA * vertexChannel(colors, ia, 0) +
                 lambdaB * vertexChannel(colors, ib, 0) +
                 lambdaC * vertexChannel(colors, ic, 0)
@@ -341,10 +294,6 @@ object GPUPreparedVerticesCpuOracle {
         blue = roundF32(blue)
         alpha = roundF32(alpha)
 
-        // The material result is the linear premultiplied solid the material
-        // compiler produces; the fixtures model an opaque white paint, so
-        // srgbToLinear(white) * paintAlpha = paintAlpha. The fragment shader
-        // multiplies the material result by the interpolated primitive colour.
         val paintMultiplier = paintAlpha.toDouble()
         return doubleArrayOf(
             roundF32(red * paintMultiplier),
@@ -520,3 +469,375 @@ object GPUPreparedVerticesCpuOracle {
         this[3],
     )
 }
+
+/** Per-channel comparison of two RGBA8 buffers produced for the same declared pixel size. */
+data class GPUPreparedVerticesPixelDelta(
+    val maxChannelDelta: Int,
+    val differingChannels: Int,
+    val comparedChannels: Int,
+) {
+    val matchesWithinOneLsb: Boolean
+        get() = maxChannelDelta <= 1
+}
+
+enum class GPUPreparedVerticesTopology { TRIANGLES, TRIANGLE_STRIP, TRIANGLE_FAN }
+
+enum class GPUPreparedVerticesFilterMode { NEAREST, LINEAR }
+
+enum class GPUPreparedVerticesBlendMode { SRC_OVER, SRC, SRC_IN, PLUS }
+
+/** Row-major affine transform: device = (scaleX*x + skewX*y + transX, skewY*x + scaleY*y + transY). */
+data class GPUPreparedVerticesAffineTransform(
+    val scaleX: Float,
+    val skewX: Float,
+    val transX: Float,
+    val skewY: Float,
+    val scaleY: Float,
+    val transY: Float,
+) {
+    fun mapX(x: Float, y: Float): Double =
+        (scaleX * x + skewX * y + transX).toDouble()
+
+    fun mapY(x: Float, y: Float): Double =
+        (skewY * x + scaleY * y + transY).toDouble()
+
+    companion object {
+        fun identity(): GPUPreparedVerticesAffineTransform =
+            GPUPreparedVerticesAffineTransform(1f, 0f, 0f, 0f, 1f, 0f)
+
+        fun translate(tx: Float, ty: Float): GPUPreparedVerticesAffineTransform =
+            GPUPreparedVerticesAffineTransform(1f, 0f, tx, 0f, 1f, ty)
+
+        fun scale(sx: Float, sy: Float): GPUPreparedVerticesAffineTransform =
+            GPUPreparedVerticesAffineTransform(sx, 0f, 0f, 0f, sy, 0f)
+    }
+}
+
+/** Integral device-rect clip: a device sample is covered only inside `[left, right) x [top, bottom)`. */
+data class GPUPreparedVerticesRectClip(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+) {
+    fun containsDeviceSample(x: Double, y: Double): Boolean =
+        x >= left && x < right && y >= top && y < bottom
+}
+
+class GPUPreparedVerticesImage private constructor(
+    val width: Int,
+    val height: Int,
+    val filterMode: GPUPreparedVerticesFilterMode,
+    private val pixels: ByteArray,
+) {
+    val pixelsCopy: ByteArray
+        get() = pixels.copyOf()
+
+    fun copy(): GPUPreparedVerticesImage = GPUPreparedVerticesImage(
+        width,
+        height,
+        filterMode,
+        pixels.copyOf(),
+    )
+
+    companion object {
+        fun create(
+            pixels: ByteArray,
+            width: Int,
+            height: Int,
+            filterMode: GPUPreparedVerticesFilterMode,
+        ): GPUPreparedVerticesImage {
+            require(width > 0 && height > 0) { "Image dimensions must be positive" }
+            require(pixels.size == width * height * 4) { "Image pixels must be width*height*4 bytes" }
+            return GPUPreparedVerticesImage(width, height, filterMode, pixels.copyOf())
+        }
+    }
+}
+
+/**
+ * Immutable fixture contract shared with the Task 13 CPU oracle. The fixture
+ * declares geometry and shading facts only; it imports no GPU production type.
+ */
+class GPUPreparedVerticesTestFixture private constructor(
+    private val positions: FloatArray,
+    private val colorsRgba8: ByteArray?,
+    private val texCoords: FloatArray?,
+    private val indices: IntArray?,
+    val topology: GPUPreparedVerticesTopology,
+    val transform: GPUPreparedVerticesAffineTransform,
+    val clip: GPUPreparedVerticesRectClip?,
+    val blendMode: GPUPreparedVerticesBlendMode,
+    val paintAlpha: Float,
+    private val image: GPUPreparedVerticesImage?,
+    val pixelWidth: Int,
+    val pixelHeight: Int,
+) {
+    val vertexCount: Int
+        get() = positions.size / 2
+
+    val positionsCopy: FloatArray
+        get() = positions.copyOf()
+
+    val colorsRgba8Copy: ByteArray?
+        get() = colorsRgba8?.copyOf()
+
+    val texCoordsCopy: FloatArray?
+        get() = texCoords?.copyOf()
+
+    val indicesCopy: IntArray?
+        get() = indices?.copyOf()
+
+    val imageCopy: GPUPreparedVerticesImage?
+        get() = image?.copy()
+
+    companion object {
+        fun create(
+            positions: FloatArray,
+            topology: GPUPreparedVerticesTopology,
+            pixelWidth: Int,
+            pixelHeight: Int,
+            colorsRgba8: ByteArray? = null,
+            texCoords: FloatArray? = null,
+            indices: IntArray? = null,
+            transform: GPUPreparedVerticesAffineTransform =
+                GPUPreparedVerticesAffineTransform.identity(),
+            clip: GPUPreparedVerticesRectClip? = null,
+            blendMode: GPUPreparedVerticesBlendMode = GPUPreparedVerticesBlendMode.SRC_OVER,
+            paintAlpha: Float = 1f,
+            image: GPUPreparedVerticesImage? = null,
+        ): GPUPreparedVerticesTestFixture {
+            require(pixelWidth > 0 && pixelHeight > 0) { "Pixel dimensions must be positive" }
+            require(positions.size >= 6) { "At least three vertices are required" }
+            require(positions.size % 2 == 0) { "Positions must be x,y pairs" }
+            require(positions.all { it.isFinite() }) { "Positions must be finite" }
+            val vertexCount = positions.size / 2
+            if (colorsRgba8 != null) {
+                require(colorsRgba8.size == vertexCount * 4) { "Colors must be vertexCount*4 bytes" }
+                for (offset in colorsRgba8.indices step 4) {
+                    val alpha = colorsRgba8[offset + 3].toInt() and 0xff
+                    require((colorsRgba8[offset].toInt() and 0xff) <= alpha) { "Colors must be premultiplied" }
+                    require((colorsRgba8[offset + 1].toInt() and 0xff) <= alpha) { "Colors must be premultiplied" }
+                    require((colorsRgba8[offset + 2].toInt() and 0xff) <= alpha) { "Colors must be premultiplied" }
+                }
+            }
+            if (texCoords != null) {
+                require(texCoords.size == positions.size) { "Tex coords must be one u,v pair per vertex" }
+                require(texCoords.all { it.isFinite() }) { "Tex coords must be finite" }
+            }
+            if (indices != null) {
+                require(indices.size >= 3) { "Indices must reference at least one triangle" }
+                require(indices.all { it in 0 until vertexCount }) { "Indices must reference existing vertices" }
+                if (topology == GPUPreparedVerticesTopology.TRIANGLES) {
+                    require(indices.size % 3 == 0) { "Triangle topology requires a multiple of three indices" }
+                }
+            }
+            if (image != null) {
+                require(texCoords != null) { "An image requires per-vertex tex coords" }
+            }
+            require(paintAlpha.isFinite() && paintAlpha in 0f..1f) {
+                "Paint alpha must be finite and in 0..1"
+            }
+            return GPUPreparedVerticesTestFixture(
+                positions = positions.copyOf(),
+                colorsRgba8 = colorsRgba8?.copyOf(),
+                texCoords = texCoords?.copyOf(),
+                indices = indices?.copyOf(),
+                topology = topology,
+                transform = transform,
+                clip = clip,
+                blendMode = blendMode,
+                paintAlpha = paintAlpha,
+                image = image?.copy(),
+                pixelWidth = pixelWidth,
+                pixelHeight = pixelHeight,
+            )
+        }
+    }
+}
+
+/** Deterministic prepared-vertices fixtures mirrored from the kanvas test sources. */
+object GPUPreparedVerticesTestFixtures {
+
+    private fun premul(r: Int, g: Int, b: Int, a: Int): ByteArray = byteArrayOf(
+        r.toByte(), g.toByte(), b.toByte(), a.toByte(),
+    )
+
+    private fun vertexColors(vararg colors: ByteArray): ByteArray =
+        ByteArray(colors.size * 4).also { out ->
+            colors.forEachIndexed { index, color -> color.copyInto(out, destinationOffset = index * 4) }
+        }
+
+    /** Unit triangle on a 3x3 canvas probing the inclusive left/top edge rule. */
+    fun edgeInclusionTriangle(): GPUPreparedVerticesTestFixture =
+        GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(0f, 0f, 2f, 0f, 0f, 2f),
+            topology = GPUPreparedVerticesTopology.TRIANGLES,
+            pixelWidth = 3,
+            pixelHeight = 3,
+        )
+
+    /** Unit triangle with opaque red/green/blue vertex colours on a 2x2 canvas. */
+    fun barycentricColorTriangle(): GPUPreparedVerticesTestFixture =
+        GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(0f, 0f, 2f, 0f, 0f, 2f),
+            colorsRgba8 = vertexColors(
+                premul(255, 0, 0, 255),
+                premul(0, 255, 0, 255),
+                premul(0, 0, 255, 255),
+            ),
+            topology = GPUPreparedVerticesTopology.TRIANGLES,
+            pixelWidth = 2,
+            pixelHeight = 2,
+        )
+
+    /** Unit triangle mapped to a 4x4 texture by uv. */
+    fun texturedTriangle(filterMode: GPUPreparedVerticesFilterMode): GPUPreparedVerticesTestFixture {
+        val pixels = ByteArray(4 * 4 * 4) { offset ->
+            val x = (offset / 4) % 4
+            val y = (offset / 4) / 4
+            val channel = offset % 4
+            val rgba = when {
+                x == 0 && y == 0 -> intArrayOf(255, 0, 0, 255)
+                x == 1 && y == 0 -> intArrayOf(255, 255, 255, 255)
+                x == 0 && y == 1 -> intArrayOf(255, 255, 255, 255)
+                x == 1 && y == 1 -> intArrayOf(0, 255, 0, 255)
+                else -> intArrayOf(0, 0, 255, 255)
+            }
+            rgba[channel].toByte()
+        }
+        return GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(0f, 0f, 2f, 0f, 0f, 2f),
+            texCoords = floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f),
+            topology = GPUPreparedVerticesTopology.TRIANGLES,
+            pixelWidth = 2,
+            pixelHeight = 2,
+            image = GPUPreparedVerticesImage.create(
+                pixels = pixels,
+                width = 4,
+                height = 4,
+                filterMode = filterMode,
+            ),
+        )
+    }
+
+    /** Unit triangle with opaque red vertex colours and paintAlpha 1/2. */
+    fun halfAlphaRedTriangle(): GPUPreparedVerticesTestFixture =
+        GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(0f, 0f, 2f, 0f, 0f, 2f),
+            colorsRgba8 = vertexColors(
+                premul(255, 0, 0, 255),
+                premul(255, 0, 0, 255),
+                premul(255, 0, 0, 255),
+            ),
+            topology = GPUPreparedVerticesTopology.TRIANGLES,
+            pixelWidth = 2,
+            pixelHeight = 2,
+            paintAlpha = 0.5f,
+        )
+
+    /** A 4-vertex triangle strip forming the unit square with alternating winding. */
+    fun stripQuad(): GPUPreparedVerticesTestFixture =
+        GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(0f, 0f, 2f, 0f, 0f, 2f, 2f, 2f),
+            colorsRgba8 = vertexColors(
+                premul(255, 0, 0, 255),
+                premul(0, 255, 0, 255),
+                premul(0, 0, 255, 255),
+                premul(255, 255, 255, 255),
+            ),
+            topology = GPUPreparedVerticesTopology.TRIANGLE_STRIP,
+            pixelWidth = 2,
+            pixelHeight = 2,
+        )
+
+    /** A 4-vertex triangle fan forming the unit square. */
+    fun fanQuad(): GPUPreparedVerticesTestFixture =
+        GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(0f, 0f, 3f, 0f, 3f, 2f, 0f, 2f),
+            colorsRgba8 = vertexColors(
+                premul(255, 0, 0, 255),
+                premul(0, 255, 0, 255),
+                premul(0, 0, 255, 255),
+                premul(255, 255, 255, 255),
+            ),
+            topology = GPUPreparedVerticesTopology.TRIANGLE_FAN,
+            pixelWidth = 3,
+            pixelHeight = 2,
+        )
+
+    /** Unit white triangle clipped to the device rect (0,0,1,1) on a 2x2 canvas. */
+    fun clippedTriangle(): GPUPreparedVerticesTestFixture =
+        GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(0f, 0f, 2f, 0f, 0f, 2f),
+            topology = GPUPreparedVerticesTopology.TRIANGLES,
+            pixelWidth = 2,
+            pixelHeight = 2,
+            clip = GPUPreparedVerticesRectClip(0, 0, 1, 1),
+        )
+
+    /** Unit white triangle translated by (2,2) on a 5x5 canvas. */
+    fun translatedTriangle(): GPUPreparedVerticesTestFixture =
+        GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(0f, 0f, 2f, 0f, 0f, 2f),
+            topology = GPUPreparedVerticesTopology.TRIANGLES,
+            pixelWidth = 5,
+            pixelHeight = 5,
+            transform = GPUPreparedVerticesAffineTransform.translate(2f, 2f),
+        )
+
+    /** Two unit triangles side by side; indices select which one renders. */
+    fun indexedTriangleSelection(indices: IntArray): GPUPreparedVerticesTestFixture =
+        GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(0f, 0f, 2f, 0f, 0f, 2f, 4f, 0f, 6f, 0f, 4f, 2f),
+            colorsRgba8 = vertexColors(
+                premul(255, 0, 0, 255),
+                premul(0, 255, 0, 255),
+                premul(0, 0, 255, 255),
+                premul(255, 0, 255, 255),
+                premul(0, 255, 255, 255),
+                premul(255, 255, 0, 255),
+            ),
+            indices = indices,
+            topology = GPUPreparedVerticesTopology.TRIANGLES,
+            pixelWidth = 6,
+            pixelHeight = 3,
+        )
+
+    /** A solid-color unit triangle for final-blend compositing. */
+    fun solidColorTriangle(
+        color: IntArray,
+        blendMode: GPUPreparedVerticesBlendMode,
+        paintAlpha: Float,
+    ): GPUPreparedVerticesTestFixture =
+        GPUPreparedVerticesTestFixture.create(
+            positions = floatArrayOf(0f, 0f, 2f, 0f, 0f, 2f),
+            colorsRgba8 = vertexColors(
+                premul(color[0], color[1], color[2], color[3]),
+                premul(color[0], color[1], color[2], color[3]),
+                premul(color[0], color[1], color[2], color[3]),
+            ),
+            topology = GPUPreparedVerticesTopology.TRIANGLES,
+            pixelWidth = 2,
+            pixelHeight = 2,
+            blendMode = blendMode,
+            paintAlpha = paintAlpha,
+        )
+}
+
+
+/** Task-14 smoke helper: replaces the fixture indices (or adds them) while keeping geometry. */
+fun GPUPreparedVerticesTestFixture.copyFixtureWithIndices(indices: IntArray): GPUPreparedVerticesTestFixture =
+    GPUPreparedVerticesTestFixture.create(
+        positions = positionsCopy,
+        colorsRgba8 = colorsRgba8Copy,
+        texCoords = texCoordsCopy,
+        indices = indices,
+        topology = topology,
+        transform = transform,
+        clip = clip,
+        blendMode = blendMode,
+        paintAlpha = paintAlpha,
+        image = imageCopy,
+        pixelWidth = pixelWidth,
+        pixelHeight = pixelHeight,
+    )

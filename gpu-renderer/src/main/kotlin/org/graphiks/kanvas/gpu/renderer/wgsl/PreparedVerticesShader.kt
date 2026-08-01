@@ -266,7 +266,21 @@ struct PreparedVerticesDrawUniforms {
         )
         append("    let materialPremul = kanvas_evaluate_material(input.localPosition);\n")
         if (hasColor) {
-            append("    return materialPremul * input.primitiveColor;\n")
+            // The scene target stores through the LinearPremul sRGB attachment authority: the
+            // primitive color interpolates the stored sRGB-encoded bytes raw (no vertex-stage
+            // decode), so the fragment must decode before the attachment re-encodes on store.
+            // A white material therefore round-trips exactly to the stored primitive bytes.
+            append(
+                "    let linearLow = input.primitiveColor.rgb / 12.92;\n" +
+                    "    let linearHigh = pow((input.primitiveColor.rgb + vec3<f32>(0.055)) / 1.055, " +
+                    "vec3<f32>(2.4));\n" +
+                    "    let decodedPrimitive = vec4<f32>(\n" +
+                    "        select(linearHigh, linearLow, " +
+                    "input.primitiveColor.rgb <= vec3<f32>(0.04045)),\n" +
+                    "        input.primitiveColor.a,\n" +
+                    "    );\n",
+            )
+            append("    return materialPremul * decodedPrimitive;\n")
         } else {
             append("    return materialPremul;\n")
         }

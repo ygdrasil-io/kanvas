@@ -104,9 +104,11 @@ class PreparedVerticesTelemetryTest {
         )
         assertEquals(2L, counters.counter(GPUPreparedVerticesBatchingCounter.PackedSubranges))
         assertEquals(1L, counters.counter(GPUPreparedVerticesBatchingCounter.PipelineCreations))
-        assertEquals(0L, counters.counter(GPUPreparedVerticesBatchingCounter.PipelineReuses))
+        // One SetPipeline per packet: the second packet re-emits the batch's
+        // single cached pipeline, which the per-packet facade contract requires.
+        assertEquals(1L, counters.counter(GPUPreparedVerticesBatchingCounter.PipelineReuses))
         assertEquals(3L, counters.counter(GPUPreparedVerticesBatchingCounter.LayoutCreations))
-        assertEquals(0L, counters.counter(GPUPreparedVerticesBatchingCounter.LayoutReuses))
+        assertEquals(1L, counters.counter(GPUPreparedVerticesBatchingCounter.LayoutReuses))
         assertEquals(1L, counters.counter(GPUPreparedVerticesBatchingCounter.CompatibleBatches))
         assertEquals(0L, counters.counter(GPUPreparedVerticesBatchingCounter.DrawCalls))
         assertEquals(2L, counters.counter(GPUPreparedVerticesBatchingCounter.DrawIndexedCalls))

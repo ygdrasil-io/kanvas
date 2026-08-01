@@ -131,7 +131,10 @@ class PreparedVerticesShaderTest {
                 ),
             )
             if (variant.hasColor) {
-                assertTrue(program.wgslSource.contains("materialPremul * input.primitiveColor"))
+                // The LinearPremul sRGB attachment authority decodes the interpolated stored
+                // primitive bytes before the attachment re-encodes on store.
+                assertTrue(program.wgslSource.contains("materialPremul * decodedPrimitive"))
+                assertTrue(program.wgslSource.contains("decodedPrimitive"))
             } else {
                 assertTrue(program.wgslSource.contains("return materialPremul;"))
             }

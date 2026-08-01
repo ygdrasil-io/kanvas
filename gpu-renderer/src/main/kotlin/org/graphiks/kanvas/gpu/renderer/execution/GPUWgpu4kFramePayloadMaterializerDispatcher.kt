@@ -197,13 +197,15 @@ internal fun selectWgpu4kPreparedFramePayloadRoute(
                 semanticSet.any {
                     it == GPUDrawSemanticPayload.SampledImage::class ||
                         it == GPUDrawSemanticPayload.TextA8::class ||
-                        it == GPUDrawSemanticPayload.ColorGlyph::class
+                        it == GPUDrawSemanticPayload.ColorGlyph::class ||
+                        it == GPUDrawSemanticPayload.Vertices::class
                 } &&
                 semanticSet.all {
                     it == GPUDrawSemanticPayload.CorePrimitive::class ||
                         it == GPUDrawSemanticPayload.SampledImage::class ||
                         it == GPUDrawSemanticPayload.TextA8::class ||
-                        it == GPUDrawSemanticPayload.ColorGlyph::class
+                        it == GPUDrawSemanticPayload.ColorGlyph::class ||
+                        it == GPUDrawSemanticPayload.Vertices::class
                 }
         } -> GPUWgpu4kPreparedFramePayloadRoute.PreparedSurfaceMixed
         distinct.size > 1 -> GPUWgpu4kPreparedFramePayloadRoute.Refused(

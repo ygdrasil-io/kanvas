@@ -1299,6 +1299,38 @@ internal sealed interface GPUPreparedNativeScopeOperand {
     }
 
     /**
+     * Scope-bound prepared-vertices buffer upload evidence. The vertices materializer writes the
+     * buffers once at materialization time; this operand retains the exact upload scope in the
+     * frame payload so the encoder-scope partition stays complete and validatable.
+     */
+    class BufferUpload(
+        override val sourceStepIndex: Int,
+        val data: GPUPreparedNativeUploadData,
+        val destination: GPUPreparedNativeBufferOperand,
+        val destinationKey: GPUPreparedNativeOperandKey,
+        val destinationOffset: Long,
+        val uploadRole: String = "prepared-vertices-buffer",
+    ) : GPUPreparedNativeScopeOperand {
+        override val operationKind = GPUEncoderOperationKind.Upload
+        override val operands: List<GPUPreparedNativeOperand> = immutableList(listOf(destination))
+        override val exactOperandKeys: List<GPUPreparedNativeOperandKey> =
+            immutableList(listOf(data.key, destinationKey))
+
+        init {
+            require(uploadRole.isNotBlank())
+            require(data.key.role == GPUPreparedNativeOperandRole.UploadSource &&
+                data.key.kind == GPUPreparedNativeOperandKind.Buffer
+            ) { "Prepared-vertices upload data requires the exact logical Buffer source key" }
+            require(destinationKey.role == GPUPreparedNativeOperandRole.UploadDestination &&
+                destinationKey.kind == GPUPreparedNativeOperandKind.Buffer
+            ) { "Prepared-vertices upload requires the exact preflight Buffer destination key" }
+            require(destinationOffset >= 0L && data.bytes().size.toLong() <=
+                Long.MAX_VALUE - destinationOffset
+            )
+        }
+    }
+
+    /**
      * Target-free TextA8 run. The mixed-surface assembler attaches the one existing target
      * without creating another encoder, pass, submit, or readback.
      */
@@ -1685,6 +1717,10 @@ private fun GPUPreparedNativeScopeOperand.declaredOperandDescriptors(): List<
     Pair<GPUPreparedNativeOperandKind, GPUPreparedNativeOperandOwnership>,
 > = when (this) {
     is GPUPreparedNativeScopeOperand.TextureUpload -> listOf(
+        data.key.kind to data.key.ownership,
+        destination.nativeKind() to destination.ownership,
+    )
+    is GPUPreparedNativeScopeOperand.BufferUpload -> listOf(
         data.key.kind to data.key.ownership,
         destination.nativeKind() to destination.ownership,
     )

@@ -8,10 +8,13 @@ import kotlin.test.assertTrue
 /**
  * Hand-computable CPU-oracle cases for [GPUPreparedVerticesCpuOracle].
  *
- * Expected bytes come from the declared quantization rule
- * (double-precision barycentric over the STORED premultiplied sRGB-encoded
- * values — exactly what the WebGPU vertex stage interpolates — then f32
- * width, then 8-bit UNORM round-half-up):
+ * Expected bytes come from the declared WebGPU `rgba8unorm-srgb`
+ * LinearPremul quantization rule: double-precision barycentric over the
+ * STORED premultiplied sRGB-encoded values (exactly what the WebGPU vertex
+ * stage interpolates — RAW, no vertex-stage decode), f32 width, RGB sRGB
+ * DECODE to linear before the material multiply and blend, blending in
+ * LINEAR space, and final store: f32 width, RGB ENCODE linear→sRGB (alpha
+ * stores linear, never encoded), 8-bit UNORM round-half-up.
  *
  * | stored value | byte |
  * |--------------|------|
@@ -25,12 +28,21 @@ import kotlin.test.assertTrue
  * | 7/8          | 223  |
  * | 1            | 255  |
  *
+ * Declared sRGB ENCODE (linear→sRGB) for dyadic linear values:
+ *
+ * | linear      | byte |
+ * |-------------|------|
+ * | 1/8         |  99  |
+ * | 1/4         | 137  |
+ * | 1/2         | 188  |
+ * | 3/4         | 225  |
+ *
  * Vertex colors and image texels enter as premultiplied sRGB-encoded bytes;
- * the oracle interpolates/samples them RAW (no sRGB decode, matching the
- * prepared-vertices packer and fragment shader), applies the material result
- * (opaque white paint in the fixture scope → paintAlpha) by multiplication,
- * blends in the premultiplied sRGB-encoded space, and stores without any
- * sRGB encode.
+ * the oracle interpolates/samples them RAW, decodes the interpolated RGB
+ * sRGB→linear (before image filtering for sampled texels), applies the
+ * material result (opaque white paint in the fixture scope → paintAlpha) by
+ * multiplication, blends in linear premultiplied space, and stores with the
+ * RGB linear→sRGB encode above (alpha stored linear).
  */
 class GPUPreparedVerticesPixelOracleTest {
 
@@ -114,8 +126,9 @@ class GPUPreparedVerticesPixelOracleTest {
         val out = GPUPreparedVerticesCpuOracle.renderVertices(
             GPUPreparedVerticesTestFixtures.texturedTriangle(GPUPreparedVerticesFilterMode.LINEAR),
         )
-        // uv = (1/4, 1/4) → fx = fy = 1/2 → raw average of red/white/white/green.
-        assertPixel(out, 2, 0, 0, 191, 191, 128, 255)
+        // uv = (1/4, 1/4) → fx = fy = 1/2 → average of the four DECODED texel
+        // centres (red/white/white/green, linear) re-encoded on store.
+        assertPixel(out, 2, 0, 0, 225, 225, 188, 255)
     }
 
     // ---- vertex-color primitive blend ------------------------------------------
@@ -136,8 +149,10 @@ class GPUPreparedVerticesPixelOracleTest {
         val out = GPUPreparedVerticesCpuOracle.renderVertices(
             GPUPreparedVerticesTestFixtures.halfAlphaRedTriangle(),
         )
-        // Red (1,0,0,1) scaled by paintAlpha 1/2: premultiplied (1/2,0,0,1/2).
-        assertPixel(out, 2, 0, 0, 128, 0, 0, 128)
+        // Red (1,0,0,1) scaled by paintAlpha 1/2: premultiplied (1/2,0,0,1/2)
+        // in linear; the red channel is re-encoded linear→sRGB on store
+        // (encode(1/2)=188) while alpha stays linear (128).
+        assertPixel(out, 2, 0, 0, 188, 0, 0, 128)
     }
 
     // ---- strip winding canonicalization ---------------------------------------
@@ -296,8 +311,9 @@ class GPUPreparedVerticesPixelOracleTest {
                 ),
             ),
         )
-        // dst blue (0,0,1,1), src red (1/2,0,0,1/2) → (1/2,0,1/2,1).
-        assertPixel(out, 2, 0, 0, 128, 0, 128, 255)
+        // dst blue (0,0,1,1), src red (1/2,0,0,1/2) → (1/2,0,1/2,1) linear,
+        // RGB re-encoded on store (encode(1/2)=188), alpha 255.
+        assertPixel(out, 2, 0, 0, 188, 0, 188, 255)
     }
 
     @Test
@@ -354,8 +370,9 @@ class GPUPreparedVerticesPixelOracleTest {
                 ),
             ),
         )
-        // Opaque destination alpha 1 → src (1/2,0,0,1/2) * 1.
-        assertPixel(out, 2, 0, 0, 128, 0, 0, 128)
+        // Opaque destination alpha 1 → src (1/2,0,0,1/2) linear * 1, RGB
+        // re-encoded on store (encode(1/2)=188), alpha stays linear 128.
+        assertPixel(out, 2, 0, 0, 188, 0, 0, 128)
     }
 
     // ---- delta comparator -------------------------------------------------------

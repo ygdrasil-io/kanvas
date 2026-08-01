@@ -368,6 +368,7 @@ internal class GPUWgpu4kFrameEncodingBackend(
                 is GPUPreparedNativeScopeOperand.Render -> encodeRender(operand)
                 is GPUPreparedNativeScopeOperand.TextureUpload ->
                     encodePreparedImageTextureUpload(queue, operand)
+                is GPUPreparedNativeScopeOperand.BufferUpload -> Unit
                 is GPUPreparedNativeScopeOperand.Copy -> encodeCopy(operand)
                 is GPUPreparedNativeScopeOperand.Readback -> encodeReadback(operand)
                 is GPUPreparedNativeScopeOperand.SurfaceBlit -> encodeSurfaceBlit(operand)

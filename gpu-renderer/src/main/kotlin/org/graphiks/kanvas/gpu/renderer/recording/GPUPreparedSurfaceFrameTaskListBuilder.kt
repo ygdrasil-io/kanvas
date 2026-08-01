@@ -895,7 +895,12 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             return GPUPreparedSurfaceFrameResult.Refused(it.atRecordingBoundary())
         }
         val baseRenders = request.baseTaskList.tasks.filterIsInstance<GPUTask.Render>()
-        if (baseRenders.isEmpty() || request.baseTaskList.tasks.any { it !is GPUTask.Render }) {
+        val semanticOnlyVertices = request.baseTaskList.tasks.filterIsInstance<GPUTask.SemanticOnly>()
+        if ((baseRenders.isEmpty() && semanticOnlyVertices.isEmpty()) ||
+            request.baseTaskList.tasks.any { task ->
+                task !is GPUTask.Render && task !is GPUTask.SemanticOnly
+            }
+        ) {
             return refused(
                 "invalid.recording.prepared_surface_base_tasks",
                 "Prepared surfaces require one accepted render-only base task list.",
@@ -915,7 +920,20 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
                 "Prepared-surface aggregate budget must be positive.",
             )
         }
-        val packets = baseRenders.flatMap(GPUTask.Render::drawPackets)
+        val semanticOnlyVertexPackets = semanticOnlyVertices.map { task ->
+            task.draw.packet.withPreparedVerticesRenderAuthority()
+        }
+        val combinedPackets = (
+            baseRenders.flatMap(GPUTask.Render::drawPackets) +
+                semanticOnlyVertexPackets
+            )
+        val packets = (
+            if (semanticOnlyVertices.isNotEmpty()) {
+                combinedPackets.sortedBy(GPUDrawPacket::originalPaintOrder)
+            } else {
+                combinedPackets
+            }
+            )
             .map { packet ->
                 val semantic = request.semanticsByCommandId[packet.commandIdValue]
                 if (semantic is GPUDrawSemanticPayload.ColorGlyph &&
@@ -1797,7 +1815,7 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
             )
         }
 
-        val recordingId = baseRenders.first().recordingId
+        val recordingId = (baseRenders.firstOrNull() ?: semanticOnlyVertices.first()).recordingId
         val prepareTask = GPUTask.PrepareResources(
             taskId = GPUTaskID("task.prepared-surface.prepare.${request.baseTaskList.frameId.value}"),
             recordingId = recordingId,
@@ -1898,9 +1916,18 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         val verticesPlanByArtifactKey = recordedVerticesUploads.associate { upload ->
             upload.resources.artifactKey to upload.resources
         }
-        val baseRenderByPacketId = baseRenders.flatMap { render ->
-            render.drawPackets.map { packet -> packet.packetId to render }
-        }.toMap()
+        val synthesizedSemanticOnlyRenders = semanticOnlyVertices.map { task ->
+            val packet = task.draw.packet.withPreparedVerticesRenderAuthority()
+            task to synthesizedSemanticOnlyBaseRender(request, task, packet)
+        }
+        val baseRenderByPacketId = (
+            baseRenders.flatMap { render ->
+                render.drawPackets.map { packet -> packet.packetId to render }
+            } +
+                synthesizedSemanticOnlyRenders.map { (_, render) ->
+                    render.drawPackets.single().packetId to render
+                }
+            ).toMap()
         val preparedRenderByPacketId = baseRenderByPacketId +
             coreAssembly.renderByPacketId
         val orderedPreparedPackets = packets.flatMap { packet ->
@@ -3480,6 +3507,70 @@ private fun GPUDrawPacket.withSemantic(
     clipExecutionPlan = clipExecutionOverride,
     diagnostics = diagnostics,
     clipProducerAuthority = clipProducerAuthority,
+)
+
+/**
+ * Rewrites the recorder's unmaterialized semantic-only vertices packet into the exact
+ * prepared-vertices render authority retained by the native route. The semantic-only packet
+ * itself (null pipeline, Discard role) remains the recording evidence; only the base task-list
+ * copy used to assemble prepared render runs is rewritten.
+ */
+private fun GPUDrawPacket.withPreparedVerticesRenderAuthority(): GPUDrawPacket = GPUDrawPacket(
+    packetId = packetId,
+    commandIdValue = commandIdValue,
+    analysisRecordId = analysisRecordId,
+    passId = passId,
+    layerId = layerId,
+    bindingListId = bindingListId,
+    insertionReasonCode = insertionReasonCode,
+    sortKey = sortKey,
+    sortKeyPreimage = sortKeyPreimage,
+    renderStepId = renderStepId,
+    renderStepVersion = renderStepVersion,
+    role = org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole.Shading,
+    blendPlan = blendPlan,
+    renderPipelineKey = org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_RENDER_PIPELINE_KEY,
+    computePipelineKey = computePipelineKey,
+    bindingLayoutHash = org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_BINDING_LAYOUT_HASH,
+    uniformSlot = uniformSlot,
+    resourceSlot = resourceSlot,
+    semanticPayload = semanticPayload,
+    vertexSourceLabel = org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_VERTEX_SOURCE_LABEL,
+    scissorBoundsHash = scissorBoundsHash,
+    targetStateHash = targetStateHash,
+    originalPaintOrder = originalPaintOrder,
+    resourceGeneration = resourceGeneration,
+    frameProvenance = frameProvenance,
+    clipCoveragePlan = clipCoveragePlan,
+    clipExecutionPlan = clipExecutionPlan,
+    diagnostics = diagnostics,
+    clipProducerAuthority = clipProducerAuthority,
+)
+
+private fun synthesizedSemanticOnlyBaseRender(
+    request: GPUPreparedSurfaceFrameRequest,
+    task: GPUTask.SemanticOnly,
+    packet: GPUDrawPacket,
+): GPUTask.Render = GPUTask.Render(
+    taskId = GPUTaskID("task.base.prepared-vertices.${task.commandId.value}"),
+    recordingId = task.recordingId,
+    phase = GPUTaskPhase.Render,
+    target = request.target,
+    loadStore = GPULoadStorePlan("load", GPUStorePlan.Store),
+    samplePlan = org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan.SingleSampleFrame,
+    provisionalSegmentKey = GPUProvisionalRenderSegmentKey(
+        "segment.prepared-surface.vertices.${task.commandId.value}",
+    ),
+    drawPackets = listOf(packet),
+    batchEligibilityByPacketId = mapOf(
+        packet.packetId to org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility(
+            kind = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchKind.Isolated,
+            queueGuard = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchQueueGuard(
+                emptyList(),
+                emptyList(),
+            ),
+        ),
+    ),
 )
 
 /**

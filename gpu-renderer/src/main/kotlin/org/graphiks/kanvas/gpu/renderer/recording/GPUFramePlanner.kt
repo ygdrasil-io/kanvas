@@ -22,6 +22,41 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSampleStoreAction
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureRef
+import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
+import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
+
+/** Rewrites the recorder's semantic-only vertices packet into the exact prepared-vertices render authority. */
+private fun GPUDrawPacket.withPlannedPreparedVerticesRenderAuthority(): GPUDrawPacket = GPUDrawPacket(
+    packetId = packetId,
+    commandIdValue = commandIdValue,
+    analysisRecordId = analysisRecordId,
+    passId = passId,
+    layerId = layerId,
+    bindingListId = bindingListId,
+    insertionReasonCode = insertionReasonCode,
+    sortKey = sortKey,
+    sortKeyPreimage = sortKeyPreimage,
+    renderStepId = renderStepId,
+    renderStepVersion = renderStepVersion,
+    role = GPUDrawPacketRole.Shading,
+    blendPlan = blendPlan,
+    renderPipelineKey = org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_RENDER_PIPELINE_KEY,
+    computePipelineKey = computePipelineKey,
+    bindingLayoutHash = org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_BINDING_LAYOUT_HASH,
+    uniformSlot = uniformSlot,
+    resourceSlot = resourceSlot,
+    semanticPayload = semanticPayload,
+    vertexSourceLabel = org.graphiks.kanvas.gpu.renderer.payloads.PREPARED_VERTICES_VERTEX_SOURCE_LABEL,
+    scissorBoundsHash = scissorBoundsHash,
+    targetStateHash = targetStateHash,
+    originalPaintOrder = originalPaintOrder,
+    resourceGeneration = resourceGeneration,
+    frameProvenance = frameProvenance,
+    clipCoveragePlan = clipCoveragePlan,
+    clipExecutionPlan = clipExecutionPlan,
+    diagnostics = diagnostics,
+    clipProducerAuthority = clipProducerAuthority,
+)
 
 /** Pure deterministic linearizer between finalized recordings and resource preflight. */
 object GPUFramePlanner {
@@ -808,14 +843,37 @@ object GPUFramePlanner {
                     )
                     steps += GPUFrameStep.PostSubmitPresentAction(task.descriptor.output, listOf(task.taskId))
                 }
-                is GPUTask.SemanticOnly -> steps += GPUFrameStep.RefusedLeafDrawStep(
-                    commandId = task.commandId,
-                    diagnostic = diagnostic(
-                        PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE,
-                        "Prepared vertices semantics have no executable native materialization route.",
-                    ),
-                    sourceTaskIds = listOf(task.taskId),
-                )
+                is GPUTask.SemanticOnly -> {
+                    val packet = task.draw.packet.withPlannedPreparedVerticesRenderAuthority()
+                    val render = GPUTask.Render(
+                        taskId = GPUTaskID("task.render.${task.commandId.value}"),
+                        recordingId = task.recordingId,
+                        phase = GPUTaskPhase.Render,
+                        target = GPUFrameTargetRef("frame.scene"),
+                        loadStore = org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan(
+                            "load",
+                            org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan.Store,
+                        ),
+                        samplePlan = org.graphiks.kanvas.gpu.renderer.passes.GPUSamplePlan
+                            .SingleSampleFrame,
+                        provisionalSegmentKey = GPUProvisionalRenderSegmentKey(
+                            "segment.prepared-vertices.${task.commandId.value}",
+                        ),
+                        drawPackets = listOf(packet),
+                        batchEligibilityByPacketId = mapOf(
+                            packet.packetId to org.graphiks.kanvas.gpu.renderer.passes
+                                .GPUPassBatchEligibility(
+                                    kind = org.graphiks.kanvas.gpu.renderer.passes
+                                        .GPUPassBatchKind.Isolated,
+                                    queueGuard = org.graphiks.kanvas.gpu.renderer.passes
+                                        .GPUPassBatchQueueGuard(emptyList(), emptyList()),
+                                ),
+                        ),
+                    )
+                    enqueueRenderSlice(RenderSlice(render, listOf(packet)))?.let {
+                        return Linearization.Refused(it)
+                    }
+                }
                 is GPUTask.Refused -> when (task.scope) {
                     GPURefusalScope.RefusedLeafDrawStep -> {
                         val destinationSource = destinationSchedule.refusalSourceTaskByRefusedTask[task.taskId]

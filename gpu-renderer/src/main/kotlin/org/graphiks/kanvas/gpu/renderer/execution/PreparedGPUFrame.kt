@@ -1888,6 +1888,9 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                     scope.corePrimitiveClipStencilPreparedRouteSeal is
                         GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
                 if (!clipStencilProducer) add("setBindGroup")
+                val verticesSemantic = packet.semanticPayload as?
+                    org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
+                if (verticesSemantic != null) add("setBindGroup")
                 val directRoutes = scope.corePrimitiveDirectNativeRouteSeal as?
                     GPUCorePrimitiveDirectNativeRouteSeal.Routes
                 val clipStencilSealed =
@@ -1901,10 +1904,15 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.expectedFac
                         scope.corePrimitiveCoverageMaskPreparedRouteSeal is
                         GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.ConsumerPartition
                 if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+                    verticesSemantic != null ||
                     directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
                     clipStencilSealed || coverageMaskConsumer) {
                     add("setVertexBuffer")
-                    add("setIndexBuffer")
+                    if (verticesSemantic == null ||
+                        verticesSemantic.artifact.indexCount != null
+                    ) {
+                        add("setIndexBuffer")
+                    }
                 }
                 if (packet.scissorBoundsHash != null) add("setScissor")
                 add("draw")
@@ -1951,11 +1959,17 @@ internal fun org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep.RenderPassS
     drawPackets.forEach { packet ->
         add(packet.packetId)
         if (!clipStencilProducer) add(packet.packetId)
+        val verticesSemantic = packet.semanticPayload as?
+            org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload.Vertices
+        if (verticesSemantic != null) add(packet.packetId)
         if (packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+            verticesSemantic != null ||
             directRoutes?.routesByPacketId?.containsKey(packet.packetId) == true ||
             clipStencilSealed || coverageMaskConsumer) {
             add(packet.packetId)
-            add(packet.packetId)
+            if (verticesSemantic == null || verticesSemantic.artifact.indexCount != null) {
+                add(packet.packetId)
+            }
         }
         if (packet.scissorBoundsHash != null) add(packet.packetId)
         add(packet.packetId)

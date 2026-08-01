@@ -58,10 +58,19 @@ class GPUPreparedVerticesSemanticBuilderTest {
         val semanticOnlyTasks = inventory.recording.taskList.tasks
             .filterIsInstance<GPUTask.SemanticOnly>()
         assertEquals(listOf(1, 2), semanticOnlyTasks.map { it.draw.packet.commandIdValue })
+        val plannedVertices = inventory.framePlan.steps
+            .filterIsInstance<GPUFrameStep.RenderPassStep>()
+            .flatMap(GPUFrameStep.RenderPassStep::drawPackets)
+            .filter { packet -> packet.commandIdValue in setOf(1, 2) }
         assertEquals(
-            listOf("unsupported.preflight.prepared_vertices_unmaterialized"),
-            inventory.framePlan.steps.filterIsInstance<GPUFrameStep.RefusedLeafDrawStep>()
-                .map { it.diagnostic.code.value }.distinct(),
+            listOf(1, 2),
+            plannedVertices.map { it.commandIdValue },
+        )
+        assertTrue(
+            plannedVertices.all { packet ->
+                packet.renderPipelineKey != null
+            },
+            "the planner must lift semantic-only vertices draws into real prepared render packets",
         )
         @Suppress("UNCHECKED_CAST")
         assertTrue(

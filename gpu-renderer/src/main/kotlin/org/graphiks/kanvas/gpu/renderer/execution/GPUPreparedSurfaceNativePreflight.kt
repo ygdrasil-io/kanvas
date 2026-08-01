@@ -230,12 +230,17 @@ internal class GPUPreparedVerticesRenderRunPlan(
     drawFacts: List<GPUPreparedVerticesDrawFacts>,
     shaderProgramByPacketId: Map<GPUDrawPacketID, GPUPreparedVerticesShaderProgram>,
     val exactScopeKey: GPUPreparedNativeScopeKey,
+    uploadScopeKeys: List<GPUPreparedNativeScopeKey> = emptyList(),
 ) {
     val packets: List<GPUDrawSemanticPayload.Vertices> = immutableList(packets)
     val resourcePlans: List<GPUVerticesFrameResourcePlan> = immutableList(resourcePlans)
     val drawFacts: List<GPUPreparedVerticesDrawFacts> = immutableList(drawFacts)
     val shaderProgramByPacketId: Map<GPUDrawPacketID, GPUPreparedVerticesShaderProgram> =
         immutableMap(shaderProgramByPacketId)
+    val uploadScopeKeys: List<GPUPreparedNativeScopeKey> = immutableList(uploadScopeKeys)
+
+    val exactScopeKeys: List<GPUPreparedNativeScopeKey> =
+        immutableList(uploadScopeKeys + exactScopeKey)
 
     init {
         require(sourceScopeIndex >= 0 &&
@@ -244,6 +249,17 @@ internal class GPUPreparedVerticesRenderRunPlan(
             exactScopeKey.operandKeys.isNotEmpty()
         ) {
             "A prepared-vertices run must retain one exact render-only scope"
+        }
+        require(this.uploadScopeKeys.all { key ->
+            key.operationKind == GPUEncoderOperationKind.Upload &&
+                key.sourceStepIndex != exactScopeKey.sourceStepIndex
+        }) {
+            "A prepared-vertices run must retain only exact upload scopes before its render scope"
+        }
+        require(this.exactScopeKeys.map(GPUPreparedNativeScopeKey::sourceStepIndex)
+            .distinct().size == this.exactScopeKeys.size
+        ) {
+            "A prepared-vertices run must retain one exact unique scope per step"
         }
         require(this.packets.isNotEmpty() &&
             renderStep.drawPackets.mapNotNull(GPUDrawPacket::semanticPayload) == this.packets &&
@@ -593,13 +609,16 @@ internal class GPUPreparedSurfaceNativePreflightPlan(
         }
         val expectedScopeKeysWithSharedUploads = buildList {
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.imageFrames.map { it.uploadScopeKey })
-            addAll(this@GPUPreparedSurfaceNativePreflightPlan.orderedRuns.map { run ->
+            this@GPUPreparedSurfaceNativePreflightPlan.orderedRuns.forEach { run ->
                 when (run) {
-                    is GPUPreparedSurfaceNativeRunPlan.Core -> run.plan.exactScopeKey
-                    is GPUPreparedSurfaceNativeRunPlan.Image -> run.plan.exactScopeKey
-                    is GPUPreparedSurfaceNativeRunPlan.Vertices -> run.plan.exactScopeKey
+                    is GPUPreparedSurfaceNativeRunPlan.Core ->
+                        add(run.plan.exactScopeKey)
+                    is GPUPreparedSurfaceNativeRunPlan.Image ->
+                        add(run.plan.exactScopeKey)
+                    is GPUPreparedSurfaceNativeRunPlan.Vertices ->
+                        addAll(run.plan.exactScopeKeys)
                 }
-            })
+            }
             textPlan?.let { addAll(it.exactScopeKeys) }
             colorGlyphPlan?.let { addAll(it.exactScopeKeys) }
             addAll(this@GPUPreparedSurfaceNativePreflightPlan.colorGlyphDestinationReads.map {
@@ -3223,6 +3242,16 @@ internal class GPUPreparedSurfaceNativePreflight(
                     val runPackets = render.drawPackets.map { packet ->
                         packet.semanticPayload as GPUDrawSemanticPayload.Vertices
                     }
+                    runPackets.firstOrNull { packet ->
+                        packet.material.sampledResources.isNotEmpty()
+                    }?.let { packet ->
+                        return refused(
+                            "unsupported.prepared-vertices.sampled-material",
+                            "Prepared-vertices material ${packet.materialIdentity} samples " +
+                                "frame resources that require the sampled-material materializer.",
+                            mapOf("boundary" to "native"),
+                        )
+                    }
                     val deviceGeneration = framePlan.capabilitySeal.deviceGeneration.value
                     val runArtifacts = runPackets.map(GPUDrawSemanticPayload.Vertices::artifact)
                         .distinctBy { artifact -> artifact.key }
@@ -3271,6 +3300,15 @@ internal class GPUPreparedSurfaceNativePreflight(
                     } ?: throw IllegalArgumentException(
                         "Prepared-vertices run scope is missing",
                     )
+                    val verticesUploadScopeKeys = framePlan.steps
+                        .mapIndexedNotNull { index, step ->
+                            (step as? GPUFrameStep.UploadResourceStep)?.takeIf { upload ->
+                                upload.destination.value.contains("prepared-vertices.vertex") ||
+                                    upload.destination.value.contains("prepared-vertices.index")
+                            }?.let { exactScopeKeys.single { scope ->
+                                scope.sourceStepIndex == index
+                            } }
+                        }
                     GPUPreparedSurfaceNativeRunPlan.Vertices(
                         GPUPreparedVerticesRenderRunPlan(
                             sourceScopeIndex = sourceStepIndex,
@@ -3280,6 +3318,7 @@ internal class GPUPreparedSurfaceNativePreflight(
                             drawFacts = drawFacts,
                             shaderProgramByPacketId = shaderProgramByPacketId,
                             exactScopeKey = exactScopeKey,
+                            uploadScopeKeys = verticesUploadScopeKeys,
                         ),
                     )
                 } catch (failure: IllegalArgumentException) {

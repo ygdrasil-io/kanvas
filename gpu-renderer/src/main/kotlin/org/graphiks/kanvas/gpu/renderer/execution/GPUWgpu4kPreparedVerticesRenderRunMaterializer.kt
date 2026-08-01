@@ -222,7 +222,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
             bufferCreationCount()
             val indexBuffer = resourcePlan.indexBuffer?.let { index ->
                 createBuffer(
-                    size = index.byteCount,
+                    size = alignedFourBytes(index.byteCount),
                     usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
                     label = "Kanvas.frame.preparedVertices.index.${resourcePlan.artifactKey}",
                 ).track(created)
@@ -241,7 +241,9 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                         buffer,
                         actualDeviceGeneration,
                         GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                        byteCapacity = requireNotNull(resourcePlan.indexBuffer).byteCount,
+                        byteCapacity = alignedFourBytes(
+                            requireNotNull(resourcePlan.indexBuffer).byteCount,
+                        ),
                     )
                 },
             )
@@ -255,9 +257,10 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 renderScopeIndices = listOf(plan.sourceScopeIndex),
             )
             buffers.indexBuffer?.let { indexBuffer ->
+                val indexBytes = requireNotNull(buffers.artifact.indexBytesForUpload())
                 uniformUploads += preparedVerticesBufferUpload(
                     role = "index",
-                    bytes = requireNotNull(buffers.artifact.indexBytesForUpload()),
+                    bytes = indexBytes.paddedToFourBytes(),
                     destination = indexBuffer,
                     destinationLabel = "index.${buffers.artifact.key}",
                     renderScopeIndices = listOf(plan.sourceScopeIndex),
@@ -330,7 +333,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
         )
         val indexPackBuffer = batch.indexPack?.let { pack ->
             createBuffer(
-                size = pack.totalBytes,
+                size = alignedFourBytes(pack.totalBytes),
                 usage = GPUBufferUsage.Index or GPUBufferUsage.CopyDst,
                 label = "Kanvas.frame.preparedVertices.packed.index.${batch.batchIndex}",
             ).track(created)
@@ -341,7 +344,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 buffer,
                 actualDeviceGeneration,
                 GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
-                byteCapacity = requireNotNull(batch.indexPack).totalBytes,
+                byteCapacity = alignedFourBytes(requireNotNull(batch.indexPack).totalBytes),
             )
         }
         batch.vertexPack.subranges.forEach { subrange ->
@@ -363,7 +366,7 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
             }
             uniformUploads += preparedVerticesBufferUpload(
                 role = "index",
-                bytes = requireNotNull(artifact.indexBytesForUpload()),
+                bytes = requireNotNull(artifact.indexBytesForUpload()).paddedToFourBytes(),
                 destination = requireNotNull(indexPackOperand),
                 destinationLabel = "packed.index.${batch.batchIndex}.${subrange.artifactKey}",
                 renderScopeIndices = listOf(plan.sourceScopeIndex),
@@ -381,20 +384,24 @@ internal class GPUWgpu4kPreparedVerticesRenderRunMaterializer(
                 created = created,
             )
         }
-        add(
-            GPUPreparedNativeRenderCommand.SetPipeline(
-                GPUPreparedNativeRenderPipelineOperand(
-                    pipelineSet.pipeline,
-                    actualDeviceGeneration,
-                    GPUPreparedNativeOperandOwnership.Borrowed,
-                ),
-            ),
-        )
-        setPipelineEmissions()
         batch.packetIds.forEach { packetId ->
             val entry = requireNotNull(entriesByPacketId[packetId]) {
                 "A prepared-vertices batch must retain its exact packet"
             }
+            // One SetPipeline per packet: the facade contract
+            // (expectedFacadeOperations) and the pass command stream both emit
+            // one SetRenderPipeline per packet, so a batched packet emits its
+            // own SetPipeline command even when the batch shares one pipeline.
+            add(
+                GPUPreparedNativeRenderCommand.SetPipeline(
+                    GPUPreparedNativeRenderPipelineOperand(
+                        pipelineSet.pipeline,
+                        actualDeviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                ),
+            )
+            setPipelineEmissions()
             val vertexSubrange = batch.vertexPack.subranges.single { subrange ->
                 subrange.artifactKey == entry.packet.artifact.key
             }
@@ -1279,4 +1286,21 @@ private fun failedPreparedVerticesMaterialization(
         facts = mapOf("boundary" to "native"),
         retainedCloseOwner = owner.takeIf { rollbackFailure != null },
     )
+}
+
+
+/** Rounds a byte count up to the WebGPU 4-byte copy alignment. */
+private fun alignedFourBytes(byteCount: Long): Long {
+    require(byteCount >= 0L) { "Byte count must be non-negative" }
+    val remainder = byteCount % 4L
+    return if (remainder == 0L) byteCount else byteCount + (4L - remainder)
+}
+
+/** Pads raw bytes to a WebGPU 4-byte aligned copy size (zero fill). */
+private fun ByteArray.paddedToFourBytes(): ByteArray {
+    val remainder = size % 4
+    if (remainder == 0) return this
+    val padded = ByteArray(size + (4 - remainder))
+    copyInto(padded)
+    return padded
 }

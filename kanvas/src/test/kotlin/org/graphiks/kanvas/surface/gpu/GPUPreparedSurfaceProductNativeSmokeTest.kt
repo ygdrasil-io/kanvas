@@ -10,6 +10,9 @@ import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
+import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
+import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
+import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
 import org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts
 import org.graphiks.kanvas.gpu.renderer.product.GPUProductFlagConfig
 import org.graphiks.kanvas.image.AlphaType
@@ -21,11 +24,17 @@ import org.graphiks.kanvas.paint.SamplingOptions
 import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
+import org.graphiks.kanvas.text.FontTypeface
+import org.graphiks.kanvas.text.KanvasGlyphRun
+import org.graphiks.kanvas.text.TextBlob
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.LatticeFlags
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.VertexMode
+import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceProductNativeSmokeTest {
     @AfterTest
@@ -580,12 +589,224 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
         assertEquals(0, result.evidence.activeNativePayloads)
     }
 
+    @Test
+    fun `heterogeneous Core Image Text Vertices Core frame uses one prepared submission and one readback`() {
+        val typeface = FontTypeface(
+            GPUPreparedTextTestFixtures.colrFontBytesWithForegroundLayer(),
+            "Task 14 heterogeneous COLRv0",
+        )
+        val image = Image(
+            width = GPUPreparedImageTestFixtures.rgbaPremul2x2Width,
+            height = GPUPreparedImageTestFixtures.rgbaPremul2x2Height,
+            colorType = ColorType.RGBA_8888,
+            sourceId = "task14-heterogeneous-image",
+            pixels = GPUPreparedImageTestFixtures.rgbaPremul2x2Bytes,
+            alphaType = AlphaType.PREMUL,
+        )
+        val operations = listOf(
+            rect(Rect.fromLTRB(0f, 0f, 4f, 4f), Color.RED),
+            drawImage(
+                image,
+                Rect.fromLTRB(48f, 0f, 50f, 2f),
+                SamplingOptions.NEAREST,
+            ),
+            text(typeface, GPUPreparedTextTestFixtures.A8_GLYPH_ID, 12, 58, Color.WHITE),
+            DisplayOp.DrawVertices(
+                vertices = Vertices(
+                    mode = VertexMode.TRIANGLES,
+                    positions = listOf(
+                        Point(0f, 0f),
+                        Point(4f, 0f),
+                        Point(0f, 4f),
+                    ),
+                ),
+                paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
+                transform = Matrix33.identity(),
+                clip = ClipStack.WideOpen,
+            ),
+            rect(Rect.fromLTRB(6f, 0f, 10f, 4f), Color.BLUE),
+        )
+        var captured: GPUPreparedSurfaceFrameBuildResult.Ready? = null
+        val executor = GPUPreparedSurfaceFrameExecutor(
+            backendFactory = GPUPreparedSurfaceNativeBackendPortFactory,
+            frameBuilder = { request ->
+                GPUPreparedSurfaceFrameBuilder.build(request).also { result ->
+                    if (result is GPUPreparedSurfaceFrameBuildResult.Ready) captured = result
+                }
+            },
+        )
+        val color = assertIs<GPUPreparedSurfaceColorMapping.Ready>(
+            RenderConfig.DEFAULT.mapPreparedGpuColorConfig(),
+        )
+        val execution = executor.execute(
+            GPUPreparedSurfaceExecutionRequest(
+                candidate = GPUPreparedSurfaceEligibility.Candidate(
+                    operations = operations,
+                    config = RenderConfig.DEFAULT,
+                    color = color,
+                ),
+                width = 160,
+                height = 96,
+                output = GPUPreparedSurfaceRequestedOutput.ReadbackRgba,
+            ),
+        )
+        val result = assertIs<GPUPreparedSurfaceExecutionResult.Succeeded>(
+            execution,
+            execution.toString(),
+        )
+        val semanticOrder = checkNotNull(captured).taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .mapNotNull(GPUDrawPacket::semanticPayload)
+            .map(GPUDrawSemanticPayload::canonicalType)
+        assertEquals(
+            listOf("CorePrimitive", "SampledImage", "TextA8", "Vertices", "CorePrimitive"),
+            semanticOrder,
+        )
+
+        // Pixel order: the vertices triangle overlaps the first core rect and is painted
+        // after it, so the overlap pixel must be the vertices green.
+        assertPixel(result.rgba, 160, 1, 1, listOf(0, 255, 0, 255))
+        assertPixel(result.rgba, 160, 2, 3, listOf(255, 0, 0, 255))
+        assertPixel(result.rgba, 160, 7, 0, listOf(0, 0, 255, 255))
+        assertPixel(result.rgba, 160, 48, 0, listOf(188, 0, 0, 128))
+        val textDelta = deltaWithinOneLsb(
+            result.rgba,
+            160,
+            16,
+            58,
+            GPUPreparedTextPixelOracle.a8SourceOver(
+                GPUPreparedTextPixelOracle.StraightSrgb(255, 255, 255),
+                paintAlpha = 1f,
+                coverage = 255,
+            ).bytes(),
+        )
+        assertTrue(textDelta <= 1, "heterogeneous text pixel delta=$textDelta")
+
+        // The vertices overlap region must match the Task 13 CPU oracle (red rect under a
+        // green triangle) within one LSB of the declared UNORM quantization.
+        val expectedVertices = GPUPreparedVerticesCpuOracle.renderVertices(
+            listOf(
+                GPUPreparedVerticesTestFixture.create(
+                    positions = floatArrayOf(0f, 0f, 4f, 0f, 0f, 4f, 4f, 0f, 4f, 4f, 0f, 4f),
+                    colorsRgba8 = byteArrayOf(
+                        255.toByte(), 0, 0, 255.toByte(),
+                        255.toByte(), 0, 0, 255.toByte(),
+                        255.toByte(), 0, 0, 255.toByte(),
+                        255.toByte(), 0, 0, 255.toByte(),
+                        255.toByte(), 0, 0, 255.toByte(),
+                        255.toByte(), 0, 0, 255.toByte(),
+                    ),
+                    indices = intArrayOf(0, 1, 2, 1, 4, 2, 2, 4, 5, 0, 2, 5),
+                    topology = GPUPreparedVerticesTopology.TRIANGLES,
+                    pixelWidth = 4,
+                    pixelHeight = 4,
+                ),
+                GPUPreparedVerticesTestFixture.create(
+                    positions = floatArrayOf(0f, 0f, 4f, 0f, 0f, 4f),
+                    colorsRgba8 = byteArrayOf(
+                        0, 255.toByte(), 0, 255.toByte(),
+                        0, 255.toByte(), 0, 255.toByte(),
+                        0, 255.toByte(), 0, 255.toByte(),
+                    ),
+                    topology = GPUPreparedVerticesTopology.TRIANGLES,
+                    pixelWidth = 4,
+                    pixelHeight = 4,
+                ),
+            ),
+        )
+        val actualRegion = ByteArray(4 * 4 * 4)
+        for (regionY in 0 until 4) {
+            for (regionX in 0 until 4) {
+                val source = (regionY * 160 + regionX) * 4
+                val target = (regionY * 4 + regionX) * 4
+                (0 until 4).forEach { channel ->
+                    actualRegion[target + channel] = result.rgba[source + channel]
+                }
+            }
+        }
+        val verticesDelta = GPUPreparedVerticesCpuOracle.comparePixels(
+            actualRegion,
+            expectedVertices,
+        )
+        assertTrue(
+            verticesDelta.matchesWithinOneLsb,
+            "heterogeneous vertices region maxChannelDelta=${verticesDelta.maxChannelDelta} " +
+                "differing=${verticesDelta.differingChannels}/${verticesDelta.comparedChannels}",
+        )
+
+        assertEquals(4, result.visualOperationCount)
+        assertEquals(1L, result.evidence.encoders)
+        assertEquals(1L, result.evidence.commandBuffers)
+        assertEquals(1L, result.evidence.submits)
+        assertEquals(1L, result.evidence.readbackCopies)
+        assertEquals(0, result.evidence.activeNativePayloads)
+        assertEquals(0, result.evidence.outputOwnedNativePayloads)
+        assertEquals(0, result.evidence.quarantinedNativePayloads)
+        assertEquals(result.evidence.retentionRegistrations, result.evidence.retentionCompletions)
+        assertEquals(0L, result.evidence.retentionQuarantines)
+        assertEquals(1, result.evidence.distinctRetentionTickets)
+        assertEquals(5L, result.evidence.renderPasses)
+        assertTrue(result.evidence.draws + result.evidence.drawIndexed >= 2L)
+        assertTrue(
+            captured.taskList.tasks
+                .filterIsInstance<GPUTask.Upload>()
+                .any { upload -> upload.destination.value.contains("prepared-vertices") },
+            "vertices upload must be planned before its consuming render",
+        )
+        println(
+            "task14.native heterogeneous prepared=true skipped=0 submits=" +
+                "${result.evidence.submits} readbacks=${result.evidence.readbackCopies} " +
+                "renderPasses=${result.evidence.renderPasses} " +
+                "verticesDelta=${verticesDelta.maxChannelDelta} textDelta=$textDelta",
+        )
+    }
+
     private fun rect(bounds: Rect, color: Color) = DisplayOp.DrawRect(
         bounds,
         Paint.fill(color).copy(antiAlias = false),
         Matrix33.identity(),
         ClipStack.WideOpen,
     )
+
+    private fun text(
+        typeface: FontTypeface,
+        glyphId: Int,
+        x: Int,
+        baselineY: Int,
+        color: Color,
+    ): DisplayOp.DrawText = DisplayOp.DrawText(
+        blob = TextBlob(
+            glyphRuns = listOf(
+                KanvasGlyphRun(
+                    glyphs = listOf(glyphId.toUShort()),
+                    positions = listOf(Point(0f, 0f)),
+                    fontSize = 48f,
+                ),
+            ),
+            typeface = typeface,
+            fontSize = 48f,
+        ),
+        x = x.toFloat(),
+        y = baselineY.toFloat(),
+        paint = Paint.fill(color),
+        transform = Matrix33.identity(),
+        clip = ClipStack.WideOpen,
+    )
+
+    private fun deltaWithinOneLsb(
+        rgba: ByteArray,
+        width: Int,
+        x: Int,
+        y: Int,
+        expected: ByteArray,
+    ): Int {
+        val offset = (y * width + x) * 4
+        return GPUPreparedImagePixelOracle.maxChannelDelta(
+            rgba.copyOfRange(offset, offset + 4),
+            expected,
+        )
+    }
 
     private fun drawImage(
         image: Image,

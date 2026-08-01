@@ -1981,6 +1981,7 @@ internal class GPUFramePreflighter(
                                     packet.semanticPayload is GPUDrawSemanticPayload.SampledImage ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.TextA8 ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+                                    packet.semanticPayload is GPUDrawSemanticPayload.Vertices ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.RegisteredUniformRect ||
                                     packet.semanticPayload is GPUDrawSemanticPayload.SeparableBlurRect
                             val acceptedGeneration = when {
@@ -4342,10 +4343,15 @@ internal class GPUFramePreflighter(
                     )
                 }
             is GPUDrawSemanticPayload.Vertices ->
-                diagnostic(
-                    PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE,
-                    "Prepared vertices semantics have no executable native materialization route.",
-                )
+                if (hasExactPreparedSurfaceMixedNativeBoundary(framePlan)) {
+                    null
+                } else {
+                    diagnostic(
+                        PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE,
+                        "Prepared vertices semantics have no executable native materialization route; " +
+                            "the sealed prepared-surface native boundary is required.",
+                    )
+                }
         }
     }
 
@@ -4441,13 +4447,14 @@ internal class GPUFramePreflighter(
             .map(GPUDrawSemanticPayload::canonicalType)
             .toSet()
         return semanticTypes.any {
-            it == "SampledImage" || it == "TextA8" || it == "ColorGlyph"
+            it == "SampledImage" || it == "TextA8" || it == "ColorGlyph" || it == "Vertices"
         } &&
             semanticTypes.all {
                 it == "CorePrimitive" ||
                     it == "SampledImage" ||
                     it == "TextA8" ||
-                    it == "ColorGlyph"
+                    it == "ColorGlyph" ||
+                    it == "Vertices"
             }
     }
 
@@ -4973,6 +4980,18 @@ internal class GPUFramePreflighter(
                 ),
             )
         }
+        val verticesSemantic = packet.semanticPayload as? GPUDrawSemanticPayload.Vertices
+        if (verticesSemantic != null) {
+            add(
+                operand(
+                    packet,
+                    "setBindGroup",
+                    GPUMaterializedCommandOperandKind.BindGroup,
+                    "${verticesSemantic.canonicalHash}.material",
+                    ownerScope,
+                ),
+            )
+        }
         val colorGlyph = packet.semanticPayload as? GPUDrawSemanticPayload.ColorGlyph
         val directCore = corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId)
         val clipStencilSlabs = when (clipStencilScope) {
@@ -4987,15 +5006,19 @@ internal class GPUFramePreflighter(
         val coverageMaskSlabs =
             (coverageMaskUnit as?
                 GPUCorePrimitiveCoverageMaskPreparedScopeRouteSeal.Consumer)?.slabAuthority
-        if (colorGlyph != null || directCore != null || clipStencilSlabs != null ||
-            coverageMaskSlabs != null
+        val verticesIndexed = verticesSemantic?.artifact?.indexCount != null
+        if (colorGlyph != null || verticesSemantic != null || directCore != null ||
+            clipStencilSlabs != null || coverageMaskSlabs != null
         ) {
             add(
                 operand(
                     packet,
                     "setVertexBuffer",
                     GPUMaterializedCommandOperandKind.VertexBuffer,
-                    if (colorGlyph != null) {
+                    if (verticesSemantic != null) {
+                        "${verticesSemantic.canonicalHash}.vertices." +
+                            verticesSemantic.artifact.vertexBytesForUpload().size
+                    } else if (colorGlyph != null) {
                         "${colorGlyph.canonicalHash}.vertices.${colorGlyph.vertexData.size}"
                     } else if (clipStencilSlabs != null) {
                         "clip-stencil.${clipStencilSlabs.vertexResource.value}@" +
@@ -5012,28 +5035,33 @@ internal class GPUFramePreflighter(
                     ownerScope,
                 ),
             )
-            add(
-                operand(
-                    packet,
-                    "setIndexBuffer",
-                    GPUMaterializedCommandOperandKind.IndexBuffer,
-                    if (colorGlyph != null) {
-                        "${colorGlyph.canonicalHash}.indices.${colorGlyph.indexData.size}"
-                    } else if (clipStencilSlabs != null) {
-                        "clip-stencil.${clipStencilSlabs.indexResource.value}@" +
-                            "${clipStencilSlabs.indexGeneration}.indices." +
-                            clipStencilSlabs.indexByteSize
-                    } else if (coverageMaskSlabs != null) {
-                        "coverage-mask.${coverageMaskSlabs.indexResource.value}@" +
-                            "${coverageMaskSlabs.indexGeneration}.indices." +
-                            coverageMaskSlabs.indexByteSize
-                    } else {
-                        "core-direct.$sourceStepIndex.${packet.packetId.value}.indices." +
-                            requireNotNull(directCore).indexCount
-                    },
-                    ownerScope,
-                ),
-            )
+            if (verticesSemantic == null || verticesIndexed) {
+                add(
+                    operand(
+                        packet,
+                        "setIndexBuffer",
+                        GPUMaterializedCommandOperandKind.IndexBuffer,
+                        if (verticesSemantic != null) {
+                            "${verticesSemantic.canonicalHash}.indices." +
+                                requireNotNull(verticesSemantic.artifact.indexBytesForUpload()).size
+                        } else if (colorGlyph != null) {
+                            "${colorGlyph.canonicalHash}.indices.${colorGlyph.indexData.size}"
+                        } else if (clipStencilSlabs != null) {
+                            "clip-stencil.${clipStencilSlabs.indexResource.value}@" +
+                                "${clipStencilSlabs.indexGeneration}.indices." +
+                                clipStencilSlabs.indexByteSize
+                        } else if (coverageMaskSlabs != null) {
+                            "coverage-mask.${coverageMaskSlabs.indexResource.value}@" +
+                                "${coverageMaskSlabs.indexGeneration}.indices." +
+                                coverageMaskSlabs.indexByteSize
+                        } else {
+                            "core-direct.$sourceStepIndex.${packet.packetId.value}.indices." +
+                                requireNotNull(directCore).indexCount
+                        },
+                        ownerScope,
+                    ),
+                )
+            }
         }
     }
 
@@ -5122,7 +5150,10 @@ internal class GPUFramePreflighter(
                 ?: GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty
             val coverageMaskUnit =
                 preparedScopeRoutes.coverageMaskUnitsByPacketId[packet.packetId]
+            val verticesSemantic =
+                packet.semanticPayload as? GPUDrawSemanticPayload.Vertices
             val indexedPayload = packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
+                verticesSemantic?.artifact?.indexCount != null ||
                 corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId) != null ||
                 clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer ||
                 clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Consumer ||
@@ -5130,12 +5161,24 @@ internal class GPUFramePreflighter(
             val expectedBindGroupCount =
                 if (clipStencilScope is GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer) {
                     0
+                } else if (verticesSemantic != null) {
+                    2
                 } else {
                     1
                 }
+            val expectedVertexIndexCount =
+                if (verticesSemantic != null) {
+                    if (indexedPayload) 2 else 1
+                } else if (indexedPayload) {
+                    2
+                } else {
+                    0
+                }
             if (pipelines.size != 1 || bindGroups.size != expectedBindGroupCount ||
+                vertices.size + indices.size != expectedVertexIndexCount ||
                 (indexedPayload && (vertices.size != 1 || indices.size != 1)) ||
-                (!indexedPayload && (vertices.isNotEmpty() || indices.isNotEmpty()))
+                (!indexedPayload && verticesSemantic == null &&
+                    (vertices.isNotEmpty() || indices.isNotEmpty()))
             ) {
                 return diagnostic(
                     "invalid.preflight.render_operand_bijection",
@@ -5215,15 +5258,23 @@ internal class GPUFramePreflighter(
                             ?: GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Empty
                     val coverageMaskUnit =
                         preparedScopeRoutes.coverageMaskUnitsByPacketId[packet.packetId]
+                    val verticesSemantic =
+                        packet.semanticPayload as? GPUDrawSemanticPayload.Vertices
                     val bindGroupCount =
                         if (clipStencilScope is
                             GPUCorePrimitiveClipStencilPreparedScopeRouteSeal.Producer
                         ) {
                             0
+                        } else if (verticesSemantic != null) {
+                            2
                         } else {
                             1
                         }
                     val indexedCount = if (
+                        verticesSemantic != null
+                    ) {
+                        if (verticesSemantic.artifact.indexCount != null) 2 else 1
+                    } else if (
                         packet.semanticPayload is GPUDrawSemanticPayload.ColorGlyph ||
                         corePrimitiveDirectRoutes.routeOrNull(sourceStepIndex, packet.packetId) != null ||
                         clipStencilScope is

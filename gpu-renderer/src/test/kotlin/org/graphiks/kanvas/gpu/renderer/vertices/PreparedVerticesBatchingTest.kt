@@ -278,7 +278,7 @@ class PreparedVerticesBatchingTest {
     // ------------------------------------------------------------------
 
     @Test
-    fun `compatible two draw run shares one packed buffer and one pipeline emission`() {
+    fun `compatible two draw run shares one packed buffer with one SetPipeline per packet`() {
         val fixture = verticesPreflightFixture(commandCount = 1)
         val rebuilt = fixture.withVerticesPackets(
             listOf(
@@ -294,9 +294,9 @@ class PreparedVerticesBatchingTest {
         val render = assertIs<GPUPreparedNativeScopeOperand.Render>(ready.scopeOperands.single())
         val commands = render.commands
         assertEquals(
-            1,
+            2,
             commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>().size,
-            "one compatible batch must emit one SetPipeline",
+            "one compatible batch must emit one SetPipeline per packet",
         )
         assertEquals(
             2,
@@ -449,9 +449,9 @@ class PreparedVerticesBatchingTest {
         val onRender = assertIs<GPUPreparedNativeScopeOperand.Render>(on.scopeOperands.single())
         val offRender = assertIs<GPUPreparedNativeScopeOperand.Render>(off.scopeOperands.single())
         assertEquals(
-            1,
+            2,
             onRender.commands.filterIsInstance<GPUPreparedNativeRenderCommand.SetPipeline>().size,
-            "one compatible batch must emit one pipeline change",
+            "one compatible batch must emit one pipeline change per packet",
         )
         assertEquals(
             2,

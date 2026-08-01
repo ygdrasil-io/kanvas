@@ -510,6 +510,34 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     )
                 }
             }
+            val verticesBufferUploadOperands = verticesRuns.flatMap { run ->
+                val uploadScopeKeys = run.uploadScopeKeys.sortedBy(
+                    GPUPreparedNativeScopeKey::sourceStepIndex,
+                )
+                val bufferUploads = verticesReady?.uniformUploads.orEmpty()
+                    .filter { upload ->
+                        upload.uploadRole == "vertex" || upload.uploadRole == "index"
+                    }
+                check(uploadScopeKeys.size == bufferUploads.size) {
+                    "Prepared-vertices upload scopes must biject with their exact buffer uploads"
+                }
+                uploadScopeKeys.zip(bufferUploads).map { (scopeKey, upload) ->
+                    visibleVerticesHandles += upload.destination.buffer
+                    GPUPreparedNativeScopeOperand.BufferUpload(
+                        sourceStepIndex = scopeKey.sourceStepIndex,
+                        data = upload.data,
+                        destination = GPUPreparedNativeBufferOperand(
+                            upload.destination.buffer,
+                            generationSeal.deviceGeneration,
+                            GPUPreparedNativeOperandOwnership.Borrowed,
+                            upload.destination.byteCapacity,
+                        ),
+                        destinationKey = scopeKey.operandKeys.last(),
+                        destinationOffset = upload.destinationOffset,
+                        uploadRole = "prepared-vertices-${upload.uploadRole}",
+                    )
+                }
+            }
             val distinctVisibleVerticesHandles = visibleVerticesHandles.distinctByNativeIdentity()
             verticesOwner?.detachOwnedHandles(distinctVisibleVerticesHandles)
             verticesAnchor = distinctVisibleVerticesHandles
@@ -661,6 +689,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     preparedR8Resources?.uploadOperands.orEmpty() +
                     finalTextOperands +
                     finalVerticesOperands +
+                    verticesBufferUploadOperands +
                     destinationCopyOperands +
                     finalColorGlyphOperands +
                     listOfNotNull(readbackOperand, surfaceOperand)
@@ -1136,6 +1165,10 @@ private fun GPUPreparedNativeScopeOperand.preparedSurfaceOperandDescriptors(): L
     Pair<GPUPreparedNativeOperandKind, GPUPreparedNativeOperandOwnership>
     > = when (this) {
     is GPUPreparedNativeScopeOperand.TextureUpload -> listOf(
+        data.key.kind to data.key.ownership,
+        destination.nativeKind() to destination.ownership,
+    )
+    is GPUPreparedNativeScopeOperand.BufferUpload -> listOf(
         data.key.kind to data.key.ownership,
         destination.nativeKind() to destination.ownership,
     )

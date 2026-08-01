@@ -54,29 +54,39 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 
 class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
     @Test
-    fun `vertices frame refuses before any native side effect`() {
+    fun `vertices frame materializes with exact vertex uploads and no submission side effect`() {
         val fixture = fixture(
             shape = PreparedSurfaceFixtureShape.ImageOnly,
             inputOverride = verticesCapturedPreparedSurfaceInputs(),
-            onCacheAcquire = { error("vertices refusal must not acquire a session cache") },
-            onTargetBorrow = { error("vertices refusal must not borrow a native target") },
         )
         try {
             val eventsBefore = fixture.native.events.toList()
-            val writesBefore = fixture.native.writeBufferCalls.toList()
 
-            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
-                fixture.materialize(),
+            val materializeResult = fixture.materialize()
+            val materialized = assertIs<GPUPreparedNativeFramePayloadMaterialization.Materialized>(
+                materializeResult,
+                (materializeResult as? GPUPreparedNativeFramePayloadMaterialization.Refused)
+                    ?.code.toString(),
             )
 
-            assertEquals("invalid.prepared-surface.encoder-plan", refused.code)
-            assertEquals(eventsBefore, fixture.native.events)
-            assertEquals(writesBefore, fixture.native.writeBufferCalls)
-            assertEquals(0, fixture.native.events.count { it == "encoder.finish" })
-            assertEquals(0, fixture.native.events.count { it == "queue.submit" })
-            assertEquals(null, refused.retainedDraft)
-            assertEquals(null, refused.retainedPreRegistrationLedger)
-            assertEquals(null, refused.retainedCloseOwner)
+            assertEquals(
+                eventsBefore.count { it.startsWith("encoder.finish") },
+                fixture.native.events.count { it.startsWith("encoder.finish") },
+            )
+            assertEquals(
+                eventsBefore.count { it.startsWith("queue.submit") },
+                fixture.native.events.count { it.startsWith("queue.submit") },
+            )
+            assertTrue(
+                materialized.draft.payload.scopeOperands
+                    .filterIsInstance<GPUPreparedNativeScopeOperand.Render>()
+                    .flatMap { it.commands }
+                    .any { command ->
+                        command is GPUPreparedNativeRenderCommand.Draw ||
+                            command is GPUPreparedNativeRenderCommand.DrawIndexed
+                    },
+                "vertices materialization must close with one exact typed draw",
+            )
         } finally {
             fixture.close()
         }

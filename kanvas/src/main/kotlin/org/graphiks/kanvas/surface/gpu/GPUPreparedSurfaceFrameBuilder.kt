@@ -25,7 +25,6 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPURecorder
 import org.graphiks.kanvas.gpu.renderer.recording.GPURecordingID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTask
-import org.graphiks.kanvas.gpu.renderer.recording.PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUCorePrimitiveCoverageMode
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
@@ -516,21 +515,27 @@ private fun collectPreparedImageVisuals(
     val artifacts = linkedMapOf<Int, GPUPreparedImageUploadArtifact>()
     val textCommandIds = linkedSetOf<Int>()
     val pathStrokeCommandIds = linkedSetOf<Int>()
+    var previousVisualCommandId = -1
     visualSources.zip(mapping.visualCommands).forEachIndexed { commandIndex, (source, visual) ->
         val operationIndex = source.operationIndex
-        if (visual.normalized.commandId.value != commandIndex ||
-            visual.normalized.ordering.paintOrder != commandIndex
+        val visualCommandId = visual.normalized.commandId.value
+        // Visual command identities are assigned from the global command order, so
+        // non-visual operations (prepared vertices) consume adjacent command ids and
+        // the visual ids stay strictly increasing in source order.
+        if (visualCommandId <= previousVisualCommandId ||
+            visual.normalized.ordering.paintOrder != visualCommandId
         ) {
             return PreparedImageVisuals.Refused(
                 imageCommandSourceDiagnostic(
                     message = "Prepared Surface command identity no longer matches source order.",
                     facts = mapOf(
-                        "commandId" to visual.normalized.commandId.value.toString(),
+                        "commandId" to visualCommandId.toString(),
                         "operationIndex" to operationIndex.toString(),
                     ),
                 ),
             )
         }
+        previousVisualCommandId = visualCommandId
         if (source is PreparedVisualSource.Core) {
             if (visual.normalized is NormalizedDrawCommand.DrawImageRect ||
                 visual.preparedImage != null
@@ -539,7 +544,7 @@ private fun collectPreparedImageVisuals(
                     imageCommandSourceDiagnostic(
                         message = "Prepared core operation was associated with image facts.",
                         facts = mapOf(
-                            "commandId" to commandIndex.toString(),
+                            "commandId" to visualCommandId.toString(),
                             "operationIndex" to operationIndex.toString(),
                         ),
                     ),
@@ -557,13 +562,13 @@ private fun collectPreparedImageVisuals(
                     imageCommandSourceDiagnostic(
                         message = "Prepared text source was associated with different command facts.",
                         facts = mapOf(
-                            "commandId" to commandIndex.toString(),
+                            "commandId" to visualCommandId.toString(),
                             "operationIndex" to operationIndex.toString(),
                         ),
                     ),
                 )
             }
-            textCommandIds += commandIndex
+            textCommandIds += visualCommandId
             return@forEachIndexed
         }
         if (source is PreparedVisualSource.TextStroke) {
@@ -582,8 +587,8 @@ private fun collectPreparedImageVisuals(
                     ),
                 )
             }
-            textCommandIds += commandIndex
-            pathStrokeCommandIds += commandIndex
+            textCommandIds += visualCommandId
+            pathStrokeCommandIds += visualCommandId
             return@forEachIndexed
         }
         source as PreparedVisualSource.Image
@@ -592,7 +597,7 @@ private fun collectPreparedImageVisuals(
                 imageCommandSourceDiagnostic(
                     message = "Prepared image source was associated with a non-image command.",
                     facts = mapOf(
-                        "commandId" to commandIndex.toString(),
+                        "commandId" to visualCommandId.toString(),
                         "operationIndex" to operationIndex.toString(),
                     ),
                 ),
@@ -602,7 +607,7 @@ private fun collectPreparedImageVisuals(
                 imageCommandSourceDiagnostic(
                     message = "Prepared image command lost its lowerer facts.",
                     facts = mapOf(
-                        "commandId" to commandIndex.toString(),
+                        "commandId" to visualCommandId.toString(),
                         "operationIndex" to operationIndex.toString(),
                     ),
                 ),
@@ -628,13 +633,13 @@ private fun collectPreparedImageVisuals(
                 imageCommandSourceDiagnostic(
                     message = "Prepared image command does not match its exact lowerer artifact.",
                     facts = mapOf(
-                        "commandId" to commandIndex.toString(),
+                        "commandId" to visualCommandId.toString(),
                         "operationIndex" to operationIndex.toString(),
                     ),
                 ),
             )
         }
-        artifacts[commandIndex] = artifact
+        artifacts[visualCommandId] = artifact
     }
     return PreparedImageVisuals.Ready(
         mapping.visualCommands.toList(),
@@ -785,7 +790,12 @@ private fun validateFrameIdentities(request: GPUPreparedSurfaceFrameBuildRequest
     }
 }
 
-/** Task 7 fail-closed preflight; Task 8 may replace this only with an authenticated native route. */
+/**
+ * Task 7 fail-closed preflight; the authenticated prepared-vertices native route replaces the
+ * refusal once the semantic-only recording evidence bijects with the prepared vertices payloads.
+ * The exact semantic-only packet evidence is validated by [GPUPreparedVerticesSemanticBuilder];
+ * this function only keeps the bijection authority.
+ */
 private fun preflightUnmaterializedPreparedVertices(
     recording: org.graphiks.kanvas.gpu.renderer.recording.GPURecording,
     semanticsByCommandId: Map<Int, GPUDrawSemanticPayload>,
@@ -809,15 +819,7 @@ private fun preflightUnmaterializedPreparedVertices(
             ),
         )
     }
-    return diagnostic(
-        code = PREPARED_VERTICES_UNMATERIALIZED_PREFLIGHT_REFUSAL_CODE,
-        message = "Prepared vertices semantics have no executable native materialization route.",
-        facts = mapOf(
-            "semanticOnlyCommandIds" to semanticOnlyCommandIds.joinToString(","),
-            "verticesCommandIds" to verticesCommandIds.joinToString(","),
-            "state" to "prepared_vertices_unmaterialized",
-        ),
-    )
+    return null
 }
 
 private fun GPUCorePrimitiveSemanticGatherResult.Refused.toDiagnostic(): GPUDiagnostic = GPUDiagnostic(

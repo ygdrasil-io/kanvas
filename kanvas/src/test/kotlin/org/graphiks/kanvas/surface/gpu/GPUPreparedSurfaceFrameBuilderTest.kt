@@ -5,8 +5,10 @@ import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -61,7 +63,7 @@ import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceFrameBuilderTest {
     @Test
-    fun `prepared vertices semantic-only draw refuses at preflight without executable pass`() {
+    fun `prepared vertices semantic-only draw plans an executable render task`() {
         val base = request(listOf(rect()))
         val result = GPUPreparedSurfaceFrameBuilder.build(
             base.copy(
@@ -73,11 +75,20 @@ class GPUPreparedSurfaceFrameBuilderTest {
             ),
         )
 
-        val refused = assertIs<GPUPreparedSurfaceFrameBuildResult.Refused>(result)
-        assertEquals(
-            "unsupported.preflight.prepared_vertices_unmaterialized",
-            refused.diagnostic.code.value,
+        val ready = assertIs<GPUPreparedSurfaceFrameBuildResult.Ready>(
+            result,
+            (result as? GPUPreparedSurfaceFrameBuildResult.Refused)
+                ?.diagnostic?.code?.value.toString(),
         )
+        val verticesPacket = ready.taskList.tasks
+            .filterIsInstance<GPUTask.Render>()
+            .flatMap(GPUTask.Render::drawPackets)
+            .single { packet -> packet.semanticPayload is GPUDrawSemanticPayload.Vertices }
+        assertNotNull(verticesPacket.renderPipelineKey)
+        val framePlan = org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlanner.plan(
+            ready.taskList,
+        )
+        assertFalse(framePlan.atomicallyRefused)
     }
 
     @Test
