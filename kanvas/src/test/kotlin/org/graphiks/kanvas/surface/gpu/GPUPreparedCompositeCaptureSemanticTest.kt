@@ -16,7 +16,10 @@ import org.graphiks.kanvas.paint.Shader
 import org.graphiks.kanvas.picture.Picture
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.VertexMode
+import org.graphiks.kanvas.types.Vertices
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -346,6 +349,39 @@ class GPUPreparedCompositeCaptureSemanticTest {
             assertIs<GPUPreparedCompositeCaptureResult.Ready>(noFilter).capture.identity,
             assertIs<GPUPreparedCompositeCaptureResult.Ready>(withFilter).capture.identity,
         )
+    }
+
+    @Test
+    fun `vertices inside picture composite stay refused`() {
+        val triangle = Vertices(
+            mode = VertexMode.TRIANGLES,
+            positions = listOf(Point(0f, 0f), Point(10f, 0f), Point(10f, 10f)),
+        )
+        val verticesOp = DisplayOp.DrawVertices(triangle, black, identity, open)
+
+        val layerScope = capture(
+            listOf(DisplayOp.BeginLayer(SaveLayerRec()), verticesOp, DisplayOp.EndLayer),
+        )
+        val layerRefused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(layerScope)
+        assertEquals("unsupported.composite.operation", layerRefused.code)
+        assertEquals(0, layerRefused.operationIndex)
+
+        val pictureScope = capture(
+            listOf(
+                DisplayOp.DrawPicture(
+                    picture = Picture(
+                        Rect.fromLTRB(0f, 0f, 10f, 10f),
+                        listOf(verticesOp),
+                    ),
+                    paint = null,
+                    transform = identity,
+                    clip = open,
+                ),
+            ),
+        )
+        val pictureRefused = assertIs<GPUPreparedCompositeCaptureResult.Refused>(pictureScope)
+        assertEquals("unsupported.composite.operation", pictureRefused.code)
+        assertEquals(0, pictureRefused.operationIndex)
     }
 
     private fun readyIdentity(op: DisplayOp): String =
