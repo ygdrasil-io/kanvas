@@ -151,6 +151,12 @@ internal class GPUFramePreflighter(
     private val capabilities: GPUCapabilities = capabilities.preflightSnapshot()
 
     fun preflight(framePlan: GPUFramePlan): GPUFramePreflightResult {
+        framePlan.steps.filterIsInstance<GPUFrameStep.RefusedLeafDrawStep>()
+            .firstOrNull { step ->
+                step.diagnostic.code.value ==
+                    "unsupported.preflight.prepared_vertices_unmaterialized"
+            }
+            ?.let { step -> return GPUFramePreflightResult.Refused(step.diagnostic) }
         if (nativeBoundary != null && nativeBoundary.resourceProvider !== resourceProvider) {
             return GPUFramePreflightResult.Refused(
                 diagnostic(

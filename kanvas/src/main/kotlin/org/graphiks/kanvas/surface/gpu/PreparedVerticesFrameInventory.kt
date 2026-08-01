@@ -77,6 +77,12 @@ class PreparedVerticesFrameCommand internal constructor(
         require(operationIndex >= 0)
         require(artifactKey.isNotBlank())
         require(materialKey.isNotBlank())
+        require(GPUPreparedMaterialFrameIdentityAuthority.authenticates(materialFrameSnapshot)) {
+            "Prepared vertices command material snapshot must be authenticated"
+        }
+        require(materialKey == materialFrameSnapshot.identity.bucketKey) {
+            "Prepared vertices command material key must match its authenticated snapshot"
+        }
     }
 
     val material: GPUPreparedMaterialProgram
@@ -161,6 +167,22 @@ class PreparedVerticesFrameInventory internal constructor(
         }
         require(commandsByOperationIndex.keys.none(elidedVerticesOperationIndices::contains)) {
             "Prepared vertices accepted and elided ownership must be disjoint"
+        }
+        require(materialsByKey.keys == commands.mapTo(linkedSetOf()) { it.materialKey }) {
+            "Prepared vertices material ownership must exactly match command material keys"
+        }
+        commands.forEach { command ->
+            val published = materialsByKey.getValue(command.materialKey)
+            require(
+                GPUPreparedMaterialFrameIdentityAuthority.authenticates(
+                    command.materialFrameSnapshot,
+                ) && GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(
+                    published,
+                    command.materialFrameSnapshot.program,
+                ),
+            ) {
+                "Prepared vertices published material must match its authenticated command snapshot"
+            }
         }
     }
 
@@ -325,7 +347,7 @@ object PreparedVerticesFrameInventoryBuilder {
 
         val artifacts = linkedMapOf<String, GPUPreparedVerticesUploadArtifact>()
         val materials = linkedMapOf<String, GPUPreparedMaterialProgram>()
-        val materialSnapshots = linkedMapOf<String, GPUPreparedMaterialFrameSnapshot>()
+        val materialSnapshotsByBucketKey = linkedMapOf<String, GPUPreparedMaterialFrameSnapshot>()
         val commands = ArrayList<PreparedVerticesFrameCommand>(visibleDraws.size)
         val vertexRanges = ArrayList<PreparedVerticesUploadRange>()
         val indexRanges = ArrayList<PreparedVerticesUploadRange>()
@@ -406,8 +428,15 @@ object PreparedVerticesFrameInventoryBuilder {
 
             val materialFrameSnapshot = GPUPreparedMaterialFrameIdentityAuthority.authenticate(draw.material)
             val material = materialFrameSnapshot.program
-            val materialKey = materialBucketKeySelector(materialFrameSnapshot)
-            val existingMaterialSnapshot = materialSnapshots[materialKey]
+            val materialBucketKey = materialBucketKeySelector(materialFrameSnapshot)
+            if (materialBucketKey.isBlank()) {
+                return refused(
+                    operationIndex,
+                    "blank_material_bucket_key",
+                    code = GPUPreparedVerticesRefusalCodes.Material,
+                )
+            }
+            val existingMaterialSnapshot = materialSnapshotsByBucketKey[materialBucketKey]
             if (existingMaterialSnapshot != null &&
                 !GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(
                     existingMaterialSnapshot.program,
@@ -417,13 +446,36 @@ object PreparedVerticesFrameInventoryBuilder {
                 return refused(
                     operationIndex,
                     "material_identity_collision",
-                    mapOf("materialKey" to materialKey, "authority" to "GPUPreparedMaterialProgram"),
+                    mapOf(
+                        "materialKey" to materialBucketKey,
+                        "authority" to "GPUPreparedMaterialProgram",
+                    ),
                     GPUPreparedVerticesRefusalCodes.Material,
                 )
             }
             if (existingMaterialSnapshot == null) {
-                materialSnapshots[materialKey] = materialFrameSnapshot
-                materials[materialKey] = material
+                materialSnapshotsByBucketKey[materialBucketKey] = materialFrameSnapshot
+            }
+            val authenticatedMaterialKey = materialFrameSnapshot.identity.bucketKey
+            val existingPublishedMaterial = materials[authenticatedMaterialKey]
+            if (existingPublishedMaterial != null &&
+                !GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(
+                    existingPublishedMaterial,
+                    material,
+                )
+            ) {
+                return refused(
+                    operationIndex,
+                    "material_identity_collision",
+                    mapOf(
+                        "materialKey" to authenticatedMaterialKey,
+                        "authority" to "GPUPreparedMaterialProgram",
+                    ),
+                    GPUPreparedVerticesRefusalCodes.Material,
+                )
+            }
+            if (existingPublishedMaterial == null) {
+                materials[authenticatedMaterialKey] = material
             }
 
             val (drawUniformBytes, drawRuntimeChildren) = materialBudgetSelector(material)
@@ -455,8 +507,8 @@ object PreparedVerticesFrameInventoryBuilder {
                 operationIndex = operationIndex,
                 artifactKey = artifactKey,
                 artifact = canonicalArtifact,
-                materialKey = materialKey,
-                materialFrameSnapshot = materialSnapshots.getValue(materialKey),
+                materialKey = authenticatedMaterialKey,
+                materialFrameSnapshot = materialFrameSnapshot,
                 draw = draw,
             )
         }

@@ -320,6 +320,7 @@ object GPUFramePlanner {
         is GPUTask.Barrier,
         is GPUTask.TargetTransition,
         is GPUTask.Output,
+        is GPUTask.SemanticOnly,
         is GPUTask.Refused,
         -> emptyList()
     }
@@ -807,6 +808,14 @@ object GPUFramePlanner {
                     )
                     steps += GPUFrameStep.PostSubmitPresentAction(task.descriptor.output, listOf(task.taskId))
                 }
+                is GPUTask.SemanticOnly -> steps += GPUFrameStep.RefusedLeafDrawStep(
+                    commandId = task.commandId,
+                    diagnostic = diagnostic(
+                        "unsupported.preflight.prepared_vertices_unmaterialized",
+                        "Prepared vertices semantics have no executable native materialization route.",
+                    ),
+                    sourceTaskIds = listOf(task.taskId),
+                )
                 is GPUTask.Refused -> when (task.scope) {
                     GPURefusalScope.RefusedLeafDrawStep -> {
                         val destinationSource = destinationSchedule.refusalSourceTaskByRefusedTask[task.taskId]
@@ -1030,6 +1039,7 @@ object GPUFramePlanner {
         is GPUTask.Barrier, is GPUTask.TargetTransition -> GPUTaskPhase.Transition
         is GPUTask.Readback -> GPUTaskPhase.Readback
         is GPUTask.Output -> GPUTaskPhase.Output
+        is GPUTask.SemanticOnly -> GPUTaskPhase.Refusal
         is GPUTask.Refused -> GPUTaskPhase.Refusal
     }
 

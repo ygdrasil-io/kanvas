@@ -39,6 +39,12 @@ object GPUPreparedMaterialFrameIdentityAuthority {
         left: GPUPreparedMaterialProgram,
         right: GPUPreparedMaterialProgram,
     ): Boolean = left.exactFrameMatches(right)
+
+    fun authenticates(snapshot: GPUPreparedMaterialFrameSnapshot): Boolean {
+        val expected = authenticate(snapshot.program)
+        return snapshot.identity.bucketKey == expected.identity.bucketKey &&
+            exactlyMatches(snapshot.program, expected.program)
+    }
 }
 
 private fun GPUPreparedMaterialProgram.exactFrameBucketKey(): String {

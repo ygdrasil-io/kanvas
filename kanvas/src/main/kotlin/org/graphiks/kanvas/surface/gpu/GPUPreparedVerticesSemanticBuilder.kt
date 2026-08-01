@@ -51,14 +51,23 @@ internal object GPUPreparedVerticesSemanticBuilder {
         val verticesIds = verticesCommands.map { it.commandId.value }
         val inventoryIds = inventory.mappedCommands.map { it.commandId }
         val mappedByCommandId = inventory.mappedCommands.associateBy { it.commandId }
-        val analysis = recording.analysis.records.groupBy { it.commandIdValue }
-        val packets = (
-            recording.taskList.tasks.filterIsInstance<GPUTask.Render>()
-                .flatMap(GPUTask.Render::drawPackets) +
-                recording.semanticOnlyDraws.map { draw -> draw.packet }
-            ).groupBy(GPUDrawPacket::commandIdValue)
-        val semanticOnlyDraws = recording.semanticOnlyDraws.groupBy { draw -> draw.packet.commandIdValue }
+        val analysisIds = recording.analysis.records.map { record -> record.commandIdValue }
+        val analysis = recording.analysis.records.associateBy { record -> record.commandIdValue }
+        val orderedPackets = recording.taskList.tasks.flatMap { task ->
+            when (task) {
+                is GPUTask.Render -> task.drawPackets
+                is GPUTask.SemanticOnly -> listOf(task.draw.packet)
+                else -> emptyList()
+            }
+        }
+        val packetIds = orderedPackets.map(GPUDrawPacket::commandIdValue)
+        val packets = orderedPackets.associateBy(GPUDrawPacket::commandIdValue)
+        val semanticOnlyIds = recording.semanticOnlyDraws.map { draw -> draw.packet.commandIdValue }
+        val semanticOnlyDraws = recording.semanticOnlyDraws.associateBy { draw -> draw.packet.commandIdValue }
         val recordedIds = recording.recordedCommands.map { it.commandId.value }
+        val decisionLineByCommandId = analysisIds
+            .zip(recording.analysisDecisionDump.lines)
+            .toMap(LinkedHashMap())
         val mappedOperationIds = inventory.mappedCommands.map { it.operationIndex }
         val expectedArtifactKeysByCommandId = inventory.mappedCommands.associate { mapped ->
             mapped.commandId to mapped.artifactKey
@@ -73,10 +82,14 @@ internal object GPUPreparedVerticesSemanticBuilder {
                 }
         if (normalizedIds.distinct().size != normalizedIds.size ||
             normalizedIds != recordedIds ||
-            normalizedIds.toSet() != analysis.keys ||
-            normalizedIds.toSet() != packets.keys ||
+            normalizedIds != analysisIds ||
+            normalizedIds != packetIds ||
+            verticesIds != semanticOnlyIds ||
+            analysis.size != analysisIds.size ||
+            packets.size != packetIds.size ||
+            semanticOnlyDraws.size != semanticOnlyIds.size ||
             recording.analysisDecisionDump.lines.size != normalizedIds.size ||
-            normalizedIds.any { analysis[it].orEmpty().size != 1 || packets[it].orEmpty().size != 1 } ||
+            decisionLineByCommandId.size != normalizedIds.size ||
             verticesIds != inventoryIds || !mappedInventoryIsBijective ||
             mappedByCommandId.size != inventoryIds.size ||
             verticesIds.toSet() != inventory.artifactKeyByCommandId.keys
@@ -98,8 +111,9 @@ internal object GPUPreparedVerticesSemanticBuilder {
             val mapped = mappedByCommandId.getValue(normalized.commandId.value)
             val inventoryCommand = inventory.commandsByOperationIndex.getValue(mapped.operationIndex)
             val draw = inventoryCommand.draw
-            val packet = packets.getValue(mapped.commandId).single()
-            val record = analysis.getValue(mapped.commandId).single()
+            val packet = packets.getValue(mapped.commandId)
+            val semanticOnlyDraw = semanticOnlyDraws.getValue(mapped.commandId)
+            val record = analysis.getValue(mapped.commandId)
             val expectedTransform = draw.transform.let { matrix ->
                 listOf(
                     matrix.scaleX, matrix.skewX, matrix.transX,
@@ -172,10 +186,9 @@ internal object GPUPreparedVerticesSemanticBuilder {
                 record.renderStepCandidates != listOf(PREPARED_VERTICES_RENDER_STEP_IDENTITY) ||
                 record.sortKey.value != normalized.ordering.paintOrder.toLong() ||
                 record.diagnostics.isNotEmpty() ||
-                recording.analysisDecisionDump.lines[normalizedIds.indexOf(mapped.commandId)] !=
-                    expectedDecisionLine ||
-                semanticOnlyDraws[mapped.commandId]?.singleOrNull()?.stateLabel !=
-                    "prepared_vertices_unmaterialized" ||
+                decisionLineByCommandId.getValue(mapped.commandId) != expectedDecisionLine ||
+                semanticOnlyDraw.stateLabel != "prepared_vertices_unmaterialized" ||
+                !packet.exactlyMatchesPreparedVerticesSemanticPacket(semanticOnlyDraw.packet) ||
                 packet.packetId.value != "packet.${mapped.commandId}.0" ||
                 packet.analysisRecordId != expectedRecordId ||
                 packet.passId != "semantic-only.prepared_vertices.${mapped.commandId}" ||
@@ -276,6 +289,39 @@ internal object GPUPreparedVerticesSemanticBuilder {
     private fun refused(code: String, message: String, facts: Map<String, String>) =
         GPUPreparedVerticesSemanticGatherResult.Refused(code, message, facts)
 }
+
+private fun GPUDrawPacket.exactlyMatchesPreparedVerticesSemanticPacket(
+    other: GPUDrawPacket,
+): Boolean =
+    packetId == other.packetId &&
+        commandIdValue == other.commandIdValue &&
+        analysisRecordId == other.analysisRecordId &&
+        passId == other.passId &&
+        layerId == other.layerId &&
+        bindingListId == other.bindingListId &&
+        insertionReasonCode == other.insertionReasonCode &&
+        sortKey == other.sortKey &&
+        sortKeyPreimage == other.sortKeyPreimage &&
+        renderStepId == other.renderStepId &&
+        renderStepVersion == other.renderStepVersion &&
+        role == other.role &&
+        blendPlan == other.blendPlan &&
+        renderPipelineKey == other.renderPipelineKey &&
+        computePipelineKey == other.computePipelineKey &&
+        bindingLayoutHash == other.bindingLayoutHash &&
+        uniformSlot == other.uniformSlot &&
+        resourceSlot == other.resourceSlot &&
+        semanticPayload == other.semanticPayload &&
+        vertexSourceLabel == other.vertexSourceLabel &&
+        scissorBoundsHash == other.scissorBoundsHash &&
+        targetStateHash == other.targetStateHash &&
+        originalPaintOrder == other.originalPaintOrder &&
+        resourceGeneration == other.resourceGeneration &&
+        frameProvenance == other.frameProvenance &&
+        clipCoveragePlan == other.clipCoveragePlan &&
+        clipExecutionPlan == other.clipExecutionPlan &&
+        diagnostics == other.diagnostics &&
+        clipProducerAuthority == other.clipProducerAuthority
 
 private fun normalizedTransformFacts(matrix: org.graphiks.kanvas.types.Matrix33) =
     org.graphiks.kanvas.gpu.renderer.commands.GPUTransformFacts(

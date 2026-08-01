@@ -29,6 +29,9 @@ import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectSource
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformField
 import org.graphiks.kanvas.gpu.renderer.materials.GPUPreparedRuntimeEffectUniformType
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialProgramAdmission
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameIdentity
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameIdentityAuthority
+import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedMaterialFrameSnapshot
 import org.graphiks.kanvas.gpu.renderer.materials.contracts.GPUPreparedRuntimeEffectChildCpuProgram
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver
@@ -48,6 +51,25 @@ import org.graphiks.kanvas.gpu.renderer.wgsl.SimpleRTWgsl
 
 class GPUPreparedVerticesPayloadTest {
     @Test
+    fun `forged material frame identity is refused even when its program matches`() {
+        val source = input()
+        val authenticated = GPUPreparedMaterialFrameIdentityAuthority.authenticate(source.material)
+        val forged = GPUPreparedMaterialFrameSnapshot(
+            program = authenticated.program,
+            identity = GPUPreparedMaterialFrameIdentity("sha256:${"f".repeat(64)}"),
+        )
+
+        val refused = assertIs<GPUPreparedVerticesPayloadResult.Refused>(
+            GPUPreparedVerticesPayloadGatherer.gather(
+                source.copy(materialFrameSnapshot = forged),
+            ),
+        )
+
+        assertEquals("invalid.renderer.prepared.vertices-material", refused.code)
+        assertEquals("material_authentication_failed", refused.facts["reason"])
+    }
+
+    @Test
     fun `every closed semantic axis changes the canonical hash independently`() {
         val baselineInput = input()
         val baseline = baselineInput.ready()
@@ -56,6 +78,11 @@ class GPUPreparedVerticesPayloadTest {
             topology = GPUVertexMode.TriangleStrip,
             positions = floatArrayOf(0f, 0f, 2f, 0f, 0f, 2f, 2f, 2f),
         )
+        val changedUniformMaterial = material(0.5f)
+        val changedAbiMaterial = imageMaterial(byteArrayOf(1, 2, 3, 4))
+        assertEquals(baselineInput.material.abiHash, changedUniformMaterial.abiHash)
+        assertNotEquals(baselineInput.material.uniformBytes, changedUniformMaterial.uniformBytes)
+        assertNotEquals(baselineInput.material.abiHash, changedAbiMaterial.abiHash)
         val mutations = linkedMapOf(
             "payloadRef" to baselineInput.copy(
                 payloadRef = GPUDrawPayloadRef(8, PREPARED_VERTICES_RENDER_STEP_IDENTITY),
@@ -66,7 +93,8 @@ class GPUPreparedVerticesPayloadTest {
             "transform raw bits" to baselineInput.copy(
                 transformBytes = baselineInput.transformBytes.toMutableList().also { it[2] = 1f.toRawBits() },
             ),
-            "material key abi and uniform bytes" to baselineInput.copy(material = material(0.5f)),
+            "material uniform bytes" to baselineInput.copy(material = changedUniformMaterial),
+            "material abi" to baselineInput.copy(material = changedAbiMaterial),
             "material resource bytes" to baselineInput.copy(material = imageMaterial(byteArrayOf(4, 3, 2, 1))),
             "primitive color presence" to baselineInput.copy(
                 primitiveColorPresent = true,
@@ -283,6 +311,7 @@ class GPUPreparedVerticesPayloadTest {
         payloadRef: GPUDrawPayloadRef = GPUDrawPayloadRef(7, PREPARED_VERTICES_RENDER_STEP_IDENTITY),
         artifact: org.graphiks.kanvas.gpu.renderer.artifacts.GPUPreparedVerticesUploadArtifact = artifact(),
         material: GPUPreparedMaterialProgram = material(0.25f),
+        materialFrameSnapshot: GPUPreparedMaterialFrameSnapshot? = null,
         topologyIdentity: GPUPreparedVerticesTopologyIdentity = when (artifact.topology) {
             GPUVertexMode.Triangles -> GPUPreparedVerticesTopologyIdentity.Triangles
             GPUVertexMode.TriangleStrip -> GPUPreparedVerticesTopologyIdentity.TriangleStrip
@@ -305,6 +334,7 @@ class GPUPreparedVerticesPayloadTest {
         payloadRef = payloadRef,
         artifact = artifact,
         material = material,
+        materialFrameSnapshot = materialFrameSnapshot,
         topologyIdentity = topologyIdentity,
         transformBytes = transformBytes,
         targetBounds = targetBounds,

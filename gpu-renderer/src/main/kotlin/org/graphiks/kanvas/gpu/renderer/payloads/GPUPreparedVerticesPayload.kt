@@ -62,6 +62,9 @@ internal class GPUPreparedVerticesPayloadSnapshot(
     )
     val artifact = input.artifact
     val authenticatedMaterial = input.materialFrameSnapshot?.also { snapshot ->
+        require(GPUPreparedMaterialFrameIdentityAuthority.authenticates(snapshot)) {
+            "Prepared vertices material frame snapshot identity must be authenticated"
+        }
         require(GPUPreparedMaterialFrameIdentityAuthority.exactlyMatches(snapshot.program, input.material)) {
             "Prepared vertices material must match the supplied authenticated frame snapshot"
         }

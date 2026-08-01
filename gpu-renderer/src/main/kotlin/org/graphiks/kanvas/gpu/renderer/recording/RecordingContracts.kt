@@ -819,6 +819,21 @@ sealed interface GPUTask {
     val phase: GPUTaskPhase
     val compositeMembership: GPUTaskCompositeMembership? get() = null
 
+    /** Non-executable semantic evidence retained until generic preflight refuses it. */
+    data class SemanticOnly(
+        override val taskId: GPUTaskID,
+        override val recordingId: GPURecordingID,
+        override val phase: GPUTaskPhase,
+        val commandId: GPUDrawCommandID,
+        val draw: GPUSemanticOnlyDraw,
+    ) : GPUTask {
+        init {
+            require(phase == GPUTaskPhase.Refusal)
+            require(commandId.value == draw.packet.commandIdValue)
+            require(draw.packet.role == GPUDrawPacketRole.Discard)
+        }
+    }
+
     /** Sole render authority; packets and blend decisions are supplied, never reconstructed. */
     class Render(
         override val taskId: GPUTaskID,
@@ -1194,7 +1209,7 @@ private fun taskList(
     capabilities: GPUCapabilities,
     plans: List<GPURecordedPlan>,
 ): GPUTaskList {
-    val tasks = plans.mapNotNull { plan -> plan.task(recordingId = recordingId) }
+    val tasks = plans.map { plan -> plan.task(recordingId = recordingId) }
     val dependencies = tasks
         .zipWithNext()
         .mapIndexed { index, (from, to) ->
@@ -1236,10 +1251,16 @@ private fun taskList(
     )
 }
 
-private fun GPURecordedPlan.task(recordingId: GPURecordingID): GPUTask? =
+private fun GPURecordedPlan.task(recordingId: GPURecordingID): GPUTask =
     when (this) {
         is GPURecordedPlan.Routed -> plan.task(recordingId)
-        is GPURecordedPlan.SemanticOnly -> null
+        is GPURecordedPlan.SemanticOnly -> GPUTask.SemanticOnly(
+            taskId = GPUTaskID("task.semantic-only.${analysisRecord.commandIdValue}"),
+            recordingId = recordingId,
+            phase = GPUTaskPhase.Refusal,
+            commandId = GPUDrawCommandID(analysisRecord.commandIdValue),
+            draw = draw,
+        )
     }
 
 private fun GPUFirstRoutePlan.task(recordingId: GPURecordingID): GPUTask =
@@ -1304,6 +1325,8 @@ private fun GPUTask.dumpLine(): String =
                 (if (preMaterialization) "pre_materialization" else "materialized") +
                 (sampleContinuationKey?.let { ":sampleContinuation=${it.stableLabel()}" } ?: "") +
                 (depthStencilLoadStore?.let { ":depthStencil=$it" } ?: "")
+        is GPUTask.SemanticOnly ->
+            "task:semantic-only:${taskId.value}:${commandId.value}:${draw.stateLabel}"
         is GPUTask.PrepareResources ->
             "task:prepare:${taskId.value}:${requests.joinToString(",") { it.resource.value }}"
         is GPUTask.Compute ->

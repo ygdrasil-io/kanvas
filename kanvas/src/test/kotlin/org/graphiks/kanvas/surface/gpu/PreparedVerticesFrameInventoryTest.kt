@@ -82,6 +82,45 @@ class PreparedVerticesFrameInventoryTest {
     }
 
     @Test
+    fun `frame command and inventory reject material keys or programs outside their snapshots`() {
+        val inventory = buildReady(listOf(draw(0, color = Color.RED)))
+        val command = inventory.commands.single()
+
+        assertFailsWith<IllegalArgumentException> {
+            PreparedVerticesFrameCommand(
+                operationIndex = command.operationIndex,
+                artifactKey = command.artifactKey,
+                artifact = command.artifact,
+                materialKey = "sha256:${"f".repeat(64)}",
+                materialFrameSnapshot = command.materialFrameSnapshot,
+                draw = command.draw,
+            )
+        }
+
+        val differentMaterial = draw(1, color = Color.BLUE).material
+        listOf(
+            emptyMap(),
+            mapOf(command.materialKey to differentMaterial),
+        ).forEach { malformedMaterials ->
+            assertFailsWith<IllegalArgumentException> {
+                PreparedVerticesFrameInventory(
+                    commands = inventory.commands,
+                    artifactsByKey = inventory.artifactsByKey,
+                    materialsByKey = malformedMaterials,
+                    artifactKeyByOperationIndex = inventory.artifactKeyByOperationIndex,
+                    vertexUploadRanges = inventory.vertexUploadRanges,
+                    indexUploadRanges = inventory.indexUploadRanges,
+                    elidedVerticesOperationIndices = inventory.elidedVerticesOperationOrder,
+                    mappedCommands = inventory.mappedCommands,
+                    capabilitySnapshotHash = inventory.capabilitySnapshotHash,
+                    metrics = inventory.metrics,
+                    limitEvidence = inventory.limitEvidence,
+                )
+            }
+        }
+    }
+
+    @Test
     fun `upload ranges are deterministic aligned separate non overlapping and aggregate checked`() {
         val indexed = draw(2, indices = listOf(0, 1, 2))
         val anotherIndexed = draw(5, positions = points(scale = 2f), indices = listOf(0, 2, 1))

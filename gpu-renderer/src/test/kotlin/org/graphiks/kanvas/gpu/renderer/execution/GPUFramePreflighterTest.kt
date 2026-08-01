@@ -213,6 +213,35 @@ import kotlin.test.assertTrue
 
 class GPUFramePreflighterTest {
     @Test
+    fun `generic preflight refuses unmaterialized prepared vertices evidence before side effects`() {
+        val events = mutableListOf<String>()
+        val result = preflighter(
+            resources = RecordingResourceProvider(events),
+            completion = RecordingCompletionProvider(events),
+            surface = RecordingSurfaceProvider(events),
+        ).preflight(
+            framePlan(
+                listOf(
+                    GPUFrameStep.RefusedLeafDrawStep(
+                        commandId = GPUDrawCommandID(7),
+                        diagnostic = preflightDiagnostic(
+                            "unsupported.preflight.prepared_vertices_unmaterialized",
+                            "Prepared vertices semantics have no executable native materialization route.",
+                        ),
+                        sourceTaskIds = listOf(GPUTaskID("task.semantic-only.7")),
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(
+            "unsupported.preflight.prepared_vertices_unmaterialized",
+            assertIs<GPUFramePreflightResult.Refused>(result).diagnostic.code.value,
+        )
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
     fun `exact core image boundary reaches native materialization while the boundary owns no side effects`() {
         val fixture = preparedSurfacePreflightFixture(PreparedSurfaceFixtureShape.Mixed)
         val events = mutableListOf<String>()
