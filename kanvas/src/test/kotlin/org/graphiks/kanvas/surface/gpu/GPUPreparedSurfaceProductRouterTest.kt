@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
 import org.graphiks.kanvas.canvas.DisplayOp
@@ -24,6 +25,7 @@ import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskList
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameAttemptID
 import org.graphiks.kanvas.gpu.renderer.telemetry.GPUFrameStructuralOutcome
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
@@ -32,14 +34,22 @@ import org.graphiks.kanvas.paint.Blender
 import org.graphiks.kanvas.paint.ColorFilter
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
+import org.graphiks.kanvas.paint.MeshProgram
 import org.graphiks.kanvas.paint.Paint
 import org.graphiks.kanvas.pipeline.BlurStyle
+import org.graphiks.kanvas.pipeline.RuntimeEffect
+import org.graphiks.kanvas.pipeline.ShaderModule
+import org.graphiks.kanvas.pipeline.UniformLayout
 import org.graphiks.kanvas.surface.PixelFormat
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Lattice
 import org.graphiks.kanvas.types.Matrix33
+import org.graphiks.kanvas.types.Mesh
+import org.graphiks.kanvas.types.Point
 import org.graphiks.kanvas.types.Rect
+import org.graphiks.kanvas.types.VertexMode
+import org.graphiks.kanvas.types.Vertices
 
 class GPUPreparedSurfaceProductRouterTest {
     @Test
@@ -206,6 +216,209 @@ class GPUPreparedSurfaceProductRouterTest {
     }
 
     @Test
+    fun `vertices and mesh frames choose prepared product routing`() {
+        val triangle = verticesTriangle()
+        val paint = Paint.fill(Color.RED).copy(antiAlias = false)
+        val operations = listOf(
+            DisplayOp.DrawVertices(triangle, paint, Matrix33.identity(), ClipStack.WideOpen),
+            DisplayOp.DrawMesh(
+                Mesh(triangle, bounds = Rect.fromLTRB(0f, 0f, 4f, 4f)),
+                paint,
+                null,
+                Matrix33.identity(),
+                ClipStack.WideOpen,
+            ),
+        )
+        operations.forEach { operation ->
+            val harness = PreparedProductExecutionHarness(width = 8, height = 8)
+
+            val route = GPUPreparedSurfaceProductRouter.route(
+                listOf(operation),
+                8,
+                8,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+                harness.port,
+            )
+
+            val prepared = assertIs<GPUPreparedSurfaceProductRoute.Prepared>(
+                route,
+                operation::class.simpleName,
+            )
+            // Vertices map to the prepared vertices command lane, not the visual lane, so
+            // the visual operation count is zero for a pure vertices frame.
+            assertEquals(0, prepared.result.stats.opsDispatched)
+            assertEquals(0, prepared.result.stats.opsRefused)
+            assertEquals(1, harness.backend.prepareCalls)
+            assertEquals(1, harness.backend.session.submitCalls)
+            assertContentEquals(harness.expectedRgba.toUByteArray(), prepared.result.pixels)
+            assertTrue(prepared.evidence.routeMarker == GPUPreparedSurfaceExecutionRouteMarker.PreparedSurfaceDirect)
+        }
+    }
+
+    @Test
+    fun `vertices and mesh reaching the legacy route carry the exact composite refusal`() {
+        val triangle = verticesTriangle()
+        val paint = Paint.fill(Color.RED).copy(antiAlias = false)
+        val verticesOp = DisplayOp.DrawVertices(
+            vertices = triangle,
+            paint = paint,
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+        val meshOp = DisplayOp.DrawMesh(
+            mesh = Mesh(triangle, bounds = Rect.fromLTRB(0f, 0f, 4f, 4f)),
+            paint = paint,
+            blendMode = null,
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+
+        // The legacy route is only entered through a legacy-gated frame (composites or a
+        // format/color refusal); any vertices/mesh it sees is refused with this exact code.
+        assertEquals("unsupported.picture.nested_vertices", verticesOp.coreRoutePreflightRefusalReason())
+        assertEquals("unsupported.picture.nested_vertices", meshOp.coreRoutePreflightRefusalReason())
+        assertEquals(
+            null,
+            rect().coreRoutePreflightRefusalReason(),
+            "non-vertices families keep their FP-05 preflight behavior",
+        )
+    }
+
+    @Test
+    fun `unsupported vertices and mesh return their exact terminal code before native work`() {
+        val paint = Paint.fill(Color.RED).copy(antiAlias = false)
+        val cases = listOf(
+            listOf(
+                DisplayOp.DrawVertices(
+                    vertices = Vertices(
+                        VertexMode.TRIANGLES,
+                        listOf(Point(Float.NaN, 0f), Point(1f, 0f), Point(0f, 1f)),
+                    ),
+                    paint = paint,
+                    transform = Matrix33.identity(),
+                    clip = ClipStack.WideOpen,
+                ),
+            ) to GPUPreparedVerticesRefusalCodes.NonFinite,
+            listOf(
+                DisplayOp.DrawMesh(
+                    mesh = Mesh(
+                        vertices = verticesTriangle(),
+                        program = MeshProgram(
+                            effect = RuntimeEffect(
+                                id = "not.registered",
+                                module = ShaderModule.fromSource("fixture"),
+                                uniformLayout = UniformLayout(emptyList()),
+                                children = emptyList(),
+                            ),
+                            uniforms = org.graphiks.kanvas.pipeline.UniformBlock {},
+                        ),
+                        bounds = Rect.fromLTRB(0f, 0f, 1f, 1f),
+                    ),
+                    paint = paint,
+                    blendMode = null,
+                    transform = Matrix33.identity(),
+                    clip = ClipStack.WideOpen,
+                ),
+            ) to GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered,
+        )
+
+        cases.forEach { (operations, expectedCode) ->
+            val harness = PreparedProductExecutionHarness(width = 8, height = 8)
+
+            val route = GPUPreparedSurfaceProductRouter.route(
+                operations,
+                8,
+                8,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+                harness.port,
+            )
+
+            val terminal = assertIs<GPUPreparedSurfaceProductRoute.Terminal>(route)
+            assertEquals(expectedCode, terminal.diagnostic.code.value)
+            assertEquals(0, harness.backend.prepareCalls)
+            assertEquals(0, harness.backend.session.submitCalls)
+        }
+    }
+
+    @Test
+    fun `no accepted or refused vertices or mesh command increments legacy counters`() {
+        val accepted = DisplayOp.DrawVertices(
+            vertices = verticesTriangle(),
+            paint = Paint.fill(Color.RED).copy(antiAlias = false),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+        val acceptedPlan = GPUFramePathApiInventory.plan(
+            operations = listOf(accepted),
+            target = org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts(
+                8,
+                8,
+                "rgba8unorm-srgb",
+            ),
+            config = RenderConfig.DEFAULT,
+            capabilities = preparedProductCapabilities(),
+        )
+        assertEquals(0, acceptedPlan.legacyDump.invocationCount)
+        assertNotNull(acceptedPlan.preparedVerticesInventory)
+
+        val refused = DisplayOp.DrawVertices(
+            vertices = Vertices(
+                VertexMode.TRIANGLES,
+                listOf(Point(Float.NaN, 0f), Point(1f, 0f), Point(0f, 1f)),
+            ),
+            paint = Paint.fill(Color.RED).copy(antiAlias = false),
+            transform = Matrix33.identity(),
+            clip = ClipStack.WideOpen,
+        )
+        val refusedPlan = GPUFramePathApiInventory.plan(
+            operations = listOf(refused),
+            target = org.graphiks.kanvas.gpu.renderer.commands.GPUTargetFacts(
+                8,
+                8,
+                "rgba8unorm-srgb",
+            ),
+            config = RenderConfig.DEFAULT,
+            capabilities = preparedProductCapabilities(),
+        )
+        assertEquals(0, refusedPlan.legacyDump.invocationCount)
+        assertEquals(
+            GPUPreparedVerticesRefusalCodes.NonFinite,
+            assertNotNull(refusedPlan.preparedRefusal).code,
+        )
+    }
+
+    @Test
+    fun `mixed vertices and core frames remain fully prepared`() {
+        val harness = PreparedProductExecutionHarness(width = 8, height = 8)
+
+        val route = GPUPreparedSurfaceProductRouter.route(
+            listOf(
+                rect(),
+                DisplayOp.DrawVertices(
+                    vertices = verticesTriangle(),
+                    paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
+                    transform = Matrix33.identity(),
+                    clip = ClipStack.WideOpen,
+                ),
+                rect(),
+            ),
+            8,
+            8,
+            PixelFormat.RGBA8,
+            RenderConfig.DEFAULT,
+            harness.port,
+        )
+
+        val prepared = assertIs<GPUPreparedSurfaceProductRoute.Prepared>(route)
+        assertEquals(2, prepared.result.stats.opsDispatched)
+        assertEquals(0, prepared.result.stats.opsRefused)
+        assertEquals(1, harness.backend.prepareCalls)
+        assertEquals(1, harness.backend.session.submitCalls)
+    }
+
+    @Test
     fun `before-entry refusal is legacy while terminal failure remains terminal`() {
         val refusal = diagnostic("unsupported.test.builder", "builder refusal")
         val terminal = diagnostic("failed.test.terminal", "terminal failure")
@@ -305,6 +518,11 @@ class GPUPreparedSurfaceProductRouterTest {
         Paint.fill(Color.RED).copy(antiAlias = false),
         Matrix33.identity(),
         ClipStack.WideOpen,
+    )
+
+    private fun verticesTriangle() = Vertices(
+        VertexMode.TRIANGLES,
+        listOf(Point(0f, 0f), Point(4f, 0f), Point(0f, 4f)),
     )
 
     private fun diagnostic(code: String, message: String) = GPUDiagnostic(
@@ -467,7 +685,22 @@ private fun preparedProductCapabilities(): GPUCapabilities {
     val base = GPUProductFlagConfig().buildCapabilities()
     return GPUCapabilities(
         implementation = base.implementation,
-        facts = base.facts,
+        facts = base.facts + listOf(
+            org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact(
+                name = "first_slice.fill_rect.native",
+                source = "runtime",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "core-primitive-direct-native",
+            ),
+            org.graphiks.kanvas.gpu.renderer.capabilities.GPUCapabilityFact(
+                name = "first_slice.fill_rrect.native",
+                source = "runtime",
+                value = "supported",
+                affectsValidity = true,
+                evidenceLabel = "core-primitive-direct-native",
+            ),
+        ),
         knownUnsupportedFacts = base.knownUnsupportedFacts,
         snapshotId = "${base.snapshotId}:prepared-product-route",
         limits = GPULimits(

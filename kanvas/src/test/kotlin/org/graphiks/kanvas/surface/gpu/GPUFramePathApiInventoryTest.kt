@@ -2287,10 +2287,9 @@ class GPUFramePathApiInventoryTest {
     }
 
     @Test
-    fun `prepared image and text families are absent while remaining legacy families stay closed`() {
+    fun `prepared image text and vertices families are absent while composites stay closed`() {
         assertEquals(
             setOf(
-                LegacyDisplayOpFamily.Vertices,
                 LegacyDisplayOpFamily.Composites,
             ),
             GPULegacyImmediatePathAdapter.allowedFamilies,

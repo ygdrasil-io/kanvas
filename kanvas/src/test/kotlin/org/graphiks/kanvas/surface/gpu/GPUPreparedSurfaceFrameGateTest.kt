@@ -37,6 +37,24 @@ class GPUPreparedSurfaceFrameGateTest {
     }
 
     @Test
+    fun `DrawVertices and DrawMesh enter the prepared candidate`() {
+        val vertices = Vertices(
+            VertexMode.TRIANGLES,
+            listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
+        )
+        listOf(
+            DisplayOp.DrawVertices(vertices, PAINT, MATRIX, CLIP),
+            DisplayOp.DrawMesh(Mesh(vertices, bounds = RECT), PAINT, null, MATRIX, CLIP),
+        ).forEach { operation ->
+            val candidate = assertIs<GPUPreparedSurfaceEligibility.Candidate>(
+                GPUPreparedSurfaceFrameGate.classify(listOf(operation), RenderConfig.DEFAULT),
+                operation::class.simpleName,
+            )
+            assertEquals(listOf(operation), candidate.operations)
+        }
+    }
+
+    @Test
     fun `all display op variants have one exact whole frame classification`() {
         val fixtures = displayOpFixtures()
 
@@ -194,12 +212,8 @@ class GPUPreparedSurfaceFrameGateTest {
             Fixture(DisplayOp.DrawPicture(Picture(RECT, emptyList()), null, MATRIX, CLIP), legacy(
                 "legacy.surface.prepared.family.composites", LegacyDisplayOpFamily.Composites,
             )),
-            Fixture(DisplayOp.DrawVertices(vertices, PAINT, MATRIX, CLIP), legacy(
-                "legacy.surface.prepared.family.vertices", LegacyDisplayOpFamily.Vertices,
-            )),
-            Fixture(DisplayOp.DrawMesh(Mesh(vertices, bounds = RECT), PAINT, null, MATRIX, CLIP), legacy(
-                "legacy.surface.prepared.family.vertices", LegacyDisplayOpFamily.Vertices,
-            )),
+            Fixture(DisplayOp.DrawVertices(vertices, PAINT, MATRIX, CLIP), visual),
+            Fixture(DisplayOp.DrawMesh(Mesh(vertices, bounds = RECT), PAINT, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.DrawAtlas(image, emptyList(), emptyList(), null, BlendMode.SRC_OVER, null, MATRIX, CLIP), visual),
             Fixture(DisplayOp.Annotation(RECT, "key", "value"), Expected.Legacy(
                 "legacy.surface.prepared.empty-frame", null, null,

@@ -328,9 +328,19 @@ internal fun DisplayOp.gpuClipCoveragePlanOrNull(
     return GPUClipCoveragePlanner.plan(request, config, maxTextureDimension2D)
 }
 
-/** Shared renderer/prepass refusal contract: refused draws must never reserve a mask use. */
+/**
+ * Shared renderer/prepass refusal contract: refused draws must never reserve a mask use.
+ *
+ * Prepared vertices and meshes never continue through the legacy immediate route. This code is
+ * reached both by vertices/meshes nested inside a legacy composite (pictures/layers) and by
+ * top-level vertices/meshes in legacy-gated frames (e.g. BGRA8 or composite frames); the
+ * "nested" label reflects the composite case. Vertices/meshes inside composites remain
+ * unsupported until FP-07.
+ */
 internal fun DisplayOp.coreRoutePreflightRefusalReason(): String? = when (this) {
-    is DisplayOp.DrawMesh -> if (mesh.program != null) "unsupported.mesh.program" else null
+    is DisplayOp.DrawVertices,
+    is DisplayOp.DrawMesh,
+    -> "unsupported.picture.nested_vertices"
     is DisplayOp.DrawPicture -> picturePreflightRefusalReason()
     else -> null
 }

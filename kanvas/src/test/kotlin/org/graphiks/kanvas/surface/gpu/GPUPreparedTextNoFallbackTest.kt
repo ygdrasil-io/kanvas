@@ -24,20 +24,24 @@ import org.graphiks.kanvas.types.Rect
 @OptIn(ExperimentalUnsignedTypes::class)
 class GPUPreparedTextNoFallbackTest {
     @Test
-    fun `legacy adapter exposes only vertices and composites and rejects DrawText`() {
+    fun `legacy adapter exposes only composites and rejects text and vertices`() {
         val adapter = GPULegacyImmediatePathAdapter()
 
         assertContentEquals(
-            listOf(LegacyDisplayOpFamily.Vertices, LegacyDisplayOpFamily.Composites),
+            listOf(LegacyDisplayOpFamily.Composites),
             LegacyDisplayOpFamily.entries,
         )
         assertEquals(
-            setOf(LegacyDisplayOpFamily.Vertices, LegacyDisplayOpFamily.Composites),
+            setOf(LegacyDisplayOpFamily.Composites),
             GPULegacyImmediatePathAdapter.allowedFamilies,
         )
         assertFalse(adapter.accepts(text()))
+        assertFalse(adapter.accepts(vertices()))
         assertFailsWith<IllegalArgumentException> {
             adapter.recordInvocation(text())
+        }
+        assertFailsWith<IllegalArgumentException> {
+            adapter.recordInvocation(vertices())
         }
         assertEquals(0, adapter.dump().invocationCount)
         assertEquals(emptyMap(), adapter.dump().invocationsByFamily)
@@ -171,6 +175,20 @@ class GPUPreparedTextNoFallbackTest {
         paint,
         Matrix33.identity(),
         ClipStack.WideOpen,
+    )
+
+    private fun vertices() = DisplayOp.DrawVertices(
+        vertices = org.graphiks.kanvas.types.Vertices(
+            org.graphiks.kanvas.types.VertexMode.TRIANGLES,
+            listOf(
+                org.graphiks.kanvas.types.Point(0f, 0f),
+                org.graphiks.kanvas.types.Point(1f, 0f),
+                org.graphiks.kanvas.types.Point(0f, 1f),
+            ),
+        ),
+        paint = Paint.fill(Color.RED),
+        transform = Matrix33.identity(),
+        clip = ClipStack.WideOpen,
     )
 
     private fun evidence() = GPUPreparedSurfaceExecutionEvidence(

@@ -122,7 +122,18 @@ class GPUAllApiBlendSurfaceTest {
                         val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
                         val expectedRoute = expectedPreparedProductRoute(api, mode, context)
 
-                        if (expectedRoute is ProductRouteExpectation.Terminal) {
+                        if (expectedRoute is ProductRouteExpectation.LegacyRefused) {
+                            // A legacy composite (saveLayer) frame stays on the legacy route, but
+                            // vertices/meshes no longer continue through the legacy immediate
+                            // renderer, so the frame refuses at the core-route preflight instead of
+                            // producing pixels.
+                            val gpu = renderGpu(api, mode, context, decisions)
+                            assertIs<GPUPreparedSurfaceRouteDecision.Legacy>(decisions.single())
+                            assertTrue(
+                                gpu.result.stats.opsRefused >= 1,
+                                gpu.result.diagnostics.entries.toString(),
+                            )
+                        } else if (expectedRoute is ProductRouteExpectation.Terminal) {
                             val terminal = assertFailsWith<GPUPreparedSurfaceTerminalException> {
                                 renderGpu(api, mode, context, decisions)
                             }
@@ -536,6 +547,17 @@ class GPUAllApiBlendSurfaceTest {
                 else -> ProductRouteExpectation.Terminal(PREPARED_TEXT_BLEND_REFUSAL)
             }
         }
+        if (api.name in VERTICES_API_NAMES) {
+            return when {
+                context == BlendContext.SAVE_LAYER -> ProductRouteExpectation.LegacyRefused
+                mode == BlendMode.DST -> ProductRouteExpectation.Prepared
+                mode.requiresDestinationRead() ->
+                    ProductRouteExpectation.Terminal(PREPARED_VERTICES_DST_READ_REFUSAL)
+                context == BlendContext.ALPHA_MASK ->
+                    ProductRouteExpectation.Terminal(PREPARED_VERTICES_ALPHA_MASK_REFUSAL)
+                else -> ProductRouteExpectation.Prepared
+            }
+        }
         if (api.name !in IMAGE_API_NAMES) return null
         if (context == BlendContext.SAVE_LAYER) return ProductRouteExpectation.Legacy
         val refusal = when (api.name) {
@@ -867,6 +889,7 @@ class GPUAllApiBlendSurfaceTest {
         data object Prepared : ProductRouteExpectation
         data class Terminal(val code: String) : ProductRouteExpectation
         data object Legacy : ProductRouteExpectation
+        data object LegacyRefused : ProductRouteExpectation
     }
 
     private class SnapshotDisplayListBuffer(
@@ -894,6 +917,9 @@ class GPUAllApiBlendSurfaceTest {
         val PARTIAL_ALPHA_EFFECTIVE_SOURCE = Color.fromRGBA(1f, 0f, 0f, 0.3f)
         val ARTISTIC_MODES = BlendMode.entries.filter { it.ordinal >= BlendMode.MULTIPLY.ordinal }.toSet()
         val IMAGE_API_NAMES = setOf("DrawImage", "DrawImageNine", "DrawImageLattice", "DrawAtlas")
+        val VERTICES_API_NAMES = setOf("DrawVertices", "DrawMesh(program=null)")
+        const val PREPARED_VERTICES_ALPHA_MASK_REFUSAL = "invalid.preflight.dump_unsafe_identity"
+        const val PREPARED_VERTICES_DST_READ_REFUSAL = "invalid.frame_plan.destination_read_unbound"
         val PREPARED_ATLAS_SOURCE_BLENDS =
             setOf(BlendMode.SRC, BlendMode.DST, BlendMode.SRC_OVER, BlendMode.PLUS, BlendMode.MODULATE)
         val PREPARED_TEXT_FIXED_FUNCTION_BLENDS = setOf(

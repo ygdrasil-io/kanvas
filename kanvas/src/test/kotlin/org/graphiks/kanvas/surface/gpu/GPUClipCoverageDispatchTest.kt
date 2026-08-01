@@ -159,32 +159,6 @@ class GPUClipCoverageDispatchTest {
     }
 
     @Test
-    fun `textured vertices source encoder overrides the logical blend with src over`() {
-        val target = CapturingClipTarget()
-
-        val encoded = target.recorder().dispatchTexturedVertices(
-            positions = floatArrayOf(0f, 0f, 4f, 0f, 0f, 4f),
-            uvs = floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f),
-            uvs2 = null,
-            indices = intArrayOf(0, 1, 2),
-            paint = Paint.fill(Color.RED).copy(blendMode = BlendMode.SRC),
-            textureBytes = byteArrayOf(0, 0, 0xff.toByte(), 0xff.toByte()),
-            textureWidth = 1,
-            textureHeight = 1,
-            textureSourceId = "clip-source-vertex",
-            diagnostics = Diagnostics(),
-            surfaceWidth = 8,
-            surfaceHeight = 8,
-            config = RenderConfig.DEFAULT,
-            diagnosticName = "drawVertices",
-            blendModeOverride = GPUBlendMode.SRC_OVER,
-        )
-
-        assertTrue(encoded)
-        assertEquals(listOf("one_isa"), target.vertexBlendModes.map { it?.stateId })
-    }
-
-    @Test
     fun `use prepass counts one complex mask per logical points draw`() {
         val clip = ClipStack.Complex(
             listOf(

@@ -8,6 +8,7 @@ import org.graphiks.kanvas.canvas.DisplayListBuffer
 import org.graphiks.kanvas.canvas.DisplayOp
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUPreparedImageRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
 import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
@@ -49,6 +50,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 
 private const val PREPARED_IMAGE_CLIP_REFUSAL = "unsupported.surface.prepared.image-clip"
 
@@ -520,7 +522,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `text atlas and textured vertices render through independent geometry coverage`() {
+    fun `text atlas renders prepared while textured vertices stay terminal before legacy`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(
@@ -555,22 +557,25 @@ class GPUClipCoverageSurfaceTest {
                 clip = clip,
             ),
         )
-        val trace = GPUClipRouteTrace()
+        var legacyCalls = 0
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = ops,
+                width = 32,
+                height = 32,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort =
+                    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    error("textured vertices must not continue through legacy")
+                },
+            )
+        }
 
-        val result = renderViaGpu(
-            buffer = StaticDisplayListBuffer(ops),
-            width = 32,
-            height = 32,
-            format = PixelFormat.RGBA8,
-            config = RenderConfig.DEFAULT,
-            routeTrace = trace,
-        )
-
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(2, trace.logicalDrawCount)
-        assertEquals(2, trace.sourceThenCompositeCount)
-        assertEquals(0, trace.directComplexClipDispatches)
-        assertRgbaNear(result.pixels, 32, 21, 21, Color.BLUE)
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, failure.diagnostic.code.value)
+        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -615,13 +620,14 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `scissor destination read textured vertices preserve the exterior through triangle coverage`() {
+    fun `scissor destination read textured vertices are terminal before legacy`() {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
         val vertices = texturedScissorTriangle()
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
+        var legacyCalls = 0
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = listOf(
                     DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
                     DisplayOp.DrawVertices(
                         vertices = vertices,
@@ -630,27 +636,32 @@ class GPUClipCoverageSurfaceTest {
                         clip = clip,
                     ),
                 ),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
+                width = 16,
+                height = 16,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort =
+                    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    error("textured vertices must not continue through legacy")
+                },
+            )
+        }
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.any { it.code.startsWith("route:destination-read:DrawVertices") })
-        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
-        assertRgbaNear(result.pixels, 16, 7, 7, Color.BLACK, tolerance = 2)
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, failure.diagnostic.code.value)
+        assertEquals(0, legacyCalls)
     }
 
     @Test
-    fun `scissor destination read textured mesh preserves the exterior through triangle coverage`() {
+    fun `scissor destination read textured mesh is terminal before legacy`() {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(6f, 6f, 14f, 14f), antiAlias = false)
         val mesh = Mesh(texturedScissorTriangle(), bounds = Rect(1f, 1f, 15f, 15f))
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
+        var legacyCalls = 0
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = listOf(
                     DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
                     DisplayOp.DrawMesh(
                         mesh = mesh,
@@ -660,17 +671,21 @@ class GPUClipCoverageSurfaceTest {
                         clip = clip,
                     ),
                 ),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
+                width = 16,
+                height = 16,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort =
+                    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    error("textured mesh must not continue through legacy")
+                },
+            )
+        }
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.any { it.code.startsWith("route:destination-read:DrawMesh") })
-        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
-        assertRgbaNear(result.pixels, 16, 7, 7, Color.BLACK, tolerance = 2)
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, failure.diagnostic.code.value)
+        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -715,12 +730,13 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `empty scissor textured vertices do not alter the destination`() {
+    fun `empty scissor textured vertices are terminal before legacy`() {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
+        var legacyCalls = 0
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = listOf(
                     DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
                     DisplayOp.DrawVertices(
                         vertices = texturedScissorTriangle(),
@@ -729,27 +745,32 @@ class GPUClipCoverageSurfaceTest {
                         clip = clip,
                     ),
                 ),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
+                width = 16,
+                height = 16,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort =
+                    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    error("textured vertices must not continue through legacy")
+                },
+            )
+        }
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(1, result.stats.opsDispatched, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawVertices") })
-        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, failure.diagnostic.code.value)
+        assertEquals(0, legacyCalls)
     }
 
     @Test
-    fun `empty scissor textured mesh does not alter the destination`() {
+    fun `empty scissor textured mesh is terminal before legacy`() {
         requireWebGpu()
         val clip = ClipStack.DeviceRect(Rect(20f, 20f, 24f, 24f), antiAlias = false)
         val mesh = Mesh(texturedScissorTriangle(), bounds = Rect(1f, 1f, 15f, 15f))
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
+        var legacyCalls = 0
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = listOf(
                     DisplayOp.DrawRect(Rect(0f, 0f, 16f, 16f), Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
                     DisplayOp.DrawMesh(
                         mesh = mesh,
@@ -759,17 +780,21 @@ class GPUClipCoverageSurfaceTest {
                         clip = clip,
                     ),
                 ),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
+                width = 16,
+                height = 16,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort =
+                    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    error("textured mesh must not continue through legacy")
+                },
+            )
+        }
 
-        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(1, result.stats.opsDispatched, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawMesh") })
-        assertWhiteOutsideClip(result.pixels, 16, clip.rect)
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, failure.diagnostic.code.value)
+        assertEquals(0, legacyCalls)
     }
 
     @Test
@@ -888,7 +913,7 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `mesh program is refused rather than rendered as plain vertices`() {
+    fun `mesh program is refused as unregistered rather than rendered as plain vertices`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
@@ -903,22 +928,33 @@ class GPUClipCoverageSurfaceTest {
             bounds = Rect(2f, 2f, 8f, 8f),
         )
         val trace = GPUClipRouteTrace()
+        var legacyCalls = 0
 
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(DisplayOp.DrawMesh(mesh, Paint.fill(Color.RED), null, Matrix33.identity(), clip)),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-            trace,
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = listOf(
+                    DisplayOp.DrawMesh(mesh, Paint.fill(Color.RED), null, Matrix33.identity(), clip),
+                ),
+                width = 16,
+                height = 16,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort =
+                    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    error("refused mesh must not continue through legacy")
+                },
+                legacyRouteTrace = trace,
+            )
+        }
+
+        assertEquals(
+            GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered,
+            failure.diagnostic.code.value,
         )
-
-        assertEquals(1, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.mesh.program" })
+        assertEquals(0, legacyCalls)
         assertEquals(0, trace.logicalDrawCount)
-        assertTrue(result.diagnostics.entries.none { it.reason == "clip_mask_acquire" })
     }
 
     @Test
@@ -953,45 +989,47 @@ class GPUClipCoverageSurfaceTest {
     }
 
     @Test
-    fun `textured vertices without image shaders retain explicit route diagnostics`() {
+    fun `textured vertices without image shaders render through the prepared product route`() {
         requireWebGpu()
         val vertices = Vertices(
             VertexMode.TRIANGLES,
             positions = listOf(Point(2f, 2f), Point(8f, 2f), Point(2f, 8f)),
             texCoords = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f)),
         )
-        val expectedOperations = listOf(
-            DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix33.identity(), complexFullClip()) to "drawVertices",
+        val operations = listOf(
+            DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen),
             DisplayOp.DrawMesh(
                 Mesh(vertices, bounds = Rect(2f, 2f, 8f, 8f)),
                 Paint.fill(Color.WHITE),
                 null,
                 Matrix33.identity(),
-                complexFullClip(),
-            ) to "drawMesh",
+                ClipStack.WideOpen,
+            ),
         )
 
-        expectedOperations.forEach { (op, expectation) ->
-            val expectedOperation = expectation
+        operations.forEach { operation ->
+            val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
             val result = renderViaGpu(
-                StaticDisplayListBuffer(listOf(op)),
+                StaticDisplayListBuffer(listOf(operation)),
                 32,
                 32,
                 PixelFormat.RGBA8,
                 RenderConfig.DEFAULT,
+                preparedRouteTrace = GPUPreparedSurfaceRouteTrace(decisions::add),
             )
 
-            assertTrue(
-                result.diagnostics.entries.any {
-                    it.operation == expectedOperation && it.reason == "gpu_textured_vertices_no_image_shader"
-                },
-                result.diagnostics.entries.toString(),
+            assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(
+                decisions.single(),
+                operation::class.simpleName,
             )
+            assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+            assertEquals(0, result.stats.opsRefused, result.diagnostics.entries.toString())
+            assertRgbaNear(result.pixels, 32, 3, 3, Color.WHITE)
         }
     }
 
     @Test
-    fun `textured vertices retain explicit perspective and mode refusals`() {
+    fun `textured vertices retain explicit transform and material refusals`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
@@ -1000,53 +1038,49 @@ class GPUClipCoverageSurfaceTest {
         val uvs = listOf(Point(0f, 0f), Point(1f, 0f), Point(0f, 1f))
         val paint = Paint.fill(Color.WHITE).copy(shader = Shader.Image(bgraBluePixel()))
 
-        val perspective = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
-                    DisplayOp.DrawVertices(
-                        Vertices(VertexMode.TRIANGLES, triangle, texCoords = uvs),
-                        paint,
-                        Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f),
-                        clip,
+        val perspective = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderViaGpu(
+                StaticDisplayListBuffer(
+                    listOf(
+                        DisplayOp.DrawVertices(
+                            Vertices(VertexMode.TRIANGLES, triangle, texCoords = uvs),
+                            paint,
+                            Matrix33.makeAll(1f, 0f, 0f, 0f, 1f, 0f, 0.1f, 0f, 1f),
+                            clip,
+                        ),
                     ),
                 ),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
-        assertTrue(
-            perspective.diagnostics.entries.any { it.reason == "unsupported.vertices.perspective_transform" },
-            perspective.diagnostics.entries.toString(),
-        )
-        assertTrue(perspective.diagnostics.entries.none { it.code.startsWith("route:clip:DrawVertices") })
+                16,
+                16,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+            )
+        }
+        assertEquals(GPUPreparedVerticesRefusalCodes.Transform, perspective.diagnostic.code.value)
 
-        val strip = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
-                    DisplayOp.DrawVertices(
-                        Vertices(VertexMode.TRIANGLE_STRIP, triangle, texCoords = uvs),
-                        paint,
-                        Matrix33.identity(),
-                        clip,
+        val strip = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderViaGpu(
+                StaticDisplayListBuffer(
+                    listOf(
+                        DisplayOp.DrawVertices(
+                            Vertices(VertexMode.TRIANGLE_STRIP, triangle, texCoords = uvs),
+                            paint,
+                            Matrix33.identity(),
+                            clip,
+                        ),
                     ),
                 ),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
-        assertTrue(
-            strip.diagnostics.entries.any { it.reason == "unsupported.vertices.textured_mode" },
-            strip.diagnostics.entries.toString(),
-        )
-        assertTrue(strip.diagnostics.entries.none { it.code.startsWith("route:clip:DrawVertices") })
+                16,
+                16,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+            )
+        }
+        assertEquals(GPUPreparedVerticesRefusalCodes.Material, strip.diagnostic.code.value)
     }
 
     @Test
-    fun `non textured vertices with colors or indices are refused instead of flattened`() {
+    fun `non textured vertices with colors and indices render through the prepared route`() {
         requireWebGpu()
         val clip = ClipStack.Complex(
             listOf(ClipStackOp.RectOp(Rect(1f, 1f, 15f, 15f), ClipOp.INTERSECT, antiAlias = true)),
@@ -1057,18 +1091,22 @@ class GPUClipCoverageSurfaceTest {
             colors = listOf(Color.RED, Color.GREEN, Color.BLUE),
             indices = listOf(0, 1, 2),
         )
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
 
         val result = renderViaGpu(
             StaticDisplayListBuffer(
-                listOf(DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix33.identity(), clip)),
+                listOf(DisplayOp.DrawVertices(vertices, Paint.fill(Color.WHITE), Matrix33.identity(), ClipStack.WideOpen)),
             ),
             16,
             16,
             PixelFormat.RGBA8,
             RenderConfig.DEFAULT,
+            preparedRouteTrace = GPUPreparedSurfaceRouteTrace(decisions::add),
         )
 
-        assertTrue(result.diagnostics.entries.any { it.reason == "unsupported.vertices.colors_or_indices" })
+        assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(decisions.single())
+        assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
+        assertEquals(0, result.stats.opsRefused, result.diagnostics.entries.toString())
     }
 
     @Test
@@ -1084,28 +1122,29 @@ class GPUClipCoverageSurfaceTest {
             indices = listOf(0, 1, 3),
         )
 
-        val result = renderViaGpu(
-            StaticDisplayListBuffer(
-                listOf(
-                    DisplayOp.DrawVertices(
-                        vertices,
-                        Paint.fill(Color.WHITE).copy(shader = Shader.Image(bgraBluePixel())),
-                        Matrix33.identity(),
-                        clip,
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            renderViaGpu(
+                StaticDisplayListBuffer(
+                    listOf(
+                        DisplayOp.DrawVertices(
+                            vertices,
+                            Paint.fill(Color.WHITE).copy(shader = Shader.Image(bgraBluePixel())),
+                            Matrix33.identity(),
+                            clip,
+                        ),
                     ),
                 ),
-            ),
-            16,
-            16,
-            PixelFormat.RGBA8,
-            RenderConfig.DEFAULT,
-        )
+                16,
+                16,
+                PixelFormat.RGBA8,
+                RenderConfig.DEFAULT,
+            )
+        }
 
-        assertTrue(
-            result.diagnostics.entries.any { it.reason == "unsupported.vertices.indices" },
-            result.diagnostics.entries.toString(),
+        assertEquals(
+            GPUPreparedVerticesRefusalCodes.IndexOutOfRange,
+            failure.diagnostic.code.value,
         )
-        assertTrue(result.diagnostics.entries.none { it.code.startsWith("route:clip:DrawVertices") })
     }
 
     @Test
@@ -1290,7 +1329,6 @@ class GPUClipCoverageSurfaceTest {
                 clip = clip,
             ),
             DisplayOp.DrawPicture(picture, null, Matrix33.identity(), clip),
-            DisplayOp.DrawMesh(Mesh(triangle, bounds = Rect(2f, 12f, 8f, 18f)), Paint.fill(Color.RED), null, Matrix33.identity(), clip),
         )
         val trace = GPUClipRouteTrace()
 
@@ -1304,8 +1342,8 @@ class GPUClipCoverageSurfaceTest {
         )
 
         assertEquals(0, result.diagnostics.fatalCount, result.diagnostics.entries.toString())
-        assertEquals(7, trace.logicalDrawCount, result.diagnostics.entries.toString())
-        assertEquals(7, trace.sourceThenCompositeCount, result.diagnostics.entries.toString())
+        assertEquals(6, trace.logicalDrawCount, result.diagnostics.entries.toString())
+        assertEquals(6, trace.sourceThenCompositeCount, result.diagnostics.entries.toString())
         assertEquals(0, trace.directComplexClipDispatches)
         assertEquals(
             emptySet<String>(),

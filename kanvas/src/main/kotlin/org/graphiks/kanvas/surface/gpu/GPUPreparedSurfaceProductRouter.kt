@@ -137,6 +137,8 @@ private fun DisplayOp.hasTerminalPreparedFamily(): Boolean = when (this) {
     is DisplayOp.DrawImageLattice,
     is DisplayOp.DrawAtlas,
     is DisplayOp.DrawText,
+    is DisplayOp.DrawVertices,
+    is DisplayOp.DrawMesh,
     -> true
     else -> false
 }

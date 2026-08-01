@@ -3,6 +3,7 @@ package org.graphiks.kanvas.surface.gpu
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
@@ -760,6 +761,103 @@ class GPUPreparedSurfaceProductNativeSmokeTest {
                 "renderPasses=${result.evidence.renderPasses} " +
                 "verticesDelta=${verticesDelta.maxChannelDelta} textDelta=$textDelta",
         )
+    }
+
+    @Test
+    fun `vertices frame routes through the product gate as prepared with exact native pixels`() {
+        val operations = listOf(
+            rect(Rect.fromLTRB(0f, 0f, 4f, 4f), Color.RED),
+            DisplayOp.DrawVertices(
+                vertices = Vertices(
+                    mode = VertexMode.TRIANGLES,
+                    positions = listOf(Point(0f, 0f), Point(4f, 0f), Point(0f, 4f)),
+                ),
+                paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
+                transform = Matrix33.identity(),
+                clip = ClipStack.WideOpen,
+            ),
+        )
+        val decisions = mutableListOf<GPUPreparedSurfaceRouteDecision>()
+
+        val result = renderViaGpu(
+            buffer = StaticDisplayListBuffer(operations),
+            width = 4,
+            height = 4,
+            format = PixelFormat.RGBA8,
+            config = RenderConfig.DEFAULT,
+            preparedRouteTrace = GPUPreparedSurfaceRouteTrace(decisions::add),
+        )
+
+        val evidence = assertIs<GPUPreparedSurfaceRouteDecision.Prepared>(
+            decisions.single(),
+            decisions.single().toString(),
+        ).evidence
+        // The green triangle covers x+y<=4; pixels beyond it keep the red rect. Interior
+        // pixels avoid the exact x+y=4 rasterization tie.
+        assertPixel(result.pixels.toByteArray(), 4, 1, 1, listOf(0, 255, 0, 255))
+        assertPixel(result.pixels.toByteArray(), 4, 2, 0, listOf(0, 255, 0, 255))
+        assertPixel(result.pixels.toByteArray(), 4, 3, 2, listOf(255, 0, 0, 255))
+        assertPixel(result.pixels.toByteArray(), 4, 1, 3, listOf(255, 0, 0, 255))
+        assertEquals(1L, evidence.submits)
+        assertEquals(1L, evidence.readbackCopies)
+        assertEquals(0, evidence.activeNativePayloads)
+        assertEquals(0, result.stats.opsRefused)
+    }
+
+    @Test
+    fun `unregistered mesh program is terminal through the product gate before legacy`() {
+        var legacyCalls = 0
+        val triangle = Vertices(
+            mode = VertexMode.TRIANGLES,
+            positions = listOf(Point(0f, 0f), Point(4f, 0f), Point(0f, 4f)),
+        )
+
+        val failure = assertFailsWith<GPUPreparedSurfaceTerminalException> {
+            GPUPreparedSurfaceProductEntry.render(
+                operations = listOf(
+                    DisplayOp.DrawMesh(
+                        mesh = org.graphiks.kanvas.types.Mesh(
+                            vertices = triangle,
+                            program = org.graphiks.kanvas.paint.MeshProgram(
+                                effect = org.graphiks.kanvas.pipeline.RuntimeEffect(
+                                    id = "not.registered",
+                                    module = org.graphiks.kanvas.pipeline.ShaderModule.fromSource(
+                                        "fixture",
+                                    ),
+                                    uniformLayout = org.graphiks.kanvas.pipeline.UniformLayout(
+                                        emptyList(),
+                                    ),
+                                    children = emptyList(),
+                                ),
+                                uniforms = org.graphiks.kanvas.pipeline.UniformBlock {},
+                            ),
+                            bounds = Rect.fromLTRB(0f, 0f, 4f, 4f),
+                        ),
+                        paint = Paint.fill(Color.GREEN).copy(antiAlias = false),
+                        blendMode = null,
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.WideOpen,
+                    ),
+                ),
+                width = 4,
+                height = 4,
+                format = PixelFormat.RGBA8,
+                config = RenderConfig.DEFAULT,
+                executionPort =
+                    GPUPreparedSurfaceFrameExecutor(GPUPreparedSurfaceNativeBackendPortFactory),
+                legacyPort = GPUPreparedSurfaceLegacyPort { _, _, _, _, _, _ ->
+                    legacyCalls++
+                    error("refused mesh must not continue through legacy")
+                },
+            )
+        }
+
+        assertEquals(
+            org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes
+                .MeshProgramUnregistered,
+            failure.diagnostic.code.value,
+        )
+        assertEquals(0, legacyCalls)
     }
 
     private fun rect(bounds: Rect, color: Color) = DisplayOp.DrawRect(
