@@ -16,6 +16,7 @@ object GPUPreparedVerticesRefusalCodes {
     const val PrimitiveBlender = "unsupported.vertices.primitive_blender_unregistered"
     const val Material = "unsupported.vertices.material"
     const val Budget = "unsupported.vertices.budget"
+    const val ClipCoverage = "unsupported.vertices.clip_coverage"
     const val MeshBounds = "unsupported.mesh.bounds"
     const val MeshProgramUnregistered = "unsupported.mesh.program_unregistered"
     const val MeshProgramCpuUnavailable = "unsupported.mesh.program_cpu_not_available"
@@ -39,6 +40,7 @@ object GPUPreparedVerticesRefusalCodes {
         PrimitiveBlender,
         Material,
         Budget,
+        ClipCoverage,
         MeshBounds,
         MeshProgramUnregistered,
         MeshProgramCpuUnavailable,

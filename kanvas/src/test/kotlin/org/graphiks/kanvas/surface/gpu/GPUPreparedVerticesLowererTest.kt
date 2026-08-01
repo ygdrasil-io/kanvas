@@ -320,7 +320,7 @@ class GPUPreparedVerticesLowererTest {
         )).ready().draw
         val second = lower(DisplayOp.DrawVertices(
             vertices(), Paint.fill(Color.RED), Matrix33.identity(),
-            ClipStack.DeviceRect(Rect.fromLTRB(11f, 10f, 20f, 20f), antiAlias = true),
+            ClipStack.DeviceRect(Rect.fromLTRB(11f, 10f, 20f, 20f), antiAlias = false),
         )).ready().draw
 
         assertNotEquals(first.clipSnapshot.identity, second.clipSnapshot.identity)
@@ -344,19 +344,32 @@ class GPUPreparedVerticesLowererTest {
     }
 
     @Test
-    fun `published mask elements reject hostile mutation`() {
-        val path = Path().addRect(Rect.fromLTRB(0f, 0f, 2f, 2f))
-        val draw = lower(DisplayOp.DrawVertices(
-            vertices(), Paint.fill(Color.RED), Matrix33.identity(),
-            ClipStack.Complex(listOf(ClipStackOp.PathOp(path, ClipOp.INTERSECT))),
-        )).ready().draw
-        val mask = assertIs<GPUClipCoveragePlan.Mask>(draw.clipSnapshot.coveragePlan)
-        val original = mask.elements
-        @Suppress("UNCHECKED_CAST")
-        assertFailsWith<UnsupportedOperationException> {
-            (mask.elements as MutableList<Any?>).clear()
+    fun `mask and analytic clip plans refuse with clip coverage code before semantic publication`() {
+        val maskClip = ClipStack.Complex(listOf(
+            ClipStackOp.PathOp(Path().addRect(Rect.fromLTRB(0f, 0f, 2f, 2f)), ClipOp.INTERSECT),
+        ))
+        val analyticClip = ClipStack.Complex(listOf(
+            ClipStackOp.RectOp(Rect.fromLTRB(0f, 0f, 2f, 2f), ClipOp.INTERSECT, antiAlias = false),
+            ClipStackOp.RectOp(Rect.fromLTRB(1f, 1f, 3f, 3f), ClipOp.INTERSECT, antiAlias = false),
+        ))
+        listOf(
+            maskClip to "mask_clip_unsupported",
+            analyticClip to "analytic_clip_unsupported",
+        ).forEach { (clip, reason) ->
+            val verticesRefusal = lower(DisplayOp.DrawVertices(
+                vertices(), Paint.fill(Color.RED), Matrix33.identity(), clip,
+            )).refused()
+            assertEquals(GPUPreparedVerticesRefusalCodes.ClipCoverage, verticesRefusal.code, reason)
+            assertEquals("clip", verticesRefusal.facts["stage"], reason)
+            assertEquals("GPUClipMapper", verticesRefusal.facts["authority"], reason)
+            assertEquals(reason, verticesRefusal.facts["reason"], reason)
+
+            val meshRefusal = lower(meshOperation(program = registeredMeshProgram()).copy(
+                clip = clip,
+            )).refused()
+            assertEquals(GPUPreparedVerticesRefusalCodes.ClipCoverage, meshRefusal.code, reason)
+            assertEquals("clip", meshRefusal.facts["stage"], reason)
         }
-        assertEquals(original, mask.elements)
     }
 
     @Test
@@ -401,6 +414,7 @@ class GPUPreparedVerticesLowererTest {
             GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation to { lower(meshOperation(program = registeredMeshProgram()), GPUPreparedRuntimeEffectResolver { _, _ -> GPUPreparedRuntimeEffectResolution.ProgramUnavailable("wgsl", GPUPreparedRuntimeEffectResolution.ProgramUnavailableReason.WgslValidation) }).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramAbi to { lower(meshOperation(program = registeredMeshProgram(uniforms = UniformBlock { }))).refused() },
             GPUPreparedVerticesRefusalCodes.MeshProgramChild to { lower(meshOperation(program = child)).refused() },
+            GPUPreparedVerticesRefusalCodes.ClipCoverage to { lower(DisplayOp.DrawVertices(vertices(), Paint.fill(Color.RED), Matrix33.identity(), ClipStack.Complex(listOf(ClipStackOp.PathOp(Path().addRect(Rect.fromLTRB(0f, 0f, 2f, 2f)), ClipOp.INTERSECT))))).refused() },
         )
         val reserved = GPUPreparedVerticesRefusalCoverage.classifications
             .filterValues { it.disposition == GPUPreparedVerticesRefusalDisposition.Reserved }
@@ -421,6 +435,7 @@ class GPUPreparedVerticesLowererTest {
             GPUPreparedVerticesRefusalCodes.MeshProgramWgslValidation to "GPUPreparedRuntimeEffectResolver",
             GPUPreparedVerticesRefusalCodes.MeshProgramAbi to "GPUPreparedMaterialProgramCompiler",
             GPUPreparedVerticesRefusalCodes.MeshProgramChild to "GPUMaterialMapper",
+            GPUPreparedVerticesRefusalCodes.ClipCoverage to "GPUClipMapper",
         )
         assertEquals(cases.keys, expectedAuthorities.keys)
         cases.forEach { (code, execute) ->
@@ -715,18 +730,17 @@ class GPUPreparedVerticesLowererTest {
     @Test
     fun `mesh snapshots vertices and clips before resolver can mutate caller objects`() {
         val positions = mutableListOf(Point(0f, 0f), Point(2f, 0f), Point(0f, 2f))
-        val path = Path().addRect(Rect.fromLTRB(0f, 0f, 4f, 4f))
+        val clip = ClipStack.DeviceRect(Rect.fromLTRB(0f, 0f, 4f, 4f), antiAlias = false)
         val operation = meshOperation(program = registeredMeshProgram()).copy(
             mesh = Mesh(
                 Vertices(VertexMode.TRIANGLES, positions),
                 registeredMeshProgram(),
                 Rect.fromLTRB(0f, 0f, 2f, 2f),
             ),
-            clip = ClipStack.Complex(listOf(ClipStackOp.PathOp(path, ClipOp.INTERSECT))),
+            clip = clip,
         )
         val resolver = GPUPreparedRuntimeEffectResolver { effectId, version ->
             positions[0] = Point(99f, 99f)
-            path.addRect(Rect.fromLTRB(50f, 50f, 60f, 60f))
             org.graphiks.kanvas.gpu.renderer.runtimeeffects.KanvasPreparedRuntimeEffectResolver()
                 .resolve(effectId, version)
         }
@@ -735,8 +749,11 @@ class GPUPreparedVerticesLowererTest {
 
         assertEquals(0f, java.nio.ByteBuffer.wrap(draw.artifact.vertexBytesForUpload())
             .order(java.nio.ByteOrder.LITTLE_ENDIAN).float)
-        val snapshottedPath = ((draw.clip as ClipStack.Complex).ops.single() as ClipStackOp.PathOp).path
-        assertEquals(Rect.fromLTRB(0f, 0f, 4f, 4f), snapshottedPath.computeBounds())
+        assertEquals(clip, draw.clip)
+        assertEquals(
+            GPUBounds(0f, 0f, 4f, 4f),
+            assertIs<GPUClipCoveragePlan.Scissor>(draw.clipSnapshot.coveragePlan).bounds,
+        )
     }
 
     private fun lower(operation: DisplayOp): GPUPreparedVerticesLowering =

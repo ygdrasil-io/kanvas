@@ -47,6 +47,7 @@ object GPUPreparedVerticesRefusalCoverage {
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.PrimitiveBlender to c(GPUPreparedVerticesRefusalDisposition.Reserved, "GPUBlendPlanner", "fixed SrcOver primitive request is admitted"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.Material to c(GPUPreparedVerticesRefusalDisposition.Direct, "GPUPreparedMaterialProgramCompiler", "paint material"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.Budget to c(GPUPreparedVerticesRefusalDisposition.Delegated, "GPUPreparedVerticesPacker", "fixed public packing ceiling"),
+            org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.ClipCoverage to c(GPUPreparedVerticesRefusalDisposition.Direct, "GPUClipMapper", "mask and analytic clip plans"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.MeshBounds to c(GPUPreparedVerticesRefusalDisposition.Direct, "GPUPreparedVerticesLowerer", "mesh bounds"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.MeshProgramUnregistered to c(GPUPreparedVerticesRefusalDisposition.Direct, "KanvasPreparedRuntimeEffectResolver", "descriptor registry"),
             org.graphiks.kanvas.gpu.renderer.vertices.GPUPreparedVerticesRefusalCodes.MeshProgramCpuUnavailable to c(GPUPreparedVerticesRefusalDisposition.Direct, "KanvasPreparedRuntimeEffectResolver", "cpu authority"),

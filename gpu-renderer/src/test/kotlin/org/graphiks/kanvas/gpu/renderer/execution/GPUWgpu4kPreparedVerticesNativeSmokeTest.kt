@@ -671,9 +671,9 @@ class GPUWgpu4kPreparedVerticesNativeSmokeTest {
                 "${limits.maxDynamicUniformBuffersPerPipelineLayout}"
         }
         val indexFormats = capabilities?.facts.orEmpty()
-            .filter { fact -> fact.name.startsWith("vertices.index_format") }
+            .filter { fact -> fact.name.startsWith("vertices.index_") }
             .joinToString(",") { fact -> "${fact.name}=${fact.value}" }
-            .ifEmpty { "uint16=<unknown>,uint32=<unknown>" }
+            .ifEmpty { "no index-format capability facts emitted" }
         val targetFormats = capabilities?.textureFormatSampleSupport?.keys
             ?.joinToString(",") { it.name }
             .orEmpty()

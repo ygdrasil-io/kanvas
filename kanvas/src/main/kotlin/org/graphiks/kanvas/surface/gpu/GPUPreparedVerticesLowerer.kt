@@ -649,6 +649,16 @@ private fun prepareClip(
             GPUPreparedVerticesRefusalCodes.Material, "coverage_refused", mapOf("clipCode" to plan.code),
         )
     }
+    if (plan is GPUClipCoveragePlan.Mask) {
+        return PreparedVerticesClipResult.Refused(
+            GPUPreparedVerticesRefusalCodes.ClipCoverage, "mask_clip_unsupported", emptyMap(),
+        )
+    }
+    if (plan is GPUClipCoveragePlan.AnalyticIntersection) {
+        return PreparedVerticesClipResult.Refused(
+            GPUPreparedVerticesRefusalCodes.ClipCoverage, "analytic_clip_unsupported", emptyMap(),
+        )
+    }
     val identity = when (snapshot) {
         org.graphiks.kanvas.canvas.ClipStack.WideOpen -> "prepared-vertices-clip:wide-open"
         is org.graphiks.kanvas.canvas.ClipStack.DeviceRect -> "prepared-vertices-clip:${request.contentKey}"

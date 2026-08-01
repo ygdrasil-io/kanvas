@@ -22,6 +22,7 @@ class GPUPreparedVerticesRefusalCodesTest {
             "unsupported.vertices.primitive_blender_unregistered",
             "unsupported.vertices.material",
             "unsupported.vertices.budget",
+            "unsupported.vertices.clip_coverage",
             "unsupported.mesh.bounds",
             "unsupported.mesh.program_unregistered",
             "unsupported.mesh.program_cpu_not_available",

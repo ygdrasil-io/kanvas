@@ -7,7 +7,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.Test
 import org.graphiks.kanvas.canvas.ClipStack
+import org.graphiks.kanvas.canvas.ClipStackOp
 import org.graphiks.kanvas.canvas.DisplayOp
+import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.capabilities.GPUDeviceGenerationID
 import org.graphiks.kanvas.gpu.renderer.coordinates.GPUPixelBounds
 import org.graphiks.kanvas.gpu.renderer.execution.GPUBackendRuntimeFactory
@@ -20,6 +22,7 @@ import org.graphiks.kanvas.image.AlphaType
 import org.graphiks.kanvas.image.ColorType
 import org.graphiks.kanvas.image.Image
 import org.graphiks.kanvas.paint.Shader
+import org.graphiks.kanvas.pipeline.ClipOp
 import org.graphiks.kanvas.surface.RenderConfig
 import org.graphiks.kanvas.types.Color
 import org.graphiks.kanvas.types.Matrix33
@@ -234,6 +237,24 @@ class GPUPreparedVerticesRefusalMatrixTest {
                 ),
                 expectedCode = GPUPreparedVerticesRefusalCodes.Material,
                 stage = "material",
+            ),
+            RefusalCase(
+                name = "mask clip plan refuses at lowering",
+                operations = listOf(
+                    DisplayOp.DrawVertices(
+                        vertices = triangle,
+                        paint = validPaint,
+                        transform = Matrix33.identity(),
+                        clip = ClipStack.Complex(listOf(
+                            ClipStackOp.PathOp(
+                                Path().addRect(Rect.fromLTRB(0f, 0f, 4f, 4f)),
+                                ClipOp.INTERSECT,
+                            ),
+                        )),
+                    ),
+                ),
+                expectedCode = GPUPreparedVerticesRefusalCodes.ClipCoverage,
+                stage = "clip",
             ),
             RefusalCase(
                 name = "sampled image paint material is refused at lowering",
