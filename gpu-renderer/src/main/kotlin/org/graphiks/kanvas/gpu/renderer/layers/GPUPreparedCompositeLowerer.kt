@@ -6,8 +6,11 @@ object GPUPreparedCompositeLowerer {
         scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
         rootScopeId: GPUPreparedCompositeScopeId,
         identity: String,
+        deviceGeneration: Long = 0L,
     ): GPUPreparedCompositeLowering {
         val layerPlans = mutableListOf<GPULayerPlan>()
+        val gatePlans = mutableMapOf<String, GPUSaveLayerIsolatedTargetGatePlan>()
+        val scopesByValue = scopes.entries.associate { (id, scope) -> id.value to scope }
 
         for (scope in scopes.values) {
             if (scope.sourceKind != GPUPreparedCompositeScopeKind.SaveLayer) continue
@@ -22,6 +25,7 @@ object GPUPreparedCompositeLowerer {
                 saveRecord = saveRecord,
                 bounds = bounds,
                 parentTargetLabel = parentTargetLabel,
+                deviceGeneration = deviceGeneration,
             )
 
             val gatePlan = GPUSaveLayerIsolatedTargetPlanner().plan(request)
@@ -36,7 +40,19 @@ object GPUPreparedCompositeLowerer {
             }
 
             layerPlans.add(gatePlan.layerPlan)
+            gatePlans[gatePlan.layerPlan.saveRecord.scopeId.value] = gatePlan
         }
+
+        // Render order: innermost layers first (their targets must exist before a parent
+        // composites them), siblings in save order. Insertion order alone would emit the
+        // parent's CompositeLayer before the child target is ever rendered.
+        val depthByScopeValue = scopesByValue.mapValues { (value, scope) ->
+            scopeDepth(scope, scopesByValue)
+        }
+        layerPlans.sortWith(
+            compareByDescending<GPULayerPlan> { plan -> depthByScopeValue[plan.saveRecord.scopeId.value] ?: 0 }
+                .thenBy { plan -> plan.saveRecord.scopeId.value },
+        )
 
         return GPUPreparedCompositeLowering.Ready(
             GPUPreparedCompositePlan(
@@ -45,6 +61,7 @@ object GPUPreparedCompositeLowerer {
                 layers = layerPlans,
                 normalizedFilters = emptyMap(),
                 identity = identity,
+                gatePlans = gatePlans,
             ),
         )
     }
@@ -95,4 +112,18 @@ object GPUPreparedCompositeLowerer {
             )
         }
     }
+}
+
+/** Returns the saveLayer nesting depth of a scope (0 for root children). */
+private fun scopeDepth(
+    scope: GPUPreparedCompositeScope,
+    scopesByValue: Map<String, GPUPreparedCompositeScope>,
+): Int {
+    var depth = 0
+    var parentId = scope.parentId?.value
+    while (parentId != null) {
+        depth += 1
+        parentId = scopesByValue[parentId]?.parentId?.value
+    }
+    return depth
 }

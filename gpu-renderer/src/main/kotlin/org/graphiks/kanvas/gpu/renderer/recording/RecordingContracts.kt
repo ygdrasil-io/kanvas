@@ -30,6 +30,7 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUFirstRoutePassBuilder
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacket
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUDrawPacketRole
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchEligibility
 import org.graphiks.kanvas.gpu.renderer.passes.GPUProvisionalRenderSegmentKey
 import org.graphiks.kanvas.gpu.renderer.passes.GPURenderStepID
@@ -1088,6 +1089,7 @@ class GPUTaskList(
     phaseOrder: List<GPUTaskPhase>,
     memoryBudget: GPUFrameMemoryBudgetPlan,
     diagnostics: List<GPUDiagnostic> = emptyList(),
+    compositeCommands: List<GPUPassCommand> = emptyList(),
 ) {
     val recordingSeals: List<GPURecordingSeal> = immutableList(recordingSeals)
     val tasks: List<GPUTask> = immutableList(tasks)
@@ -1097,6 +1099,7 @@ class GPUTaskList(
     val diagnostics: List<GPUDiagnostic> = immutableList(
         diagnostics.map { it.copy(facts = immutableMap(it.facts)) },
     )
+    val compositeCommands: List<GPUPassCommand> = immutableList(compositeCommands)
 
     init {
         require(expectedReplayKeyHash.isNotBlank()) {
@@ -1109,6 +1112,25 @@ class GPUTaskList(
             "GPUTaskList.frameId must match GPUFrameCapabilitySeal.frameId"
         }
     }
+
+    /** Returns a copy carrying the materialized saveLayer command stream as scheduling evidence. */
+    fun withCompositeCommands(commands: List<GPUPassCommand>): GPUTaskList =
+        if (commands.isEmpty()) {
+            this
+        } else {
+            GPUTaskList(
+                frameId = frameId,
+                capabilitySeal = capabilitySeal,
+                recordingSeals = recordingSeals,
+                expectedReplayKeyHash = expectedReplayKeyHash,
+                tasks = tasks,
+                dependencies = dependencies,
+                phaseOrder = phaseOrder,
+                memoryBudget = memoryBudget,
+                diagnostics = diagnostics,
+                compositeCommands = compositeCommands + commands,
+            )
+        }
 
     /** Returns stable task and dependency lines for tests and evidence bundles. */
     fun dumpLines(): List<String> =

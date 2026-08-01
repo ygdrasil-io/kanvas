@@ -15,9 +15,12 @@ import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnostic
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticCode
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticDomain
 import org.graphiks.kanvas.gpu.renderer.diagnostics.GPUDiagnosticSeverity
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreflightCapabilities
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameRequest
+import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSaveLayerFrameHandling
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameResult
 import org.graphiks.kanvas.gpu.renderer.recording.GPUPreparedSurfaceFrameTaskListBuilder
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotOperation
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUReadbackRequestID
@@ -85,6 +88,7 @@ internal sealed interface GPUPreparedSurfaceFrameBuildResult {
         val destinationReadTextCommandIds: Set<Int> = emptySet(),
         val destinationReadEvidence: List<GPUPreparedSurfaceDestinationReadEvidence> =
             emptyList(),
+        val compositeCommandCount: Int = 0,
     ) : GPUPreparedSurfaceFrameBuildResult
 
     data class Refused(val diagnostic: GPUDiagnostic) : GPUPreparedSurfaceFrameBuildResult
@@ -101,6 +105,39 @@ internal object GPUPreparedSurfaceFrameBuilder {
         validateTargetFormat(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         validateFrameIdentities(request)?.let { return GPUPreparedSurfaceFrameBuildResult.Refused(it) }
         return try {
+            val hasCompositeOps = request.candidate.operations.any { operation ->
+                operation is DisplayOp.BeginLayer ||
+                    operation is DisplayOp.EndLayer ||
+                    operation is DisplayOp.DrawPicture
+            }
+            // Composite frames are handled fail-closed BEFORE the text/vertices/image
+            // preparers: those preparers do not understand layer structure (the mapper
+            // records BeginLayer/EndLayer into the legacy dump and flat-renders layer
+            // children), so a composite frame must either materialize through the real
+            // saveLayer pipeline or refuse terminally — never silently fall back.
+            val compositeHandling = if (hasCompositeOps) {
+                prepareCompositeFrameHandling(
+                    operations = request.candidate.operations,
+                    capabilities = request.capabilities,
+                    taskListBuilder = taskListBuilder,
+                    context = contextFor(request),
+                )
+            } else {
+                null
+            }
+            if (compositeHandling is CompositeFrameHandling.Refused) {
+                return GPUPreparedSurfaceFrameBuildResult.Refused(
+                    diagnostic(
+                        code = compositeHandling.code,
+                        message = "Prepared Surface composite could not be lowered.",
+                        facts = compositeHandling.facts + mapOf(
+                            "boundary" to "surface.composite",
+                            "operationIndex" to
+                                compositeHandling.operationIndex.toString(),
+                        ),
+                    ),
+                )
+            }
             val hasPreparedText = request.candidate.operations.any { operation ->
                 operation is org.graphiks.kanvas.canvas.DisplayOp.DrawText
             }
@@ -295,10 +332,18 @@ internal object GPUPreparedSurfaceFrameBuilder {
                     validateEncodedPremulSrgbOutput(request, preparedMapping, semantics)?.let {
                         return GPUPreparedSurfaceFrameBuildResult.Refused(it)
                     }
-                    val destinationReadEvidence = prepared.taskList
+                    val mergedTaskList = (compositeHandling as? CompositeFrameHandling.Ready)
+                        ?.let { ready ->
+                            taskListBuilder.mergeCompositeCommands(
+                                taskList = prepared.taskList,
+                                commands = ready.handling.commands,
+                            )
+                        }
+                        ?: prepared.taskList
+                    val destinationReadEvidence = mergedTaskList
                         .authenticatedDestinationReadEvidence(semantics)
                     GPUPreparedSurfaceFrameBuildResult.Ready(
-                        taskList = prepared.taskList,
+                        taskList = mergedTaskList,
                         readbackRequestId = request.readbackRequestId,
                         visualOperationCount = preparedMapping.visualCommands.size,
                         stateEventCount = mapping.stateEvents.count { event ->
@@ -314,6 +359,7 @@ internal object GPUPreparedSurfaceFrameBuilder {
                         destinationReadEvidence = java.util.Collections.unmodifiableList(
                             ArrayList(destinationReadEvidence),
                         ),
+                        compositeCommandCount = mergedTaskList.compositeCommands.size,
                     )
                 }
                 is GPUPreparedSurfaceFrameResult.Refused ->
@@ -378,6 +424,57 @@ internal class GPUPreparedSurfaceFrameBuildSession(
     fun build(request: GPUPreparedSurfaceFrameBuildRequest): GPUPreparedSurfaceFrameBuildResult =
         GPUPreparedSurfaceFrameBuilder.build(request, taskListBuilder)
 }
+
+private sealed interface CompositeFrameHandling {
+    data class Ready(
+        val handling: GPUPreparedSaveLayerFrameHandling.Ready,
+    ) : CompositeFrameHandling
+
+    data class Refused(
+        val code: String,
+        val operationIndex: Int?,
+        val facts: Map<String, String>,
+    ) : CompositeFrameHandling
+}
+
+private fun prepareCompositeFrameHandling(
+    operations: List<DisplayOp>,
+    capabilities: GPUCapabilities,
+    taskListBuilder: GPUPreparedSurfaceFrameTaskListBuilder,
+    context: GPUTargetPreparationContext,
+): CompositeFrameHandling {
+    val capture = GPUPreparedCompositeCapturer.capture(
+        operations = operations,
+        limits = GPUPreparedCompositeCaptureLimits(),
+    )
+    if (capture is GPUPreparedCompositeCaptureResult.Refused) {
+        return CompositeFrameHandling.Refused(capture.code, capture.operationIndex, capture.facts)
+    }
+    val ready = capture as GPUPreparedCompositeCaptureResult.Ready
+    val handling = taskListBuilder.handleSaveLayer(
+        scopes = ready.capture.scopes,
+        rootScopeId = ready.capture.rootScopeId,
+        identity = ready.capture.identity,
+        capabilities = GPUPreflightCapabilities(
+            maxTextureSize = (capabilities.limits?.maxTextureDimension2D ?: 4096L).toInt(),
+            maxColorAttachments = 8,
+        ),
+        context = context,
+    )
+    return when (handling) {
+        is GPUPreparedSaveLayerFrameHandling.Ready -> CompositeFrameHandling.Ready(handling)
+        is GPUPreparedSaveLayerFrameHandling.Refused ->
+            CompositeFrameHandling.Refused(handling.code, handling.operationIndex, handling.facts)
+    }
+}
+
+private fun contextFor(request: GPUPreparedSurfaceFrameBuildRequest): GPUTargetPreparationContext =
+    GPUTargetPreparationContext(
+        targetId = request.target.value,
+        frameId = request.frameId.value.toString(),
+        deviceGeneration = request.deviceGeneration.value,
+        budgetClass = "default",
+    )
 
 private sealed interface PreparedImageVisuals {
     data class Ready(

@@ -92,6 +92,23 @@ import org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUStorePlan
 import org.graphiks.kanvas.gpu.renderer.state.GPUTargetIdentity
 import org.graphiks.kanvas.gpu.renderer.wgsl.GPUPreparedTextVertexLayout
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositePlan
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeLowerer
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeLowering
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositePreflight
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeRefusalCodes
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScope
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeId
+import org.graphiks.kanvas.gpu.renderer.layers.GPUPreflightCapabilities
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerExecutionPlan
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerScopeID
+import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerIsolatedTargetGatePlan
+import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerMaterializationRequest
+import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerMaterializationResult
+import org.graphiks.kanvas.gpu.renderer.layers.GPUSaveLayerNativeExecutor
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
+import org.graphiks.kanvas.gpu.renderer.resources.GPUResourceMaterializationDecision
+import org.graphiks.kanvas.gpu.renderer.resources.GPUTargetPreparationContext
 
 data class GPUPreparedSurfaceFrameRequest(
     val baseTaskList: GPUTaskList,
@@ -2951,8 +2968,141 @@ class GPUPreparedSurfaceFrameTaskListBuilder(
         }
     }
 
+    /**
+     * Handles a prepared composite frame through the real saveLayer pipeline:
+     * lowerer → preflight → materialization request → native executor, aggregating the
+     * materialized [GPUPassCommand] sequence (PrepareLayerTarget / RenderLayerChildren /
+     * CompositeLayer) into the frame scheduling.
+     */
+    fun handleSaveLayer(
+        scopes: Map<GPUPreparedCompositeScopeId, GPUPreparedCompositeScope>,
+        rootScopeId: GPUPreparedCompositeScopeId,
+        identity: String,
+        capabilities: GPUPreflightCapabilities,
+        context: GPUTargetPreparationContext,
+        targetBudgetBytes: Long = DEFAULT_SAVE_LAYER_FRAME_BUDGET_BYTES,
+    ): GPUPreparedSaveLayerFrameHandling {
+        val lowering = GPUPreparedCompositeLowerer.lower(
+            scopes = scopes,
+            rootScopeId = rootScopeId,
+            identity = identity,
+            deviceGeneration = context.deviceGeneration,
+        )
+        if (lowering is GPUPreparedCompositeLowering.Refused) {
+            return GPUPreparedSaveLayerFrameHandling.Refused(
+                code = lowering.code,
+                operationIndex = lowering.operationIndex,
+                facts = lowering.facts,
+            )
+        }
+
+        val compositePlan = (lowering as GPUPreparedCompositeLowering.Ready).plan
+        val preflight = GPUPreparedCompositePreflight.preflight(compositePlan, capabilities)
+        if (preflight is GPUPreparedCompositeLowering.Refused) {
+            return GPUPreparedSaveLayerFrameHandling.Refused(
+                code = preflight.code,
+                operationIndex = preflight.operationIndex,
+                facts = preflight.facts,
+            )
+        }
+
+        val results = mutableListOf<GPUSaveLayerMaterializationResult>()
+        val commands = mutableListOf<GPUPassCommand>()
+        for (layer in compositePlan.layers) {
+            val layerGatePlan = compositePlan.gatePlans[layer.saveRecord.scopeId.value]
+                ?: return GPUPreparedSaveLayerFrameHandling.Refused(
+                    code = GPUPreparedCompositeRefusalCodes.LAYER_GATE_MISSING,
+                    operationIndex = null,
+                    facts = mapOf("scopeId" to layer.saveRecord.scopeId.value),
+                )
+            val result = materializeSaveLayer(layer.saveRecord.scopeId, layerGatePlan, context, targetBudgetBytes)
+            val refusedDecision = result.resourceDecision as? GPUResourceMaterializationDecision.Refused
+            if (refusedDecision != null) {
+                return GPUPreparedSaveLayerFrameHandling.Refused(
+                    code = refusedDecision.diagnostic.code,
+                    operationIndex = null,
+                    facts = mapOf(
+                        "scopeId" to layer.saveRecord.scopeId.value,
+                        "targetId" to context.targetId,
+                    ),
+                )
+            }
+            results += result
+            commands += result.commandStream.commands
+        }
+
+        return GPUPreparedSaveLayerFrameHandling.Ready(
+            plan = compositePlan,
+            results = results,
+            commands = commands,
+        )
+    }
+
+    /**
+     * Merges a materialized saveLayer command stream into a recorded frame task list so the
+     * composite scheduling evidence rides with the executable frame.
+     */
+    fun mergeCompositeCommands(
+        taskList: GPUTaskList,
+        commands: List<GPUPassCommand>,
+    ): GPUTaskList =
+        taskList.withCompositeCommands(commands)
+
+    private fun materializeSaveLayer(
+        scopeId: GPULayerScopeID,
+        gatePlan: GPUSaveLayerIsolatedTargetGatePlan,
+        context: GPUTargetPreparationContext,
+        targetBudgetBytes: Long,
+    ): GPUSaveLayerMaterializationResult {
+        val execution = gatePlan.layerPlan.execution as GPULayerExecutionPlan.IsolatedTarget
+        val target = execution.target
+        val generation = target.generationLabel.substringAfter(':').toLongOrNull() ?: 0L
+        val request = GPUSaveLayerMaterializationRequest(
+            targetId = context.targetId,
+            gatePlan = gatePlan,
+            parentPassId = "pass.save_layer.${scopeId.value}.composite",
+            childPassId = "pass.save_layer.${scopeId.value}.children",
+            childTargetStateHash = "state.child.${target.targetDescriptorHash}",
+            parentTargetStateHash = "state.parent.${target.targetDescriptorHash}",
+            childLoadStoreLabel = "clear:store",
+            parentLoadStoreLabel = "load:store",
+            deviceGeneration = context.deviceGeneration,
+            expectedTargetGeneration = generation,
+            actualTargetGeneration = generation,
+            availableUsageLabels = target.usageLabels.toSet(),
+            allocationAvailable = true,
+            targetBudgetBytes = targetBudgetBytes,
+            actualFormatClass = target.formatClass,
+            actualSampleCount = target.sampleCount,
+        )
+        return GPUSaveLayerNativeExecutor().execute(request, context)
+    }
+
     private fun refused(code: String, message: String) =
         GPUPreparedSurfaceFrameResult.Refused(diagnostic(code, message))
+}
+
+/** Frame-level budget used by saveLayer materialization when the caller provides none. */
+private const val DEFAULT_SAVE_LAYER_FRAME_BUDGET_BYTES = 16L * 1024L * 1024L
+
+/** Result of handling one prepared composite frame through the saveLayer pipeline. */
+sealed interface GPUPreparedSaveLayerFrameHandling {
+    /** All layers lowered, preflighted, and materialized with their command streams. */
+    data class Ready(
+        val plan: GPUPreparedCompositePlan,
+        val results: List<GPUSaveLayerMaterializationResult>,
+        val commands: List<GPUPassCommand>,
+    ) : GPUPreparedSaveLayerFrameHandling
+
+    /** Stable refusal from lowering, preflight, or materialization. */
+    class Refused(
+        val code: String,
+        val operationIndex: Int?,
+        facts: Map<String, String>,
+    ) : GPUPreparedSaveLayerFrameHandling {
+        val facts: Map<String, String> =
+            java.util.Collections.unmodifiableMap(java.util.LinkedHashMap(facts))
+    }
 }
 
 private fun buildPreparedColorGlyphDestinationSnapshotPlans(

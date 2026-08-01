@@ -138,11 +138,16 @@ class GPUPreparedCompositePlan(
     layers: List<GPULayerPlan>,
     normalizedFilters: Map<GPUPreparedCompositeScopeId, GPUPreparedFilterNormalization>,
     val identity: String,
+    gatePlans: Map<String, GPUSaveLayerIsolatedTargetGatePlan> = emptyMap(),
 ) {
     val layers: List<GPULayerPlan> =
         Collections.unmodifiableList(layers.toList())
     val normalizedFilters: Map<GPUPreparedCompositeScopeId, GPUPreparedFilterNormalization> =
         Collections.unmodifiableMap(LinkedHashMap(normalizedFilters))
+
+    /** Per-layer gate plans keyed by [GPULayerSaveRecord.scopeId] value. */
+    val gatePlans: Map<String, GPUSaveLayerIsolatedTargetGatePlan> =
+        Collections.unmodifiableMap(LinkedHashMap(gatePlans))
 }
 
 sealed interface GPUPreparedCompositeLowering {
