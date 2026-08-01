@@ -37,10 +37,13 @@ import org.graphiks.kanvas.gpu.renderer.passes.GPUSourceCoverageEncoding
 import org.graphiks.kanvas.gpu.renderer.payloads.GPUDrawSemanticPayload
 import org.graphiks.kanvas.gpu.renderer.pipelines.GPURenderPipelineKey
 import org.graphiks.kanvas.gpu.renderer.recording.GPUDestinationSnapshotConsumerRef
+import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameID
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFramePlan
 import org.graphiks.kanvas.gpu.renderer.recording.GPUFrameStep
 import org.graphiks.kanvas.gpu.renderer.recording.GPUSurfaceOutputRef
 import org.graphiks.kanvas.gpu.renderer.recording.GPUTaskID
+import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
+import org.graphiks.kanvas.gpu.renderer.passes.fromBatchPlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUConcreteResourceProvider
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole
 import org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTargetRef
@@ -50,6 +53,155 @@ import org.graphiks.kanvas.gpu.renderer.resources.GPUImageFrameResourcePlan
 import org.graphiks.kanvas.gpu.renderer.resources.GPUSamplerDescriptor
 
 class GPUWgpu4kPreparedSurfaceFramePayloadMaterializerTest {
+    @Test
+    fun `vertices frame refuses before any native side effect`() {
+        val fixture = fixture(
+            shape = PreparedSurfaceFixtureShape.ImageOnly,
+            inputOverride = verticesCapturedPreparedSurfaceInputs(),
+            onCacheAcquire = { error("vertices refusal must not acquire a session cache") },
+            onTargetBorrow = { error("vertices refusal must not borrow a native target") },
+        )
+        try {
+            val eventsBefore = fixture.native.events.toList()
+            val writesBefore = fixture.native.writeBufferCalls.toList()
+
+            val refused = assertIs<GPUPreparedNativeFramePayloadMaterialization.Refused>(
+                fixture.materialize(),
+            )
+
+            assertEquals("invalid.prepared-surface.encoder-plan", refused.code)
+            assertEquals(eventsBefore, fixture.native.events)
+            assertEquals(writesBefore, fixture.native.writeBufferCalls)
+            assertEquals(0, fixture.native.events.count { it == "encoder.finish" })
+            assertEquals(0, fixture.native.events.count { it == "queue.submit" })
+            assertEquals(null, refused.retainedDraft)
+            assertEquals(null, refused.retainedPreRegistrationLedger)
+            assertEquals(null, refused.retainedCloseOwner)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun `vertices render operands stay open through submit and close once on completion`() {
+        val flow = verticesPayloadFlowFixture()
+        val backend = GPUWgpu4kFrameEncodingBackend(
+            deviceGeneration = flow.generationSeal.deviceGeneration,
+            device = flow.native.device,
+            queue = flow.native.queue,
+            canonicalSceneTargetView = flow.target.view,
+        )
+        val registry = GPURuntimeResourceAdapter()
+        val encodingWitness = GPUFrameCoreTestFixture.preparedFrame()
+        var ownership: GPUPreparedNativeFrameOwnership? = null
+        try {
+            val ready = assertIs<GPUPreparedRenderRunMaterialization.Ready>(
+                GPUWgpu4kPreparedVerticesRenderRunMaterializer(flow.native.device)
+                    .materializeAcceptedRun(
+                        flow.plan,
+                        flow.generationSeal.deviceGeneration,
+                        flow.targetViewOperand,
+                    ),
+            )
+            val owner = ready.ownedResources.single()
+                as GPUPreparedRenderRunOwnedResources
+            ready.uniformUploads.forEach { upload ->
+                encodePreparedImageUniformUpload(flow.native.queue, upload)
+            }
+            assertTrue(
+                flow.native.writeBufferCalls.any { call ->
+                    call.bufferLabel.startsWith("Kanvas.frame.preparedVertices.")
+                },
+                "vertices buffers must be written before scope encoding",
+            )
+            val visibleHandles = mutableListOf<AutoCloseable>()
+            val borrowedRender = assertIs<GPUPreparedNativeScopeOperand.Render>(
+                ready.scopeOperands.single(),
+            ).toTargetBoundVerticesRender(flow.generationSeal, visibleHandles)
+            assertTrue(
+                borrowedRender.commands
+                    .filterIsInstance<GPUPreparedNativeRenderCommand.SetBindGroup>()
+                    .all { group -> group.bindGroup.ownership == GPUPreparedNativeOperandOwnership.Borrowed },
+            )
+            assertTrue(
+                borrowedRender.commands
+                    .filterIsInstance<GPUPreparedNativeRenderCommand.SetVertexBuffer>()
+                    .all { command -> command.buffer.ownership == GPUPreparedNativeOperandOwnership.Borrowed },
+            )
+            val distinctVisible = visibleHandles.distinctBy(System::identityHashCode)
+            owner.detachOwnedHandles(distinctVisible)
+            val anchor = GPUPreparedNativeCompletionAnchor(distinctVisible)
+            val payload = GPUPreparedNativeFramePayload(
+                identity = GPUPreparedNativeFrameIdentity(
+                    frameId = flow.frameId,
+                    contextIdentity = flow.contextIdentity,
+                    encoderPlanId = "frame.${flow.frameId.value}",
+                    deviceGeneration = flow.generationSeal.deviceGeneration,
+                    targetGeneration = flow.generationSeal.targetGeneration,
+                    scopes = listOf(flow.plan.exactScopeKey),
+                ),
+                scopeOperands = listOf(borrowedRender),
+                scopeOperandKeys = listOf(flow.plan.exactScopeKey.operandKeys),
+                auxiliaryOwnedHandles = listOf(
+                    GPUPreparedNativeAuxiliaryHandle(
+                        anchor,
+                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    ),
+                    GPUPreparedNativeAuxiliaryHandle(
+                        owner,
+                        GPUPreparedNativeOperandOwnership.PayloadOwnedCompletion,
+                    ),
+                ),
+            )
+            val frameHandles = (
+                distinctVisible + owner.ownedHandlesSnapshot()
+                ).distinctBy(System::identityHashCode)
+            assertTrue(
+                frameHandles.all { flow.native.closeCounts[it] == null },
+                "vertices frame handles must stay open through materialization",
+            )
+            val draft = GPUPreparedNativeFrameDraft(payload)
+            ownership = assertIs<GPUPreparedNativeFrameRegistration.Registered>(
+                registry.registerPreparedNativeFrameDraft(draft),
+            ).ownership
+            assertIs<GPUPreparedNativeFrameBindingResult.Ready>(
+                ownership.bindLateSurface(
+                    acquiredSurface = null,
+                    binding = GPUPreparedNativeFrameLateSurfaceBinding.NotRequired,
+                ),
+            )
+            assertIs<GPUPreparedNativeFrameConsumption.Consumed>(
+                ownership.consume(payload.identity),
+            )
+            val encoder = backend.createCommandEncoder("vertices-close-once")
+            flow.encoderPlan.scopes.zip(payload.scopeOperands).forEach { (scope, operand) ->
+                encoder.encode(
+                    scope,
+                    encodingWitness,
+                    GPUFrameCoreTestFixture.sceneTarget(
+                        targetGeneration = flow.generationSeal.targetGeneration,
+                    ),
+                    operand,
+                )
+            }
+            backend.submit(encoder.finish())
+            assertEquals(1, flow.native.events.count { it == "encoder.finish" })
+            assertEquals(1, flow.native.events.count { it == "queue.submit" })
+            assertTrue(frameHandles.all { flow.native.closeCounts[it] == null })
+
+            assertTrue(ownership.markSubmitted())
+            assertTrue(ownership.releaseAfterCompletion())
+            assertTrue(frameHandles.all { flow.native.closeCounts[it] == 1 })
+            assertFalse(ownership.releaseAfterCompletion())
+        } finally {
+            ownership?.rollback()
+            if (encodingWitness.claimForRollback()) encodingWitness.rollback.execute()
+            runCatching { registry.close() }
+            runCatching { backend.close() }
+            flow.close()
+        }
+    }
+
     @Test
     fun `equivalent ColorGlyph plan instances canonicalize to one native buffer triplet`() {
         val fixture = fixture(
@@ -2678,5 +2830,372 @@ private fun GPUFramePlan.withReversedPreparedImageBindings(): GPUFramePlan {
         phaseOrder = phaseOrder,
         elidedNoOpDraws = elidedNoOpDraws,
         atomicallyRefused = atomicallyRefused,
+    )
+}
+
+/**
+ * Full-frame captured input for one accepted prepared-vertices fixture.
+ *
+ * The preflighter refuses vertices semantics before encoder planning, so the encoder plan,
+ * resources, and generation seal are derived here from the same sealed frame authority.
+ */
+internal fun verticesCapturedPreparedSurfaceInputs(): CapturedPreparedSurfaceInputs {
+    val fixture = verticesPreflightFixture()
+    val framePlan = fixture.framePlan
+    val context = fixture.context
+    val sceneTarget = framePlan.steps
+        .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+        .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        .single { request -> request.role == GPUFrameResourceRole.SceneTarget }
+        .resource as GPUFrameTargetRef
+    val generationSeal = GPUPreparedGenerationSeal(
+        deviceGeneration = context.deviceGeneration,
+        targetGeneration = context.targetGeneration,
+        resourceGenerations = context.resourceGenerations,
+        capabilitySealHash = framePlan.capabilitySeal.sealHash,
+    )
+    val preparations = framePlan.steps
+        .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+        .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+    val resources = GPUPreparedResourceSet(
+        ordinaryResources = preparations
+            .filter { request -> request.role != GPUFrameResourceRole.ReadbackStaging }
+            .map { request ->
+                GPUPreparedResourceEvidence(
+                    logicalResource = request.resource,
+                    concreteResource = when (request.descriptor) {
+                        is org.graphiks.kanvas.gpu.renderer.resources.GPUFrameBufferDescriptor ->
+                            org.graphiks.kanvas.gpu.renderer.resources
+                                .GPUPreparedConcreteResourceRef.Buffer(
+                                    org.graphiks.kanvas.gpu.renderer.resources
+                                        .GPUBufferResourceRef("concrete.${request.resource.value}"),
+                                )
+                        is org.graphiks.kanvas.gpu.renderer.resources.GPUFrameTextureDescriptor ->
+                            org.graphiks.kanvas.gpu.renderer.resources
+                                .GPUPreparedConcreteResourceRef.Texture(
+                                    org.graphiks.kanvas.gpu.renderer.resources
+                                        .GPUTextureResourceRef("concrete.${request.resource.value}"),
+                                )
+                        else -> error("Unsupported prepared-vertices test descriptor")
+                    },
+                    role = request.role,
+                    deviceGeneration = context.deviceGeneration,
+                    resourceGeneration = requireNotNull(
+                        context.resourceGenerations[request.resource],
+                    ),
+                )
+            },
+        outputOwnedReadbacks = emptyList(),
+    )
+    val encoderPlan = GPUCommandEncoderPlan.ordered(
+        planId = "frame.${framePlan.frameId.value}",
+        contextIdentity = sceneTarget.value,
+        deviceGeneration = context.deviceGeneration,
+        targetGeneration = context.targetGeneration,
+        scopes = verticesEncoderScopes(framePlan, context, generationSeal),
+    )
+    return CapturedPreparedSurfaceInputs(
+        framePlan = framePlan,
+        encoderPlan = encoderPlan,
+        resources = resources,
+        shaderContract = assertIs<GPUPreparedImageShaderValidationResult.Ready>(
+            validatePreparedImageShader(GPU_PREPARED_IMAGE_WGSL),
+        ).shaderContract,
+        generationSeal = generationSeal,
+    )
+}
+
+private fun verticesEncoderScopes(
+    framePlan: GPUFramePlan,
+    context: GPUFramePreflightContext,
+    generationSeal: GPUPreparedGenerationSeal,
+): List<GPUCommandEncoderScopePlan> = framePlan.steps.mapIndexedNotNull { index, step ->
+    when (step) {
+        is GPUFrameStep.UploadResourceStep -> {
+            val labels = verticesResourceLabels(step, generationSeal)
+            GPUCommandEncoderScopePlan(
+                sourceStepIndex = index,
+                operationKind = GPUEncoderOperationKind.Upload,
+                scopeLabel = "step.$index",
+                sourceTaskIds = step.sourceTaskIds,
+                facadeOperationClasses = listOf("writeBufferOrCopyBuffer"),
+                targetGeneration = generationSeal.targetGeneration,
+                resourceGenerationLabels = labels,
+            ).attachNativeOperandKeys(
+                listOf(
+                    GPUPreparedNativeOperandKey(
+                        GPUPreparedNativeOperandRole.UploadSource,
+                        GPUPreparedNativeOperandKind.Buffer,
+                        gpuPreparedNativeBindingKey(labels[0]),
+                    ),
+                    GPUPreparedNativeOperandKey(
+                        GPUPreparedNativeOperandRole.UploadDestination,
+                        GPUPreparedNativeOperandKind.Buffer,
+                        gpuPreparedNativeBindingKey(labels[1]),
+                    ),
+                ),
+            )
+        }
+        is GPUFrameStep.RenderPassStep -> verticesRenderScope(
+            index,
+            step,
+            framePlan,
+            generationSeal,
+        )
+        else -> null
+    }
+}
+
+private fun verticesResourceLabels(
+    step: GPUFrameStep,
+    generationSeal: GPUPreparedGenerationSeal,
+): List<String> {
+    val refs = when (step) {
+        is GPUFrameStep.UploadResourceStep -> listOf(step.staging, step.destination)
+        is GPUFrameStep.RenderPassStep ->
+            listOf(step.target) + step.resourceUses.map { use -> use.resource }
+        else -> emptyList()
+    }
+    return refs.map { ref ->
+        "${ref::class.simpleName}:${ref.value}@" +
+            requireNotNull(generationSeal.resourceGenerations[ref]) {
+                "Prepared-vertices test scope lost generation evidence for ${ref.value}"
+            }
+    }
+}
+
+private fun verticesRenderScope(
+    index: Int,
+    render: GPUFrameStep.RenderPassStep,
+    framePlan: GPUFramePlan,
+    generationSeal: GPUPreparedGenerationSeal,
+): GPUCommandEncoderScopePlan {
+    val labels = verticesResourceLabels(render, generationSeal)
+    val bridge = verticesRenderBridge(render, generationSeal)
+    val passPlan = org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatchPlan(
+        streamId = "frame.${framePlan.frameId.value}.step.$index",
+        passId = "frame.${framePlan.frameId.value}.render.$index",
+        batches = render.batches.map { batch ->
+            org.graphiks.kanvas.gpu.renderer.passes.GPUPassBatch(
+                batchId = batch.batchId,
+                packets = batch.packets,
+                kind = batch.kind,
+                targetStateHash = batch.packets.first().targetStateHash,
+                queueGuard = org.graphiks.kanvas.gpu.renderer.passes
+                    .GPUPassBatchQueueGuard(emptyList(), emptyList()),
+            )
+        },
+        cuts = emptyList(),
+        diagnostics = emptyList(),
+        inputPacketCount = render.drawPackets.size,
+    )
+    val stream = GPUPassCommandStream.fromBatchPlan(
+        streamId = "frame.${framePlan.frameId.value}.commands.$index",
+        batchPlan = passPlan,
+        loadStoreLabel = render.loadStore.dumpPreparedSurfaceTestLabel(),
+        operandBridge = bridge,
+    )
+    return GPUCommandEncoderScopePlan(
+        sourceStepIndex = index,
+        operationKind = GPUEncoderOperationKind.Render,
+        scopeLabel = "step.$index",
+        sourceTaskIds = render.sourceTaskIds,
+        sourcePacketIds = render.drawPackets.map { packet -> packet.packetId },
+        facadeOperationClasses = stream.commandLabels,
+        targetGeneration = generationSeal.targetGeneration,
+        resourceGenerationLabels = labels,
+        passCommandStream = stream,
+        corePrimitiveDirectNativeRouteSeal = GPUCorePrimitiveDirectNativeRouteSeal.Empty,
+        targetResource = render.target,
+    ).attachNativeOperandKeys(
+        verticesRenderOperandKeys(render, labels, bridge),
+    )
+}
+
+private fun org.graphiks.kanvas.gpu.renderer.state.GPULoadStorePlan.dumpPreparedSurfaceTestLabel(): String =
+    "$loadOp:${storePlan.name}:${clearColorLabel ?: "none"}"
+
+private fun verticesRenderOperandKeys(
+    render: GPUFrameStep.RenderPassStep,
+    labels: List<String>,
+    bridge: List<org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge>,
+): List<GPUPreparedNativeOperandKey> = buildList {
+    add(
+        GPUPreparedNativeOperandKey(
+            GPUPreparedNativeOperandRole.RenderColorTarget,
+            GPUPreparedNativeOperandKind.TextureView,
+            gpuPreparedNativeBindingKey(labels.first()),
+        ),
+    )
+    bridge.forEach { entry ->
+        val role = when (entry.operand.kind) {
+            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+                .RenderPipeline -> GPUPreparedNativeOperandRole.RenderPipeline
+            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+                .BindGroup -> GPUPreparedNativeOperandRole.RenderBindGroup
+            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+                .VertexBuffer -> GPUPreparedNativeOperandRole.RenderVertexBuffer
+            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+                .IndexBuffer -> GPUPreparedNativeOperandRole.RenderIndexBuffer
+            else -> error("Unsupported prepared-vertices test bridge kind")
+        }
+        val kind = when (entry.operand.kind) {
+            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+                .RenderPipeline -> GPUPreparedNativeOperandKind.RenderPipeline
+            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+                .BindGroup -> GPUPreparedNativeOperandKind.BindGroup
+            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+                .VertexBuffer,
+            org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind
+                .IndexBuffer,
+            -> GPUPreparedNativeOperandKind.Buffer
+            else -> error("Unsupported prepared-vertices test bridge kind")
+        }
+        add(
+            GPUPreparedNativeOperandKey(
+                role,
+                kind,
+                gpuPreparedNativeBindingKey(
+                    "${entry.commandLabel}:${entry.operand.label}",
+                ),
+            ),
+        )
+    }
+}
+
+private fun verticesRenderBridge(
+    render: GPUFrameStep.RenderPassStep,
+    generationSeal: GPUPreparedGenerationSeal,
+): List<org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge> =
+    render.drawPackets.map { packet ->
+        val artifact = (packet.semanticPayload as GPUDrawSemanticPayload.Vertices).artifact
+        fun operand(
+            label: String,
+            kind: org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandKind,
+        ) = org.graphiks.kanvas.gpu.renderer.resources.GPUMaterializedCommandOperandReference(
+            label = label,
+            kind = kind,
+            descriptorHash = "vertices.${kind.name}.${packet.packetId.value}",
+            deviceGeneration = generationSeal.deviceGeneration.value,
+            ownerScope = "PayloadOwnedCompletion",
+            usageLabels = listOf("copy_dst"),
+            invalidationPolicy = "frame-local",
+        )
+        listOf(
+            org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge(
+                packet.packetId,
+                "setRenderPipeline",
+                operand("vertices.pipeline.${packet.packetId.value}",
+                    org.graphiks.kanvas.gpu.renderer.resources
+                        .GPUMaterializedCommandOperandKind.RenderPipeline),
+            ),
+            org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge(
+                packet.packetId,
+                "setBindGroup",
+                operand("vertices.draw-group.${packet.packetId.value}",
+                    org.graphiks.kanvas.gpu.renderer.resources
+                        .GPUMaterializedCommandOperandKind.BindGroup),
+            ),
+            org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge(
+                packet.packetId,
+                "setBindGroup",
+                operand("vertices.material-group.${packet.packetId.value}",
+                    org.graphiks.kanvas.gpu.renderer.resources
+                        .GPUMaterializedCommandOperandKind.BindGroup),
+            ),
+            org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge(
+                packet.packetId,
+                "setVertexBuffer",
+                operand("vertices.vertex.${artifact.key}",
+                    org.graphiks.kanvas.gpu.renderer.resources
+                        .GPUMaterializedCommandOperandKind.VertexBuffer),
+            ),
+        ) + if (artifact.indexCount != null) {
+            listOf(
+                org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandOperandBridge(
+                    packet.packetId,
+                    "setIndexBuffer",
+                    operand("vertices.index.${artifact.key}",
+                        org.graphiks.kanvas.gpu.renderer.resources
+                            .GPUMaterializedCommandOperandKind.IndexBuffer),
+                ),
+            )
+        } else {
+            emptyList()
+        }
+    }.flatten()
+
+private class VerticesPayloadFlowFixture(
+    val native: GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy,
+    val target: GPUWgpu4kPreparedSceneTarget,
+    val targetLifecycle: GPUWgpu4kPreparedSceneTargetLifecycle,
+    val setup: GPUPreparedSceneSetupTransaction,
+    val plan: GPUPreparedVerticesRenderRunPlan,
+    val generationSeal: GPUPreparedGenerationSeal,
+    val frameId: GPUFrameID,
+    val contextIdentity: String,
+    val encoderPlan: GPUCommandEncoderPlan,
+) {
+    val targetViewOperand: GPUPreparedNativeTextureViewOperand
+        get() = GPUPreparedNativeTextureViewOperand(
+            target.view,
+            generationSeal.deviceGeneration,
+            GPUPreparedNativeOperandOwnership.Borrowed,
+        )
+
+    fun close() {
+        runCatching { target.close() }
+    }
+}
+
+private fun verticesPayloadFlowFixture(): VerticesPayloadFlowFixture {
+    val preflightFixture = verticesPreflightFixture(indexed = true, indexFormat = "uint16")
+    val framePlan = preflightFixture.framePlan
+    val context = preflightFixture.context
+    val generationSeal = GPUPreparedGenerationSeal(
+        deviceGeneration = context.deviceGeneration,
+        targetGeneration = context.targetGeneration,
+        resourceGenerations = context.resourceGenerations,
+        capabilitySealHash = framePlan.capabilitySeal.sealHash,
+    )
+    val sceneTarget = framePlan.steps
+        .filterIsInstance<GPUFrameStep.PrepareResourcesStep>()
+        .flatMap(GPUFrameStep.PrepareResourcesStep::requests)
+        .single { request -> request.role == GPUFrameResourceRole.SceneTarget }
+        .resource as GPUFrameTargetRef
+    val native = GPUWgpu4kCorePrimitiveFramePayloadMaterializerTest.NativeProxy()
+    val targetLifecycle = GPUWgpu4kPreparedSceneTargetLifecycle()
+    val setup = GPUPreparedSceneSetupTransaction()
+    val target = GPUWgpu4kPreparedSceneTarget.create(
+        device = native.device,
+        width = 16,
+        height = 16,
+        format = GPUTextureFormat.RGBA8UnormSrgb,
+        deviceGeneration = context.deviceGeneration,
+        targetGeneration = context.targetGeneration,
+        lifecycle = targetLifecycle,
+        setupTransaction = setup,
+    )
+    setup.commit()
+    val plan = preparedVerticesRenderRunTestPlan(preflightFixture)
+    val renderIndex = framePlan.steps.indexOfFirst { it is GPUFrameStep.RenderPassStep }
+    val render = framePlan.steps[renderIndex] as GPUFrameStep.RenderPassStep
+    val encoderPlan = GPUCommandEncoderPlan.ordered(
+        planId = "frame.${framePlan.frameId.value}",
+        contextIdentity = sceneTarget.value,
+        deviceGeneration = context.deviceGeneration,
+        targetGeneration = context.targetGeneration,
+        scopes = listOf(verticesRenderScope(renderIndex, render, framePlan, generationSeal)),
+    )
+    return VerticesPayloadFlowFixture(
+        native = native,
+        target = target,
+        targetLifecycle = targetLifecycle,
+        setup = setup,
+        plan = plan,
+        generationSeal = generationSeal,
+        frameId = framePlan.frameId,
+        contextIdentity = sceneTarget.value,
+        encoderPlan = encoderPlan,
     )
 }

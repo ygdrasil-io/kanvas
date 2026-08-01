@@ -106,6 +106,9 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
         var retainedR8RollbackOwner: AutoCloseable? = null
         var colorGlyphOwner: GPUPreparedRenderRunOwnedResources? = null
         var retainedColorGlyphRollbackOwner: AutoCloseable? = null
+        var verticesOwner: GPUPreparedRenderRunOwnedResources? = null
+        var verticesAnchor: GPUPreparedNativeCompletionAnchor? = null
+        var retainedVerticesRollbackOwner: AutoCloseable? = null
         val setupLedger = GPUPreRegistrationNativeHandleLedger()
         var pendingDraft: GPUPreparedNativeFrameDraft? = null
         var coreMaterializer: GPUWgpu4kCorePrimitiveRenderRunMaterializer? = null
@@ -461,6 +464,58 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                 .takeIf(List<AutoCloseable>::isNotEmpty)
                 ?.let(::GPUPreparedNativeCompletionAnchor)
 
+            val verticesRuns = accepted.orderedRuns.mapNotNull { run ->
+                (run as? GPUPreparedSurfaceNativeRunPlan.Vertices)?.plan
+            }
+            val verticesReady = if (verticesRuns.isEmpty()) {
+                null
+            } else {
+                when (
+                    val result = GPUWgpu4kPreparedVerticesRenderRunMaterializer(device)
+                        .materializeAcceptedRun(
+                            verticesRuns.single(),
+                            generationSeal.deviceGeneration,
+                            targetViewOperand,
+                        )
+                ) {
+                    is GPUPreparedRenderRunMaterialization.Ready -> result
+                    is GPUPreparedRenderRunMaterialization.Refused -> {
+                        retainedVerticesRollbackOwner = result.retainedCloseOwner
+                        throw PreparedSurfaceMaterializationFailure(result.code, result.message)
+                    }
+                }
+            }
+            verticesOwner = verticesReady?.ownedResources?.singleOrNull()
+                as? GPUPreparedRenderRunOwnedResources
+            if (verticesReady != null && verticesOwner == null) {
+                throw PreparedSurfaceMaterializationFailure(
+                    "invalid.prepared-surface.vertices-owner",
+                    "The frame-global prepared-vertices lot must return one exact transferable owner.",
+                )
+            }
+            verticesReady?.uniformUploads.orEmpty().forEach { upload ->
+                encodePreparedImageUniformUpload(queue, upload)
+            }
+            val visibleVerticesHandles = mutableListOf<AutoCloseable>()
+            val finalVerticesOperands = verticesReady?.scopeOperands.orEmpty().map { operand ->
+                when (operand) {
+                    is GPUPreparedNativeScopeOperand.Render ->
+                        operand.toTargetBoundVerticesRender(
+                            generationSeal,
+                            visibleVerticesHandles,
+                        )
+                    else -> throw PreparedSurfaceMaterializationFailure(
+                        "invalid.prepared-surface.vertices-operand",
+                        "The frame-global prepared-vertices lot returned an unsupported operand.",
+                    )
+                }
+            }
+            val distinctVisibleVerticesHandles = visibleVerticesHandles.distinctByNativeIdentity()
+            verticesOwner?.detachOwnedHandles(distinctVisibleVerticesHandles)
+            verticesAnchor = distinctVisibleVerticesHandles
+                .takeIf(List<AutoCloseable>::isNotEmpty)
+                ?.let(::GPUPreparedNativeCompletionAnchor)
+
             val colorGlyphReady = accepted.colorGlyphPlan?.let { colorPlan ->
                 val r8Resources = preparedR8Resources
                     ?: throw PreparedSurfaceMaterializationFailure(
@@ -605,6 +660,7 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     finalImageOperands +
                     preparedR8Resources?.uploadOperands.orEmpty() +
                     finalTextOperands +
+                    finalVerticesOperands +
                     destinationCopyOperands +
                     finalColorGlyphOperands +
                     listOfNotNull(readbackOperand, surfaceOperand)
@@ -661,6 +717,8 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                         r8Owner,
                         textAnchor,
                         textOwner,
+                        verticesAnchor,
+                        verticesOwner,
                         colorGlyphOwner,
                     ).forEach { owner ->
                         add(
@@ -707,6 +765,8 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
             r8Owner = null
             textAnchor = null
             textOwner = null
+            verticesAnchor = null
+            verticesOwner = null
             colorGlyphOwner = null
             draftR8Owner?.detachOwnedHandles(
                 requireNotNull(preparedR8Resources)
@@ -728,6 +788,8 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     r8Owner,
                     textAnchor,
                     textOwner,
+                    verticesAnchor,
+                    verticesOwner,
                     colorGlyphOwner,
                 ),
             )
@@ -742,10 +804,13 @@ internal class GPUWgpu4kPreparedSurfaceFramePayloadMaterializer(
                     ),
                     retainedCloseOwner(
                         retainedTextRollbackOwner,
-                        retainedColorGlyphRollbackOwner,
+                        retainedVerticesRollbackOwner,
                     ),
                 ),
-                locallyRetainedOwner,
+                retainedCloseOwner(
+                    retainedColorGlyphRollbackOwner,
+                    locallyRetainedOwner,
+                ),
             )
             val ledgerRetained = setupLedger.takeUnless(
                 GPUPreRegistrationNativeHandleLedger::closeRetainingFailures,
@@ -909,6 +974,80 @@ private fun GPUPreparedNativeScopeOperand.PreparedTextRenderRun.toTargetBoundRen
         semanticPayloads = semanticPayloads.map<GPUDrawSemanticPayload.TextA8, GPUDrawSemanticPayload> {
             it
         },
+    )
+}
+
+/**
+ * Rewrites the frame-owned prepared-vertices operands to borrowed payload operands.
+ *
+ * The vertices materializer returns one target-bound render whose vertex/index buffers and
+ * bind groups are completion operands while the pipeline and layout entries stay in the run
+ * owner ledger. This assembler borrows every operand handle into the payload, collects them
+ * for completion anchoring, and leaves the session-owned pipeline entry untouched.
+ */
+internal fun GPUPreparedNativeScopeOperand.Render.toTargetBoundVerticesRender(
+    generationSeal: GPUPreparedGenerationSeal,
+    visibleHandles: MutableList<AutoCloseable>,
+): GPUPreparedNativeScopeOperand.Render {
+    val borrowedCommands = commands.map { command ->
+        when (command) {
+            is GPUPreparedNativeRenderCommand.SetPipeline -> command
+            is GPUPreparedNativeRenderCommand.SetBindGroup -> {
+                visibleHandles += command.bindGroup.bindGroup
+                GPUPreparedNativeRenderCommand.SetBindGroup(
+                    index = command.index,
+                    bindGroup = GPUPreparedNativeBindGroupOperand(
+                        command.bindGroup.bindGroup,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                    ),
+                    dynamicOffsets = command.dynamicOffsets,
+                )
+            }
+            is GPUPreparedNativeRenderCommand.SetVertexBuffer -> {
+                visibleHandles += command.buffer.buffer
+                GPUPreparedNativeRenderCommand.SetVertexBuffer(
+                    slot = command.slot,
+                    buffer = GPUPreparedNativeBufferOperand(
+                        command.buffer.buffer,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                        command.buffer.byteCapacity,
+                    ),
+                    offset = command.offset,
+                    size = command.size,
+                    vertexStrideBytes = command.vertexStrideBytes,
+                )
+            }
+            is GPUPreparedNativeRenderCommand.SetIndexBuffer -> {
+                visibleHandles += command.buffer.buffer
+                GPUPreparedNativeRenderCommand.SetIndexBuffer(
+                    buffer = GPUPreparedNativeBufferOperand(
+                        command.buffer.buffer,
+                        generationSeal.deviceGeneration,
+                        GPUPreparedNativeOperandOwnership.Borrowed,
+                        command.buffer.byteCapacity,
+                    ),
+                    format = command.format,
+                    offset = command.offset,
+                    size = command.size,
+                )
+            }
+            is GPUPreparedNativeRenderCommand.SetScissor,
+            is GPUPreparedNativeRenderCommand.Draw,
+            is GPUPreparedNativeRenderCommand.DrawIndexed,
+            -> command
+            else -> throw PreparedSurfaceMaterializationFailure(
+                "invalid.prepared-surface.vertices-command",
+                "Prepared vertices emitted a command outside its closed draw ABI.",
+            )
+        }
+    }
+    return GPUPreparedNativeScopeOperand.Render(
+        sourceStepIndex = sourceStepIndex,
+        pass = pass,
+        commands = borrowedCommands,
+        semanticPayloads = semanticPayloads,
     )
 }
 
