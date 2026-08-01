@@ -177,13 +177,13 @@ object GPUFilterOracle {
             val g = source.pixels[i + 1]
             val b = source.pixels[i + 2]
             val a = source.pixels[i + 3]
-            dst.pixels[i] = (matrix[0] * r + matrix[4] * g + matrix[8] * b + matrix[12] * a + matrix[16]).coerceIn(
+            dst.pixels[i] = (matrix[0] * r + matrix[1] * g + matrix[2] * b + matrix[3] * a + matrix[4]).coerceIn(
                 0f, 1f)
-            dst.pixels[i + 1] = (matrix[1] * r + matrix[5] * g + matrix[9] * b + matrix[13] * a + matrix[17]).coerceIn(
+            dst.pixels[i + 1] = (matrix[5] * r + matrix[6] * g + matrix[7] * b + matrix[8] * a + matrix[9]).coerceIn(
                 0f, 1f)
-            dst.pixels[i + 2] = (matrix[2] * r + matrix[6] * g + matrix[10] * b + matrix[14] * a + matrix[18]).coerceIn(
+            dst.pixels[i + 2] = (matrix[10] * r + matrix[11] * g + matrix[12] * b + matrix[13] * a + matrix[14]).coerceIn(
                 0f, 1f)
-            dst.pixels[i + 3] = (matrix[3] * r + matrix[7] * g + matrix[11] * b + matrix[15] * a + matrix[19]).coerceIn(
+            dst.pixels[i + 3] = (matrix[15] * r + matrix[16] * g + matrix[17] * b + matrix[18] * a + matrix[19]).coerceIn(
                 0f, 1f)
         }
         return dst

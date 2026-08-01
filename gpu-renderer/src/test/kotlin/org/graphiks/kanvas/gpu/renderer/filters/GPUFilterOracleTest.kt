@@ -87,16 +87,17 @@ class GPUFilterOracleTest {
     @Test
     fun `colorFilter grayscale matrix makes r==g==b for all pixels`() {
         val source = solidBitmap(4, 3, 1f, 0.5f, 0.25f, 1f)
-        // Column-major 4x5: each column of 4 values is one source-channel multiplier
-        // r column: affects (new_r, new_g, new_b, new_a)
-        // g column: affects (new_r, new_g, new_b, new_a)
-        // b column: ...  a column: ...  addends: (new_r, new_g, new_b, new_a)
+        // Row-major 4x5 (Skia / production WGSL convention): each row of 5
+        // values is one output channel's coefficients + translation.
+        // r row: (new_r coefficients, addend)
+        // g row: (new_g coefficients, addend)
+        // b row: (new_b coefficients, addend)
+        // a row: (new_a coefficients, addend)
         val grayscale = floatArrayOf(
-            0.2126f, 0.2126f, 0.2126f, 0f, // r → same luminance to all RGB
-            0.7152f, 0.7152f, 0.7152f, 0f, // g → same luminance to all RGB
-            0.0722f, 0.0722f, 0.0722f, 0f, // b → same luminance to all RGB
-            0f, 0f, 0f, 1f,                // a → passes through
-            0f, 0f, 0f, 0f,                // addends
+            0.2126f, 0.7152f, 0.0722f, 0f, 0f, // R' = luminance
+            0.2126f, 0.7152f, 0.0722f, 0f, 0f, // G' = luminance
+            0.2126f, 0.7152f, 0.0722f, 0f, 0f, // B' = luminance
+            0f, 0f, 0f, 1f, 0f,                // A' = A
         )
         val node = GPUPreparedFilterNode(
             id = GPUPreparedFilterNodeId("cf1"),
@@ -119,15 +120,34 @@ class GPUFilterOracleTest {
     }
 
     @Test
+    fun `color filter uses row-major matrix layout`() {
+        val source = Rgba8Bitmap(1, 1, floatArrayOf(0.2f, 0.8f, 0.0f, 1.0f))
+        // Row-major 4x5 (Skia / production WGSL convention):
+        // R' = m0*R + m1*G + m2*B + m3*A + m4 ; G' = m5*R + m6*G + ... etc.
+        val matrix = FloatArray(20)
+        matrix[0] = 1f; matrix[6] = 1f; matrix[11] = 1f; matrix[15] = 1f
+        matrix[1] = 0.5f   // G contributes to output R (row-major: m[1])
+        val node = GPUPreparedFilterNode(
+            id = GPUPreparedFilterNodeId("cf-row-major"),
+            kind = GPUPreparedFilterKind.ColorFilter,
+            inputs = listOf(GPUPreparedFilterInputRef.ImplicitSource),
+            parameters = ColorFilterParams(matrix),
+            provenance = "test/cf-row-major",
+        )
+        val out = GPUFilterOracle.apply(source, node, emptyMap())
+        assertEquals(0.6f, out.pixels[0], 1e-4f)   // R' = 0.2 + 0.5*0.8
+        assertEquals(0.8f, out.pixels[1], 1e-4f)   // G' unchanged
+    }
+
+    @Test
     fun `colorFilter identity matrix is a no-op`() {
         val source = solidBitmap(4, 4, 1f, 0f, 0f, 0.5f)
-        // Column-major 4x5 identity
+        // Row-major 4x5 identity: 1s on the diagonal at m0, m6, m12, m18
         val identity = floatArrayOf(
-            1f, 0f, 0f, 0f, // r → (1,0,0,0)
-            0f, 1f, 0f, 0f, // g → (0,1,0,0)
-            0f, 0f, 1f, 0f, // b → (0,0,1,0)
-            0f, 0f, 0f, 1f, // a → (0,0,0,1)
-            0f, 0f, 0f, 0f, // addends
+            1f, 0f, 0f, 0f, 0f, // R' = R
+            0f, 1f, 0f, 0f, 0f, // G' = G
+            0f, 0f, 1f, 0f, 0f, // B' = B
+            0f, 0f, 0f, 1f, 0f, // A' = A
         )
         val node = GPUPreparedFilterNode(
             id = GPUPreparedFilterNodeId("cf2"),
