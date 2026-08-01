@@ -184,9 +184,9 @@ class GPUPreparedTextExecutableFixtureTest {
                 preCoverageSourceAlpha = GPUSourceAlphaClassification.ProvenOpaque,
                 materialKey =
                         "material:prepared:solidcolor:" +
-                        "859e76254c9addedeecb848e604b5526a7dc951f5e215015a453fb919a1b4624",
+                        "f64dd51786077c9d73124e924f58df11ae996dc8101d0ea007c0436f4ca72ec4",
                 abiHash =
-                    "sha256:c59bf2f2d836f190defffad2fd669dae339af64cf663baa91289bc0ca17f0571",
+                    "sha256:66f83e111e3c9b0c2a50fdbddd67ffe4c84d5679380b9a9b438559d667b7be28",
                 wgslSha256 =
                     "4b1404cd4bf7aef896ae03b4f1ee152d8cf58938d0d1c30112147a72167df8cc",
                 fragmentHash =
@@ -203,9 +203,9 @@ class GPUPreparedTextExecutableFixtureTest {
                 preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
                         "material:prepared:gradient:" +
-                        "5034a45377a53f7d5d25fc065a2af43cfea55ee4a5091a04459730d26996f00a",
+                        "7d48819c0799accb64a68c6e57d5fe994649a7f968add2d7e35e65628495debf",
                 abiHash =
-                    "sha256:bf29904216e4f377ccf22a722fda50d10ae0dd67ca47330b2ad9b76b1974e2b6",
+                    "sha256:fbe672e92ca68cfc96c0b7c609f4ff7534dbf1113715093fb02e6302131b28be",
                 wgslSha256 =
                     "3135797b82879597ea6bea1c3a583180ef37efc82d29fd16aaed5b5a9269cc77",
                 fragmentHash =
@@ -222,9 +222,9 @@ class GPUPreparedTextExecutableFixtureTest {
                 preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
                         "material:prepared:gradient:" +
-                        "2137563615ea35bd8c68ad2dc405747f122ffb36e026cab54f40ded9e7ef8e70",
+                        "9f74f89a5745eecc74cb4475d149fb34702e9ab02e07d32227426123dcacd460",
                 abiHash =
-                    "sha256:691c819fb208a1a470c5066bec35e33293b2ca03dad569c30a1c957ab5e4a71d",
+                    "sha256:d298ac7e63b5249d292b4ba6afe0ec0db0af81a6dc37cb5531db685188d8a9ca",
                 wgslSha256 =
                     "c6d95da0614bad81bee5a9c51f93bb95f4f34a5b4584a26ae4380e1567f9624a",
                 fragmentHash =
@@ -241,9 +241,9 @@ class GPUPreparedTextExecutableFixtureTest {
                 preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
                         "material:prepared:gradient:" +
-                        "056f983255b7ebaf539a408ee923629a5ac2f3ed49543cc1bdbd0ae34108b784",
+                        "f6a0d3cc43837653e525e9eb45fe2ca64ac0ec6130cf6cb1791278b60282e592",
                 abiHash =
-                    "sha256:955a43edd1d349593581f53aabf1fa30251e0b55777fa4a5bf313c2913f2814d",
+                    "sha256:64e55cf562330cd6ddc527823c1dc57f98ed539b5844c00719efbb92f067349b",
                 wgslSha256 =
                     "4a85b68d2661aaf863faecb5263d46255007cd5f06ad2ff7cc81bfe4182d8596",
                 fragmentHash =
@@ -260,9 +260,9 @@ class GPUPreparedTextExecutableFixtureTest {
                 preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
                         "material:prepared:gradient:" +
-                        "2b9af3753ff7981d2ef72db63e82a532cf047602a91e261e906029aa14d222dc",
+                        "a86984997d7211b50460602972f4c49ba5a7b907631241d20375e392bc86881f",
                 abiHash =
-                    "sha256:9d44dfe5d5e5b5c4e329a2a6327b4f810cfb5c6888071cb17f4f9730328bb4b5",
+                    "sha256:f58efe65ece9b35aa72db002ac56372f17b613027eba8088564ee25fdfafd85b",
                 wgslSha256 =
                     "3fcf60a17773dccfb1c8931875d13ec5a16f730b7f2ae8e897981c046e5f9038",
                 fragmentHash =
@@ -279,13 +279,13 @@ class GPUPreparedTextExecutableFixtureTest {
                 preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
                         "material:prepared:runtimeeffect:" +
-                        "ef948366ff7d700840ccdff9d6724bd13f252a2f86a96bc2b2b33fdc0591aee4",
+                        "a6b5762789a92257a0a9ae3ea9ff9b8f11533e5118aea1ff1671c818f6c0aebb",
                 abiHash =
-                    "sha256:e88659cf2efc31c62248e39512b3e11f49a87a88ada2b3c6327f293d6660f130",
+                    "sha256:b8e2d81dd2d56319e34b0adeb702ccba41a46bf72a5f2f2434058358a604d86d",
                 wgslSha256 =
-                    "0a1b50d95d53a2eae8dd6994b03dc25544a4cda1e67029b9c92281983bb8a2cb",
+                    "875c3a6bae0022c75098b84981a699d1cbe5632d2d2ef0ce8045dc706978988c",
                 fragmentHash =
-                    "93dd5750f4ab7734859633ef5f28554e2406402b8fc6dc1d00aa8934e78265c6",
+                    "6da63b8c0c7ae4facd267248db6f6a1b91771b860e1fa24a02be2ca5463bc774",
                 fragmentAbiHash =
                     "sha256:f4f9dae638b5b3503cd71ce47fc9a192d2785955a0e398e2158723d76c79e0ac",
                 finalSourceMarker =
@@ -300,9 +300,9 @@ class GPUPreparedTextExecutableFixtureTest {
                 preCoverageSourceAlpha = GPUSourceAlphaClassification.Translucent,
                 materialKey =
                         "material:prepared:imageshader:" +
-                        "82b4533c9f35fa91d7977be00c8d108c2938800a19758618217ec258bcc2d2a9",
+                        "d787b7887941a35099f2e38c11a4422803cbe7c982d7a2d7bee1614a56234037",
                 abiHash =
-                    "sha256:175d68964f7527112224603ec02e7ee13751e9807c5dba7ebc6baced5919127b",
+                    "sha256:c64c2245a0331543f8715af27aee7f7e1b2e98487a03a985893a064abacbd85e",
                 wgslSha256 =
                     "7337b56fac8b54a56df024cce5bedb65d9a871abaadf3c209c823375fc006683",
                 fragmentHash =
@@ -325,7 +325,7 @@ class GPUPreparedTextExecutableFixtureTest {
         )
 
         val runtimeProgram = programs.getValue("runtime")
-        assertTrue(runtimeProgram.wgslSource.startsWith(resolved.program.wgslSource))
+        assertTrue(runtimeProgram.wgslSource.startsWith(resolved.program.wgslSource.trim()))
         assertTrue(
             runtimeProgram.composableFragment.declarationsWgsl
                 .contains(resolved.program.wgslSource.trim()),
@@ -392,7 +392,7 @@ class GPUPreparedTextExecutableFixtureTest {
             "return vec4<f32>(0.0);",
         )
         assertNotEquals(runtimeProgram.wgslSource, runtimeWithoutInvocation)
-        assertTrue(runtimeWithoutInvocation.startsWith(resolved.program.wgslSource))
+        assertTrue(runtimeWithoutInvocation.startsWith(resolved.program.wgslSource.trim()))
         val parsedRuntimeWithoutInvocation = parseWgslResult(runtimeWithoutInvocation)
         assertTrue(
             parsedRuntimeWithoutInvocation.isSuccess,
