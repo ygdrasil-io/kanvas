@@ -5,6 +5,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.canvas.ClipStack
@@ -343,6 +344,8 @@ class PreparedVerticesFrameInventoryTest {
     @Test
     fun `published collections reject hostile JVM mutation`() {
         val inventory = buildReady(listOf(draw(0)))
+        val command = inventory.commands.single()
+        val publishedMaterial = inventory.materialsByKey.getValue(command.materialKey)
 
         @Suppress("UNCHECKED_CAST")
         assertFailsWith<UnsupportedOperationException> {
@@ -356,6 +359,12 @@ class PreparedVerticesFrameInventoryTest {
         assertFailsWith<UnsupportedOperationException> {
             (inventory.commandsByOperationIndex as MutableMap<Int, PreparedVerticesFrameCommand>).clear()
         }
+        @Suppress("UNCHECKED_CAST")
+        assertFailsWith<UnsupportedOperationException> {
+            (publishedMaterial.uniformBytes as MutableList<Int>).clear()
+        }
+        assertSame(command.material, publishedMaterial)
+        assertNotSame(command.draw.material, publishedMaterial)
         val culled = buildReady(listOf(asCulled(draw(4))))
         @Suppress("UNCHECKED_CAST")
         assertFailsWith<UnsupportedOperationException> {
