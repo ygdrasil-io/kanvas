@@ -98,6 +98,8 @@ fun GPUPassCommandStream.Companion.fromIntermediatePlan(
                             blendPlan = compositeBlendPlan(step.blendModeLabel, step.source.formatClass),
                             routeLabel = step.routeLabel,
                             tokenLabel = step.tokenLabel,
+                            alpha = step.alpha,
+                            clipLabel = step.clipLabel,
                         ),
                     )
                 }

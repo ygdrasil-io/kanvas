@@ -825,6 +825,7 @@ sealed interface GPUPassCommand {
             require(blendModeLabel.isNotBlank()) { "CompositeLayer.blendModeLabel must not be blank" }
             require(routeLabel.isNotBlank()) { "CompositeLayer.routeLabel must not be blank" }
             require(tokenLabel.isNotBlank()) { "CompositeLayer.tokenLabel must not be blank" }
+            require(alpha in 0f..1f) { "CompositeLayer.alpha must be in 0f..1f" }
         }
     }
 
@@ -1339,7 +1340,9 @@ private fun GPUPassCommand.dumpLine(): String =
                 "children=$childrenLabel token=$tokenLabel"
         is GPUPassCommand.CompositeLayer ->
             "passes.command compositeLayer source=$sourceLabel parent=$parentTargetLabel " +
-                "blend=$blendModeLabel route=$routeLabel token=$tokenLabel"
+                "blend=$blendModeLabel route=$routeLabel token=$tokenLabel" +
+                (if (alpha != 1f) " alpha=$alpha" else "") +
+                (clipLabel?.let { " clip=$it" } ?: "")
         is GPUPassCommand.ResolveMSAA ->
             "passes.command resolveMSAA source=$sourceLabel destination=$destinationLabel " +
                 "strategy=$strategyLabel token=$tokenLabel"

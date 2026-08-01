@@ -2,14 +2,21 @@ package org.graphiks.kanvas.gpu.renderer.layers
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class SaveLayerIsolatedTargetGateTest {
     @Test
-    fun boundedTransparentLayerProducesIsolatedTargetEvidenceDump() {
-        val plan = GPUSaveLayerIsolatedTargetPlanner().plan(saveLayerRequest())
+    fun saveRecordRejectsOutOfRangeAlpha() {
+        assertFailsWith<IllegalArgumentException> {
+            saveRecord(alpha = 1.5f)
+        }
+    }
+
+    @Test
+    fun boundedTransparentLayerProducesIsolatedTargetEvidenceDump() {        val plan = GPUSaveLayerIsolatedTargetPlanner().plan(saveLayerRequest())
 
         assertEquals("gpu-renderer.savelayer.isolated-target", plan.evidenceRow)
         assertEquals("GPUNative", plan.routeKind)
@@ -212,6 +219,7 @@ private fun saveRecord(
     backdropRequired: Boolean = false,
     sourceFilterCount: Int = 0,
     restoreBlendMode: String = "srcOver",
+    alpha: Float = 1f,
     cpuFallbackRequested: Boolean = false,
     preserveLCDText: Boolean = false,
     f16Requested: Boolean = false,
@@ -225,6 +233,7 @@ private fun saveRecord(
     backdropRequired = backdropRequired,
     sourceFilterCount = sourceFilterCount,
     restoreBlendMode = restoreBlendMode,
+    alpha = alpha,
     cpuFallbackRequested = cpuFallbackRequested,
     preserveLCDText = preserveLCDText,
     f16Requested = f16Requested,

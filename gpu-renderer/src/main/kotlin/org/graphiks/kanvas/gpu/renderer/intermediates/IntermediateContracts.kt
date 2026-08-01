@@ -122,12 +122,15 @@ sealed interface GPUIntermediatePlanStep {
         val blendModeLabel: String,
         val routeLabel: String,
         val tokenLabel: String,
+        val alpha: Float = 1f,
+        val clipLabel: String? = null,
     ) : GPUIntermediatePlanStep {
         init {
             require(parentTargetLabel.isNotBlank()) { "GPUIntermediatePlanStep.CompositeIntermediate.parentTargetLabel must not be blank" }
             require(blendModeLabel.isNotBlank()) { "GPUIntermediatePlanStep.CompositeIntermediate.blendModeLabel must not be blank" }
             require(routeLabel.isNotBlank()) { "GPUIntermediatePlanStep.CompositeIntermediate.routeLabel must not be blank" }
             require(tokenLabel.isNotBlank()) { "GPUIntermediatePlanStep.CompositeIntermediate.tokenLabel must not be blank" }
+            require(alpha in 0f..1f) { "GPUIntermediatePlanStep.CompositeIntermediate.alpha must be in 0f..1f" }
         }
     }
 

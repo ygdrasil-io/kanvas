@@ -50,7 +50,11 @@ data class GPULayerSaveRecord(
     val cpuFallbackRequested: Boolean = false,
     val preserveLCDText: Boolean = false,
     val f16Requested: Boolean = false,
-)
+) {
+    init {
+        require(alpha in 0f..1f) { "GPULayerSaveRecord.alpha must be in 0f..1f" }
+    }
+}
 
 /** Restore plan for a layer scope. */
 data class GPULayerRestorePlan(

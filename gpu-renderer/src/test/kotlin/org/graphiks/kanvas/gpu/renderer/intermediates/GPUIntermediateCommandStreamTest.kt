@@ -3,7 +3,10 @@ package org.graphiks.kanvas.gpu.renderer.intermediates
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
+import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendPlan
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommand
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassDiagnostic
 import org.graphiks.kanvas.gpu.renderer.passes.GPUPassCommandStream
@@ -222,6 +225,85 @@ class GPUIntermediateCommandStreamTest {
             ),
             stream.diagnostics,
         )
+    }
+
+    @Test
+    fun `intermediate route threads layer alpha and clip label into composite layer command`() {
+        val descriptor = descriptor("intermediate:layer:alpha", GPUIntermediatePurpose.LayerTarget)
+        val stream = GPUPassCommandStream.fromIntermediatePlan(
+            streamId = "stream:alpha",
+            packetStreamId = "packets:alpha",
+            passId = "pass:alpha",
+            targetStateHash = "target:rgba8:sample1",
+            loadStoreLabel = "load-store:load-store",
+            plan = GPUIntermediatePlan(
+                planId = "plan:alpha",
+                targetId = "target:main",
+                steps = listOf(
+                    GPUIntermediatePlanStep.CompositeIntermediate(
+                        source = descriptor,
+                        parentTargetLabel = "surface:root",
+                        blendModeLabel = "srcOver",
+                        routeLabel = "composite:layer",
+                        tokenLabel = "compose-token:alpha",
+                        alpha = 128f / 255f,
+                        clipLabel = "device-rect:l=0,t=0,r=1107296256,b=1102053376,aa=true",
+                    ),
+                ),
+            ),
+        )
+
+        val composite = stream.commands
+            .filterIsInstance<GPUPassCommand.CompositeLayer>()
+            .single()
+        assertEquals(128f / 255f, composite.alpha)
+        assertEquals("device-rect:l=0,t=0,r=1107296256,b=1102053376,aa=true", composite.clipLabel)
+    }
+
+    @Test
+    fun `intermediate route defaults to opaque alpha and no clip label`() {
+        val descriptor = descriptor("intermediate:layer:default", GPUIntermediatePurpose.LayerTarget)
+        val stream = GPUPassCommandStream.fromIntermediatePlan(
+            streamId = "stream:default",
+            packetStreamId = "packets:default",
+            passId = "pass:default",
+            targetStateHash = "target:rgba8:sample1",
+            loadStoreLabel = "load-store:load-store",
+            plan = GPUIntermediatePlan(
+                planId = "plan:default",
+                targetId = "target:main",
+                steps = listOf(
+                    GPUIntermediatePlanStep.CompositeIntermediate(
+                        source = descriptor,
+                        parentTargetLabel = "surface:root",
+                        blendModeLabel = "srcOver",
+                        routeLabel = "composite:layer",
+                        tokenLabel = "compose-token:default",
+                    ),
+                ),
+            ),
+        )
+
+        val composite = stream.commands
+            .filterIsInstance<GPUPassCommand.CompositeLayer>()
+            .single()
+        assertEquals(1f, composite.alpha)
+        assertEquals(null, composite.clipLabel)
+    }
+
+    @Test
+    fun `composite layer command rejects out of range alpha`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUPassCommand.CompositeLayer(
+                sourceLabel = "layer-target:test",
+                parentTargetLabel = "root-target",
+                blendModeLabel = "srcOver",
+                blendPlan = GPUBlendPlan.NoOp(GPUBlendMode.SRC_OVER, "test"),
+                routeLabel = "fixed-function-srcOver",
+                tokenLabel = "token:test",
+                alpha = 1.5f,
+            )
+        }
     }
 
     private fun descriptor(

@@ -2,8 +2,11 @@ package org.graphiks.kanvas.gpu.renderer.intermediates
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import org.graphiks.kanvas.gpu.renderer.destination.GPUDestinationReadBounds
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerSaveRecord
+import org.graphiks.kanvas.gpu.renderer.layers.GPULayerScopeID
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendMode
 import org.graphiks.kanvas.gpu.renderer.passes.GPUBlendDestinationReadRequirement
 
@@ -129,6 +132,67 @@ class GPUIntermediatePlannerTest {
             plan.destinationReadEligibilities,
         )
         assertTrue(plan.dumpLines().any { it.contains("route=destination-read-required:multiply:multiply@v1") })
+    }
+
+    @Test
+    fun `saveLayer alpha and clip label are threaded into the composite intermediate step`() {
+        val plan = GPUIntermediatePlanner().plan(
+            request(
+                GPUIntermediateDrawRequest(
+                    commandId = "cmd-layer",
+                    targetLabel = "surface:main",
+                    targetGeneration = 1,
+                    bounds = bounds("cmd-layer"),
+                    blendMode = GPUBlendMode.SRC_OVER,
+                    materialKeyHash = "material:layer",
+                    renderStepIdentity = "rect-fill",
+                    saveLayer = GPULayerSaveRecord(
+                        scopeId = GPULayerScopeID("layer:intermediate"),
+                        boundsLabel = "layer-local",
+                        childCommandIds = listOf("draw:0"),
+                        backdropRequired = false,
+                        restoreBlendMode = "srcOver",
+                        alpha = 128f / 255f,
+                        clipLabel = "device-rect:l=0,t=0,r=1107296256,b=1102053376,aa=true",
+                    ),
+                ),
+            ),
+        )
+
+        val composite = assertIs<GPUIntermediatePlanStep.CompositeIntermediate>(
+            plan.steps.single { it is GPUIntermediatePlanStep.CompositeIntermediate },
+        )
+        assertEquals(128f / 255f, composite.alpha)
+        assertEquals("device-rect:l=0,t=0,r=1107296256,b=1102053376,aa=true", composite.clipLabel)
+    }
+
+    @Test
+    fun `saveLayer without alpha or clip threads opaque defaults into the composite step`() {
+        val plan = GPUIntermediatePlanner().plan(
+            request(
+                GPUIntermediateDrawRequest(
+                    commandId = "cmd-layer-default",
+                    targetLabel = "surface:main",
+                    targetGeneration = 1,
+                    bounds = bounds("cmd-layer-default"),
+                    blendMode = GPUBlendMode.SRC_OVER,
+                    materialKeyHash = "material:layer-default",
+                    renderStepIdentity = "rect-fill",
+                    saveLayer = GPULayerSaveRecord(
+                        scopeId = GPULayerScopeID("layer:default"),
+                        boundsLabel = "layer-local",
+                        childCommandIds = listOf("draw:0"),
+                        backdropRequired = false,
+                    ),
+                ),
+            ),
+        )
+
+        val composite = assertIs<GPUIntermediatePlanStep.CompositeIntermediate>(
+            plan.steps.single { it is GPUIntermediatePlanStep.CompositeIntermediate },
+        )
+        assertEquals(1f, composite.alpha)
+        assertEquals(null, composite.clipLabel)
     }
 
     private fun request(draw: GPUIntermediateDrawRequest): GPUIntermediatePlannerRequest =

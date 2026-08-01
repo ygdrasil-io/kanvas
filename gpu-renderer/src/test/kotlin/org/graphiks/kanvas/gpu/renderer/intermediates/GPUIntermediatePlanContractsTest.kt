@@ -199,6 +199,20 @@ class GPUIntermediatePlanContractsTest {
     }
 
     @Test
+    fun `composite intermediate step rejects out of range alpha`() {
+        assertFailsWith<IllegalArgumentException> {
+            GPUIntermediatePlanStep.CompositeIntermediate(
+                source = descriptor(),
+                parentTargetLabel = "surface:root",
+                blendModeLabel = "srcOver",
+                routeLabel = "composite:layer",
+                tokenLabel = "compose-token:invalid",
+                alpha = 1.5f,
+            )
+        }
+    }
+
+    @Test
     fun `target intermediate identities and pixel bounds are validated value objects`() {
         assertEquals(
             GPUTargetIdentity("target:main"),

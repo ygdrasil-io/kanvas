@@ -244,6 +244,8 @@ class GPUIntermediatePlanner(
                 blendModeLabel = isolated.composite.blendModeLabel,
                 routeLabel = isolated.composite.compositeRoute,
                 tokenLabel = isolated.composite.orderingToken.value,
+                alpha = saveLayer.alpha,
+                clipLabel = saveLayer.clipLabel,
             ),
         )
     }
