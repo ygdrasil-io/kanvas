@@ -6,8 +6,8 @@ import org.graphiks.kanvas.canvas.SaveLayerRec
 import org.graphiks.kanvas.geometry.Path
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedClipSnapshot
 import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedCompositeScopeKind
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMaskFilterKind
-import org.graphiks.kanvas.gpu.renderer.layers.GPUPreparedMaskFilterPlan
+import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedMaskFilterKind
+import org.graphiks.kanvas.gpu.renderer.filters.GPUPreparedMaskFilterPlan
 import org.graphiks.kanvas.paint.ImageFilter
 import org.graphiks.kanvas.paint.MaskFilter
 import org.graphiks.kanvas.pipeline.BlurStyle

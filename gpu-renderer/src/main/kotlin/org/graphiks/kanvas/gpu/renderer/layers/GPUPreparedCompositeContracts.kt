@@ -163,36 +163,3 @@ sealed interface GPUPreparedCompositeLowering {
             Collections.unmodifiableMap(LinkedHashMap(facts))
     }
 }
-
-enum class GPUPreparedMaskFilterKind {
-    Blur,
-    Shader,
-    Table,
-}
-
-enum class GPUPreparedCoverageFormat {
-    A8,
-}
-
-class GPUPreparedMaskFilterPlan(
-    val kind: GPUPreparedMaskFilterKind,
-    val coverageFormat: GPUPreparedCoverageFormat,
-    val executionIdentity: String,
-    tableEntries: List<Int> = emptyList(),
-) {
-    val tableEntries: List<Int> =
-        Collections.unmodifiableList(tableEntries.toList())
-}
-
-sealed interface GPUPreparedMaskFilterLowering {
-    data class Ready(val plan: GPUPreparedMaskFilterPlan) :
-        GPUPreparedMaskFilterLowering
-
-    class Refused(
-        val code: String,
-        facts: Map<String, String>,
-    ) : GPUPreparedMaskFilterLowering {
-        val facts: Map<String, String> =
-            Collections.unmodifiableMap(LinkedHashMap(facts))
-    }
-}
