@@ -10,7 +10,6 @@ object GPUPreparedCompositeRefusalCodes {
     const val LAYER_UNBALANCED = "unsupported.composite.layer.unbalanced"
     const val LAYER_BOUNDS = "unsupported.composite.layer.bounds"
     const val LAYER_BUDGET = "unsupported.composite.layer.budget"
-    const val LAYER_DESTINATION_READ = "unsupported.composite.layer.destination_read"
     const val LAYER_GATE_MISSING = "unsupported.composite.layer.gate_missing"
     const val OPERATION = "unsupported.composite.operation"
     const val PAINT = "unsupported.composite.paint"

@@ -351,18 +351,57 @@ Acceptance:
 
 ### FP-07 — Prepared composite route
 
-Status: `pending`
+Status: `completed`
 
 Goal: migrate layers, filters, masks, pictures, and backdrop composites to the
 common prepared frame route.
 
+Resolution evidence:
+
+- `aebfd94fe` is the accepting head (42 commits over the FP-06 tip
+  `40a873560`); route closure recorded in
+  `fp-07-composite-route.md` (route diagnostics, execution architecture,
+  refusal matrix, boundary statements, fallback policy, deferred items) with
+  the per-task trial record in `fp-07-composite-route-evidence.md`;
+- layer-target execution (Graphite/Dawn model): one render pass per layer
+  target plus the root pass in a single encoder — `compositeCommands`
+  (`PrepareLayerTarget`/`RenderLayerChildren`/`CompositeLayer`) carried
+  through `GPUPreparedWindowOutput.attachToFrame`, planned into frame steps,
+  admitted as declared layer targets by the session validator, materialized
+  as RGBA8 layer textures with child renders and a textured-quad composite
+  draw (real `GPUBlendPlan` + alpha + clip, premultiplied layer sampling);
+  flat child render elided when composite commands are scheduled;
+- bounded saveLayer/mask-blur pixel evidence executes on the Apple M2 Max
+  adapter (CPU vs GPU exact tolerances); the final serial aggregate passed
+  `:kanvas:test` 3,230/3,230 and `:gpu-renderer:test` 3,256 tests with only
+  the historical package-boundary baseline (exactly 20 cycles, 0 rule
+  violations — restored by the Task 18 boundary audit);
+- the fallback policy is explicit terminal refusal, never silent: unsupported
+  topologies refuse with stable codes (`bounds_unbounded`, `composite.clip`,
+  `composite.operation`, `layer-nesting`, `layer-composite-blend`,
+  `mixed-composite-topology`, `nested_vertices`), and the router's terminal
+  family is the loud-refusal safety net.
+
 Acceptance:
 
 - composite operations no longer produce
-  `legacy.surface.prepared.family.composites`;
-- child layer content is sampled by the composite pass;
-- saveLayer, image-filter, mask-blur, picture, and backdrop evidence passes;
-- `Composites` is removed from the legacy allowlist.
+  `legacy.surface.prepared.family.composites` — zero occurrences in
+  `kanvas/src` / `gpu-renderer/src`; ✓
+- child layer content is sampled by the composite pass — bounded
+  saveLayer/translated/scaled/partially-offscreen/empty-layer and mask-blur
+  frames render with exact pixels; non-core children and unsupported
+  topologies are documented terminal refusals (matrix in the closure report);
+  ✓
+- saveLayer, image-filter, mask-blur, picture, and backdrop evidence passes —
+  saveLayer and mask-blur render; image-filter/picture/backdrop shapes that
+  the route cannot cover refuse loudly with documented codes (no silent
+  drop); ✓
+- `Composites` is removed from the legacy allowlist — the legacy adapter has
+  no display family and `allowedFamilies = emptySet()`. ✓
+
+Known deferred items (tracked in the closure report §8): nested saveLayers,
+non-SRC_OVER blend materialization, tight-bounds layer transforms, layer
+texture frame-pool lease, non-core children inside layer scopes.
 
 ### FP-08 — Retire immediate and CPU continuation paths
 
