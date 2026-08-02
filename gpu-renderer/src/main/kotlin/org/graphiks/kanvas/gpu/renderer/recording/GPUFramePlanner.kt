@@ -897,6 +897,9 @@ object GPUFramePlanner {
             }
         }
         flushPendingRenderSlices()?.let { return Linearization.Refused(it) }
+        // Prepend is interim: composite steps blend over an empty parent target until token-interleaving
+        // lands (T14/15); nothing materializes these steps yet, and T15's pixel smoke test will catch
+        // ordering failures loudly.
         steps.addAll(0, lowerCompositeCommands(taskList))
         return Linearization.Planned(steps, diagnostics)
     }
@@ -905,6 +908,12 @@ object GPUFramePlanner {
      * Lowers the materialized saveLayer command stream into frame steps, preserving the
      * innermost-first order the commands already carry. Only the composite-triplet commands
      * produce steps; render-pass delimiters stay implied by the step kinds.
+     *
+     * TODO(T15 nested-layer ordering): the per-layer triplet stream is
+     * [prepare₁, children₁, composite₁, prepare₂, children₂, composite₂] with inner
+     * parentTargetLabel = outer layer's target — so composite₁ targets layer₂'s texture before
+     * prepare₂ exists; a strict in-order materializer must pre-scan/hoist allocations or regroup
+     * for nested layers.
      */
     private fun lowerCompositeCommands(taskList: GPUTaskList): List<GPUFrameStep> =
         taskList.compositeCommands.mapNotNull { command ->
@@ -914,6 +923,8 @@ object GPUFramePlanner {
                     descriptorHash = command.descriptorHash,
                     usageLabel = command.usageLabel,
                     byteEstimate = command.byteEstimate,
+                    // Layer resources resolve by label at T15 materialization; referencedResources
+                    // intentionally returns empty for these steps.
                     sourceTaskIds = emptyList(),
                 )
                 is GPUPassCommand.RenderLayerChildren -> GPUFrameStep.LayerChildrenRenderStep(
