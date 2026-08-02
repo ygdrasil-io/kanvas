@@ -1386,6 +1386,9 @@ private class WgpuBackendSession(
                         val declaredLayerTargetLabels = declaredLayerTargets.map { it.targetLabel }.toSet()
                         val preparations = taskList.tasks.filterIsInstance<GPUTask.PrepareResources>()
                             .flatMap { it.requests }
+                        fun textureDeclared(ref: GPUFrameTargetRef): Boolean =
+                            preparations.singleOrNull { it.resource == ref }?.descriptor is
+                                GPUFrameTextureDescriptor
                         val preparation = preparations.singleOrNull {
                             it.role == org.graphiks.kanvas.gpu.renderer.resources.GPUFrameResourceRole.SceneTarget
                         }
@@ -1399,24 +1402,22 @@ private class WgpuBackendSession(
                             renderTargets.any { renderTarget ->
                                 renderTarget != target &&
                                     renderTarget.value !in declaredLayerTargetLabels &&
-                                    preparations.singleOrNull { it.resource == renderTarget }?.descriptor !is
-                                        GPUFrameTextureDescriptor
+                                    !textureDeclared(renderTarget)
                             } -> executionDiagnostic(
                                 "unsupported.prepared-scene-session.target-count",
                                 "Every prepared render target beyond the scene target must be declared as a layer target or carry one exact texture declaration.",
                             )
                             renderTargets.any { renderTarget ->
                                 when {
-                                    renderTarget == target ->
-                                        preparations.singleOrNull { it.resource == renderTarget }?.descriptor !is
-                                            GPUFrameTextureDescriptor
+                                    renderTarget == target -> !textureDeclared(renderTarget)
                                     renderTarget.value in declaredLayerTargetLabels ->
-                                        // Declared layer targets are label-only at this stage:
-                                        // PrepareLayerTarget enforces a non-blank descriptorHash and
-                                        // usageLabel at construction, and the exact layer-target
-                                        // descriptor (bounds, sampleCount 1, format,
-                                        // RenderAttachment|TextureBinding) resolves and is validated
-                                        // when T15 materializes the layer target.
+                                        // Defensive invariant that cannot fire while
+                                        // PrepareLayerTarget construction enforces a non-blank
+                                        // descriptorHash and usageLabel. Do NOT read this as the
+                                        // validator validating layer descriptor fields — exact
+                                        // bounds, sampleCount 1, format, and
+                                        // RenderAttachment|TextureBinding resolve and are
+                                        // validated only when T15 materializes the layer target.
                                         !declaredLayerTargets.any {
                                             it.targetLabel == renderTarget.value &&
                                                 it.descriptorHash.isNotBlank() &&
@@ -1479,6 +1480,9 @@ private class WgpuBackendSession(
                     .map { it.target }
                     .filter { it != target && it.value in declaredLayerTargetLabels }
                     .forEach { layerTarget ->
+                        // Layer generations are advisory (scene target generation + 1): when a
+                        // layer target also carries a preparation-derived generation, putIfAbsent
+                        // keeps the preparation value — harmless per-frame, intentional.
                         generations.putIfAbsent(layerTarget, targetGeneration + 1L)
                     }
 

@@ -468,12 +468,13 @@ class GPUWgpu4kSolidRectFrameSmokeTest {
                 ),
             ).completion.toCompletableFuture().get(10, TimeUnit.SECONDS)
             // The prepared-scene session validator admits one scene target plus declared layer
-            // targets: a declared layer-target frame must never be refused by a
-            // prepared-scene-session validator code. Layer-target materialization and encoding
-            // land with Task 15 (GPUWgpu4kLayerTargetCompositeSmokeTest); until then such a
-            // frame may refuse downstream inside the native materializer.
+            // targets. At T14 there is no positive signal that lets this test distinguish
+            // "validator admitted" from "downstream materializer refused" (layer materialization
+            // lands with Task 15 / GPUWgpu4kLayerTargetCompositeSmokeTest), so its real contract
+            // is: a declared layer-target frame must never be refused by a prepared-scene-session
+            // validator code.
             assertFalse(
-                accepted.diagnostic?.code?.value.orEmpty().startsWith("unsupported.prepared-scene-session"),
+                accepted.diagnostic?.code?.value.orEmpty().contains("prepared-scene-session"),
                 "The prepared-scene validator refused a declared layer target: " +
                     "${accepted.diagnostic?.code?.value}: ${accepted.diagnostic?.message}",
             )
