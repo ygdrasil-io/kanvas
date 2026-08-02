@@ -14,8 +14,6 @@ object GPUPreparedCompositeRefusalCodes {
     const val OPERATION = "unsupported.composite.operation"
     const val PAINT = "unsupported.composite.paint"
     const val CLIP = "unsupported.composite.clip"
-    const val NATIVE_ALIAS = "unsupported.composite.native.alias"
-    const val NATIVE_CAPABILITY = "unsupported.composite.native.capability"
     const val PREFLIGHT = "unsupported.composite.preflight"
 
     val ALL: Set<String> = setOf(
@@ -28,8 +26,6 @@ object GPUPreparedCompositeRefusalCodes {
         OPERATION,
         PAINT,
         CLIP,
-        NATIVE_ALIAS,
-        NATIVE_CAPABILITY,
         PREFLIGHT,
     )
 }

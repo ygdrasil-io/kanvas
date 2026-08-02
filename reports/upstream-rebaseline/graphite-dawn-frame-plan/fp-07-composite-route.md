@@ -37,22 +37,30 @@ early-cutover commits and no `.superpowers/sdd/` entries are in the range.
 
 ## 1. Route diagnostics (stable refusal surface)
 
-The composite route is a capture → lowerer → preflight → executor pipeline.
-Each stage refuses with a stable code; the router's terminal-family check is
-the loud-refusal safety net at product admission.
+The composite route is a capture → lowerer → planner/gate → preflight →
+executor pipeline, with the builder and the router as the admission boundary.
+Each row below lists the ACTUAL emission site (grep-verified) for its codes;
+the router's terminal-family check is the loud-refusal safety net at product
+admission.
 
-| Stage | Entry | Terminal refusal codes emitted |
+| Stage | Entry (emission site) | Terminal refusal codes emitted |
 |---|---|---|
-| Product admission | `GPUPreparedSurfaceProductRouter.hasTerminalPreparedFamily` (`DrawPicture`/`BeginLayer`/`EndLayer` in the prepared family) | none (admits), `unsupported.surface.prepared.draw-picture` (GPUOpMapper flat fallback), `unsupported.surface.prepared.mixed-composite-topology` (builder boundary, `GPUPreparedSurfaceFrameBuilder.kt:765`) |
-| Capture | `GPUPreparedCompositeCapturer.capture(operations, limits)` | `unsupported.composite.operation`, `unsupported.composite.paint`, `unsupported.composite.clip`, `unsupported.composite.picture.cycle`, `unsupported.composite.picture.budget`, `unsupported.composite.layer.unbalanced`, `unsupported.composite.layer.bounds`, `unsupported.composite.layer.budget`, `unsupported.composite.layer.gate_missing`, `unsupported.picture.nested_vertices` |
-| Lowerer | `GPUPreparedCompositeLowerer` (`capture → GPULayerSaveRecord → plan(request)`) | `unsupported.prepared-surface.layer-nesting` (nested layer scopes), `unsupported.composite.native.capability` (non-core child kinds) |
-| Preflight | `GPUPreparedCompositePreflight` (maxTextureSize / maxColorAttachments budget) | `unsupported.composite.preflight` |
-| Native preflight | `GPUPreparedSurfaceNativePreflight` (composite admission) | `unsupported.prepared-surface.layer-composite-blend` (non-SRC_OVER), `unsupported.prepared-surface.layer-nesting`, `unsupported.layer.bounds_unbounded` (`LayerContracts.kt:689`) |
+| Capture | `GPUPreparedCompositeCapturer.capture(operations, limits)` (`GPUPreparedCompositeCapture.kt`) | `unsupported.composite.operation` (non-core children incl. covered pictures, l.437/474/521/564/645/657/691/713), `unsupported.composite.clip` (l.735/739), `unsupported.composite.paint` (l.750/757/793), `unsupported.composite.picture.cycle` (l.407), `unsupported.composite.picture.budget` (l.414/583), `unsupported.composite.layer.unbalanced` (l.372/384), `unsupported.composite.layer.bounds` (l.498), `unsupported.composite.layer.budget` (l.336) |
+| Lowerer | `GPUPreparedCompositeLowerer` (`GPUPreparedCompositeLowerer.kt`) | none of its own — relays `GPUSaveLayerIsolatedTargetPlanner` gate codes verbatim (`gatePlan.diagnostics.firstOrNull { it.terminal }?.code`, l.34); all emitted codes are `unsupported.layer.*` (see Planner/gate row). Non-core children are refused upstream at Capture with `unsupported.composite.operation` |
+| Planner/gate | `GPUSaveLayerIsolatedTargetPlanner.plan` (`LayerContracts.kt:689-699`) | `unsupported.layer.bounds_unbounded`, `unsupported.layer.bounds_invalid`, `unsupported.layer.target_usage_missing`, `unsupported.layer.active_attachment_sampled`, `unsupported.layer.init_previous_unaccepted`, `unsupported.layer.filter_chain`, `unsupported.layer.restore_blend`, `unsupported.layer.cpu_fallback_forbidden`, `unsupported.layer.preserve_lcd_text`, `unsupported.layer.f16_unavailable`, `unsupported.layer.target_too_large` |
+| Preflight | `GPUPreparedCompositePreflight` (maxTextureSize / maxColorAttachments budget, `GPUPreparedCompositePreflight.kt:16/31`) | `unsupported.composite.preflight` |
+| Frame handling | `GPUPreparedSurfaceFrameTaskListBuilder.handleSaveLayer` (`GPUPreparedSurfaceFrameTaskListBuilder.kt:3025`) | `unsupported.composite.layer.gate_missing` |
+| Builder | `GPUPreparedSurfaceFrameBuilder` (`GPUPreparedSurfaceFrameBuilder.kt`) | `unsupported.surface.prepared.mixed-composite-topology` (l.765), `unsupported.prepared-surface.layer-nesting` (l.800) |
+| Native preflight | `GPUPreparedSurfaceNativePreflight` (composite admission, `GPUPreparedSurfaceNativePreflight.kt`) | `unsupported.prepared-surface.layer-nesting` (l.3750), `unsupported.prepared-surface.layer-composite-blend` (l.3736), `invalid.prepared-surface.layer-target` (l.3694/3705/3727) |
+| Flat fallback | `GPUOpMapper.mapCoreOperation` (`GPUOpMapper.kt:501`) | `unsupported.surface.prepared.draw-picture` |
+| FP-06 boundary | `GPUClipCoverage` (`GPUClipCoverage.kt:343`) | `unsupported.picture.nested_vertices` |
 | Executor | `GPUSaveLayerNativeExecutor` → `ValidatingSaveLayerMaterializer.materialize(request, context)` (`adapterBacked=false`) | none (runs) — refusals surface upstream |
 
 `unsupported.filter.native.capability` (`GPUPreparedFilterRefusalCodes`) is the
 mask-filter/filter-DAG lowerer's refusal code; `GPUPreparedFilterDAGPlanner`
 and `GPUPreparedMaskFilterLowerer` both emit it (see §7, boundary restoration).
+It is distinct from the now-swept `GPUPreparedCompositeRefusalCodes.NATIVE_CAPABILITY`
+(dead constant, removed in the Task 18 review sweep).
 
 ## 2. Execution architecture (layer-target steps + materialization + composite draw)
 
